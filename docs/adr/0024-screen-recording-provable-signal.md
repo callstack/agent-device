@@ -60,6 +60,10 @@ Six rules make the table operational:
 Two later, independently proven steps are recorded so they are not re-litigated: reducing the
 Android device marker to marker-only content (2.6), and `--time-limit 0` on API 34+ (2.8).
 
+Completed rollout history is in git history.
+The finalizer uses overlay and telemetry only.
+The contracts no longer contain `invalidTrimRange` or `trimStartMs` after removal of start trimming.
+
 ## 1. Context
 
 `record start` / `record stop` is one command family, yet its last three months of fixes each
@@ -411,9 +415,6 @@ platform packages, Android completed-evidence refusal tests.
 
 ## 7. Rollout
 
-1. Merge the open regression PRs (#2564, #2565, #2566). Done; PR #2586 (start trimming removed)
-   is also on `main`, so the finalizer is overlay and telemetry only and the trim-related
-   `invalidTrimRange` and `trimStartMs` surfaces no longer exist in the contracts this ADR names.
 2. Rule 6 in the shared coordinator, gated per kind: a failed finish no longer runs forced
    cleanup for a kind once that kind's failed-finish test states what its retry needs. Recording
    first; the other three kinds each in their own commit. Independently shippable.
