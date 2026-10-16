@@ -13,7 +13,11 @@
 
 import type { LayeringViolation } from './model.ts';
 import { PACKAGE_EXPORT_SURFACE_RULE, TEST_KIT_PACKAGE } from './package-export-surface.ts';
-import { checkPackageIsolation, parseManifests, TEST_KIT_ISOLATION } from './package-isolation.ts';
+import {
+  checkPackageIsolation,
+  TEST_KIT_ISOLATION,
+  type ParsedManifests,
+} from './package-isolation.ts';
 
 const TEST_KIT_DIR = TEST_KIT_ISOLATION.dir;
 const TEST_KIT_ENTRY = './src/index.ts';
@@ -34,12 +38,12 @@ function violation(file: string, message: string, line = 1): LayeringViolation {
  * other packages or by import; no package it reaches declaring it back).
  */
 export function checkTestKitIsolation(
-  manifests: ReadonlyMap<string, string>,
+  manifests: ParsedManifests,
   sources: ReadonlyMap<string, string>,
 ): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   const testKitFile = `${TEST_KIT_DIR}/package.json`;
-  const testKit = parseManifests(manifests).get(testKitFile);
+  const testKit = manifests.get(testKitFile);
   if (!testKit) return violations;
 
   const exported = (testKit.exports as Record<string, unknown> | undefined) ?? {};

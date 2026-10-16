@@ -58,7 +58,7 @@ export const PLUGIN_FRAMEWORK_ISOLATION: PackageIsolationPolicy = {
   remedy: 'Provider knowledge reaches the loader as a policy from the composing root.',
 };
 
-type DependencyManifest = {
+export type DependencyManifest = {
   name?: string;
   exports?: unknown;
   dependencies?: Record<string, string>;
@@ -67,9 +67,9 @@ type DependencyManifest = {
   peerDependencies?: Record<string, string>;
 };
 
-export function parseManifests(
-  manifests: ReadonlyMap<string, string>,
-): Map<string, DependencyManifest> {
+export type ParsedManifests = ReadonlyMap<string, DependencyManifest>;
+
+export function parseManifests(manifests: ReadonlyMap<string, string>): ParsedManifests {
   return new Map(
     [...manifests].map(([file, text]) => [file, JSON.parse(text) as DependencyManifest]),
   );
@@ -87,10 +87,7 @@ function declaredNames(manifest: DependencyManifest): string[] {
 
 const ROOT_PACKAGE = 'agent-device';
 
-function forbiddenNames(
-  parsed: ReadonlyMap<string, DependencyManifest>,
-  policy: PackageIsolationPolicy,
-): Set<string> {
+function forbiddenNames(parsed: ParsedManifests, policy: PackageIsolationPolicy): Set<string> {
   const names = new Set(policy.forbidsRoot ? [ROOT_PACKAGE] : []);
   for (const [file, manifest] of parsed) {
     if (policy.forbiddenManifests.test(file) && manifest.name) names.add(manifest.name);
@@ -109,7 +106,7 @@ function packageName(specifier: string): string {
  * that declares the policy's package back closes a project-reference cycle.
  */
 function manifestViolations(
-  parsed: ReadonlyMap<string, DependencyManifest>,
+  parsed: ParsedManifests,
   policy: PackageIsolationPolicy,
   forbidden: ReadonlySet<string>,
 ): LayeringViolation[] {
@@ -161,11 +158,10 @@ function manifestViolations(
  * declaring it back.
  */
 export function checkPackageIsolation(
-  manifests: ReadonlyMap<string, string>,
+  parsed: ParsedManifests,
   sources: ReadonlyMap<string, string>,
   policy: PackageIsolationPolicy,
 ): LayeringViolation[] {
-  const parsed = parseManifests(manifests);
   if (!parsed.has(`${policy.dir}/package.json`)) return [];
   const forbidden = forbiddenNames(parsed, policy);
   const violations = manifestViolations(parsed, policy, forbidden);

@@ -161,7 +161,11 @@ import { sourceExecutionCompatibilityViolations } from './source-execution-polic
 import { sessionResourceOwnershipViolations } from './session-resource-ownership.ts';
 import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
 import { iosSnapshotEngineOwnershipViolations } from './ios-snapshot-engine-policy.ts';
-import { checkPackageIsolation, PLUGIN_FRAMEWORK_ISOLATION } from './package-isolation.ts';
+import {
+  checkPackageIsolation,
+  parseManifests,
+  PLUGIN_FRAMEWORK_ISOLATION,
+} from './package-isolation.ts';
 import { providerSnapshotPresentationViolations } from './provider-snapshot-presentation-policy.ts';
 import { snapshotAssemblyPresentationViolations } from './snapshot-assembly-presentation-policy.ts';
 import { RETIRED_PATH_RULES, retiredPathRuleViolations } from './retired-paths-policy.ts';
@@ -620,11 +624,14 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       context.ratchets.testOnlyExports,
       context.reference.testOnlyExports,
     ),
-    ...checkTestKitIsolation(readTrackedPackageManifests(repoRoot), context.allTypeScriptSources),
+    ...checkTestKitIsolation(
+      parseManifests(readTrackedPackageManifests(repoRoot)),
+      context.allTypeScriptSources,
+    ),
   ],
   'plugin-framework-independence': (context) =>
     checkPackageIsolation(
-      readTrackedPackageManifests(repoRoot),
+      parseManifests(readTrackedPackageManifests(repoRoot)),
       context.allTypeScriptSources,
       PLUGIN_FRAMEWORK_ISOLATION,
     ),

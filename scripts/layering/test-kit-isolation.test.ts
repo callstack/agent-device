@@ -3,6 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { parseManifests } from './package-isolation.ts';
 import { checkTestKitIsolation } from './test-kit-isolation.ts';
 
 type Manifest = Record<string, unknown>;
@@ -46,7 +47,7 @@ const SOURCE = new Map([
 ]);
 
 function check(overrides: Record<string, Manifest> = {}, sources = SOURCE) {
-  return checkTestKitIsolation(workspace(overrides), sources);
+  return checkTestKitIsolation(parseManifests(workspace(overrides)), sources);
 }
 
 test('the test-kit shape holds: one entry, built only on packages below it', () => {

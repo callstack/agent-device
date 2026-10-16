@@ -8,6 +8,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import {
   checkPackageIsolation,
+  parseManifests,
   PLUGIN_FRAMEWORK_INDEPENDENCE_RULE,
   PLUGIN_FRAMEWORK_ISOLATION,
   TEST_KIT_ISOLATION,
@@ -69,7 +70,11 @@ function check(
   overrides: Record<string, Manifest> = {},
   sources: Record<string, string> = {},
 ) {
-  return checkPackageIsolation(workspace(overrides), new Map(Object.entries(sources)), policy);
+  return checkPackageIsolation(
+    parseManifests(workspace(overrides)),
+    new Map(Object.entries(sources)),
+    policy,
+  );
 }
 
 function source(policy: PackageIsolationPolicy, text: string) {
@@ -83,7 +88,7 @@ test('the real repository holds every isolation policy', () => {
       fs.readFileSync(path.join(repoRoot, file), 'utf8'),
     ]),
   );
-  const manifests = readTrackedPackageManifests(repoRoot);
+  const manifests = parseManifests(readTrackedPackageManifests(repoRoot));
   for (const policy of POLICIES) {
     assert.deepEqual(checkPackageIsolation(manifests, sources, policy), [], policy.name);
   }
@@ -91,7 +96,11 @@ test('the real repository holds every isolation policy', () => {
 
 test('a repo without the isolated package has nothing to isolate', () => {
   for (const policy of POLICIES) {
-    assert.deepEqual(checkPackageIsolation(new Map(), new Map(), policy), [], policy.name);
+    assert.deepEqual(
+      checkPackageIsolation(parseManifests(new Map()), new Map(), policy),
+      [],
+      policy.name,
+    );
   }
 });
 
