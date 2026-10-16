@@ -99,10 +99,8 @@ async function handleRecordCommandUnsafe(
   const { req, sessionName, sessionStore } = params;
   const existingRef = sessionStore.lookup(sessionName);
   const existingSession = existingRef?.session;
-  // The named-session refusal runs before any record-specific refusal: a request whose session
-  // this daemon lost is answered on the session first, whatever it wanted to record (#3674). The
-  // guard can only fire for a missing session, so only that path pays the function-scoped import
-  // (ADR-0019 loading shape).
+  // Ordered before every record-specific refusal: a named missing session answers on the
+  // session. Only that branch pays the function-scoped import (ADR-0019 loading shape).
   if (!existingSession) {
     const { requireNamedSessionHoldsDevice } =
       await import('../../core/explicit-session-resolution.ts');

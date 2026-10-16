@@ -433,8 +433,6 @@ async function closeWithoutSession(params: {
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, sessionName, logPath, inspectFacts, bindDevice, platformServices } = params;
-  // There is no session here by definition, so this is exactly the refused shape; the guard's own
-  // provenance check still decides between the typed refusal and sessionless close.
   const { requireNamedSessionHoldsDevice } =
     await import('../../../core/explicit-session-resolution.ts');
   requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session: undefined });

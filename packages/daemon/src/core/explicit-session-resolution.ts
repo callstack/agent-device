@@ -18,9 +18,6 @@ export function namedSessionNotFoundError(sessionAddress: string): AppError {
   return new AppError(
     'SESSION_NOT_FOUND',
     `No active session "${sessionAddress}". Run agent-device open <app> --session ${sessionArg} first, or omit --session to run against a device selector.`,
-    // One producer for the refusal shape: the reason, dispatched marker, and session address come
-    // from the kernel builder every named-session seam shares (#3674); only this site's message
-    // adds the open/omit guidance and the session-list hint.
     {
       ...namedSessionNotFoundDetails(sessionAddress),
       hint:

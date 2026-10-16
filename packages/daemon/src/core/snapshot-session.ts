@@ -14,12 +14,8 @@ export async function resolveSessionDevice(
 ) {
   const ref = boundRef ?? sessionStore.lookup(sessionName);
   const session = ref ? sessionStore.requireCurrent(ref) : undefined;
-  // The guard asks whether a *missing* session was named, so a held session answers it for free
-  // and the refused path is the only one that loads the module — keeping the guard off the eager
-  // closure of every request that resolves through here (ADR-0019 loading shape, #3674). It also
-  // keeps a first-time module load out of the held-session hot path, whose transform cost under
-  // coverage instrumentation alone overran `wait-runtime.test.ts`'s fake-timer budget when the
-  // import ran unconditionally.
+  // Only a missing session can be refused for being named, so only that branch pays the
+  // function-scoped import (ADR-0019 loading shape).
   if (!session) {
     const { requireNamedSessionHoldsDevice } = await import('./explicit-session-resolution.ts');
     requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session });

@@ -23,8 +23,6 @@ function appStateSessionNotFoundResponse(
   // Every Apple selector — `apple`, `ios`, or `macos` — answers appstate only from an open
   // session and its runner, so the "omit --session" route they would otherwise be pointed at
   // just reaches the session-required refusal. Send them straight to opening the session.
-  // The details are the shared named-session refusal's, so one branch on
-  // `named_session_not_found` sees the same shape wherever a lost session answers (#3674).
   if (isApplePlatform(platform)) {
     return errorResponse(
       'SESSION_NOT_FOUND',
@@ -60,13 +58,15 @@ function admitAppStateTarget(params: RuntimeCommandHandlerParams): AppStateTarge
   const flags = req.flags ?? {};
   const normalizedPlatform = flags.platform;
 
-  // Same priority as the resolution guard (#3674), read for what this command can actually serve:
-  // an identity selector (`--device`/`--udid`/`--serial`) states a concrete target the daemon can
-  // answer sessionlessly — an Android device, or an iOS one the caller will run `open` against —
-  // so the refusal stays out of the way there. A bare `--platform` filter states no device this
-  // command can answer without a session (Apple appstate is session-required one step later), so
-  // for those the typed named-session refusal remains the truest answer.
-  if (!session && namesSessionExplicitly(req) && !hasExplicitDeviceSelector(flags)) {
+  // Same priority as the resolution guard: a non-Apple identity selector states a target this
+  // command answers sessionlessly, so the refusal stays out of the way there. Apple-family
+  // appstate requires an open session whatever the selector states, so the typed refusal remains
+  // the only actionable answer for it.
+  if (
+    !session &&
+    namesSessionExplicitly(req) &&
+    (!hasExplicitDeviceSelector(flags) || isApplePlatform(normalizedPlatform))
+  ) {
     return { refusal: appStateSessionNotFoundResponse(sessionName, normalizedPlatform) };
   }
 

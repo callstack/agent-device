@@ -16,7 +16,7 @@ import {
   mockInspectDeviceRuntimeFacts,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import type {
   AppStateRuntimeInput,
   AppStateRuntimeResult,
@@ -239,6 +239,9 @@ test('appstate with explicit missing session returns SESSION_NOT_FOUND', async (
     expect(response.error.code).toBe('SESSION_NOT_FOUND');
     expect(response.error.message).toMatch(/no active session "sim"/i);
     expect(response.error.message).not.toMatch(/omit --session/i);
+    expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+    expect(response.error.details?.session).toBe('sim');
+    expect(response.error.details?.dispatched).toBe('no');
   }
 });
 

@@ -127,6 +127,7 @@ test('a record start naming a missing session answers on the session, not on app
   expect(response.error.code).toBe('SESSION_NOT_FOUND');
   expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
   expect(response.error.details?.session).toBe(LOST_SESSION);
+  expect(listings.count).toBe(0);
 });
 
 test('the same command with no session named still resolves a device sessionlessly', async () => {
