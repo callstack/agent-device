@@ -4,49 +4,49 @@
 
 Accepted
 
-Completed process history is in git history.
-
 ## Rules at a glance
 
-- For iOS/macOS selector taps with a frame, use coordinate-first resolved element activation. tvOS remains focus/remote-driven.
-- Before commands to ready sessions, probe `uptime`, except for the stated startup, readiness, and recent-mutation cases.
-- Keep recent-mutation health only on the runner session and only for the stated app, commands, and 5-second window.
+- For iOS/macOS selector taps on an element with a frame, use coordinate-first resolved element activation. tvOS remains focus/remote-driven.
+- Before a command to a ready session, send an `uptime` preflight, except for the stated startup, readiness, and recent-mutation cases.
+- Keep recent-mutation health only on the `RunnerSession` and only for the stated app, commands, response checks, and 5-second window.
+- Never count snapshots or other read-only responses as health signals.
+- Future optimization work should reduce the `uptime` preflights only after runner status survives command-induced XCTest teardown and can prove that the session still serves new requests.
 - Invalidate dead cached runner processes without graceful `shutdown`.
-- After `RUNNER_BUSY`, resend only read-only commands under their busy-specific budget. Never replay mutations.
-- Before a busy runner can enter retention, `close` stops it and awaits lease release.
+- After `RUNNER_BUSY`, resend only read-only commands, under their busy-specific budget.
+- After `RUNNER_BUSY` on a mutating command, return the refusal to the caller without a resend.
+- If `close` would retain a runner whose main-thread occupancy is set, stop that runner first and await the stop.
 - After a root AX failure, clear the cached app target. Keep raw/strict errors distinct from interactive recovery payloads.
 
 ## Context
 
 The iOS runner is a long-lived XCTest process with an HTTP command loop.
-A command can appear complete at the daemon boundary while XCTest already stops the runner.
+A command can appear to complete at the daemon boundary while XCTest is already tearing down the test runner.
 
-This occurred in the React Navigation playground after selector taps that caused navigation, such as `Navigate to Details` and `Back to home`.
+This failure was reproduced in the React Navigation playground with selector taps that cause navigation, such as `Navigate to Details` and `Back to home`.
 The runner resolved the button and synthesized the tap.
 The app navigated, and XCTest then tried to resolve the original `XCUIElement` again.
 Because the element had disappeared, xcodebuild recorded `Failed to get matching snapshot` and ended the test with `** TEST EXECUTE FAILED **`.
 The daemon had already received a successful tap response.
-Thus, the next read-only command used a stale cached runner.
+Thus, the next read-only command inherited a stale cached runner.
 
 These earlier assumptions were incorrect:
 
-- A recent successful runner response proves continued runner health.
-- After selector resolution, `XCUIElement.tap()` is the safest selector-tap primitive.
-- A cached `XCUIApplication` target remains safe after XCTest cannot serialize the app's accessibility tree.
+- A recent successful runner response proves that the runner is still healthy.
+- After a selector has resolved, `XCUIElement.tap()` is the safest selector-tap primitive.
+- A cached `XCUIApplication` target remains safe after XCTest reports that it cannot serialize the app's accessibility tree.
 
 ## Decision
 
 Coordinate-first resolved element activation is the iOS/macOS selector-tap model.
-The runner uses selectors or text queries to find the semantic `XCUIElement`.
-If the element has a frame, activation taps its resolved center point instead of calling `XCUIElement.tap()`.
-tvOS remains focus/remote-driven because it does not support normal coordinate input.
+The runner still uses selectors or text queries to find the semantic `XCUIElement`.
+If the element has a frame, activation taps the resolved center point instead of calling `XCUIElement.tap()`.
+tvOS remains focus/remote-driven because tvOS does not support normal coordinate input.
 
 Before command send, ready runner sessions receive a short `uptime` preflight.
-Read-only startup commands skip this preflight.
-The first successful command proves readiness for a newly launched runner.
-Readiness probe commands also skip preflight to avoid recursion.
+Read-only startup commands still skip that preflight because, for a newly launched runner, the first successful command is the readiness proof.
+Readiness probe commands skip preflight to avoid recursion.
 
-The daemon may also skip ready-session `uptime` for an explicit allowlist of mutating interactions:
+The daemon may also skip the ready-session `uptime` preflight for an explicit allowlist of mutating interactions:
 
 - `tap`.
 - `longPress`.
@@ -55,114 +55,118 @@ The daemon may also skip ready-session `uptime` for an explicit allowlist of mut
 - `scroll`.
 - `sequence`.
 
-This requires a healthy mutating response from the same session for the same `appBundleId` within 5 seconds.
-The response must parse successfully and carry no `runnerFatal`.
-Only the `RunnerSession` object stores this recency as `lastHealthyMutation`.
-Each invalidation or restart deletes it.
+The skip requires that the same session produced a healthy mutating response for the same `appBundleId` within 5 seconds.
+A healthy mutating response is parsed ok and does not carry `runnerFatal`.
+This recency lives only on the `RunnerSession` object as `lastHealthyMutation`.
+Thus, it is discarded with every invalidation or restart.
 The record is written only after the `runnerFatal` check.
-Sparse AX-fallback snapshots and `runnerFatal` payloads therefore never renew it.
-Snapshots and other read-only responses never count as health signals.
+Thus, sparse AX-fallback snapshots and `runnerFatal` payloads never refresh it.
+Snapshots and other read-only responses never count as a health signal.
 
-This narrow skip is permitted because coordinate-first activation removes the command-induced teardown trigger.
-The lifecycle status journal and status-before-invalidate recovery preserve status across teardown.
-They resolve ambiguous post-send failures before invalidation.
-After a skipped preflight, a transport failure clears recency and carries skip context.
-Connection-shaped failures, such as refused, reset, or hung up, use status recovery instead of blind replay.
-Timeout-shaped failures propagate with skip context.
-This is the same classification used by preflighted sends.
+This narrow skip is permitted because it meets the preflight-reduction precondition in the Consequences section:
 
-`uptime` directly probes the runner listener.
-The listener answers before command journaling, the serial execution queue, app activation, and main-thread XCTest dispatch.
-It should measure only whether the runner is alive and accepts new HTTP requests.
+- Coordinate-first activation removed the command-induced teardown trigger.
+- The lifecycle status journal plus the status-before-invalidate recovery is the teardown-surviving status surface.
+  That surface resolves any ambiguous post-send failure before invalidation.
 
-Invalidate dead cached runner processes without graceful `shutdown`.
-A stopped process cannot answer a shutdown request.
-Graceful cleanup would only add stale-listener delay.
+After a skip, a transport failure clears the recency record and is marked with the skip context.
+Connection-shaped failures (refused, reset, hung up) run status recovery instead of a blind replay.
+Timeout-shaped failures propagate with the skip context.
+This is the same classification that preflighted sends use.
 
-Every successful runner response carries live main-thread occupancy as `runnerMainThreadBusy`.
-An execution-watchdog timeout carries typed code `MAIN_THREAD_TIMEOUT`.
-Thus, the stalled command itself informs the daemon of occupancy before a later `RUNNER_BUSY` refusal.
-The daemon mirrors occupancy on `RunnerSession`:
+`uptime` is a direct runner listener probe.
+The listener answers it before command journaling, the serial command execution queue, app activation, and main-thread XCTest dispatch.
+The `uptime` probe should measure only whether the runner is alive and accepts new HTTP requests.
 
-- Set it on `RUNNER_BUSY` or `MAIN_THREAD_TIMEOUT`.
-- Clear it on any other served runner reply, which reached the main thread and therefore drained.
-- Preserve it after a transport failure or unstamped recovered response.
+Dead cached runner processes are invalidated without graceful `shutdown`.
+A process that already stopped cannot answer the shutdown request.
+Thus, graceful cleanup only adds stale-listener delay.
 
-A healthy `ok` never proves drain.
-A private-AX snapshot can succeed while an abandoned tree crawl continues on the XCTest main thread (#2552).
+The runner stamps its live main-thread occupancy (`runnerMainThreadBusy`) onto every successful response.
+The runner tags the execution-watchdog timeout with the typed `MAIN_THREAD_TIMEOUT` code.
+Thus, the daemon learns of main-thread occupancy from the stalling command itself, not only from a later `RUNNER_BUSY` refusal.
+The daemon mirrors that occupancy on the `RunnerSession`:
 
-The daemon's per-command read-only trait determines behavior after `RUNNER_BUSY`.
-No runner-side command classification controls it.
-`RUNNER_COMMAND_TRAITS` in `packages/platform-apple/src/runner/runner-command-traits.ts` owns this trait.
-`runAppleRunnerCommand` reads it through `isReadOnlyRunnerCommand` when it selects the resend loop.
-`runner-client-busy-resend.test.ts` asserts these distinct behaviors:
+- `RUNNER_BUSY` or `MAIN_THREAD_TIMEOUT` sets it.
+- Any other served runner reply clears it, because that reply reached the main thread and therefore drained.
+- A transport failure or an unstamped recovered response leaves it intact.
 
-- A read-only command waits for drain under a busy-specific budget sized to outlast it.
+The daemon never reads a healthy `ok` as proof of drain.
+The reason is that a private-AX snapshot can be served while an abandoned tree crawl still continues on the XCTest main thread (#2552).
+
+The cost of a `RUNNER_BUSY` refusal to the caller depends on the daemon's own per-command read-only trait.
+It does not depend on any runner-side classification of the command.
+The trait is `RUNNER_COMMAND_TRAITS` in `packages/platform-apple/src/runner/runner-command-traits.ts`.
+`runAppleRunnerCommand` reads it through `isReadOnlyRunnerCommand` when it decides whether to wrap the send in a resend loop.
+This asymmetry is shipped, and `runner-client-busy-resend.test.ts` asserts it:
+
+- A read-only command treats the refusal as *not yet*.
+  It waits for the drain on the busy-specific budget sized to outlast the drain.
   It resends until the runner answers or the window ends.
-- A mutating command makes one attempt.
-  The refusal reaches the caller without a wrapper or replay.
+- A mutating command treats the same refusal as *not mine to send again*.
+  It makes one attempt, and the refusal reaches the caller unwrapped, with nothing replayed.
 
-Neither path performs a status probe because the structured reply already states whether the command ran.
-`runner-lifecycle.ts` implements this bypass.
-The same trait controls the startup-preflight skip above.
-It is therefore the single owner for classification changes.
+Neither path sends a status probe, because a structured reply already answered "did my command run?".
+This bypass is in `runner-lifecycle.ts`.
+The same trait already decides the startup-preflight skip above.
+Thus, it is the single place for a change to that classification.
 
-If `close` would retain an occupied runner for reuse, it first stops that runner.
-It awaits the stop so the lease is released before the next request.
-A runner with watchdog-abandoned work refuses every command until drain or escalation to `RUNNER_WEDGED`.
-This fact governs close and retention only.
-The read-only resend loop is one live caller that waits under its own budget.
-`close` does not inherit that wait for the pool.
-Returning the stalled runner to the pool gives it to the next `open` without recovery.
-Only process termination can abort uncancellable XCTest work.
-This applies the `RUNNER_WEDGED` restart from #1105 at close instead of after the wedge threshold.
+If `close` would retain a runner for reuse and that occupancy is set, `close` first stops the runner.
+`close` awaits the stop, so the lease is released before the next request.
+A runner that still finishes watchdog-abandoned work refuses every command sent to it until it drains or escalates to `RUNNER_WEDGED`.
+This ADR states that fact only for the close-and-pooling decision.
+The read-only resend above is one live caller that waits out the same refusal on its own budget.
+`close` does not inherit that wait on behalf of the pool.
+If the pool takes the stalled runner back, it gives that runner to the next `open`, and `close` recovers nothing.
+Killing the process is the only way to abort uncancellable XCTest work.
+This is the `RUNNER_WEDGED` restart from #1105, applied at the close boundary instead of after the wedge threshold elapses.
 
 If XCTest reports a root accessibility snapshot failure such as `kAXErrorIllegalArgument`, the runner treats the cached app target as suspect.
-Interactive snapshots fail closed with a truncated root-only payload.
-They do not issue more flat fallback queries against the broken tree.
+Interactive snapshots fail closed to a truncated root-only payload.
+They do not issue more flat fallback queries against the same broken tree.
 The runner clears the cached `XCUIApplication` handle.
-The next command reacquires the target through normal activation.
+Thus, the next command reacquires the target through the normal activation path.
 
 An external iOS-family Simulator relaunch or physical iOS relaunch also invalidates process-bound target state.
-After app process replacement, the daemon sends a lifecycle reset to the retained runner.
-The next command then reacquires `XCUIApplication`.
+After it replaces the app process, the daemon sends a lifecycle reset to the retained runner.
+Thus, the next command reacquires `XCUIApplication`.
 The reset also clears process-bound snapshot penalty and private-AX depth state.
-If the reset cannot be confirmed, the daemon discards the runner session.
-If relaunch fails before reset, it also discards the session.
-Other physical Apple OS leaves retain existing runner-restart behavior until separate evidence supports a change.
+If that reset cannot be confirmed, or if relaunch fails before reset, the daemon discards the runner session.
+Other physical Apple OS leaves retain their existing runner-restart behavior until separate evidence exists.
 
-The snapshot surface intentionally has two AX-failure forms.
-Interactive fast snapshots return truncated success with `runnerFatal`.
-Agents can see AX unavailability and recover through a plain screenshot and coordinate navigation.
-Raw or strict snapshot paths retain errors because their callers request a faithful tree instead of lossy recovery.
+The snapshot surface intentionally has two AX-failure shapes.
+Interactive fast snapshots return a truncated success payload with `runnerFatal`.
+Thus, agents can still see that AX state is unavailable and recover with a plain screenshot plus coordinate navigation.
+Raw or strict snapshot paths continue to return an error, because those callers requested a faithful tree, not a lossy recovery payload.
 
 ## Consequences
 
-Selector taps that cause navigation no longer depend on XCTest's post-tap element resolution.
-If navigation removes the target, the tap remains a normal successful interaction.
-The runner should remain alive.
+The success of a selector tap that causes navigation no longer depends on XCTest's post-tap element bookkeeping.
+If the target disappears because navigation happened, the tap remains a normal successful interaction.
+The runner should stay alive.
 
-If xcodebuild exits for another reason, process/liveness checks detect the stale runner on the next command.
-They avoid the old 15-second graceful-shutdown wait.
-Remaining latency comes from fresh xcodebuild runner startup instead of stale transport delay.
+If xcodebuild still exits for another reason, the next command detects the stale runner through process/liveness checks.
+That command also avoids the old 15-second graceful-shutdown wait.
+The remaining latency is fresh xcodebuild runner startup, not a stale transport stall.
 
-A `close` then `open` during abandoned main-thread work starts a fresh runner instead of reusing the stalled runner.
-The wedge therefore does not persist across close/open.
-When retention is requested, ready runners without unanswered exchanges can remain active for reuse.
+A `close` then `open` on a runner that still drains abandoned main-thread work now starts a fresh runner.
+It does not inherit the stalled runner.
+Thus, the wedge no longer survives the close/open cycle.
+When retention is requested, runners that are ready and have no unanswered exchanges can remain warm.
 iOS-family simulators also require an observed live listener.
 Close retires unfinished startup and its recovery authority.
 The retained generation owns its idle timer and listener observation.
 Successful reuse ends retention.
 Listener loss or idle expiry disposes that generation.
-Graceful daemon shutdown stops idle retained generations before exit.
+Graceful daemon shutdown stops idle retained generations before it exits.
 Active ready generations retain the existing handoff policy.
 
-The daemon does not treat generic recent success as runner health.
-A proven healthy mutating response for the same app provides end-to-end liveness evidence from HTTP listener to app target.
-It counts only after the `runnerFatal` check and only for allowlisted interactions.
-A repeated series of allowlisted interactions can therefore skip per-command `uptime`.
-Each healthy mutation establishes permission for the next skip.
-Unconditional `uptime` remains the default for non-allowlisted commands and after:
+The daemon no longer models a generic "recent success" cache as a runner-health signal.
+A proven healthy mutating response for the same app is now a real end-to-end liveness proof, from the HTTP listener through to the app target.
+That response is recorded only after the `runnerFatal` check and only for allowlisted interactions.
+Thus, a repeated series of allowlisted interactions skips the per-command `uptime` request.
+Each skip is still earned again from another healthy mutation.
+The earlier unconditional `uptime` before every ready-session command remains the default for non-allowlisted commands and after any of these:
 
 - Invalidation.
 - A stale record.
@@ -170,14 +174,17 @@ Unconditional `uptime` remains the default for non-allowlisted commands and afte
 - An absent record.
 
 XCTest may still be unable to examine deeply an app with a broken accessibility tree.
-However, one failed snapshot no longer causes continued use of a suspect target or additional failures from every interactive element query.
+However, one failed snapshot no longer causes the runner to keep using a suspect cached app target.
+It also no longer causes the runner to amplify the failure with a walk of every interactive element query.
 
-After a tap, `XCTEST_RECORDED_FAILURE` is an ambiguous outcome at the daemon boundary.
+An `XCTEST_RECORDED_FAILURE` returned after a tap is treated as an ambiguous outcome at the daemon boundary.
 If a usable retained snapshot exists, the daemon takes one same-presentation post-action capture.
-A changed accessibility digest returns success with an explicit warning.
-This prevents blind repetition of a tap that may already have navigated.
-Unchanged, sparse, mismatched, or unavailable evidence retains the original failure.
+A changed accessibility digest is reported as success with an explicit warning.
+Thus, agents do not blindly repeat a tap that may already have navigated.
+Unchanged, sparse, mismatched, or unavailable evidence remains the original failure.
 
-iOS-family Simulator and physical iOS relaunch retain a healthy XCTest process without retaining an app target across process identity.
-The reset adds one local runner request instead of a runner restart.
-Before replacement target acquisition, it clears the old process's hostile-screen capture penalty.
+iOS-family Simulator and physical iOS relaunch keep the healthy XCTest process warm without carrying an app target across process identity.
+The reset adds one local runner request instead of the cost of a runner restart.
+Before the replacement target is reacquired, the reset clears the old process's hostile-screen capture penalty.
+
+Future optimization work should reduce these `uptime` preflights only after the runner exposes status that survives command-induced XCTest teardown and can prove that the session still serves new requests.
