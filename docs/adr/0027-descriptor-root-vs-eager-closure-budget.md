@@ -14,21 +14,22 @@ Rename canonicalization preserves a `git mv` of a module already inside the base
 It does not exempt a pre-existing external module moved into the closure.
 `scripts/__tests__/closure-growth-rule.ts` owns the rule.
 `scripts/__tests__/closure-growth-rule.test.ts` plants violations in every failing direction.
-The hard ADR-0019 checks remain unchanged: exact façades and no platform implementation before a binding.
-The tolerance relaxes the module-count proxy, never the load property.
+The hard ADR-0019 checks remain unchanged: façade exactness and no platform implementation before binding.
+The tolerance relaxes the module-count proxy, never the loading property.
 
 ## Rules at a glance, resolved
 
-- A statement-neutral hub split is permitted only with containment, added-module novelty, and flat module-scope statement count.
+- A hub split is permitted when it is statement-neutral: it has containment, added-module novelty, and flat module-scope statement count.
   The gate enforces all three.
   Unexplained count growth still fails without an approval path.
 - Do not add an approved-growth row, baseline entry, or suppression to pass the gate.
   That would be the allowlist prohibited by `AGENTS.md`.
-  The split tolerance computes a rule from two graphs, without per-split manual entries or waivers.
+  The split tolerance is a rule, not a waiver.
+  It decides from the two graphs, and nobody enters a value by hand for a split.
 - Do not make registry construction asynchronous to bypass the walker.
   ADR 0008 requires the synchronous root for compile-time totality.
-- Flat statement weight requires preservation of the base closure.
-  The tolerance does not authorize additional eager edges beneath a façade.
+- The split tolerance guarantees flat statement weight over a preserved closure.
+  It does not license additional eager edges beneath a façade.
   The head must still evaluate each merge-base module.
   The ADR-0019 checks remain mandatory.
 
@@ -47,8 +48,8 @@ Consumers reach these values through **value** imports.
 `AGENTS.md` states that files beyond 1,000 lines are architecture debt and must split before new behavior.
 The descriptor root exceeds that limit.
 
-The ADR 0019 probe, `scripts/__tests__/eager-closure-budgets.ts`, measures each published entry surface's eager **module count** against the committed merge-base.
-It prohibits increases and deliberately has no approval path for growth.
+The ADR 0019 loading-shape probe, `scripts/__tests__/eager-closure-budgets.ts`, measures each published entry surface's eager **module count** against the committed merge-base.
+It prohibits any increase and deliberately has no approval path for growth.
 `APPROVED_OVER_CEILING` applies only to newly introduced entries against `NEW_ENTRY_CEILINGS`.
 
 A hub split necessarily adds static value edges.
@@ -90,7 +91,7 @@ The gate proxy and file-size proxy conflict at precisely this structure, so the 
 
 ## Decision
 
-Byte-neutral relocation of hub contents may increase eager module count **only for a split**.
+Byte-neutral relocation of hub contents may increase eager module count **if and only if the relocation is a split**.
 Three facts determine eligibility from the closure graphs and merge-base tree, without a manually entered number:
 
 1. **Containment.**
@@ -105,12 +106,12 @@ Three facts determine eligibility from the closure graphs and merge-base tree, w
    Classification of every single-statement reuse as a move would incorrectly reject new files.
    A pre-existing module outside the closure that becomes eager is a new edge, not relocated closure code.
    This applies under its original path, a renamed path, or a rewritten move that escapes git `-M` pairing.
-   Without novelty, deleted weight elsewhere could fund that new edge.
+   Without novelty, weight deleted elsewhere in the closure would fund that new edge.
    Rename canonicalization preserves modules **already inside** the base closure.
    An external module moved inside fails at its base path, which remains present in the merge-base tree.
 3. **Flat weight.**
    Total top-level statement count cannot exceed the merge-base closure's count.
-   Composition lines are excluded so relocation itself does not affect weight.
+   Wiring lines are excluded, so relocation is invisible to this count.
 
 This implements #2469 candidate 4, structure ∧ weight.
 Structure uses containment and novelty instead of candidate 2's importer-set structure.
@@ -124,7 +125,7 @@ Together, the three facts permit extraction without increased module-scope state
 Statements measure the preserved declarations and calls more accurately than bytes.
 Formatting and comments change bytes without changing those statements.
 
-The guarantee has these exact limits:
+The guarantee is exactly these facts:
 
 - Newly evaluated paths are absent from the merge-base tree.
 - Each shares at most one coincidental statement with any source deleted since the merge-base.
@@ -132,37 +133,38 @@ The guarantee has these exact limits:
 
 `movedFromDeletedSource` deliberately uses the two-statement move threshold.
 The guarantee does not establish equal eager behavior.
-A more expensive replacement for one existing top-level statement changes neither count nor weight and therefore passes.
-Neither module counts nor statement counts detect like-for-like replacements.
+A split that replaces an existing statement in an existing file with a more expensive top-level call changes neither count nor weight.
+Therefore it passes.
+No count-based check, of modules or of statements, can detect a like-for-like replacement.
 The remaining risk is bounded by new-path novelty and the transplant probe.
-Any added module with two shared normalized statements from one deleted source counts as pre-existing code.
+Any added module with two or more shared normalized statements from one deleted source counts as pre-existing code.
 
 The probe is deliberately conservative and textual.
-Code rewritten or reformulated during a move does not match and can pass as novel.
+Code rewritten or reformulated during a move does not match the probe and would pass as novel.
 It verifies "no verbatim transplant of a deleted source", not "no repurposed logic".
 The weight check still refuses a heavier transplant.
 Surrounding checks limit this residual risk:
 
-- Hard ADR-0019 façade and pre-binding implementation checks remain count- and pattern-based.
+- The hard ADR-0019 checks (façade exactness, no platform implementation before binding) remain count- and pattern-based.
 - Each failure prints added modules for reviewer examination.
 - `scripts/__tests__/closure-growth-rule.test.ts` pins every failing direction.
 
 An ordinary extraction requires zero configuration edits.
 The merge-base comparison recomputes all values without a per-split row, baseline, or number.
-Candidate 3's approval-row design instead requires one manual row and its later retirement.
+Candidate 3's approval-row design instead requires one manual row for each split, and its later retirement.
 
 The `AGENTS.md` 1,000-line rule therefore needs no hub exception.
-A statement-neutral split is shippable, so an oversized hub remains addressable debt rather than accepted state.
+A statement-neutral split is shippable, so an oversized hub is addressable debt, not accepted state.
 
 ## Alternatives considered and refuted
 
 - **An approved-growth row like `APPROVED_OVER_CEILING`, with issue, reason, and owner: refuted.**
-  It is auditable but creates an allowlist for an invariant deliberately lacking an approval path.
+  It is auditable but creates an allowlist for the one invariant that deliberately has no approval path.
   `AGENTS.md` prohibits such an allowlist to obtain a pass.
   Every split would also require a row and its retirement, unlike the chosen rule.
 - **Structure alone, #2469 candidate 2: refuted.**
   The planted smuggle test shows that a "new" module can introduce a heavy eager edge.
-  Containment alone does not constrain eager work.
+  Containment proves nothing about eager work.
 - **Containment and weight without novelty, the first #3298 draft: refuted.**
   The planted pre-existing-heavy test deletes statements elsewhere and funds a static edge to a pre-existing external module.
   That is actual growth, not a split.
@@ -178,7 +180,8 @@ A statement-neutral split is shippable, so an oversized hub remains addressable 
 - **Weight alone, #2469 candidate 1: refuted.**
   The planted drop test replaces modules while retaining the same statement total.
 - **Leave the array in place.**
-  This retains the conflict and file-size debt without an owner or documented resolution.
+  This is the status quo, not a resolution.
+  It leaves the size debt without an owner and the conflict without documentation.
 - **Function-scoped `await import` per family.**
   This passes by making registry construction asynchronous.
   It removes ADR 0008's compile-time totality and literal-union guarantees.
