@@ -48,7 +48,7 @@ This ADR proposes these rules:
 
 - One runtime row per capability family owns its cell key.
   The table derives the cell-key type instead of a separately maintained type.
-- Each runtime owner still reports exhaustive facts for its exact device shape under [ADR 0019](0019-request-bound-platform-runtime.md), section 3.
+- Each runtime owner still reports exhaustive facts for its exact device shape under [ADR 0019](0019-request-bound-platform-runtime.md), section 2.
   Derivation may enumerate cells.
   It must not derive an owner's answer for a cell.
 - There is no cross-family default denial set.
