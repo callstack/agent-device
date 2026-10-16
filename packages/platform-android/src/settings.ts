@@ -27,7 +27,7 @@ import {
   type SettingName,
 } from '@agent-device/contracts/settings-catalog';
 import { runAndroidAdb, runAndroidShell } from './adb.ts';
-import { sampleUntilSettled } from './sample-until-settled.ts';
+import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
@@ -325,20 +325,21 @@ async function awaitAndroidMobileData(
   requested: AndroidMobileData,
   signal: AbortSignal | undefined,
 ): Promise<AndroidMobileData> {
-  const storedValue = await sampleUntilSettled(
-    async (remainingMs) =>
-      (
-        await runAndroidShell(device, ['settings', 'get', 'global', 'mobile_data'], {
-          signal,
-          timeoutMs: remainingMs,
-        })
-      ).stdout.trim(),
-    (value) => parseAndroidMobileData(value) === requested,
-    { timeoutMs: MOBILE_DATA_SETTLE_MS, intervalMs: MOBILE_DATA_SAMPLE_INTERVAL_MS, signal },
-  );
-  const mobileData = parseAndroidMobileData(storedValue);
-  if (mobileData === requested) return mobileData;
-  throw androidMobileDataSettleError(device, requested, mobileData, storedValue);
+  const deadline = Deadline.fromTimeoutMs(MOBILE_DATA_SETTLE_MS);
+  for (;;) {
+    signal?.throwIfAborted();
+    const { stdout } = await runAndroidShell(device, ['settings', 'get', 'global', 'mobile_data'], {
+      signal,
+      timeoutMs: Math.max(1, deadline.remainingMs()),
+    });
+    const storedValue = stdout.trim();
+    const mobileData = parseAndroidMobileData(storedValue);
+    if (mobileData === requested) return mobileData;
+    if (deadline.isExpired()) {
+      throw androidMobileDataSettleError(device, requested, mobileData, storedValue);
+    }
+    await sleep(Math.min(MOBILE_DATA_SAMPLE_INTERVAL_MS, deadline.remainingMs()), signal);
+  }
 }
 
 function parseAndroidMobileData(storedValue: string): AndroidMobileData | undefined {

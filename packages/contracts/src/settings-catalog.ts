@@ -109,7 +109,7 @@ export const SETTINGS = {
     forms: [{ kind: 'on-off' }],
     app: 'input',
     appScope: { mobile: 'device-level' },
-    help: 'Android switches mobile data with svc data and reports the mobileData state the global mobile_data row then holds, failing with mobile-data-not-applied or mobile-data-unreadable when it does not settle within 2 s. Multi-SIM devices keep the switch in a per-subscription row this read-back does not cover yet. Naming an app is refused, because the switch is device-wide.',
+    help: 'Android only. Runs svc data and reports the stored mobileData state, or fails with mobile-data-not-applied or mobile-data-unreadable. Multi-SIM read-back is not covered yet, and --app is refused.',
   },
   location: {
     forms: [
