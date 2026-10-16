@@ -13,14 +13,20 @@ import {
 import { handleLimrunIosAlert, type LimrunIosAlertClient } from './alert.ts';
 import type { IosTreeNode } from './snapshot.ts';
 
-// The clock is the assertion, not the wait (`docs/agents/testing.md`): only `Date` is faked, and
-// the legs' sleep seam advances it, so budget loops terminate without real time.
-const advanceClock = async (ms: number) => {
-  vi.advanceTimersByTime(ms);
-};
-
-function fakeClock() {
-  vi.useFakeTimers({ toFake: ['Date'] });
+/**
+ * The legs share the tree-alert driver, whose polls sleep between captures on the shared
+ * deadline primitive; the clock is the assertion, not the wait (`docs/agents/testing.md`).
+ */
+async function underFakeTimers<T>(run: () => Promise<T>): Promise<T> {
+  vi.useFakeTimers();
+  try {
+    const outcome = run();
+    outcome.catch(() => {});
+    await vi.runAllTimersAsync();
+    return await outcome;
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 function clientWithTrees(trees: Array<IosTreeNode | IosTreeNode[]>): LimrunIosAlertClient {
@@ -39,34 +45,25 @@ afterEach(() => {
 });
 
 describe('wait budget', () => {
-  it('spends exactly the caller window through the sleep seam and reports the timeout', async () => {
-    fakeClock();
+  it('spends exactly the caller window and reports the timeout', async () => {
     const client = clientWithTrees([limrunAppScreenTree()]);
-    const sleep = vi.fn(advanceClock);
 
-    const settled = handleLimrunIosAlert(client, 'wait', { timeoutMs: 5_000, sleep }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    const error = await settled;
-
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe('alert wait timed out');
+    await expect(
+      underFakeTimers(() => handleLimrunIosAlert(client, 'wait', { timeoutMs: 5_000 })),
+    ).rejects.toThrow('alert wait timed out');
     // One poll per interval over the whole window: never fewer (gave up early) nor real seconds.
-    expect(sleep).toHaveBeenCalledTimes(Math.ceil(5_000 / 300));
+    expect(client.elementTree).toHaveBeenCalledTimes(1 + Math.ceil(5_000 / 300));
   });
 
   it('treats a malformed window as the bounded default rather than an unbound loop', async () => {
-    fakeClock();
     const client = clientWithTrees([limrunAppScreenTree()]);
-    const sleep = vi.fn(advanceClock);
 
     await expect(
-      handleLimrunIosAlert(client, 'wait', { timeoutMs: Number.NaN, sleep }),
+      underFakeTimers(() => handleLimrunIosAlert(client, 'wait', { timeoutMs: Number.NaN })),
     ).rejects.toThrow('alert wait timed out');
     // The fallback is the contract default, spent on the driven clock — this returned, so the
     // loop had a bound, which a NaN comparison would not have given it.
-    expect(sleep).toHaveBeenCalledTimes(Math.ceil(10_000 / 300));
+    expect(client.elementTree).toHaveBeenCalledTimes(1 + Math.ceil(10_000 / 300));
   });
 
   it('surfaces a failed capture as itself, never as a timeout', async () => {
@@ -77,9 +74,7 @@ describe('wait budget', () => {
       ) as unknown as LimrunIosAlertClient['elementTree'];
     const client = { elementTree, tap: vi.fn(async () => {}) } satisfies LimrunIosAlertClient;
 
-    await expect(handleLimrunIosAlert(client, 'wait', { sleep: async () => {} })).rejects.toThrow(
-      'websocket closed',
-    );
+    await expect(handleLimrunIosAlert(client, 'wait')).rejects.toThrow('websocket closed');
   });
 });
 
@@ -87,7 +82,7 @@ describe('get on an undecided capture', () => {
   it('says the capture cannot decide, rather than claiming no alert', async () => {
     const client = clientWithTrees([[limrunAttAlertTree(), limrunAttAlertTree()]]);
 
-    const result = await handleLimrunIosAlert(client, 'get', { sleep: async () => {} });
+    const result = await handleLimrunIosAlert(client, 'get');
 
     expect(result.kind === 'alertStatus' && result.alert).toBeNull();
     expect(result.kind === 'alertStatus' && result.message).toBe(
@@ -97,24 +92,19 @@ describe('get on an undecided capture', () => {
 });
 
 describe('acting budgets', () => {
-  it('spends the confirm budget through the sleep seam and reports a stuck alert', async () => {
-    fakeClock();
+  it('spends the confirm budget and reports a stuck alert', async () => {
     const client = clientWithTrees([limrunAttAlertTree(), limrunAttAlertTree()]);
-    const sleep = vi.fn(advanceClock);
 
-    await expect(handleLimrunIosAlert(client, 'dismiss', { sleep })).rejects.toThrow(
+    await expect(underFakeTimers(() => handleLimrunIosAlert(client, 'dismiss'))).rejects.toThrow(
       'alert dismiss did not dismiss the visible alert',
     );
     expect(client.tap).toHaveBeenCalledTimes(1);
-    expect(sleep).toHaveBeenCalled();
   });
 
   it('refuses an ambiguous alert without tapping, on a typed reason', async () => {
     const client = clientWithTrees([limrunAlertAmbiguousButtonsTree()]);
 
-    const error = await handleLimrunIosAlert(client, 'accept', {
-      sleep: async () => {},
-    }).then(
+    const error = await handleLimrunIosAlert(client, 'accept').then(
       () => undefined,
       (caught: unknown) => caught,
     );
@@ -127,7 +117,6 @@ describe('acting budgets', () => {
   });
 
   it('reports a stuck alert when the post-tap capture stays unresolvable to the end', async () => {
-    fakeClock();
     // The first probe resolves the single alert; every post-tap probe carries two disagreeing
     // alert-shaped sheets. An unresolvable capture proves absence for nothing, so the confirm
     // loop keeps its budget and fails rather than reporting the alert handled.
@@ -135,22 +124,19 @@ describe('acting budgets', () => {
       limrunAttAlertTree(),
       [limrunAttAlertTree(), limrunAttAlertTree()],
     ]);
-    const sleep = vi.fn(advanceClock);
 
-    await expect(handleLimrunIosAlert(client, 'dismiss', { sleep })).rejects.toThrow(
+    await expect(underFakeTimers(() => handleLimrunIosAlert(client, 'dismiss'))).rejects.toThrow(
       'alert dismiss did not dismiss the visible alert',
     );
   });
 
   it('reports a stuck alert when the same root survives the tap with degraded buttons', async () => {
-    fakeClock();
     // The tap was ignored: the post-tap capture is the same alert root with its choices dropped
     // to disabled, explicitly unhittable, and frameless. Degraded-but-present is not absence;
     // the leg must fail, not report handled.
     const client = clientWithTrees([limrunAttAlertTree(), limrunAlertTreeWithUnpressableButtons()]);
-    const sleep = vi.fn(advanceClock);
 
-    await expect(handleLimrunIosAlert(client, 'accept', { sleep })).rejects.toThrow(
+    await expect(underFakeTimers(() => handleLimrunIosAlert(client, 'accept'))).rejects.toThrow(
       'alert accept did not dismiss the visible alert',
     );
     expect(client.tap).toHaveBeenCalledTimes(1);
@@ -160,16 +146,14 @@ describe('acting budgets', () => {
     // The closest genuine no-alert negative to the case above: the same seam and budgets, and
     // the app's own named root after the tap — observed absence, which does confirm.
     const client = clientWithTrees([limrunAttAlertTree(), limrunAppScreenTree()]);
-    const result = await handleLimrunIosAlert(client, 'accept', { sleep: async () => {} });
+    const result = await handleLimrunIosAlert(client, 'accept');
     expect(result.kind === 'alertHandled' && result.button).toBe('Allow');
   });
 
   it('refuses to act on an alert-shaped but unresolvable capture, without tapping', async () => {
-    fakeClock();
     const client = clientWithTrees([limrunAlertTreeWithUnpressableButtons()]);
-    const sleep = vi.fn(advanceClock);
 
-    const error = await handleLimrunIosAlert(client, 'accept', { sleep }).then(
+    const error = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept')).then(
       () => undefined,
       (caught: unknown) => caught,
     );
@@ -208,14 +192,14 @@ describe('button vocabulary', () => {
         alertWith('Ask App Not to Track', label),
         limrunAppScreenTree(),
       ]);
-      const result = await handleLimrunIosAlert(client, 'accept', { sleep: async () => {} });
+      const result = await handleLimrunIosAlert(client, 'accept');
       expect(result.kind === 'alertHandled' && result.button).toBe(label);
     }
   });
 
   it('dismisses Close App, the ANRB denial', async () => {
     const client = clientWithTrees([alertWith('Close App', 'Wait'), limrunAppScreenTree()]);
-    const result = await handleLimrunIosAlert(client, 'dismiss', { sleep: async () => {} });
+    const result = await handleLimrunIosAlert(client, 'dismiss');
     expect(result.kind === 'alertHandled' && result.button).toBe('Close App');
   });
 });

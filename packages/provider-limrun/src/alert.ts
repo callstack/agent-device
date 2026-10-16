@@ -3,11 +3,9 @@ import type {
   TreeAlertObservation,
   TreeAlertPress,
   TreeAlertResult,
-  TreeAlertSleep,
 } from '@agent-device/platform-android/mechanics';
 import { runTreeAlertAction } from '@agent-device/platform-android/mechanics';
 import type { InstanceClient as LimrunIosClient } from '@limrun/api/ios-client';
-import { setTimeout as sleep } from 'node:timers/promises';
 import {
   chooseLimrunAlertButton,
   type LimrunAlertCandidate,
@@ -30,13 +28,6 @@ export type LimrunIosAlertClient = Readonly<{
   tap: LimrunIosClient['tap'];
 }>;
 
-/** Tests advance polls on a driven clock; production rides the timer (`docs/agents/testing.md`). */
-export type LimrunAlertSleep = TreeAlertSleep;
-
-const realSleep: LimrunAlertSleep = async (milliseconds) => {
-  await sleep(milliseconds);
-};
-
 export type LimrunIosAlertResult = TreeAlertResult<LimrunAlertInfo, 'ios'>;
 
 export type LimrunIosAlertAction = 'get' | 'wait' | 'accept' | 'dismiss';
@@ -44,9 +35,8 @@ export type LimrunIosAlertAction = 'get' | 'wait' | 'accept' | 'dismiss';
 export async function handleLimrunIosAlert(
   client: LimrunIosAlertClient,
   action: LimrunIosAlertAction,
-  options?: Readonly<{ timeoutMs?: number; sleep?: LimrunAlertSleep }>,
+  options?: Readonly<{ timeoutMs?: number }>,
 ): Promise<LimrunIosAlertResult> {
-  const nap = options?.sleep ?? realSleep;
   const driver: TreeAlertDriver<
     Awaited<ReturnType<LimrunIosClient['elementTree']>>,
     LimrunAlertInfo,
@@ -56,7 +46,6 @@ export async function handleLimrunIosAlert(
   > = {
     platform: 'ios',
     timeoutMs: options?.timeoutMs,
-    sleep: nap,
     capture: () => client.elementTree(),
     findCandidate: (tree): TreeAlertObservation<LimrunAlertCandidate> =>
       readLimrunAlertCapture(tree as Parameters<typeof readLimrunAlertCapture>[0]),
