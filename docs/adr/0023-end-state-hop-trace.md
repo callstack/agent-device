@@ -5,16 +5,6 @@ Backs the "Entry-to-platform hop count" paragraph in
 That paragraph cited 38 hops (`press`/Android) and 29 hops (`snapshot`/iOS) with no ordered
 route, no counting definition, and no linked artifact. This file supplies all three.
 
-The 23/24 tables originally recorded here at `132ffe1da` (corrected for PR #2302 in that PR)
-are superseded: the routes moved ~58 commits, `snapshot`/iOS is now a dual-arm route, and the
-#2278 audit re-traced both routes file-by-file at HEAD with a role vocabulary. This revision
-replaces the tables and keeps the counting definition stable so the numbers remain comparable.
-A follow-up revision re-traced the request spine: the auth token comparison, the request
-cancellation gate, the idle-reap timer reset, and the Android freshness guard/clear are
-side-calls (guards and liveness bookkeeping), not the call that continues toward the platform
-boundary, so they are not hops. The tables and every derived number below are recomputed under
-that reading.
-
 ## Counting definition
 
 - **Unit**: one distinct production `.ts` file entered on the call path, counted once even if
