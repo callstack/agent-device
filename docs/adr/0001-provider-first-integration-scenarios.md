@@ -4,6 +4,8 @@
 
 Accepted
 
+Completed process history is in git history.
+
 > **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Provider-first scenario coverage and semantic provider operations remain accepted.
 > Request-bound runtime facets and explicit provider ownership supersede the monolithic `Interactor` and request callback-stack topology one command at a time.
 
@@ -217,6 +219,5 @@ Unit tests remain for:
 - Provider scope routing.
 - Platform error boundaries.
 
-The temporary migration roadmap is complete and was removed from the repository.
 Future work should follow current evidence from the progress script, failing tests, or concrete adapter needs.
 It should not follow a permanent refactor backlog.
