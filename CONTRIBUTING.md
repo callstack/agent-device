@@ -210,9 +210,12 @@ pnpm check:affected --run --head "$(git rev-parse HEAD)"
 
 Only a passed receipt with `exactCommit: true` proves validation at that commit. Without `--head`,
 the run also includes staged, unstaged, and untracked files; treat that result as local feedback.
-For broad refactors or when explicitly requested, run `pnpm check`. Both commands share one host
-lock and need macOS or Linux. GitHub CI stays authoritative for coverage, provider integration,
-specialized toolchains, and live device lanes.
+Unknown, workflow, lockfile, and selector-owning changes fail open to the full local set. For broad
+refactors or when explicitly requested, run `pnpm check`: formatting, lint, typechecking, layering,
+production exports, MCP metadata, the build, Fallow, unit tests, and local smoke tests. Both commands
+share one host lock and need macOS or Linux; on Windows, use the affected plan and direct focused
+checks. GitHub CI stays authoritative for coverage, provider integration, specialized toolchains,
+and live device lanes.
 
 Useful direct entry points:
 

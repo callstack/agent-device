@@ -24,6 +24,8 @@ For Apple connection failures, start at `packages/platform-apple/src/runner/runn
 Retry policy belongs in `runner-error-classification.ts`. Command typing belongs in `runner-contract.ts`.
 Keep the transport below session and client behavior. Keep xctestrun preparation outside request execution.
 After signing, run `node -e 0` before you measure Gatekeeper-sensitive startup.
+Before you measure on a physical iOS device, set Auto-Lock to Never.
+A failed command can look like a fast success. Examine each result before you record its time.
 
 ## Ownership and cleanup
 
