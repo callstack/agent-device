@@ -2,77 +2,84 @@
 
 ## Status
 
-Proposed (2026-09-14). Amends ADR 0019
-section 5 for the `screen-recording` resource kind only; ADR 0019 receives a short pointer
-paragraph (2.7), the relationship ADR 0022 and 0023 have to it. App-log, audio-probe, and
-perf-capture keep the ADR 0019 contract unchanged; rule 6's shared mechanism reaches each of them
-only through that kind's own failed-finish test.
+Proposed (2026-09-14).
+This proposal amends ADR 0019 section 5 only for `screen-recording`.
+ADR 0019 receives a short pointer under 2.7, as with ADRs 0022 and 0023.
+App-log, audio-probe, and perf-capture retain ADR 0019's contract.
+Rule 6 applies its shared mechanism to each kind only through that kind's failed-finish test.
 
-Two facts drive the design and are kept independent: **whether a playable export exists** and
-**whether the recorder has stopped**. A playable export can exist while termination is
-unconfirmed; a recorder can be stopped while its video still needs collecting. Both combinations
-are legitimate, and one lifecycle cannot answer both questions.
+Completed rollout history is in git history.
+The current finalizer uses overlay and telemetry only.
+After start-trim removal, the contracts no longer contain `invalidTrimRange` or `trimStartMs`.
+
+The design separates two facts: **playable export existence** and **recorder termination**.
+A playable export can exist without confirmed termination.
+A stopped recorder can still require video collection.
+Both combinations are legitimate.
+One lifecycle cannot establish both facts.
 
 ## Rules at a glance
 
-The shared contract is six situations. Everything platform-specific stays in the backend.
+This ADR proposes a shared contract for six situations.
+Platform-specific behavior stays in backends.
 
-| Situation | Shared behavior |
+| Situation | Proposed shared behavior |
 | --- | --- |
-| A recording is actively owned (its owner is alive and holds the fence) | Another start refuses without disturbing it |
-| Stop produces a playable export | Commit it and return it with the recorder observation |
-| Stop cannot produce an export | Preserve recoverable evidence, return the actual error, leave the manifest `open` |
-| An export was already committed | Replay it, under the same session and device guards, without repeating stop work |
-| The recorder or native-path disposition remains unresolved after a committed export | Retain the native path and identity in the manifest; authorized recovery may settle termination and disposition |
-| Artifact cleanup is considered | Require ownership and proof that no recoverable output is destroyed |
+| An active owner is alive and holds the fence | Refuse another start without effects on the recording |
+| Stop produces a playable export | Commit and return it with the recorder observation |
+| Stop produces no export | Preserve recoverable evidence, return the actual error, and leave the manifest `open` |
+| An export is already committed | Replay under the same session/device guards without repeated stop work |
+| Recorder or native-path disposition remains unresolved after commit | Retain path/identity in the manifest; authorized recovery may settle termination and disposition |
+| Artifact cleanup is considered | Require ownership and proof that recoverable output remains protected |
 
-Six rules make the table operational:
+The proposal defines six rules:
 
-1. **Identity uncertainty alone never discards a usable export, and failures preserve retryable
-   evidence.** That replaces "fail closed on uncertain ownership" as the recording policy. It is not
-   "stop fails for exactly two reasons": storage, transport, cancellation, and manifest-commit
-   failures remain real errors.
-2. **Signalling lives entirely inside the backend.** The coordinator asks "stop safely within this
-   budget" and receives an observation. Which signal, in which order, after which identity check,
-   and whether a HarmonyOS toggle is safe are backend facts with different meanings per platform.
-   Identity probes are private to the backend. A proven identity mismatch prohibits signalling in
-   every backend; an unreadable probe is answered by the backend's own capability rules (2.3).
-3. **One stop-and-export path.** Live and recovered recordings run the same steps: stop safely,
-   collect, validate, commit. A live in-process handle helps the backend stop; its absence never
-   selects a different algorithm.
-4. **The recording manifest is the only lifecycle store.** Identity, artifacts, the committed
-   export, and the last recorder observation live together in `screen-recording.resource.json`.
-   `owned-processes.json` and the Android device marker cover only the window before a manifest
-   exists (incomplete starts, chunk launches); they are not a second lifecycle database.
-5. **Recovery selects work; the coordinator does it.** The coordinator serves two requests. A
-   user stop **ensures an export**. Authorized recovery **settles the recorder**: it stops an
-   unresolved recorder and completes safe native-path disposition, preserving a committed export
-   untouched. Recovery enumerates abandoned or unsettled manifests and asks for one of the two
-   under the ownership guard; it never kills processes or deletes files on its own.
-6. **Export failure is not disposal.** A collection, validation, or commit failure preserves the
-   material a retry needs. Forced cleanup is invoked only by session teardown and failed-start
-   rollback, never inferred from "finish threw". The mechanism is in the shared coordinator
-   (`capture-kit/durable-capture/transitions.ts`), but its scope is earned per kind: each of
-   app-log, audio-probe, and perf-capture gets its own failed-finish test proving what its retry
-   needs, and a kind whose retry needs nothing keeps its current disposal explicitly. The Android
-   data loss alone establishes the rule for recording only.
+1. **Identity uncertainty never discards a usable export by itself.** Failures preserve retryable evidence.
+   This replaces the recording policy of refusal on uncertain ownership.
+   Storage, transport, cancellation, and manifest-commit failures remain real errors.
+   Stop failure is not limited to two reasons.
+2. **Backends own all signals.** The coordinator requests safe stop within a budget and receives an observation.
+   Signal choice, order, identity checks, and HarmonyOS toggle safety are backend facts.
+   Identity probes remain private.
+   Proven identity mismatch prohibits signals in every backend.
+   Unreadable probes follow backend capability rules under 2.3.
+3. **One path stops and exports.** Live and recovered recordings use safe stop, collection, validation, and commit.
+   A live handle helps stop the recorder.
+   Its absence never selects another algorithm.
+4. **The manifest is the sole lifecycle store.** `screen-recording.resource.json` holds identity, artifacts, committed export, and last recorder observation.
+   `owned-processes.json` and the Android marker cover only pre-manifest incomplete starts/chunk launches.
+   They are not another lifecycle database.
+5. **Recovery selects work; the coordinator performs it.** User stop ensures an export.
+   Authorized recovery settles unresolved recorders and safe native-path disposition without changing committed exports.
+   Recovery enumerates abandoned/unsettled manifests and requests either operation under ownership guards.
+   It never independently kills processes or deletes files.
+6. **Export failure does not authorize disposal.** Collection, validation, and commit failures preserve retry material.
+   Only teardown and failed-start rollback invoke forced cleanup.
+   A thrown finish never implies cleanup.
+   The shared mechanism belongs to `capture-kit/durable-capture/transitions.ts`.
+   Each other durable kind requires its own failed-finish test.
+   App-log, audio-probe, and perf-capture must each prove retry requirements.
+   A kind that needs no retry material explicitly retains current disposal.
+   Android data loss establishes this rule for recording only.
 
-Two later, independently proven steps are recorded so they are not re-litigated: reducing the
-Android device marker to marker-only content (2.6), and `--time-limit 0` on API 34+ (2.8).
-
-Completed rollout history is in git history.
-The finalizer uses overlay and telemetry only.
-The contracts no longer contain `invalidTrimRange` or `trimStartMs` after removal of start trimming.
+Two later separate steps have independent evidence and remain documented to preserve their rationale:
+Android marker-only content (2.6) and API 34+ `--time-limit 0` (2.8).
 
 ## 1. Context
 
-`record start` / `record stop` is one command family, yet its last three months of fixes each
-touched 10 to 35 files (#2447, #2457, #2487, #2534, #2564, #2565, #2566). The subsystem is ~10,150
-production lines and ~19,000 test lines across `contracts`, `capture-kit`, `host-kit`, four
-platform packages, nine `src/platform-runtime-screen-recording-*` hosts, and eight daemon modules.
+Fixes to the single `record start`/`record stop` family have each affected 10 to 35 files over three months.
+They are #2447, #2457, #2487, #2534, #2564, #2565, and #2566.
+The subsystem has about 10,150 production lines and 19,000 test lines across these areas:
 
-Nine user-facing record bugs were filed since July 2026. Five were the ownership machinery refusing
-on its own uncertainty:
+- `contracts`
+- `capture-kit`
+- `host-kit`
+- Four platform packages
+- Nine `src/platform-runtime-screen-recording-*` hosts
+- Eight daemon modules
+
+Nine record bugs were filed after July 2026.
+Five were ownership refusals caused by uncertainty:
 
 | Issue | Refusal | Native cause? |
 | --- | --- | --- |
@@ -86,30 +93,31 @@ on its own uncertainty:
 | #615 | `screenrecord` 180 s cap | yes |
 | #2551 | clip ends at the last screen change | yes |
 
-Three facts make the fail-closed contract cost more than it protects:
+Three facts make the fail-closed contract more costly than protective:
 
-- **Reattachment is already dead on four of five backends.** `reattachAppleRecording`, the
-  HarmonyOS and web operations return `unreattachable` unconditionally. After daemon loss,
-  `finishRecoveredDurableCapture` runs descriptor cleanup and then **throws**, even when cleanup
-  succeeded and the finalized MP4 is on disk. Only Android can answer `active` or `completed`. Ten
-  ownership and outcome enums express distinctions four backends cannot make.
-- **Daemon loss mid-recording is rare and already mitigated.** An active recording holds off the
-  idle reaper. The startup reaper already `SIGINT`s orphaned `simctl recordVideo` children from
-  `owned-processes.json`. The maintainer's local daemon logs hold zero recording reattachments; the
-  reported failures are all ordinary same-daemon stops.
-- **A failed export destroys its own retry.** `finishDurableCaptureHandle` calls
-  `handle.forceCleanup()` when `finish` throws (`transitions.ts`, `compensateFailedFinish`). On
-  Android that reaches `cleanupVerifiedAndroidEvidence`, which removes the remote artifact and
-  marker. A pull that fails once under load leaves nothing to pull twice.
+- **Four of five backends cannot reattach.** `reattachAppleRecording`, HarmonyOS, and web operations always return `unreattachable`.
+  After daemon loss, `finishRecoveredDurableCapture` runs descriptor cleanup, then throws even when finalized MP4 output exists.
+  Only Android reports `active` or `completed`.
+  Ten ownership/outcome enums encode distinctions unavailable to four backends.
+- **Daemon loss is rare and already mitigated.** Active recordings prevent idle reap.
+  Startup already sends `SIGINT` to orphaned `simctl recordVideo` children from `owned-processes.json`.
+  Maintainer logs contain zero recording reattachments.
+  Reported failures concern ordinary same-daemon stops.
+- **Failed export destroys retry material.** On thrown `finish`, `finishDurableCaptureHandle` calls `handle.forceCleanup()` through `transitions.ts`'s `compensateFailedFinish`.
+  Android reaches `cleanupVerifiedAndroidEvidence`, which removes the remote artifact and marker.
+  One failed pull under load therefore prevents another pull.
 
-`#2551` was reproduced with raw `adb` on an API 36 emulator: `SIGINT` at +16 s produced a clip whose
-last frame sits at +12.6 s, the last screen change; changes after the last input were captured. The
-clip length is `screenrecord`'s change-driven encoding, not our stop path. Disclosure (PR #2566) is
-the whole fix.
+Raw `adb` reproduced #2551 on an API 36 emulator.
+`SIGINT` at +16 s produced a last frame at +12.6 s, the last screen change.
+Changes after the last input were captured.
+`screenrecord`'s change-driven encoding determines clip length, not this stop path.
+Disclosure in PR #2566 is the complete fix.
 
 ## 2. Decision
 
 ### 2.1 Shape
+
+This section proposes the following ownership structure:
 
 ```mermaid
 flowchart TD
@@ -126,10 +134,12 @@ flowchart TD
     Markers["Native orphan markers<br/>owned-processes.json, Android device marker<br/>cover incomplete starts"] -.-> Recovery
 ```
 
-The coordinator reuses the existing manifest store, fence, pending-transfer guard, and completed
-replay (PR #2534). No new framework.
+The coordinator reuses the existing manifest store, fence, pending-transfer guard, and completed replay from PR #2534.
+No new framework is proposed.
 
 ### 2.2 The backend contract
+
+This section proposes the following backend interface:
 
 ```ts
 type RecordingBackend = {
@@ -144,24 +154,32 @@ type StopObservation =
   | { recorder: 'lost'; why };           // identity proven not ours, or runner/browser session dead
 ```
 
-`stop` accepts either the in-process handle or the persisted descriptor and decides internally
-how to stop safely: the simulator backend kills its own `ChildProcess` and probes every descendant
-marker before signalling it by pid (a `not-ours` marker is never signalled, as #2565 proves); the
-Android backend probes `/proc` before `kill -2` exactly as `stopChunk` does today, and answers
-`unconfirmed` instead of throwing when `/proc` is unreadable; the runner backend issues the stop
-RPC bound to `runnerSessionId`; the HarmonyOS backend toggles once from its live handle and never
-from a descriptor; the web backend stops the session browser. None of that sequencing is visible
-to the coordinator.
+`stop` accepts a live handle or persisted descriptor.
+It privately determines safe stop behavior:
 
-`StopObservation.recorder` is the one word every backend must report; it fills the public
-`recorder` field. It describes what was observed, never what identity proved.
+- Simulator kills its own `ChildProcess` and probes each descendant marker before pid signals.
+  It never signals `not-ours`, as #2565 proves.
+- Android probes `/proc` before `kill -2`, as current `stopChunk` does.
+  Unreadable `/proc` returns `unconfirmed` instead of an exception.
+- Runner sends a stop RPC bound to `runnerSessionId`.
+- HarmonyOS toggles once through a live handle, never a descriptor.
+- Web stops the session browser.
 
-Admission facts stay where they are: `screenRecordingStart` reports unavailable with
-`DEVICE_IN_USE` and the writer named when a backend sees a foreign live recorder (Android:
-`findRunning` over every `agent-device-recording-*` path, not only the one about to be reused;
-simulator: `simctl` exit 16; runner and web: the provider reports an active recording).
+The coordinator does not see this sequence.
+Every backend must report `StopObservation.recorder` for the public `recorder` field.
+It describes an observation, not identity proof.
+
+Admission facts stay in their current owners.
+If a backend sees a foreign live recorder, `screenRecordingStart` reports unavailable with `DEVICE_IN_USE` and the writer's identity:
+
+- Android uses `findRunning` over every `agent-device-recording-*` path, not only the reused path.
+- Simulator observes `simctl` exit 16.
+- Runner/web use provider active-recording reports.
 
 ### 2.3 The coordinator's stop
+
+This section proposes separate ensure-export and recovery-only settle requests.
+Ensure-export follows this sequence:
 
 ```
 record stop  (request: ensure export)
@@ -175,48 +193,61 @@ record stop  (request: ensure export)
   4. commit: manifest completed { export, recorder observation, native path disposition }; respond
 ```
 
-**`collect` always produces a separate, immutable copy.** Every backend records into a *native
-path* the recorder owns: the `simctl` output file, the runner's device file, the Android
-`/sdcard` chunks, the HarmonyOS media item, the agent-browser WebM. `collect` copies (or pulls)
-from the native path into `collectedPath`, a sibling of the caller's export path, and the
-checkpoint is recorded once that copy passes the sniff. The native path is never the export and
-is never finalized in place. On a local backend "collect" is a file copy, not "none": a playable
-copy does not prove the native writer has stopped using its path, and on the simulator and web
-that writer is exactly the process the observation may have left `unconfirmed`.
+**`collect` always creates a separate immutable copy.**
+Every recorder owns its native path:
 
-**Native-path disposition is a backend proof, recorded at commit.** The native path and the
-recorder identity are retained after commit until the backend proves cleanup safe:
-`recorder: 'confirmed'` (the writer exited or acknowledged), or the writer proven `gone` by a
-later settle. A `lost` observation alone never permits deleting the native path: a pid identity
-that no longer matches says nothing about who writes there now. HarmonyOS and web, which cannot
-prove a writer gone, retain the native item until an explicit, fenced disposal (rule 6). Only the
-collected copy may be finalized, and only the collected copy is removed after commit. Native-path
-disposition is complete only after fenced retirement succeeds or the backend verifies the native
-artifact is absent. A path marked retirable still needs its manifest until retirement completes.
+- `simctl` output
+- Runner device file
+- Android `/sdcard` chunks
+- HarmonyOS media item
+- Agent-browser WebM
 
-**Checkpoints mark durable, valid artifacts; they never mark attempts.** `collected` is recorded
-only after the collected copy passes the playability sniff (`ftyp` + `moov`, the existing check in
-`video.ts`), so a pull of a not-yet-finalized MP4 leaves no checkpoint. `finalized` is recorded
-after the export is written. Step 1 records its observation but is **re-attempted on every retry
-while the observation is `unconfirmed` and no export is committed**: an Android `/proc` that was
-unreadable once is probed again, and a recorder that has since become readable is signalled. A
-`confirmed` or `lost` observation is not re-attempted. A retry resumes at the first missing
-checkpoint after re-running step 1 when it must.
+`collect` copies or pulls into `collectedPath`, beside the caller's export path.
+The copy receives a checkpoint only after playability validation.
+The native path is never the export or an in-place finalization input.
+Local collection still copies files.
+A playable copy does not prove the native writer stopped.
+On simulator/web, that writer can remain `unconfirmed`.
 
-The collected copy is preserved until step 4 commits; the finalizer reads it and writes the
-export beside it, so a retry after a failed commit re-runs nothing that changes the video. Today
-`exportProcessedVideo` applies the touch overlay **in place** (`overlay.ts` renames the processed
-file over its input; start trimming was removed by PR #2586), which is why the copy is required:
-without it, a retry after a commit failure would burn the overlay twice. After commit the
-collected copy is removed; a failed removal is a diagnostic, never an error.
+**Backend proof determines native-path disposition at commit.**
+After commit, the manifest retains native path and identity until cleanup is proven safe.
+Proof is `recorder: 'confirmed'` through exit/acknowledgement, or a later settle that proves the writer `gone`.
+`lost` alone never authorizes native-path deletion.
+A changed pid identity says nothing about the current writer at that path.
+HarmonyOS/web cannot prove writer absence.
+They retain native items until explicit fenced disposal under rule 6.
+Only the collected copy may be finalized.
+Only that copy is removed after commit.
+Disposition completes after successful fenced retirement or verified native-artifact absence.
+A retirable path still requires its manifest until retirement completes.
 
-Failures at 1, 2, 3, or 4 leave the manifest `open` with the recorded observation and checkpoints
-and every artifact in place; the next stop re-drives as above (step 1 re-drive is what #2565
-proves for the simulator today). No forced cleanup runs on that path (rule 6).
+**Checkpoints identify valid durable artifacts, never attempts.**
+`collected` requires the existing `video.ts` playability check (`ftyp` + `moov`).
+A pulled unfinalized MP4 receives no checkpoint.
+`finalized` requires written export output.
+Step 1 records its observation without a checkpoint.
+While `unconfirmed` and before export commit, every retry repeats step 1.
+Android therefore probes previously unreadable `/proc` again and signals a recorder that becomes readable.
+`confirmed` and `lost` observations do not repeat stop.
+After required step-1 work, retry starts at the first missing checkpoint.
 
-After step 4 commits, the manifest retains the native path, identity, recorder observation and
-native-path disposition. The next `record stop` replays. Authorized recovery settles any unresolved
-recorder or pending native-path disposition (2.5); a second stop never repeats that work.
+The collected copy remains until step 4 commits.
+Finalization reads it and writes the export beside it.
+A failed-commit retry therefore changes no video.
+Current `exportProcessedVideo` applies overlays in place through `overlay.ts` rename-over-input.
+PR #2586 removed start trimming.
+The separate copy prevents duplicate overlay application after commit failure.
+After commit, copy-removal failure is diagnostic only, never a command error.
+
+Failures at any of steps 1-4 leave the manifest `open` with observations, checkpoints, and every artifact preserved.
+The next stop repeats the required work.
+Simulator step-1 retry already has #2565 evidence.
+Rule 6 prohibits forced cleanup here.
+
+After commit, the manifest retains native path, identity, observation, and disposition.
+The next `record stop` only replays.
+Authorized recovery settles unresolved recorder/disposition under 2.5.
+A second stop never repeats that work.
 
 ```
 settle recorder  (request: recovery only)
@@ -232,86 +263,100 @@ settle recorder  (request: recovery only)
 
 ### 2.4 Start admission
 
-`record start` runs in this order:
+This section proposes the following `record start` order:
 
-1. Refuse if the session already holds a live handle (`recording already in progress`).
-2. Refuse if the device's recording manifest is `open` and **actively owned**: the owner named in
-   the manifest is alive by the existing owner-identity check (`host-kit/internal/owner-identity.ts`)
-   and holds the fence. This is the ADR 0019 rule; it is unchanged.
-3. Otherwise the manifest is abandoned or completed. Hand it to recovery (2.5) under the ownership
-   guard **before** launching. Recovery may end an `ours` recorder and collect its export into the
-   old session's manifest; it never deletes what it cannot prove abandoned.
-4. Ask the backend's admission fact. A foreign live writer is `DEVICE_IN_USE` naming the writer.
-5. If the session's current manifest is still unsettled after recovery (`open`, or `completed`
-   with an unresolved recorder or pending native-path disposition), **archive it under its fence
-   generation** before adoption:
-   `screen-recording.resource.json` → `screen-recording.<generation>.resource.json`, an atomic
-   rename in the same session directory. The store lists both shapes (`store.list` already walks
-   session directories; it gains the glob), and the next fence generation is the maximum over
-   every manifest in the directory plus one, not the current file plus one as
-   `createNextDurableCaptureFence` computes today.
-6. Launch under a new artifact path and that fence generation.
+1. If the session has a live handle, refuse with `recording already in progress`.
+2. If the device has an actively owned `open` manifest, refuse.
+   Existing `host-kit/internal/owner-identity.ts` must establish a live owner that holds the fence.
+   This ADR 0019 rule remains unchanged.
+3. Otherwise, submit the abandoned/completed manifest to recovery under ownership guards before launch.
+   Recovery may terminate an `ours` recorder and collect its export into the old session manifest.
+   It never deletes evidence without proof of abandonment.
+4. Request the backend admission fact.
+   A foreign live writer returns `DEVICE_IN_USE` with writer identity.
+5. If the current manifest remains unsettled, archive it under its fence generation before adoption.
+   Unsettled means `open`, or `completed` with unresolved recorder/disposition.
+   Use same-directory atomic rename:
+   `screen-recording.resource.json` → `screen-recording.<generation>.resource.json`.
+   Extend existing `store.list` session-directory traversal with the archive glob.
+   Compute the next generation as the maximum across all directory manifests plus one.
+   Do not use only the current file, as current `createNextDurableCaptureFence` does.
+6. Launch at a new artifact path with that generation.
 
-A completed manifest, a manifest naming another serial, a reused pid, or an unreadable process
-table no longer refuses a start. They are recovery inputs, not admission inputs. Adoption never
-overwrites a manifest that recovery could still need: the one-file-per-session layout stays for
-the *current* recording, and unsettled predecessors remain durably enumerable by generation. An
-archived manifest is removed only after its export is committed and its native-path disposition
-is complete. Neither `confirmed` nor `lost` alone retires that recovery record: a stopped writer
-can leave an artifact awaiting disposal, and a lost identity does not prove disposal safe.
-`record stop` and replay read only the current manifest; archived ones belong to recovery.
+Completed manifests, different serials, reused pids, and unreadable process tables become recovery inputs, not start refusals.
+Adoption never overwrites potentially necessary recovery evidence.
+One current manifest remains per session.
+Unsettled predecessors remain durably enumerable by generation.
+Archives are removed only after export commit and completed native-path disposition.
+Neither `confirmed` nor `lost` alone permits archive retirement.
+Stopped writers can leave undisposed artifacts.
+Lost identity does not prove disposal safety.
+`record stop` and replay read only the current manifest.
+Recovery owns archived manifests.
 
 ### 2.5 Recovery
 
-Recovery has two entry points and one body. At daemon start, and at step 3 of admission, it
-enumerates manifests (`store.list`, already present; current and archived generations) that are
-`open` and not actively owned, or `completed` with an unresolved recorder or pending native-path
-disposition. For each, it acquires the ownership guard (the existing fence takeover; a stale fence
-is left alone with a diagnostic) and asks the coordinator to **settle the recorder** (2.3). A
-confirmed or lost recorder with pending disposition still participates: the backend inspects
-artifact disposition without signalling again. The coordinator persists disposition after
-authorized, fenced retirement succeeds or the backend verifies the artifact is absent. Until
-then, the manifest remains enumerable for retry or explicit teardown. The committed export is
-never re-collected, re-finalized, or replayed. An open abandoned manifest continues as
-ensure-export from the recorded phase.
+This section proposes two recovery entry points with one shared implementation:
+daemon startup and admission step 3.
+Both enumerate current/archive manifests with `store.list`.
+Eligible manifests are abandoned `open`, or `completed` with unresolved recorder/disposition.
+For each, recovery acquires the existing fence-takeover ownership guard.
+A stale fence remains untouched with a diagnostic.
+Recovery asks the coordinator to **settle the recorder** under 2.3.
+Confirmed/lost recorders with pending disposition still participate, without another signal.
+The backend examines disposition only.
 
-Recovery therefore never decides signals or deletions itself. An `open` manifest whose backend
-answers `lost` and whose artifact is playable is committed as an export with `recorder: 'lost'`;
-one whose artifact is unplayable stays `open` with its evidence retained and a diagnostic. The
-existing `owned-processes.json` reaper keeps its narrow job: native children left behind by an
-incomplete start, before any manifest existed; it prefers `SIGINT` for `simctl` (#2457).
+The coordinator persists completed disposition after successful authorized fenced retirement or verified absence.
+Until then, enumeration supports retry or explicit teardown.
+Committed exports are never recollected, refinalized, or replayed by recovery.
+Abandoned open manifests continue ensure-export from their recorded phase.
 
-Artifact cleanup is a separate, explicit decision (rule 6): session teardown and failed-start
-rollback dispose through the backend under the fence, and only after the manifest records that no
-recoverable export is lost.
+Recovery never selects signals or deletions itself.
+If an open manifest has `lost` recorder identity but playable output, the coordinator commits with `recorder: 'lost'`.
+Unplayable output leaves it `open` with evidence and a diagnostic.
+`owned-processes.json` retains only its incomplete-start role before any manifest exists.
+It prefers `SIGINT` for `simctl` under #2457.
+
+Rule 6 treats disposal as a separate explicit decision.
+Teardown/failed-start rollback disposes through the backend under the fence.
+First, the manifest must record that no recoverable export is lost.
 
 ### 2.6 Native markers
 
-`owned-processes.json` (simulator recorders) and `/sdcard/agent-device-recording-active.json`
-(Android launch and chunk rotation) cover the windows between spawning a native recorder and
-publishing the manifest that names it. They stay. What changes is their content: the Android
-device marker stops carrying lifecycle (completion, `deviceId` gating, fence generation as an
-admission key) and becomes identity plus pending chunk path, read only by the Android backend's
-`stop` and by its incomplete-start recovery. Deleting it outright is deferred until the launch and
-rotation crash windows are shown to be covered by the manifest alone.
+This section proposes narrower marker content without marker removal.
+`owned-processes.json` and `/sdcard/agent-device-recording-active.json` cover native launch-to-manifest intervals.
+They also cover Android chunk rotation.
+The Android marker becomes identity plus pending chunk path.
+It stops carrying completion, `deviceId` admission gating, or fence generation as an admission key.
+Only backend `stop` and incomplete-start recovery read it.
+Deletion remains deferred until the manifest alone proves coverage of launch/rotation crash intervals.
 
 ### 2.7 ADR 0019 amendment
 
-Section 5 currently requires every durable facet to expose `reattach` and `cleanup`, keep uncertain
-cleanup `cleanup-pending`, and (in `transitions.ts`) run forced cleanup when finish throws. The
-amendment: *screen recording is a **stop-and-collect** resource. It keeps the manifest, the fence on
-every destructive step, and the completed replay. It replaces `reattach` and `cleanup` with the
-backend's `stop(target)` and `collect`, drops `cleanup-pending` as a phase and the admission ledger
-for this kind, and records the recorder observation beside the committed export. For every durable
-kind, forced cleanup is no longer inferred from a failed finish.*
+This section proposes an amendment, not a current change to ADR 0019.
+Current section 5 requires durable-facet `reattach`/`cleanup` and `cleanup-pending` for uncertain cleanup.
+`transitions.ts` also forces cleanup after finish failure.
+The proposed amendment is:
+
+Screen recording is a **stop-and-collect** resource.
+It retains the manifest, destructive-step fences, and completed replay.
+Backend `stop(target)`/`collect` replace `reattach`/`cleanup`.
+This kind removes the `cleanup-pending` phase and admission ledger.
+It records recorder observation beside the committed export.
+For every durable kind, failed finish no longer implies forced cleanup.
 
 ### 2.8 Android duration (separate decision)
 
-`screenrecord --time-limit 0` removes the cap on API 34 and later (help text, API 36 emulator;
-AOSP added the option in API 34). On those devices one artifact and no rotation; below API 34,
-rotation stays. This lands after 2.1–2.7 and is not required by them.
+This section proposes a separate later change.
+`screenrecord --time-limit 0` removes the cap on API 34+.
+API 36 emulator help confirms it; AOSP added it in API 34.
+Those devices would use one artifact without rotation.
+Below API 34, rotation remains.
+Implementation follows 2.1–2.7 but is not their prerequisite.
 
 ## 3. Cross-platform matrix
+
+This proposal defines the following backend behavior alongside current daemon-loss behavior:
 
 | Backend | `stop` from a live handle | `stop` from a descriptor (recovery) | `collect` | Today after daemon loss |
 | --- | --- | --- | --- | --- |
@@ -323,13 +368,14 @@ rotation stays. This lands after 2.1–2.7 and is not required by them.
 | Limrun (iOS, Android) | provider stop RPC on the live session; the served download URL is memoized so a stop is never repeated | **no signal**: the recording lives and dies with the instance; `unreattachable` | HTTP download of the served MP4 to the output path, bounded by a deadline that ends inside the `record` request window (60 s of its 90 s envelope) and not cancellable; retriable from the memoized URL while the instance lives | `cleanup-pending`, manual; the instance (and its file) is deleted on lease release |
 | WebDriver providers, Vega | unavailable | — | — | unchanged |
 
-Two traps stay visible: a blind HarmonyOS toggle **starts** a recording, so only the live handle
-may toggle; and the Apple runner recording dies with the runner process, so `lost` after a keep-hot
-restart is correct, not a state to defend against.
+A blind HarmonyOS toggle starts recording.
+Only the live handle may toggle.
+Apple runner recordings terminate with the runner process.
+After keep-hot restart, `lost` is therefore correct.
 
 ## 4. Compatibility
 
-Every published surface changes additively.
+This proposal makes additive changes to published surfaces, with the behavior change identified below:
 
 | Surface | Change | Breaking? |
 | --- | --- | --- |
@@ -344,96 +390,118 @@ Every published surface changes additively.
 
 ## 5. Tests
 
-**Keep as written**: #2565's handle-stop, next-stop re-drive, and never-signal-a-reused-pid tests;
-#2564's stranded-serial retirement and live-writer refusal; #2534's replay; every fence-loss test;
-#2487, #2447, #2457, #1651, #2566.
+This proposal requires the following test changes.
 
-**Flip**: #2564 "refuses a stranded interrupted launch whose writers cannot be read" → the start
-proceeds after recovery retains the evidence; "retains open evidence … after its recorder is gone"
-→ recovery commits or retains it, then the start proceeds. #2565 "refuses to signal a live process
-whose identity nobody can read" → still no signal, and the stop completes as `unconfirmed` when a
-playable file exists. Every post-daemon-loss `record stop` error on Apple, HarmonyOS, and web → a
-completion with `recorder`, or an error that leaves evidence in place.
+**Keep unchanged:**
 
-**Add before removing anything** (one per backend where the row applies):
+- #2565 handle-stop, next-stop retry, and never-signal-reused-pid tests
+- #2564 stranded-serial retirement and live-writer refusal
+- #2534 replay
+- Every fence-loss test
+- #2487, #2447, #2457, #1651, and #2566
 
-- Finish fails at collect → no `forceCleanup`, remote artifact and manifest intact, manifest
-  `open`, second stop succeeds. (Rule 6; today this deletes the Android artifact.) One such test
-  per durable kind, each stating what its retry needs; a kind that keeps disposal says so in the
-  test name.
-- Commit fails after finalize (overlay applied) → manifest `open` at phase `finalized`, collected
-  copy present; the retry commits without invoking the finalizer again (spy), and the export is
-  unchanged byte-for-byte.
-- Simulator and web: stop returns `unconfirmed` while the native writer is still alive, the
-  collected copy passes the sniff → completion `unconfirmed`, export served from the copy, native
-  file untouched and still open by the writer; a later settle that proves the writer gone records
-  the native path as retirable; a `lost` observation alone leaves it in place.
-- `ours` signalled, no exit inside the budget → completion `unconfirmed`; next stop replays without
-  calling the backend (spy); startup recovery calls the backend stop, rewrites the observation to
-  `confirmed`, and the export file is unchanged.
-- Android stop with `/proc` unreadable → no `kill` sent, artifact pulled, `unconfirmed`; with
-  `/proc` naming another process → no `kill`, `lost`.
-- Android stop with `/proc` unreadable and the pull returning a `moov`-less file → no `collected`
-  checkpoint, manifest `open`; `/proc` readable on the retry → `kill -2` sent, exit observed,
-  re-pull passes the sniff, completion `confirmed`. A recorded attempt never implies termination.
-- Start over a session whose manifest is `completed` with `recorder: 'unconfirmed'` → the manifest
-  is archived under its generation, the new manifest gets generation + 1, `store.list` returns
-  both, and recovery later settles the archived one and removes it. Adoption never overwrites
-  unresolved evidence.
-- Completed export with a `lost` recorder and native disposition still pending → start archives
-  the manifest, recovery retains its path and identity, and no native deletion is authorized by
-  `lost` alone. The archive is retired only after backend proof and fenced disposition complete.
-- Confirmed recorder with a failed native-artifact retirement → start archives the manifest,
-  recovery still enumerates it and retries only disposition; a failed retry retains the manifest,
-  a successful retry permits archive removal, and the committed export is unchanged throughout.
-- HarmonyOS live stop issues exactly one toggle; recovery issues none.
-- Start over an actively owned open manifest → refused; over an abandoned one → recovery runs
-  first, old artifact retained unless committed, start proceeds under a new path.
-- Start with a live writer on a previous timestamped Android path → `DEVICE_IN_USE` naming it.
-- Stale fence with a committed completion → replay; stale fence with an `open` manifest →
-  `ownership-fence-lost`, no signal sent.
+**Change expected results:**
 
-**Delete**: `cleanup-pending` phase branches for recording, reattach/cleanup unit tests in the four
-platform packages, Android completed-evidence refusal tests.
+- #2564 "refuses a stranded interrupted launch whose writers cannot be read" now permits start after recovery preserves evidence.
+- "retains open evidence … after its recorder is gone" now commits or retains evidence through recovery, then permits start.
+- #2565 "refuses to signal a live process whose identity nobody can read" still sends no signal.
+  With playable output, stop completes as `unconfirmed`.
+- Apple/HarmonyOS/web post-daemon-loss stop errors become completion with `recorder`, or errors that preserve evidence.
+
+**Before removal, add these tests for every applicable backend:**
+
+- Collection failure invokes no `forceCleanup`.
+  Remote artifact and open manifest remain intact.
+  A second stop succeeds.
+  Current Android behavior deletes this retry material.
+  Every durable kind needs its own test that names retry requirements.
+  Tests for retained disposal identify that behavior in their names.
+- Commit failure after overlay leaves `open`, phase `finalized`, and the collected copy.
+  Retry commits without another finalizer call, proven by a spy.
+  Export bytes remain identical.
+- Simulator/web `unconfirmed` stop leaves a live native writer while the collected copy passes validation.
+  Completion serves the copy without changing the open native file.
+  Later writer-absence proof marks the native path retirable.
+  `lost` alone leaves it intact.
+- An `ours` recorder signaled without observed exit completes as `unconfirmed`.
+  Next stop replays without a backend call, proven by a spy.
+  Startup recovery calls stop and updates to `confirmed` without changing export bytes.
+- Android unreadable `/proc` sends no `kill`, pulls the artifact, and reports `unconfirmed`.
+  A different process identity sends no `kill` and reports `lost`.
+- Android unreadable `/proc` with `moov`-less output leaves no `collected` checkpoint and keeps `open`.
+  On readable retry, `kill -2` produces observed exit and a valid new pull with `confirmed`.
+  A recorded attempt never proves termination.
+- Start with completed/unconfirmed state archives the old generation and allocates generation + 1.
+  `store.list` returns both.
+  Recovery settles and removes the archive later.
+  Adoption never overwrites unresolved evidence.
+- Completed/lost state with pending disposition is archived before start.
+  Recovery retains path/identity.
+  Lost identity alone authorizes no deletion.
+  Backend proof and fenced disposition must complete before archive removal.
+- Confirmed state with failed native retirement is archived before start.
+  Recovery retries only disposition.
+  Failure retains the manifest; success permits archive removal.
+  Committed export bytes remain unchanged.
+- HarmonyOS live stop toggles exactly once.
+  Recovery never toggles.
+- Actively owned open manifests refuse start.
+  Abandoned manifests receive recovery first.
+  Old artifacts remain unless committed, and new start uses a new path.
+- A live Android writer at an earlier timestamped path causes `DEVICE_IN_USE` with its identity.
+- A stale fence with committed output permits replay.
+  A stale fence with `open` returns `ownership-fence-lost` without signals.
+
+**Delete:** recording `cleanup-pending` branches, four platform packages' reattach/cleanup units, and Android completed-evidence refusal tests.
 
 ## 6. Refuted alternatives
 
-- **Keep fail-closed, keep patching evidence branches.** The current trajectory (#2487, #2564,
-  #2565). Each patch is correct and adds a state; the next branch arrives within weeks.
-- **Delete the daemon manifest for recording.** The replay needs a durable home and the fence is
-  what keeps a stale owner from mutating a resource it no longer holds.
-- **A public `probe` + `stop(level)` backend interface.** Rejected: it exposes signal sequencing
-  the coordinator must not own, and a live handle could bypass the identity check.
-- **`owned-processes.json` as the sweep list.** Rejected: a second lifecycle database beside the
-  manifest. It keeps its incomplete-start job only.
-- **Recovery that signals and deletes on its own.** Rejected: it duplicates the coordinator under
-  weaker guards. Recovery selects work; the coordinator does it under the fence.
-- **Retire unresolved evidence at start.** Rejected: an unprovable recorder may still be writing.
-- **Delete the Android device marker now.** Deferred: it covers launch and rotation crash windows
-  the manifest does not yet cover.
-- **Drop chunk rotation everywhere.** Rejected: below API 34 that loses everything after 180 s.
+This proposal rejects or defers these alternatives:
+
+- **Continue fail-closed patches.** #2487/#2564/#2565 each add a correct state, but another branch appears within weeks.
+- **Remove recording manifests.** Replay needs durable storage.
+  Fences prevent stale-owner mutations.
+- **Public `probe` + `stop(level)`: rejected.** It transfers signal sequencing to the coordinator and permits live-handle identity bypass.
+- **Use `owned-processes.json` for recovery enumeration: rejected.** That duplicates lifecycle storage.
+  It retains only incomplete-start recovery.
+- **Independent recovery signals/deletions: rejected.** This duplicates coordinator work with weaker guards.
+  Recovery selects work; the fenced coordinator performs it.
+- **Retire unresolved evidence at start: rejected.** An unproven recorder may still write.
+- **Delete Android markers immediately: deferred.** The manifest does not yet cover launch/rotation crash intervals.
+- **Remove all rotation: rejected.** Below API 34, that loses all output after 180 s.
 
 ## 7. Rollout
 
-2. Rule 6 in the shared coordinator, gated per kind: a failed finish no longer runs forced
-   cleanup for a kind once that kind's failed-finish test states what its retry needs. Recording
-   first; the other three kinds each in their own commit. Independently shippable.
-3. Consolidate **stop, export, and replay** with existing primitives: the coordinator stop of 2.3,
-   `recorder` and `capturedDurationMs` on the response, recovery through the coordinator (2.5),
-   admission order of 2.4. No operation removed, no store moved. Closes the class behind #2549,
-   #2550, #2476, #2281.
-4. Replace `reattach` / `cleanup` with backend `stop(target)` / `collect`; delete the stop-recovery
-   plan, exact-owner recovery control, and the admission ledger for recording.
-5. Reduce the Android device marker to marker-only content (2.6), with the crash-window tests.
-6. `--time-limit 0` on API 34+ (2.8).
-7. Amend ADR 0019 section 5; update `commands.md`.
+This active proposal retains these implementation steps after the completed prerequisite in git history:
 
-Each step is independently proven live per ADR 0019 evidence rules: iOS simulator, Android
-emulator API 34+ and one API < 34 image, macOS runner, HarmonyOS if a device is available, web.
-Each backend proves the ordinary stop, the host-silent stop, the post-daemon-loss stop, the
-collect-failure retry, and the stale-caller refusal.
+2. Implement rule 6 in the shared coordinator with per-kind failed-finish coverage.
+   Recording comes first.
+   The other three kinds each use a separate commit that identifies retry material.
+   This step is independently shippable.
+3. Consolidate stop, export, and replay with existing primitives.
+   Add 2.3's coordinator stop, response `recorder`/`capturedDurationMs`, recovery under 2.5, and admission under 2.4.
+   Remove no operation and move no store.
+   This addresses the class behind #2549, #2550, #2476, and #2281.
+4. Replace `reattach`/`cleanup` with backend `stop(target)`/`collect`.
+   Delete recording's stop-recovery plan, exact-owner recovery control, and admission ledger.
+5. Reduce Android marker content under 2.6 with crash-interval tests.
+6. Add API 34+ `--time-limit 0` under 2.8.
+7. Amend ADR 0019 section 5 and update `commands.md`.
+
+Each step requires independent live proof under ADR 0019:
+
+- iOS simulator
+- Android emulator API 34+
+- One Android API < 34 image
+- macOS runner
+- HarmonyOS, if a device is available
+- Web
+
+Each backend proves ordinary stop, host-silent stop, post-daemon-loss stop, collection-failure retry, and stale-caller refusal.
 
 ## 8. End state
+
+This proposal estimates the following result:
 
 | Area | Before | After step 4 | After step 5 |
 | --- | --- | --- | --- |
@@ -452,13 +520,14 @@ collect-failure retry, and the stale-caller refusal.
 | `record stop` paths | 2 (live; recovery that throws on 4 backends) | 1 | 1 |
 | Files on an Android stop path | 9 | ~7 | ~6 |
 
-The reduction is modest because the device marker stays, the root host files stay, and rotation
-stays below API 34. What this design buys is one path, one store, three enums, and no refusal that
-a silent host or a reused pid can produce. A later, separate ADR may fold the nine root host files into per-platform transports
-once the layering gates (R16) are re-cut; that is shape, not policy, and it is not needed for any
-row of section 1's table.
+Reduction is limited because device markers, root hosts, and below-34 rotation remain.
+The benefit is one path, one store, three enums, and no refusal caused solely by host silence or reused pids.
+A later ADR may move nine root hosts into per-platform transports after R16 layering-gate changes.
+That structural change is outside this policy and unnecessary for section 1's situations.
 
-Deletion test: `screenRecordingReattach`, `screenRecordingCleanup`, `cleanup-pending` for
-recording, and `ScreenRecordingAdmissionLedger` no longer exist in production; `transitions.ts`
-has no cleanup-on-failed-finish path; every situation in the rules table has a passing test on
-every backend where it applies.
+The implementation deletion test requires these results:
+
+- Production no longer contains `screenRecordingReattach` or `screenRecordingCleanup`.
+- Recording no longer contains `cleanup-pending` or `ScreenRecordingAdmissionLedger`.
+- `transitions.ts` has no cleanup-on-failed-finish path.
+- Every rules-table situation has a passing test on every applicable backend.
