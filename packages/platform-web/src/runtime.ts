@@ -435,6 +435,7 @@ function webRuntimeFacts(
       materializeAppSource: readinessUnavailable,
       deployMaterializedApp: readinessUnavailable,
       sendPushNotification: readinessUnavailable,
+      uninstallApp: readinessUnavailable,
       shutdownTarget: readinessUnavailable,
       ...webLifecycleFacts(device),
     },

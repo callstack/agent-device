@@ -11,6 +11,7 @@ export type {
   AppOpenResult,
   AppPushOptions,
   AppTriggerEventOptions,
+  AppUninstallOptions,
   DeviceSelectionMetadata,
   DeviceSelectionReason,
   DeviceSelectionSource,

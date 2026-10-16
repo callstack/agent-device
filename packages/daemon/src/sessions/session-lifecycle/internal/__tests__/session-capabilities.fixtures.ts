@@ -89,6 +89,7 @@ function createAdmissionFacts(
       appLogInspect: cell(options.appLogAvailable),
       captureScreenshot: screenshotFact,
       deployApp: cell(options.deployAvailable),
+      uninstallApp: cell(options.deployAvailable),
       materializeAppSource: cell(options.sourceAvailable),
       deployMaterializedApp: cell(options.sourceAvailable),
       sendPushNotification: cell(options.pushAvailable),

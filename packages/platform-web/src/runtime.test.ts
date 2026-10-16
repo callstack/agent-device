@@ -522,6 +522,19 @@ test('install and reinstall share the runtime-owned unavailable deploy fact', as
   expect(binding.operations.deployApp).toBeUndefined();
 });
 
+test('uninstall reports the runtime-owned unavailable uninstall fact', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  expect(binding.facts.operations.uninstallApp).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(binding.operations.uninstallApp).toBeUndefined();
+});
+
 // #1900: `install-from-source` resolves to `readyMaterializeAndDeployAppUse`, requiring all three
 // of these facts; none of them exist for a browser target.
 test('install-from-source reports the runtime-owned unavailable materialize and deploy facts', async () => {

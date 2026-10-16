@@ -476,6 +476,7 @@ function sourceRuntimeFacts(
       materializeAppSource: materializationAvailable ? { available: true } : unavailable,
       deployMaterializedApp: materializationAvailable ? { available: true } : unavailable,
       sendPushNotification: unavailable,
+      uninstallApp: unavailable,
       networkDump: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,

@@ -22,6 +22,7 @@ const proxyLeaseAllocatingCommands: ReadonlySet<string> = new Set([
   PUBLIC_COMMANDS.open,
   PUBLIC_COMMANDS.install,
   PUBLIC_COMMANDS.reinstall,
+  PUBLIC_COMMANDS.uninstall,
   INTERNAL_COMMANDS.installSource,
 ]);
 

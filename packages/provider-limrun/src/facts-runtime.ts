@@ -260,6 +260,7 @@ export function limrunAppLogRecoveryFacts(
       materializeAppSource: liveSessionUnavailable,
       deployMaterializedApp: liveSessionUnavailable,
       sendPushNotification: liveSessionUnavailable,
+      uninstallApp: liveSessionUnavailable,
       shutdownTarget: liveSessionUnavailable,
       ...limrunLifecycleFacts(device, false),
     },

@@ -191,6 +191,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     }),
   install: handleSessionAppDeploymentCommand,
   reinstall: handleSessionAppDeploymentCommand,
+  uninstall: handleSessionAppDeploymentCommand,
   install_source: handleSessionAppDeploymentCommand,
   release_materialized_paths: async ({ req }) =>
     await handleReleaseMaterializedPathsCommand({ req }),

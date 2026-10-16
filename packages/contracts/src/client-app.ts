@@ -185,6 +185,10 @@ export type AppPushOptions = DeviceCommandBaseOptions & {
   payload: string | JsonObject;
 };
 
+export type AppUninstallOptions = DeviceCommandBaseOptions & {
+  app: string;
+};
+
 export type AppTriggerEventOptions = DeviceCommandBaseOptions & {
   event: string;
   payload?: JsonObject;

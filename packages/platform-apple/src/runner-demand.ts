@@ -35,6 +35,7 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   materializeAppSource: 'simulator',
   deployMaterializedApp: 'simulator',
   sendPushNotification: 'simulator',
+  uninstallApp: 'simulator',
   appState: 'simulator',
   appLogStart: 'simulator',
   appLogInspect: 'simulator',

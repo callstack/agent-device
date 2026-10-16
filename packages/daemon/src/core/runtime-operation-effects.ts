@@ -94,5 +94,6 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   triggerAppEvent: 'mutates',
   tvRemote: 'mutates',
   typeText: 'mutates',
+  uninstallApp: 'mutates',
   writeClipboard: 'mutates',
 });

@@ -87,6 +87,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'triggerAppEvent',
   'tvRemote',
   'typeText',
+  'uninstallApp',
   'writeClipboard',
 ] as const;
 

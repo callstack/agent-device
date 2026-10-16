@@ -27,6 +27,7 @@ import {
   deployAppUse,
   readyMaterializeAndDeployAppUse,
   readySendPushNotificationUse,
+  uninstallAppUse,
 } from '@agent-device/contracts/app-deployment-runtime-plan';
 import {
   closeApplicationRuntimePlanUses,
@@ -951,6 +952,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'reinstall',
     ...DEPLOY_APP_COMMAND_DESCRIPTOR,
+  },
+  {
+    name: 'uninstall',
+    ...DEPLOY_APP_COMMAND_DESCRIPTOR,
+    platformExecution: { kind: 'device-runtime', use: uninstallAppUse },
   },
   {
     name: 'install_source',

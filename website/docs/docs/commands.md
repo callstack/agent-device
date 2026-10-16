@@ -578,6 +578,15 @@ agent-device reinstall com.example.app ./build/MyApp.app --platform ios
 
 - `reinstall <app> <path>` uninstalls and installs in one command, for login/logout resets and deterministic test setup. Device coverage, formats, and remote upload match `install`.
 
+## App uninstall
+
+```bash
+agent-device uninstall com.example.app --platform android
+```
+
+- `uninstall <app>` removes an installed app, for example to start a test without the app installed. Android (ADB), iOS simulators, and CoreDevice iOS devices are supported.
+- A package name or bundle id that is not installed succeeds with `wasInstalled: false`; another name that matches nothing installed fails with `APP_NOT_INSTALLED`.
+
 ## App install from source URL
 
 ```bash

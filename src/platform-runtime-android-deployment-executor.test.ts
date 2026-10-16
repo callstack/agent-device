@@ -26,7 +26,10 @@ test('keeps root composition limited to artifact preparation and app identity re
   const executor = createAndroidAppDeploymentExecutor();
 
   await expect(executor.resolveAppPackage(device, 'Example')).resolves.toBe('com.example.app');
-  expect(resolveAndroidApp).toHaveBeenCalledWith(device, 'Example');
+  expect(resolveAndroidApp).toHaveBeenCalledWith(device, 'Example', undefined);
+  resolveAndroidApp.mockResolvedValueOnce({ type: 'package', value: 'com.example.app' });
+  await executor.resolveAppPackage(device, 'Example', { installedOnly: true });
+  expect(resolveAndroidApp).toHaveBeenLastCalledWith(device, 'Example', { installedOnly: true });
   expect(Object.keys(executor).sort()).toEqual([
     'bundletoolJar',
     'prepareArtifact',

@@ -19,9 +19,9 @@ export function createAppleAppDeploymentExecutor(): AppleAppDeploymentExecutor {
         await import('@agent-device/platform-apple/install-artifact');
       return await prepareIosInstallArtifact(input.source, options);
     },
-    resolveAppBundleId: async (device, app) => {
+    resolveAppBundleId: async (device, app, options) => {
       const { resolveIosApp } = await import('@agent-device/platform-apple/app-resolution');
-      return await resolveIosApp(device, app);
+      return await resolveIosApp(device, app, options);
     },
   });
 }

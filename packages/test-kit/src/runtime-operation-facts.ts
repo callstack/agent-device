@@ -31,6 +31,7 @@ const unavailableDeploymentOperationFacts = Object.freeze({
   materializeAppSource: unavailable,
   deployMaterializedApp: unavailable,
   sendPushNotification: unavailable,
+  uninstallApp: unavailable,
 });
 
 /** Default fact for tests that are unrelated to explicit device shutdown. */

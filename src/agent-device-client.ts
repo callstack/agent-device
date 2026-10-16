@@ -262,6 +262,8 @@ export function createAgentDeviceClient(
           await executeCommand('reinstall', options),
           resolveRequestSession(options),
         ),
+      uninstall: async (options) =>
+        await executeCommand<CommandResult<'uninstall'>>('uninstall', options),
       installFromSource: async (options: AppInstallFromSourceOptions) =>
         normalizeInstallFromSourceResult(
           await executeCommand('install-from-source', options),

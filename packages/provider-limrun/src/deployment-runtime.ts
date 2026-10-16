@@ -28,6 +28,10 @@ const pushUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Push notifications are unavailable for Limrun provider-owned devices.',
 );
+const uninstallUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'App uninstall is unavailable for Limrun provider-owned devices.',
+);
 
 export type LimrunAppDeploymentRuntimeOptions = Readonly<{
   host: PlatformRuntimeHost;
@@ -56,6 +60,7 @@ export function limrunAppDeploymentFacts(
   materializeAppSource: RuntimeOperationFact;
   deployMaterializedApp: RuntimeOperationFact;
   sendPushNotification: RuntimeOperationFact;
+  uninstallApp: RuntimeOperationFact;
 }> {
   const deployment = limrunDeploymentFact(options, device);
   return Object.freeze({
@@ -64,6 +69,9 @@ export function limrunAppDeploymentFacts(
     deployMaterializedApp: deployment,
     sendPushNotification: isActiveLimrunRuntimeSession(options, device)
       ? pushUnavailable
+      : deploymentUnavailable,
+    uninstallApp: isActiveLimrunRuntimeSession(options, device)
+      ? uninstallUnavailable
       : deploymentUnavailable,
   });
 }

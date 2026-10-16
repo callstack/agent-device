@@ -72,6 +72,7 @@ import type {
   AppStateCommandOptions,
   AppSwitcherCommandOptions,
   AppTriggerEventOptions,
+  AppUninstallOptions,
   AudioOptions,
   BackCommandOptions,
   BatchRunOptions,
@@ -216,6 +217,7 @@ export type AgentDeviceClient = {
   apps: {
     install: (options: AppInstallOptions) => Promise<AppDeployResult>;
     reinstall: (options: AppDeployOptions) => Promise<AppDeployResult>;
+    uninstall: (options: AppUninstallOptions) => Promise<CommandResult<'uninstall'>>;
     installFromSource: (
       options: AppInstallFromSourceOptions,
     ) => Promise<AppInstallFromSourceResult>;

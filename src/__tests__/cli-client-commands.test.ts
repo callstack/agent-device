@@ -1098,6 +1098,12 @@ function createStubClient(params: {
     throw new Error('unexpected command call');
   };
   const command = createThrowingMethodGroup<AgentDeviceClient['command']>();
+  const deployDemo: AgentDeviceClient['apps']['install'] = async () => ({
+    app: 'Demo',
+    appPath: '/tmp/Demo.app',
+    platform: 'ios',
+    identifiers: { appId: 'com.example.demo' },
+  });
   return {
     command,
     devices: {
@@ -1114,18 +1120,9 @@ function createStubClient(params: {
       artifacts: unexpectedCommandCall,
     },
     apps: {
-      install: async () => ({
-        app: 'Demo',
-        appPath: '/tmp/Demo.app',
-        platform: 'ios',
-        identifiers: { appId: 'com.example.demo' },
-      }),
-      reinstall: async () => ({
-        app: 'Demo',
-        appPath: '/tmp/Demo.app',
-        platform: 'ios',
-        identifiers: { appId: 'com.example.demo' },
-      }),
+      install: deployDemo,
+      reinstall: deployDemo,
+      uninstall: unexpectedCommandCall,
       installFromSource: params.installFromSource,
       list: params.listApps ?? (async () => []),
       open:

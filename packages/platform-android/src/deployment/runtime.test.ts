@@ -2,6 +2,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { AndroidAppDeploymentExecutor } from '@agent-device/contracts/app-deployment-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 
 const native = vi.hoisted(() => ({
   installAndroidArtifact: vi.fn(),
@@ -193,3 +194,39 @@ test('keeps ordinary Android install successful when identity is unavailable', a
   ).resolves.toEqual({});
   expect(native.inferAndroidAppName).not.toHaveBeenCalled();
 });
+
+test.each([
+  [
+    'an installed package',
+    async (): Promise<string> => 'com.example.demo',
+    { wasInstalled: true, packageName: 'com.example.demo' },
+  ],
+  ['a missing package', notInstalled, { wasInstalled: false }],
+] as const)('uninstall of %s', async (_name, resolveAppPackage, expected) => {
+  const host = hostFixture({ resolveAppPackage });
+  const operations = createAndroidAppDeploymentOperations({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await expect(operations.uninstallApp?.({ app: 'com.example.demo' })).resolves.toEqual(expected);
+  expect(native.uninstallAndroidPackage).toHaveBeenCalledTimes(expected.wasInstalled ? 1 : 0);
+});
+
+test('uninstall refuses a name that matches no installed package', async () => {
+  const operations = createAndroidAppDeploymentOperations({
+    host: hostFixture({ resolveAppPackage: notInstalled }),
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await expect(operations.uninstallApp?.({ app: 'Demo' })).rejects.toMatchObject({
+    code: 'APP_NOT_INSTALLED',
+  });
+  expect(native.uninstallAndroidPackage).not.toHaveBeenCalled();
+});
+
+async function notInstalled(): Promise<string> {
+  throw new AppError('APP_NOT_INSTALLED', 'No package found');
+}

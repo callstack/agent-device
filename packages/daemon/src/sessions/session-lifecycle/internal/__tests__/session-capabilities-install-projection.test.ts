@@ -39,6 +39,7 @@ test('capabilities projects the install family from exactly one facts inspection
     expect.arrayContaining([
       PUBLIC_COMMANDS.install,
       PUBLIC_COMMANDS.reinstall,
+      PUBLIC_COMMANDS.uninstall,
       PUBLIC_COMMANDS.installFromSource,
       PUBLIC_COMMANDS.push,
     ]),
@@ -105,6 +106,7 @@ test('capabilities fails closed for every fact-owned command when facts inspecti
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.logs);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.install);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.reinstall);
+  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.uninstall);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.installFromSource);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.push);
   expect(runtime.uses).toEqual([]);
