@@ -227,6 +227,29 @@ test('settings text-size reads the category the owner holds without mutating any
   expect(fixtureSettingsMutations).toHaveLength(0);
 });
 
+test('settings bluetooth on an iOS simulator is refused at admission, before dispatch', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-bluetooth';
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', { positionals: ['bluetooth', 'on'] }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
+    expect(response.error.message).toBe('settings bluetooth is not supported on this device');
+    expect(response.error.details?.reason).toBe('unsupported-platform-leaf');
+  }
+  expect(fixtureSettingsMutations).toHaveLength(0);
+});
+
 test('settings on the macOS host refuses a setting it does not serve, read and write alike', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-settings';

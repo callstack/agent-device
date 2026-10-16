@@ -19,7 +19,7 @@ import {
   parseAndroidDeviceDescription,
   parseAndroidDeviceEntries,
   parseAndroidEmulatorAvdNameOutput,
-  parseAndroidFeatureListForTv,
+  androidFeatureListDeclares,
   parseAndroidTargetFromCharacteristics,
   type AndroidDeviceEntry,
 } from './inventory-parsers.ts';
@@ -229,7 +229,10 @@ async function resolveTarget(
     return 'tv';
   }
   const featureList = await runAdbShell(context, serial, ['pm', 'list', 'features']);
-  return parseAndroidFeatureListForTv(commandOutput(featureList)) ? 'tv' : 'mobile';
+  const features = commandOutput(featureList);
+  return TV_FEATURES.some((feature) => androidFeatureListDeclares(features, feature))
+    ? 'tv'
+    : 'mobile';
 }
 
 async function listStoppedAvds(

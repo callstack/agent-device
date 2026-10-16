@@ -1,5 +1,6 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import { underFakeTimers } from './test-utils/fake-timers.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { button, node, text } from './alert-fixtures.ts';
@@ -22,19 +23,6 @@ const dialog = [
   text(1, 'Automation confirmation', 'android:id/alertTitle'),
   button(2, 'Cancel', 'android:id/button2', { x: 210, y: 612 }),
 ];
-
-/** Runs an alert action whose polls sleep between captures, without waiting the sleeps out. */
-async function underFakeTimers<T>(run: () => Promise<T>): Promise<T> {
-  vi.useFakeTimers();
-  try {
-    const outcome = run();
-    outcome.catch(() => {});
-    await vi.runAllTimersAsync();
-    return await outcome;
-  } finally {
-    vi.useRealTimers();
-  }
-}
 
 /** The dialog is in the tree until the button press lands, then gone — the real timeline. */
 function dialogUntilPressed(nodes = dialog) {

@@ -177,10 +177,10 @@ describe('settings CLI permission', () => {
 
   test('passes a setting outside the catalog to the daemon, which refuses it', () => {
     expect(
-      settingsDaemonWriter({ setting: 'bluetooth', state: 'on' } as unknown as Parameters<
+      settingsDaemonWriter({ setting: 'nfc', state: 'on' } as unknown as Parameters<
         typeof settingsDaemonWriter
       >[0]),
-    ).toMatchObject({ positionals: ['bluetooth', 'on'] });
+    ).toMatchObject({ positionals: ['nfc', 'on'] });
   });
 
   test('omits the request input when no app is named', () => {

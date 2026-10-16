@@ -358,6 +358,7 @@ export function limrunSettingsOperationFacts(
             unsupported: settingUnavailableAndroid,
             write: {
               wifi: available,
+              bluetooth: available,
               airplane: available,
               'mobile-data': available,
               location: available,

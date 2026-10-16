@@ -633,6 +633,8 @@ agent-device trigger-app-event screenshot_taken '{"source":"qa"}'
 ```bash
 agent-device settings wifi on
 agent-device settings wifi off
+agent-device settings bluetooth on
+agent-device settings bluetooth off
 agent-device settings airplane on
 agent-device settings airplane off
 agent-device settings mobile-data off
@@ -682,6 +684,7 @@ Platform support:
 Device settings:
 
 - `settings animations off|on` (Android) sets the window, transition, and animator scales. Turn animations off to stabilize runs with heavy animation, and back on afterward.
+- `settings bluetooth on|off` (Android over adb) turns the Bluetooth adapter on or off with `svc bluetooth`, from Android 8.1. A device or emulator image without a Bluetooth adapter fails with `UNSUPPORTED_OPERATION` and `error.details.reason: android_bluetooth_adapter_missing` without changing anything; a build older than Android 8.1 fails the same way with `android_bluetooth_command_unavailable`. It waits up to 2 seconds for the device to hold the requested state and reports it as `bluetooth`; a change the device refuses, such as one a device policy blocks, fails with `COMMAND_FAILED` and `error.details.reason: bluetooth-not-applied`, or `bluetooth-unreadable` if the final read is not a known state. The app may take longer to react, so poll it rather than asserting immediately.
 - `settings airplane on|off` (Android) needs the connectivity service's `cmd connectivity airplane-mode` command, available from Android 11. It reports the resulting `airplaneMode`; a build without that command fails with `UNSUPPORTED_OPERATION` without changing anything. Connectivity takes a moment to settle, so poll the app rather than asserting offline behavior immediately.
 - `settings mobile-data on|off` (Android over adb) switches mobile data with `svc data enable|disable` and reports the resulting `mobileData` from the global `mobile_data` row. If that row does not settle to the request within 2 seconds, it fails with `COMMAND_FAILED`: `error.details.reason` is `mobile-data-unreadable` if the final read is neither `0` nor `1`, or `mobile-data-not-applied` if it is the opposite state. Pair it with `settings wifi off` to move a session such as a video stream from Wi-Fi to cellular, and back with `settings wifi on`. Poll the app while the network hands over.
 - The read-back covers single-SIM targets only. A multi-SIM device stores the switch per subscription and can leave `mobile_data` unchanged, so the command may fail there even when the switch took effect. A target without an active SIM can also accept `svc data` without changing the row, and with Wi-Fi off it is offline rather than on cellular.

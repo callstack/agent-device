@@ -11,6 +11,7 @@ import {
 } from '@agent-device/contracts/settings-catalog';
 import { runAndroidShell } from './adb.ts';
 import { androidAdbResultError } from './adb-failure.ts';
+import { readAndroidSdkInt } from './device-sdk-int.ts';
 import {
   readAndroidCurrentUserId,
   readAndroidPackagePermissions,
@@ -662,7 +663,7 @@ async function setAndroidPhotoPermission(
   pmAction: 'grant' | 'revoke',
   userArgs: AndroidUserArgs,
 ): Promise<string> {
-  const sdkInt = await getAndroidSdkInt(device);
+  const { sdkInt } = await readAndroidSdkInt(device);
   const candidates =
     sdkInt !== null && sdkInt >= 33
       ? ['android.permission.READ_MEDIA_IMAGES', 'android.permission.READ_EXTERNAL_STORAGE']
@@ -733,14 +734,4 @@ async function clearAndroidPermissionFlags(
       { allowFailure: true },
     );
   }
-}
-
-async function getAndroidSdkInt(device: DeviceInfo): Promise<number | null> {
-  const result = await runAndroidShell(device, ['getprop', 'ro.build.version.sdk'], {
-    allowFailure: true,
-  });
-  if (result.exitCode !== 0) return null;
-  const value = Number.parseInt(result.stdout.trim(), 10);
-  if (!Number.isFinite(value) || value <= 0) return null;
-  return value;
 }
