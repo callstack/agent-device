@@ -28,10 +28,10 @@ That inference determined output membership.
 | Situation | Behavior |
 | --- | --- |
 | Indicator ownership | Its **parent** owns it when the parent is a scroll type. Ownership also passes through ancestors with their own parent's **exact frame**. These are transparent wrappers around one region. A scroll-typed node with the indicator label describes itself and owns nothing. |
-| Nearest scroll ancestor requires traversal across a frame change | Own nothing. Apply no band or clip. The smaller `TextView`/`WebView`/cell host retains its scrollability. A frame change ends traversal, regardless of label or type. |
+| An indicator whose nearest scroll-typed ancestor is reached only across a frame change, for example a smaller `TextView`/`WebView`/cell host | The indicator owns nothing. It gets no band and no clip. The smaller `TextView`/`WebView`/cell host retains its scrollability. A frame change ends traversal, regardless of label or type. |
 | Visible band | Presentation derives it from the owner's frame and indicator track. A producer never reports it. |
 | Removal **because a scroll band hides a node** | Require the clip fold's result or a band owned by the indicator's parent. Inferred ownership cannot authorize removal. |
-| Semantic removal: collapsed row, duplicate label, wrapper content | This is compaction, outside this ADR. It retains its own authority. |
+| Removal of a node by semantic delegation, for example a collapsed row, a duplicate label, or wrapper content | This is compaction, outside this ADR. It retains its own authority. |
 | Evidence weaker than a parent edge | Emit only directional hints, `hiddenContentAbove` / `hiddenContentBelow`. Do not change membership. |
 | Every removed source | Must have a typed disposition. This is the open #2754 step 5 contract, not shipped code. It is internal evidence, never wire vocabulary. |
 
@@ -41,7 +41,7 @@ That inference determined output membership.
 A scroll view's indicators are its children.
 The parent edge is therefore the producer's ownership claim.
 No new contract field, cross-language ownership table, or capture-local index remap is necessary.
-The edge survives presentation at both input stages because every iOS scroll host is regular-eligible.
+The edge survives until presentation at both input stages because every iOS scroll host is regular-eligible.
 Projection therefore re-parents indicators only to that host.
 These two lists encode the same fact and must remain synchronized:
 
@@ -60,7 +60,7 @@ Both contain these types:
 **Same-frame traversal preserves structural ownership.**
 The producer states that two nodes have the same rectangle.
 This is a structural fact, not a label or type inference.
-A `WKWebView` page indicator resides under `WebView` wrappers that exactly fill its `ScrollView`.
+Same-frame traversal is necessary because a `WKWebView` page indicator is published under `WebView` wrappers that exactly fill its `ScrollView`.
 #1784/#1797 and real #2754 step 3 captures establish this shape.
 Strict parent-edge ownership left this region without a band and exposed content under the toolbar.
 Traversal stops at the first frame change.
@@ -72,7 +72,8 @@ Same-frame traversal must not restore #2214's failure.
 The iOS runner never emits it.
 It originates in the macOS helper's `AXScrollArea` mapping.
 Those trees reach these rules through `snapshot-desktop-surface.ts` → `ios-snapshot-runtime.ts` → `publishIosSnapshot`.
-Eligibility can remove a `ScrollArea` host and re-parent its children beyond it, leaving no parent-edge owner.
+On those trees, eligibility can remove a `ScrollArea` host while its children re-parent beyond it.
+Then a parent-edge lookup finds no owner.
 Reuse on macOS therefore required a separate eligibility decision.
 #2759 established these cases without admitting the type for iOS:
 
@@ -92,7 +93,7 @@ Removal of indicator clipping would expose content under system chrome.
 The band is necessary; its owner was the disputed fact.
 
 **Visibility ejection requires evidence. Each ejection must be recorded.**
-Most of the engine's 23 removal sites delegate semantics or remove decoration:
+Most of the engine's 23 removal sites delegate semantics or remove decoration, for example:
 
 - A collapsed row.
 - A duplicate label.
@@ -102,11 +103,11 @@ Most of the engine's 23 removal sites delegate semantics or remove decoration:
 This ADR does not change their authority.
 It governs four visibility-driven sites: one scroll-band site and three keyboard-band sites.
 It also covers the clip fold's inclusion decision in `geometry-policy.ts`.
-Only the scroll-band site accepts a weak signal.
-If no indicator parent owns a band, that signal may produce directional hints.
+A weak signal can reach only the scroll-band site.
+If nothing is the indicator's parent, directional hints are the safe outlet for that signal.
 
 Each source index must end presented with its representatives or removed with a typed reason.
-This would make the ledger complete by construction instead of a gate.
+This rule makes the ledger complete by construction, without a gate.
 #2754 step 5 still owes the removal reason.
 Currently, `presentedIndexesBySourceIndex` in `ios-snapshot-engine/semantic-index.ts` records representatives without removal reasons.
 Extend that ledger. A parallel ledger would create another source of truth.
@@ -115,13 +116,14 @@ Extend that ledger. A parallel ledger would create another source of truth.
 
 - **A producer-reported ownership field on `IosRunnerPresentation`.**
   The parent edge already supplies the fact.
-  A field adds validation, capture-local indices, and remap risks without additional information.
+  A field would add validation, capture-local indexing, and remap hazards, and give no new information.
 - **Producer-computed visible bands.**
-  This returns interpretation across the process boundary established by ADR 0004.
+  This moves interpretation back across the process boundary.
+  ADR 0004 removed interpretation from the producer side of that boundary.
   Bands remain host-side.
-- **An owner from unrestricted ancestor traversal.**
-  That traversal caused the incident.
-  Exclusion of only known scroll types, as in #2740, leaves the next `WebView`, map view, or paged cell vulnerable.
+- **An owner found by walking ancestors.**
+  That walk caused the incident.
+  Exclusion of only known scroll types, as in #2740, leaves the next scroll-shaped host, for example a `WebView`, a map view, or a paged cell, to reopen the incident.
 - **One universal scroll-container set or a matrix of ownership/clip/termination booleans.**
   Five sites currently answer related questions:
   - `ios-snapshot-engine/tree.ts`
@@ -131,7 +133,7 @@ Extend that ledger. A parallel ledger would create another source of truth.
   - `RunnerTests+Snapshot.swift`
   Their contents differ.
   Only `tree.ts` accepts macOS `scrollarea`, which the iOS runner never emits.
-  Before restructuring a site, characterize its behavior.
+  Before you reshape any of these sites, characterize each site.
   Parent-edge ownership needs only the existing `isScrollableSnapshotType`.
 - **A rule graph, effect system, or two-API reshape/eject split.**
   The existing code does not justify this structure.
@@ -143,7 +145,7 @@ Extend that ledger. A parallel ledger would create another source of truth.
   First inventory sites in #2754.
   Redesign only what that inventory justifies.
 - **A shrinkage guard instead of the differential.**
-  A threshold either rejects legitimate compaction or permits a 74 → 20 collapse.
+  A threshold would either reject legitimate compaction or permit a 74 → 20 collapse.
   Settings legitimately removes rows under system chrome.
   The differential already asserts interactive ⊆ regular ⊆ raw.
   It lacks runner-stage coverage.
@@ -158,13 +160,13 @@ Extend that ledger. A parallel ledger would create another source of truth.
   It exposed content under the toolbar (#1797, with adjacent #1784).
   #2754 step 3 surveyed Settings, Settings › Privacy & Security, and a Safari `WKWebView` page.
   The captures contained 25 indicators, 18 under non-scroll parents.
-  Only the web surface had this shape.
+  The survey found exactly this shape on the web surface.
   Same-frame traversal reproduces `main` clipping on all three captures.
   Smaller-host cases from #2214 still own nothing.
-  A non-scroll wrapper with a different frame could still under-clip.
+  A non-scroll wrapper with a different frame would still under-clip.
   No captured iOS tree has that shape.
 - **Real data confirms the `WebView` shape.**
-  Safari `snapshot -i --raw` publishes the `WKWebView` indicator under `Other` → `WebView` → `WebView`.
+  A Safari `snapshot -i --raw` capture shows the `WKWebView` indicator under `Other` → `WebView` → `WebView`.
   These ancestors exactly fill the `ScrollView`.
   `runner-presentation.test.ts` reduces that live tree into a fixture.
 - **A scroll-typed indicator owns nothing.**
@@ -172,7 +174,7 @@ Extend that ledger. A parallel ledger would create another source of truth.
   A self-band is ineffective because indicator and container share a rectangle, which `deriveScrollableViewportRect` refuses.
   A parent band would incorrectly clip a sibling list, reproducing #2214 in the opposite direction.
   Thus, `findScrollIndicatorContainer` returns null for an indicator node that is itself a scroll type.
-  `runner-presentation.test.ts` proves that such a label leaves the parent list's band intact.
+  `runner-presentation.test.ts` pins that a scroll host labelled as an indicator leaves the parent list's band intact.
 - **macOS already consumes these rules.**
   Desktop capture uses `snapshot-desktop-surface.ts` → `ios-snapshot-runtime.ts` → `publishIosSnapshot`.
   #2759 decided the `ScrollArea` cases described above.
