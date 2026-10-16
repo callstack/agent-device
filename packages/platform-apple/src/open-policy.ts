@@ -34,7 +34,7 @@ const LAUNCH_CONFIRMATION_ROUNDS = 2;
 type HeldLaunchOutcome = Readonly<{
   observed: LaunchObservation | undefined;
   report?: LaunchConfirmationOutcome;
-  /** The probe step that could not run when no report exists; the prompt state is then unknown. */
+  /** The probe step that failed or went unverified when no report exists; the state is unknown. */
   probeFailure?: LaunchConfirmationProbeFailure;
   /** The launch has no process, or its recognized confirmation remains visible. */
   unanswered: boolean;
@@ -127,9 +127,8 @@ export function releaseSpeculativeRunner(
  * visible after a failed accept also fails the open, even if the app is running. A missing prompt
  * leaves the launch unchanged; an unrecognized prompt or an unresolved URL owner leaves it
  * unchanged and reports `launchConfirmation: 'unanswered'` with its typed reason, because the
- * prompt is on the screen the caller still has to answer. A probe that could not run reports no
- * confirmation and names its failed step instead, leaving the daemon to warn that the prompt state
- * is unknown. An unresolved owner spends both the 3-second presentation window and the bounded
+ * prompt is on the screen the caller still has to answer. A probe step that failed or went unverified reports
+ * no confirmation and names itself, leaving the daemon to warn that the prompt state is unknown. An unresolved owner spends both the 3-second presentation window and the bounded
  * URL-owner lookup.
  */
 export async function settleAppleOpen(
@@ -297,7 +296,7 @@ function settleAttempt(attempt: LaunchConfirmationAttempt): AttemptSettlement {
 
 /**
  * The one rule mapping an answer attempt to what the settle reports. Every attempt states the
- * latest the probe knows: a seen confirmation replaces the report, a probe that could not run
+ * latest the probe knows: a seen confirmation replaces the report, a step that failed or went unverified
  * replaces it with the unknown state, and a completed probe that saw nothing resolves the unknown
  * and keeps any confirmation already seen — an accepted is a completed action the caller owns. An
  * `alert-still-present` attempt belongs to the failed-accept path, which fails the open outright.

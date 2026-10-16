@@ -13,8 +13,8 @@ type Report = Readonly<{
 
 /**
  * The one mapping from each answer attempt to what the settle reports, over each state the settle
- * can already be in. A seen confirmation replaces the report; a failed probe replaces it with the
- * unknown state; a completed probe that saw nothing resolves the unknown and keeps any
+ * can already be in. A seen confirmation replaces the report; a step that failed or went unverified replaces it
+ * with the unknown state; a completed probe that saw nothing resolves the unknown and keeps any
  * confirmation already seen.
  */
 const freshCases: ReadonlyArray<Readonly<[string, LaunchConfirmationAttempt, Report]>> = [

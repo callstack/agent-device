@@ -137,7 +137,7 @@ function launchConfirmationReport(
   }
 }
 
-/** What the caller's `open` output says when the confirmation probe itself could not run. */
+/** What the caller's `open` output says when a confirmation probe step failed unverified. */
 function launchConfirmationProbeFailureWarning(): string {
   return (
     'agent-device could not read whether iOS is asking to confirm the launch URL, so the launch ' +
