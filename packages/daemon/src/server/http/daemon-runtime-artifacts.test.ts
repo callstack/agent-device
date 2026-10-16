@@ -13,11 +13,6 @@ async function downloadTrackedArtifact(env: Record<string, string>, awaitConsump
   const stateDir = mkdtempForTestSync('agent-device-daemon-runtime-artifacts-');
   const artifactPath = path.join(stateDir, 'runtime-artifact.txt');
   fs.writeFileSync(artifactPath, 'runtime-artifact');
-  const artifactId = trackDownloadableArtifact({
-    artifactPath,
-    artifactType: 'runtime-artifact',
-    fileName: 'runtime-artifact.txt',
-  });
   const runtime = await startDaemonRuntime({
     host: createTestHostEnvironment({
       env: {
@@ -32,8 +27,14 @@ async function downloadTrackedArtifact(env: Record<string, string>, awaitConsump
     stdout: { write: () => {} },
     composeDeps: daemonRuntimeDepsFixture(),
   });
+  const artifactId = runtime.run(() =>
+    trackDownloadableArtifact({
+      artifactPath,
+      artifactType: 'runtime-artifact',
+      fileName: 'runtime-artifact.txt',
+    }),
+  );
   try {
-    expect(runtime).not.toBeNull();
     const response = await fetch(
       `http://127.0.0.1:${runtime?.httpPort}/artifacts/${encodeURIComponent(artifactId)}`,
       { headers: { authorization: `Bearer ${runtime?.token}`, connection: 'close' } },
@@ -46,8 +47,8 @@ async function downloadTrackedArtifact(env: Record<string, string>, awaitConsump
     }
     return { status: response.status, body, onDisk: fs.existsSync(artifactPath) };
   } finally {
-    await runtime?.close();
-    cleanupDownloadableArtifact(artifactId);
+    runtime.run(() => cleanupDownloadableArtifact(artifactId));
+    await runtime.close();
   }
 }
 

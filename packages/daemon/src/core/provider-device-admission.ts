@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import type { RuntimeStateHandle } from '@agent-device/host-kit/request';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 /**
@@ -18,7 +20,20 @@ const NO_PROVIDER_DEVICE_ADMISSION: ProviderDeviceAdmission = {
   isActive: () => false,
 };
 
-let installedProviderDeviceAdmission: ProviderDeviceAdmission = NO_PROVIDER_DEVICE_ADMISSION;
+type ProviderAdmissionState = { admission: ProviderDeviceAdmission };
+
+const providerAdmissionStorage = new AsyncLocalStorage<ProviderAdmissionState>();
+const standaloneProviderAdmission: ProviderAdmissionState = {
+  admission: NO_PROVIDER_DEVICE_ADMISSION,
+};
+const providerAdmissionState = (): ProviderAdmissionState =>
+  providerAdmissionStorage.getStore() ?? standaloneProviderAdmission;
+
+/** The admission one daemon runtime owns; the runtime installs its composition's into it. */
+export function createProviderDeviceAdmissionRuntimeState(): RuntimeStateHandle {
+  const owned: ProviderAdmissionState = { admission: NO_PROVIDER_DEVICE_ADMISSION };
+  return { run: (fn) => providerAdmissionStorage.run(owned, fn), dispose: () => {} };
+}
 
 /**
  * Root composition's installation point. The provider runtime scope is ambient per request, so
@@ -26,9 +41,9 @@ let installedProviderDeviceAdmission: ProviderDeviceAdmission = NO_PROVIDER_DEVI
  * provider runtime internals itself.
  */
 export function installProviderDeviceAdmission(admission: ProviderDeviceAdmission): void {
-  installedProviderDeviceAdmission = admission;
+  providerAdmissionState().admission = admission;
 }
 
 export function isActiveProviderDevice(device: DeviceInfo): boolean {
-  return installedProviderDeviceAdmission.isActive(device);
+  return providerAdmissionState().admission.isActive(device);
 }

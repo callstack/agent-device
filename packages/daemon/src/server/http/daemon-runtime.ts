@@ -13,8 +13,14 @@ import {
   resolveDaemonServerMode,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createDaemonHttpServer } from './http-server.ts';
-import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import {
+  createArtifactTrackingRuntimeState,
+  trackDownloadableArtifact,
+} from '../../resources/artifact-tracking.ts';
+import { createResumableUploadRuntimeState } from '../resumable-upload.ts';
+import { createMaterializedPathRuntimeState } from '../../sessions/materialized-path-registry.ts';
+import {
+  createProviderDeviceAdmissionRuntimeState,
   installProviderDeviceAdmission,
   type ProviderDeviceAdmission,
 } from '../../core/provider-device-admission.ts';
@@ -24,6 +30,7 @@ import {
 } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { assertDaemonPolicyAllowsCapability } from '../../core/daemon-policy.ts';
 import {
+  createInteractorResolutionRuntimeState,
   installInteractorResolution,
   type InteractorResolution,
 } from '../../core/interactor-resolution.ts';
@@ -64,6 +71,10 @@ import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { withCommandHost } from '@agent-device/host-kit/command';
+import {
+  createRequestCancelRuntimeState,
+  type RuntimeStateHandle,
+} from '@agent-device/host-kit/request';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import {
@@ -218,6 +229,8 @@ export type DaemonRuntimeController = {
   close: (options?: { cause?: unknown }) => Promise<ShutdownReport>;
   /** Settles once the runtime has closed, whoever closed it (an idle reap closes it unasked). */
   closed: Promise<ShutdownReport>;
+  /** Runs `fn` as this runtime, for code that serves it from outside its own callbacks. */
+  run: <T>(fn: () => T) => T;
   token: string;
 };
 
@@ -412,23 +425,49 @@ export async function teardownDaemonSessionForShutdown(params: {
   return teardownSucceeded;
 }
 
+type RuntimeContext = Readonly<{ run<T>(fn: () => T): T; dispose(): void }>;
+
+/** The per-runtime state of every module that keeps some, in the order it is entered. */
+function createDaemonRuntimeStates(): RuntimeStateHandle[] {
+  return [
+    createRequestCancelRuntimeState(),
+    createProviderDeviceAdmissionRuntimeState(),
+    createInteractorResolutionRuntimeState(),
+    createArtifactTrackingRuntimeState(),
+    createResumableUploadRuntimeState(),
+    createMaterializedPathRuntimeState(),
+  ];
+}
+
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions,
 ): Promise<DaemonRuntimeController> {
-  return await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
-    const rollback = createStartupRollback();
-    try {
-      return await startDaemonRuntimeOnHost(options, rollback);
-    } catch (error) {
-      await rollback.run();
-      throw error;
-    }
-  });
+  const states = createDaemonRuntimeStates();
+  const runtimeContext: RuntimeContext = {
+    run: (fn) => states.reduceRight((next, state) => () => state.run(next), fn)(),
+    dispose: () => {
+      for (const state of states) state.dispose();
+    },
+  };
+  return await runtimeContext.run(
+    async () =>
+      await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
+        const rollback = createStartupRollback();
+        rollback.onRollback(() => runtimeContext.dispose());
+        try {
+          return await startDaemonRuntimeOnHost(options, rollback, runtimeContext);
+        } catch (error) {
+          await rollback.run();
+          throw error;
+        }
+      }),
+  );
 }
 
 async function startDaemonRuntimeOnHost(
   options: DaemonRuntimeOptions,
   rollback: StartupRollback,
+  runtimeContext: RuntimeContext,
 ): Promise<DaemonRuntimeController> {
   const { host } = options;
   const { env } = host;
@@ -681,7 +720,7 @@ async function startDaemonRuntimeOnHost(
         },
       };
     idleReap.cancel();
-    const dispatch = dispatchRequest(req);
+    const dispatch = runtimeContext.run(() => dispatchRequest(req));
     inFlightRequests.add(dispatch);
     try {
       return await dispatch;
@@ -953,6 +992,7 @@ async function startDaemonRuntimeOnHost(
       outcome: { providerReleases: providerReleaseDrain, claims: shutdownClaimLedger.claims },
     });
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
+    runtimeContext.dispose();
     const unknownLeaseIds = new Set(providerReleaseDrain.unknown.map((lease) => lease.leaseId));
     return {
       providerReleases: {
@@ -980,9 +1020,11 @@ async function startDaemonRuntimeOnHost(
   closed.catch(() => {});
   const close = (closeOptions: { cause?: unknown } = {}): Promise<ShutdownReport> => {
     if (!closing) {
-      closing = withCommandHost(
-        { host, requestEnv: undefined },
-        async () => await closeOnHost(closeOptions),
+      closing = runtimeContext.run(() =>
+        withCommandHost(
+          { host, requestEnv: undefined },
+          async () => await closeOnHost(closeOptions),
+        ),
       );
       closing.then(settleClosed.resolve, settleClosed.reject);
     }
@@ -993,6 +1035,7 @@ async function startDaemonRuntimeOnHost(
     httpPort,
     close,
     closed,
+    run: runtimeContext.run,
     socketPort,
     token,
   };

@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import type { RuntimeStateHandle } from '@agent-device/host-kit/request';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -44,7 +46,36 @@ type ArtifactEntry = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-const pendingArtifacts = new Map<string, ArtifactEntry>();
+type ArtifactTrackingState = {
+  artifacts: Map<string, ArtifactEntry>;
+  uploads: Map<string, UploadEntry>;
+};
+
+const artifactTrackingStorage = new AsyncLocalStorage<ArtifactTrackingState>();
+const createArtifactTrackingState = (): ArtifactTrackingState => ({
+  artifacts: new Map(),
+  uploads: new Map(),
+});
+const standaloneArtifactTracking = createArtifactTrackingState();
+const artifactTracking = (): ArtifactTrackingState =>
+  artifactTrackingStorage.getStore() ?? standaloneArtifactTracking;
+const pendingArtifacts = () => artifactTracking().artifacts;
+const pendingUploads = () => artifactTracking().uploads;
+
+/** The artifacts and uploads one daemon runtime tracks; disposing it stops their expiry timers. */
+export function createArtifactTrackingRuntimeState(): RuntimeStateHandle {
+  const owned = createArtifactTrackingState();
+  return {
+    run: (fn) => artifactTrackingStorage.run(owned, fn),
+    dispose: () => {
+      for (const entry of [...owned.artifacts.values(), ...owned.uploads.values()]) {
+        clearTimeout(entry.timer);
+      }
+      owned.artifacts.clear();
+      owned.uploads.clear();
+    },
+  };
+}
 
 /** What a finished request registers for each artifact it hands back to the client. */
 export type DownloadableArtifactRegistration = {
@@ -73,7 +104,7 @@ export function trackDownloadableArtifact(
     cleanupDownloadableArtifact(artifactId);
   }, ARTIFACT_CLEANUP_TIMEOUT_MS);
   timer.unref();
-  pendingArtifacts.set(artifactId, {
+  pendingArtifacts().set(artifactId, {
     artifactPath: params.artifactPath,
     tenantId: params.tenantId,
     artifactType: params.artifactType,
@@ -105,7 +136,7 @@ export async function listDownloadableArtifacts(
   tenantId?: string,
 ): Promise<DaemonArtifactInventoryEntry[]> {
   const artifacts: DaemonArtifactInventoryEntry[] = [];
-  for (const [id, entry] of pendingArtifacts) {
+  for (const [id, entry] of pendingArtifacts()) {
     if (!canReadArtifact(entry, tenantId)) continue;
     let stat: fs.Stats;
     try {
@@ -148,7 +179,7 @@ function readDownloadableArtifactEntry(
   tenantId: string | undefined,
 ): { entry: ArtifactEntry; stat: fs.Stats } {
   const entry = requireTenantOwnedEntry(
-    pendingArtifacts,
+    pendingArtifacts(),
     artifactId,
     tenantId,
     DOWNLOADABLE_ARTIFACT_RESOURCE,
@@ -249,7 +280,7 @@ async function createDirectoryArchive(
       sizeBytes: fs.statSync(archivePath).size,
     };
     // The artifact may be consumed or expire while tar is still archiving.
-    if (pendingArtifacts.get(artifactId) !== entry) {
+    if (pendingArtifacts().get(artifactId) !== entry) {
       fs.rmSync(tempDir, { recursive: true, force: true });
       throw expiredTenantOwnedEntryError(DOWNLOADABLE_ARTIFACT_RESOURCE, artifactId);
     }
@@ -294,10 +325,10 @@ function hasUnsafeFilenameCharacter(fileName: string): boolean {
 }
 
 export function cleanupDownloadableArtifact(artifactId: string): void {
-  const entry = pendingArtifacts.get(artifactId);
+  const entry = pendingArtifacts().get(artifactId);
   if (!entry) return;
   clearTimeout(entry.timer);
-  pendingArtifacts.delete(artifactId);
+  pendingArtifacts().delete(artifactId);
   cleanupDirectoryArchive(entry);
   if (!entry.deleteAfterDownload) return;
   try {
@@ -334,8 +365,6 @@ type UploadEntry = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-const pendingUploads = new Map<string, UploadEntry>();
-
 export function trackUploadedArtifact(params: {
   artifactPath: string;
   tempDir: string;
@@ -346,7 +375,7 @@ export function trackUploadedArtifact(params: {
     cleanupUploadedArtifact(uploadId);
   }, UPLOAD_CLEANUP_TIMEOUT_MS);
   timer.unref();
-  pendingUploads.set(uploadId, {
+  pendingUploads().set(uploadId, {
     artifactPath: params.artifactPath,
     tempDir: params.tempDir,
     tenantId: params.tenantId,
@@ -357,7 +386,7 @@ export function trackUploadedArtifact(params: {
 
 export function prepareUploadedArtifact(uploadId: string, tenantId?: string): string {
   const entry = requireTenantOwnedEntry(
-    pendingUploads,
+    pendingUploads(),
     uploadId,
     tenantId,
     UPLOADED_ARTIFACT_RESOURCE,
@@ -367,9 +396,9 @@ export function prepareUploadedArtifact(uploadId: string, tenantId?: string): st
 }
 
 export function cleanupUploadedArtifact(uploadId: string): void {
-  const entry = pendingUploads.get(uploadId);
+  const entry = pendingUploads().get(uploadId);
   if (!entry) return;
   clearTimeout(entry.timer);
-  pendingUploads.delete(uploadId);
+  pendingUploads().delete(uploadId);
   fs.rmSync(entry.tempDir, { recursive: true, force: true });
 }

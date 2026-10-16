@@ -1,7 +1,45 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 
-const canceledRequestIds = new Set<string>();
-const requestAbortControllers = new Map<string, AbortController>();
+/**
+ * What one daemon runtime owns of a kind: the module keeps its state in an async-local slot the
+ * runtime enters, so two runtimes in one process never share it. Outside a runtime (a client
+ * process, a unit test) the module's own standalone state answers.
+ */
+export type RuntimeStateHandle = Readonly<{
+  /** Runs `fn` as the runtime that owns this state. */
+  run<T>(fn: () => T): T;
+  /** Releases what the state holds (timers, handles). */
+  dispose(): void;
+}>;
+
+type RequestCancelState = {
+  canceledRequestIds: Set<string>;
+  requestAbortControllers: Map<string, AbortController>;
+};
+
+const createRequestCancelState = (): RequestCancelState => ({
+  canceledRequestIds: new Set<string>(),
+  requestAbortControllers: new Map<string, AbortController>(),
+});
+const requestCancelStorage = new AsyncLocalStorage<RequestCancelState>();
+const standaloneRequestCancelState = createRequestCancelState();
+const requestCancelState = (): RequestCancelState =>
+  requestCancelStorage.getStore() ?? standaloneRequestCancelState;
+const canceledRequestIds = () => requestCancelState().canceledRequestIds;
+const requestAbortControllers = () => requestCancelState().requestAbortControllers;
+
+export function createRequestCancelRuntimeState(): RuntimeStateHandle {
+  const owned = createRequestCancelState();
+  return {
+    run: (fn) => requestCancelStorage.run(owned, fn),
+    dispose: () => {
+      for (const controller of owned.requestAbortControllers.values()) controller.abort();
+      owned.requestAbortControllers.clear();
+      owned.canceledRequestIds.clear();
+    },
+  };
+}
 
 export type RequestAbortRegistration = {
   requestId: string;
@@ -55,16 +93,16 @@ export function registerRequestAbort(
   requestId: string | undefined,
 ): RequestAbortRegistration | undefined {
   if (!requestId) return undefined;
-  if (requestAbortControllers.has(requestId)) {
+  if (requestAbortControllers().has(requestId)) {
     throw new AppError('INVALID_ARGS', `Request ID is already in flight: ${requestId}`, {
       requestId,
       reason: 'duplicate_request_id',
     });
   }
-  evictOldestEntries(requestAbortControllers);
+  evictOldestEntries(requestAbortControllers());
   const controller = new AbortController();
-  requestAbortControllers.set(requestId, controller);
-  if (canceledRequestIds.has(requestId)) {
+  requestAbortControllers().set(requestId, controller);
+  if (canceledRequestIds().has(requestId)) {
     controller.abort();
   }
   return { requestId, controller };
@@ -72,13 +110,13 @@ export function registerRequestAbort(
 
 export function markRequestCanceled(requestId: string | undefined): void {
   if (!requestId) return;
-  evictOldestSetEntries(canceledRequestIds);
-  canceledRequestIds.add(requestId);
+  evictOldestSetEntries(canceledRequestIds());
+  canceledRequestIds().add(requestId);
   // Abort WITH the typed error as the reason: every `signal.throwIfAborted()`,
   // fetch, and `throw signal.reason` downstream then surfaces the canceled
   // request as such, instead of a bare DOMException that normalizes to UNKNOWN.
   // No call site has to remember the factory — the signal carries it.
-  requestAbortControllers.get(requestId)?.abort(createRequestCanceledError());
+  requestAbortControllers().get(requestId)?.abort(createRequestCanceledError());
 }
 
 export function clearRequestCanceled(
@@ -89,12 +127,12 @@ export function clearRequestCanceled(
   if (
     registration &&
     (registration.requestId !== requestId ||
-      requestAbortControllers.get(requestId) !== registration.controller)
+      requestAbortControllers().get(requestId) !== registration.controller)
   ) {
     return;
   }
-  canceledRequestIds.delete(requestId);
-  requestAbortControllers.delete(requestId);
+  canceledRequestIds().delete(requestId);
+  requestAbortControllers().delete(requestId);
 }
 
 export function clearRequestAbortRegistration(
@@ -106,12 +144,12 @@ export function clearRequestAbortRegistration(
 
 export function isRequestCanceled(requestId: string | undefined): boolean {
   if (!requestId) return false;
-  return canceledRequestIds.has(requestId);
+  return canceledRequestIds().has(requestId);
 }
 
 export function getRequestSignal(requestId: string | undefined): AbortSignal | undefined {
   if (!requestId) return undefined;
-  return requestAbortControllers.get(requestId)?.signal;
+  return requestAbortControllers().get(requestId)?.signal;
 }
 
 export function throwIfRequestCanceled(requestId: string | undefined): void {
