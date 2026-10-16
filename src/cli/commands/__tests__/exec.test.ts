@@ -344,6 +344,7 @@ test('forwards a second signal when the child ignored the first, and keeps the f
   const dirs = useDirs();
   const gotSignal = path.join(dirs.stateDir, 'child-got-second-term.txt');
   const childStarted = path.join(dirs.stateDir, 'child-started.txt');
+  const sigintListenersBefore = process.listenerCount('SIGINT');
   const sigtermListenersBefore = process.listenerCount('SIGTERM');
   const running = runExec(
     [
@@ -365,6 +366,8 @@ test('forwards a second signal when the child ignored the first, and keeps the f
   process.emit('SIGTERM');
   // The first signal owns the exit code even though the second ended the child.
   assert.equal(await running.promise, 128 + 2);
+  // Both signals were emitted, so both handlers must be gone again.
+  assert.equal(process.listenerCount('SIGINT'), sigintListenersBefore);
   assert.equal(process.listenerCount('SIGTERM'), sigtermListenersBefore);
   assert.equal(fs.readFileSync(gotSignal, 'utf8').trim(), 'got');
   assert.equal(storedClaim(dirs.claimsDir), undefined);
