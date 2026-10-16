@@ -106,7 +106,7 @@ export function checkSessionAuthorityOverlay(
       line: 1,
       message:
         'new handler-owned SessionStore authority edge: the merge-base holds no such import. ' +
-        "Route the operation through the owning module's facade or a named semantic query. " +
+        "Route the operation through the owning module's facade or a named store operation. " +
         'If the boundary change is intended, change the invariant and the gate together.',
     });
   }

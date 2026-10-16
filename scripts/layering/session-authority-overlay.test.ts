@@ -129,8 +129,9 @@ test('R75 fails a handler file that gains a shape or authority edge beyond the m
   assert.equal(authority.rule, SESSION_AUTHORITY_OVERLAY_RULE);
   assert.match(shape.message, /new handler-owned SessionState shape edge/);
   assert.match(authority.message, /new handler-owned SessionStore authority edge/);
+  assert.match(shape.message, /owning module's facade or a named semantic query/);
+  assert.match(authority.message, /owning module's facade or a named store operation/);
   for (const { message } of [shape, authority]) {
-    assert.match(message, /owning module's facade or a named semantic query/);
     assert.match(message, /change the invariant and the gate together/);
     assert.doesNotMatch(message, /accept the growth/);
   }
