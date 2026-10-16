@@ -31,25 +31,10 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
 
 ## 2. Decision
 
-1. **Every daemon import of a root `src/platform-runtime-*.ts` module is classified as exactly
-   one of three categories** (retired by the 2026-10-12 amendment below: the inventory
-   `DAEMON_PLATFORM_RUNTIME_EDGES` in
-   [`scripts/layering/daemon-platform-runtime-inventory.ts`](../../scripts/layering/daemon-platform-runtime-inventory.ts)
-   is now empty, so the classification table and its symbol-drift and staleness passes are deleted
-   and R76 bans the coupling outright — any production `packages/daemon/src/**` import of the family or of a
-   root hub that reaches it is a violation. The categories and outcomes below remain the record of
-   how each edge was judged and retired):
-   - **Composition-essential** — assembling neutral runtime implementations at the process root.
-   - **Daemon-policy-essential** — request admission, session ownership, conflicts, locking,
-     cancellation, teardown ordering, artifact publication, or response/event semantics.
-   - **Leaked platform mechanics** — platform-family operations or state that should be owned
-     behind a deeper runtime interface or adapter; only this category creates implementation
-     work (child issues below).
-   The gate rule **R76 `daemon-platform-runtime-inventory`** (in `scripts/layering/check.ts`)
-   originally failed the layering check on any unclassified edge, on symbol-set drift between a
-   file and its inventory entry, and on stale entries; observed red against a planted unclassified
-   import before acceptance. Since the amendment it fails on any production daemon import of the
-   family or a hub that reaches it, in any static or dynamic form.
+1. **R76 bans daemon coupling to root platform-runtime modules.** Any production
+   `packages/daemon/src/**` import of `src/platform-runtime-*.ts` or a root hub that reaches
+   that family is a violation, in any static or dynamic form. The completed classification
+   procedure is retained in git history. The section-2 outcomes retain the audit rationale.
 
 2. **Per-edge outcomes at `27a97ee619`.** Four edges are composition-essential and stay
    (`daemon-runtime.ts` → `platform-runtime.ts` and → `platform-runtime-host-diagnostics.ts`;
