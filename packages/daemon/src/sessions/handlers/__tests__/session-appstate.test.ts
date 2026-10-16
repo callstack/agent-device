@@ -69,6 +69,39 @@ test('appstate --platform apple missing-session error never suggests omitting --
   }
 });
 
+test('appstate --udid with no --platform still answers the typed reason for a named missing session', async () => {
+  // `--udid` is the Apple identity flag, so a bare `--udid <ios>` reaches the device-runtime lane
+  // and lands on an Apple device. The commands.md row promises the typed reason "even with an
+  // explicit device", so this lane — the only appstate route that resolves a device — answers it
+  // too, not the reasonless session-required refusal.
+  const iosSim: DeviceInfo = {
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'SIM-UDID-A',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    target: 'mobile',
+    booted: true,
+  };
+  const resolved = vi.mocked(resolveTargetDevice).mockResolvedValue(iosSim);
+  try {
+    const response = await handleAppStateCommand({
+      platformServices: daemonPlatformServicesFixture(),
+      req: appStateRequest('lost', { session: 'lost', udid: 'SIM-UDID-A' }),
+      sessionName: 'lost',
+      sessionStore: makeSessionStore(),
+    });
+
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
+    expect(response.error.code).toBe('SESSION_NOT_FOUND');
+    expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+    expect(response.error.details?.session).toBe('lost');
+  } finally {
+    resolved.mockReset();
+  }
+});
+
 test('appstate with a named session and an identity device selector keeps the stated target', async () => {
   // Same priority as the resolution guard (#3674): the request names a session this daemon lost
   // but states a concrete device, so it is not answered on the missing session. It resolves the

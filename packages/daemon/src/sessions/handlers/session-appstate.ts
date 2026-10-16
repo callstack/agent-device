@@ -1,7 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { isApplePlatform, type PlatformSelector } from '@agent-device/kernel/device';
-import { errorResponse, namesSessionExplicitly } from '@agent-device/kernel/contracts';
-import { namedSessionNotFoundDetails } from '@agent-device/kernel/errors';
+import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
+import { isApplePlatform } from '@agent-device/kernel/device';
 import { hasExplicitDeviceSelector } from '../../core/device/device-selector-intent.ts';
 import {
   requireSessionOrExplicitSelector,
@@ -10,32 +9,12 @@ import {
 } from '../../resources/session-device-resolution.ts';
 import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-admission.ts';
 import {
+  appStateSessionNotFoundResponse,
   appleSessionAppStateResponse,
   appleSessionRequiredRefusal,
   type AppStateSessionRecord,
 } from './session-appstate-apple-session.ts';
 import { queryDeviceRuntimeAppState } from './session-appstate-device-runtime.ts';
-
-function appStateSessionNotFoundResponse(
-  sessionName: string,
-  platform: PlatformSelector | undefined,
-): DaemonResponse {
-  // Every Apple selector — `apple`, `ios`, or `macos` — answers appstate only from an open
-  // session and its runner, so the "omit --session" route they would otherwise be pointed at
-  // just reaches the session-required refusal. Send them straight to opening the session.
-  if (isApplePlatform(platform)) {
-    return errorResponse(
-      'SESSION_NOT_FOUND',
-      `No active session "${sessionName}". Run open with --session ${sessionName} first.`,
-      namedSessionNotFoundDetails(sessionName),
-    );
-  }
-  return errorResponse(
-    'SESSION_NOT_FOUND',
-    `No active session "${sessionName}". Run open with --session ${sessionName} first, or omit --session to query by device selector.`,
-    namedSessionNotFoundDetails(sessionName),
-  );
-}
 
 type AppStateSessionStoreEntry = ReturnType<RuntimeCommandHandlerParams['sessionStore']['get']>;
 

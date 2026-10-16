@@ -1,4 +1,3 @@
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
 import {
   isIosFamily,
@@ -6,10 +5,15 @@ import {
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
+import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-admission.ts';
-import { appleSessionRequiredRefusal } from './session-appstate-apple-session.ts';
+import {
+  appStateSessionNotFoundResponse,
+  appleSessionRequiredRefusal,
+} from './session-appstate-apple-session.ts';
 
 function sortedAndroidSerialAllowlist(value: string | undefined): string[] | undefined {
   const allowlist = resolveAndroidSerialAllowlist(value);
@@ -26,8 +30,16 @@ export async function queryDeviceRuntimeAppState(
   params: RuntimeCommandHandlerParams,
   device: DeviceInfo,
 ): Promise<DaemonResponse> {
-  if (isIosFamily(device)) return appleSessionRequiredRefusal('ios');
-  if (isMacOs(device)) return appleSessionRequiredRefusal('macos');
+  if (isIosFamily(device) || isMacOs(device)) {
+    // A request that names a session this daemon does not hold and resolves onto an Apple device
+    // is missing its session, not its device (#3674): the same typed refusal the session-required
+    // selectors answer, whatever flag routed it here. A request that named no session keeps the
+    // plain session-required refusal, which is the right advice for it.
+    if (!params.sessionStore.get(params.sessionName) && namesSessionExplicitly(params.req)) {
+      return appStateSessionNotFoundResponse(params.sessionName, device.platform);
+    }
+    return appleSessionRequiredRefusal(isMacOs(device) ? 'macos' : 'ios');
+  }
   const flags = params.req.flags ?? {};
   const admitted = await admitRuntimeUse({
     command: 'appstate',
