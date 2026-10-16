@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type { ElementTextRuntimeOperations } from '@agent-device/contracts/element-text-runtime';
 import { resolveSelectorCaptureRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
@@ -11,7 +12,6 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../core/request-runtime-binding.ts';
 import { admitAndBindSnapshotCapture } from '../core/snapshot-runtime-binding.ts';
-import type { DaemonResponse } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 
 /** The selector commands that resolve their targets from the shared request-bound capture seam. */

@@ -31,7 +31,7 @@ test('the overlay counts symbol-level production importers, not file-level impor
   const sources = {
     'packages/daemon/src/core/session-state.ts': STATE_STUB,
     'packages/daemon/src/core/session-store.ts': STORE_STUB,
-    'packages/daemon/src/sessions/handlers/fixture.ts':
+    'packages/daemon/src/sessions/handlers/subject.ts':
       "import type { SessionState } from '../../core/session-state.ts';\n" +
       "import { SessionStore } from '../../core/session-store.ts';\n",
     'packages/daemon/src/sessions/handlers/request-only.ts':
@@ -39,15 +39,15 @@ test('the overlay counts symbol-level production importers, not file-level impor
       "import { resolveDaemonStateDir } from '../../core/session-store.ts';\n",
     'packages/daemon/src/non-handler.ts':
       "import type { SessionState } from './core/session-state.ts';\n",
-    'packages/daemon/src/sessions/handlers/fixture.test.ts':
+    'packages/daemon/src/sessions/handlers/subject.test.ts':
       "import type { SessionState } from '../../core/session-state.ts';\n",
   };
   assert.deepEqual(overlayOf(sources), {
     shapeFiles: [
       'packages/daemon/src/non-handler.ts',
-      'packages/daemon/src/sessions/handlers/fixture.ts',
+      'packages/daemon/src/sessions/handlers/subject.ts',
     ],
-    authorityFiles: ['packages/daemon/src/sessions/handlers/fixture.ts'],
+    authorityFiles: ['packages/daemon/src/sessions/handlers/subject.ts'],
   });
 });
 
@@ -58,7 +58,7 @@ test('the overlay follows the SessionState declaration to a moved path, not a re
     'packages/daemon/src/types.ts': 'export type DaemonRequest = { x: number; };\n',
     'packages/daemon/src/core/session-state.ts': STATE_STUB,
     'packages/daemon/src/core/session-store.ts': STORE_STUB,
-    'packages/daemon/src/sessions/handlers/fixture.ts':
+    'packages/daemon/src/sessions/handlers/subject.ts':
       "import type { SessionState } from '../../core/session-state.ts';\n",
     'packages/daemon/src/non-handler.ts':
       "import type { SessionState } from './core/session-state.ts';\n",
@@ -66,7 +66,7 @@ test('the overlay follows the SessionState declaration to a moved path, not a re
   assert.deepEqual(overlayOf(sources), {
     shapeFiles: [
       'packages/daemon/src/non-handler.ts',
-      'packages/daemon/src/sessions/handlers/fixture.ts',
+      'packages/daemon/src/sessions/handlers/subject.ts',
     ],
     authorityFiles: [],
   });
@@ -75,7 +75,7 @@ test('the overlay follows the SessionState declaration to a moved path, not a re
 test('the handler-owned subset is every <layer>/handlers/ folder, not a recorded pair', () => {
   const overlay: SessionAuthorityOverlay = {
     shapeFiles: [
-      'packages/daemon/src/sessions/handlers/fixture.ts',
+      'packages/daemon/src/sessions/handlers/subject.ts',
       'packages/daemon/src/execution/handlers/snapshot-handler.ts',
       // A handler folder under a layer the split never produced still joins the ratcheted
       // subset: membership comes from the folder shape, so no rule edit can miss it.
@@ -85,7 +85,7 @@ test('the handler-owned subset is every <layer>/handlers/ folder, not a recorded
       'packages/daemon/src/execution/interaction/internal/interaction.ts',
     ],
     authorityFiles: [
-      'packages/daemon/src/sessions/handlers/fixture.ts',
+      'packages/daemon/src/sessions/handlers/subject.ts',
       'packages/daemon/src/execution/handlers/snapshot-handler.ts',
       'packages/daemon/src/core/handlers/newcomer.ts',
       'packages/daemon/src/server/request-router.ts',
@@ -93,12 +93,12 @@ test('the handler-owned subset is every <layer>/handlers/ folder, not a recorded
   };
   assert.deepEqual(handlerOwnedOverlay(overlay), {
     shapeFiles: [
-      'packages/daemon/src/sessions/handlers/fixture.ts',
+      'packages/daemon/src/sessions/handlers/subject.ts',
       'packages/daemon/src/execution/handlers/snapshot-handler.ts',
       'packages/daemon/src/core/handlers/newcomer.ts',
     ],
     authorityFiles: [
-      'packages/daemon/src/sessions/handlers/fixture.ts',
+      'packages/daemon/src/sessions/handlers/subject.ts',
       'packages/daemon/src/execution/handlers/snapshot-handler.ts',
       'packages/daemon/src/core/handlers/newcomer.ts',
     ],

@@ -8,7 +8,7 @@ import type { ReplayObservationEvidence } from '@agent-device/contracts/replay';
 import type {
   ReplaySessionObservation,
   ReplaySessionStore,
-} from '@agent-device/replay-port/command-types';
+} from '@agent-device/contracts/replay-backend';
 
 /**
  * Daemon-owned replay projection and publication boundary. The response or

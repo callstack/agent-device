@@ -1,12 +1,13 @@
 import { defineConfig } from 'vitest/config';
 import { resolveVitestMaxWorkers } from './scripts/lib/vitest-concurrency.ts';
+import coverageRunStampReporter from './scripts/vitest-coverage-run-stamp-reporter.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
 // A real per-case spawn is timeout noise under thousands of mutant reruns, so the
 // mutation lane excludes these tests even though the unit lane runs them normally.
 const MUTATION_EXCLUDED_SUBPROCESS_TESTS: readonly string[] = [
   // Stubs npx plus the package managers and spawns a real Metro dev server per case.
-  'src/__tests__/client-metro.test.ts',
+  'src/metro/client-metro.test.ts',
   // The SUT is the subprocess watchdog: a node subprocess per case, one hangs on purpose (#1414).
   'scripts/fuzz/harness.test.ts',
   // The daemon takeover test launches a branch-named daemon per case to prove
@@ -48,6 +49,15 @@ const FUZZ_WORKER_TESTS: readonly string[] = [
   // Replays the fuzz corpus through the worker watchdog, waiting its per-case budget (#1414).
   'scripts/fuzz/corpus-replay.test.ts',
 ];
+
+/**
+ * The projects `test:coverage` keeps out of the instrumented invocation, which the stamp reporter has to
+ * expect: without it, the lane's own `--project=!fuzz-worker` is indistinguishable from someone narrowing
+ * the run, and every coverage pass would stamp itself partial. This config owns the split, so it hands the
+ * list to the reporter directly; the guard test compares it against the declared projects below and the
+ * `--project=!x` flags in the script, which are the two ways it can go stale.
+ */
+export const COVERAGE_UNINSTRUMENTED_PROJECTS: readonly string[] = ['fuzz-worker'];
 /**
  * Every test the mutation lane must not collect. The two lists above stay
  * module-local: this union is the whole cross-file surface, and the mutation lane
@@ -93,7 +103,12 @@ export default defineConfig({
     // assumption without reducing ordinary file-level parallelism.
     maxConcurrency: 1,
     // Gate reporters for every lane; a `--reporter` flag would replace them, so no lane passes one.
-    reporters: ['default', slowTestGateReporter()],
+    // The stamp reporter only acts on a lane that ran coverage — see its module.
+    reporters: [
+      'default',
+      slowTestGateReporter(),
+      coverageRunStampReporter(COVERAGE_UNINSTRUMENTED_PROJECTS),
+    ],
     projects: [
       {
         test: {
@@ -117,6 +132,10 @@ export default defineConfig({
             'scripts/fuzz/validation-arbitraries-maestro.test.ts',
             'scripts/fuzz/validation-case.test.ts',
             'scripts/fuzz/envelope.test.ts',
+            'scripts/__tests__/vitest-slow-test-reporter.test.ts',
+            // Artifact guards assert on Swift sources, package.json, workflows, docs and examples rather
+            // than on a module under src.
+            'test/repo-guards/*.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
             'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-expectation-falsification.test.ts',
@@ -223,7 +242,7 @@ export default defineConfig({
           setupFiles: [
             ...SETUP_FILES,
             'scripts/vitest-apple-runner-home-setup.ts',
-            'scripts/vitest-apple-runner-host-setup.ts',
+            'packages/platform-apple/src/runner/__tests__/host-setup.ts',
           ],
         },
       },

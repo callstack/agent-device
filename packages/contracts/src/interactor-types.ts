@@ -7,7 +7,8 @@ import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 import type { GesturePlan } from './gesture-plan-types.ts';
-import type { ReadableSetting, ReadSettingResult, SettingOptions } from './settings.ts';
+import type { ReadSettingResult, SettingOptions } from './settings.ts';
+import type { ReadableSetting } from './settings-catalog.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { BackendSnapshotResult } from './snapshot-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
@@ -17,6 +18,7 @@ import type {
   IosSnapshotComparisonIdentity,
 } from './ios-snapshot.ts';
 import type {
+  PresentedSurface,
   RawSnapshotNode,
   Point,
   Rect,
@@ -106,7 +108,7 @@ export const MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE = 'tapped via non-hittable co
  * its only producer and the boundary that narrows it
  * (readTypeTextBackendResult, packages/platform-apple/src/interactions.ts) drops a
  * route it cannot name — so a Swift-side addition would silently vanish. The
- * route-parity test in packages/platform-apple/src/core/__tests__/interactions.test.ts
+ * route-parity test in packages/platform-apple/src/interactions.test.ts
  * reads the Swift sources and fails instead.
  */
 export const TEXT_ENTRY_ROUTES = [
@@ -265,6 +267,12 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
    * over the session app rather than the app itself (#2438).
    */
   systemSurface?: IosSystemSurfaceProvenance;
+  /**
+   * Whether this capture read a modal presentation over the app (#3565), computed by the producer on
+   * the acquired tree before any projection. Absent means the producer published no fact at all,
+   * which a consumer must treat as `'unknown'`.
+   */
+  presentedSurface?: PresentedSurface;
   /**
    * Keyboard evidence acquired with this tree: measured `visible`, policy-derived `derived`,
    * additive `visibility-only`, rejected `tree-rejected`, proven `absent`, or unknown `unmeasurable` facts. Measured and

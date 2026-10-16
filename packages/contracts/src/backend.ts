@@ -23,11 +23,9 @@ import type {
 import type {
   Point,
   Rect,
-  SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotOptions,
   SnapshotState,
-  SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
 
 // The backend's public leaf platform (approach b): backends distinguish iOS from
@@ -45,25 +43,10 @@ export type BackendCommandContext = {
 };
 
 export type BackendSnapshotResult = {
-  nodes?: SnapshotNode[];
-  truncated?: boolean;
-  backend?: string;
-  snapshot?: SnapshotState;
+  snapshot: SnapshotState;
   appName?: string;
   appBundleId?: string;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
-  /**
-   * The keyboard band this capture's producer measured (#2660), carried beside the tree it measured.
-   * A backend that publishes nothing measured nothing, and the tap-path keyboard guard keeps deriving
-   * the band from `nodes`.
-   */
-  keyboard?: SnapshotKeyboardBandFact;
-  /**
-   * The box these rects are measured in, as the producer measured it (#3182). Absent means the
-   * producer measured no box — never a zero — since that absence is the only answer a producer with
-   * no screen to measure is allowed to give.
-   */
-  viewport?: SnapshotViewportSize;
 } & SnapshotCaptureAnnotations;
 
 export type BackendSnapshotOptions = SnapshotOptions & {

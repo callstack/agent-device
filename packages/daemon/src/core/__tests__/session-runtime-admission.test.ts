@@ -1,6 +1,6 @@
 import { resolveSnapshotRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
 import { expect, test } from 'vitest';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit';
 import { snapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
 import {
   admitRuntimePlan,

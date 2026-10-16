@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
-import { sleep } from '@agent-device/host-kit/retry';
+import { type Deadline, sleep } from '@agent-device/host-kit/retry';
 import { buildSwiftToolEnv, compileSwiftSourceText } from './swift-cache.ts';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
@@ -119,15 +119,19 @@ function isSwiftVideoValidatorError(error: unknown): boolean {
   );
 }
 
+/** Polls until the file plays, for `attempts` polls or until `deadline` passes, whichever is first. */
 export async function waitForPlayableVideo(
   filePath: string,
-  options: { pollMs?: number; attempts?: number } = {},
+  options: { pollMs?: number; attempts?: number; deadline?: Deadline } = {},
 ): Promise<void> {
   const pollMs = options.pollMs ?? 150;
   const attempts = options.attempts ?? 12;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (await isPlayableVideo(filePath)) {
+      return;
+    }
+    if (options.deadline?.isExpired()) {
       return;
     }
     await sleep(pollMs);

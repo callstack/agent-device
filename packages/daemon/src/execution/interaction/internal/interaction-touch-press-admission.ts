@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { InteractionTarget } from '@agent-device/contracts/interaction';
 import {
@@ -8,7 +9,6 @@ import {
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { resolveRefStalenessWarning } from '../../session-snapshot.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
 import { refusedBeforeDispatch } from '../../request-dispatch-disclosure.ts';

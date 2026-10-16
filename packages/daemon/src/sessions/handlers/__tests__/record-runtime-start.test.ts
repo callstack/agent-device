@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeRecordRuntimeHarness } from './record-runtime.fixtures.ts';
 
 test('record start adopts the runtime pair and projects unchanged response metadata', async () => {
@@ -35,6 +35,26 @@ test('record start preserves the requested path while the runtime receives the e
   expect(response).toMatchObject({ ok: true, data: { outPath: 'capture.mp4' } });
   expect(harness.runtime.start).toHaveBeenCalledWith(
     expect.objectContaining({ outputPath: path.join(cwd, 'capture.mp4') }),
+  );
+});
+
+test('record start without a path records a remote caller default on the daemon host', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-remote-default-');
+
+  const response = await harness.run(['start'], {
+    cwd: '/client/project',
+    clientArtifactPaths: { outPath: '/client/project/recording-1' },
+  });
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { outPath: '/client/project/recording-1.mp4' },
+  });
+  expect(harness.runtime.start).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outputPath: expect.stringMatching(/^\/tmp\/agent-device-recording-\d+-[a-z0-9]+\.mp4$/),
+      clientOutputPath: '/client/project/recording-1.mp4',
+    }),
   );
 });
 

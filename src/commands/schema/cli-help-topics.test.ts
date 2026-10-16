@@ -522,37 +522,35 @@ test('usageForCommand resolves macos help topic', async () => {
 test('usageForCommand resolves react-devtools help topic', async () => {
   const help = await usageForCommand('react-devtools');
   if (help === null) throw new Error('Expected react-devtools help text');
-  assert.match(help, /agent-device react-devtools start/);
-  assert.match(help, /agent-device react-devtools wait --component <ComponentName>/);
-  assert.match(help, /agent-device react-devtools find <ComponentName> --exact/);
+  assert.match(help, /React Native internals the accessibility tree cannot show/);
+  assert.match(help, /agent-device react-devtools tree \[@ref\|Name\]/);
+  assert.match(help, /agent-device react-devtools find <Name> \[--exact\]/);
+  assert.match(help, /agent-device react-devtools inspect <@ref\|Name>/);
   assert.match(help, /agent-device react-devtools errors/);
-  assert.match(help, /agent-device react-devtools profile report @c5/);
-  assert.match(help, /agent-device react-devtools profile timeline --limit 20/);
-  assert.match(help, /agent-device react-devtools profile export profile\.json/);
+  assert.match(help, /agent-device react-devtools profile start/);
+  assert.match(help, /agent-device react-devtools profile report \[Component\]/);
+  assert.match(help, /agent-device react-devtools profile commit \[N\]/);
+  assert.doesNotMatch(help, /profile (slow|rerenders|timeline|status)/);
+  assert.match(help, /React Native 0\.74 or newer, with no app, Metro, or Babel changes/);
+  assert.match(help, /verified on Android emulators and iOS simulators/);
+  assert.match(help, /through agent-device proxy, and on remote bridge sessions/);
+  assert.match(help, /Add --app <bundle-id> when several apps share the dev server/);
+  assert.match(help, /--metro-device <name> when one app runs on several devices/);
+  assert.match(help, /ranked findings, each naming a component, its evidence, and a fix/);
   assert.match(
     help,
-    /agent-device react-devtools profile diff before\.json after\.json --limit 10/,
+    /memo-defeated: a memoized component often re-renders because props change identity/,
   );
-  assert.match(help, /render causes and changed props\/state\/hooks/);
-  assert.match(help, /Run agent-device react-devtools status first/);
-  assert.match(help, /start is not a connection check/);
-  assert.match(help, /Always run agent-device react-devtools wait --connected after status/);
+  assert.match(help, /compare runs instead of reading absolute numbers/);
   assert.match(help, /logs clear --restart before the first logs mark/);
-  assert.match(help, /one bounded first-pass survey/);
-  assert.match(help, /profile slow --limit 5 once/);
-  assert.match(help, /profile rerenders --limit 5 once/);
-  assert.match(help, /profile timeline --limit 20 only when commit timing matters/);
-  assert.match(help, /Do not repeatedly raise broad profile slow limits/);
-  assert.match(help, /profile report unless you have a specific target/);
+  assert.match(help, /Do not repeatedly raise table limits/);
   assert.match(help, /agent-device logs mark "before catalog search"/);
-  assert.match(help, /agent-device react-devtools profile timeline --limit 20/);
-  assert.match(help, /Do not write agent-devtools/);
-  assert.match(help, /Every profiling and survey line must begin with agent-device react-devtools/);
+  assert.match(help, /Every command is an agent-device subcommand/);
   assert.match(help, /agent-device network dump --include headers/);
-  assert.match(help, /@c refs reset after reload\/remount/);
-  assert.match(help, /use separate sessions\/devices/);
-  assert.match(help, /local service tunnel/);
-  assert.match(help, /Remote iOS apps attempt the legacy React DevTools websocket/);
+  assert.doesNotMatch(
+    help,
+    /agent-react-devtools|wait --connected|get tree|profile export|profile diff|profile report @c/,
+  );
 });
 
 test('usageForCommand resolves cdp help topic', async () => {
@@ -586,8 +584,11 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /Multiple local worktrees can reuse one native iOS simulator build/);
   assert.match(help, /--metro-host 127\.0\.0\.1 --metro-port 8081/);
   assert.match(help, /One simulator cannot run two copies of the same bundle id/);
-  assert.match(help, /Keep the agent-device react-devtools prefix/);
-  assert.match(help, /Use help react-devtools for status\/wait/);
+  assert.match(help, /Keep the agent-device react-devtools prefix on every React DevTools command/);
+  assert.match(
+    help,
+    /Use help react-devtools for component trees, props\/state\/hooks, render profiles/,
+  );
   assert.match(help, /Keep the agent-device cdp prefix/);
   assert.match(help, /Use help cdp for JS heap usage samples/);
   assert.match(help, /logs clear --restart/);
@@ -595,15 +596,13 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /agent-device open "Agent Device Tester" --platform android/);
   assert.match(help, /Start React Native slow-flow plans with this ordered scaffold/);
   assert.match(help, /include the open command even when it also describes the current screen/);
-  assert.match(help, /agent-device react-devtools status/);
-  assert.match(help, /Profiling plans need both status and wait --connected before profile start/);
-  assert.match(help, /Do not substitute react-devtools start for status/);
+  assert.match(help, /react-devtools profile start right before the interaction/);
+  assert.doesNotMatch(help, /react-devtools status|wait --connected|react-devtools errors/);
   assert.match(help, /If snapshot reports a React Native warning\/error overlay/);
   assert.match(help, /agent-device react-native dismiss-overlay/);
   assert.match(help, /verifies the overlay is gone with a fresh post-dismiss snapshot -i/);
   assert.match(help, /Do not use a plain snapshot after dismiss-overlay/);
-  assert.match(help, /When overlay evidence and React diagnostics are required/);
-  assert.match(help, /agent-device react-devtools errors/);
+  assert.match(help, /When overlay evidence is required before continuing/);
   assert.match(help, /overlay is still visible/);
   assert.match(help, /Do not manually press warning\/error text bodies/);
   assert.match(help, /dismiss-overlay command owns the narrow LogBox\/RedBox targeting policy/);
@@ -631,7 +630,7 @@ test('commands topic renders concise commands inline with descriptions', async (
   assert.match(help, / {2}metro\s{2,}Prepare the dev server or reload apps/);
   assert.match(help, / {2}perf\s{2,}Check frames, memory, or native profiles/);
   assert.match(help, / {2}cdp\s{2,}Inspect CDP targets, JS heap, and leaks/);
-  assert.match(help, / {2}react-devtools\s{2,}Inspect components, hooks, and render profiles/);
+  assert.match(help, / {2}react-devtools\s{2,}React Native components, props\/state\/hooks/);
   assert.match(help, / {2}proxy\s{2,}Expose a local daemon through an HTTP tunnel/);
   assert.match(help, / {2}batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
   assert.match(help, / {2}test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);

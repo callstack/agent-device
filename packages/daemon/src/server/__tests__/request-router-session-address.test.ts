@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
@@ -31,8 +32,8 @@ import { ensureDeviceReady } from '../../core/device/device-ready.ts';
 import { awaitFixtureReadiness } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 /**
  * The production route for the #2031/#1394 defect: a request without `--session` resolves the

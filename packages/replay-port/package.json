@@ -40,6 +40,10 @@
       "types": "./src/daemon-port/replay-backend-registry.ts",
       "default": "./src/daemon-port/replay-backend-registry.ts"
     },
+    "./replay-backend-declarations": {
+      "types": "./src/daemon-port/replay-backend-declarations.ts",
+      "default": "./src/daemon-port/replay-backend-declarations.ts"
+    },
     "./replay-script-selection": {
       "types": "./src/daemon-port/replay-script-selection.ts",
       "default": "./src/daemon-port/replay-script-selection.ts"
@@ -71,22 +75,6 @@
     "./session-replay-heal": {
       "types": "./src/daemon-port/session-replay-heal.ts",
       "default": "./src/daemon-port/session-replay-heal.ts"
-    },
-    "./session-replay-maestro-failure": {
-      "types": "./src/daemon-port/session-replay-maestro-failure.ts",
-      "default": "./src/daemon-port/session-replay-maestro-failure.ts"
-    },
-    "./session-replay-maestro-observer": {
-      "types": "./src/daemon-port/session-replay-maestro-observer.ts",
-      "default": "./src/daemon-port/session-replay-maestro-observer.ts"
-    },
-    "./session-replay-maestro-request": {
-      "types": "./src/daemon-port/session-replay-maestro-request.ts",
-      "default": "./src/daemon-port/session-replay-maestro-request.ts"
-    },
-    "./session-replay-maestro-runtime": {
-      "types": "./src/daemon-port/session-replay-maestro-runtime.ts",
-      "default": "./src/daemon-port/session-replay-maestro-runtime.ts"
     },
     "./session-replay-report-action": {
       "types": "./src/daemon-port/session-replay-report-action.ts",
@@ -124,10 +112,6 @@
       "types": "./src/daemon-port/session-replay-video-recording.ts",
       "default": "./src/daemon-port/session-replay-video-recording.ts"
     },
-    "./session-test-infrastructure": {
-      "types": "./src/daemon-port/session-test-infrastructure.ts",
-      "default": "./src/daemon-port/session-test-infrastructure.ts"
-    },
     "./session-test-outcome": {
       "types": "./src/daemon-port/session-test-outcome.ts",
       "default": "./src/daemon-port/session-test-outcome.ts"
@@ -136,17 +120,9 @@
       "types": "./src/daemon-port/session-test-shard-devices.ts",
       "default": "./src/daemon-port/session-test-shard-devices.ts"
     },
-    "./session-test-source-discovery": {
-      "types": "./src/daemon-port/session-test-source-discovery.ts",
-      "default": "./src/daemon-port/session-test-source-discovery.ts"
-    },
     "./target-classification": {
       "types": "./src/daemon-port/target-classification.ts",
       "default": "./src/daemon-port/target-classification.ts"
-    },
-    "./target-classification-fixtures": {
-      "types": "./src/target-classification.fixtures.ts",
-      "default": "./src/target-classification.fixtures.ts"
     },
     "./target-token": {
       "types": "./src/daemon-port/target-token.ts",
@@ -164,5 +140,8 @@
       "types": "./src/replay-script-source.fixtures.ts",
       "default": "./src/replay-script-source.fixtures.ts"
     }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
   }
 }

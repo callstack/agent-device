@@ -9,7 +9,7 @@ import {
   clearDeviceClaim,
   type DeviceClaimReconciler,
   type DeviceClaimSessionOwnership,
-} from './device-claims.ts';
+} from '@agent-device/daemon-contracts/device-claims';
 
 /**
  * The #1320 claim gate a request passes on its way from a device binding to

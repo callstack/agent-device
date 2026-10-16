@@ -3,7 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { resolveReplayFormat } from '@agent-device/ad-script';
-import type { ReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 
 export const REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES = 2 * 1024 * 1024;
 

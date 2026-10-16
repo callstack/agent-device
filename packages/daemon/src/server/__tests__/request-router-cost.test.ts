@@ -23,7 +23,7 @@ import type { SessionState } from '../../core/session-state.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 // A representative, structurally rich owner payload so the parity assertions exercise nested
 // objects/arrays rather than a trivial flat record. `scroll` is the subject because it reaches a

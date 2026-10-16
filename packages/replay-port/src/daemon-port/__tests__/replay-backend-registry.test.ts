@@ -1,13 +1,14 @@
 import { expect, test, vi } from 'vitest';
+import { maestroReplayBackendDeclaration } from '@agent-device/maestro/replay-backend-declaration';
+import { getReplayBackendDeclaration } from '../replay-backend-declarations.ts';
 import { getReplayBackend } from '../replay-backend-registry.ts';
-import { maestroBackend } from '../replay-maestro-backend.ts';
 
 // The #3377 extraction seam: the registry is the only host-side door to a non-native engine, so
 // what it promises is exactly what the plugin swap must keep — the load-once contract and the
 // capability shape every host call site routes through.
 
-test('resolves the Maestro backend through its registration', async () => {
-  await expect(getReplayBackend('maestro')).resolves.toBe(maestroBackend);
+test('lists the Maestro declaration for the maestro id', () => {
+  expect(getReplayBackendDeclaration('maestro')).toBe(maestroReplayBackendDeclaration);
 });
 
 test('memoizes the backend so a process evaluates the engine once', async () => {
@@ -32,18 +33,18 @@ test('a failed load is not cached, so the next call retries it', async () => {
   // the memo map free of the successes above.
   vi.resetModules();
   let loadAttempts = 0;
-  vi.doMock('../replay-maestro-backend.ts', () => ({
-    // The thunk reads `.maestroBackend` right after the `import()`, so failing the first read
+  vi.doMock('@agent-device/maestro/replay-backend', () => ({
+    // The loader reads the plugin export right after the `import()`, so failing the first read
     // fails the load exactly like a rejecting module evaluation would.
-    get maestroBackend() {
+    get maestroReplayBackendPlugin() {
       loadAttempts += 1;
       if (loadAttempts === 1) throw new Error('transient load failure');
-      return { id: 'maestro' };
+      return { create: () => ({ id: 'maestro' }) };
     },
   }));
   const { getReplayBackend: freshGet } = await import('../replay-backend-registry.ts');
   await expect(freshGet('maestro')).rejects.toThrow('transient load failure');
   await expect(freshGet('maestro')).resolves.toMatchObject({ id: 'maestro' });
   expect(loadAttempts).toBe(2);
-  vi.doUnmock('../replay-maestro-backend.ts');
+  vi.doUnmock('@agent-device/maestro/replay-backend');
 });

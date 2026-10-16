@@ -45,10 +45,10 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Client-side record of where a daemon is listening (pid, ports, state dir). Never serialized into a request or response.',
   'packages/daemon/src/core/daemon-request.ts#DaemonRequest':
     'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
-  'packages/daemon/src/core/daemon-request.ts#DaemonResponse':
-    'Re-export alias of the listed kernel DaemonResponse; the shape is fixed by packages/kernel/src/contracts.ts#DaemonResponse.',
-  'packages/daemon/src/core/daemon-request.ts#DaemonArtifact':
-    'Re-export alias of the listed kernel DaemonArtifact; the shape is fixed by packages/kernel/src/contracts.ts#DaemonArtifact.',
+  'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequest':
+    'Client-side narrowing of the listed kernel DaemonRequest (token and session required, flags typed as CommandFlags); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
+  'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequestMeta':
+    'Narrowing of the listed kernel DaemonRequestMeta (installSource, lockPlatform and the lease coordinates); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequestMeta.',
   'src/remote/upload-stream.ts#UploadStreamProgressOptions':
     'Byte-progress callback options for local upload rendering. The bytes counted are digested through the request/response declarations; these options never cross the wire.',
   'src/remote/upload-progress.ts#UploadProgressSink':

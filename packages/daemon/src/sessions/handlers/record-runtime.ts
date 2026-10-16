@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import path from 'node:path';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -17,6 +18,7 @@ import {
 } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import type { Platform } from '@agent-device/kernel/device';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ensureBoundDeviceReady } from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
@@ -37,7 +39,7 @@ import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,
 } from '../../core/request-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import {
@@ -45,7 +47,13 @@ import {
   prepareRecordingRequest,
   readRecordingScope,
 } from './record-runtime-request.ts';
-import { resolveRecordingOutputPaths } from '@agent-device/capture-kit/recording-output-path';
+import {
+  appendRecordingExtensionWhenMissing,
+  type RecordingOutputPaths,
+  recordingExtensionForPlatform,
+  resolveRecordingOutputPaths,
+} from '@agent-device/capture-kit/recording-output-path';
+import { buildRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import {
   buildRecordingStartResponse,
   buildRecordingStartedAction,
@@ -162,7 +170,7 @@ async function startRecording(
   const { fence, outputPaths } = prepareRecordingStart(params, session);
   binding.assertAdoptable();
   const started = await runtime.operations.screenRecordingStart(
-    screenRecordingStartInput(params, session, prepared, fence, outputPaths.outputPath),
+    screenRecordingStartInput(params, session, prepared, fence, outputPaths),
   );
   await adoptStartedScreenRecording({
     admissionLedger: params.admissionLedger,
@@ -202,11 +210,30 @@ function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: Sess
       resourcePath,
       device: session.device,
     }),
-    outputPaths: resolveRecordingOutputPaths({
-      requestedPath: params.req.positionals?.[1],
-      platform: session.device.platform,
-      cwd: params.req.meta?.cwd,
-    }),
+    outputPaths: resolveRecordingStartPaths(params.req, session.device.platform),
+  };
+}
+
+type RecordingStartPaths = RecordingOutputPaths & Readonly<{ clientOutputPath?: string }>;
+
+function resolveRecordingStartPaths(req: DaemonRequest, platform: Platform): RecordingStartPaths {
+  const requestedPath = req.positionals?.[1];
+  const clientOutputPath = req.meta?.clientArtifactPaths?.outPath;
+  if (requestedPath === undefined && clientOutputPath !== undefined) {
+    // A remote caller that names no path cannot know the session platform's extension, so it sends
+    // its local destination without one; its cwd does not exist on this host.
+    const extension = recordingExtensionForPlatform(platform);
+    return {
+      ...resolveRecordingOutputPaths({
+        requestedPath: buildRemoteTempArtifactPath('recording', extension),
+        platform,
+      }),
+      clientOutputPath: appendRecordingExtensionWhenMissing(clientOutputPath, extension),
+    };
+  }
+  return {
+    ...resolveRecordingOutputPaths({ requestedPath, platform, cwd: req.meta?.cwd }),
+    ...(clientOutputPath === undefined ? {} : { clientOutputPath }),
   };
 }
 
@@ -215,12 +242,12 @@ function screenRecordingStartInput(
   session: SessionState,
   prepared: ReturnType<typeof prepareRecordingRequest>,
   fence: ScreenRecordingStartInput['fence'],
-  outputPath: string,
+  outputPaths: RecordingStartPaths,
 ): ScreenRecordingStartInput {
   return {
     sessionId: params.sessionName,
-    outputPath,
-    clientOutputPath: params.req.meta?.clientArtifactPaths?.outPath,
+    outputPath: outputPaths.outputPath,
+    clientOutputPath: outputPaths.clientOutputPath,
     scope: prepared.scope,
     showTouches: prepared.showTouches,
     hideTouchesRequested: prepared.hideTouchesRequested,

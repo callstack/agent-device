@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   DeviceLease,
   LeaseLifecycleContext,
@@ -8,7 +9,7 @@ import type {
   AgentArtifactsResult,
   CloudArtifactProvider,
 } from '@agent-device/contracts/observability';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   leaseReleaseRequestFor,
@@ -22,10 +23,14 @@ import {
   resolveRequestOrSessionLeaseScope,
 } from '../../core/lease-context.ts';
 import {
+  leaseDeviceKey,
   leaseScopeToAllocateRequest,
   leaseScopeToHeartbeatRequest,
   leaseScopeToReleaseRequest,
+  type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
+import { publicPlatformString } from '@agent-device/kernel/device';
+import { platformForLeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError, createRequestCanceledError, errorMessage } from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
@@ -44,6 +49,7 @@ type LeaseHandlerArgs = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -57,6 +63,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    endSessionsForLease,
   } = args;
   const leaseScope = resolveLeaseScope(req);
   switch (req.command) {
@@ -84,11 +91,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         req.meta?.providerCredentialFingerprint,
         providerCredentials,
       );
-      const activeLeaseIds = new Set(
-        leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
-      );
-      const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
-      const reused = activeLeaseIds.has(lease.leaseId);
+      const { lease, reused } = await allocateOrRenewLease(req, leaseScope, leaseRegistry);
       const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
         let providerData: Record<string, unknown> | undefined;
@@ -158,6 +161,9 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
             leaseLifecycleContext(req),
           ),
       );
+      // Outside the device mutation: ending a session waits for its execution locks, and a
+      // command holding them may itself be waiting for that mutation.
+      if (lease && outcome.registryReleased) await endSessionsForLease?.(lease.leaseId);
       return {
         ok: true,
         data: {
@@ -170,6 +176,57 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     default:
       return null;
   }
+}
+
+/**
+ * A request repeating the `leaseId` of its own live lease gets that lease back before any device is
+ * picked, so a retry neither fails on a device that left the inventory nor binds another one.
+ */
+async function allocateOrRenewLease(
+  req: DaemonRequest,
+  scope: LeaseScope,
+  leaseRegistry: LeaseRegistry,
+): Promise<{ lease: DeviceLease; reused: boolean }> {
+  const request = leaseScopeToAllocateRequest(scope);
+  const renewed = leaseRegistry.renewRequestedLease(request);
+  if (renewed) return { lease: renewed, reused: true };
+  const pickedDeviceKey = await pickProxyLeaseDeviceKey(req, scope);
+  const activeLeaseIds = new Set(leaseRegistry.listActiveLeases().map((entry) => entry.leaseId));
+  const lease = leaseRegistry.allocateLease(
+    pickedDeviceKey ? { ...request, deviceKey: pickedDeviceKey } : request,
+  );
+  return { lease, reused: activeLeaseIds.has(lease.leaseId) };
+}
+
+/**
+ * A proxy allocation that names no `deviceKey` but does name a device spec leaves the device to this
+ * daemon: it resolves the request's selectors as a command would, and the lease binds that device.
+ */
+async function pickProxyLeaseDeviceKey(
+  req: DaemonRequest,
+  scope: LeaseScope,
+): Promise<string | undefined> {
+  if (!isProxyLeaseScope(scope) || scope.deviceKey) return undefined;
+  const flags = req.flags ?? {};
+  const { hasDeviceSelectionInput } = await import('../../core/device/device-selector-intent.ts');
+  if (!hasDeviceSelectionInput(flags)) return undefined;
+  const { resolveTargetDevice } = await import('@agent-device/device-selection/dispatch-resolve');
+  const device = await resolveTargetDevice({
+    platform:
+      flags.platform ??
+      (scope.leaseBackend ? platformForLeaseBackend(scope.leaseBackend) : undefined),
+    target: flags.target,
+    device: flags.device,
+    udid: flags.udid,
+    serial: flags.serial,
+    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+    androidDeviceAllowlist: flags.androidDeviceAllowlist,
+  });
+  return leaseDeviceKey({
+    platform: publicPlatformString(device),
+    target: device.target,
+    id: device.id,
+  });
 }
 
 type LeaseReleaseOutcome = {

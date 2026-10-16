@@ -22,6 +22,7 @@
     { "path": "../maestro" },
     { "path": "../replay-test" },
     { "path": "../selectors" },
-    { "path": "../session-journal" }
+    { "path": "../session-journal" },
+    { "path": "../test-kit" }
   ]
 }

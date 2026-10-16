@@ -118,7 +118,7 @@ See the [Node.js API](https://oss.callstack.com/agent-device/docs/client-api), t
 
 ## What agents can do
 
-- **Inspect app state** through accessibility snapshots, refs, selectors, and React Native component trees.
+- **Inspect app state** through accessibility snapshots, refs, and selectors, and profile React Native renders to find what makes an interaction slow.
 - **Act on visible UI** by tapping or pressing elements, filling fields, scrolling, making gestures, waiting, asserting state, and handling alerts.
 - **Diagnose failures** with screenshots, video, logs, traces, network data, performance samples, crash details, and React profiles.
 - **Repeat workflows** by saving working steps as `.ad` scripts for local use or CI. Export strict Maestro YAML when needed.

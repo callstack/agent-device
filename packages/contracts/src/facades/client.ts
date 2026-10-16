@@ -55,7 +55,6 @@ export type {
   PanOptions,
   PinchOptions,
   PressOptions,
-  ReadinessBudgetOptions,
   RepeatedPressOptions,
   RotateGestureOptions,
   ScrollOptions,
@@ -67,6 +66,7 @@ export type {
 } from '../client-gesture.ts';
 export type {
   CloudArtifactsOptions,
+  EndedLease,
   HumanControlHold,
   HumanControlHoldOptions,
   HumanControlHoldScope,

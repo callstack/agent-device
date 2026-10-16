@@ -1,4 +1,5 @@
 import type {
+  PresentedSurface,
   RawSnapshotNode,
   Rect,
   SnapshotNode,
@@ -230,6 +231,15 @@ export type IosSnapshotPublication = Readonly<{
    * that measured against it. A raw projection validates no box and carries none.
    */
   validatedViewport?: Rect;
+  /**
+   * Whether this capture read a modal presentation over the app (#3565), classified on the acquired
+   * tree so every projection of one acquisition — interactive, full, depth-cut, scoped — answers the
+   * same value. A raw `--depth` bounds the acquisition itself, so it can read too little and answer
+   * `unknown`. Only an acquisition the engine itself classified carries it: a runner-declared capture
+   * arrives already presented, and the runner's own reading of its pre-presentation acquisition
+   * travels on the payload beside it.
+   */
+  presentedSurface?: PresentedSurface;
 }>;
 
 export type IosSnapshotEngine = Readonly<{

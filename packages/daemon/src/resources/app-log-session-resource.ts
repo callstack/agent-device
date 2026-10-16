@@ -1,3 +1,4 @@
+import { appLogDurableResource } from '@agent-device/capture-kit/app-log-durable-resource';
 import type { LogBackend } from '@agent-device/contracts/observability';
 import type { AppLogCompletion, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
@@ -9,11 +10,7 @@ import type {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
-import {
-  createDurableCaptureResource,
-  type DurableCaptureFinishIntent,
-} from '@agent-device/capture-kit/durable-capture-resource';
-import { appLogResourceStore } from './app-log-resource-store.ts';
+import type { DurableCaptureFinishIntent } from '@agent-device/capture-kit/durable-capture-resource';
 import type { SessionStore } from '../core/session-store.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { clearAppLogFiles } from './app-log.ts';
@@ -28,27 +25,6 @@ export type AppLogSessionSnapshot = Readonly<{
   failureMessage?: string;
   hint?: string;
 }>;
-
-export const appLogDurableResource = createDurableCaptureResource<
-  'app-log',
-  AppLogLiveHandle,
-  AppLogCompletion
->({
-  resourceKind: 'app-log',
-  displayName: 'app-log',
-  store: appLogResourceStore,
-  completionMetadata: (completion) => ({
-    backend: completion.backend,
-    outputPath: completion.outputPath,
-    completedAt: completion.completedAt,
-  }),
-  failedFinishPolicy: 'dispose-on-failed-finish',
-  messages: {
-    noActive: 'no app log stream active',
-    cleanupPendingHint:
-      'Keep app-log.resource.json and retry cleanup through its exact runtime owner.',
-  },
-});
 
 export function inspectSessionAppLog(session: SessionState): AppLogSessionSnapshot {
   if (session.appLog) {

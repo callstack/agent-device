@@ -1,3 +1,6 @@
+import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -7,15 +10,13 @@ import { test } from 'vitest';
 import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import { resolveSessionRequestLogPath } from '@agent-device/daemon/session-artifact-paths';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, type ProviderScenarioHarness } from './harness.ts';
 import {
@@ -33,7 +34,7 @@ import { createProviderTranscript, type ProviderScenarioTranscript } from './tra
  * differ are transport timing and request identity.
  */
 
-type ScenarioRequest = Omit<DaemonRequest, 'token'>;
+type ScenarioRequest = Omit<DaemonWireRequest, 'token'>;
 type ScenarioLeg = (request: ScenarioRequest) => Promise<DaemonResponse>;
 
 const SIM = PROVIDER_SCENARIO_IOS_SIMULATOR;
@@ -568,7 +569,7 @@ test(
           command: string,
           positionals: string[],
           leaseId: string,
-          stepFlags: DaemonRequest['flags'] = flags,
+          stepFlags: DaemonWireRequest['flags'] = flags,
         ) =>
           await proxied({
             session,
@@ -648,7 +649,7 @@ test(
         const run = async (
           command: string,
           positionals: string[],
-          stepFlags: DaemonRequest['flags'],
+          stepFlags: DaemonWireRequest['flags'],
         ) => await proxied({ session, command, positionals, flags: stepFlags, meta });
 
         assert.equal((await run('open', [APP], flags)).ok, true);

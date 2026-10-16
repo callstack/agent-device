@@ -166,6 +166,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'buildDaemonHttpAuthHeaders',
         'DAEMON_HTTP_TENANT_HEADER',
         'buildDaemonHttpTenantHeaders',
+        'isTenantOwnedSessionName',
       ),
       ...from(
         HTTP_AUTHORIZATION,
@@ -186,12 +187,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       // is that rule; the namespace it takes says whether the caller's sessions
       // were partitioned at all, which is what the naming side keys off.
       ...from(REQUEST_DIAGNOSTICS_HTTP, 'RequestDiagnosticsHttpAuthorizer'),
-      ...from(
-        SESSION_TENANT_SCOPE,
-        'TenantSessionNamespace',
-        'isTenantOwnedSessionName',
-        'isTenantAddressableSessionName',
-      ),
+      ...from(SESSION_TENANT_SCOPE, 'TenantSessionNamespace', 'isTenantAddressableSessionName'),
     ],
   },
   {

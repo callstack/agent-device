@@ -110,8 +110,8 @@ importers:
         specifier: ^0.0.4
         version: 0.0.4
       '@limrun/api':
-        specifier: ^0.60.0
-        version: 0.60.0(supports-color@7.2.0)
+        specifier: ^0.64.1
+        version: 0.64.1(supports-color@7.2.0)
       '@nkzw/eslint-plugin':
         specifier: ^2.0.0
         version: 2.0.0(eslint@10.9.1(supports-color@7.2.0))
@@ -272,6 +272,10 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
+    devDependencies:
+      fast-check:
+        specifier: ^4.9.0
+        version: 4.9.0
 
   packages/contracts:
     dependencies:
@@ -336,10 +340,13 @@ importers:
       '@agent-device/session-journal':
         specifier: workspace:*
         version: link:../session-journal
+    devDependencies:
+      '@agent-device/proxy':
+        specifier: workspace:*
+        version: link:../proxy
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
-    devDependencies:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
@@ -355,6 +362,9 @@ importers:
 
   packages/daemon-contracts:
     dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
       '@agent-device/command-registry':
         specifier: workspace:*
         version: link:../command-registry
@@ -367,6 +377,10 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/device-selection:
     dependencies:
@@ -409,6 +423,9 @@ importers:
 
   packages/maestro:
     dependencies:
+      '@agent-device/ad-script':
+        specifier: workspace:*
+        version: link:../ad-script
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
@@ -456,6 +473,9 @@ importers:
         specifier: workspace:*
         version: link:../xml
     devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
@@ -480,6 +500,10 @@ importers:
       '@agent-device/xml':
         specifier: workspace:*
         version: link:../xml
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/platform-harmonyos:
     dependencies:
@@ -546,6 +570,10 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/provider-limrun:
     dependencies:
@@ -563,8 +591,8 @@ importers:
         version: link:../platform-android
     devDependencies:
       '@limrun/api':
-        specifier: ^0.60.0
-        version: 0.60.0(supports-color@7.2.0)
+        specifier: ^0.64.1
+        version: 0.64.1(supports-color@7.2.0)
 
   packages/provider-testmu:
     devDependencies:
@@ -598,6 +626,10 @@ importers:
       '@agent-device/xml':
         specifier: workspace:*
         version: link:../xml
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/provision-kit:
     dependencies:
@@ -668,6 +700,10 @@ importers:
       '@agent-device/session-journal':
         specifier: workspace:*
         version: link:../session-journal
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/replay-test:
     dependencies:
@@ -717,15 +753,9 @@ importers:
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
-      '@agent-device/command-registry':
-        specifier: workspace:*
-        version: link:../command-registry
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@agent-device/daemon-contracts':
-        specifier: workspace:*
-        version: link:../daemon-contracts
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
@@ -1256,8 +1286,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@limrun/api@0.60.0':
-    resolution: {integrity: sha512-w7A0PiqNF5XHBU6xUzvAsi1BEnJeBhzYKckuVETp/Nkehv5QF28u2q90LgkjifdFEJkULus7IzeCqnqTnynJCA==}
+  '@limrun/api@0.64.1':
+    resolution: {integrity: sha512-nrKFfalo3I+9wFPEoIs7kqlUxgih14qvaQqBr1OsUM7j0rjfxje2XiIHb/401PIccPEvuXSFbSJ4uru+asDbwg==}
 
   '@limrun/xdelta3-wasm@0.2.0':
     resolution: {integrity: sha512-mEohO7CYj4Gdc0v1Gr/AjlBhfbXQnIz6+2wmMhRfwz8hXZrsIC/yqYQhfoDhu1ysqQwBnU5lDDLPUGdUu+8hPQ==}
@@ -4874,7 +4904,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@limrun/api@0.60.0(supports-color@7.2.0)':
+  '@limrun/api@0.64.1(supports-color@7.2.0)':
     dependencies:
       '@limrun/xdelta3-wasm': 0.2.0
       '@types/har-format': 1.2.16

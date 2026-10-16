@@ -2,6 +2,7 @@ name: Android
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths-ignore:
       - 'docs/**'
       - 'website/**'
@@ -30,6 +31,7 @@ concurrency:
 jobs:
   smoke-android:
     name: Smoke Tests
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:

@@ -1,10 +1,16 @@
+import { resolveSessionRunnerLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import {
   commandRuntimeUseRequirements,
   listRuntimeFactCommands,
 } from '@agent-device/command-registry/registry';
 import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
-import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
+import {
+  assertResolvedAppsFilter,
+  type ProviderAppCatalog,
+  type ProviderAppCatalogQuery,
+} from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
 import {
   requireRuntimeBinding,
@@ -16,24 +22,20 @@ import {
   isMacOs,
   matchesPlatformSelector,
   publicPlatformString,
-  resolveAppleSimulatorSetPathForSelector,
+  resolveRequestAppleSimulatorSetPath,
   type DeviceInfo,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import {
-  resolveAndroidSerialAllowlist,
-  resolveIosSimulatorDeviceSetPath,
-} from '@agent-device/kernel/device-isolation';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaims,
-} from '../../../resources/device/device-claim-inspection.ts';
-import { canonicalLocalDeviceKey } from '../../../resources/device/device-claim-paths.ts';
-import { deviceClaimIdentity } from '../../../resources/device/device-claims.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+  canonicalLocalDeviceKey,
+  deviceClaimIdentity,
+} from '@agent-device/daemon-contracts/device-claims';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
-import { resolveSessionRunnerLogPath } from '../../../core/session-artifact-paths.ts';
 import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
@@ -54,7 +56,6 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
-import type { ProviderAppCatalog, ProviderAppCatalogQuery } from '@agent-device/contracts/device';
 import { resolveLeaseScope } from '../../../core/lease-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
@@ -215,8 +216,8 @@ function inventoryIosSimulatorSetPath(
   platform: PlatformSelector | undefined,
   target: DeviceInfo['target'],
 ) {
-  return resolveAppleSimulatorSetPathForSelector({
-    simulatorSetPath: resolveIosSimulatorDeviceSetPath(configuredPath),
+  return resolveRequestAppleSimulatorSetPath({
+    requestedSetPath: configuredPath,
     platform,
     target,
   });

@@ -38,6 +38,10 @@ extension RunnerTests {
       break
     }
 #endif
+    let state = activeApp.state
+    guard state != .notRunning && state != .unknown else {
+      return nil
+    }
     // Guard the query: when a remote-hosted modal (e.g. the AccessorySetupKit
     // picker) was just dismissed, the dismissal re-check re-enters here with the
     // now-gone host as `activeApp`, and its `alerts` query raises

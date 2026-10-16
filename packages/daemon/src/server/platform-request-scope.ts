@@ -26,16 +26,3 @@ export function createPlatformRequestScope(req: DaemonRequest): PlatformRequestS
     }),
   });
 }
-
-/** Process-owned scope for post-lock durable-resource recovery before request admission. */
-export function createDaemonRecoveryPlatformScope(): PlatformRequestScope {
-  return Object.freeze({
-    signal: processLifetimeSignal,
-    diagnostics: Object.freeze({
-      emit: (event: PlatformDiagnosticEvent) => emitDiagnostic(event),
-    }),
-    progress: Object.freeze({
-      report: () => {},
-    }),
-  });
-}

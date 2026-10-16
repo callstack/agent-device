@@ -2,6 +2,13 @@ import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
+  @MainActor
+  func testAlertResolutionDoesNotQueryATerminatedApp() {
+    app.terminate()
+    XCTAssertEqual(app.state, .notRunning)
+    XCTAssertNil(resolveAlert(app: app, deadline: Date().addingTimeInterval(1)))
+  }
+
   func testAlertAcceptTreatsOpenAsAffirmative() {
     XCTAssertTrue(isAcceptButton("Open"))
   }

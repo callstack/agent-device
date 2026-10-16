@@ -1,3 +1,4 @@
+import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,
@@ -18,10 +19,9 @@ import {
   createRequestExecutionScope,
   prepareLockedRequestScope,
 } from '../request-execution-scope.ts';
-import { resolveSessionRequestLogPath } from '../../core/session-artifact-paths.ts';
 import { resolveSessionScope } from '../../sessions/session-routing.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { handleSessionCloseCommands } from '../../sessions/session-lifecycle/index.ts';
 

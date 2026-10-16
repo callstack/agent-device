@@ -195,6 +195,11 @@ export type CloseApplicationInput = Readonly<{
   surface: SessionSurface;
   /** A selector-only close establishes readiness inside its admitted lifecycle binding. */
   ensureReady?: boolean;
+  /**
+   * `kill` asks for system-initiated process death of the positional target (Maestro `killApp`);
+   * absent means an ordinary close. A backend without such a primitive closes normally.
+   */
+  mode?: 'kill';
   execution: ApplicationLifecycleExecution;
 }>;
 

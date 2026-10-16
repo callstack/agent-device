@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTest } from '@agent-device/test-kit';
 import {
   narrowConnectionPlatform,
   buildConnectionDeviceKey,

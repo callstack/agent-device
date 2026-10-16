@@ -95,5 +95,8 @@
       "types": "./src/cli-command-aliases.ts",
       "default": "./src/cli-command-aliases.ts"
     }
+  },
+  "devDependencies": {
+    "fast-check": "^4.9.0"
   }
 }

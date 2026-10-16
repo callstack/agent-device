@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import {
   type RequestCaptureProof,

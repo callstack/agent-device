@@ -1,7 +1,8 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import {
   createRequestDispatchLedger,
   recordBoundMutations,

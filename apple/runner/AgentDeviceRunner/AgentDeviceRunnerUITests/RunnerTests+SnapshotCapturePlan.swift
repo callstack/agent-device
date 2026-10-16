@@ -86,11 +86,20 @@ struct SnapshotBackendCapture {
   /// tree tier reads the keyboard, so only that tier has one; the daemon reads a missing band as "this
   /// producer could not measure", which is exactly what the query-sweep and private-AX tiers did.
   var keyboardBand: KeyboardBandFactPayload? = nil
+  /// Whether this capture read a modal presentation over the app (#3565), classified on the
+  /// acquisition this capture presents. A tier that classified nothing carries nothing, and the host
+  /// reads that as no evidence rather than as absence.
+  var presentedSurface: PresentedSurface? = nil
 }
 
 extension RunnerTests {
+  /// Assembles what one tier answered, from the tree it presented and the acquisition it read. The
+  /// presented-surface fact is classified on the acquisition rather than the presentation, because
+  /// interactive filtering, depth and scope are all cuts into what the tier actually saw (#3565): a
+  /// capture of a presented screen that kept four nodes still read the presentation.
   static func makeSnapshotBackendCapture(
-    from result: AgentDeviceSnapshotPresentation.SnapshotPresentationResult
+    from result: AgentDeviceSnapshotPresentation.SnapshotPresentationResult,
+    acquired acquisition: SnapshotAcquisition
   ) -> SnapshotBackendCapture {
     SnapshotBackendCapture(
       payload: DataPayload(nodes: result.nodes, truncated: result.truncated),
@@ -98,7 +107,8 @@ extension RunnerTests {
       customActions: result.customActions,
       qualityPayload: result.qualityNodes.map {
         DataPayload(nodes: $0, truncated: result.truncated)
-      }
+      },
+      presentedSurface: SnapshotPresentedSurface.classify(acquisition)
     )
   }
 
@@ -576,7 +586,7 @@ extension RunnerTests {
             acquired: normalizedAcquisition.hint.projection
           )
         }
-        return Self.makeSnapshotBackendCapture(from: result)
+        return Self.makeSnapshotBackendCapture(from: result, acquired: normalizedAcquisition)
       }
     } catch let failure as SnapshotPresentationFailure {
       return SnapshotBackendAttempt(
@@ -754,6 +764,7 @@ extension RunnerTests {
         return SnapshotQualityPayload(nodes: nodes, truncated: quality.truncated == true)
       },
       snapshotQuality: quality,
+      presentedSurface: capture.presentedSurface,
       keyboard: capture.keyboardBand,
       runnerFatal: payload.runnerFatal,
       runnerFatalReason: payload.runnerFatalReason

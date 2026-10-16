@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { resolveDaemonLaunchSpec } from '../../daemon-client/daemon-launch-spec.ts';
-import { listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { listenOnLoopback } from '@agent-device/test-kit';
 
 // A loopback stand-in for a running daemon: answers `GET /health`, echoes `responseData` as the
 // result of every `POST /rpc`, and records what it was asked, for the daemon-client tests that

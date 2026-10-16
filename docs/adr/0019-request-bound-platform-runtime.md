@@ -201,12 +201,12 @@ the Apple package. R13 models the package by enumeration rather than by exceptio
 exports its root façade plus thirteen named domain/mechanics facades — `./app-lifecycle`,
 `./app-resolution`, `./debug-symbols`, `./doctor`, `./install-artifact`, `./macos`,
 `./perf`, `./physical-device`, `./runner-owner`, `./runner/operations`, `./simctl`, `./simulator`, and
-`./tool-provider` — as well as exactly the `./runner` and `./runner/test-host`
-subpaths. The named facades replace root-only access for synchronous domain consumers without a
+`./tool-provider` — as well as the `./runner`
+subpath. The named facades replace root-only access for synchronous domain consumers without a
 broad compatibility barrel; R13 pins the exact export set and allowed consumer seams. The
 `./runner` façade subpath is the seam through which daemon and root consumers reach runner mechanics
-directly today; the host-bound runner client stays package-internal and `./runner/test-host` has one
-vitest installer; the facet owns its cache files and usbmux sockets (the
+directly today; the host-bound runner client and its test host stay package-internal (the `apple-runner` vitest
+project installs the test host from the package's own `__tests__/host-setup.ts`); the facet owns its cache files and usbmux sockets (the
 ambient-host rule exempts exactly that subtree), while raw process primitives stay banned — host
 authority still enters through one focused injected port (`AppleRunnerHost`: process execution,
 diagnostics, retry, probes, locks, foreground Apple tooling, physical-device control) constructed by
@@ -282,6 +282,13 @@ preferred runtime-use shape. Such a shape is refused by the owning leaf mechanic
 typed reason and a hint, at the point the shape is requested. Absence of a whole admitted
 operation's member remains an ownership bug and fails closed with its own typed reason; it is never
 the mechanism that expresses an unsupported shape.
+
+**A subject of an operation may carry its own fact.** When one operation serves a closed vocabulary
+that owners serve unevenly — `setSetting` over the settings catalog — its available fact may name a
+fact per subject and an `unlisted` refusal for every other subject. Admission takes the subject the
+request names and refuses an unavailable one exactly as it refuses an unavailable operation, before
+binding. A subject is the thing the request names (which setting); a shape of the request (a
+coordinate form, a permission target) still belongs to the owning leaf mechanic, as above.
 
 `RequestExecutionScope.bindDevice(device, use)` is the trust choke point. It:
 
@@ -841,7 +848,7 @@ therefore structurally enforced rather than periodically measured.
 Some request-path work asks the host machine something without ever taking a device runtime:
 concrete local readiness, boot-time and runner-session observation, and open-target
 classification. Those asks now cross the daemon boundary as one required dependency,
-`DaemonPlatformServices` (`packages/daemon/src/core/platform-services.ts`), assembled by the daemon runtime's
+`DaemonPlatformServices` (`packages/daemon/src/core/platform-services.ts`, exported from the package entry `@agent-device/daemon`), assembled by the daemon runtime's
 root-composition module in `src/daemon-composition.ts` — which reaches the concrete adapters
 through `src/platform-runtime-daemon-services.ts` behind a function-scoped `await import` — and
 threaded composition → `startDaemonRuntime` deps → `RequestRouterDeps` → the request execution

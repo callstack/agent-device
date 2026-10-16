@@ -2,7 +2,6 @@ import {
   SELECTOR_RESOLUTION_POLICIES,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
-import type { ObservationSchedule } from '@agent-device/capture-kit/observe-until';
 
 /**
  * The structural half of the per-caller selector policy (#1656), companion to
@@ -17,7 +16,7 @@ import type { ObservationSchedule } from '@agent-device/capture-kit/observe-unti
  *
  * A row may only declare what these runners enforce (#1649 review). Every row,
  * skips included, is driven through every runner in
- * selector-pipeline-policy.test.ts, so flipping any cell changes an assertion —
+ * selector-pipeline.test.ts, so flipping any cell changes an assertion —
  * add a column only once a runner reads it.
  */
 
@@ -76,31 +75,8 @@ export type WaitPollBudget = {
   intervalMs: number;
 };
 
-/**
- * `promotedTarget`: the row states only a ceiling and a cadence, never a default — a miss with no
- * caller-supplied budget takes the one-attempt path instead of polling (`resolveSelectorInteractionTarget`).
- * When the caller does supply one (`readinessTimeoutMs`, never model- or
- * CLI-writable), it is capped at `maxTimeoutMs` before it bounds the readiness loop.
- */
-export type ReadinessPollBudget = {
-  /** The ceiling a caller-supplied readiness timeout may not exceed. */
-  maxTimeoutMs: number;
-  /** Delay between polls, clamped to the remaining budget. */
-  intervalMs: number;
-};
-
-/** The poll budget of a row that polls: `wait`/`findWait`'s own default, or `promotedTarget`'s cap. */
-export type SelectorPollBudget = WaitPollBudget | ReadinessPollBudget;
-
-/**
- * Consumed by `selectorPollBudget` (wait-shaped rows only) and — for `promotedTarget` — by
- * `resolveSelectorInteractionTarget`'s target-readiness loop. `'none'` is an answer, not an
- * omission: a row that resolves against one capture has no polling contract, so asking for its
- * budget is a caller bug — never a place to default one in. Acting rows are not all `'none'`:
- * `promotedTarget` polls for the target to exist, while `resolvedTarget` and every read row still
- * resolve against a single capture.
- */
-export type SelectorPollStage = SelectorPollBudget | 'none';
+/** A row either resolves once or supplies the deadline and cadence for an explicit wait. */
+export type SelectorPollStage = WaitPollBudget | 'none';
 
 /**
  * A row whose result is the candidate SET, not a target: `find <q> list`.
@@ -131,20 +107,13 @@ export type SelectorPipelinePolicy = SelectorListPolicy & {
 const WAIT_POLL_BUDGET: WaitPollBudget = { defaultTimeoutMs: 10_000, intervalMs: 300 };
 
 export const SELECTOR_PIPELINE_POLICIES = {
-  /**
-   * `click`/`press`/`longpress`: the tap lands on the actionable owner of the
-   * match. When the caller supplies a readiness budget, polls for the target to
-   * appear and become resolvable (a rect), capped at this row's `maxTimeoutMs`, before refusing —
-   * resolution only; occlusion, off-screen, and promotion still run once, against the winning
-   * capture, after the loop ends. A miss with no caller-supplied budget takes the one-attempt path
-   * (`resolveSelectorInteractionTarget`).
-   */
+  /** `click`/`press`/`longpress`: the action dispatches to the actionable owner of the match. */
   promotedTarget: {
     resolution: SELECTOR_RESOLUTION_POLICIES.act,
     occlusion: 'exclude-and-refuse',
     offscreen: 'refuse',
     promotion: 'hittable-ancestor',
-    poll: { maxTimeoutMs: 2_000, intervalMs: 200 },
+    poll: 'none',
   },
   /**
    * `fill`/`focus`/`scroll`/gesture endpoints, and the native-ref preflight —
@@ -231,34 +200,6 @@ export const SELECTOR_PIPELINE_POLICIES = {
 } as const satisfies Record<string, SelectorPipelinePolicy | SelectorListPolicy>;
 
 export type SelectorPipelinePolicyName = keyof typeof SELECTOR_PIPELINE_POLICIES;
-
-/**
- * The schedule a readiness wait polls its target under. The budget counts from the end of the
- * first capture: that capture is the one-attempt lookup a step pays without any wait, so the
- * replay target gate and the dispatch spend the budget only on retries.
- */
-export type ReadinessSchedule = Readonly<
-  Pick<ObservationSchedule, 'intervalMs' | 'budgetMs'> & { budgetFrom: 'first-capture' }
->;
-
-/**
- * The one owner of a readiness schedule, for the replay target gate and the dispatch alike:
- * `undefined` for a row that resolves against one capture or when no positive integer budget was
- * supplied, otherwise the row's cadence and the supplied budget capped at the row's `maxTimeoutMs`.
- */
-export function readinessScheduleFor(
-  poll: ReadinessPollBudget | 'none',
-  readinessTimeoutMs: number | undefined,
-): ReadinessSchedule | undefined {
-  if (poll === 'none') return undefined;
-  if (readinessTimeoutMs === undefined || !Number.isInteger(readinessTimeoutMs)) return undefined;
-  if (readinessTimeoutMs <= 0) return undefined;
-  return {
-    intervalMs: poll.intervalMs,
-    budgetMs: Math.min(readinessTimeoutMs, poll.maxTimeoutMs),
-    budgetFrom: 'first-capture',
-  };
-}
 
 /**
  * The two questions a row asks the engine, derived from its ambiguity contract

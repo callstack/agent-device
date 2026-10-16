@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   FillCommandResult,
   InteractionTarget,
@@ -9,7 +10,6 @@ import {
   stripAtPrefix,
   type DecodedFillTarget,
 } from '@agent-device/selectors/interaction-positionals';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { parseVersionedRefPositional } from '../../ref-positionals.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';

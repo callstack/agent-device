@@ -78,7 +78,7 @@ import {
 } from '@agent-device/daemon/testing/__tests__/application-lifecycle-runtime-fixture';
 import { discoverReadyAndroidEmulators } from './application-lifecycle-runtime-fixture.ts';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { inspectDeviceClaims } from '@agent-device/daemon/device/device-claim-inspection';
+import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import {
   createOwnedProcessRecordStore,
   isProcessAlive,
@@ -92,7 +92,7 @@ import {
   makeIosDevice,
   openRequest,
 } from '@agent-device/daemon/testing/__tests__/request-router-open-harness';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);

@@ -11,12 +11,16 @@ export function parseScriptArgs<T extends Options>(
   usage: string,
   options: T,
 ): ReturnType<typeof parseArgs<{ options: T & { help: { type: 'boolean' } } }>>['values'] {
-  const { values } = parseArgs({
+  const { values } = parseArgs<{
+    args: readonly string[];
+    options: T & { help: { type: 'boolean'; short: 'h'; default: false } };
+    allowPositionals: false;
+  }>({
     args: [...argv],
     options: { ...options, help: { type: 'boolean', short: 'h', default: false } },
     allowPositionals: false,
   });
-  if (values.help) {
+  if ((values as { help?: boolean }).help) {
     process.stdout.write(usage);
     process.exit(0);
   }

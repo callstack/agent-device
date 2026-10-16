@@ -14,7 +14,7 @@ import { handleAppDeploymentCommand } from '@agent-device/daemon/testing/handler
 import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
 import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createComposedPlatformRuntimeGateway } from '../../../src/platform-runtime-gateway.ts';
 
 function createProviderDeploymentAdmission(params: {

@@ -5,6 +5,8 @@ import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-co
 import { AppError } from '@agent-device/kernel/errors';
 import {
   deviceIdentityFlag,
+  isDeviceTarget,
+  isPublicPlatform,
   platformSelectorsConflict,
   publicPlatformString,
   type DeviceIdentityFlag,
@@ -22,9 +24,11 @@ import {
   type SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
 import {
+  leaseDeviceKey,
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,
   leaseScopeToConnectionMetadata,
+  parseLeaseDeviceKey,
 } from '@agent-device/contracts/lease-scope';
 
 export type RemoteConnectionState = {
@@ -94,20 +98,38 @@ export type ConnectionDeviceScope = Readonly<{
 }>;
 
 export function resolveConnectionDeviceScope(device: DeviceInfo): ConnectionDeviceScope {
-  const platform = publicPlatformString(device);
+  return connectionDeviceScope(publicPlatformString(device), device.target, device.id);
+}
+
+function connectionDeviceScope(
+  platform: PublicPlatform,
+  target: DeviceTarget | undefined,
+  id: string,
+): ConnectionDeviceScope {
   const leaseBackend = leaseBackendForPlatform(platform);
   return {
     platform,
-    target: device.target,
+    target,
     leaseBackend,
     identityFlag: leaseBackend ? deviceIdentityFlag(platform) : undefined,
-    id: device.id,
+    id,
   };
 }
 
 /** The `deviceKey` for a resolved device: its identity on the public platform and target axes. */
 export function buildConnectionDeviceKey(scope: ConnectionDeviceScope): string {
-  return `${scope.platform}:${scope.target ?? 'mobile'}:${scope.id}`;
+  return leaseDeviceKey(scope);
+}
+
+/** The device scope a {@link buildConnectionDeviceKey} key names, or `undefined` for any other key. */
+export function parseConnectionDeviceKey(
+  deviceKey: string | undefined,
+): ConnectionDeviceScope | undefined {
+  const parsed = parseLeaseDeviceKey(deviceKey);
+  if (!parsed || !isPublicPlatform(parsed.platform) || !isDeviceTarget(parsed.target)) {
+    return undefined;
+  }
+  return connectionDeviceScope(parsed.platform, parsed.target, parsed.id);
 }
 
 /**

@@ -1,159 +1,59 @@
+import {
+  CLIENT_SIDE_POLICY_NAME,
+  LOGICAL_MODULE_POLICIES,
+  matchesDeclaredRoot,
+} from './architecture-ownership.ts';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
+import { staleReachModules, walkProcessReach } from './process-reach.ts';
 import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
-
-// The declared daemon-entry surface for the client (#2559). `src/daemon-client/**` composes the
-// daemon over the network, not over its module graph, so it is NOT an entry point into daemon
-// internals: the process root composition is. Every on-disk or protocol contract the client shares
-// with the daemon (state-dir/transport resolution, pidfile liveness, the repair tombstone, the
-// progress framing) therefore lives below both sides — since the daemon-contracts extraction, in
-// `packages/daemon-contracts` — not under `packages/daemon/src/`, and the client
-// reaches it there. What remains is the client reading the daemon's request/response vocabulary —
-// the `DaemonRequest`/`DaemonResponse` types that anchor the ADR 0006 wire surface — recorded here,
-// per measured `file -> target` edge, and only as a type-only import. A runtime (value or dynamic)
-// import of a
-// daemon module by the client is always a violation, an undeclared type import is a violation, and
-// a recorded edge that no longer exists is stale; all three fail, so the set cannot grow, and a
-// repair cannot leave a stale entry that would let the edge back in unnoticed.
 
 export const DAEMON_CLIENT_ENTRY_RULE = 'R78 daemon-client-entry';
 
-const REQUEST_RATIONALE =
-  'the client names the request and response it sends and reads across the socket — the same ' +
-  'DaemonRequest/DaemonResponse vocabulary that anchors the ADR 0006 wire surface and is gated by ' +
-  'test/wire-compat. Reading it as a type is unavoidable and closes the wire surface; a value import ' +
-  'would drag the daemon-private request half (#2318/#2322) into the client.';
-
-export type DaemonClientEntryEdge = Readonly<{
-  file: string;
-  target: string;
-  rationale: string;
-}>;
+/** The modules a CLI process starts from. */
+export const CLI_PROCESS_ENTRIES: readonly string[] = ['src/bin.ts', 'src/cli.ts'];
 
 /**
- * The residual client→daemon imports, every one of them a type-only read of the canonical
- * DaemonRequest/DaemonResponse vocabulary. It names measured edges, never a directory, so a new
- * client module reaching the daemon — even for the same type — fails until it is recorded here.
+ * Catches: any module the CLI process can load — over static and dynamic edges, so a root module
+ *   the CLI lazy-loads counts — importing the daemon package. The folder ban on the client-side
+ *   roots lives in `LOGICAL_MODULE_POLICIES` (R10) and covers direct edges, type-only included;
+ *   this rule covers the hop outside those roots, where a root platform-runtime module could
+ *   launder a daemon import into the CLI process. The violation names the chain from the entry.
+ *   What the client shares with the daemon lives below both: `packages/daemon-contracts`,
+ *   `DaemonWireRequest` in `@agent-device/contracts/command`, `DaemonResponse` in kernel.
+ * Evidence: the folder ban alone left `device release --stale` loading the daemon reconciler
+ *   through a root module one hop away.
+ * Cost: one breadth-first walk over the resolved edges, inside check:layering.
+ * Kill criterion: a maintainer decision that the CLI process may load daemon internals directly.
  */
-export const DAEMON_CLIENT_ENTRY_EDGES: readonly DaemonClientEntryEdge[] = [
-  {
-    file: 'src/daemon-client/daemon-client.ts',
-    target: 'packages/daemon/src/core/daemon-request.ts',
-    rationale: REQUEST_RATIONALE,
-  },
-  {
-    file: 'src/daemon-client/daemon-client-lifecycle.ts',
-    target: 'packages/daemon/src/core/daemon-request.ts',
-    rationale: REQUEST_RATIONALE,
-  },
-  {
-    file: 'src/daemon-client/daemon-client-lease-beat.ts',
-    target: 'packages/daemon/src/core/daemon-request.ts',
-    rationale: REQUEST_RATIONALE,
-  },
-  {
-    file: 'src/daemon-client/daemon-client-liveness-probe.ts',
-    target: 'packages/daemon/src/core/daemon-request.ts',
-    rationale: REQUEST_RATIONALE,
-  },
-  {
-    file: 'src/daemon-client/daemon-client-progress.ts',
-    target: 'packages/daemon/src/core/daemon-request.ts',
-    rationale: REQUEST_RATIONALE,
-  },
-  {
-    file: 'src/daemon-client/daemon-client-rpc.ts',
-    target: 'packages/daemon/src/core/daemon-request.ts',
-    rationale: REQUEST_RATIONALE,
-  },
-  {
-    file: 'src/daemon-client/daemon-client-transport.ts',
-    target: 'packages/daemon/src/core/daemon-request.ts',
-    rationale: REQUEST_RATIONALE,
-  },
-] as const;
-
-function keyOf(file: string, target: string): string {
-  return `${file} -> ${target}`;
-}
-
-type MeasuredEdge = { file: string; target: string; line: number; runtimeKind: string | null };
-
-/**
- * Catches: the client reaching daemon internals again — a runtime import of any daemon module, or a
- *   new type-only import that was not measured and recorded. The runtime half is the regression this
- *   gate exists for: #2559 relocated the shared contracts to the process root specifically so the
- *   client stops value-importing `config.ts` or the shared contracts now owned by
- *   `packages/daemon-contracts`. The mirror failure — a recorded edge whose import is gone —
- *   is caught too, so a repair cannot leave the door open.
- * Evidence: #2559 measured 13 client→daemon pairs (8 runtime) at the #2557 tip; the runtime half is
- *   now 0 and the 5 wire-only type edges are the residue recorded above.
- * Cost: one rule registered in check.ts's whole-graph pass; not a standalone CI job.
- * Kill criterion: the client reaches the daemon only through its network protocol (the inventory
- *   empty), or a maintainer decision that the client may compose daemon internals directly.
- */
-export function checkDaemonClientEntry(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
-  const measured = new Map<string, MeasuredEdge>();
-  for (const edge of edges) {
-    if (!edge.file.startsWith('src/daemon-client/')) continue;
-    if (!edge.target.startsWith(DAEMON_SOURCE_ROOT)) continue;
-    const key = keyOf(edge.file, edge.target);
-    const entry = measured.get(key) ?? {
-      file: edge.file,
-      target: edge.target,
-      line: edge.line,
-      runtimeKind: null,
-    };
-    if (entry.runtimeKind === null && !edge.typeOnly) {
-      entry.runtimeKind = edge.dynamic ? 'dynamic-imports' : 'value-imports';
-    }
-    measured.set(key, entry);
-  }
-
-  const declared = new Set(DAEMON_CLIENT_ENTRY_EDGES.map((edge) => keyOf(edge.file, edge.target)));
-  const violations: LayeringViolation[] = [];
-  const seen = new Set<string>();
-
-  for (const [key, entry] of measured) {
-    if (entry.runtimeKind !== null) {
-      violations.push({
-        rule: DAEMON_CLIENT_ENTRY_RULE,
-        file: entry.file,
-        line: entry.line,
-        message:
-          `the daemon client ${entry.runtimeKind} daemon internals: ${key}. The client composes the ` +
-          `daemon over the network, not its module graph. Move the shared contract to ` +
-          `packages/daemon-contracts (or read the DaemonRequest/DaemonResponse types in ` +
-          `packages/daemon/src/core/daemon-request.ts as a type).`,
-      });
-      seen.add(key);
-      continue;
-    }
-    if (!declared.has(key)) {
-      violations.push({
-        rule: DAEMON_CLIENT_ENTRY_RULE,
-        file: entry.file,
-        line: entry.line,
-        message:
-          `unclassified daemon-client import of daemon internals: ${key}. If the client legitimately ` +
-          `reads a request/response type, record the measured edge in DAEMON_CLIENT_ENTRY_EDGES ` +
-          `(${DAEMON_CLIENT_ENTRY_RULE}) with its rationale; otherwise reach the shared root contract.`,
-      });
-    }
-    seen.add(key);
-  }
-
-  for (const edge of DAEMON_CLIENT_ENTRY_EDGES) {
-    const key = keyOf(edge.file, edge.target);
-    if (seen.has(key)) continue;
-    violations.push({
+export function checkDaemonClientEntry(
+  sourceFiles: readonly string[],
+  edges: readonly ResolvedImportEdge[],
+  entries: readonly string[] = CLI_PROCESS_ENTRIES,
+): LayeringViolation[] {
+  const stale = staleReachModules(
+    DAEMON_CLIENT_ENTRY_RULE,
+    'scripts/layering/daemon-client-entry.ts',
+    entries,
+    sourceFiles,
+    'CLI_PROCESS_ENTRIES',
+  );
+  if (stale.length > 0) return stale;
+  const policy = LOGICAL_MODULE_POLICIES.find(({ name }) => name === CLIENT_SIDE_POLICY_NAME);
+  const isPolicyCovered = (file: string) =>
+    policy?.roots.some((root) => matchesDeclaredRoot(file, root)) ?? false;
+  const walk = walkProcessReach(
+    entries,
+    edges.filter((edge) => !edge.file.startsWith(DAEMON_SOURCE_ROOT)),
+    (edge) => edge.target.startsWith(DAEMON_SOURCE_ROOT),
+  );
+  return walk.stopped
+    .filter((edge) => !isPolicyCovered(edge.file))
+    .map((edge) => ({
       rule: DAEMON_CLIENT_ENTRY_RULE,
-      file: 'scripts/layering/daemon-client-entry.ts',
-      line: 1,
+      file: edge.file,
+      line: edge.line,
       message:
-        `stale declared edge: ${key} no longer exists. Remove it from DAEMON_CLIENT_ENTRY_EDGES so ` +
-        `the client dependency cannot return unclassified.`,
-    });
-  }
-
-  return violations;
+        `the CLI process reaches daemon internals: ${edge.file} imports ${edge.target}. ` +
+        `Chain: ${[...walk.chainTo(edge.file), edge.target].join(' -> ')}.`,
+    }));
 }

@@ -179,11 +179,12 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   },
   'react-devtools': {
     text: {
-      summary: 'Inspect components, hooks, and render profiles',
+      summary: 'React Native components, props/state/hooks, and render profiling',
       description:
-        'Run pinned agent-react-devtools commands for React Native performance profiling, component trees, props/state/hooks, and render analysis',
+        'Inspect React Native components and profile their renders through the Metro dev server',
     },
-    usageOverride: 'react-devtools [...args]',
+    usageOverride:
+      'react-devtools tree [@ref|Name]|find <Name>|inspect <@ref|Name>|errors|profile start|stop|report [Component]|commit [N]',
     listUsageOverride: 'react-devtools',
     positionalArgs: ['args?'],
     allowsExtraPositionals: true,

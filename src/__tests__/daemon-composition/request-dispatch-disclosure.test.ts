@@ -23,7 +23,8 @@ import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
-} from '@agent-device/contracts/dispatch-disclosure-fixtures';
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   makeAndroidSession,
@@ -31,8 +32,7 @@ import {
   makeSession,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import { discloseRequestDispatch } from '@agent-device/daemon/testing/request-dispatch-disclosure';
 import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';

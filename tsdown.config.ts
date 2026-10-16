@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type TsdownPluginOption } from 'tsdown';
 
 const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
@@ -169,8 +170,9 @@ export default defineConfig({
   // specifier to a chunk that names the omission. Add the package to `deps.onlyBundle` and drop
   // this alias to restore that path.
   alias: {
-    '@limrun/xdelta3-wasm': new URL('./src/vendor/limrun-delta-sync-omitted.ts', import.meta.url)
-      .pathname,
+    '@limrun/xdelta3-wasm': fileURLToPath(
+      new URL('./src/vendor/limrun-delta-sync-omitted.ts', import.meta.url),
+    ),
   },
   format: 'esm',
   platform: 'node',

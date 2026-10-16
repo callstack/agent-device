@@ -1,8 +1,8 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
 } from '../../android-system-dialog.ts';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';

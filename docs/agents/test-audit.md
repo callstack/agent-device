@@ -24,7 +24,7 @@ Authoring rejects; audits hunt:
 - type pins posing as runtime assertions (`Equal<A,B> = true`, `X ? true : never`, `satisfies` after erasure, `toHaveLength(n)` over literals); if erasing leaves nothing executable, use `void [fixtures]`;
 - mocks asserting their own inputs; negative controls passing for the wrong reason;
 - names promising more than the input exercises;
-- dead code called only by tests; tests preserving test-only exports.
+- dead code called only by tests; tests preserving test-only exports; a production package `exports` entry only tests import.
 
 ## Retention criteria
 

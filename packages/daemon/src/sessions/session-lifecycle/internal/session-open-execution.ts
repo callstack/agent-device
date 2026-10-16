@@ -1,4 +1,8 @@
 import {
+  resolveSessionRequestLogPath,
+  resolveSessionRunnerLogPath,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
+import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyUse,
   openApplicationWithRuntimeHintClearUse,
@@ -12,7 +16,7 @@ import type { SessionSurface } from '@agent-device/contracts/session';
 import type { OpenApplicationTiming } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import {
   abortAuthoringOnSecondOpen,
@@ -22,10 +26,6 @@ import {
 import { isRequestCanceled } from '@agent-device/host-kit/request';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../../core/session-store.ts';
-import {
-  resolveSessionRequestLogPath,
-  resolveSessionRunnerLogPath,
-} from '../../../core/session-artifact-paths.ts';
 import {
   countConfiguredRuntimeHints,
   runtimeHintValues,
@@ -58,12 +58,16 @@ import {
   type DeviceClaimAcquireResult,
   type DeviceClaimSessionOwnership,
   type DeviceClaimReconciler,
-} from '../../../resources/device/device-claims.ts';
-import type { TakenOverDeviceClaim } from '../../../resources/device/device-claim-reboot.ts';
+  type TakenOverDeviceClaim,
+} from '@agent-device/daemon-contracts/device-claims';
 import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
-import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/contracts';
+import {
+  errorResponse,
+  type DaemonFailureResponse,
+  type DaemonResponse,
+} from '@agent-device/kernel/contracts';
 
 export type SessionOpenResult =
   | Readonly<{ type: 'opened'; response: DaemonResponse; ref: SessionRef }>

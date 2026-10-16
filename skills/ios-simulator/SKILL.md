@@ -27,6 +27,6 @@ Only when the task is specialized or a command shape is unclear, read the releva
 agent-device help validate        # engineering validation and build freshness
 agent-device help debugging       # screenshots, logs, traces, video, and failures
 agent-device help react-native    # React Native and Expo runtime guidance
-agent-device help react-devtools  # component tree, props/state/hooks, and renders
+agent-device help react-devtools  # React components, props/state/hooks, render profiling
 agent-device help scripting       # durable replay and CI workflows
 ```

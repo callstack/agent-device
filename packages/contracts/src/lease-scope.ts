@@ -1,7 +1,8 @@
-import type { LeaseBackend } from '@agent-device/kernel/contracts';
+import type { DaemonResponse, LeaseBackend } from '@agent-device/kernel/contracts';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
+import type { EndedLease } from './client-lease.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
 
@@ -32,6 +33,7 @@ export type LeaseRpcCommand = 'lease_allocate' | 'lease_heartbeat' | 'lease_rele
 export type LeaseAllocateRequestScope = {
   tenantId: string;
   runId: string;
+  leaseId?: string;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
@@ -141,6 +143,7 @@ export function leaseScopeToAllocateRequest(scope: LeaseScope): LeaseAllocateReq
   return stripUndefined({
     tenantId: scope.tenantId ?? '',
     runId: scope.runId ?? '',
+    leaseId: scope.leaseId,
     leaseBackend: scope.leaseBackend,
     leaseProvider: scope.leaseProvider,
     deviceKey: scope.deviceKey,
@@ -184,6 +187,7 @@ export function leaseScopeToLeaseRpcParams(
       return {
         ...common,
         ...stripUndefined({
+          leaseId: scope.leaseId,
           ttlMs: scope.leaseTtlMs,
           retainOnClose: scope.leaseRetainOnClose,
           backend: scope.leaseBackend,
@@ -215,9 +219,15 @@ export function leaseScopeToLeaseRpcParams(
  * producer and the daemon's consumer read the SAME list and cannot drop a sibling the provider needs.
  */
 const LEASE_ALLOCATE_PROVIDER_FLAG_KEYS = [
-  // Device selection the lease-lifecycle provider needs to create the session.
+  // Device selection the lease-lifecycle provider needs to create the session, and a proxy daemon
+  // needs to pick the device when the request names no `deviceKey`.
   'platform',
+  'target',
   'device',
+  'udid',
+  'serial',
+  'iosSimulatorDeviceSet',
+  'androidDeviceAllowlist',
   // The Cloud provider profile fields; pinned exhaustive against that vocabulary below.
   'providerApp',
   'providerOsVersion',
@@ -296,6 +306,24 @@ export function buildLeaseDiagnosticsContext(
   return Object.keys(context).length > 0 ? context : undefined;
 }
 
+/** The `deviceKey` a proxy lease binds a device under: its public platform, target, and id. */
+export function leaseDeviceKey(device: { platform: string; target?: string; id: string }): string {
+  return `${device.platform}:${device.target ?? 'mobile'}:${device.id}`;
+}
+
+/**
+ * The raw fields a {@link leaseDeviceKey} key was written from, or `undefined` for a malformed key.
+ * The id is everything after the second `:`, so an id may itself contain `:`.
+ */
+export function parseLeaseDeviceKey(
+  key: string | undefined,
+): { platform: string; target: string; id: string } | undefined {
+  const match = /^([^:]+):([^:]+):(.+)$/.exec(key ?? '');
+  if (!match) return undefined;
+  const [, platform, target, id] = match;
+  return { platform: platform!, target: target!, id: id! };
+}
+
 export function isProxyLeaseScope(scope: LeaseScope): boolean {
   return scope.leaseProvider === PROXY_LEASE_PROVIDER;
 }
@@ -338,6 +366,18 @@ export function isInactiveLeaseError(error: unknown): boolean {
       (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason,
     )
   );
+}
+
+/** The leases a daemon reply says its request ended; a malformed entry is no ended lease. */
+export function readEndedLeases(response: DaemonResponse): EndedLease[] {
+  const body = response.ok ? response.data : response.error.details;
+  const entries = body?.endedLeases;
+  if (!Array.isArray(entries)) return [];
+  return entries.flatMap((entry: unknown) => {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const { leaseId, outcome } = entry as Readonly<{ leaseId?: unknown; outcome?: unknown }>;
+    return typeof leaseId === 'string' && outcome === 'released' ? [{ leaseId, outcome }] : [];
+  });
 }
 
 function leaseScopeToScopedRequest(scope: LeaseScope): LeaseScopedRequestScope {

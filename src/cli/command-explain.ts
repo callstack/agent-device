@@ -4,7 +4,7 @@ import {
   normalizeCliCommandAlias,
 } from '@agent-device/command-registry/cli-command-aliases';
 import { buildCommandUsage } from '../commands/schema/usage.ts';
-import type { DaemonCommandRoute } from '@agent-device/daemon/daemon-command-registry';
+import type { DaemonCommandRoute } from '@agent-device/command-registry/daemon-command-descriptor';
 import { commandDescriptors, type Command } from '@agent-device/command-registry/registry';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
 import type { CommandTimeoutPolicy } from '@agent-device/command-registry/types';

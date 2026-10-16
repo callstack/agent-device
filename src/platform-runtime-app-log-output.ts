@@ -1,8 +1,8 @@
+import { ensureAppLogPath } from '@agent-device/capture-kit/app-log-files';
 import type { AppLogOutputSink } from '@agent-device/contracts/app-log-runtime';
 import fs from 'node:fs';
 import { openVerifiedFileForAppend, openVerifiedFileForRead } from '@agent-device/host-kit/file';
-import { ensureAppLogPath } from '@agent-device/daemon/app-log-files';
-import { requireManagedSessionArtifactPath } from '@agent-device/daemon/managed-session-artifact-path';
+import { requireManagedSessionArtifactPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 
 export async function openAppLogOutput(
   sessionsDir: string,

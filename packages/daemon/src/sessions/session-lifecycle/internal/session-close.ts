@@ -1,8 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
@@ -10,6 +11,7 @@ import { resolveCommandDevice } from '../../../resources/session-device-resoluti
 import { expireRefFrame } from '../../../core/ref-frame.ts';
 import type { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { releaseSessionLease } from '../../lease-lifecycle.ts';
+import { recordEndedLease } from '../../../core/request-ended-leases.ts';
 import {
   hasRepairPlatformCloseReceipt,
   isRepairArmedSession,
@@ -18,7 +20,7 @@ import {
 import { isAuthoringArmedSession } from '../../../core/session-script-publication-capability.ts';
 import type { SessionCleanupFailure } from '../../session-teardown.ts';
 import { isWebSession } from '../../web-session-names.ts';
-import { clearDeviceClaim } from '../../../resources/device/device-claims.ts';
+import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import { hasRuntimeTransportHints } from '../../session-runtime.ts';
 import type {
@@ -116,12 +118,15 @@ async function prepareRepairClose(params: {
 }
 
 async function releaseProviderLeaseForClose(params: {
+  req: DaemonRequest;
   session: SessionState;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined;
 }): Promise<{ providerData?: Record<string, unknown>; response?: DaemonResponse }> {
   try {
-    return { providerData: await releaseSessionLease(params) };
+    const { endedLeaseId, providerData } = await releaseSessionLease(params);
+    if (endedLeaseId) recordEndedLease(params.req, endedLeaseId);
+    return { providerData };
   } catch (error) {
     const normalized = normalizeError(error);
     return {
@@ -152,6 +157,7 @@ async function dispatchTargetedPlatformClose(params: {
       outPath: req.flags?.out,
       appBundleId: session.appBundleId,
       surface: session.surface ?? 'app',
+      ...(req.internal?.killApp === true ? { mode: 'kill' as const } : {}),
       execution: applicationLifecycleExecutionFromRequest(req, logPath, session.trace?.outPath),
     });
     return undefined;
@@ -324,6 +330,7 @@ async function runCloseTeardownAndRelease(params: {
   });
   let session = sessionStore.requireCurrent(ref);
   const leaseRelease = await releaseProviderLeaseForClose({
+    req,
     session,
     leaseRegistry,
     leaseLifecycleProvider,
@@ -444,6 +451,7 @@ async function closeWithoutSession(params: {
     outPath: req.flags?.out,
     surface: 'app',
     ensureReady: true,
+    ...(req.internal?.killApp === true ? { mode: 'kill' as const } : {}),
     execution: applicationLifecycleExecutionFromRequest(req, logPath),
   });
   return {

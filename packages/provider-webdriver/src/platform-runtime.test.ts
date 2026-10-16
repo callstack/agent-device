@@ -411,7 +411,11 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
         markBooted: () => {},
         wasRecentlyObservedBooted: async () => false,
       },
-      androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
+      androidEmulator: {
+        discover: async () => [],
+        launch: async () => 1,
+        terminate: async () => {},
+      },
     },
     deviceShutdown: {
       apple: {

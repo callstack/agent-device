@@ -1,7 +1,7 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
-import type { DaemonResponse } from '../core/daemon-request.ts';
 import type { SessionRuntimeHints, SessionState } from '../core/session-state.ts';
 import {
   armRepairStep,

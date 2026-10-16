@@ -27,7 +27,7 @@ export function parsePort(value: number | string | undefined, fallback: number):
   if (value === undefined || value === null || value === '') {
     return fallback;
   }
-  const parsed = Number.parseInt(String(value), 10);
+  const parsed = /^\d+$/.test(String(value).trim()) ? Number(String(value).trim()) : Number.NaN;
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
     throw new AppError('INVALID_ARGS', `Invalid Metro port: ${String(value)}. Use 1-65535.`);
   }

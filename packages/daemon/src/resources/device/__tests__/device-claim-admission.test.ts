@@ -1,3 +1,4 @@
+import { ANDROID_EMULATOR, deviceClaimFilePath } from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import {
   daemonPlatformServicesFixture,
@@ -7,15 +8,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { localRuntimeOwner, providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { asAppError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
 } from '../../../__tests__/support/device-claim-store.ts';
 import { createDeviceClaimAdmission } from '../device-claim-admission.ts';
-import { abandonDeviceClaim, acquireDeviceClaim } from '../device-claims.ts';
-import { inspectDeviceClaims } from '../device-claim-inspection.ts';
-import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from '../device-claim-paths.ts';
+import {
+  abandonDeviceClaim,
+  acquireDeviceClaim,
+  inspectDeviceClaims,
+  canonicalLocalDeviceKey,
+} from '@agent-device/daemon-contracts/device-claims';
 import { createRequestExecutionScope } from '../../../server/request-execution-scope.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../../core/session-store.ts';
@@ -164,7 +167,7 @@ test('an ordinary owner is refused for an unknown-schema claim record, not waved
   const { stateDir, claimsDir } = setup();
   fs.mkdirSync(claimsDir, { recursive: true });
   const deviceKey = canonicalLocalDeviceKey(ANDROID_EMULATOR);
-  const claimPath = resolveDeviceClaimPath(deviceKey);
+  const claimPath = deviceClaimFilePath(deviceKey);
   const record = JSON.stringify({
     schemaVersion: 3,
     deviceKey,

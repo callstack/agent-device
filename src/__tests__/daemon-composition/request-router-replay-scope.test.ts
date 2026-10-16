@@ -32,7 +32,7 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
   };
 });
 
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
@@ -46,7 +46,6 @@ import { ensureDeviceReady } from '@agent-device/daemon/testing/device/device-re
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
 import { awaitFixtureReadiness } from '@agent-device/daemon/testing/__tests__/application-lifecycle-runtime-fixture';
 import { createRequestPlatformProviders } from '../../platform-runtime.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);

@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { handleReleaseMaterializedPathsCommand } from './session-app-source-deployment.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
 import {

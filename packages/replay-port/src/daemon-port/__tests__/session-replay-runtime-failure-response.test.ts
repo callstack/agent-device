@@ -52,30 +52,6 @@ test('native replay failure metadata keeps machine fields and daemon-owned paths
   expect(response.error.details).not.toHaveProperty('reas<var:MODE>');
 });
 
-test('a replay divergence carries the readiness evidence of an exhausted target wait', () => {
-  const readiness = { polls: 11, waitedMs: 2_004, end: 'expired' };
-  const response = buildReplayDivergenceFailureResponseFromDescriptor({
-    error: {
-      code: 'COMMAND_FAILED',
-      message: 'Selector did not match',
-      details: { reason: 'selector_not_found', readiness },
-    },
-    actionLabel: 'press label=Continue',
-    action: 'press',
-    positionals: ['label=Continue'],
-    step: 3,
-    replayPath: '/tmp/flows/checkout.ad',
-    artifactPaths: [],
-    divergence: {},
-    scrubVars: [],
-  });
-
-  expect(response.ok).toBe(false);
-  if (response.ok) return;
-  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
-  expect(response.error.details).toMatchObject({ reason: 'selector_not_found', readiness });
-});
-
 // #2997: the Android platform states `open --test-ime` because it sees one dispatched
 // session-open. On this surface that advice is unactionable — a flow caller never runs
 // `open` — so the cause's hint is replaced off the typed reason, never off the message.
@@ -107,4 +83,42 @@ test('a cause without the Android shell-text reason keeps its own hoisted hint',
   });
 
   expect(cause.hint).toBe('Inspect the latest snapshot.');
+});
+
+test('a failure response carries warnings accumulated before the failing step (#2560)', () => {
+  const response = buildReplayDivergenceFailureResponseFromDescriptor({
+    error: { code: 'COMMAND_FAILED', message: 'typed action failed' },
+    actionLabel: 'tapOn save',
+    action: 'tapOn',
+    positionals: ['save'],
+    step: 3,
+    replayPath: '/tmp/flows/login.yaml',
+    artifactPaths: [],
+    divergence: { kind: 'action-failure' },
+    scrubVars: [],
+    warnings: ['Optional Maestro assertVisible skipped at line 2: no match'],
+  });
+
+  if (response.ok) throw new Error('expected a failure response');
+  expect(response.error.details?.warnings).toEqual([
+    'Optional Maestro assertVisible skipped at line 2: no match',
+  ]);
+});
+
+test('a failure response omits an empty warnings channel', () => {
+  const response = buildReplayDivergenceFailureResponseFromDescriptor({
+    error: { code: 'COMMAND_FAILED', message: 'typed action failed' },
+    actionLabel: 'tapOn save',
+    action: 'tapOn',
+    positionals: ['save'],
+    step: 3,
+    replayPath: '/tmp/flows/login.yaml',
+    artifactPaths: [],
+    divergence: {},
+    scrubVars: [],
+    warnings: [],
+  });
+
+  if (response.ok) throw new Error('expected a failure response');
+  expect('warnings' in (response.error.details ?? {})).toBe(false);
 });

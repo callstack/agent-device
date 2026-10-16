@@ -1,11 +1,11 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { isMacOs } from '@agent-device/kernel/device';
 import { legacyDispatchCapture } from '../legacy-snapshot-capture-fixture.ts';
 import { expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { AppLogLiveState } from '@agent-device/contracts/app-log-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
 import type { LogBackend } from '@agent-device/contracts/observability';
 
 vi.mock('node:timers/promises', async (importOriginal) => {
@@ -82,7 +82,7 @@ vi.mock('../../../sessions/materialized-path-registry.ts', async (importOriginal
 import * as path from 'node:path';
 import { cleanupRetainedMaterializedPathsForSession } from '../../../sessions/materialized-path-registry.ts';
 import { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ensureDeviceReady } from '../../../core/device/device-ready.ts';

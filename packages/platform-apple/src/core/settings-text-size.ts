@@ -1,5 +1,4 @@
 import {
-  APPLE_TEXT_SIZE_LEAF_REFUSAL,
   parseTextSizeCategory,
   readTextSizeCategory,
   textSizeSettingPayload,
@@ -10,33 +9,14 @@ import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { runSimctlForDevice } from './simctl.ts';
 import { ensureBootedSimulator } from './simulator.ts';
-import { requireHandheldAppleSimulatorLeaf } from './settings-leaf.ts';
 
-/**
- * The Apple half of `settings text-size`: `simctl ui <device> content_size` is both the reader and
- * the writer, and it names the ladder verbatim, so no translation table sits between the shared
- * vocabulary and the tool.
- *
- * Both halves are confined to the iPhone/iPad simulator leaf. The daemon refuses a leaf outside it
- * before it binds anything, so this guard is what an owner still enforces on its own when it is
- * reached directly: the content-size surface was only ever verified on that leaf, and a write that
- * reached an Apple TV or Vision Pro simulator would be reported as applied on a device whose setting
- * may not exist. The leaf rule and the refusal are declared once — `requireHandheldAppleSimulatorLeaf`
- * over `isHandheldAppleSimulator` and `APPLE_TEXT_SIZE_LEAF_REFUSAL` — and the runtime's read fact
- * reads the same predicate.
- */
+/** `simctl ui <device> content_size` reads and writes the ladder's names verbatim. */
 
-/**
- * Applies one ladder rung. The category arrives validated because `simctl` answers an unknown
- * category with exit 0 and the single word `Invalid argument` — a write that delegated validation
- * to the tool would report success while changing nothing. `setIosSetting` has already required a
- * booted simulator for every setting it serves.
- */
+/** `simctl` answers an unknown category with exit 0, so the category is parsed first. */
 export async function setIosTextSize(
   device: DeviceInfo,
   state: string,
 ): Promise<TextSizeSettingPayload> {
-  requireHandheldAppleSimulatorLeaf(device, APPLE_TEXT_SIZE_LEAF_REFUSAL);
   const category = parseTextSizeCategory(state);
   await runSimctlForDevice(device, ['ui', device.id, 'content_size', category]);
   return textSizeSettingPayload(category, category);
@@ -49,7 +29,6 @@ export async function setIosTextSize(
  * into a category the simulator never reported.
  */
 export async function readIosTextSize(device: DeviceInfo): Promise<TextSizeSettingPayload> {
-  requireHandheldAppleSimulatorLeaf(device, APPLE_TEXT_SIZE_LEAF_REFUSAL);
   await ensureBootedSimulator(device);
   const result = requireExecSuccess(
     await runSimctlForDevice(device, ['ui', device.id, 'content_size'], { allowFailure: true }),

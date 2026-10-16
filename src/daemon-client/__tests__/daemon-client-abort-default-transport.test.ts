@@ -1,7 +1,7 @@
 /**
  * #3178: the real client route, through the default transport.
  *
- * `daemon-client-abort.test.ts` drives `sendRequest` directly, and `client-abort-signal.test.ts`
+ * `daemon-client-abort.test.ts` drives `sendRequest` directly, and `agent-device-client-abort-signal.test.ts`
  * injects a fake transport, so neither proves that the caller's signal actually reaches the
  * transport from `createAgentDeviceClient`. That property lives at one line — the signal handed to
  * `sendRequest` in `daemon-client.ts` — and a test that skips that wiring cannot see it disappear:
@@ -15,6 +15,8 @@
  * the caller's rejection is the id the daemon canceled, which is what lets a caller correlate a
  * canceled call with the daemon's own diagnostics.
  */
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
@@ -22,11 +24,6 @@ import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-} from '@agent-device/daemon/daemon-request';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
@@ -34,11 +31,13 @@ import { currentDaemonCodeSignature } from '../../__tests__/test-utils/daemon-ht
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
+  type SkippableTestContext,
   skipWhenLoopbackUnavailable,
   trackLoopbackSockets,
-  type SkippableTestContext,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
+
+type WireInvokeFn = (req: DaemonWireRequest) => Promise<DaemonResponse>;
 
 const TOKEN = 'default-transport-abort-token';
 
@@ -46,8 +45,8 @@ type SeenRequest = { started: boolean; canceled: boolean[]; requestId?: string }
 
 // `wait` is the long request the caller abandons; it never answers on its own, so only the client's
 // disconnect ends it — through the daemon's own request-scoped cancellation.
-function hangingWaitHandler(seen: SeenRequest): DaemonInvokeFn {
-  return async (req: DaemonRequest): Promise<DaemonResponse> => {
+function hangingWaitHandler(seen: SeenRequest): WireInvokeFn {
+  return async (req: DaemonWireRequest): Promise<DaemonResponse> => {
     const requestId = req.meta?.requestId;
     seen.started = true;
     seen.requestId = requestId;
@@ -96,7 +95,7 @@ async function waitFor(condition: () => boolean, what: string): Promise<void> {
 async function runDefaultTransportAbort(
   t: SkippableTestContext,
   transport: 'socket' | 'http',
-  serve: (handleRequest: DaemonInvokeFn) => Promise<{
+  serve: (handleRequest: WireInvokeFn) => Promise<{
     server: Parameters<typeof closeLoopbackServer>[0];
     port: number;
     destroyConnections?: () => void;

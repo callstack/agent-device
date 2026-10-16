@@ -1,9 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import type { IosTargetActivation } from '@agent-device/kernel/snapshot';
 import { withCaptureDisclosures, withTargetActivationDisclosure } from '../capture-disclosure.ts';
-import type { DaemonResponse } from '../daemon-request.ts';
 
 const FACT: IosTargetActivation = {
   reason: 'stale_target',

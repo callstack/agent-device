@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { isApplePlatform, type PlatformSelector } from '@agent-device/kernel/device';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import {
@@ -7,7 +8,6 @@ import {
   selectorTargetsSessionDevice,
 } from '../../resources/session-device-resolution.ts';
 import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-admission.ts';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 import {
   appleSessionAppStateResponse,
   appleSessionRequiredRefusal,

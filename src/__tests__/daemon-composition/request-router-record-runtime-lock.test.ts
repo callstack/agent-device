@@ -11,9 +11,11 @@ import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-r
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import {
+  mkdtempForTestSync,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { runCli } from '../../../cli.ts';
-import { pluginHome, selectPlugin } from '@agent-device/test-kit/plugin.fixtures';
+import { pluginHome, selectPlugin } from '@agent-device/test-kit';
 import { parseRawArgs, usageForCommand } from '../../parser/args.ts';
 import { beginStdoutCapture } from '../../../__tests__/test-utils/stream-capture.ts';
 

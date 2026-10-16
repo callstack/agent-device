@@ -1,3 +1,4 @@
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import fs from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -10,9 +11,11 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import {
+  createTestAppLogLiveHandle,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+} from '@agent-device/test-kit';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -20,7 +23,6 @@ import {
   type AppLogAdmissionLedger,
 } from '../../../../resources/app-log-admission-ledger.ts';
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
-import { appLogResourceStore } from '../../../../resources/app-log-resource-store.ts';
 import type { BindDeviceRuntime } from '../../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../../core/session-store.ts';
 import {

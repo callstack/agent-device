@@ -161,6 +161,33 @@ test('handleFindCommands click prefers on-screen duplicate text matches', async 
   expect(invokeCalls[0]!.positionals?.[0]).toBe('@e3');
 });
 
+// #3565: the leaf adopts find's tree as its settle baseline, so the presentation find's capture
+// read must arrive on that tree rather than be re-derived from the nodes.
+test('handleFindCommands click hands the leaf the baseline its own capture minted', async () => {
+  const nodes = [
+    { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+    {
+      index: 1,
+      ref: 'e2',
+      type: 'Button',
+      label: 'Close',
+      hittable: true,
+      rect: { x: 20, y: 80, width: 80, height: 44 },
+      parentIndex: 0,
+    },
+  ];
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'snapshot' ? { nodes, presentedSurface: 'presented' } : {},
+  );
+
+  const { response, invokeCalls } = await runFindClickScenario({ positionals: ['Close', 'click'] });
+
+  expect(response.ok).toBe(true);
+  const carried = invokeCalls[0]!.internal?.findResolvedTarget;
+  expect(carried?.tree.presentedSurface).toBe('presented');
+  expect(carried?.tree.nodes).toContain(carried?.node);
+});
+
 test('handleFindCommands click tries query-scoped full retry before failing sparse verdict', async () => {
   const session = makeSession('default');
   session.snapshot = {

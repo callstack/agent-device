@@ -1,8 +1,8 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import net from 'node:net';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import { loadNodeHttpRequester, consumeTextLines } from '@agent-device/host-kit/transport';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 
 // The post-timeout liveness probe (#3177): the question a daemon reset may no longer assume. The
@@ -158,7 +158,7 @@ function probeSocketRpc(
  * device locks the timed-out request's work may still hold. The `session` field is required on
  * the wire; an omitted one falls back to the daemon's own routing default.
  */
-function buildLivenessProbeRequest(token: string, session: string | undefined): DaemonRequest {
+function buildLivenessProbeRequest(token: string, session: string | undefined): DaemonWireRequest {
   return {
     token,
     session: session || 'default',

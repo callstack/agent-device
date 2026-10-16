@@ -12,7 +12,7 @@ import {
   commandDescriptors,
   commandRuntimeUseRequirements,
 } from '@agent-device/command-registry/registry';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
+import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 import { makeSession } from './session-factories.ts';
 import { makeSessionStore } from './store-factory.ts';
 import { resolveBoundBackRuntime } from '../../execution/back-runtime.ts';

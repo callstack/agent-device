@@ -20,7 +20,7 @@ import {
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
-} from '@agent-device/test-kit/device-fixtures';
+} from '@agent-device/test-kit';
 import { readReplayScriptMetadata } from '@agent-device/ad-script';
 
 // Parity gate for the ios/macos -> apple Platform collapse (issue #979, approach b).

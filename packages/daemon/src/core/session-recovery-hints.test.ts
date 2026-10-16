@@ -2,7 +2,7 @@ import { makeStoredSessionRef } from '../__tests__/support/store-factory.ts';
 import { test, expect } from 'vitest';
 import { buildSessionRecoveryHint } from './session-recovery-hints.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 
 // The recovery hint's whole job is to hand back a command that works. For an implicitly
 // cwd-scoped session — named `default`, stored as `cwd:<hash>:default` — building it from the

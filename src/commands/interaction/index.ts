@@ -678,7 +678,6 @@ function toPressOptions(input: PressInput): PressOptions {
     ...toSelectorSnapshotOptions(input),
     ...toRepeatedOptions(input),
     verify: input.verify,
-    readinessTimeoutMs: input.readinessTimeoutMs,
     ...toSettleOptions(input),
   };
 }
@@ -703,7 +702,6 @@ function toLongPressOptions(input: LongPressInput): LongPressOptions {
     ...toClientInteractionTarget(input.target),
     ...toSelectorSnapshotOptions(input),
     durationMs: input.durationMs,
-    readinessTimeoutMs: input.readinessTimeoutMs,
     ...toSettleOptions(input),
   };
 }

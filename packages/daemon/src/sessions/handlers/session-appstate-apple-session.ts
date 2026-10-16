@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
 import {
   isMacOs,
@@ -12,7 +13,6 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-admission.ts';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 
 /**
  * The session facts this answer is built from, as a structural view: the handler reads exactly

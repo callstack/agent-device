@@ -15,7 +15,7 @@ import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { makeTestScreenRecordingResource } from '@agent-device/daemon/testing/__tests__/support/screen-recording-live-handle';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 // The observation spy hangs off the port the router composes with (ADR 0019 section 11), not off
 // the platform module behind it.

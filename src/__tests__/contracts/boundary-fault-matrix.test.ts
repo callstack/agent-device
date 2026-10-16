@@ -4,10 +4,10 @@ import path from 'node:path';
 import { test } from 'vitest';
 import {
   BOUNDARY_COMMAND_CLASSES,
-  BOUNDARY_FAULTS,
   BOUNDARY_FAULT_MATRIX,
+  BOUNDARY_FAULTS,
   type BoundaryCoverage,
-} from '@agent-device/test-kit/boundary-fault-matrix';
+} from '@agent-device/test-kit';
 
 test('boundary fault matrix is complete across both declared axes', () => {
   assert.deepEqual(Object.keys(BOUNDARY_FAULT_MATRIX).sort(), [...BOUNDARY_FAULTS].sort());

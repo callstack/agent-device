@@ -8,7 +8,7 @@ import type {
 import { createSelectorRuntimeForDevice } from '@agent-device/daemon/testing/selector-runtime-backend';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 

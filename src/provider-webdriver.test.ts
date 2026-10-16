@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { bundledCloudWebDriverProvider } from '@agent-device/provider-webdriver';
 import { createBundledCloudWebDriverHost } from './provider-webdriver.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('bundled AWS artifact lookup runs through the host command adapter', async () => {
   const tempDir = mkdtempForTestSync('agent-device-provider-webdriver-');

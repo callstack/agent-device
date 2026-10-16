@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { CliJsonResult } from './cli-json.ts';
 import { createLiveDeviceContext, createLiveDeviceHarness } from './live-device-e2e/runtime.ts';
 

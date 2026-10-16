@@ -26,7 +26,7 @@ import type { InteractionAction } from './interaction-resolution-request.ts';
 
 /**
  * The one construction site for "covered by another visible element" refusals, shared by the
- * node-stage runner below (ref, selector, native-ref preflight) and `selector-readiness.ts`'s
+ * node-stage runner below (ref, selector, native-ref preflight) and `selector-target-resolution.ts`'s
  * covered-target diagnosis probe. `find ... focus` builds the same detail shape through
  * {@link coveredInteractionDetails}, so both producers report one shape.
  *

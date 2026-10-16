@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
@@ -19,12 +20,12 @@ import { handleReleaseMaterializedPathsCommand } from '../../../handlers/session
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import { makeSession } from '../../../../__tests__/support/session-factories.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({
   ok: true,

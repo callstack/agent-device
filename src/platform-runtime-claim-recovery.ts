@@ -1,5 +1,15 @@
+import {
+  createOwnerScopedDeviceClaimReconciler,
+  createRecoveryPlatformScope,
+  type ClaimRecoveryGatewayFactory,
+  type OwnerScopedClaimRecoveryComposer,
+} from '@agent-device/daemon-contracts/device-claim-recovery';
+import {
+  releaseProvenStaleDeviceClaims,
+  type DeviceClaimSelectors,
+  type DeviceClaimStaleReleaseOutcome,
+} from '@agent-device/daemon-contracts/device-claims';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
-import type { ClaimRecoveryGatewayFactory } from '@agent-device/daemon/device/claim-recovery-gateway';
 
 /**
  * Root composition for owner-scoped claim recovery (ADR 0019 section 1): the daemon owns the
@@ -15,3 +25,24 @@ export const createClaimRecoveryGateway: ClaimRecoveryGatewayFactory = (input) =
     ownedProcesses: input.ownedProcesses,
     resolveSessionArtifacts: input.resolveSessionArtifacts,
   });
+
+/**
+ * Daemonless `device release --stale`: settles each provably dead owner
+ * through the same owner-scoped reconciliation the daemon uses at `open` and
+ * startup — recovery composed from the stale claim's own state dir, resources
+ * settled first, claim cleared last — without requiring the (typically dead)
+ * owner daemon, or any daemon, to be running.
+ */
+export async function runStaleDeviceClaimRelease(
+  selectors: DeviceClaimSelectors,
+  composeRecovery?: OwnerScopedClaimRecoveryComposer,
+): Promise<DeviceClaimStaleReleaseOutcome[]> {
+  return await releaseProvenStaleDeviceClaims({
+    selectors,
+    reconcile: createOwnerScopedDeviceClaimReconciler({
+      scope: createRecoveryPlatformScope(),
+      composeGateway: createClaimRecoveryGateway,
+      composeRecovery,
+    }),
+  });
+}

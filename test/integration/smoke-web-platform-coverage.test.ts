@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTest } from '@agent-device/test-kit';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   assertCoverageClassificationSummaryWiredToManifest,

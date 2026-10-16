@@ -9,6 +9,7 @@ import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import type { DaemonRequestMeta } from '@agent-device/kernel/contracts';
 import {
   buildDaemonHttpAuthHeaders,
+  buildDaemonHttpLeaseHeaders,
   buildDaemonHttpTenantHeaders,
 } from '@agent-device/contracts/daemon-http';
 
@@ -89,6 +90,7 @@ export async function downloadRemoteArtifactFromUrl(
         headers: {
           ...buildDaemonHttpAuthHeaders(params.token),
           ...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),
+          ...buildDaemonHttpLeaseHeaders(params.requestScope?.leaseId),
         },
       },
       (res) => {

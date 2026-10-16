@@ -1,5 +1,5 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { isMacOs } from '@agent-device/kernel/device';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 

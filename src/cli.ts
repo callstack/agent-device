@@ -1,13 +1,13 @@
+import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import {
   asAppError,
   AppError,
   normalizeError,
-  throwDaemonError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon/session-artifact-paths';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
@@ -36,7 +36,6 @@ import {
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { applyDefaultPlatformBinding, resolveBindingSettings } from './cli/session-binding.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
@@ -48,8 +47,7 @@ import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
-import { INTERNAL_COMMANDS, isKnownCliCommandName } from '@agent-device/command-registry/catalog';
-import { sendInjectedDaemonRequest } from './cli/injected-daemon-dispatch.ts';
+import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
@@ -140,7 +138,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
       let logTailStopper: (() => void) | null = null;
       try {
         if (command === 'react-devtools') {
-          await exitAfterFlush(await runReactDevtoolsCli(ctx, deps));
+          await exitAfterFlush(await runReactDevtoolsCli(ctx));
           return;
         }
         if (command === 'web') {
@@ -350,38 +348,12 @@ async function resolveRunContextOrExit(
   }
 }
 
-async function runReactDevtoolsCli(ctx: CliRunContext, deps: CliDeps): Promise<number> {
+async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
   const { runReactDevtoolsCommand } = await import('./cli/commands/react-devtools.ts');
-  const { daemonAuthToken, ...directRequestFlags } = ctx.effectiveFlags;
   return await runReactDevtoolsCommand(ctx.positionals, {
-    flags: {
-      ...directRequestFlags,
-      leaseProvider: ctx.connectionDefaults?.connection?.leaseProvider,
-    },
+    flags: ctx.effectiveFlags,
     stateDir: ctx.daemonPaths.baseDir,
     session: ctx.effectiveFlags.session ?? ctx.sessionName,
-    cwd: process.cwd(),
-    env: process.env,
-    configureDirectPortReverse: async () => {
-      const response = await sendInjectedDaemonRequest({
-        route: 'react-devtools',
-        command: INTERNAL_COMMANDS.runtime,
-        request: {
-          positionals: ['port-reverse'],
-          flags: {
-            ...directRequestFlags,
-            leaseProvider: ctx.connectionDefaults?.connection?.leaseProvider,
-            devicePort: 8097,
-            hostPort: 8097,
-            portReverseName: 'react-devtools',
-          },
-          session: ctx.effectiveFlags.session ?? ctx.sessionName,
-        },
-        transport: deps.sendToDaemon,
-        transportOptions: { authToken: daemonAuthToken },
-      });
-      if (!response.ok) throwDaemonError(response.error);
-    },
   });
 }
 
@@ -811,6 +783,29 @@ function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boole
   return false;
 }
 
+type CliDaemonTransportSetup = {
+  command: string;
+  flags: CliFlags;
+  replayTestReporterRuntime?: ReplayTestReporterRuntime;
+  commandProgress: CommandProgressState;
+  transport: CliDaemonTransport;
+};
+
+/**
+ * A remote connection reads each daemon reply for the leases its request ended, and forgets the
+ * stored lease when the reply names it.
+ */
+function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
+  const send = createCliProgressTransport(options);
+  if (!options.flags.remoteConfig) return send;
+  return async (req, context) => {
+    const response = await send(req, context);
+    const { forgetEndedProxyLease } = await import('./cli/connection/ended-lease.ts');
+    forgetEndedProxyLease(options.flags, response);
+    return response;
+  };
+}
+
 /**
  * The human CLI renders streamed progress itself: `test` hands its events to the
  * replay-test reporter, every other command streams `command` lines to stderr
@@ -818,13 +813,7 @@ function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boole
  * doctor summary does not repeat checks progress already printed). `--json` opts
  * out of progress entirely, so it installs no sink.
  */
-function createCliDaemonTransport(options: {
-  command: string;
-  flags: CliFlags;
-  replayTestReporterRuntime?: ReplayTestReporterRuntime;
-  commandProgress: CommandProgressState;
-  transport: CliDaemonTransport;
-}): AgentDeviceDaemonTransport {
+function createCliProgressTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
   const { command, flags, replayTestReporterRuntime, transport } = options;
   if (flags.json) return createClientDaemonTransport(transport);
   const onProgress =

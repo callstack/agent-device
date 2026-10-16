@@ -11,8 +11,7 @@ import {
   parseAndroidAdbArgv,
   runAndroidHostAdb,
 } from '@agent-device/platform-android/mechanics';
-import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { ANDROID_EMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import './platform-runtime-android-adb-host.ts';
 
 const UNGUARDED_DEVICE_SHELL = {

@@ -95,11 +95,6 @@ export type FocusCommandResult = ResolvedInteractionTarget & BackendResultEnvelo
 export type LongPressCommandOptions = CommandContext & {
   target: InteractionTarget;
   durationMs?: number;
-  /**
-   * Polls for the target to exist and become actionable, capped at the promotedTarget row's
-   * maxTimeoutMs. Absent takes one attempt.
-   */
-  readinessTimeoutMs?: number;
   /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
   expectedResolvedTarget?: ExpectedResolvedTarget;
 } & SettlePostActionObservationOptions;
@@ -147,7 +142,6 @@ export const longPressCommand: RuntimeCommand<
     pipeline: SELECTOR_PIPELINE_POLICIES.promotedTarget,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
     expectedResolvedTarget: options.expectedResolvedTarget,
-    readinessTimeoutMs: options.readinessTimeoutMs,
   });
   if (!runtime.backend.longPress) {
     throw new AppError('UNSUPPORTED_OPERATION', 'longPress is not supported by this backend');

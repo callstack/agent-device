@@ -6,7 +6,7 @@ import {
   findDaemonPlatformDependencies,
 } from './daemon-platform-boundary.ts';
 
-const daemonFile = 'packages/daemon/src/terminal-boundary-fixture.ts';
+const daemonFile = 'packages/daemon/src/terminal-boundary-case.ts';
 
 function dependencies(source: string, file = daemonFile) {
   return findDaemonPlatformDependencies([{ path: file, source }]);
@@ -92,7 +92,7 @@ test('R65 recognizes side-effect and aliased imports, including nested daemon pa
   ].join('\n');
 
   assert.deepEqual(
-    dependencies(source, 'packages/daemon/src/sessions/handlers/terminal-boundary-fixture.ts').map(
+    dependencies(source, 'packages/daemon/src/sessions/handlers/terminal-boundary-case.ts').map(
       (found) => ({
         kind: found.kind,
         line: found.line,
@@ -269,13 +269,10 @@ test('R65 rejects platform selection inside cleanup orchestrators', () => {
 
 test('R65 ignores non-daemon and test-shaped records even when their syntax is red', () => {
   const source = "import { platform } from '../../../src/platforms/android/runtime.ts';";
-  assert.deepEqual(dependencies(source, 'src/core/terminal-boundary-fixture.ts'), []);
+  assert.deepEqual(dependencies(source, 'src/core/terminal-boundary-case.ts'), []);
+  assert.deepEqual(dependencies(source, 'packages/daemon/src/terminal-boundary-case.test.ts'), []);
   assert.deepEqual(
-    dependencies(source, 'packages/daemon/src/terminal-boundary-fixture.test.ts'),
-    [],
-  );
-  assert.deepEqual(
-    dependencies(source, 'packages/daemon/src/__tests__/terminal-boundary-fixture.ts'),
+    dependencies(source, 'packages/daemon/src/__tests__/terminal-boundary-case.ts'),
     [],
   );
 });

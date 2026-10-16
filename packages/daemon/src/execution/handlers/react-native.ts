@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   createBoundTouchExecutor,
   resolveBoundTouchRuntime,
@@ -14,7 +15,6 @@ import { successText } from '@agent-device/kernel/success-text';
 
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import {
   bindInteractionSession,

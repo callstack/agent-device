@@ -93,6 +93,7 @@ export const CASE_GENERATION_INPUTS = [
   'validation-arbitraries-maestro.ts',
   'validation-values.ts',
   'validation-case.ts',
+  '../../src/commands/replay/replay-script.fixtures.ts',
 ] as const;
 
 /**

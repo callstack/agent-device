@@ -69,7 +69,7 @@ What a `RUNNER_BUSY` refusal then costs the caller turns on the daemon's own per
 trait, not on any runner-side classification of the command: `RUNNER_COMMAND_TRAITS` in
 `packages/platform-apple/src/runner/runner-command-traits.ts`, read through
 `isReadOnlyRunnerCommand` where `runAppleRunnerCommand` decides whether to wrap the send in a resend
-loop. The asymmetry is shipped, and asserted in `runner-command-busy-resend.test.ts`: a read-only
+loop. The asymmetry is shipped, and asserted in `runner-client-busy-resend.test.ts`: a read-only
 command treats the refusal as *not yet*, waiting the drain out on the busy-specific budget sized to
 outlast it and resending until the runner answers or the window ends; a mutating command treats the
 same refusal as *not mine to send again* — one attempt, and the refusal reaches the caller unwrapped

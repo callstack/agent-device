@@ -25,7 +25,7 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
       },
       androidEmulator: {
         discover: async () => [],
-        launch: () => 1,
+        launch: async () => 1,
         terminate: async () => {},
       },
     },

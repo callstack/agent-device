@@ -23,7 +23,7 @@ pnpm gate --help
 
 `check:affected --run` reports coverage obligations without instrumenting; when related tests are
 selected, it runs one capped `vitest related` command. Run local coverage, then
-`check:coverage-crap` gates the touched functions (CONTRIBUTING.md).
+`check:coverage-crap` gates touched functions on that run's stamp (CONTRIBUTING.md).
 
 Two selection traps recur:
 
@@ -32,9 +32,8 @@ Two selection traps recur:
 - A workspace package manifest or TypeScript config can rewire all consumers, so the affected
   selector fails open to the full gate set on purpose.
 
-Docs-only changes with no runtime behavior impact need no runtime tests or new tests asserting prose.
-Keep required gates; after those and focused checks pass, repeat or broaden only for changes,
-failures, or unresolved risks.
+Docs-only changes need no runtime tests or tests asserting prose. After the required gates, repeat
+or broaden only for changes, failures, or unresolved risks.
 
 ## Platform and live-device policy
 
@@ -67,13 +66,15 @@ Read the entry file before running a lane. Do not copy its environment matrix he
 
 ## Shared test utilities
 
-Before creating fixtures, look in `@agent-device/test-kit/` (generic) and
-`packages/daemon/src/__tests__/support/` (daemon-shaped). Import named builders from their
-defining module, never through a barrel. Shared `DeviceInfo`, session, snapshot, store,
-runtime-fact, and mocked-binary values belong in a sibling fixture module, not in repeated
-test literals. `PROPERTY_RUNS` and the touch-point/rect arbitraries live in
-`@agent-device/selectors/snapshot-geometry-fixtures`;
-`makeSnapshotState` lives in `@agent-device/capture-kit/snapshot-state-fixtures`.
+Before creating fixtures, look in `@agent-device/test-kit` and
+`packages/daemon/src/__tests__/support/`. Shared `DeviceInfo`, session, snapshot, store,
+runtime-fact, and mocked-binary values belong in a sibling fixture module, not in repeated test
+literals; a fixture one package uses is a `*.fixtures.ts` beside its module. The packages test-kit
+builds on (kernel, contracts, capture-kit, host-kit, daemon-contracts) cannot
+declare it; their tests keep helpers local. Never import test-kit in the `vi.mock` factory of a
+module its entry loads (`host-kit/process`, `command`, `file`): spy it in place, as
+`pinOwnProcessStartTime` does. Fixtures a package still exports (R83's legacy count) stay
+importable until moved.
 
 Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the run and
 removes it after every worker exits — skip per-test cleanup. An interrupted run may leave a
@@ -109,8 +110,8 @@ For structured classifiers, pair the positive case with the closest negative. Wh
 can be identical with and without a typed reason, the negative test must prove the message alone
 cannot activate retry, fallback, or recovery.
 
-Test through public interfaces where practical; never add production exports or test-only
-dependency injection — a missing seam needs a real product seam.
+Test through public interfaces; never add production exports or test-only dependency injection — a
+missing seam needs a real product seam.
 
 ## Properties, fuzzing, and mutation
 
@@ -119,13 +120,11 @@ another example. Keep examples for a real past bug or a named decision. Reuse `P
 budgets so property files stay inside the unit slow-test gate.
 
 Parser fuzz targets live in `scripts/fuzz/targets.ts`. Validation generators carry the invalid
-outcome they planted, so silent acceptance and wrong error codes are failures. Cases run in a
-worker process, so a case that never returns or kills its process is reported as `hang` or `crash`
-against the exact input. Promote a discovered case with the command the harness prints — never
+outcome they planted, so silent acceptance and wrong error codes are failures. Promote a discovered case with the command the harness prints — never
 hand-copy an unshrunk input.
 
-Mutation scope: `scripts/mutation/modules.ts#KERNEL_MODULES` (weekly), `scripts/mutation/run.ts#LANE_TOOLING`
-(PR canary). Scores are advisory; incomplete sweeps fail. Pilot protocol: `pnpm mutation:run --help`.
+Mutation scope: `scripts/mutation/modules.ts#KERNEL_MODULES` (weekly), `scripts/mutation/run.ts#LANE_SOURCES`
+(PR canary; dispatch adds `LANE_DEPENDENCIES`). Scores are advisory; incomplete sweeps fail. Pilot protocol: `pnpm mutation:run --help`.
 
 ## Before editing a shared module
 
@@ -145,8 +144,7 @@ selects gates independently from the diff; it does not consume the depgraph repo
 action with a literal gate id; `pnpm check:gate-manifest` verifies registration, workflow ownership,
 path reachability, and routed device lanes. Raw shell text cannot declare ownership.
 
-New check: update the catalog and its executable model. Changed path ownership: plant a path that
-would previously be misrouted and watch the selector or manifest fail before fixing it.
+New check: update the catalog and its executable model.
 
 ## Concurrency torture lane
 

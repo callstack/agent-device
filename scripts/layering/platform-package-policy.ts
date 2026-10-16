@@ -15,11 +15,12 @@
 //   into a sibling's src still compiles; project references are a build cache, not a boundary.
 
 import path from 'node:path';
-import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
+import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseImports, type LayeringViolation } from './model.ts';
 import { checkPlatformComposition } from './platform-composition-policy.ts';
 import { checkPlatformPackageSourcePolicy } from './platform-package-source-policy.ts';
+import { isTestOnlyExportSpecifier } from './package-export-surface.ts';
 import { retiredPathViolations } from './retired-zone-policy.ts';
 
 export const CANONICAL_PLATFORM_FAMILIES = PLATFORMS;
@@ -66,9 +67,8 @@ export function checkRetiredPlatformsZone(files: readonly string[]): LayeringVio
     'src/platforms is retired; family code belongs in its platform package, shared mechanics in an owning substrate package, and cross-family tests in their root or package test owner',
   );
 }
+const APPLE_RUNNER_TEST_HOST_FILE = 'packages/platform-apple/src/runner/test-host';
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
-const APPLE_RUNNER_TEST_HOST = '@agent-device/platform-apple/runner/test-host';
-const APPLE_RUNNER_TEST_HOST_INSTALLER = 'scripts/vitest-apple-runner-host-setup.ts';
 const ANDROID_MECHANICS_FACADE = '@agent-device/platform-android/mechanics';
 const ANDROID_HOST_FACET = '@agent-device/platform-android/adb-host';
 const ANDROID_HOST_BINDING = 'src/platform-runtime-android-adb-host.ts';
@@ -76,7 +76,6 @@ const ANDROID_DEVICE_BOOT_FACADE = '@agent-device/platform-android/device-boot';
 const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly string[]>>> = {
   apple: [
     APPLE_RUNNER_FACADE,
-    APPLE_RUNNER_TEST_HOST,
     '@agent-device/platform-apple/app-lifecycle',
     '@agent-device/platform-apple/app-resolution',
     '@agent-device/platform-apple/debug-symbols',
@@ -87,7 +86,6 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/physical-device',
     '@agent-device/platform-apple/runner-owner',
     '@agent-device/platform-apple/runner/operations',
-    '@agent-device/platform-apple/runner/requests-fixtures',
     '@agent-device/platform-apple/session-observation',
     '@agent-device/platform-apple/snapshot-source',
     '@agent-device/platform-apple/simctl',
@@ -99,26 +97,27 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
   android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE, ANDROID_DEVICE_BOOT_FACADE],
 };
 
-// Test-only entries: the shared Android capture/walk fixtures (#3517). They ride export
-// validation with the facets above but not its consumer set: only non-production files
-// may import them, so `src/commands/` style production code importing a fixture trips R13.
-const ANDROID_TEST_ONLY_SUBPATHS: readonly string[] = [
-  '@agent-device/platform-android/snapshot-capture-fixtures',
-  '@agent-device/platform-android/ui-hierarchy-fixtures',
-];
-
 function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
   if (specifier === ANDROID_HOST_FACET) return file === ANDROID_HOST_BINDING;
-  if (ANDROID_TEST_ONLY_SUBPATHS.includes(specifier)) return isNonProductionConsumer(file);
+  if (isPlatformTestOnlyImport(specifier)) return true;
   if (!(MECHANICS_FACET_SUBPATHS.android ?? []).includes(specifier)) return false;
   // The named facets are the implementation seam for root/core/SDK consumers. Daemon production
   // code still reaches platform behavior through the request-bound runtime gateway; tests may
   // import a facet to exercise the package-owned mechanics directly.
-  return !file.startsWith(DAEMON_SOURCE_ROOT) || !isProductionSource(file);
+  return !file.startsWith(DAEMON_SOURCE_ROOT) || !isProductionSourceFile(file);
+}
+
+// Test-only subpaths (fixtures, the runner test host) are R83's: it holds the export list and
+// bans production importers, so R13 neither requires nor polices them.
+function isPlatformTestOnlyImport(specifier: string): boolean {
+  return concretePlatformFamily(specifier) !== undefined && isTestOnlyExportSpecifier(specifier);
 }
 
 function isAppleFacadeSubpathImport(specifier: string): boolean {
-  return MECHANICS_FACET_SUBPATHS.apple?.includes(specifier) ?? false;
+  return (
+    (MECHANICS_FACET_SUBPATHS.apple?.includes(specifier) ?? false) ||
+    isPlatformTestOnlyImport(specifier)
+  );
 }
 
 function violation(file: string, line: number, message: string): LayeringViolation {
@@ -137,14 +136,6 @@ function familyForPackageFile(file: string): string | undefined {
   return /^packages\/platform-([^/]+)\//.exec(file)?.[1];
 }
 
-function isProductionSource(file: string): boolean {
-  return !file.endsWith('.test.ts') && !file.includes('/__tests__/');
-}
-
-function isNonProductionConsumer(file: string): boolean {
-  return !isProductionSource(file) || file.startsWith('test/');
-}
-
 function concretePlatformFamily(specifier: string): string | undefined {
   return /^@agent-device\/platform-([^/]+)(?:\/|$)/.exec(specifier)?.[1];
 }
@@ -159,6 +150,12 @@ function resolvesToRequestProviderComposition(file: string, specifier: string): 
   if (!specifier.startsWith('.')) return false;
   const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
   return resolved === REQUEST_PROVIDER_COMPOSITION_FILE;
+}
+
+function resolvesToAppleRunnerTestHost(file: string, specifier: string): boolean {
+  if (!specifier.startsWith('.')) return false;
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
+  return resolved.replace(/\.ts$/, '') === APPLE_RUNNER_TEST_HOST_FILE;
 }
 
 function isPackageOwnedFacadeTest(file: string, family: string, specifier: string): boolean {
@@ -176,6 +173,10 @@ function isWebPackageTestSelectorImport(file: string, family: string, specifier:
     (file.endsWith('.test.ts') || file.includes('/__tests__/')) &&
     specifier === '@agent-device/selectors'
   );
+}
+
+function isTestKitTestImport(file: string, specifier: string): boolean {
+  return specifier === '@agent-device/test-kit' && !isProductionSourceFile(file);
 }
 
 function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): LayeringViolation[] {
@@ -209,14 +210,13 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
         violation(`${expectedDir}/package.json`, 1, `${expectedDir} must be private`),
       );
     }
-    const expectedSubpaths = [
-      expectedName,
-      ...(MECHANICS_FACET_SUBPATHS[family] ?? []),
-      ...(family === 'android' ? ANDROID_TEST_ONLY_SUBPATHS : []),
-    ];
+    const expectedSubpaths = [expectedName, ...(MECHANICS_FACET_SUBPATHS[family] ?? [])];
+    const productionSubpaths = declaration.exportedSubpaths.filter(
+      (subpath) => !isTestOnlyExportSpecifier(subpath),
+    );
     if (
-      declaration.exportedSubpaths.length !== expectedSubpaths.length ||
-      expectedSubpaths.some((subpath) => !declaration.exportedSubpaths.includes(subpath))
+      productionSubpaths.length !== expectedSubpaths.length ||
+      expectedSubpaths.some((subpath) => !productionSubpaths.includes(subpath))
     ) {
       violations.push(
         violation(
@@ -248,7 +248,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
   // of the facet's definition, so the ambient-host rules do not apply to it.
   // Raw process primitives stay banned below and host tooling still enters
   // through the AppleRunnerHost port.
-  if (ownerFamily && isProductionSource(file) && !file.startsWith(APPLE_RUNNER_SUBTREE)) {
+  if (ownerFamily && isProductionSourceFile(file) && !file.startsWith(APPLE_RUNNER_SUBTREE)) {
     violations.push(...checkPlatformPackageSourcePolicy(file, source, ownerFamily));
   }
   for (const site of parseImports(source)) {
@@ -258,6 +258,15 @@ function checkSource(file: string, source: string): LayeringViolation[] {
           file,
           site.line,
           `only ${COMPOSITION_FILE} may import the private request-provider composition submodule`,
+        ),
+      );
+    }
+    if (resolvesToAppleRunnerTestHost(file, site.spec) && isProductionSourceFile(file)) {
+      violations.push(
+        violation(
+          file,
+          site.line,
+          'runner/test-host.ts binds the runner test dispatcher — only test files and __tests__ helpers may import it',
         ),
       );
     }
@@ -280,15 +289,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         ),
       );
     }
-    if (site.spec === APPLE_RUNNER_TEST_HOST && file !== APPLE_RUNNER_TEST_HOST_INSTALLER) {
-      violations.push(
-        violation(
-          file,
-          site.line,
-          `'${APPLE_RUNNER_TEST_HOST}' installs the runner test host dispatcher — only ${APPLE_RUNNER_TEST_HOST_INSTALLER} may import it`,
-        ),
-      );
-    } else if (
+    if (
       importedFamily &&
       !COMPOSITION_FILES.has(file) &&
       // Named platform facades are the package's consumer seams. R11's
@@ -321,7 +322,8 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       site.spec !== '@agent-device/xml' &&
       !isAppleFacadeSubpathImport(site.spec) &&
       !isPackageOwnedFacadeTest(file, ownerFamily, site.spec) &&
-      !isWebPackageTestSelectorImport(file, ownerFamily, site.spec)
+      !isWebPackageTestSelectorImport(file, ownerFamily, site.spec) &&
+      !isTestKitTestImport(file, site.spec)
     ) {
       violations.push(
         violation(
@@ -348,7 +350,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
     // (they intercept, not spawn), and the runner host port names ChildProcess
     // as a type. The spawn ban is about mechanics bypassing the host-command
     // port at runtime.
-    if (RAW_PROCESS_SPECIFIERS.has(site.spec) && isProductionSource(file) && !site.typeOnly) {
+    if (RAW_PROCESS_SPECIFIERS.has(site.spec) && isProductionSourceFile(file) && !site.typeOnly) {
       violations.push(
         violation(
           file,
@@ -381,7 +383,7 @@ function isAllowedPlatformRootImport(
 ): boolean {
   if (site.spec !== `@agent-device/platform-${family}`) return false;
   return (
-    isNonProductionConsumer(file) ||
+    !isProductionSourceFile(file) ||
     file.startsWith('src/core/interactors/') ||
     (PLATFORM_RUNTIME_HOST_FILES.has(file) && (site.dynamic || site.typeOnly))
   );

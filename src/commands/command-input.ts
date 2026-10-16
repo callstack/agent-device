@@ -20,7 +20,12 @@ import {
   readCommonInput,
   type CommonCommandInput,
 } from './common-input-fields.ts';
-import type { InputAudience, InputAudienceMap, OperatorInputSource } from './input-audience.ts';
+import {
+  refuseRetiredInput,
+  type InputAudience,
+  type InputAudienceMap,
+  type OperatorInputSource,
+} from './input-audience.ts';
 import {
   compactRecord,
   optionalAnyString,
@@ -211,12 +216,7 @@ export function retiredField(message: string): CommandField<never> {
     schema: { type: 'null' },
     required: false,
     audience: { kind: 'retired', message },
-    read: (record, key) => {
-      if (Object.hasOwn(record, key)) {
-        throw new AppError('INVALID_ARGS', message);
-      }
-      return undefined;
-    },
+    read: (record, key) => refuseRetiredInput(record, key, message),
   };
 }
 
@@ -412,7 +412,6 @@ export function readFieldInput<TFields extends CommandFieldMap>(
   );
   const commonInput = readCommonInput(record, {
     readTargetAlias: !Object.hasOwn(fields, 'target'),
-    readinessBudgetDeclared: Object.hasOwn(fields, 'readinessTimeoutMs'),
   });
   return compactRecord({
     ...commonInput,

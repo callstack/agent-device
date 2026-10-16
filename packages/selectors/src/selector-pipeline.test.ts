@@ -507,22 +507,9 @@ test('the poll stage answers only for the rows that poll a caller-default budget
       intervalMs: 300,
     });
   }
-  for (const row of NODE_STAGE_ROWS.filter(
-    (name) => name !== 'wait' && name !== 'findWait' && name !== 'promotedTarget',
-  )) {
+  for (const row of NODE_STAGE_ROWS.filter((name) => name !== 'wait' && name !== 'findWait')) {
     assert.throws(() => selectorPollBudget(SELECTOR_PIPELINE_POLICIES[row]), /no poll budget/, row);
   }
-});
-
-test('promotedTarget states a caller-capped readiness budget, not a caller-default one', () => {
-  assert.deepEqual(SELECTOR_PIPELINE_POLICIES.promotedTarget.poll, {
-    maxTimeoutMs: 2_000,
-    intervalMs: 200,
-  });
-  assert.throws(
-    () => selectorPollBudget(SELECTOR_PIPELINE_POLICIES.promotedTarget),
-    /caller-capped readiness budget/,
-  );
 });
 
 test('a listing row cannot be handed the node stages it does not declare', () => {
@@ -719,7 +706,7 @@ test('the documented per-caller pipelines are the ones declared', () => {
       }),
     ),
     {
-      promotedTarget: ['exclude-and-refuse', 'refuse', 'hittable-ancestor', 'poll'],
+      promotedTarget: ['exclude-and-refuse', 'refuse', 'hittable-ancestor', 'no-poll'],
       resolvedTarget: ['exclude-and-refuse', 'refuse', 'none', 'no-poll'],
       coveredDiagnosis: ['refuse', 'ignore', 'none', 'no-poll'],
       readText: ['ignore', 'ignore', 'none', 'no-poll'],

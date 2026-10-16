@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -6,9 +7,9 @@ import { test } from 'vitest';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { runRequestHandlerChain } from '@agent-device/daemon/testing/request-handler-chain';
-import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/route-owner-files';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
-import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { getDaemonRouteOwnerFiles } from '@agent-device/command-registry/owner-files';
+import type { DaemonRequest } from '@agent-device/daemon';
+import { LINUX_DEVICE } from '@agent-device/test-kit';
 import {
   makeIosSession,
   makeSession,

@@ -2,22 +2,16 @@ import type { ExecutionPlan } from './execution-plan.ts';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
-import type {
-  DaemonArtifact as PublicDaemonArtifact,
-  DaemonResponse as PublicDaemonResponse,
-  DaemonResponseData as PublicDaemonResponseData,
-} from '@agent-device/kernel/contracts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { RequestDispatchLedger } from './request-dispatch-ledger.ts';
+import type { EndedLeaseLedger } from './request-ended-leases.ts';
 
 /**
- * The daemon's own request and response vocabulary: the wire shape from `@agent-device/contracts/command` (`DaemonWireRequest`)
- * plus what only the daemon may see. A consumer that must stay free of live session state takes
+ * The daemon's request vocabulary: the wire shape from `@agent-device/contracts/command`
+ * (`DaemonWireRequest`) plus what only the daemon may see. A consumer that must stay free of live session state takes
  * `DaemonWireRequest` directly.
  */
-
-export type DaemonArtifact = PublicDaemonArtifact;
-export type DaemonResponseData = PublicDaemonResponseData;
 
 /**
  * What only the daemon may see on a request: the replay dispatch options (declared once in
@@ -60,6 +54,11 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    * delegated it so those mutations count toward that request's disclosure too.
    */
   dispatchLedger?: RequestDispatchLedger;
+  /**
+   * The leases the outermost request and its nested requests ended. Only the request that created
+   * it reports it, once, on its reply.
+   */
+  endedLeases?: EndedLeaseLedger;
 };
 
 /**
@@ -72,5 +71,4 @@ export type DaemonRequest = DaemonWireRequest & {
   internal?: DaemonRequestInternal;
 };
 
-export type DaemonResponse = PublicDaemonResponse;
 export type DaemonInvokeFn = (req: DaemonRequest) => Promise<DaemonResponse>;

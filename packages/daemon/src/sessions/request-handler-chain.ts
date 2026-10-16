@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
@@ -9,13 +10,13 @@ import type { DaemonCommandContext } from '../core/context.ts';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type { SessionStore } from '../core/session-store.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../core/daemon-request.ts';
 import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../core/request-runtime-binding.ts';
-import type { DeviceClaimReconciler } from '../resources/device/device-claims.ts';
+import type { DeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims';
 import type { AppLogAdmissionLedger } from '../resources/app-log-admission-ledger.ts';
 import { type AudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
@@ -39,6 +40,7 @@ type RequestHandlerChainParams = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
@@ -159,6 +161,7 @@ async function runLeaseHandler(
       providerCredentials: params.providerCredentials,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       cloudArtifactProvider: params.cloudArtifactProvider,
+      endSessionsForLease: params.endSessionsForLease,
     }),
   );
 }

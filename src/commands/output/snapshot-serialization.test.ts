@@ -118,3 +118,28 @@ test('serializeSnapshotResult omits an absent viewport instead of minting one (#
 
   assert.equal('viewport' in data, false);
 });
+
+// #3565: settle's presented-surface confirmation reads the fact off the baseline, and a caller that
+// stores a response as its baseline reads it off this payload. An unclassified capture publishes no
+// key rather than the `unknown` a reader would default to — absence already means that here, and a
+// producer that never looked must not look like one that answered.
+test('serializeSnapshotResult publishes the presented-surface fact beside the tree (#3565)', () => {
+  const data = serializeSnapshotResult({
+    nodes: [],
+    truncated: false,
+    presentedSurface: 'presented',
+    identifiers: { session: 'qa' },
+  });
+
+  assert.equal(data.presentedSurface, 'presented');
+});
+
+test('serializeSnapshotResult omits a presented surface the producer did not read (#3565)', () => {
+  const data = serializeSnapshotResult({
+    nodes: [],
+    truncated: false,
+    identifiers: { session: 'qa' },
+  });
+
+  assert.equal('presentedSurface' in data, false);
+});

@@ -27,7 +27,6 @@ import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { systemButtonRuntimeOperationFacts } from './system-button-runtime.ts';
 import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
-import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import { alertRuntimeOperationFacts } from './alert-runtime.ts';
 import { audioProbeRuntimeOperationFacts } from './audio-probe-runtime.ts';
 import { perfRuntimeOperationFacts } from './perf-runtime.ts';
@@ -64,12 +63,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   clipboard: RuntimeOperationUnavailability;
   systemButton: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
-  /**
-   * One cell for both settings halves: an owner that names no settings surface here refuses the
-   * write and the read alike, and an owner whose two halves genuinely differ (the Apple leaf, whose
-   * host can set an appearance it cannot read back) states them directly through
-   * `settingsRuntimeOperationFacts` instead of routing both through this denial.
-   */
+  /** Refuses every setting, read and write alike. */
   settings: RuntimeOperationUnavailability;
   readAlert: RuntimeOperationUnavailability;
   awaitAlert: RuntimeOperationUnavailability;
@@ -249,10 +243,8 @@ export function createUnavailablePlatformRuntimeFacts(
       ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...systemButtonRuntimeOperationFacts({ unsupported: frozen.systemButton }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
-      ...settingsRuntimeOperationFacts({
-        setSetting: frozen.settings,
-        readSetting: frozen.settings,
-      }),
+      setSetting: frozen.settings,
+      readSetting: frozen.settings,
       ...alertRuntimeOperationFacts({
         read: frozen.readAlert,
         wait: frozen.awaitAlert,

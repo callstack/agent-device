@@ -11,7 +11,7 @@ import { runCmdSync } from '@agent-device/host-kit/command';
 // agent-device's real `agent-device/*` subpath sources, so a doc snippet that no
 // longer compiles — wrong property, renamed export, changed signature — fails
 // CI instead of only being caught if an examples/sdk/*.ts file happens to drift
-// the same way. src/__tests__/client-api-examples-drift.test.ts covers the
+// the same way. test/repo-guards/client-api-examples-drift.test.ts covers the
 // docs' bullet-list API manifests against examples/sdk/*.ts; this is the
 // complementary check the reviewer asked for on #1463's drift guard (checking
 // the doc's actual code, not just its symbol-name manifest).

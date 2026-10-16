@@ -5,7 +5,7 @@ import {
   readIdleSessionTombstoneFile,
   resolveIdleSessionTombstonePath,
 } from './session-idle-tombstone.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('a marker whose lifetime cannot be represented stops explaining the absence', () => {
   const markerPath = resolveIdleSessionTombstonePath(

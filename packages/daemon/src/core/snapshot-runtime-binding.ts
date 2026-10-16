@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from './platform-services.ts';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
@@ -20,7 +21,7 @@ import {
 } from './request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
 import {
   admitRuntimePlan,

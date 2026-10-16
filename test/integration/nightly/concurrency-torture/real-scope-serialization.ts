@@ -1,4 +1,6 @@
 // Real-scope same-device serialization guard for the concurrency torture lane
+
+import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import {
   composedPlatformServicesFixture,
   composedClaimRecoveryGatewayFixture,
@@ -23,19 +25,17 @@ import { createRequestExecutionScope } from '@agent-device/daemon/testing/reques
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 import { DEVICE_POOL } from './bindings.ts';
 
-function openRequest(sessionName: string, deviceId: string): DaemonRequest {
+function openRequest(sessionName: string, deviceId: string): DaemonWireRequest {
   return {
     command: 'open',
     positionals: [],
     token: 'torture',
     session: sessionName,
     flags: { platform: 'ios', udid: deviceId } as CommandFlags,
-  } as DaemonRequest;
+  } as DaemonWireRequest;
 }
 
 /**

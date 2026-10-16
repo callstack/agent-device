@@ -15,12 +15,11 @@ import {
   REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,
 } from '@agent-device/replay-port/script-source';
 import { prepareReplaySession } from './session-replay-runtime-session.ts';
+import type { ReplayCommand, ReplayCoordinator } from '@agent-device/replay-port/command-types';
 import type {
-  ReplayCommand,
-  ReplayCoordinator,
   ReplaySessionState,
   ReplaySessionStore,
-} from '@agent-device/replay-port/command-types';
+} from '@agent-device/contracts/replay-backend';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 /**

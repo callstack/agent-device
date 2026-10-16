@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
@@ -9,7 +10,7 @@ import {
   shouldPropagateDeviceInventoryProbeError,
 } from '@agent-device/device-selection/device-inventory-context';
 import { readVersion } from '@agent-device/host-kit/version';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import { appendAppChecks, type DoctorAppInventory } from './session-doctor-app.ts';

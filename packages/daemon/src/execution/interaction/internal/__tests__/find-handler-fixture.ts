@@ -1,5 +1,6 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { SessionStore } from '../../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import { handleFindCommands } from '../find.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';

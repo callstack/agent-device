@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('daemon auth tokens are scrubbed from CLI diagnostics and serialized requests', async () => {
   const home = mkdtempForTestSync('agent-device-auth-diagnostics-');

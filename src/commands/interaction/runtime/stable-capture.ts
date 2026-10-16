@@ -1,10 +1,13 @@
 import type {
   SnapshotNode,
   SnapshotPreferredBackend,
+  SnapshotProvenance,
   SnapshotQualityVerdict,
+  SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
+import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import { now, sleep } from '../../runtime-common.ts';
 import {
   captureSelectorSnapshot,
@@ -34,8 +37,7 @@ import { withoutSettleChrome } from '@agent-device/capture-kit/snapshot-chrome';
 const STABLE_POLL_INTERVAL_MS = 300;
 const STABLE_MIN_POLL_MS = 25;
 // Never slower than the default poll, never faster than the minimum: a tight window gets a cadence
-// that can measure it, a window the confirmation extends gets one that does not sample the whole
-// extended wait at the caller's original grid.
+// that can measure it, and a window the confirmation extends is not sampled on the caller's grid.
 function stableCapturePollMs(quietMs: number): number {
   return Math.min(STABLE_POLL_INTERVAL_MS, Math.max(STABLE_MIN_POLL_MS, quietMs));
 }
@@ -47,14 +49,35 @@ const QUIET_DEADLINE_EPSILON_MS = 2;
 // Broad replacements (for example, dismissing a modal into a room) can expose a coherent but
 // transitional AX tree for the default quiet window. Confirm those transitions longer without
 // adding latency to local mutations whose pre/post trees substantially overlap.
-//
-// The confirmation is decided by the transition alone: a caller asking for a shorter quiet window
-// asked for a tighter verdict, not for a different set of transitions to distrust. It used to arm
-// only at `requestedQuietMs >= DEFAULT_STABLE_QUIET_MS`, which made `--settle-quiet 499` behave
-// differently from 500 and left `settleQuietMs: 150` callers (tester-army/e2e) with no guard at all
-// (#3470). A confirmed replacement is held for the caller's own window, floored at 1.5 s.
 const BROAD_TRANSITION_CONFIRMATION_QUIET_MS = 1_500;
 export const DEFAULT_STABLE_QUIET_MS = 500;
+/**
+ * The default quiet window each producer's capture earns. The iOS simulator snapshot bridge answers
+ * well inside the general default, so holding the general window on that read spends a whole extra
+ * capture on a window its tree had already satisfied. Keyed on the producer, not the channel: the
+ * bridge and the Apple runner share the `xctest` channel and read at different costs, and only the
+ * bridge carries the measurement. Every producer states its price here, so a new one cannot inherit
+ * an unmeasured window by omission. (PR #3522 holds the interleaved before/after medians and the
+ * late-diff accuracy check.)
+ */
+const DEFAULT_QUIET_MS_BY_PRODUCER = {
+  'apple-runner': DEFAULT_STABLE_QUIET_MS,
+  'simulator-ax-bridge': 300,
+  'appium-source': DEFAULT_STABLE_QUIET_MS,
+  'limrun-ios-tree': DEFAULT_STABLE_QUIET_MS,
+  'android-uiautomator': DEFAULT_STABLE_QUIET_MS,
+  'harmonyos-uitest': DEFAULT_STABLE_QUIET_MS,
+  'macos-helper': DEFAULT_STABLE_QUIET_MS,
+  'linux-atspi': DEFAULT_STABLE_QUIET_MS,
+  'agent-browser': DEFAULT_STABLE_QUIET_MS,
+} as const satisfies Record<SnapshotProvenance['producer'], number>;
+
+/** A capture that declares no producer has no measured price and keeps the general default. */
+function defaultQuietMsForCapture(snapshot: SnapshotState): number {
+  return snapshot.producer === undefined
+    ? DEFAULT_STABLE_QUIET_MS
+    : DEFAULT_QUIET_MS_BY_PRODUCER[snapshot.producer];
+}
 export const DEFAULT_STABLE_TIMEOUT_MS = 10_000;
 // Below this node count a settled tree is suspicious: real app surfaces have
 // more than a handful of accessibility nodes, splash/loading screens do not.
@@ -72,178 +95,373 @@ export type StableCaptureLoopResult = {
   waitedMs: number;
   captures: number;
   nodeCount: number;
+  /**
+   * The quiet window the run was holding when it returned: the caller's, or the default resolved
+   * from the last capture that paid it. A run that completed no capture never priced a window, so
+   * it reports the general default it started from.
+   */
+  quietMs: number;
   /** The most recent completed capture, settled or not. */
   lastCapture?: CapturedSnapshot;
+  /** A capture threw; the run ended there, without a verdict. */
+  failure?: { error: unknown };
 };
 
 export async function runStableCaptureLoop(
   runtime: AgentDeviceRuntime,
   options: CommandContext & SelectorSnapshotOptions,
   params: {
-    quietMs: number;
+    /**
+     * The quiet window the caller asked for. Absent means the loop resolves its own default from
+     * the capture it performs, because that capture is the read the window prices
+     * ({@link defaultQuietMsForCapture}); a caller with its own default passes it explicitly.
+     */
+    quietMs?: number;
     timeoutMs: number;
     resetBudgetOnPrivateAxRecovery?: boolean;
     /** Immutable pre-action projection; the stored session may advance before settle begins. */
-    broadTransitionBaselineNodes?: SnapshotNode[];
+    broadTransitionBaseline?: SurfaceScopedNodes;
   },
 ): Promise<StableCaptureLoopResult> {
-  const { quietMs, timeoutMs } = params;
+  const { timeoutMs } = params;
   const start = now(runtime);
   let deadlineMs = start + timeoutMs;
   let privateAxRecoveryBudgetReset = false;
   const session = await runtime.sessions.get(options.session ?? 'default');
-  let transitionBaseline: StableCaptureSignal | undefined;
+  // The quiet window the run holds. An unrequested window is priced by the latest capture the loop
+  // performs, never by the baseline's producer, and applies to the whole quiet span so far: the
+  // capture that decides the verdict is the read the window prices. A producer switch mid-wait can
+  // therefore shorten the window; a confirmed broad replacement never drops below its own floor.
+  // A window the caller asked for is fixed.
+  let quietMs = params.quietMs ?? DEFAULT_STABLE_QUIET_MS;
+  const confirmation = broadTransitionConfirmation({
+    baseline: params.broadTransitionBaseline,
+    platform: runtime.backend.platform,
+    appBundleId: session?.appBundleId,
+  });
   let preferredBackend = preferredSnapshotBackendForVerdict(session?.snapshot?.snapshotQuality);
-  // Cadence derives from the quiet window in force (never slower than the default
-  // poll): a caller asking for a 50ms quiet window should not be forced onto a
-  // 300ms grid, and a run the confirmation has extended to 1.5s should not spend
-  // that wait on the caller's tight grid — every sample is a capture round trip.
-  // Tests inject the budget instead of waiting real time.
-  let pollMs = stableCapturePollMs(quietMs);
+  const pacing = createStableCapturePacing(start);
   let captures = 0;
-  let lastSignal: StableCaptureSignal | undefined;
-  let lastNodeCount = 0;
   let lastCapture: CapturedSnapshot | undefined;
-  let quietSinceMs = start;
-  let requiredQuietMs = quietMs;
+  const result = (
+    settled: boolean,
+    stalled: boolean,
+    waitedMs: number,
+  ): StableCaptureLoopResult => ({
+    settled,
+    stalled,
+    waitedMs,
+    captures,
+    nodeCount: pacing.lastNodeCount,
+    quietMs,
+    lastCapture,
+  });
+  const unfinished = (read: Exclude<StableCaptureRead, { kind: 'captured' }>) => ({
+    ...result(false, read.kind === 'stalled', now(runtime) - start),
+    ...(read.kind === 'failed' ? { failure: { error: read.error } } : {}),
+  });
   while (now(runtime) < deadlineMs) {
-    const capture = await captureStableSignalWithinDeadline(
+    const read = await captureStableSignalWithinDeadline(
       runtime,
       options,
       deadlineMs - now(runtime),
       preferredBackend,
     );
-    if (!capture) {
-      return {
-        settled: false,
-        stalled: true,
-        waitedMs: now(runtime) - start,
-        captures,
-        nodeCount: lastNodeCount,
-        lastCapture,
-      };
-    }
+    if (read.kind !== 'captured') return unfinished(read);
+    const { capture } = read;
     captures += 1;
     lastCapture = capture;
-    transitionBaseline ??= stableCaptureTransitionBaseline(
-      params.broadTransitionBaselineNodes,
-      capture.snapshot,
-      runtime.backend.platform,
-      session?.appBundleId,
-    );
+    const window = stableCaptureWindow(capture.snapshot, params.quietMs, confirmation);
+    quietMs = window.quietMs;
+    const { requiredQuietMs, pollMs } = window;
     const signal = stableCaptureSignal(capture.snapshot);
-    requiredQuietMs = stableCaptureNextQuietWindowMs({
-      baseline: transitionBaseline,
-      snapshot: capture.snapshot,
-      appBundleId: session?.appBundleId,
-      requestedQuietMs: quietMs,
-      currentQuietMs: requiredQuietMs,
-    });
-    // Recomputed from the window in force rather than only when it changed: the window is a
-    // monotonic max, so this is the same value, and the cadence cannot drift from it.
-    pollMs = stableCapturePollMs(requiredQuietMs);
     preferredBackend ??= preferredSnapshotBackendForVerdict(capture.snapshot.snapshotQuality);
     const nowMs = now(runtime);
-    const recoveredDeadlineMs = extendedDeadlineAfterPrivateAxRecovery({
-      resetRequested: params.resetBudgetOnPrivateAxRecovery,
+    const nodeCount = capture.snapshot.nodes.length;
+    const verdict = capture.snapshot.snapshotQuality;
+    const recovered = recoverStableCaptureBudget({
+      pacing,
+      resetBudgetOnPrivateAxRecovery: params.resetBudgetOnPrivateAxRecovery,
       alreadyReset: privateAxRecoveryBudgetReset,
-      verdict: capture.snapshot.snapshotQuality,
-      nowMs,
-      timeoutMs,
-      deadlineMs,
-    });
-    if (recoveredDeadlineMs !== undefined) {
-      privateAxRecoveryBudgetReset = true;
-      deadlineMs = recoveredDeadlineMs;
-      quietSinceMs = nowMs;
-      lastSignal = signal;
-      lastNodeCount = capture.snapshot.nodes.length;
-      const recoveryDelayMs = stableCaptureDelayMs({
-        nowMs,
-        quietSinceMs,
-        quietMs: requiredQuietMs,
-        pollMs,
+      state: {
         deadlineMs,
-      });
-      if (recoveryDelayMs <= 0) break;
-      await sleep(runtime, recoveryDelayMs);
-      continue;
-    }
-    if (!stableCaptureSignalsEqual(lastSignal, signal)) {
-      lastSignal = signal;
-      lastNodeCount = capture.snapshot.nodes.length;
-      quietSinceMs = nowMs;
-    } else if (captures >= 2 && nowMs - quietSinceMs >= requiredQuietMs) {
-      return {
-        settled: true,
-        stalled: false,
-        waitedMs: nowMs - start,
-        captures,
-        nodeCount: lastNodeCount,
-        lastCapture,
-      };
-    }
-    const delayMs = stableCaptureDelayMs({
-      nowMs,
-      quietSinceMs,
-      quietMs: requiredQuietMs,
-      pollMs,
-      deadlineMs,
+        timeoutMs,
+        nowMs,
+        verdict,
+        signal,
+        nodeCount,
+        requiredQuietMs,
+        pollMs,
+      },
     });
-    if (delayMs <= 0) break;
-    await sleep(runtime, delayMs);
+    if (recovered) {
+      privateAxRecoveryBudgetReset = true;
+      deadlineMs = recovered.deadlineMs;
+    }
+    const step = recovered
+      ? { settled: false, delayMs: recovered.delayMs }
+      : pacing.observe({ signal, nodeCount, nowMs, requiredQuietMs, pollMs, deadlineMs, captures });
+    if (step.settled) return result(true, false, nowMs - start);
+    if (step.delayMs <= 0) break;
+    await sleep(runtime, step.delayMs);
   }
+  return result(false, false, now(runtime) - start);
+}
+
+/**
+ * The quiet window one capture prices, the window it must actually hold once the broad-transition
+ * confirmation has had its say, and the cadence that can measure that. Sampling an extended wait on
+ * the caller's tight grid would spend the whole extension in capture round trips.
+ */
+function stableCaptureWindow(
+  snapshot: SnapshotState,
+  requestedQuietMs: number | undefined,
+  confirmation: StableCaptureConfirmation,
+): { quietMs: number; requiredQuietMs: number; pollMs: number } {
+  const quietMs = requestedQuietMs ?? defaultQuietMsForCapture(snapshot);
+  const requiredQuietMs = confirmation.requiredQuietMs(snapshot, quietMs);
+  return { quietMs, requiredQuietMs, pollMs: stableCapturePollMs(requiredQuietMs) };
+}
+
+/**
+ * The once-per-run budget extension a private-AX recovery buys. The recovery re-read the same
+ * surface through another backend, so the quiet window restarts on that capture rather than carrying
+ * suspicion across the switch. Undefined when the capture asked for no reset (or the run already
+ * spent its one).
+ */
+function recoverStableCaptureBudget(params: {
+  pacing: StableCapturePacing;
+  alreadyReset: boolean;
+  resetBudgetOnPrivateAxRecovery?: boolean;
+  state: {
+    deadlineMs: number;
+    timeoutMs: number;
+    nowMs: number;
+    verdict: SnapshotQualityVerdict | undefined;
+    signal: StableCaptureSignal;
+    nodeCount: number;
+    requiredQuietMs: number;
+    pollMs: number;
+  };
+}): { deadlineMs: number; delayMs: number } | undefined {
+  const { state } = params;
+  const extendedDeadlineMs = extendedDeadlineAfterPrivateAxRecovery({
+    resetRequested: params.resetBudgetOnPrivateAxRecovery,
+    alreadyReset: params.alreadyReset,
+    verdict: state.verdict,
+    nowMs: state.nowMs,
+    timeoutMs: state.timeoutMs,
+    deadlineMs: state.deadlineMs,
+  });
+  if (extendedDeadlineMs === undefined) return undefined;
+  params.pacing.restart({
+    signal: state.signal,
+    nodeCount: state.nodeCount,
+    nowMs: state.nowMs,
+  });
   return {
-    settled: false,
-    stalled: false,
-    waitedMs: now(runtime) - start,
-    captures,
-    nodeCount: lastNodeCount,
-    lastCapture,
+    deadlineMs: extendedDeadlineMs,
+    delayMs: params.pacing.delayMs({
+      nowMs: state.nowMs,
+      requiredQuietMs: state.requiredQuietMs,
+      pollMs: state.pollMs,
+      deadlineMs: extendedDeadlineMs,
+    }),
   };
 }
 
-function stableCaptureTransitionBaseline(
-  baselineNodes: SnapshotNode[] | undefined,
-  snapshot: Parameters<typeof stableCaptureSignal>[0] | undefined,
-  platform: AgentDeviceRuntime['backend']['platform'],
-  appBundleId: string | undefined,
-): StableCaptureSignal | undefined {
-  // SnapshotState.backend is optional at the runtime boundary. The bound iOS backend remains
-  // authoritative when a presented capture omits that provenance; a declared non-XCTest backend
-  // still wins so this confirmation cannot leak onto another capture implementation.
-  if (!baselineNodes || !snapshot || !isBoundIosXCTestCapture(snapshot.backend, platform)) {
-    return undefined;
-  }
+type StableCapturePacing = ReturnType<typeof createStableCapturePacing>;
+
+/**
+ * The settle loop's per-capture bookkeeping: the last capture's shape, when the UI last changed, and
+ * the quiet-window arithmetic that decides whether a capture settles the run. Owns that state so the
+ * loop above stays the read of one capture at a time.
+ */
+function createStableCapturePacing(start: number) {
+  let lastSignal: StableCaptureSignal | undefined;
+  let lastNodeCount = 0;
+  let quietSinceMs = start;
+  return {
+    /** Node count of the most recent capture, reported on every result shape. */
+    get lastNodeCount(): number {
+      return lastNodeCount;
+    },
+    /** Folds one capture in: settled, or how long to wait before the next one (<= 0 ends the run). */
+    observe(params: {
+      signal: StableCaptureSignal;
+      nodeCount: number;
+      nowMs: number;
+      requiredQuietMs: number;
+      pollMs: number;
+      deadlineMs: number;
+      captures: number;
+    }): { settled: boolean; delayMs: number } {
+      if (!stableCaptureSignalsEqual(lastSignal, params.signal)) {
+        // The UI is still moving: the quiet window restarts from this capture.
+        lastSignal = params.signal;
+        lastNodeCount = params.nodeCount;
+        quietSinceMs = params.nowMs;
+      } else if (params.captures >= 2 && params.nowMs - quietSinceMs >= params.requiredQuietMs) {
+        return { settled: true, delayMs: 0 };
+      }
+      return {
+        settled: false,
+        delayMs: stableCaptureDelayMs({
+          nowMs: params.nowMs,
+          quietSinceMs,
+          quietMs: params.requiredQuietMs,
+          pollMs: params.pollMs,
+          deadlineMs: params.deadlineMs,
+        }),
+      };
+    },
+    /** Adopts a capture as the new start of the quiet window without deciding anything. */
+    restart(params: { signal: StableCaptureSignal; nodeCount: number; nowMs: number }): void {
+      lastSignal = params.signal;
+      lastNodeCount = params.nodeCount;
+      quietSinceMs = params.nowMs;
+    },
+    /** The wait before the next capture, given the window currently in force. */
+    delayMs(params: {
+      nowMs: number;
+      requiredQuietMs: number;
+      pollMs: number;
+      deadlineMs: number;
+    }): number {
+      return stableCaptureDelayMs({
+        nowMs: params.nowMs,
+        quietSinceMs,
+        quietMs: params.requiredQuietMs,
+        pollMs: params.pollMs,
+        deadlineMs: params.deadlineMs,
+      });
+    },
+  };
+}
+
+/**
+ * The broad-transition confirmation, as one decision the settle loop asks about each capture. It
+ * compares each capture against the pre-action tree until one proves the replacement, and holds that
+ * window for the rest of the run.
+ *
+ * Two gates stand before the comparison. The pre-action baseline is constant for the run and the
+ * only input allowed to rule the confirmation out: a caller that passed none has nothing to confirm
+ * against, and a baseline whose producer read no presented surface (`presentedSurface: 'absent'`)
+ * has no dismissal to confirm — a tab switch or a push replaces the screen broadly but presents
+ * nothing over it (#3470). The fact is stamped before projection, so every flavour of one screen's
+ * baseline (interactive, full, depth-limited, scoped, a stored ref frame) answers it alike; no fact,
+ * or `'unknown'`, keeps the arming below, so the fact only ever narrows the guard (#3565). The
+ * capture gate — the capture proves an iOS XCTest read and carries a complete viewport
+ * projection — belongs to each capture, because the first read after a dismissal can still show the
+ * dismissed surface, arrive rootless or empty mid-animation, or come from another backend than the
+ * next poll will. A capture that fails it leaves the question open; the first capture that passes
+ * fixes the comparison baseline, and every later capture is compared against that baseline until one
+ * proves the replacement.
+ *
+ * Arming never consults the requested quiet window: `--settle-quiet` asks for a tighter verdict, not
+ * for a different set of transitions to distrust. A confirmed replacement is held for at least the
+ * caller's own window, floored at 1.5 s.
+ */
+function broadTransitionConfirmation(params: {
+  baseline: SurfaceScopedNodes | undefined;
+  platform: AgentDeviceRuntime['backend']['platform'];
+  appBundleId: string | undefined;
+}): StableCaptureConfirmation {
+  const { platform, appBundleId } = params;
+  const baseline = params.baseline?.presentedSurface === 'absent' ? undefined : params.baseline;
+  // Open question, not a ruling: `undefined` is the state a capture that cannot support the
+  // comparison leaves behind, so arming never depends on which capture happens to land first.
+  let transitionBaseline: StableCaptureSignal | undefined;
+  // The comparison refuses a node-less side outright, so a mid-animation empty read must not be able
+  // to cancel the floor: without the latch it hands the loop its short window back, and the next
+  // empty read matches it, settling a dismissal that owed the floor.
+  let confirmedQuietMs: number | undefined;
+  return {
+    // While unconfirmed, do not memoize the verdict on `stableCaptureSignalsEqual`: signal identity
+    // omits `role`, parent links, and >1px-free geometry, all of which the chrome classifier reads,
+    // and one pass costs tens of microseconds against the 300 ms poll cadence.
+    requiredQuietMs(snapshot, currentQuietMs) {
+      if (transitionBaseline === undefined && baseline) {
+        transitionBaseline = broadTransitionBaseline({
+          baseline,
+          capture: snapshot,
+          platform,
+          appBundleId,
+        });
+      }
+      if (!transitionBaseline) return currentQuietMs;
+      if (confirmedQuietMs === undefined) {
+        const candidate = stableCaptureComparisonSignal(snapshot, snapshot.nodes, appBundleId);
+        if (stableCaptureSignalsHaveBroadReplacement(transitionBaseline, candidate)) {
+          confirmedQuietMs = Math.max(currentQuietMs, BROAD_TRANSITION_CONFIRMATION_QUIET_MS);
+        }
+      }
+      // Still maxed against the current window: the loop can price a wider one after the latch, on a
+      // mid-run fallback from the bridge to the runner.
+      return confirmedQuietMs === undefined
+        ? currentQuietMs
+        : Math.max(currentQuietMs, confirmedQuietMs);
+    },
+  };
+}
+
+type StableCaptureConfirmation = {
+  /** The quiet window this capture demands, at least the loop's current one. */
+  requiredQuietMs: (
+    snapshot: Parameters<typeof stableCaptureSignal>[0],
+    currentQuietMs: number,
+  ) => number;
+};
+
+/**
+ * The pre-action tree to confirm against, or `undefined` when the capture in hand cannot support the
+ * comparison: the capture must prove an iOS XCTest session (`SnapshotState.backend` is optional at
+ * the runtime boundary, so the bound platform stays authoritative when a capture omits that
+ * provenance; a declared non-XCTest backend still wins so this confirmation cannot leak onto another
+ * capture implementation), and it must be trustworthy evidence about the screen. `undefined` asks the
+ * next capture, rather than ruling the transition out for the run.
+ */
+function broadTransitionBaseline(params: {
+  baseline: SurfaceScopedNodes;
+  capture: Parameters<typeof stableCaptureSignal>[0];
+  platform: AgentDeviceRuntime['backend']['platform'];
+  appBundleId: string | undefined;
+}): StableCaptureSignal | undefined {
+  const { baseline, capture, platform, appBundleId } = params;
+  if (!isBoundIosXCTestCapture(capture.backend, platform)) return undefined;
   // A broad *screen* replacement needs a complete post-action viewport projection. The baseline
   // comes from settle's authoritative pre-action capture, but a presented iOS modal can omit its
   // Application root and still be the complete interaction surface. Requiring the root only from
   // the candidate prevents scoped/synthetic post-action fragments from extending settle latency.
-  const hasCompleteViewportProjection = snapshot.nodes.some(isViewportRootNode);
-  // Tiny pre-action surfaces are the other trustworthy completeness signal: iOS presents alerts
-  // and sheets as a handful of nodes, and their first post-dismissal capture can temporarily omit
-  // the viewport root. Treating that rootless replacement as an arbitrary scoped projection lets
-  // a coherent transitional tree win the default 500ms quiet window.
-  const hasTinyPresentedBaseline = baselineNodes.length <= TINY_STABLE_TREE_NODE_COUNT;
-  if (!hasCompleteViewportProjection && !hasTinyPresentedBaseline) return undefined;
-  return stableCaptureReplacementSignal({ ...snapshot, nodes: baselineNodes }, appBundleId);
+  const hasCompleteViewportProjection = capture.nodes.some(isViewportRootNode);
+  // A presented pre-action surface is the other trustworthy completeness signal: the first capture
+  // after its dismissal can temporarily omit the viewport root, and treating that rootless
+  // replacement as an arbitrary scoped projection lets a coherent transitional tree win the plain
+  // quiet window. The producer's fact says so outright; without one, a tiny baseline stands in for
+  // it, because iOS presents alerts and sheets as a handful of nodes.
+  const hasPresentedBaseline =
+    baseline.presentedSurface === 'presented' ||
+    baseline.nodes.length <= TINY_STABLE_TREE_NODE_COUNT;
+  if (!hasCompleteViewportProjection && !hasPresentedBaseline) return undefined;
+  return stableCaptureComparisonSignal(capture, baseline.nodes, appBundleId);
 }
 
 /**
- * The comparison signal for the broad-replacement verdict: the capture minus the chrome the
- * settle diff also collapses (`withoutSettleChrome`). Keyboard surface arriving or leaving —
- * ~40 keys, the candidate bar, the dock buttons on a fill — is not a screen replacement, and
- * counting it as one made every keyboard-raising action pay the 1.5 s confirmation window
- * (#3469). The survivor rule lives in the shared classifier, so this signal and the diff agree
- * on what keyboard chrome is; here it only decides the quiet window, never the visible diff.
+ * One side of the broad-replacement comparison: a tree minus the chrome the settle diff also
+ * collapses (`withoutSettleChrome`). Keyboard surface arriving or leaving — ~40 keys, the candidate
+ * bar, the dock buttons on a fill — is not a screen replacement, and counting it as one made every
+ * keyboard-raising action pay the 1.5 s confirmation window (#3469). The survivor rule lives in the
+ * shared classifier, so this signal and the diff agree on what keyboard chrome is; here it only
+ * decides the quiet window, never the visible diff.
  */
-function stableCaptureReplacementSignal(
+function stableCaptureComparisonSignal(
   snapshot: Parameters<typeof stableCaptureSignal>[0],
+  nodes: SnapshotNode[],
   appBundleId: string | undefined,
 ): StableCaptureSignal {
   return stableCaptureSignal({
     ...snapshot,
-    nodes: withoutSettleChrome(snapshot.nodes, appBundleId),
+    nodes: withoutSettleChrome(nodes, appBundleId),
   });
 }
 
@@ -253,30 +471,6 @@ function isBoundIosXCTestCapture(
 ): boolean {
   if (backend === 'xctest') return true;
   return backend === undefined && platform === 'ios';
-}
-
-/**
- * The quiet window the candidate capture demands: the broad-replacement verdict runs on the
- * chrome-free candidate signal (see `stableCaptureReplacementSignal`), so a keyboard pop never
- * reaches the confirmation branch at all. Do not memoize this on `stableCaptureSignalsEqual`:
- * the signal identity omits `role`, parent links, and >1px-free geometry, all of which the
- * classifier reads, and one pass costs tens of microseconds against the 300 ms poll cadence.
- */
-function stableCaptureNextQuietWindowMs(params: {
-  baseline: StableCaptureSignal | undefined;
-  snapshot: Parameters<typeof stableCaptureSignal>[0];
-  appBundleId: string | undefined;
-  requestedQuietMs: number;
-  currentQuietMs: number;
-}): number {
-  if (!params.baseline) {
-    return params.currentQuietMs;
-  }
-  const replacementSignal = stableCaptureReplacementSignal(params.snapshot, params.appBundleId);
-  if (!stableCaptureSignalsHaveBroadReplacement(params.baseline, replacementSignal)) {
-    return params.currentQuietMs;
-  }
-  return Math.max(params.requestedQuietMs, BROAD_TRANSITION_CONFIRMATION_QUIET_MS);
 }
 
 function isPrivateAxRecovery(verdict: SnapshotQualityVerdict | undefined): boolean {
@@ -351,7 +545,7 @@ function stableCaptureDelayMs(params: {
 // subsequent ref/get/find lookups against the same session. (`--settle` DOES
 // store its final capture, but explicitly, in one place, after the loop.)
 //
-// Resolves undefined when the capture does not return within remainingMs. A
+// Resolves `stalled` when the capture does not return within remainingMs. A
 // stalled backend capture (observed with macOS AX captures) must not push the
 // stable wait past the user-supplied timeout into the daemon request timeout.
 // The deadline cancels and joins the capture before returning so no late capture
@@ -361,17 +555,26 @@ async function captureStableSignalWithinDeadline(
   options: CommandContext & SelectorSnapshotOptions,
   remainingMs: number,
   preferredBackend?: SnapshotPreferredBackend,
-): Promise<CapturedSnapshot | undefined> {
-  const result = await runWithinWaitDeadline(runtime, options, remainingMs, async (signal) => {
-    return await captureSelectorSnapshot(
-      runtime,
-      { ...options, signal },
-      {
-        updateSession: false,
-        interactiveOnly: true,
-        preferredBackend,
-      },
-    );
-  });
-  return result.timedOut ? undefined : result.value;
+): Promise<StableCaptureRead> {
+  try {
+    const result = await runWithinWaitDeadline(runtime, options, remainingMs, async (signal) => {
+      return await captureSelectorSnapshot(
+        runtime,
+        { ...options, signal },
+        {
+          updateSession: false,
+          interactiveOnly: true,
+          preferredBackend,
+        },
+      );
+    });
+    return result.timedOut ? { kind: 'stalled' } : { kind: 'captured', capture: result.value };
+  } catch (error) {
+    return { kind: 'failed', error };
+  }
 }
+
+type StableCaptureRead =
+  | { kind: 'captured'; capture: CapturedSnapshot }
+  | { kind: 'stalled' }
+  | { kind: 'failed'; error: unknown };

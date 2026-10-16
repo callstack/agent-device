@@ -190,6 +190,32 @@ export async function retryWithPolicy<T>(
   throw new AppError('COMMAND_FAILED', 'retry failed');
 }
 
+/**
+ * Samples `probe` until `settled` accepts a value or `deadline` expires, and returns the last value
+ * either way so the caller owns its failure. The first sample is always taken, and the last sleep is
+ * clamped to the deadline, so a final sample lands at the deadline rather than an interval past it.
+ * An aborted `signal` throws the request-canceled error before the next sample.
+ */
+export async function pollUntilSettled<T>(params: {
+  probe: () => Promise<T>;
+  settled: (value: T, previous: T | undefined) => boolean;
+  deadline: DeadlineClock;
+  intervalMs: number;
+  signal?: AbortSignal;
+}): Promise<Readonly<{ settled: boolean; value: T }>> {
+  const { probe, settled, deadline, intervalMs, signal } = params;
+  let previous: T | undefined;
+  for (;;) {
+    if (signal?.aborted) throw createRequestCanceledError();
+    const value = await probe();
+    if (settled(value, previous)) return { settled: true, value };
+    const remainingMs = deadline.remainingMs();
+    if (remainingMs <= 0) return { settled: false, value };
+    previous = value;
+    await sleep(Math.min(intervalMs, remainingMs), signal);
+  }
+}
+
 function waitForRetryDelay(
   ms: number,
   signal: AbortSignal | undefined,

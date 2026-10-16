@@ -1,8 +1,9 @@
-// Pure pieces of the coverage-based CRAP verdict: which Istanbul file records fallow can trust,
-// whether the two reports of one coverage run agree about what it measured, and how the scored
-// functions are rendered. run.ts owns the git, fallow, config and file I/O.
+// Pure pieces of the coverage-based CRAP verdict: which Istanbul file records fallow can trust, which
+// touched files the coverage run was told to instrument, and how the scored functions are rendered.
+// run.ts owns the git, stamp, fallow and file I/O.
 import type { ChangedFileDiff } from '../lib/repo-git.ts';
 import { repoRelativePath } from '../lib/repo-path.ts';
+import { isInstrumentedPath, type CoverageConfig } from './stamp.ts';
 
 type IstanbulCounters = Readonly<{
   s?: Readonly<Record<string, unknown>>;
@@ -194,77 +195,60 @@ export function readTouchedFiles(diffs: readonly ChangedFileDiff[]): TouchedFile
     .map((diff) => ({ path: diff.path, addedLines: diff.added.length }));
 }
 
-/** A touched file the coverage run enumerated but recorded no counters for. */
-export type UnscoredTouchedFile = Readonly<{ path: string; addedLines: number }>;
-
 /**
- * Why this run cannot trust what it scored. Keyed, never inferred from error text: the report and
- * the remediation both branch on `kind`, and prose is the one place a reason could be reworded
- * away. A missing or unreadable map is not one of these — run.ts fails before computing a verdict,
- * because there is no report left to reason about.
+ * Why this run cannot trust what it scored. Keyed, never inferred from error text: the report and the
+ * remediation both branch on `kind`, and prose is the one place a reason could be reworded away. A
+ * stamp that does not match this checkout is not one of these — run.ts refuses before asking fallow,
+ * because then there is no report left to reason about.
  */
 export type CrapProblem =
-  | Readonly<{ kind: 'enumeration_missing' }>
-  | Readonly<{ kind: 'map_partial'; mapFiles: number; enumeratedFiles: number }>
   | Readonly<{ kind: 'corrupt_touched'; files: readonly string[] }>
-  | Readonly<{ kind: 'unscored_touched'; files: readonly UnscoredTouchedFile[] }>
-  | Readonly<{ kind: 'unmeasured_touched'; files: readonly EstimatedFinding[] }>;
+  | Readonly<{ kind: 'unrecorded_eligible'; files: readonly TouchedFile[] }>;
 
 const PROBLEM_MESSAGES: Readonly<Record<CrapProblem['kind'], string>> = {
-  enumeration_missing:
-    'no usable lcov report lists the files the coverage run measured (coverage/lcov.info)',
-  map_partial: 'the Istanbul coverage map records fewer files than the same run enumerated',
   corrupt_touched: 'touched file(s) were dropped from the map for impossible counts',
-  unscored_touched: 'touched file(s) with changed lines have no record in the coverage map',
-  unmeasured_touched:
-    'touched function(s) are absent from the coverage map, so their score is estimated from complexity alone',
+  unrecorded_eligible:
+    'touched file(s) the coverage config instruments have no record in the coverage map',
 };
 
 const PROBLEM_FIXES: Readonly<Record<CrapProblem['kind'], string>> = {
-  enumeration_missing:
-    'Run `pnpm test:coverage` again: it writes coverage/lcov.info beside the map.',
-  map_partial: 'Run `pnpm test:coverage` again on this commit; coverage/ mixes reports.',
   corrupt_touched:
     'Run `pnpm test:coverage` again on this commit. If the counts stay impossible, that file is unscored, not clean.',
-  unscored_touched:
-    'Run `pnpm test:coverage` again on this commit. A file the run never loaded has no measured score.',
-  unmeasured_touched:
-    'Run `pnpm test:coverage` again: the map predates these functions, so only their complexity is known.',
+  unrecorded_eligible:
+    'Run `pnpm test:coverage` again on this commit. If the file still has no record, nothing this run ' +
+    "executes loads it — the config's `exclude` or a whole-file ignore comment is how it declares " +
+    'itself out of scope.',
 };
 
-function describeProblemFile(file: string | UnscoredTouchedFile | EstimatedFinding): string {
-  if (typeof file === 'string') return `\`${file}\``;
-  return 'addedLines' in file
-    ? `\`${file.path}\` (${file.addedLines} changed line(s))`
-    : `\`${file.path}:${file.line}\` ${file.name}`;
+function describeProblemFile(file: string | TouchedFile): string {
+  return typeof file === 'string'
+    ? `\`${file}\``
+    : `\`${file.path}\` (${file.addedLines} changed line(s))`;
 }
 
 function renderProblems(problems: readonly CrapProblem[]): string[] {
-  return problems.map((problem) => {
-    const counts =
-      'mapFiles' in problem
-        ? ` (${problem.mapFiles} recorded, ${problem.enumeratedFiles} enumerated)`
-        : '';
-    const files =
-      'files' in problem ? `: ${problem.files.map(describeProblemFile).join(', ')}` : '';
-    return `- **${PROBLEM_MESSAGES[problem.kind]}**${counts}${files}\n  ${PROBLEM_FIXES[problem.kind]}`;
-  });
+  return problems.map(
+    (problem) =>
+      `- **${PROBLEM_MESSAGES[problem.kind]}**: ${problem.files
+        .map(describeProblemFile)
+        .join(', ')}\n  ${PROBLEM_FIXES[problem.kind]}`,
+  );
 }
 
 export type CrapVerdict = Readonly<{
   blocking: boolean;
   problems: readonly CrapProblem[];
-  /** Estimates the report cannot measure, listed for the reader without blocking on them. */
-  unscoped: readonly EstimatedFinding[];
+  /** Estimates no run will measure: the config excludes the file, or an ignore comment drops it. */
+  uninstrumented: readonly EstimatedFinding[];
   offenders: readonly CrapFinding[];
 }>;
 
 /**
- * The verdict for one report. `touched` scope blocks on a function at or above the threshold and on
- * any reason the report cannot be trusted to answer, because `[]` from a partial map looks exactly
- * like a clean branch. `all` scope is the backlog report on `main`, which carries debt on purpose: it
- * lists what it could not verify without blocking on it. `enumeratedPaths` is null when the run wrote
- * no usable lcov report, which from here means nothing was recorded as measured.
+ * The verdict for one report. `touched` blocks on a function at or above the threshold and on any
+ * reason the report cannot answer, because `[]` from a partial map looks exactly like a clean branch.
+ * `all` is the backlog report on `main`, which carries debt on purpose: it exits 0 once it has a
+ * report to show, so it answers none of the touched-file questions — that list is what they are asked
+ * over, and `all` runs without one.
  */
 export function decideCrapVerdict(input: {
   scope: CrapScope;
@@ -272,66 +256,45 @@ export function decideCrapVerdict(input: {
   estimated: readonly EstimatedFinding[];
   touched: readonly TouchedFile[];
   dropped: ReadonlySet<string>;
+  /** Files the surviving map records. A record the sanitizer dropped is corrupt, not missing. */
   mapPaths: ReadonlySet<string>;
-  enumeratedPaths: ReadonlySet<string> | null;
+  /** The config the verified stamp declared, or null when no stamp was required of this run. */
+  coverage: CoverageConfig | null;
+  /** Touched files whose source carries a whole-file ignore comment, which no run records. */
+  ignoredFiles: ReadonlySet<string>;
 }): CrapVerdict {
-  const { enumeratedPaths } = input;
+  const { coverage, ignoredFiles } = input;
   const problems: CrapProblem[] = [];
   const corrupt = input.touched
     .filter((file) => input.dropped.has(file.path))
     .map((file) => file.path);
   if (corrupt.length > 0) problems.push({ kind: 'corrupt_touched', files: corrupt });
-  // The enumeration is what answers "what did this run measure", the question the per-file verdict
-  // cannot do without. The whole-repo backlog is scored from the map alone, so an absent lcov says
-  // nothing about it and must not be called incomplete.
-  if (enumeratedPaths === null && input.scope === 'touched') {
-    problems.push({ kind: 'enumeration_missing' });
-  }
 
-  // Both checks below read the enumeration, and without it enumeration_missing above is the whole
-  // story. lcov and the Istanbul map are two reports of one coverage run, so every file the run
-  // enumerated has to be recorded in the map. The test is per path rather than a count: a map of the
-  // right size holding the wrong paths — one file measured, another dropped, both reported as 1,724
-  // entries — is exactly what a report mixed from two coverage runs looks like, and counting would
-  // trust it.
-  if (enumeratedPaths !== null) {
-    const unrecorded = new Set([...enumeratedPaths].filter((file) => !input.mapPaths.has(file)));
-    if (unrecorded.size > 0) {
-      problems.push({
-        kind: 'map_partial',
-        mapFiles: input.mapPaths.size,
-        enumeratedFiles: enumeratedPaths.size,
-      });
-    }
+  // Eligibility is a declaration, never an absence: the config the run resolved to names the files it
+  // was told to instrument, so a touched one of those the map does not record is a gap this change
+  // owes a re-run for, while a file the config excludes is out of scope. `mapPaths` holds the records
+  // including the corrupt ones, so a file named above is never missing from the map as well.
+  const unrecorded = coverage
+    ? input.touched.filter(
+        (file) =>
+          !input.mapPaths.has(file.path) &&
+          !ignoredFiles.has(file.path) &&
+          isInstrumentedPath(file.path, coverage),
+      )
+    : [];
+  if (unrecorded.length > 0) problems.push({ kind: 'unrecorded_eligible', files: unrecorded });
 
-    // Of those, the ones this diff touches are what the verdict was going to score. Records the
-    // sanitizer dropped are named as corrupt above and stay in `mapPaths`, so they are not also here.
-    const unscored = input.touched
-      .filter((file) => unrecorded.has(file.path))
-      .map((file) => ({ path: file.path, addedLines: file.addedLines }));
-    if (unscored.length > 0) problems.push({ kind: 'unscored_touched', files: unscored });
-  }
-
-  // A touched file the map does record, with a function in it that the map does not: the map is
-  // older than the code and fallow is estimating that function from its complexity.
+  // Estimates on a touched file that is not a gap above. The stamp proves the map describes this
+  // tree, so a function it does not record cannot predate the map: an ignore comment discarded its
+  // lines, or it runs where the inspector never sees it — a worker, a page-evaluated script, a child
+  // process. Listing them keeps a green run from reading as "checked and cleared" without sending the
+  // reader to re-run coverage for something a re-run cannot change. A file already named above owes no
+  // second mention, and a run that read no config declares no scope, so it claims none.
+  const named = new Set([...corrupt, ...unrecorded.map((file) => file.path)]);
   const touchedPaths = new Set(input.touched.map((file) => file.path));
-  const unmeasured = input.estimated.filter(
-    (finding) => touchedPaths.has(finding.path) && input.mapPaths.has(finding.path),
-  );
-  if (unmeasured.length > 0) problems.push({ kind: 'unmeasured_touched', files: unmeasured });
-
-  // The same estimate for a file neither report knows is a different fact: coverage does not measure
-  // that file at all (scripts, a package the coverage config excludes), so no re-run would score it and
-  // it is not debt this PR owes. It is still not a measurement, so the report says so rather than let
-  // the headline imply the function was checked and cleared. Files the run enumerated but did not
-  // record are named as unscored above, and stay out of this list. Only while the enumeration exists:
-  // without it, "coverage does not instrument this" is a claim this run cannot make.
-  const unscoped = enumeratedPaths
+  const uninstrumented = coverage
     ? input.estimated.filter(
-        (finding) =>
-          touchedPaths.has(finding.path) &&
-          !input.mapPaths.has(finding.path) &&
-          !enumeratedPaths.has(finding.path),
+        (finding) => touchedPaths.has(finding.path) && !named.has(finding.path),
       )
     : [];
 
@@ -340,7 +303,7 @@ export function decideCrapVerdict(input: {
   return {
     blocking: input.scope === 'touched' && (input.findings.length > 0 || problems.length > 0),
     problems,
-    unscoped,
+    uninstrumented,
     offenders: input.scope === 'touched' ? input.findings : [],
   };
 }
@@ -438,21 +401,24 @@ export function renderCrapReport(input: {
     `## Coverage-based CRAP (${mode}): ${headline}`,
     ...renderProblemSection(verdict.problems, unanswerable),
     ...renderFindingSection(findings),
-    ...renderUnscopedSection(verdict.unscoped),
+    ...renderUninstrumentedSection(verdict.uninstrumented),
     ...renderDroppedSection(dropped),
     ...renderOverrideSection(input.overrides),
   ].join('\n')}\n`;
 }
 
 /**
- * Estimates the coverage run could not measure because the file is outside what it instruments. Not a
- * problem — a re-run changes nothing — but not a measurement either, and a bare "no touched
- * function(s)" headline would imply the reader was checked.
+ * Estimates from functions no coverage run will measure: the config excludes their file, an ignore
+ * comment drops it or the lines around them, or the code executes somewhere the inspector never sees.
+ * Not a problem — a re-run changes nothing — but not a measurement either, and a bare "no touched
+ * function(s)" headline would imply the reader was checked and cleared.
  */
-function renderUnscopedSection(unscoped: readonly EstimatedFinding[]): readonly string[] {
-  if (unscoped.length === 0) return [];
+function renderUninstrumentedSection(
+  uninstrumented: readonly EstimatedFinding[],
+): readonly string[] {
+  if (uninstrumented.length === 0) return [];
   return section([
-    `Not measured, and not blocking: ${unscoped.length} touched function(s) in file(s) coverage does not instrument, scored from complexity alone: ${unscoped
+    `Not measured, and not blocking: ${uninstrumented.length} touched function(s) no coverage run measures, scored from complexity alone: ${uninstrumented
       .map(
         (finding) =>
           `\`${finding.path}:${finding.line}\` ${finding.name} (CRAP ${finding.crap.toFixed(1)})`,

@@ -5,7 +5,7 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('journals and bounds a hung recoverable lease release before the final drain', async () => {
   vi.useFakeTimers();

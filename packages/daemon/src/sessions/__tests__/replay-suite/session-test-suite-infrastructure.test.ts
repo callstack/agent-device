@@ -1,13 +1,13 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 
 import path from 'node:path';
 
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { expectOkData, makeSessionStore } from './session-test-suite.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('../../../core/snapshot-interactor-capture.ts', () => ({

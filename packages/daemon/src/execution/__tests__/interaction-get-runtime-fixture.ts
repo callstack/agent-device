@@ -38,7 +38,7 @@ import type {
 import { captureSnapshotWithInteractor } from '../../core/snapshot-interactor-capture.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { androidObservationFixture } from '../../__tests__/support/android-observation-fixture.ts';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
+import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 
 /**
  * The request-bound runtime seam `get` consumes, faked at `inspectFacts` / `bindDevice` — never

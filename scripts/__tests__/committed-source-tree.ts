@@ -157,7 +157,7 @@ function readCommittedBlobs(
 
 /**
  * The same enumeration and blob read as `createCommittedSourceTree`, handed over as text: the
- * production sources and workspace manifests committed at `treeish`. A whole-tree measurement
+ * production sources and workspace manifests committed at `treeish`, plus every committed path. A whole-tree measurement
  * (the layering ratchets) needs the corpus rather than a reader, and taking it from here is what
  * keeps its file set identical to the closure walker's.
  */
@@ -165,12 +165,13 @@ function readCommittedBlobs(
 export function readCommittedSources(
   repoRoot: string,
   treeish: string,
-): { sources: Map<string, string>; manifests: Map<string, string> } {
-  const { sources, manifests } = committedSourceSet(listCommittedTree(repoRoot, treeish));
+): { sources: Map<string, string>; manifests: Map<string, string>; files: string[] } {
+  const files = listCommittedTree(repoRoot, treeish);
+  const { sources, manifests } = committedSourceSet(files);
   const blobs = readCommittedBlobs(repoRoot, treeish, [...sources, ...manifests]);
   const only = (files: readonly string[]) =>
     new Map(files.flatMap((file) => (blobs.has(file) ? [[file, blobs.get(file)!] as const] : [])));
-  return { sources: only(sources), manifests: only(manifests) };
+  return { sources: only(sources), manifests: only(manifests), files };
 }
 
 /**

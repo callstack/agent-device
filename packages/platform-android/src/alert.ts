@@ -6,6 +6,7 @@ import {
 } from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { successText } from '@agent-device/kernel/success-text';
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -17,7 +18,6 @@ import {
   type AndroidAlertInfo,
 } from './alert-detection.ts';
 import { backAndroid, pressAndroid } from './input-actions.ts';
-import { sampleUntilSettled } from './sample-until-settled.ts';
 
 type AndroidAlertOptions = {
   timeoutMs?: number;
@@ -133,13 +133,13 @@ async function confirmAndroidAlertDismissed(
   action: 'accept' | 'dismiss',
   captureNodes: AndroidAlertOptions['captureNodes'],
 ): Promise<void> {
-  const isGone = (current: AndroidAlertCandidate | null) =>
-    !current || !sameAndroidAlert(current.alert, dismissed);
-  const current = await sampleUntilSettled(() => readAndroidAlertCandidate(captureNodes), isGone, {
-    timeoutMs: ALERT_ACTION_RETRY_MS,
+  const { settled } = await pollUntilSettled({
+    probe: () => readAndroidAlertCandidate(captureNodes),
+    settled: (current) => !current || !sameAndroidAlert(current.alert, dismissed),
+    deadline: Deadline.fromTimeoutMs(ALERT_ACTION_RETRY_MS),
     intervalMs: ALERT_POLL_INTERVAL_MS,
   });
-  if (isGone(current)) return;
+  if (settled) return;
   throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
     alert: dismissed,
     hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
@@ -154,11 +154,13 @@ async function pollAndroidAlertCandidate(
   captureNodes: AndroidAlertOptions['captureNodes'],
   timeoutMs: number,
 ): Promise<AndroidAlertCandidate | null> {
-  return await sampleUntilSettled(
-    () => readAndroidAlertCandidate(captureNodes),
-    (candidate) => candidate !== null,
-    { timeoutMs, intervalMs: ALERT_POLL_INTERVAL_MS },
-  );
+  const { value } = await pollUntilSettled({
+    probe: () => readAndroidAlertCandidate(captureNodes),
+    settled: (candidate) => candidate !== null,
+    deadline: Deadline.fromTimeoutMs(timeoutMs),
+    intervalMs: ALERT_POLL_INTERVAL_MS,
+  });
+  return value;
 }
 
 async function readAndroidAlertCandidate(

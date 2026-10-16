@@ -1,11 +1,11 @@
 import {
-  type MobilePermissionTarget,
   parseAppearanceAction,
   parsePermissionAction,
   parsePermissionTarget,
   parseSettingState,
   type SimctlSettingRequest,
 } from '@agent-device/contracts/settings';
+import { type MobilePermissionTarget } from '@agent-device/contracts/settings-catalog';
 import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 

@@ -269,6 +269,83 @@ extension RunnerTests {
     XCTAssertNil(payload.qualityPayload?.scope)
   }
 
+  /// The classification has to happen on the acquisition a tier read, not on the presentation the tier
+  /// returns, and survive onto the response envelope. This drives the production assembly function with a
+  /// tree that keeps only what the runner's own AX tier publishes — no UIKit class names, an element type
+  /// the runner's name table cannot spell — and asks for a capture that dropped every node the acquisition
+  /// held. Deleting the classification, or reading the presented tree instead of the acquired one, fails
+  /// it (#3565).
+  func testSnapshotCaptureAssemblyClassifiesTheAcquisitionItPresented() throws {
+    let options = PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false)
+    let evidenceIndex = 2
+    let acquisition = SnapshotAcquisition(
+      hint: SnapshotPresentation.captureHint(for: options),
+      nodes: [
+        planTestRawNode(index: 0, type: "Application", parentIndex: nil),
+        planTestRawNode(index: 1, type: "Window", parentIndex: 0),
+        planTestRawNode(index: evidenceIndex, type: "Element(7)", parentIndex: 1),
+      ],
+      truncated: false,
+      effectiveDepth: nil,
+      viewport: .reported(box: CGRect(x: 0, y: 0, width: 402, height: 874))
+    )
+    let presented = try SnapshotPresentation.presentRegular(acquisition, options: options)
+    // The premise the assertion below turns on, pinned rather than assumed: this is the node the
+    // evidence sits on, and the tier's own presentation does not carry it. Were it retained, the two
+    // trees would agree and the next line would stop proving which one was read.
+    XCTAssertFalse(
+      presented.nodes.contains { $0.index == evidenceIndex },
+      "the presentation has to drop the evidence node, or this test cannot tell the two trees apart"
+    )
+
+    let capture = Self.makeSnapshotBackendCapture(from: presented, acquired: acquisition)
+    XCTAssertEqual(capture.presentedSurface, .presented, "positive evidence below the presented cut")
+
+    // The same presentation assembled against an acquisition that holds no evidence must answer from
+    // the acquisition. If the classifier ever read the presented tree instead, this pair collapses to
+    // the same answer and the assertion above stops proving anything.
+    let cleared = acquisition.replacingNodes([
+      planTestRawNode(index: 0, type: "Application", parentIndex: nil)
+    ])
+    XCTAssertEqual(
+      Self.makeSnapshotBackendCapture(from: presented, acquired: cleared).presentedSurface,
+      .unknown,
+      "the fact follows the acquisition, not the presentation it produced"
+    )
+
+    let payload = stampedSnapshotPayload(capture, backend: .recursiveTree, state: .healthy, reason: nil)
+    XCTAssertEqual(payload.presentedSurface, .presented)
+    // A tier that assembled no fact publishes nothing: silence is how the host reads "this producer
+    // published no fact", and it must not be reachable by a default.
+    XCTAssertNil(
+      stampedSnapshotPayload(
+        SnapshotBackendCapture(payload: capture.payload, effectiveDepth: nil),
+        backend: .recursiveTree,
+        state: .healthy,
+        reason: nil
+      ).presentedSurface
+    )
+  }
+
+  private func planTestRawNode(index: Int, type: String, parentIndex: Int?) -> RawAXNode {
+    RawAXNode(
+      index: index,
+      type: type,
+      label: nil,
+      identifier: nil,
+      value: nil,
+      rect: SnapshotRect(x: 0, y: 0, width: 10, height: 10),
+      enabled: true,
+      focused: nil,
+      selected: nil,
+      hittable: nil,
+      depth: parentIndex == nil ? 0 : 1,
+      parentIndex: parentIndex,
+      hiddenContentAbove: nil,
+      hiddenContentBelow: nil
+    )
+  }
+
   func testDirectPresentationDoesNotClaimPlanTiming() {
     let options = PresentationOptions(
       interactiveOnly: false,
@@ -276,17 +353,15 @@ extension RunnerTests {
       scope: nil,
       raw: true
     )
-    let result = SnapshotPresentation.presentRaw(
-      SnapshotAcquisition(
-        hint: SnapshotPresentation.captureHint(for: options),
-        nodes: [],
-        truncated: false,
-        effectiveDepth: nil,
-        viewport: .reported(box: CGRect(x: 0, y: 0, width: 402, height: 874))
-      ),
-      options: options
+    let acquisition = SnapshotAcquisition(
+      hint: SnapshotPresentation.captureHint(for: options),
+      nodes: [],
+      truncated: false,
+      effectiveDepth: nil,
+      viewport: .reported(box: CGRect(x: 0, y: 0, width: 402, height: 874))
     )
-    let capture = Self.makeSnapshotBackendCapture(from: result)
+    let result = SnapshotPresentation.presentRaw(acquisition, options: options)
+    let capture = Self.makeSnapshotBackendCapture(from: result, acquired: acquisition)
 
     let payload = stampedSnapshotPayload(
       capture,

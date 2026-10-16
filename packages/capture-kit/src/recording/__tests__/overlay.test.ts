@@ -24,13 +24,17 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 vi.mock('../video.ts', () => ({
-  waitForStableFile: vi.fn(async () => {}),
   waitForPlayableVideo: vi.fn(async () => {}),
 }));
 
-import { OVERLAY_BUDGET_MS, overlayRecordingTouches } from '../overlay.ts';
+import {
+  OVERLAY_BUDGET_MS,
+  overlayRecordingTouches,
+  startRecordingOverlayBudget,
+} from '../overlay.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
+import { waitForPlayableVideo } from '../video.ts';
 
 function helperScriptArgs(): string[] {
   const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
@@ -58,9 +62,17 @@ test('overlay burns touches through a cached helper and same-directory temp outp
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
-  await overlayRecordingTouches({ videoPath, telemetryPath });
+  await overlayRecordingTouches({
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+  });
   fs.writeFileSync(videoPath, 'second original');
-  await overlayRecordingTouches({ videoPath, telemetryPath });
+  await overlayRecordingTouches({
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+  });
 
   const compileCalls = mockRunCmd.mock.calls.filter(([cmd, args]) => {
     return cmd === 'xcrun' && args[0] === 'swiftc';
@@ -96,7 +108,9 @@ test('overlay preserves Swift helper compile hints', async () => {
     throw new AppError('COMMAND_FAILED', 'Timed out waiting for Swift cache lock', { hint });
   });
 
-  await expect(overlayRecordingTouches({ videoPath, telemetryPath })).rejects.toMatchObject({
+  await expect(
+    overlayRecordingTouches({ videoPath, telemetryPath, deadline: startRecordingOverlayBudget() }),
+  ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'Failed to add touch overlays to the recording',
     details: {
@@ -111,7 +125,11 @@ test('overlay defaults to the fast medium export preset', async () => {
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
-  await overlayRecordingTouches({ videoPath, telemetryPath });
+  await overlayRecordingTouches({
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+  });
 
   expect(helperScriptArgs()).toEqual(
     expect.arrayContaining(['--events', telemetryPath, '--quality', 'medium']),
@@ -124,7 +142,12 @@ test('overlay forwards the requested high export preset', async () => {
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
-  await overlayRecordingTouches({ videoPath, telemetryPath, exportQuality: 'high' });
+  await overlayRecordingTouches({
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+    exportQuality: 'high',
+  });
 
   expect(helperScriptArgs()).toEqual(
     expect.arrayContaining(['--events', telemetryPath, '--quality', 'high']),
@@ -137,11 +160,20 @@ test('overlay caps the helper frame rate at the caller fps only when one was ask
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
-  await overlayRecordingTouches({ videoPath, telemetryPath });
+  await overlayRecordingTouches({
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+  });
   expect(helperScriptArgs()).not.toContain('--max-fps');
 
   mockRunCmd.mockClear();
-  await overlayRecordingTouches({ videoPath, telemetryPath, fps: 15 });
+  await overlayRecordingTouches({
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+    fps: 15,
+  });
   const args = helperScriptArgs();
   expect(args[args.indexOf('--max-fps') + 1]).toBe('15');
 });
@@ -152,7 +184,11 @@ test('overlay hands the helper what is left of its budget, inside the record req
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
-  await overlayRecordingTouches({ videoPath, telemetryPath });
+  await overlayRecordingTouches({
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+  });
 
   const compileCall = mockRunCmd.mock.calls.find(([cmd]) => cmd === 'xcrun');
   const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
@@ -164,6 +200,22 @@ test('overlay hands the helper what is left of its budget, inside the record req
   expect(compileCall?.[2]?.timeoutMs).toBeLessThanOrEqual(OVERLAY_BUDGET_MS);
   expect(helperCall?.[2]?.timeoutMs).toBeLessThanOrEqual(OVERLAY_BUDGET_MS);
   expect(exportMs).toBeLessThan(helperCall?.[2]?.timeoutMs ?? 0);
+});
+
+test('overlay hands the helper only what the finalization left of the budget', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+  const spentMs = 25_000;
+  const deadline = startRecordingOverlayBudget();
+  vi.setSystemTime(Date.now() + spentMs);
+
+  await overlayRecordingTouches({ videoPath, telemetryPath, deadline });
+
+  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
+  expect(helperCall?.[2]?.timeoutMs).toBe(OVERLAY_BUDGET_MS - spentMs);
 });
 
 test('overlay leaves the video as recorded when compiling the helper spent its budget', async () => {
@@ -181,7 +233,9 @@ test('overlay leaves the video as recorded when compiling the helper spent its b
     return { stdout: '', stderr: '', exitCode: 0 };
   });
 
-  await expect(overlayRecordingTouches({ videoPath, telemetryPath })).rejects.toMatchObject({
+  await expect(
+    overlayRecordingTouches({ videoPath, telemetryPath, deadline: startRecordingOverlayBudget() }),
+  ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'Failed to add touch overlays to the recording',
   });
@@ -196,14 +250,20 @@ test('overlay names its budget when the export ran out of it', async () => {
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
-  await overlayRecordingTouches({ videoPath, telemetryPath });
+  await overlayRecordingTouches({
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+  });
   fs.writeFileSync(videoPath, 'original');
   mockRunCmd.mockImplementationOnce(async () => {
     vi.setSystemTime(Date.now() + OVERLAY_BUDGET_MS);
     throw new AppError('COMMAND_FAILED', 'recording-overlay exited with code 1');
   });
 
-  await expect(overlayRecordingTouches({ videoPath, telemetryPath })).rejects.toMatchObject({
+  await expect(
+    overlayRecordingTouches({ videoPath, telemetryPath, deadline: startRecordingOverlayBudget() }),
+  ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     message: `Failed to add touch overlays to the recording: the export did not finish within its ${OVERLAY_BUDGET_MS}ms budget; a lower --fps renders faster`,
   });
@@ -216,12 +276,40 @@ test('overlay keeps the plain failure when the export failed with budget to spar
   fs.writeFileSync(videoPath, 'original');
   fs.writeFileSync(telemetryPath, '{"events":[]}');
 
-  await overlayRecordingTouches({ videoPath, telemetryPath });
+  await overlayRecordingTouches({
+    videoPath,
+    telemetryPath,
+    deadline: startRecordingOverlayBudget(),
+  });
   mockRunCmd.mockImplementationOnce(async () => {
     throw new AppError('COMMAND_FAILED', 'recording-overlay exited with code 1');
   });
 
-  await expect(overlayRecordingTouches({ videoPath, telemetryPath })).rejects.toMatchObject({
+  await expect(
+    overlayRecordingTouches({ videoPath, telemetryPath, deadline: startRecordingOverlayBudget() }),
+  ).rejects.toMatchObject({
     message: 'Failed to add touch overlays to the recording',
   });
+});
+
+test('overlay keeps the video as recorded when verifying the export spent its budget', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+  const deadline = startRecordingOverlayBudget();
+  vi.mocked(waitForPlayableVideo).mockImplementationOnce(async () => {
+    vi.setSystemTime(Date.now() + OVERLAY_BUDGET_MS);
+  });
+
+  await expect(
+    overlayRecordingTouches({ videoPath, telemetryPath, deadline }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: `Failed to add touch overlays to the recording: the export did not finish within its ${OVERLAY_BUDGET_MS}ms budget; a lower --fps renders faster`,
+  });
+  expect(vi.mocked(waitForPlayableVideo)).toHaveBeenCalledWith(expect.any(String), { deadline });
+  expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
+  expect(fs.readdirSync(tmpDir).filter((name) => name.includes('agent-device-'))).toEqual([]);
 });

@@ -91,6 +91,13 @@ under `contracts/fixtures/`.
 - Tests mirror source topology one-to-one. Split a source module and its test together; do not add to
   the legacy `interaction.test.ts` or platform `index.test.ts` aggregations. Pure moves carry their
   tests unchanged; rename-only hunks owe no new coverage.
+- A test sits beside the module it is named for: `<module>.test.ts` or `<module>-<aspect>.test.ts`
+  (R84). Cross-module package tests are `index-<aspect>.test.ts` beside `index.ts`; repo-level guards on
+  Swift sources, manifests, docs or scripts live in `test/repo-guards/`.
+- Add no package `exports` entry that points at test support; R83 only lets the legacy count fall. A
+  fixture one package uses stays inside it, imported relatively; helpers shared across packages live only in `@agent-device/test-kit`, a
+  `devDependency` production source never imports and that never depends on `platform-*`,
+  `provider-*`, the daemon or root.
 
 ## Toolchain and worktree traps
 
@@ -110,7 +117,7 @@ under `contracts/fixtures/`.
 ## Runtime and diagnostics seams
 
 Diagnostics use `@agent-device/host-kit/diagnostics`. Request diagnostics belong in the session request log;
-session artifact paths come from `packages/daemon/src/core/session-artifact-paths.ts`. App/device logs remain in `app.log`;
+session artifact paths come from `packages/daemon-contracts/src/session-artifact-paths.ts`. App/device logs remain in `app.log`;
 Apple runner and xcodebuild output remains in `runner.log`.
 
 Normalize failures with `normalizeError` and preserve `hint`, `diagnosticId`, `logPath`, and typed

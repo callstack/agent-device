@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '@agent-device/daemon/daemon-request';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';

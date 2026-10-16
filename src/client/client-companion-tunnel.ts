@@ -5,7 +5,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   ENV_COMPANION_TUNNEL_BEARER_TOKEN,
-  ENV_COMPANION_TUNNEL_DEVICE_PORT,
   ENV_COMPANION_TUNNEL_LAUNCH_URL,
   ENV_COMPANION_TUNNEL_LOCAL_BASE_URL,
   ENV_COMPANION_TUNNEL_REGISTER_PATH,
@@ -13,7 +12,6 @@ import {
   ENV_COMPANION_TUNNEL_SCOPE_RUN_ID,
   ENV_COMPANION_TUNNEL_SCOPE_TENANT_ID,
   ENV_COMPANION_TUNNEL_SERVER_BASE_URL,
-  ENV_COMPANION_TUNNEL_SESSION,
   ENV_COMPANION_TUNNEL_STATE_PATH,
   ENV_COMPANION_TUNNEL_UNREGISTER_PATH,
 } from './client-companion-tunnel-contract.ts';
@@ -49,8 +47,6 @@ type CompanionTunnelState = {
   launchUrl?: string;
   registerPath?: string;
   unregisterPath?: string;
-  devicePort?: number;
-  session?: string;
   bridgeScope?: CompanionTunnelScope;
   tokenHash: string;
   consumers: string[];
@@ -66,8 +62,6 @@ export type EnsureCompanionTunnelOptions = {
   launchUrl?: string;
   registerPath?: string;
   unregisterPath?: string;
-  devicePort?: number;
-  session?: string;
   profileKey?: string;
   consumerKey?: string;
   stateDir?: string;
@@ -161,8 +155,6 @@ function readCompanionState(statePath: string): CompanionTunnelState | null {
       launchUrl: normalizeOptionalString(parsed.launchUrl),
       registerPath: normalizeOptionalString(parsed.registerPath),
       unregisterPath: normalizeOptionalString(parsed.unregisterPath),
-      devicePort: Number.isInteger(parsed.devicePort) ? Number(parsed.devicePort) : undefined,
-      session: normalizeOptionalString(parsed.session),
       bridgeScope: readCompanionScope(parsed.bridgeScope),
       tokenHash: parsed.tokenHash,
       consumers,
@@ -240,8 +232,6 @@ function shouldReuseCompanion(
     state.launchUrl === normalizeOptionalString(options.launchUrl) &&
     state.registerPath === normalizeOptionalString(options.registerPath) &&
     state.unregisterPath === normalizeOptionalString(options.unregisterPath) &&
-    state.devicePort === options.devicePort &&
-    state.session === normalizeOptionalString(options.session) &&
     areCompanionScopesEqual(state.bridgeScope, options.bridgeScope) &&
     state.tokenHash === hashString(options.bearerToken)
   );
@@ -377,12 +367,6 @@ function buildCompanionEnv(
     ENV_COMPANION_TUNNEL_UNREGISTER_PATH,
     normalizeOptionalString(options.unregisterPath),
   );
-  setOrDelete(
-    nextEnv,
-    ENV_COMPANION_TUNNEL_DEVICE_PORT,
-    options.devicePort === undefined ? undefined : String(options.devicePort),
-  );
-  setOrDelete(nextEnv, ENV_COMPANION_TUNNEL_SESSION, normalizeOptionalString(options.session));
   return nextEnv;
 }
 
@@ -435,8 +419,6 @@ function spawnCompanionProcess(
     launchUrl: normalizeOptionalString(options.launchUrl),
     registerPath: normalizeOptionalString(options.registerPath),
     unregisterPath: normalizeOptionalString(options.unregisterPath),
-    devicePort: options.devicePort,
-    session: normalizeOptionalString(options.session),
     bridgeScope: options.bridgeScope,
     tokenHash: hashString(options.bearerToken),
     consumers: [],

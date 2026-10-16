@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
 import { runCmd, runCmdSync } from '@agent-device/host-kit/command';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -383,6 +383,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       'createAgentDeviceClient',
       'createLocalArtifactAdapter',
       'isAgentDeviceError',
+      'isUnreadableCaptureContentError',
       'normalizeAgentDeviceError',
     ]);
     assert.equal(imports.rootClientSnapshot, 'function');

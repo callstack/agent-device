@@ -36,7 +36,6 @@ function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/perf',
             '@agent-device/platform-apple/physical-device',
             '@agent-device/platform-apple/runner',
-            '@agent-device/platform-apple/runner/test-host',
             '@agent-device/platform-apple/runner/operations',
             '@agent-device/platform-apple/runner/requests-fixtures',
             '@agent-device/platform-apple/runner-owner',
@@ -285,22 +284,6 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 
-  // The test-host installer is a single vitest setup file, dynamic imports included.
-  const testHostSources = validSources();
-  testHostSources.set(
-    'scripts/vitest-apple-runner-host-setup.ts',
-    "import { installAppleRunnerTestHost } from '@agent-device/platform-apple/runner/test-host';",
-  );
-  assert.deepEqual(checkPlatformPackagePolicy(testHostSources, declarations()), []);
-  testHostSources.set(
-    'src/platform-runtime.ts',
-    composition() + "\nvoid import('@agent-device/platform-apple/runner/test-host');",
-  );
-  assert.match(
-    messages(testHostSources).join('\n'),
-    /only scripts\/vitest-apple-runner-host-setup\.ts may import/,
-  );
-
   // A NEW unenumerated subpath widens the export list and fails declarations.
   const widened = declarations();
   const apple = widened.find((pkg) => pkg.family === 'apple')!;
@@ -311,6 +294,26 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   assert.match(
     messages(validSources(), widened).join('\n'),
     /platform-apple must export exactly its root façade/,
+  );
+});
+
+test('the runner test host is importable only from tests and __tests__ helpers', () => {
+  const testHostSources = validSources();
+  testHostSources.set(
+    'packages/platform-apple/src/runner/__tests__/host-setup.ts',
+    "import { installAppleRunnerTestHost } from '../test-host.ts';",
+  );
+  testHostSources.set(
+    'packages/platform-apple/src/runner/runner-lifecycle.ts',
+    "import { appleRunnerTestHost } from './test-host.ts';",
+  );
+  assert.match(
+    messages(testHostSources).join('\n'),
+    /runner\/test-host\.ts binds the runner test dispatcher/,
+  );
+  assert.equal(
+    messages(testHostSources).filter((message) => message.includes('test dispatcher')).length,
+    1,
   );
 });
 
@@ -430,7 +433,7 @@ test('the Android mechanics facet is the named consumer seam and adb host wiring
   );
 });
 
-test('the Android test-only fixture subpaths accept test consumers and deny production ones', () => {
+test('R13 leaves the Android test-only fixture subpaths to R83 for every consumer', () => {
   const fixtureImport =
     "import { createAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';";
   const allowed = validSources();
@@ -440,21 +443,14 @@ test('the Android test-only fixture subpaths accept test consumers and deny prod
     fixtureImport,
   );
   allowed.set('test/integration/provider-scenarios/android.test.ts', fixtureImport);
-  assert.deepEqual(
-    messages(allowed).filter((message) => message.includes('may import')),
-    [],
-  );
+  assert.deepEqual(messages(allowed), []);
 
-  // Production consumers ride no facet seam: importing a fixture is an R13 violation, even
-  // from a file the mechanics facet would otherwise accept.
+  // Production importers of a fixture are R83's to refuse (package-export-surface.test.ts);
+  // R13 holds no second list of them.
   for (const file of ['src/commands/replay/index.ts', 'src/core/interactors/android.ts']) {
-    const denied = validSources();
-    denied.set(file, fixtureImport);
-    assert.match(
-      messages(denied).join('\n'),
-      /may import '@agent-device\/platform-android\/snapshot-capture-fixtures'/,
-      file,
-    );
+    const production = validSources();
+    production.set(file, fixtureImport);
+    assert.deepEqual(messages(production), [], file);
   }
 });
 
@@ -520,6 +516,33 @@ test('platform packages may use capture-kit but no unrelated workspace implement
       /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
     );
   }
+});
+
+test('platform package tests may import test-kit, production source may not', () => {
+  const tests = validSources();
+  tests.set(
+    'packages/platform-apple/src/probe.test.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  tests.set(
+    'packages/platform-apple/src/recording/fixtures.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  tests.set(
+    'packages/platform-apple/src/probe.spec.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(tests, declarations()), []);
+
+  const production = validSources();
+  production.set(
+    'packages/platform-apple/src/probe.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  assert.match(
+    messages(production).join('\n'),
+    /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
+  );
 });
 
 test('package-owned tests may import their own public facade', () => {

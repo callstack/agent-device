@@ -22,7 +22,7 @@ import {
 import { listExecutableCommandNames } from '../command-surface.ts';
 import { helpBody, mcpBody } from '@agent-device/command-registry/command-text';
 import { explainCommand } from '../../cli/command-explain.ts';
-import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/route-owner-files';
+import { getDaemonRouteOwnerFiles } from '@agent-device/command-registry/owner-files';
 
 test('MCP exposed command names have metadata and executable command definitions', () => {
   const mcpExposedNames = listMcpExposedCommandNames().sort();

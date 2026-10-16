@@ -117,7 +117,7 @@ final class AccessibilityTreeXml {
         stats.truncated = true;
         break;
       }
-      AccessibilityNodeInfo child = node.getChild(index);
+      AccessibilityNodeInfo child = AccessibilityNodeReads.child(node, index);
       if (child == null) {
         continue;
       }

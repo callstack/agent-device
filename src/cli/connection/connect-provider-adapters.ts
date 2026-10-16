@@ -2,6 +2,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { requireResolvedProfilePlatform } from '@agent-device/contracts/provider-profile-fields';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
+import { readVersion } from '@agent-device/host-kit/version';
 import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
@@ -206,6 +207,7 @@ async function verifyLimrun(
 ): Promise<ConnectVerification> {
   return await verifyLimrunConnection({
     ...readLimrunCredentials(context.env),
+    clientVersion: readVersion(),
     platform: requireResolvedProfilePlatform(context.flags.platform, 'Limrun'),
   });
 }

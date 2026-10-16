@@ -5,7 +5,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 
 type FixtureCommand = {
   command: 'status' | 'tap' | 'type';

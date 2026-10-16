@@ -19,16 +19,19 @@ describe('@agent-device/maestro facade', () => {
     expect(exports).not.toContain('rankMaestroFailureCandidates');
   });
 
-  test('keeps the daemon-side port off the engine entry and declares pure modules', () => {
+  test('keeps the plugin and helper off the engine entry and declares pure modules', () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.join(import.meta.dirname, '../package.json'), 'utf8'),
     ) as { exports: Record<string, unknown>; sideEffects?: boolean };
-    // The daemon-side runtime port (#2544) and its runScript HTTP helper are subpaths, not part
-    // of the engine entry. This pins the surface; scripts/__tests__/eager-closure-budgets.test.ts
-    // is what keeps `.` from starting to evaluate host-kit, capture-kit, or provision-kit.
+    // The runScript HTTP helper is a subpath, not part of the engine entry, and the replay
+    // backend plugin (#3377) is the only other way in: its engine-free declaration lets help list
+    // the backend without evaluating the engine. This pins the surface;
+    // scripts/__tests__/eager-closure-budgets.test.ts is what keeps `.` from starting to evaluate
+    // host-kit, capture-kit, or provision-kit.
     expect(Object.keys(manifest.exports)).toEqual([
       '.',
-      './daemon-runtime-port',
+      './replay-backend',
+      './replay-backend-declaration',
       './run-script-http',
     ]);
     expect(manifest.sideEffects).toBe(false);

@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import {
+  checkFindArgs,
   isReadOnlyFindAction,
   parseFindArgs,
   parseFindSelectorExpression,
@@ -122,4 +123,13 @@ test('isReadOnlyFindAction separates the find sub-actions --record may accompany
   for (const action of ['click', 'fill', 'focus', 'type'] as const) {
     expect(isReadOnlyFindAction(action)).toBe(false);
   }
+});
+
+test('find value refusals are stated once', () => {
+  expect(checkFindArgs([])).toMatchObject({ message: 'find requires a locator or text' });
+  expect(checkFindArgs([''])).toMatchObject({ message: 'find requires a value' });
+  expect(checkFindArgs(['id="field"'], { findFirst: true, findLast: true })).toMatchObject({
+    message: 'find accepts only one of --first or --last',
+  });
+  expect(checkFindArgs(['id="field"'])).toMatchObject({ ok: true });
 });

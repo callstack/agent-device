@@ -36,6 +36,7 @@ type RawStep = {
   uses?: string;
   run?: string;
   with?: Record<string, unknown>;
+  parallel?: RawStep[];
 };
 
 type Job = { name?: string; steps?: RawStep[]; uses?: string; with?: Record<string, unknown> };
@@ -179,6 +180,11 @@ function readLocalWorkflowJobs(uses: string, root: string): Job[] | null {
   return jobs.length > 0 ? jobs : null;
 }
 
+/** A job's steps with each `parallel:` group opened into the steps it runs. */
+function runnableSteps(steps: readonly RawStep[]): RawStep[] {
+  return steps.flatMap((step) => (step.parallel ? runnableSteps(step.parallel) : [step]));
+}
+
 /** What a job runs, with the caller's `with` inputs that the steps' `${{ inputs.* }}` resolve to. */
 type JobSteps = {
   steps: RawStep[];
@@ -192,13 +198,15 @@ type JobSteps = {
  * missing, jobless, or nested reusable workflow fails closed as unsupported.
  */
 function jobSteps(job: Job, root: string): JobSteps {
-  if (!job.uses) return { steps: job.steps ?? [], inputs: {}, files: [], unsupported: [] };
+  if (!job.uses) {
+    return { steps: runnableSteps(job.steps ?? []), inputs: {}, files: [], unsupported: [] };
+  }
   const called = readLocalWorkflowJobs(job.uses, root);
   if (!called || called.some((calledJob) => calledJob.uses)) {
     const unsupported = [`\`uses: ${job.uses}\` (reusable workflow)`];
     return { steps: [], inputs: {}, files: [], unsupported };
   }
-  const steps = called.flatMap((calledJob) => calledJob.steps ?? []);
+  const steps = called.flatMap((calledJob) => runnableSteps(calledJob.steps ?? []));
   return { steps, inputs: job.with ?? {}, files: [job.uses.slice(2)], unsupported: [] };
 }
 

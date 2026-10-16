@@ -1,4 +1,4 @@
-import { inspectDeviceClaims } from '../../resources/device/device-claim-inspection.ts';
+import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 /**

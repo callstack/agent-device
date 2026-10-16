@@ -34,11 +34,6 @@ function planNightly(run) {
   if (scheduled && latest && run.tags.get(latest) === run.sha) {
     return skip(`${latest} already ships ${run.sha}.`);
   }
-  // The npm dist-tag is the durable record: a nightly can publish and then fail to tag.
-  const shippedToday = [latest, run.publishedNightly].find((shipped) =>
-    shipped?.includes(`-nightly.${run.today}.`),
-  );
-  if (scheduled && shippedToday) return skip(`${shippedToday} shipped today.`);
   if (run.ciConclusion !== 'success') {
     const reason = `CI on ${run.sha} is ${run.ciConclusion}; a nightly ships only a commit whose CI passed.`;
     if (scheduled) return skip(reason);
@@ -61,7 +56,8 @@ function planStable(run, tag) {
   if (!run.onMain) throw new Error(`${tag} is not on main.`);
   if (run.ciConclusion !== 'success') {
     throw new Error(
-      `CI on ${run.sha} is ${run.ciConclusion}. Once it passes, run Release on ${tag} to publish it.`,
+      `CI on ${run.sha} is ${run.ciConclusion}. Re-running Release does not re-run CI: once CI ` +
+        `passes on that commit, or ${tag} moves to a commit whose CI passed, run Release on ${tag}.`,
     );
   }
   const previousTag = previousReleaseTag([...run.tags.keys()], version) ?? '';
@@ -98,15 +94,13 @@ function skip(reason) {
  * What GitHub must enforce before any publish, since npm trusts every run of release.yml that
  * reaches the npm-publish environment and a run's own copy of this script proves nothing.
  */
-export function repositorySetupGaps({ npmPublish, npmPublishPolicies, release, tagRulesets }) {
+export function repositorySetupGaps({ npmPublish, npmPublishPolicies, tagRulesets }) {
   const gaps = [];
   const allowed = new Set(npmPublishPolicies.map((policy) => `${policy.type}:${policy.name}`));
   const onlyMainAndTags = allowed.size === 2 && allowed.has('branch:main') && allowed.has('tag:v*');
   if (!npmPublish?.deployment_branch_policy?.custom_branch_policies || !onlyMainAndTags) {
     gaps.push('the npm-publish environment must deploy only from branch main and tags v*');
   }
-  const reviewers = release?.protection_rules?.find((rule) => rule.type === 'required_reviewers');
-  if (!reviewers?.reviewers?.length) gaps.push('the release environment must require a reviewer');
   if (!tagRulesets.some(guardsReleaseTags)) {
     gaps.push(
       'an active tag ruleset must restrict creating, updating, and deleting every refs/tags/v* tag, ' +
@@ -184,7 +178,7 @@ const UNSETTLED_CI = new Set([
   'in_progress',
 ]);
 
-/** A tag pushed right after a merge waits, within the Plan job's budget, for that merge's CI. */
+/** A commit pushed moments ago waits, within the Plan job's budget, for its CI to finish. */
 async function settledCiConclusion(env, sha) {
   for (let attempt = 0; ; attempt += 1) {
     const conclusion = await ciConclusion(env, sha);
@@ -231,14 +225,12 @@ function absentOn404(fallback) {
 }
 
 async function readRepositorySetup(env) {
-  const environment = (name) => github(env, `environments/${name}`).catch(absentOn404(null));
   const summaries = await github(env, 'rulesets?targets=tag');
   return {
-    npmPublish: await environment('npm-publish'),
+    npmPublish: await github(env, 'environments/npm-publish').catch(absentOn404(null)),
     npmPublishPolicies: await github(env, 'environments/npm-publish/deployment-branch-policies')
       .then((body) => body.branch_policies)
       .catch(absentOn404([])),
-    release: await environment('release'),
     tagRulesets: await Promise.all(
       summaries.map((summary) => github(env, `rulesets/${summary.id}`)),
     ),
@@ -259,12 +251,7 @@ async function readRun(env) {
     runNumber: env.GITHUB_RUN_NUMBER,
     tags: event === 'pull_request' ? new Map() : remoteTags(),
     latestStable: onBranch || onTag ? await publishedVersion('latest') : null,
-    publishedNightly: onBranch ? await publishedVersion('nightly') : null,
-    ciConclusion: onTag
-      ? await settledCiConclusion(env, env.GITHUB_SHA)
-      : onBranch
-        ? await ciConclusion(env, env.GITHUB_SHA)
-        : undefined,
+    ciConclusion: onBranch || onTag ? await settledCiConclusion(env, env.GITHUB_SHA) : undefined,
     onMain: onTag ? await isOnMain(env) : undefined,
   };
 }

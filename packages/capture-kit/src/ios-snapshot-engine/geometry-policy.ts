@@ -1,4 +1,4 @@
-import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { PresentedSurface, Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect, rectContains } from '@agent-device/kernel/rect';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { collectChildrenByParent, collectSubtreeByParentLinks } from './tree.ts';
@@ -9,12 +9,62 @@ const VISIBILITY_CARRIER_TYPES = new Set(['application', 'window']);
 const NEGLIGIBLE_DECORATION_TOLERANCE = 1;
 
 /**
- * Private UIKit classes are matched by exact name, unlike the substring role tests the occlusion
- * pass uses: this rule decides node membership, so a near miss on a class name has to fail closed
- * rather than widen the cut.
+ * The container UIKit appends per presentation, and the one it presents app content inside. This is the
+ * one place the name is written: the occlusion cut reads a LATER sibling of this class carrying a dimming
+ * view as the presentation that dims everything before it, and the presented-surface rule reads a window
+ * holding MORE than one of them as a capture it cannot call un-presented. A UIKit version that stopped
+ * using this class would degrade one reader to `unknown` and the other to no cut at all, and both
+ * failures are silent, so the pairing lives in the golden table's vocabulary and its parity test.
  */
-const PRESENTATION_CONTAINER_ROLE = 'uitransitionview';
-const PRESENTATION_DIMMING_ROLE = 'uidimmingview';
+export const PRESENTATION_CONTAINER_CLASS = 'UITransitionView';
+
+/**
+ * The dimming view a presentation dims the content behind it with. Only a presentation installs one. The
+ * occlusion cut reads this node's `userInteractionEnabled` to decide what the user can still reach; the
+ * presented-surface rule deliberately does not, because a sheet resting at an undimmed detent keeps a
+ * dimming view that takes no touches and is still presented.
+ */
+export const PRESENTATION_DIMMING_VIEW_CLASS = 'UIDimmingView';
+
+/**
+ * The private root classes of a UIAlertController. An iPhone alert arrives in its own window with no
+ * dimming view anywhere in the capture, so these classes are the only evidence that screen holds.
+ */
+export const ALERT_ROOT_CLASS_PREFIX = '_UIAlertController';
+
+/**
+ * Windows UIKit hosts outside the app's own scene. They can carry none of the app's presentations, so
+ * neither the window nor anything under its subtree counts as evidence in either direction: a capture
+ * taken with the keyboard up still reads as one content window.
+ *
+ * This is a denylist of the hosts iOS is known to name, not a way to recognize app content. The direction
+ * is deliberate: an app that hosts its scene in a `UIWindow` subclass stays readable, while an allowlist
+ * would answer `unknown` for every screen it did not recognize. The cost is that an unlisted host which
+ * carries a dimming view of its own would read as `presented`; no such host has been observed.
+ */
+export const SYSTEM_WINDOW_CLASSES: ReadonlySet<string> = new Set([
+  'UITextEffectsWindow',
+  'UIRemoteKeyboardWindow',
+]);
+
+/**
+ * Element types that name a presentation wherever they appear, keyed by the shared element-type
+ * numbering every iOS producer reads. A producer whose own name table stops short of the name publishes
+ * `Element(<number>)` for the same node, so both spellings count; the raw-value spelling is derived from
+ * these numbers rather than listed beside them (#3565).
+ *
+ * The numbers belong to `ELEMENT_TYPE_NAMES` in `packages/platform-apple/src/snapshot-source/tree.ts`,
+ * which is the table that turns an accessibility raw value into one of these names, and nothing imports
+ * across that boundary — capture-kit sits below platform-apple. The golden table's vocabulary is the tie
+ * that keeps the two in agreement: its parity test is read both by that package's own test, which
+ * re-derives each name's index from the owner's table, and by both classifier parity tests.
+ */
+export const PRESENTING_ELEMENT_TYPES: ReadonlyMap<string, number> = new Map([
+  ['Sheet', 5],
+  ['Drawer', 6],
+  ['Alert', 7],
+  ['Dialog', 8],
+]);
 
 export type TraversalState = Readonly<{
   projectedOut: boolean;
@@ -292,13 +342,209 @@ function isDimmedByPresentation(covering: CoveringPresentation, sibling: RawSnap
 }
 
 function isPresentationContainer(node: RawSnapshotNode): boolean {
-  return hasRole(node, PRESENTATION_CONTAINER_ROLE);
+  return hasRole(node, PRESENTATION_CONTAINER_CLASS);
 }
 
 function isPresentationDimmingView(node: RawSnapshotNode): boolean {
-  return hasRole(node, PRESENTATION_DIMMING_ROLE);
+  return hasRole(node, PRESENTATION_DIMMING_VIEW_CLASS);
 }
 
+/**
+ * Roles are matched through `normalizeType`, which is what lets the occlusion cut and the
+ * presented-surface rule agree on a class a producer spelled with a module prefix or in another case:
+ * one predicate, so neither reader can drift to accepting a name the other refuses.
+ */
 function hasRole(node: RawSnapshotNode, role: string): boolean {
-  return normalizeType(node.role ?? '') === role;
+  return normalizeType(node.role ?? '') === normalizeType(role);
+}
+
+/**
+ * What the capture's producer claims about its own completeness, stated by the caller from the
+ * producer's truncation evidence instead of inferred from the tree: `complete` when the producer reports
+ * it is not capped, `capped` when it reports a cap, `unstated` when it observes nothing either way.
+ */
+export type PresentedSurfaceCompleteness = 'complete' | 'capped' | 'unstated';
+
+/**
+ * Whether a capture read a modal presentation over the app's own content (#3565), decided on the
+ * acquired tree so the interactive, full, depth-cut and scoped projections of one acquisition all
+ * answer the same value. A raw `--depth` bounds the acquisition itself; one too shallow to reach the
+ * presentation's windows answers `unknown`, never `absent`.
+ *
+ * UIKit appends each modal presentation as a later sibling of the container it presents over, directly
+ * under the window, and dims what is behind it — the same shape `findCoveringPresentation` above rests
+ * on when it drops dimmed content. That reader decides which nodes a user can still reach and so reads a
+ * dimming view's enablement; this one decides only whether something is presented and must NOT read it: a
+ * sheet resting at an undimmed detent keeps a dimming view that takes no touches and is still presented.
+ *
+ * `absent` is the strong answer and is never the default, because a consumer arms a dismissal
+ * confirmation on it. It requires that the producer stated the capture was not capped, that every node
+ * carries the UIKit class name this rule reads, that each node is numbered once so the parent links this
+ * walk follows name the node they mean, and that the one content window under the app root holds exactly
+ * one presentation container. Producers that report no class names — every XCTest runner tier — answer
+ * `presented` or `unknown`, never `absent`.
+ *
+ * The cross-language rule and the tree shapes it is pinned on are the golden table
+ * `contracts/fixtures/ios-presented-surface.json`. The Swift `SnapshotPresentedSurface` implements only
+ * the class-blind reading (`classBlindExpected`), and each side has a parity test against that table.
+ */
+export function collectPresentedSurface(
+  nodes: readonly RawSnapshotNode[],
+  completeness: PresentedSurfaceCompleteness,
+): PresentedSurface {
+  const windowPositions = appWindowPositions(nodes);
+  const examinable = positionsOutsideSystemWindows(nodes, windowPositions);
+  // Positive evidence is evidence of what the producer did read, so a cap does not defeat it; absence
+  // is what a cap defeats, along with any capture that cannot state its own window structure.
+  if (nodes.some((node, position) => examinable.has(position) && isPresentingEvidence(node))) {
+    return 'presented';
+  }
+  if (completeness !== 'complete') return 'unknown';
+  if (windowPositions.length === 0 || !nodes.every((node) => node.role !== undefined)) {
+    return 'unknown';
+  }
+  // `absent` is a claim about every window the producer read, and window structure is read through
+  // parent links, which cannot tell two nodes sharing a number apart. Positive evidence is already
+  // reported above, keyed on the node it was read off rather than on its number, so the most a
+  // collision can cost this rule is the answer it declines to make — never a false `absent`.
+  if (!identifiesEachNodeOnce(nodes)) return 'unknown';
+
+  const contentWindows = windowPositions.filter((position) => !isSystemWindow(nodes[position]!));
+  if (contentWindows.length !== 1) return 'unknown';
+  return presentationContainersIn(nodes[contentWindows[0]!]!, nodes).length === 1
+    ? 'absent'
+    : 'unknown';
+}
+
+/**
+ * Positive evidence of a presentation: the dimming view a presentation owns, an alert's own root class,
+ * or an element type that names a presentation. Each is a per-node fact, so a tree that holds one
+ * answers without any window structure to read.
+ */
+function isPresentingEvidence(node: RawSnapshotNode): boolean {
+  return isPresentationDimmingView(node) || isAlertRoot(node) || isPresentingElementType(node);
+}
+
+function isAlertRoot(node: RawSnapshotNode): boolean {
+  const role = node.role;
+  if (role === undefined) return false;
+  const normalized = normalizeType(role);
+  return normalized.startsWith(normalizeType(ALERT_ROOT_CLASS_PREFIX));
+}
+
+function isPresentingElementType(node: RawSnapshotNode): boolean {
+  const type = node.type;
+  if (!type) return false;
+  if (PRESENTING_ELEMENT_TYPES.has(type)) return true;
+  const reportedRawValue = UNNAMED_ELEMENT_TYPE.exec(type);
+  return reportedRawValue !== null && PRESENTING_RAW_VALUES.has(Number(reportedRawValue[1]));
+}
+
+/** The name a producer publishes for an element type its own table does not cover. */
+const UNNAMED_ELEMENT_TYPE = /^Element\((\d+)\)$/;
+
+const PRESENTING_RAW_VALUES: ReadonlySet<number> = new Set(PRESENTING_ELEMENT_TYPES.values());
+
+function isSystemWindow(node: RawSnapshotNode): boolean {
+  const role = node.role;
+  if (role === undefined) return false;
+  const normalized = normalizeType(role);
+  for (const systemWindowClass of SYSTEM_WINDOW_CLASSES) {
+    if (normalizeType(systemWindowClass) === normalized) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether every node carries its own number, which is what lets a parent-link walk name the node it is
+ * standing on. Positive evidence survives a repeated number — it is keyed on the node it was read off —
+ * but window structure is read through those links, so a producer that numbered a node twice cannot
+ * support a claim about every window it read, and such a tree is answered here rather than walked
+ * further. The engine's own fold refuses this tree outright, so the regular route never reaches here with
+ * one; the guard is what keeps the answer honest when the classifier is called on a tree that has not
+ * passed through it.
+ */
+function identifiesEachNodeOnce(nodes: readonly RawSnapshotNode[]): boolean {
+  return new Set(nodes.map((node) => node.index)).size === nodes.length;
+}
+
+/**
+ * The app's windows: the nodes directly under its root, as the places in `nodes` they occupy. Both iOS
+ * acquisition tiers report the app root and then one node per window, so finding them needs no class
+ * facts — which is what lets a class-blind capture still be examined for the positive evidence it does
+ * report.
+ */
+function appWindowPositions(nodes: readonly RawSnapshotNode[]): number[] {
+  const rootPositions: number[] = [];
+  for (const [position, node] of nodes.entries()) {
+    if (node.parentIndex === undefined) rootPositions.push(position);
+  }
+  if (rootPositions.length !== 1) return [];
+  const rootIndex = nodes[rootPositions[0]!]!.index;
+  const windows: number[] = [];
+  for (const [position, node] of nodes.entries()) {
+    if (node.parentIndex === rootIndex) windows.push(position);
+  }
+  return windows;
+}
+
+/**
+ * The nodes to read evidence from: every node except the ones the walk reached from a window UIKit hosts
+ * outside the app's scene, keyed by the place in `nodes` each occupies rather than by its number. A walk
+ * has to reach the node it is standing on, and two nodes sharing a number cannot be told apart by the
+ * links that reach them; keying on the number would let a keyboard host's subtree swallow an app window's
+ * own evidence, which is a direct read the rule would then throw away. Keying on the occurrence keeps that
+ * read, and the numbering guard above is what stops such a tree from earning absence. A capture with no
+ * class facts cannot single any window out, which is the honest reading: nothing in it is excludable, and
+ * nothing in it can earn absence either.
+ */
+function positionsOutsideSystemWindows(
+  nodes: readonly RawSnapshotNode[],
+  windowPositions: readonly number[],
+): ReadonlySet<number> {
+  const positionsByParentIndex = new Map<number, number[]>();
+  for (const [position, node] of nodes.entries()) {
+    if (typeof node.parentIndex !== 'number') continue;
+    const siblings = positionsByParentIndex.get(node.parentIndex) ?? [];
+    siblings.push(position);
+    positionsByParentIndex.set(node.parentIndex, siblings);
+  }
+  const examinable = new Set<number>(nodes.map((_node, position) => position));
+  for (const windowPosition of windowPositions) {
+    if (!isSystemWindow(nodes[windowPosition]!)) continue;
+    for (const occurrence of subtreePositions(windowPosition, nodes, positionsByParentIndex)) {
+      examinable.delete(occurrence);
+    }
+  }
+  return examinable;
+}
+
+/**
+ * A node and everything reachable from it through parent links, as the places in `nodes` they occupy.
+ * Reported depths are not needed. Visited is keyed on the occurrence and seeded with the root: a producer
+ * that closes a loop deeper in the tree is one this walk would follow forever. The golden table's cycle
+ * case is pinned on exactly that shape.
+ */
+function subtreePositions(
+  rootPosition: number,
+  nodes: readonly RawSnapshotNode[],
+  positionsByParentIndex: ReadonlyMap<number, readonly number[]>,
+): number[] {
+  const collected: number[] = [rootPosition];
+  const visited = new Set<number>([rootPosition]);
+  for (let walked = 0; walked < collected.length; walked += 1) {
+    for (const position of positionsByParentIndex.get(nodes[collected[walked]!]!.index) ?? []) {
+      if (visited.has(position)) continue;
+      visited.add(position);
+      collected.push(position);
+    }
+  }
+  return collected;
+}
+
+function presentationContainersIn(
+  window: RawSnapshotNode,
+  nodes: readonly RawSnapshotNode[],
+): RawSnapshotNode[] {
+  return nodes.filter((node) => node.parentIndex === window.index && isPresentationContainer(node));
 }

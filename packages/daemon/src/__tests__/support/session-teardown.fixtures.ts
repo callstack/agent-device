@@ -2,7 +2,7 @@ import path from 'node:path';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { SessionState } from '../../core/session-state.ts';

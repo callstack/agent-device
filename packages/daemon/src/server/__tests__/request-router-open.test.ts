@@ -1,9 +1,5 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import {
-  daemonPlatformServicesFixture,
-  daemonClaimRecoveryGatewayFixture,
-  observeBootTimeMsFixture,
-} from '../../__tests__/support/platform-services-fixture.ts';
+import { observeBootTimeMsFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
@@ -67,8 +63,6 @@ import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
 } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { createRequestHandler as createProductionRequestHandler } from '../request-router.ts';
-import { providerCredentialsFixture } from '../../__tests__/support/provider-credentials-fixture.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { ensureDeviceReady } from '../../core/device/device-ready.ts';
@@ -76,14 +70,14 @@ import { awaitFixtureReadiness } from '../../__tests__/support/application-lifec
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { inspectDeviceClaims } from '../../resources/device/device-claim-inspection.ts';
+import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import {
   makeAndroidDevice,
   makeIosDevice,
   openRequest,
   storedClaimUpdatedAt,
 } from './request-router-open-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -93,6 +87,10 @@ const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 function createOpenHandler(
   sessionStore: ReturnType<typeof makeSessionStore>,
   leaseRegistry = new LeaseRegistry(),
+  capabilities: Pick<
+    Parameters<typeof createRequestHandler>[0],
+    'androidObservation' | 'platformResourceCleanup'
+  > = {},
 ) {
   return createRequestHandler({
     createCommandSurface: fakeCreateCommandSurface,
@@ -103,6 +101,7 @@ function createOpenHandler(
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
+    ...capabilities,
   });
 }
 
@@ -370,7 +369,10 @@ test('proxy open without required lease metadata fails before device resolution'
   expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
-test('close releases the session lease', async () => {
+test.each([
+  ['omitted', {}],
+  ['explicit undefined', { androidObservation: undefined, platformResourceCleanup: undefined }],
+])('close releases the session lease with %s fixture capabilities', async (_case, capabilities) => {
   const sessionStore = makeSessionStore('agent-device-router-open-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
@@ -391,7 +393,7 @@ test('close releases the session lease', async () => {
       clientId: 'client-a',
     },
   });
-  const handler = createOpenHandler(sessionStore, leaseRegistry);
+  const handler = createOpenHandler(sessionStore, leaseRegistry, capabilities);
 
   const response = await handler({
     token: 'test-token',
@@ -452,47 +454,6 @@ test.each([
       clientId: 'client-a',
     }).leaseId,
   ).toBe(lease.leaseId);
-});
-
-test('close fails synchronously when root composition omits platform resource cleanup', async () => {
-  const sessionStore = makeSessionStore('agent-device-router-open-');
-  sessionStore.publish('default', {
-    name: 'default',
-    device: makeIosDevice('SIM-CLOSE-MISSING-CLEANUP'),
-    createdAt: Date.now(),
-    actions: [],
-  });
-  const handler = createProductionRequestHandler({
-    createCommandSurface: fakeCreateCommandSurface,
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    platformServices: daemonPlatformServicesFixture(),
-    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
-    token: 'test-token',
-    sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    providerCredentials: providerCredentialsFixture({}, '/tmp'),
-    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
-    deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    trackDownloadableArtifact: () => 'artifact-id',
-  });
-
-  const response = await handler({
-    token: 'test-token',
-    session: 'default',
-    command: 'close',
-    positionals: [],
-    meta: { requestId: 'req-close-missing-cleanup' },
-  });
-
-  expect(response.ok).toBe(false);
-  if (!response.ok) {
-    expect(response.error).toMatchObject({
-      code: 'INTERNAL_ERROR',
-      message: 'Platform resource cleanup was not supplied by root runtime composition',
-    });
-  }
-  expect(sessionStore.get('default')).toBeDefined();
-  expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
 test('close rejects a different client before cleanup', async () => {

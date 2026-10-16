@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { createRequestCanceledError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { LeaseRegistry } from '../lease-registry.ts';
 import {
   HUMAN_CONTROL_LEASE_REQUEST,
@@ -27,6 +27,173 @@ test('allocateLease creates lease and enforces tenant/run validation', () => {
   assert.throws(
     () => registry.allocateLease({ tenantId: 'tenant-a', runId: 'bad run id' }),
     /Invalid run id/,
+  );
+});
+
+function isLeaseIdInUse(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.code === 'INVALID_ARGS' &&
+    error.details?.reason === 'LEASE_ID_IN_USE'
+  );
+}
+
+test('allocateLease keeps a caller-chosen lease id and refuses any id it already issued', () => {
+  const registry = new LeaseRegistry();
+  const chosen = 'ABCDEF0123456789abcdef0123456789';
+  const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1', leaseId: chosen });
+  assert.equal(lease.leaseId, chosen.toLowerCase());
+  assert.equal(registry.heartbeatLease({ leaseId: lease.leaseId }).leaseId, lease.leaseId);
+
+  assert.throws(
+    () => registry.allocateLease({ tenantId: 'tenant-b', runId: 'run-2', leaseId: chosen }),
+    isLeaseIdInUse,
+  );
+  assert.throws(
+    () => registry.allocateLease({ tenantId: 'tenant-b', runId: 'run-2', leaseId: 'not-hex' }),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+
+  assert.equal(registry.releaseLease({ leaseId: lease.leaseId }).released, true);
+  assert.throws(
+    () => registry.allocateLease({ tenantId: 'tenant-b', runId: 'run-2', leaseId: chosen }),
+    isLeaseIdInUse,
+  );
+
+  const minted = registry.allocateLease({ tenantId: 'tenant-c', runId: 'run-3' });
+  const hostIssued = registry.putHostLease('0123456789abcdef0123456789abcdef', {
+    tenantId: 'tenant-d',
+    runId: 'run-4',
+  });
+  assert.equal(registry.releaseLease({ leaseId: minted.leaseId }).released, true);
+  assert.equal(registry.releaseLease({ leaseId: hostIssued.leaseId }).released, true);
+  for (const leaseId of [minted.leaseId, hostIssued.leaseId]) {
+    assert.throws(
+      () => registry.allocateLease({ tenantId: 'tenant-e', runId: 'run-5', leaseId }),
+      isLeaseIdInUse,
+    );
+  }
+});
+
+test('an allocation repeating its own live lease id gets that lease back, on any device it names or none', () => {
+  const registry = new LeaseRegistry();
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const owner = {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'proxy',
+    clientId: 'client-1',
+  } as const;
+  const lease = registry.allocateLease({ ...owner, leaseId, deviceKey: 'ios:mobile:sim-1' });
+
+  assert.equal(registry.renewRequestedLease({ ...owner, leaseId })?.leaseId, leaseId);
+  assert.equal(registry.allocateLease({ ...owner, leaseId }).deviceKey, lease.deviceKey);
+  assert.equal(
+    registry.renewRequestedLease({ ...owner, leaseId, deviceKey: 'ios:mobile:sim-2' }),
+    undefined,
+  );
+  assert.equal(
+    registry.renewRequestedLease({ ...owner, leaseId, clientId: 'client-2' }),
+    undefined,
+  );
+  assert.equal(registry.renewRequestedLease({ ...owner, leaseId, runId: 'run-2' }), undefined);
+  assert.equal(registry.renewRequestedLease(owner), undefined);
+  assert.throws(
+    () => registry.allocateLease({ ...owner, leaseId, deviceKey: 'ios:mobile:sim-2' }),
+    isLeaseIdInUse,
+  );
+  assert.equal(registry.listActiveLeases().length, 1);
+});
+
+test('a retried allocation renews its own lease for the window that lease carries', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const owner = { tenantId: 'tenant-a', runId: 'run-1', clientId: 'client-1' } as const;
+  const lease = registry.allocateLease({ ...owner, leaseId, ttlMs: 60_000 });
+
+  now = 31_000;
+  const retried = registry.renewRequestedLease({ ...owner, leaseId });
+
+  assert.equal(lease.expiresAt, 61_000);
+  assert.equal(retried?.heartbeatAt, 31_000);
+  assert.equal(retried?.expiresAt, 91_000);
+});
+
+test('an allocation naming an issued lease id gets exactly that lease or LEASE_ID_IN_USE, never another lease of its run', () => {
+  const registry = new LeaseRegistry();
+  const owner = { tenantId: 'tenant-a', runId: 'run-1', clientId: 'client-1' } as const;
+  const first = registry.allocateLease({
+    ...owner,
+    leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    deviceKey: 'ios:mobile:sim-1',
+  });
+  const second = registry.allocateLease({
+    ...owner,
+    leaseId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    deviceKey: 'ios:mobile:sim-2',
+  });
+
+  assert.notEqual(first.leaseId, second.leaseId);
+  assert.throws(
+    () => registry.allocateLease({ ...owner, leaseId: first.leaseId, deviceKey: second.deviceKey }),
+    isLeaseIdInUse,
+  );
+});
+
+test('a retried allocation of a host-pinned lease never outlives the host window', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now });
+  const leaseId = 'cccccccccccccccccccccccccccccccc';
+  const owner = { tenantId: 'tenant-a', runId: 'run-1' } as const;
+  registry.putHostLease(leaseId, { ...owner, ttlMs: 10_000 });
+
+  now = 5_000;
+  const retried = registry.allocateLease({ ...owner, leaseId, ttlMs: 600_000 });
+
+  assert.equal(retried.leaseId, leaseId);
+  assert.equal(retried.expiresAt, 15_000);
+});
+
+test('an expired provider lease keeps its id and provider session from a caller-chosen reuse', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const expiring = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseId,
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'limrun',
+    deviceKey: 'device-1',
+  });
+  registry.recordProviderSession(expiring, 'provider-session-1');
+
+  now = 20_000;
+  assert.deepEqual(
+    registry.consumeExpiredLeases().map((lease) => lease.leaseId),
+    [leaseId],
+  );
+  assert.throws(
+    () =>
+      registry.allocateLease({
+        tenantId: 'tenant-a',
+        runId: 'run-2',
+        leaseId,
+        leaseBackend: 'ios-instance',
+        leaseProvider: 'limrun',
+        deviceKey: 'device-1',
+      }),
+    isLeaseIdInUse,
+  );
+  assert.equal(
+    registry.resolveProviderSession({
+      provider: 'limrun',
+      providerSessionId: 'provider-session-1',
+      tenantId: 'tenant-a',
+    })?.leaseId,
+    leaseId,
   );
 });
 

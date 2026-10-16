@@ -7,7 +7,7 @@ export type AppLogArtifactPaths = Readonly<{
 }>;
 
 export function appLogSessionArtifactsMatch(
-  host: AppLogRuntimeHost,
+  host: Pick<AppLogRuntimeHost, 'artifacts'>,
   sessionId: string,
   paths: AppLogArtifactPaths,
 ): boolean {
@@ -19,7 +19,7 @@ export function appLogSessionArtifactsMatch(
 }
 
 export function assertAppLogSessionArtifacts(
-  host: AppLogRuntimeHost,
+  host: Pick<AppLogRuntimeHost, 'artifacts'>,
   input: AppLogStartInput,
 ): void {
   if (appLogSessionArtifactsMatch(host, input.sessionId, input)) return;

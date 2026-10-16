@@ -5,8 +5,8 @@ import {
   deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
   type InspectedDeviceClaim,
-} from '@agent-device/daemon/device/device-claim-inspection';
-import type { DeviceClaimStaleReleaseOutcome } from '@agent-device/daemon/device/device-claims';
+  type DeviceClaimStaleReleaseOutcome,
+} from '@agent-device/daemon-contracts/device-claims';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -65,7 +65,7 @@ async function runDeviceRelease(flags: CliFlags): Promise<boolean> {
       },
     );
   }
-  const { runStaleDeviceClaimRelease } = await import('./device-release.ts');
+  const { runStaleDeviceClaimRelease } = await import('../../platform-runtime-claim-recovery.ts');
   const outcomes = await runStaleDeviceClaimRelease({
     platform: flags.platform,
     device: flags.device,

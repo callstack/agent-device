@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { WebProvider } from '@agent-device/platform-web';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
@@ -18,8 +18,7 @@ import {
   makeAuthoringSession,
   makeSession,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import {

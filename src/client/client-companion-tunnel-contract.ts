@@ -1,5 +1,4 @@
 export const METRO_COMPANION_RUN_ARG = '--agent-device-run-metro-companion';
-export const REACT_DEVTOOLS_COMPANION_RUN_ARG = '--agent-device-run-react-devtools-companion';
 export const COMPANION_TUNNEL_RECONNECT_DELAY_MS = 1_000;
 export const COMPANION_TUNNEL_LEASE_CHECK_INTERVAL_MS = 250;
 export const WS_READY_STATE_OPEN = 1;
@@ -14,8 +13,6 @@ export const ENV_COMPANION_TUNNEL_SCOPE_RUN_ID = 'AGENT_DEVICE_COMPANION_TUNNEL_
 export const ENV_COMPANION_TUNNEL_SCOPE_LEASE_ID = 'AGENT_DEVICE_COMPANION_TUNNEL_SCOPE_LEASE_ID';
 export const ENV_COMPANION_TUNNEL_REGISTER_PATH = 'AGENT_DEVICE_COMPANION_TUNNEL_REGISTER_PATH';
 export const ENV_COMPANION_TUNNEL_UNREGISTER_PATH = 'AGENT_DEVICE_COMPANION_TUNNEL_UNREGISTER_PATH';
-export const ENV_COMPANION_TUNNEL_DEVICE_PORT = 'AGENT_DEVICE_COMPANION_TUNNEL_DEVICE_PORT';
-export const ENV_COMPANION_TUNNEL_SESSION = 'AGENT_DEVICE_COMPANION_TUNNEL_SESSION';
 
 // The scope SHAPE is declared in contracts/ so zones that only need the shape do not have to
 // declare themselves in terms of client/. Re-exported here for this module's existing consumers.
@@ -34,6 +31,4 @@ export type CompanionTunnelWorkerOptions = {
   launchUrl?: string;
   statePath?: string;
   unregisterPath?: string;
-  devicePort?: number;
-  session?: string;
 };

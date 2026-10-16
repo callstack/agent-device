@@ -1,3 +1,7 @@
+import {
+  createOwnerScopedDeviceClaimReconciler,
+  type ClaimRecoveryGatewayFactory,
+} from '@agent-device/daemon-contracts/device-claim-recovery';
 import { withResolveTargetDeviceCacheScope } from '@agent-device/device-selection/dispatch-resolve';
 import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
@@ -16,6 +20,8 @@ import {
   type ResponseCost,
   errorResponse,
   noActiveSessionError,
+  type DaemonResponse,
+  type DaemonResponseData,
 } from '@agent-device/kernel/contracts';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
@@ -23,12 +29,7 @@ import type {
   RequestPlatformProviderScope,
   RequestPlatformProviders,
 } from '@agent-device/contracts/platform-providers';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-  DaemonResponseData,
-} from '../core/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../core/daemon-request.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from '../core/session-store.ts';
 import { resolvePlatformProviderRequestContext } from './request-platform-provider-context.ts';
@@ -62,8 +63,6 @@ import {
 } from '@agent-device/ad-script';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 import { parameterizeSensitiveString } from '@agent-device/selectors/parameterized-recorded-fill';
-import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
-import type { ClaimRecoveryGatewayFactory } from '../resources/device/claim-recovery-gateway.ts';
 import { isConfinedToAppLease, scopeRequestSession } from '../sessions/request-admission.ts';
 import { redactMacOsAppLeaseResponse } from '../resources/macos-app-lease.ts';
 import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
@@ -92,6 +91,7 @@ import {
   refusedBeforeDispatch,
 } from '../execution/request-dispatch-disclosure.ts';
 import { recordNestedRequests } from '../core/request-dispatch-ledger.ts';
+import { handDownEndedLeases, reportEndedLeases } from '../core/request-ended-leases.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
@@ -134,49 +134,18 @@ export type RequestRouterDeps = {
   providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  /** Ends the sessions opened under a lease the tenant just released, and clears their claims. */
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
-  androidObservation?: AndroidObservationAdapter;
+  androidObservation: AndroidObservationAdapter;
   /** Builds the per-request command surface the device-facing runtimes execute through. */
   createCommandSurface: CreateDaemonCommandSurface;
-  platformResourceCleanup?: PlatformResourceCleanup;
+  platformResourceCleanup: PlatformResourceCleanup;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
   daemonPolicy?: DaemonPolicy;
   trackDownloadableArtifact: TrackDownloadableArtifact;
 };
-
-const unavailableAndroidObservation = new Proxy({} as AndroidObservationAdapter, {
-  get() {
-    return async () => {
-      throw new AppError(
-        'INTERNAL_ERROR',
-        'Android observation was not supplied by root runtime composition',
-      );
-    };
-  },
-});
-
-function missingPlatformResourceCleanup(): AppError {
-  return new AppError(
-    'INTERNAL_ERROR',
-    'Platform resource cleanup was not supplied by root runtime composition',
-  );
-}
-
-const unavailablePlatformResourceCleanup: PlatformResourceCleanup = Object.freeze({
-  stopSnapshotHelper: async () => {
-    throw missingPlatformResourceCleanup();
-  },
-  closeManagedBrowser: async () => {
-    throw missingPlatformResourceCleanup();
-  },
-  cleanupSessionlessExecutionHost: async () => {
-    throw missingPlatformResourceCleanup();
-  },
-  retainExecutionHostAfterClose: () => {
-    throw missingPlatformResourceCleanup();
-  },
-});
 
 export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   const {
@@ -196,10 +165,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    endSessionsForLease,
     providerAppCatalog,
-    androidObservation = unavailableAndroidObservation,
+    androidObservation,
     createCommandSurface,
-    platformResourceCleanup = unavailablePlatformResourceCleanup,
+    platformResourceCleanup,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
     daemonPolicy,
@@ -210,6 +180,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     : deps.deviceInventoryGateways;
 
   async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
+    return await reportEndedLeases(req, handleRequestOnLedger);
+  }
+
+  async function handleRequestOnLedger(req: DaemonRequest): Promise<DaemonResponse> {
     const start = Date.now();
     const debug = Boolean(req.meta?.debug || req.flags?.verbose);
     return await withDiagnosticsScope(
@@ -380,8 +354,12 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       providerRuntimeRequiredIds,
       providerCredentials,
       cloudArtifactProvider,
+      endSessionsForLease,
       providerAppCatalog,
-      invoke: recordNestedRequests(handleRequest, dispatchLedger),
+      invoke: handDownEndedLeases(
+        recordNestedRequests(handleRequest, dispatchLedger),
+        lockedScope.req,
+      ),
       invokeReplayAction: allowReplayActions
         ? recordNestedRequests(
             createReplayScopedActionInvoker(lockedScope, providerScope),

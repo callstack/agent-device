@@ -230,9 +230,7 @@ test('runtime diff snapshot initializes baseline when no previous snapshot exist
 
 test('runtime snapshot emits filtered Android guidance from backend analysis', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [],
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState([], { truncated: false, backend: 'android' }),
     analysis: {
       rawNodeCount: 42,
       maxDepth: 6,
@@ -253,12 +251,13 @@ test('runtime snapshot emits filtered Android guidance from backend analysis', a
 
 test('runtime snapshot renders the system-surface disclosure from Android annotations', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'FrameLayout', label: 'Quick settings' },
-      { ref: 'e2', index: 1, depth: 1, parentIndex: 0, type: 'Switch', label: 'Internet' },
-    ],
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'FrameLayout', label: 'Quick settings' },
+        { index: 1, depth: 1, parentIndex: 0, type: 'Switch', label: 'Internet' },
+      ],
+      { truncated: false, backend: 'android' },
+    ),
     androidSnapshot: {
       backend: 'android-helper',
       systemSurfaceOnly: true,
@@ -274,9 +273,10 @@ test('runtime snapshot renders the system-surface disclosure from Android annota
 
 test('runtime snapshot warns when iOS interactive output is root-only', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Application' }],
-    truncated: false,
-    backend: 'xctest',
+    snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Application' }], {
+      truncated: false,
+      backend: 'xctest',
+    }),
   });
 
   const result = await device.capture.snapshot({
@@ -292,13 +292,14 @@ test('runtime snapshot warns when iOS interactive output is root-only', async ()
 test('runtime snapshot flags a merged accessibility leaf and surfaces backend warnings', async () => {
   const mergedLabel = Array.from({ length: 30 }, (_, i) => `Row ${i}, Tap`).join(', ');
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'Application', label: 'App' },
-      { ref: 'e2', index: 1, depth: 1, parentIndex: 0, type: 'Other', label: mergedLabel },
-      { ref: 'e3', index: 2, depth: 1, parentIndex: 0, type: 'Button', label: 'Ok' },
-    ],
-    truncated: false,
-    backend: 'xctest',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'Application', label: 'App' },
+        { index: 1, depth: 1, parentIndex: 0, type: 'Other', label: mergedLabel },
+        { index: 2, depth: 1, parentIndex: 0, type: 'Button', label: 'Ok' },
+      ],
+      { truncated: false, backend: 'xctest' },
+    ),
     warnings: [
       'Recovered this snapshot with the fallback accessibility backend after sparse tree.',
     ],
@@ -319,16 +320,17 @@ test('runtime snapshot flags a merged accessibility leaf and surfaces backend wa
 test('runtime snapshot does not flag prose text or labeled containers with children', async () => {
   const prose = Array.from({ length: 30 }, (_, i) => `clause ${i}`).join(', ');
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'Application', label: 'App' },
-      // Long comma-joined prose on a text node: content, not a collapsed container.
-      { ref: 'e2', index: 1, depth: 1, parentIndex: 0, type: 'StaticText', label: prose },
-      // Same label shape on a container WITH children: not a merged leaf.
-      { ref: 'e3', index: 2, depth: 1, parentIndex: 0, type: 'Other', label: prose },
-      { ref: 'e4', index: 3, depth: 2, parentIndex: 2, type: 'Button', label: 'Ok' },
-    ],
-    truncated: false,
-    backend: 'xctest',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'Application', label: 'App' },
+        // Long comma-joined prose on a text node: content, not a collapsed container.
+        { index: 1, depth: 1, parentIndex: 0, type: 'StaticText', label: prose },
+        // Same label shape on a container WITH children: not a merged leaf.
+        { index: 2, depth: 1, parentIndex: 0, type: 'Other', label: prose },
+        { index: 3, depth: 2, parentIndex: 2, type: 'Button', label: 'Ok' },
+      ],
+      { truncated: false, backend: 'xctest' },
+    ),
   });
 
   const result = await device.capture.snapshot({ session: 'default' });
@@ -339,12 +341,22 @@ test('runtime snapshot does not flag prose text or labeled containers with child
 test('runtime snapshot renders the structured quality verdict and skips legacy detectors', async () => {
   const mergedLabel = Array.from({ length: 30 }, (_, i) => `Row ${i}, Tap`).join(', ');
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'Application', label: 'App' },
-      { ref: 'e2', index: 1, depth: 1, parentIndex: 0, type: 'Other', label: mergedLabel },
-    ],
-    truncated: true,
-    backend: 'xctest',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'Application', label: 'App' },
+        { index: 1, depth: 1, parentIndex: 0, type: 'Other', label: mergedLabel },
+      ],
+      {
+        truncated: true,
+        backend: 'xctest',
+        snapshotQuality: {
+          state: 'recovered',
+          backend: 'queries',
+          reason: 'snapshot returned only structural application/window nodes',
+          collapsedLeafIndexes: [1],
+        },
+      },
+    ),
     quality: {
       state: 'recovered',
       backend: 'queries',
@@ -372,13 +384,23 @@ test('runtime snapshot renders the structured quality verdict and skips legacy d
 test('runtime snapshot renders healthy-capture disclosures from the verdict alone', async () => {
   const tabBarLabel = Array.from({ length: 12 }, (_, i) => `Tab ${i}`).join(', ');
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'Application', label: 'App' },
-      { ref: 'e2', index: 1, depth: 1, parentIndex: 0, type: 'Other', label: tabBarLabel },
-      { ref: 'e3', index: 2, depth: 1, parentIndex: 0, type: 'Button', label: 'Ok' },
-    ],
-    truncated: false,
-    backend: 'xctest',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'Application', label: 'App' },
+        { index: 1, depth: 1, parentIndex: 0, type: 'Other', label: tabBarLabel },
+        { index: 2, depth: 1, parentIndex: 0, type: 'Button', label: 'Ok' },
+      ],
+      {
+        truncated: false,
+        backend: 'xctest',
+        snapshotQuality: {
+          state: 'healthy',
+          backend: 'tree',
+          customActions: { read: 12, candidates: 19, truncated: 0, blocked: false },
+          collapsedLeafIndexes: [1],
+        },
+      },
+    ),
     quality: {
       state: 'healthy',
       backend: 'tree',
@@ -397,12 +419,13 @@ test('runtime snapshot renders healthy-capture disclosures from the verdict alon
 
 test('runtime snapshot does not warn for a normal iOS interactive output', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'Application' },
-      { ref: 'e2', index: 1, depth: 1, type: 'Button', label: 'Continue' },
-    ],
-    truncated: false,
-    backend: 'xctest',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'Application' },
+        { index: 1, depth: 1, type: 'Button', label: 'Continue' },
+      ],
+      { truncated: false, backend: 'xctest' },
+    ),
   });
 
   const result = await device.capture.snapshot({
@@ -415,13 +438,14 @@ test('runtime snapshot does not warn for a normal iOS interactive output', async
 
 test('runtime snapshot warns when Android hierarchy looks like a React Native overlay', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'Text', label: 'LogBox' },
-      { ref: 'e2', index: 1, depth: 1, type: 'Text', label: 'Warnings' },
-      { ref: 'e3', index: 2, depth: 1, type: 'Button', label: 'Dismiss' },
-    ],
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'Text', label: 'LogBox' },
+        { index: 1, depth: 1, type: 'Text', label: 'Warnings' },
+        { index: 2, depth: 1, type: 'Button', label: 'Dismiss' },
+      ],
+      { truncated: false, backend: 'android' },
+    ),
   });
 
   const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
@@ -431,17 +455,17 @@ test('runtime snapshot warns when Android hierarchy looks like a React Native ov
 
 test('runtime snapshot warns on collapsed Android React Native warning banners', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      {
-        ref: 'e1',
-        index: 0,
-        depth: 0,
-        type: 'android.widget.TextView',
-        label: 'Warning: Each child in a list should have a unique "key" prop.',
-      },
-    ],
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState(
+      [
+        {
+          index: 0,
+          depth: 0,
+          type: 'android.widget.TextView',
+          label: 'Warning: Each child in a list should have a unique "key" prop.',
+        },
+      ],
+      { truncated: false, backend: 'android' },
+    ),
   });
 
   const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
@@ -451,26 +475,25 @@ test('runtime snapshot warns on collapsed Android React Native warning banners',
 
 test('runtime snapshot does not suggest full-screen React Native warning parents', async () => {
   const result = await createSnapshotOnlyDevice({
-    nodes: [
-      {
-        ref: 'e1',
-        index: 0,
-        depth: 0,
-        type: 'XCUIElementTypeOther',
-        label: '!, Open debugger to view warnings.',
-        rect: { x: 0, y: 0, width: 402, height: 874 },
-      },
-      {
-        ref: 'e2',
-        index: 1,
-        depth: 1,
-        type: 'XCUIElementTypeOther',
-        label: '!, Open debugger to view warnings.',
-        rect: { x: 10, y: 786, width: 382, height: 68 },
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
+    snapshot: makeSnapshotState(
+      [
+        {
+          index: 0,
+          depth: 0,
+          type: 'XCUIElementTypeOther',
+          label: '!, Open debugger to view warnings.',
+          rect: { x: 0, y: 0, width: 402, height: 874 },
+        },
+        {
+          index: 1,
+          depth: 1,
+          type: 'XCUIElementTypeOther',
+          label: '!, Open debugger to view warnings.',
+          rect: { x: 10, y: 786, width: 382, height: 68 },
+        },
+      ],
+      { truncated: false, backend: 'xctest' },
+    ),
   }).capture.snapshot({ session: 'default', interactiveOnly: true });
 
   assertReactNativeOverlayWarning(result.warnings);
@@ -479,13 +502,14 @@ test('runtime snapshot does not suggest full-screen React Native warning parents
 
 test('runtime snapshot recognizes Android React Native stack overlays with Dismiss and Minimize controls', async () => {
   const result = await createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'android.widget.TextView', label: 'useOnyx.ts:80:43' },
-      { ref: 'e2', index: 1, depth: 1, type: 'android.widget.Button', label: 'Dismiss' },
-      { ref: 'e3', index: 2, depth: 1, type: 'android.widget.TextView', label: 'Minimize' },
-    ],
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'android.widget.TextView', label: 'useOnyx.ts:80:43' },
+        { index: 1, depth: 1, type: 'android.widget.Button', label: 'Dismiss' },
+        { index: 2, depth: 1, type: 'android.widget.TextView', label: 'Minimize' },
+      ],
+      { truncated: false, backend: 'android' },
+    ),
   }).capture.snapshot({ session: 'default', interactiveOnly: true });
 
   assertReactNativeOverlayWarning(result.warnings);
@@ -493,12 +517,13 @@ test('runtime snapshot recognizes Android React Native stack overlays with Dismi
 
 test('runtime snapshot recognizes Android RedBox stacks without Minimize', async () => {
   const result = await createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'android.widget.TextView', label: 'useOnyx.ts:80:43' },
-      { ref: 'e2', index: 1, depth: 1, type: 'android.widget.Button', label: 'Dismiss' },
-    ],
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'android.widget.TextView', label: 'useOnyx.ts:80:43' },
+        { index: 1, depth: 1, type: 'android.widget.Button', label: 'Dismiss' },
+      ],
+      { truncated: false, backend: 'android' },
+    ),
   }).capture.snapshot({ session: 'default', interactiveOnly: true });
 
   assertReactNativeOverlayWarning(result.warnings);
@@ -506,31 +531,29 @@ test('runtime snapshot recognizes Android RedBox stacks without Minimize', async
 
 test('runtime snapshot warns when iOS hierarchy looks like a React Native overlay', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      {
-        ref: 'e1',
-        index: 0,
-        depth: 0,
-        type: 'XCUIElementTypeOther',
-        label: 'React Native RedBox',
-      },
-      {
-        ref: 'e2',
-        index: 1,
-        depth: 1,
-        type: 'XCUIElementTypeStaticText',
-        value: 'Runtime Error',
-      },
-      {
-        ref: 'e3',
-        index: 2,
-        depth: 1,
-        type: 'XCUIElementTypeButton',
-        identifier: 'Reload JS',
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
+    snapshot: makeSnapshotState(
+      [
+        {
+          index: 0,
+          depth: 0,
+          type: 'XCUIElementTypeOther',
+          label: 'React Native RedBox',
+        },
+        {
+          index: 1,
+          depth: 1,
+          type: 'XCUIElementTypeStaticText',
+          value: 'Runtime Error',
+        },
+        {
+          index: 2,
+          depth: 1,
+          type: 'XCUIElementTypeButton',
+          identifier: 'Reload JS',
+        },
+      ],
+      { truncated: false, backend: 'xctest' },
+    ),
   });
 
   const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
@@ -540,19 +563,19 @@ test('runtime snapshot warns when iOS hierarchy looks like a React Native overla
 
 test('runtime snapshot targets React Native LogBox close icon instead of warning body', async () => {
   const result = await createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'XCUIElementTypeOther', label: 'LogBox' },
-      {
-        ref: 'e2',
-        index: 1,
-        depth: 1,
-        type: 'XCUIElementTypeStaticText',
-        label: 'Warning: Each child in a list should have a unique "key" prop.',
-      },
-      { ref: 'e3', index: 2, depth: 1, type: 'XCUIElementTypeButton', label: '×' },
-    ],
-    truncated: false,
-    backend: 'xctest',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'XCUIElementTypeOther', label: 'LogBox' },
+        {
+          index: 1,
+          depth: 1,
+          type: 'XCUIElementTypeStaticText',
+          label: 'Warning: Each child in a list should have a unique "key" prop.',
+        },
+        { index: 2, depth: 1, type: 'XCUIElementTypeButton', label: '×' },
+      ],
+      { truncated: false, backend: 'xctest' },
+    ),
   }).capture.snapshot({ session: 'default', interactiveOnly: true });
 
   assertReactNativeOverlayWarning(result.warnings);
@@ -560,13 +583,14 @@ test('runtime snapshot targets React Native LogBox close icon instead of warning
 
 test('runtime snapshot does not warn for ordinary Android validation errors', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [
-      { ref: 'e1', index: 0, depth: 0, type: 'Text', label: 'Validation errors' },
-      { ref: 'e2', index: 1, depth: 1, type: 'Text', label: 'Required' },
-      { ref: 'e3', index: 2, depth: 1, type: 'Button', label: 'Submit order' },
-    ],
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState(
+      [
+        { index: 0, depth: 0, type: 'Text', label: 'Validation errors' },
+        { index: 1, depth: 1, type: 'Text', label: 'Required' },
+        { index: 2, depth: 1, type: 'Button', label: 'Submit order' },
+      ],
+      { truncated: false, backend: 'android' },
+    ),
   });
 
   const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
@@ -590,9 +614,11 @@ test('runtime snapshot stale-drop warning uses the runtime clock', async () => {
   session.snapshot.createdAt = 1_000;
   const device = createAgentDevice({
     backend: createSnapshotBackend(() => ({
-      nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Text', label: 'After' }],
-      truncated: false,
-      backend: 'android',
+      snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Text', label: 'After' }], {
+        truncated: false,
+        backend: 'android',
+        createdAt: 3_500,
+      }),
     })),
     artifacts: createLocalArtifactAdapter(),
     sessions: {
@@ -740,9 +766,10 @@ function assertReactNativeOverlayWarning(warnings: string[] | undefined) {
 test('runtime snapshot discloses a cut capture the same way on every backend', async () => {
   for (const backend of ['android', 'xctest'] as const) {
     const device = createSnapshotOnlyDevice({
-      nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
-      truncated: true,
-      backend,
+      snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Home' }], {
+        truncated: true,
+        backend: backend,
+      }),
     });
 
     const result = await device.capture.snapshot({ session: 'default' });
@@ -753,9 +780,10 @@ test('runtime snapshot discloses a cut capture the same way on every backend', a
   }
 
   const complete = createSnapshotOnlyDevice({
-    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Home' }], {
+      truncated: false,
+      backend: 'android',
+    }),
   });
   const result = await complete.capture.snapshot({ session: 'default' });
   assert.equal(
@@ -771,9 +799,10 @@ test('runtime snapshot discloses a cut capture the same way on every backend', a
 test('runtime snapshot publishes the keyboard band its capture measured', async () => {
   const band = { kind: 'visible', frame: { x: 0, y: 583, width: 402, height: 291 } } as const;
   const device = createSnapshotOnlyDevice({
-    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
-    backend: 'xctest',
-    keyboard: band,
+    snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Home' }], {
+      backend: 'xctest',
+      keyboard: band,
+    }),
   });
 
   const result = await device.capture.snapshot({ session: 'default' });
@@ -783,8 +812,9 @@ test('runtime snapshot publishes the keyboard band its capture measured', async 
 
 test('runtime snapshot leaves the keyboard band off when the backend measured none', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
-    backend: 'xctest',
+    snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Home' }], {
+      backend: 'xctest',
+    }),
   });
 
   const result = await device.capture.snapshot({ session: 'default' });
@@ -817,9 +847,10 @@ test('runtime snapshot warns when its tree was read on a surface still moving af
 
 test('runtime snapshot publishes the viewport its producer measured', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
-    backend: 'android',
-    viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 }),
+    snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Home' }], {
+      backend: 'android',
+      viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 }),
+    }),
   });
 
   const result = await device.capture.snapshot({ session: 'default' });
@@ -829,8 +860,9 @@ test('runtime snapshot publishes the viewport its producer measured', async () =
 
 test('runtime snapshot leaves the viewport off when the producer measured no box', async () => {
   const device = createSnapshotOnlyDevice({
-    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
-    backend: 'android',
+    snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Home' }], {
+      backend: 'android',
+    }),
   });
 
   const result = await device.capture.snapshot({ session: 'default' });
@@ -838,11 +870,10 @@ test('runtime snapshot leaves the viewport off when the producer measured no box
   assert.equal('viewport' in result, false);
 });
 
-// The Android helper's clickability evidence is retained by object identity, and this command
-// merges the backend's facts into a copy of the state it hands over (#3182). A copy that forgets
-// the evidence is silent until Maestro's clickable-first ordering finds no exact evidence, falls
-// back to document order, and taps an inert duplicate of a tapped id (Android smoke lane).
-test('runtime snapshot carries backend clickability evidence through the response merge', async () => {
+// The Android helper's clickability evidence is retained by object identity. Presentation and
+// public-response copies must carry it while projecting viewport from the canonical state (#3182).
+// Losing it makes Maestro fall back to document order and tap an inert duplicate (Android smoke lane).
+test('runtime snapshot carries backend clickability evidence through presentation and response copies', async () => {
   const clickability = {
     kind: 'exact',
     provider: 'android-helper',
@@ -856,16 +887,30 @@ test('runtime snapshot carries backend clickability evidence through the respons
       { index: 0, depth: 0, type: 'TextView', label: 'Inert duplicate target' },
       { index: 1, depth: 0, type: 'Button', label: 'Clickable duplicate target' },
     ],
-    { backend: 'android', producer: 'android-uiautomator' },
+    {
+      backend: 'android',
+      producer: 'android-uiautomator',
+      viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 }),
+    },
   );
   attachSnapshotClickabilityEvidence(state, clickability);
-  const device = createSnapshotOnlyDevice({
-    snapshot: state,
-    viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 }),
+  let stored: Parameters<CommandSessionStore['set']>[0] | undefined;
+  const device = createAgentDevice({
+    backend: createSnapshotBackend(() => ({ snapshot: state })),
+    artifacts: createLocalArtifactAdapter(),
+    sessions: {
+      get: () => undefined,
+      set: (record) => {
+        stored = record;
+      },
+    },
+    policy: localCommandPolicy(),
   });
 
   const result = await device.capture.snapshot({ session: 'default' });
 
+  assert.deepEqual(readSnapshotClickabilityEvidence(stored?.snapshot), clickability);
   assert.deepEqual(readSnapshotClickabilityEvidence(result), clickability);
+  assert.equal(JSON.stringify(result).includes('clickability'), false);
   assert.deepEqual(result.viewport, { width: 1080, height: 2400 });
 });

@@ -1,3 +1,4 @@
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
@@ -5,7 +6,6 @@ import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-r
 import type { PerfNativeCaptureLiveHandle } from '@agent-device/contracts/perf-runtime';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { appLogResourceStore } from '../../../../resources/app-log-resource-store.ts';
 import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
 import { perfCaptureResourceStore } from '@agent-device/capture-kit/perf-capture-resource-store';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
@@ -14,7 +14,7 @@ import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 

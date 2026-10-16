@@ -1,7 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { CommandClock } from '@agent-device/contracts/runtime-contract';
+import type { PresentedSurface, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   APP_SURFACE,
   iosSystemSurfaceDisclosure,
@@ -10,10 +12,19 @@ import {
 } from '@agent-device/contracts/ios-system-surface';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/testing/ref-frame';
+import {
+  PRESENTED_SHEET_FULL_NODES,
+  PRESENTED_SHEET_INTERACTIVE_NODES,
+  SHEET_DISMISSED_NODES,
+} from './presented-sheet-trees.ts';
+import {
+  activateCompleteRefFrame,
+  markSessionSnapshotOutdated,
+  refFrameState,
+} from '@agent-device/daemon/testing/ref-frame';
 import { setSessionSnapshot } from '@agent-device/daemon/testing/session-snapshot';
 import type { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import type { SessionRef, SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
@@ -76,6 +87,7 @@ type SettlePayload = {
   captures: number;
   quietMs: number;
   timeoutMs: number;
+  waitedMs: number;
   refsGeneration?: number;
   diff?: {
     summary: { additions: number; removals: number; unchanged: number };
@@ -113,16 +125,34 @@ async function emulateCaptureSnapshotForSession(
   return snapshot;
 }
 
-function mockCommandDispatch(snapshots: Array<typeof BEFORE_NODES>) {
+function mockCommandDispatch(
+  snapshots: RawSnapshotNode[][],
+  producer: NonNullable<GenericSettleTree['producer']> = 'apple-runner',
+) {
   let snapshotCalls = 0;
   mockDispatch.mockImplementation(async (command) => {
     if (command === 'snapshot') {
       const nodes = snapshots[Math.min(snapshotCalls, snapshots.length - 1)];
       snapshotCalls += 1;
-      return { nodes, backend: 'xctest', producer: 'apple-runner' };
+      return { nodes, backend: 'xctest', producer };
     }
     return {};
   });
+}
+
+/**
+ * A clock the settle loop advances instead of waiting. The default-window cases below assert the
+ * window a run RESOLVED, which needs no real elapsed time: the loop's own budget arithmetic runs on
+ * this clock, so the suite neither slows nor goes unstable under load.
+ */
+function fakeClock(stepMs = 300): CommandClock {
+  let elapsed = 0;
+  return {
+    now: () => elapsed,
+    sleep: async (ms: number) => {
+      elapsed += ms > 0 ? ms : stepMs;
+    },
+  };
 }
 
 const contextFromFlags = () => ({}) as never;
@@ -161,14 +191,17 @@ function seedSession(
 type GenericSettleTree = {
   nodes: RawSnapshotNode[];
   systemSurface?: IosSystemSurfaceProvenance;
+  producer?: 'apple-runner' | 'simulator-ax-bridge';
+  presentedSurface?: PresentedSurface;
 };
 
 function snapshotPayload(tree: GenericSettleTree) {
   return {
     nodes: tree.nodes,
     backend: 'xctest' as const,
-    producer: 'apple-runner' as const,
+    producer: tree.producer ?? ('apple-runner' as const),
     ...(tree.systemSurface ? { systemSurface: tree.systemSurface } : {}),
+    ...(tree.presentedSurface ? { presentedSurface: tree.presentedSurface } : {}),
   };
 }
 
@@ -205,6 +238,8 @@ async function dispatchGeneric(params: {
   runtimeBindings?: Readonly<
     Pick<Parameters<typeof dispatchGenericCommand>[0], 'inspectFacts' | 'bindDevice'>
   >;
+  /** Injects a clock into every command surface the route builds, so no test waits real time. */
+  clock?: CommandClock;
 }): Promise<DaemonResponse> {
   const req: DaemonRequest = {
     token: 't',
@@ -214,7 +249,9 @@ async function dispatchGeneric(params: {
     ...(params.flags ? { flags: params.flags } : {}),
   };
   return await dispatchGenericCommand({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: params.clock
+      ? async (config) => await testCreateCommandSurface({ ...config, clock: params.clock })
+      : testCreateCommandSurface,
     platformServices: composedPlatformServicesFixture(),
     req,
     ref: params.sessionStore.lookup(params.sessionName)!,
@@ -532,6 +569,75 @@ test('back --settle attaches no diff across a sheet-to-app surface change and di
   expect(stored.snapshot?.iosSystemSurfaceBundleId).toBeUndefined();
 });
 
+/**
+ * `back --settle` over a sheet left on the session by a capture of one given flavour, which is how
+ * the generic route picks its baseline (`generic-settle.ts` reads the stored tree directly). The
+ * settle loop's budget arithmetic runs on the injected clock, so no caller waits real time.
+ */
+async function dismissSheetFromBaseline(
+  sessionName: string,
+  baseline: GenericSettleTree,
+  options: { outdated?: boolean; captures?: RawSnapshotNode[][] } = {},
+): Promise<SettlePayload> {
+  const sessionStore = makeSessionStore();
+  const session = seedSession(sessionName, sessionStore, baseline);
+  if (options.outdated) markSessionSnapshotOutdated(session);
+  // Rootless, as the first reads after a dismissal can be: only a presented baseline arms on them.
+  mockCommandDispatch(options.captures ?? [SHEET_DISMISSED_NODES.slice(1)]);
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'back',
+    flags: { settle: true, settleQuietMs: 25, timeoutMs: 30_000 },
+    clock: fakeClock(),
+  });
+  return expectOkData(response).settle as SettlePayload;
+}
+
+test('the confirmation arms for one presented sheet whichever baseline flavour the route holds', async () => {
+  // The interactive capture projects the sheet as 4 nodes and the full read as 6, so a rule keyed on
+  // the projection disarms on the full one. The producer's fact is stamped before projection.
+  const interactive = await dismissSheetFromBaseline('generic-settle-dismiss-sheet-interactive', {
+    nodes: PRESENTED_SHEET_INTERACTIVE_NODES,
+    presentedSurface: 'presented',
+  });
+  const full = await dismissSheetFromBaseline('generic-settle-dismiss-sheet-full', {
+    nodes: PRESENTED_SHEET_FULL_NODES,
+    presentedSurface: 'presented',
+  });
+
+  expect(interactive.settled).toBe(true);
+  expect(full.settled).toBe(true);
+  expect(interactive.waitedMs).toBeGreaterThanOrEqual(1_500);
+  expect(full.waitedMs).toBeGreaterThanOrEqual(1_500);
+});
+
+test('back --settle keeps the plain window when the stored tree presented nothing', async () => {
+  // The same broad replacement, stamped `absent` by its producer: the stored tree's fact reaches
+  // the loop, and a screen with nothing presented over it owes no dismissal confirmation (#3470).
+  const settle = await dismissSheetFromBaseline(
+    'generic-settle-absent',
+    { nodes: PRESENTED_SHEET_FULL_NODES, presentedSurface: 'absent' },
+    { captures: [SHEET_DISMISSED_NODES] },
+  );
+
+  expect(settle.settled).toBe(true);
+  expect(settle.waitedMs).toBeLessThan(1_500);
+});
+
+test('back --settle keeps the confirmation when a side effect outdated an absent stored tree', async () => {
+  // The app screen was read `absent`, then a press presented the sheet without a capture. The
+  // stored fact predates the sheet, so it cannot rule out the confirmation its dismissal owes.
+  const settle = await dismissSheetFromBaseline(
+    'generic-settle-outdated-absent',
+    { nodes: SHEET_DISMISSED_NODES, presentedSurface: 'absent' },
+    { outdated: true, captures: [PRESENTED_SHEET_INTERACTIVE_NODES, SHEET_DISMISSED_NODES] },
+  );
+
+  expect(settle.settled).toBe(true);
+  expect(settle.waitedMs).toBeGreaterThanOrEqual(1_500);
+});
+
 test('the settle observation runs after the post-gesture stabilization marker', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-order';
@@ -801,3 +907,80 @@ for (const change of ['rebuild', 'retire'] as const) {
     }
   });
 }
+
+// The default quiet window keys on the capture the settle loop PERFORMS (#3470 follow-up), not on
+// the baseline it diffs: on this route the baseline is the session's stored tree, which can be
+// several commands stale and served by a different producer. All three run on an injected clock, so
+// they assert the resolved window without real waiting.
+test('scroll --settle without --settle-quiet uses the shorter default when the loop reads the simulator bridge', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-default-quiet';
+  seedSession(sessionName, sessionStore, {
+    nodes: BEFORE_NODES,
+    producer: 'simulator-ax-bridge',
+  });
+  mockCommandDispatch([AFTER_NODES], 'simulator-ax-bridge');
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'scroll',
+    positionals: ['down'],
+    // No settleQuietMs: the route's own default window is what is under test.
+    flags: { settle: true, timeoutMs: 2_000 },
+    clock: fakeClock(),
+  });
+
+  const settle = expectOkData(response).settle as SettlePayload;
+  expect(settle.settled).toBe(true);
+  expect(settle.quietMs).toBe(300);
+});
+
+test('scroll --settle keeps the 500ms default when the loop reads the Apple runner', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-default-quiet-runner';
+  seedSession(sessionName, sessionStore, {
+    nodes: BEFORE_NODES,
+    producer: 'apple-runner',
+  });
+  mockCommandDispatch([AFTER_NODES], 'apple-runner');
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { settle: true, timeoutMs: 2_000 },
+    clock: fakeClock(),
+  });
+
+  const settle = expectOkData(response).settle as SettlePayload;
+  expect(settle.settled).toBe(true);
+  expect(settle.quietMs).toBe(500);
+});
+
+test('a stale bridge-sourced baseline does not shorten a settle the Apple runner performs', async () => {
+  // The mismatch the stored baseline can carry: the tree on file came from the bridge, but the
+  // captures that pay this window come from the runner, whose read the short window was never
+  // measured on. Keying on the baseline would hold 300ms against an unmeasured read.
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-default-quiet-mismatch';
+  seedSession(sessionName, sessionStore, {
+    nodes: BEFORE_NODES,
+    producer: 'simulator-ax-bridge',
+  });
+  mockCommandDispatch([AFTER_NODES], 'apple-runner');
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { settle: true, timeoutMs: 2_000 },
+    clock: fakeClock(),
+  });
+
+  const settle = expectOkData(response).settle as SettlePayload;
+  expect(settle.settled).toBe(true);
+  expect(settle.quietMs).toBe(500);
+});

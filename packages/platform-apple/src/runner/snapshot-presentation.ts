@@ -22,9 +22,14 @@ import {
   buildIosSnapshotPresentationKey,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { AppError } from '@agent-device/kernel/errors';
-import { isRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
+import {
+  isRecord,
+  readPresentedSurfaceFact,
+  readSnapshotKeyboardBandFact,
+} from '@agent-device/kernel/record';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type {
+  PresentedSurface,
   RawSnapshotNode,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
@@ -48,6 +53,12 @@ export type AppleRunnerSnapshotResult = Readonly<{
   qualityPayload?: IosRunnerQualityPayloadFacts;
   runnerFatal?: boolean;
   systemSurface?: IosSystemSurfaceProvenance;
+  /**
+   * The runner's own answer about a modal presentation over the app (#3565), read from its capture
+   * payload. The runner classifies the acquisition it is about to present, and only publishes a
+   * reading it can support: a payload with no key is a capture the runner could not decide.
+   */
+  presentedSurface?: PresentedSurface;
   keyboard?: SnapshotKeyboardBandFact;
   /** Foreground repair this capture's own command had to perform (#2682). */
   targetActivation?: IosTargetActivation;
@@ -59,6 +70,7 @@ export function readAppleSnapshotResult(
   device: Pick<DeviceInfo, 'platform' | 'appleOs' | 'target'>,
 ): AppleRunnerSnapshotResult {
   const systemSurface = readSystemSurfaceProvenance(result.systemSurface);
+  const presentedSurface = readPresentedSurfaceFact(result);
   const keyboard = readSnapshotKeyboardBandFact(result.keyboard);
   const observation = readSnapshotObservation(result.observation);
   const targetActivation = readTargetActivationFact(result[TARGET_ACTIVATION_WIRE_KEY], (detail) =>
@@ -82,6 +94,7 @@ export function readAppleSnapshotResult(
     runnerFatal: result.runnerFatal === true,
     ...(keyboard ? { keyboard } : {}),
     ...(systemSurface ? { systemSurface } : {}),
+    ...(presentedSurface ? { presentedSurface } : {}),
     ...(targetActivation ? { targetActivation } : {}),
     ...(observation ? { observation } : {}),
     message:

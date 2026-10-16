@@ -147,7 +147,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
     }
   }
 
-  private void runOneShotViewport(Bundle result) {
+  private void runOneShotViewport(Bundle result) throws InterruptedException {
     TouchCommandHandler.populateViewport(result, getConnectedUiAutomationUnchecked());
     finishSafely(0, result);
   }

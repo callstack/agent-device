@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
@@ -12,7 +13,7 @@ import {
   makeAndroidEmulator,
 } from './session-open-runtime.fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import {
   composeOpenWithInitialSnapshot,
   resolveForegroundOpenRequest,

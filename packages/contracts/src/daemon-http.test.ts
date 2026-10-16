@@ -4,12 +4,15 @@ import {
   buildDaemonHealthPayload,
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpBaseUrl,
+  buildDaemonHttpLeaseHeaders,
   buildDaemonHttpTenantHeaders,
   buildDaemonHttpUrl,
   buildRemoteTempArtifactDirPath,
   buildRemoteTempArtifactPath,
   DAEMON_RPC_PROTOCOL_VERSION,
   isRemoteTempArtifactPath,
+  isTenantOwnedSessionName,
+  normalizeTenantId,
 } from './daemon-http.ts';
 
 test('buildDaemonHttpBaseUrl appends the public agent-device base path', () => {
@@ -47,6 +50,23 @@ test('buildDaemonHttpTenantHeaders omits blank tenant identities', () => {
     'x-agent-device-tenant': 'tenant-a',
   });
   assert.deepEqual(buildDaemonHttpTenantHeaders(''), {});
+});
+
+test('normalizeTenantId trims an id and refuses blank, oversized, or out-of-alphabet ids', () => {
+  assert.equal(normalizeTenantId('  team-a.prod_1 '), 'team-a.prod_1');
+  assert.equal(normalizeTenantId('x'.repeat(128)), 'x'.repeat(128));
+  assert.equal(normalizeTenantId('x'.repeat(129)), undefined);
+  assert.equal(normalizeTenantId('alice@example.com'), undefined);
+  assert.equal(normalizeTenantId('   '), undefined);
+  assert.equal(normalizeTenantId(undefined), undefined);
+});
+
+test('buildDaemonHttpLeaseHeaders names a held lease and omits a blank one', () => {
+  assert.deepEqual(buildDaemonHttpLeaseHeaders(' lease-1 '), {
+    'x-agent-device-lease-id': 'lease-1',
+  });
+  assert.deepEqual(buildDaemonHttpLeaseHeaders(''), {});
+  assert.deepEqual(buildDaemonHttpLeaseHeaders(undefined), {});
 });
 
 test('buildDaemonHealthPayload takes the version from its caller and keeps the payload shape', () => {
@@ -96,4 +116,11 @@ test('a temp path of another prefix, a directory, or an escape is not a remote t
     isRemoteTempArtifactPath('/Users/me/agent-device-screenshot-1-a.png', 'screenshot', '.png'),
     false,
   );
+});
+
+test('isTenantOwnedSessionName accepts only names beneath the tenant prefix', () => {
+  assert.equal(isTenantOwnedSessionName('alice', 'alice:default'), true);
+  assert.equal(isTenantOwnedSessionName('alice', 'alice'), false);
+  assert.equal(isTenantOwnedSessionName('alice', 'alice-2:default'), false);
+  assert.equal(isTenantOwnedSessionName('alice', 'bob:alice:default'), false);
 });

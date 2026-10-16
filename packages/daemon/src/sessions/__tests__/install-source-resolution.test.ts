@@ -4,7 +4,7 @@ import path from 'node:path';
 import { resolveInstallSource } from '../install-source-resolution.ts';
 import { trackUploadedArtifact } from '../../resources/artifact-tracking.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 function makeRequest(meta?: DaemonRequest['meta']): DaemonRequest {
   return {

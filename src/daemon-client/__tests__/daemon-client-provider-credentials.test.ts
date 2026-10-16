@@ -12,9 +12,9 @@ import {
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   supportsLoopbackBind,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 import { providerCredentialFingerprint } from '../../provider-credential-fingerprint.ts';
 import { LIMRUN_CREDENTIAL_VARIABLES } from '../../provider-limrun-credentials.ts';
 

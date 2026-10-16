@@ -1,3 +1,4 @@
+import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -101,14 +102,16 @@ test('app-event delivery is admitted on both direct-session legs', () => {
   );
 });
 
-// R58: the Android leg reuses the local family's interactor and serves both cells. The iOS leg
-// writes through simctl and cannot read a setting back.
-test('settings write on both legs and read back only on Android', () => {
-  expect(limrunSettingsOperationFacts(androidMobileDevice).setSetting).toEqual({ available: true });
-  expect(limrunSettingsOperationFacts(androidMobileDevice).readSetting).toEqual({
-    available: true,
+test('the iOS leg serves the simctl settings only and reads nothing back', () => {
+  const android = limrunSettingsOperationFacts(androidMobileDevice);
+  expect(runtimeSubjectFact(android.setSetting, 'animations').available).toBe(true);
+  expect(runtimeSubjectFact(android.readSetting, 'text-size').available).toBe(true);
+  const ios = limrunSettingsOperationFacts(iosDevice).setSetting;
+  expect(runtimeSubjectFact(ios, 'appearance').available).toBe(true);
+  expect(runtimeSubjectFact(ios, 'wifi')).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
   });
-  expect(limrunSettingsOperationFacts(iosDevice).setSetting).toEqual({ available: true });
   expect(limrunSettingsOperationFacts(iosDevice).readSetting).toEqual({
     available: false,
     reason: 'unsupported-provider-mode',

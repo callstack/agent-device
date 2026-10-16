@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { afterEach, vi } from 'vitest';
+import * as hostProcess from '@agent-device/host-kit/process';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { acquireDeviceClaim } from '../device/device-claims.ts';
-import { canonicalLocalDeviceKey } from '../device/device-claim-paths.ts';
+import {
+  acquireDeviceClaim,
+  canonicalLocalDeviceKey,
+} from '@agent-device/daemon-contracts/device-claims';
 import { createDurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -21,14 +24,13 @@ import {
   makeRepairCompleteSession,
 } from '../../__tests__/support/session-factories.ts';
 import {
-  registerFilesystemBoundaryMatrix,
-  type FilesystemBoundaryOwner,
   type FilesystemBoundaryFixture,
-} from '@agent-device/test-kit/filesystem-boundary-faults';
+  type FilesystemBoundaryOwner,
+  registerFilesystemBoundaryMatrix,
+  pinOwnProcessStartTime,
+} from '@agent-device/test-kit';
 
-vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
-);
+pinOwnProcessStartTime(hostProcess);
 
 type DaemonFilesystemBoundaryOwner =
   | 'durable-capture-resource-store/screen-recording'

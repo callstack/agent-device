@@ -38,7 +38,7 @@ export type DeviceReadinessRuntimeHost = Readonly<{
   }>;
   androidEmulator: Readonly<{
     discover(request: DeviceInventoryRequest, signal: AbortSignal): Promise<readonly DeviceInfo[]>;
-    launch(avdName: string, headless: boolean): number;
+    launch(avdName: string, headless: boolean, bootBudgetMs: number): Promise<number>;
     terminate(pid: number): Promise<void>;
   }>;
 }>;

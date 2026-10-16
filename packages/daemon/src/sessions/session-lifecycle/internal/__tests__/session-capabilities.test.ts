@@ -3,14 +3,18 @@ import { test, expect, vi } from 'vitest';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { LINUX_DEVICE, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import {
+  LINUX_DEVICE,
+  mkdtempForTestSync,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  WEB_DESKTOP_DEVICE,
+} from '@agent-device/test-kit';
 import {
   makeAndroidSession,
   makeSession,
 } from '../../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
@@ -29,7 +33,6 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../../core/request-runtime-binding.ts';
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 
 /** The system leaves this owner refuses: the retired fallback listed them unconditionally. */

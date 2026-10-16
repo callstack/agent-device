@@ -13,11 +13,3 @@ export function resolveSessionIsolationMode(raw: string | undefined): SessionIso
   if (normalized === 'tenant') return 'tenant';
   return 'none';
 }
-
-export function normalizeTenantId(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const value = raw.trim();
-  if (!value) return undefined;
-  if (!/^[a-zA-Z0-9._-]{1,128}$/.test(value)) return undefined;
-  return value;
-}

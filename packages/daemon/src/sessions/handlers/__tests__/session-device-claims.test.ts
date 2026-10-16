@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import * as hostProcess from '@agent-device/host-kit/process';
+import { MACOS_DEVICE, mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -30,9 +31,7 @@ vi.mock('@agent-device/platform-android/mechanics', () => ({
     async (_device, _target, currentAppBundleId) => currentAppBundleId,
   ),
 }));
-vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
-);
+pinOwnProcessStartTime(hostProcess);
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ensureDeviceReady } from '../../../core/device/device-ready.ts';
@@ -46,8 +45,10 @@ import {
   prepareApplicationOpenFixture,
 } from '../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
-import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../../resources/device/device-claims.ts';
-import { inspectDeviceClaims } from '../../../resources/device/device-claim-inspection.ts';
+import {
+  acquireDeviceClaim as acquireProductionDeviceClaim,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import {
@@ -56,7 +57,6 @@ import {
 } from '../../session-lifecycle/index.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/support/session-factories.ts';
-import { MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   bindProviderLifecycleRuntime,
@@ -301,6 +301,41 @@ test('a canceled attempt lets the next attempt of the same suite open the device
     store.get('suite:1-gesture-pan-duration:attempt-2')?.deviceClaim?.ownerToken,
     claim?.ownerToken,
   );
+});
+
+test('cancellation after local device setup retains the device claim for recovery', async () => {
+  const { store, stateDir } = setup();
+  const requestId = 'claim-canceled-after-dispatch';
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockDispatch.mockResolvedValue(undefined);
+  markRequestCanceled(requestId);
+
+  try {
+    const response = await handleOpenCommand({
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req: {
+        command: 'open',
+        token: 'test',
+        session: 'claim-canceled-after-dispatch',
+        positionals: ['Demo'],
+        flags: { platform: 'android' },
+        meta: { requestId },
+      },
+      sessionName: 'claim-canceled-after-dispatch',
+      logPath: path.join(stateDir, 'daemon.log'),
+      sessionStore: store,
+    });
+
+    assert.equal(response.ok, false);
+    assert.equal(mockDispatch.mock.calls.length, 1);
+    const retainedClaim = inspectDeviceClaims({ serial: android.id })[0];
+    assert.equal(retainedClaim?.classification, 'live');
+    assert.equal(typeof retainedClaim?.claim?.abandonedAtMs, 'number');
+    assert.equal(store.get('claim-canceled-after-dispatch'), undefined);
+  } finally {
+    clearRequestCanceled(requestId);
+  }
 });
 
 test('provider-owned open creates no host-local device claim from its selected owner', async () => {

@@ -16,21 +16,23 @@ reported. If a gate fails, diagnose it and rerun after the cause is resolved; re
 failures without claiming validation passed. Rerun a failed CI job once only when its log shows an
 infrastructure fault (runner startup, network, device boot); the same failure twice is a finding.
 
+Push once per review round, not per fix: each push restarts CI. Drafts skip device lanes.
+
 - **Published**: branch pushed, PR opened, and validation recorded at a named commit.
 - **Merge-ready**: required checks pass on the actual head, with live evidence for device-facing
   changes. Docs-only and pure-tooling changes do not need device runs. Reporting publication does
   not require waiting for CI.
 
 A local unit run does not establish provider integration or coverage. When those checks are
-selected, verify the **Integration Tests** and **Coverage** jobs on the PR head. Run
-`pnpm check:fallow --base origin/main` when code-quality or dead-code risk warrants it.
+selected, verify the **Integration Tests** and **Coverage** jobs on the PR head.
 
 For device-facing changes, fixtures do not replace a live run whose output proves it reached the
 route the change adds or modifies; a neighbouring route is not evidence. If blocked, record the
 command and device needed and the remaining risk. Close manual sessions using
 `docs/agents/device-verification.md` and report incomplete cleanup.
 
-Gross diff budget: 1,000 lines by `git diff --stat origin/main...HEAD`. Rename-only move PRs titled
+Gross diff budget: 1,000 lines by `git diff --stat origin/main...HEAD`; 2,500 for one coherent change
+in self-contained commits. Stack only layers that land independently. Rename-only move PRs titled
 `refactor(move)` are exempt when `git diff -M90% --stat origin/main...HEAD` proves no material
 content change.
 

@@ -397,6 +397,77 @@ function acquisition(
   };
 }
 
+test("the published presented-surface fact is the acquisition's, for every projection", () => {
+  const requests = [
+    createIosSnapshotRequest(),
+    createIosSnapshotRequest({ interactiveOnly: true }),
+    createIosSnapshotRequest({ raw: true, depth: 1 }),
+    createIosSnapshotRequest({ scope: 'Automation lab' }),
+  ];
+  const published = requests.map((request) =>
+    publishIosSnapshot(acquiredInput(request, presentedTreeNodes()), request),
+  );
+
+  // One screen answers one value: the fact is read on the acquired tree, so a projection that dropped
+  // the presentation from what it shows still reports the presentation the producer saw.
+  assert.deepEqual(
+    published.map((result) => result.presentedSurface),
+    ['presented', 'presented', 'presented', 'presented'],
+  );
+
+  // The depth-1 cut here projects a full acquisition: the presentation sits at depth 2 and 3, so what
+  // that capture publishes holds no trace of it. (A live `--raw --depth 1` bounds the acquisition
+  // instead and answers `unknown`.) Were the fact read off the published nodes, this projection would
+  // have to answer `absent` — which is the failure mode the fact exists to close.
+  const depthCut = published[2]!;
+  const publishedRoles = (depthCut.payload.nodes ?? []).map((node) => node.role);
+  assert.ok(
+    !publishedRoles.includes('UIDimmingView') && !publishedRoles.includes('UITransitionView'),
+    `expected the depth-1 cut to drop the presentation, saw ${JSON.stringify(publishedRoles)}`,
+  );
+  assert.equal(depthCut.presentedSurface, 'presented');
+});
+
+test('an acquisition that states no completeness cannot be read as un-presented', () => {
+  const request = createIosSnapshotRequest();
+  const unstated: IosSnapshotAcquisition = {
+    ...acquisition(request, ordinaryTreeNodes()),
+    truncated: undefined,
+  };
+
+  assert.equal(
+    publishIosSnapshot({ stage: 'acquired', acquisition: unstated }, request).presentedSurface,
+    'unknown',
+  );
+  assert.equal(
+    publishIosSnapshot(acquiredInput(request, ordinaryTreeNodes()), request).presentedSurface,
+    'absent',
+  );
+});
+
+test('a runner-declared publication states no presented-surface fact of its own', () => {
+  const request = createIosSnapshotRequest();
+  const input: IosSnapshotInput = {
+    stage: 'presented',
+    presentation: {
+      producer: 'apple-runner',
+      intent: 'full',
+      payload: { nodes: presentedTreeNodes(), truncated: false },
+    },
+    validation: validationFacts(request),
+  };
+
+  // The runner classifies its own pre-presentation acquisition and publishes the reading beside the
+  // payload; re-deriving one from the presented tree here would be a second, weaker answer. The same tree
+  // answers at the acquired stage, so this pins the stage gate and not a classifier that reads neither:
+  // a publication path that stopped classifying at all would fail the second assertion, not this one.
+  assert.equal(publishIosSnapshot(input, request).presentedSurface, undefined);
+  assert.equal(
+    publishIosSnapshot(acquiredInput(request, presentedTreeNodes()), request).presentedSurface,
+    'presented',
+  );
+});
+
 function acquiredInput(request: IosSnapshotRequest, nodes: RawSnapshotNode[]): IosSnapshotInput {
   return { stage: 'acquired', acquisition: acquisition(request, nodes) };
 }
@@ -419,6 +490,53 @@ function nestedNodes(): RawSnapshotNode[] {
     node(3, 'Button', 'Partially visible', { x: 150, y: 80, width: 100, height: 40 }, 2, 3),
     node(4, 'Button', 'Escaped child', { x: 210, y: 80, width: 100, height: 40 }, 2, 3),
   ];
+}
+
+/** A UIKit-shaped tree over which a presentation is up: a second container carrying a dimming view. */
+function presentedTreeNodes(): RawSnapshotNode[] {
+  return [
+    appNode(0, 'UIApplication', 'Application', viewport, undefined),
+    appNode(1, 'UIWindow', 'Window', viewport, 0),
+    appNode(2, 'UITransitionView', 'Other', viewport, 1, 2),
+    node(3, 'StaticText', 'Automation lab', { x: 10, y: 20, width: 200, height: 20 }, 2, 3),
+    appNode(4, 'UITransitionView', 'Other', viewport, 1, 2),
+    {
+      ...appNode(5, 'UIDimmingView', 'Other', viewport, 4, 3),
+      userInteractionEnabled: true,
+    },
+    node(6, 'StaticText', 'Automation sheet', { x: 10, y: 120, width: 200, height: 20 }, 4, 3),
+  ];
+}
+
+/** A UIKit-shaped tree with nothing presenting: one window, its own single container. */
+function ordinaryTreeNodes(): RawSnapshotNode[] {
+  return [
+    appNode(0, 'UIApplication', 'Application', viewport, undefined),
+    appNode(1, 'UIWindow', 'Window', viewport, 0),
+    appNode(2, 'UITransitionView', 'Other', viewport, 1),
+    appNode(
+      3,
+      'RCTParagraphComponentView',
+      'StaticText',
+      { x: 10, y: 20, width: 200, height: 20 },
+      2,
+    ),
+  ];
+}
+
+/** A node shaped like the simulator AX bridge reports one: UIKit class name in `role`. */
+function appNode(
+  index: number,
+  role: string,
+  type: string,
+  rect: Rect,
+  parentIndex: number | undefined,
+  depth?: number,
+): RawSnapshotNode {
+  return {
+    ...node(index, type, undefined, rect, parentIndex, depth),
+    role,
+  };
 }
 
 function scopedNodes(): RawSnapshotNode[] {

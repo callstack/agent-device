@@ -16,8 +16,11 @@ import {
   currentDaemonCodeSignature,
   startHttpDaemonFixture,
 } from '../../__tests__/test-utils/daemon-http-fixture.ts';
-import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  closeLoopbackServer,
+  mkdtempForTestSync,
+  supportsLoopbackBind,
+} from '@agent-device/test-kit';
 import { loadDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendToDaemon } from '../daemon-client.ts';

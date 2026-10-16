@@ -8,7 +8,7 @@ import {
 } from '@agent-device/host-kit/diagnostics';
 import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
 import type { CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('createDaemonRuntimeSessionStore hides non-matching sessions and scopes writes', async () => {
   const previousHome = process.env.HOME;

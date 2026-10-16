@@ -3,11 +3,12 @@
 // passed. `am instrument` force-stops whatever is already instrumenting the helper package, so a
 // command-scoped capture stops the automation-helper session after every one of those reads and the
 // next read pays a fresh `am instrument` start. These tests pin who owns the helper session across
-// the samples and how long the samples keep coming — not what one sample concludes, which
-// fill-diagnostics/input-actions-fill own. The one conclusion pinned here is whether any of a
-// commit reached the field, which both the soft-success guard and the IME rebind share.
+// the samples and what they conclude when the text lands late or never — not what one sample
+// concludes, which fill-diagnostics/input-actions-fill own. The one conclusion pinned here is
+// whether any of a commit reached the field, which both the soft-success guard and the IME rebind
+// share.
 
-import { afterEach, beforeEach, test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import './test-utils/android-host-test-setup.ts';
 import assert from 'node:assert/strict';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -18,7 +19,6 @@ import {
   isAndroidFillCommitDropped,
   readAndroidFillTargetBeforeMutation,
   verifyAndroidFilledText,
-  type FillVerificationClock,
 } from '../fill-verification.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import {
@@ -101,59 +101,66 @@ test('a value the app renders late still verifies, as long as it lands before th
   const session = createFillHelperSession({
     textForCapture: (captureIndex) => (captureIndex <= 6 ? 'Key echo' : 'chips'),
   });
-  const clock = createFakeClock();
 
-  const verification = await withFillHelperProvider(
-    session.provider,
+  const verification = await underFakeTimers(
     async () =>
-      await verifyAndroidFilledText(
-        device,
-        10,
-        10,
-        'chips',
-        { helperSessionScope: 'daemon-session' },
-        clock,
+      await withFillHelperProvider(
+        session.provider,
+        async () =>
+          await verifyAndroidFilledText(device, 10, 10, 'chips', {
+            helperSessionScope: 'daemon-session',
+          }),
       ),
   );
 
   assert.equal(verification.ok, true);
   assert.equal(session.captureCount(), 8, 'six hint samples, then the value held for two');
-  assert.equal(clock.now(), 1050, 'the value held from the 900 ms sample to the 1050 ms one');
 });
 
-test('a value that never lands is a mismatch at the deadline, not before it', async () => {
+test('a value that never lands is a mismatch read from the last sample', async () => {
   const session = createFillHelperSession({ textForCapture: () => 'Key echo' });
-  const clock = createFakeClock();
+  let elapsedMs = 0;
 
-  const verification = await withFillHelperProvider(
-    session.provider,
-    async () =>
-      await verifyAndroidFilledText(
-        device,
-        10,
-        10,
-        'chips',
-        { helperSessionScope: 'daemon-session' },
-        clock,
-      ),
-  );
+  const verification = await underFakeTimers(async () => {
+    const startedAt = Date.now();
+    const result = await withFillHelperProvider(
+      session.provider,
+      async () =>
+        await verifyAndroidFilledText(device, 10, 10, 'chips', {
+          helperSessionScope: 'daemon-session',
+        }),
+    );
+    elapsedMs = Date.now() - startedAt;
+    return result;
+  });
 
   assert.equal(verification.ok, false);
   assert.equal(verification.reason, 'text_mismatch');
-  assert.equal(verification.actual, 'Key echo', 'the sample at the deadline is the answer');
-  assert.equal(clock.now(), 1500, 'sampling ran to the deadline and not past it');
-  assert.equal(session.captureCount(), 11, 'a sample every 150 ms from 0 to 1500');
+  assert.equal(verification.actual, 'Key echo');
+  assert.ok(
+    elapsedMs >= 1_500 && elapsedMs < 1_650,
+    `sampled until the deadline, took ${elapsedMs} ms`,
+  );
+  assert.ok(session.captureCount() >= 9, 'kept sampling on its interval');
 });
 
-/** A clock the sampler advances by sleeping, so the deadline is reached without waiting it out. */
-function createFakeClock(): FillVerificationClock & { now(): number } {
-  let elapsed = 0;
-  return {
-    now: () => elapsed,
-    sleep: async (milliseconds) => {
-      elapsed += milliseconds;
-    },
-  };
+/**
+ * Runs the sampler with its sleeps advanced instead of waited out. The clock moves in slices
+ * shorter than a sample interval so the helper session's own timers never fire ahead of its replies.
+ */
+async function underFakeTimers<T>(run: () => Promise<T>): Promise<T> {
+  vi.useFakeTimers();
+  try {
+    let done = false;
+    const outcome = run().finally(() => {
+      done = true;
+    });
+    outcome.catch(() => {});
+    while (!done) await vi.advanceTimersByTimeAsync(10);
+    return await outcome;
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 test('the pre-action target read shares the daemon-session helper with the samples', async () => {

@@ -39,10 +39,7 @@ import {
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  ComposeDaemonRuntimeDeps,
-  DaemonRuntimeDeps,
-} from '@agent-device/daemon/server/daemon-runtime';
+import type { ComposeDaemonRuntimeDeps, DaemonRuntimeDeps } from '@agent-device/daemon';
 
 /**
  * Best-effort startup cleanup of managed-agent-browser orphans left by a previous daemon. It runs

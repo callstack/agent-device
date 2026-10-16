@@ -22,18 +22,24 @@ on:
 permissions:
   contents: read
 
+# Release and nightly publishing require green CI on the exact main commit, so a
+# main push never cancels or replaces another commit's run.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: >-
+    ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
+  # Lint, typecheck, and package verification share one checkout and install. The lint gates
+  # and typecheck are independent reads of the tree, so they run as one parallel group.
+  #
   # The Swift trailing-comma assertion is text-only and runs before the toolchain setup, so a
   # grep failure does not wait on an install. The DI-seams check below needs a real TypeScript
   # runtime (#1976 / PR #2006), so it runs after Setup toolchain instead.
-  lint:
-    name: Lint & Format
+  lint-typecheck-package:
+    name: Lint, Typecheck & Package
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -66,50 +72,96 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      # Same false-green shape as the Swift check above (#1976). An earlier revision of this
-      # gate (PR #2006, first review pass) fixed the exit-code handling but kept the ban/allow
-      # decision as a regex that exempted matches by the *spelling* of the typeof target
-      # (`typeof fetch` always passed, SCREAMING_SNAKE_CASE targets always passed) — a name-based
-      # semantic allowlist that would silently pass a new, genuinely test-only `typeof fetch` seam
-      # anywhere in the tree while banning an equally legitimate seam under any other name.
-      # scripts/di-seams instead checks each match against an explicit, typed, per-site allowlist
-      # (scripts/di-seams/approved.ts) keyed by (file, field, typeof-target): a triple is exempt
-      # only because it was individually reviewed and named, never because of how it is spelled.
-      # The gate fails just as hard on a stale approval (one whose triple no longer matches
-      # anything) as on an unapproved seam, so the allowlist can't drift out of sync with the code
-      # it describes. See scripts/di-seams/model.ts and its tests.
-      - name: Fail if test-only DI seams reappear in production code
-        uses: ./.github/actions/run-gate
-        with: { gate: di-seams }
+      - parallel:
+          # Same false-green shape as the Swift check above (#1976). An earlier revision of this
+          # gate (PR #2006, first review pass) fixed the exit-code handling but kept the ban/allow
+          # decision as a regex that exempted matches by the *spelling* of the typeof target
+          # (`typeof fetch` always passed, SCREAMING_SNAKE_CASE targets always passed) — a name-based
+          # semantic allowlist that would silently pass a new, genuinely test-only `typeof fetch` seam
+          # anywhere in the tree while banning an equally legitimate seam under any other name.
+          # scripts/di-seams instead checks each match against an explicit, typed, per-site allowlist
+          # (scripts/di-seams/approved.ts) keyed by (file, field, typeof-target): a triple is exempt
+          # only because it was individually reviewed and named, never because of how it is spelled.
+          # The gate fails just as hard on a stale approval (one whose triple no longer matches
+          # anything) as on an unapproved seam, so the allowlist can't drift out of sync with the code
+          # it describes. See scripts/di-seams/model.ts and its tests.
+          - name: Fail if test-only DI seams reappear in production code
+            uses: ./.github/actions/run-gate
+            with: { gate: di-seams }
 
-      - name: Run oxlint
-        uses: ./.github/actions/run-gate
-        with: { gate: lint }
+          - name: Run oxlint
+            uses: ./.github/actions/run-gate
+            with: { gate: lint }
 
-      - name: Check formatting
-        uses: ./.github/actions/run-gate
-        with: { gate: format }
+          - name: Check formatting
+            uses: ./.github/actions/run-gate
+            with: { gate: format }
 
-  # Structural guards share one checkout and install. Every gate stays an
-  # independently named step with its own failure message; the gate manifest
-  # derives lane ownership from these declarations, so merging jobs changes
-  # nothing it asserts.
+          - name: Run typecheck
+            uses: ./.github/actions/run-gate
+            with: { gate: typecheck }
+
+      - name: Build CLI
+        uses: ./.github/actions/run-gate
+        with: { gate: build }
+
+      - name: Verify emitted chunk ownership
+        uses: ./.github/actions/run-gate
+        with: { gate: bundle-owner-files }
+
+      # The build runs on the default toolchain Node and the package is verified on the minimum
+      # supported Node, so this job covers what a user on `engines.node` floor actually installs.
+      - name: Setup Node.js 22.12
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: '22.12'
+
+      # Packs, lints the tarball with publint/attw, installs it outside the workspace, and imports
+      # every published entry point before running the CLI. See scripts/check-package.ts.
+      #
+      # Runs the script directly rather than through `pnpm check:package`: the repo's pinned pnpm
+      # requires Node >= 22.13 and refuses to start on the 22.12 floor this job exists to cover. The
+      # gate itself only needs `node` and `npm`, so it is the package.json script minus the launcher.
+      - name: Verify the published package on Node.js 22.12
+        run: node --experimental-strip-types scripts/check-package.ts
+
+  # Structural guards and the history-backed compatibility gates share one deep checkout and
+  # install. Every gate stays an independently named step with its own failure message; the gate
+  # manifest derives lane ownership from these declarations, so merging jobs changes nothing it
+  # asserts.
   repo-guards:
-    name: Repo Guards
+    name: Repo Guards & Compatibility
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       # The layering ratchets (R6/R9/R10) measure the merge-base with origin/main, which a
-      # shallow checkout cannot reach.
+      # shallow checkout cannot reach. Fallow, replay-compat, and daemon-wire-compat need full
+      # history or tags.
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       # The layering gate parses production sources with `oxc-parser`, so
       # dependencies are required; keep install-deps enabled.
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
+
+      # The fallow audit runs in the background beside the guards below. A cold fallow run costs
+      # several minutes on a hosted runner: since fallow 3.20 every import re-walks the root
+      # tsconfig's project references.
+      - name: Run Fallow audit
+        id: fallow-audit
+        background: true
+        env:
+          FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        uses: ./.github/actions/run-gate
+        with:
+          gate: fallow
+          args: |
+            --base
+            ${{ env.FALLOW_BASE }}
 
       - name: Check import-direction DAG
         # Structured import-direction lint over the resolved graph. See
@@ -183,43 +235,6 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: mcp-metadata }
 
-      # Slowest guard (~3 min), so it runs last and structural failures surface
-      # before it. Runs on plain Node via the shared install above.
-      - name: Check numeric ranges
-        uses: ./.github/actions/run-gate
-        with: { gate: freerange }
-
-  # History-backed compatibility gates share one deep checkout: fallow,
-  # replay-compat, and daemon-wire-compat all need either full history or tags,
-  # which no shallow unit lane can read.
-  compat-provenance:
-    name: Compatibility & Provenance
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Run Fallow audit
-        env:
-          FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        uses: ./.github/actions/run-gate
-        with:
-          gate: fallow
-          args: |
-            --base
-            ${{ env.FALLOW_BASE }}
-
-      - name: Check for production-unused exports
-        uses: ./.github/actions/run-gate
-        with: { gate: production-exports }
-
       # The frozen replay-compat corpus (#1417) claims each entry was published by
       # a released tag. Only a full-history checkout can re-derive that claim.
       - name: Verify corpus entries against their released blobs
@@ -232,52 +247,21 @@ jobs:
 
       # The daemon RPC wire ledger (#1432) is compared against the ledger as it
       # stood at the last RELEASED tag, which only a tagged checkout can read.
-      # The shallow Repo Guards lane holds the ledger to its source; this step
-      # holds it to the last release.
       - name: Compare the daemon RPC wire surface against the last released tag
         uses: ./.github/actions/run-gate
         with: { gate: daemon-wire-compat }
 
-  # Typecheck and package verification share one checkout and install; both
-  # need the default toolchain only, and the package step re-pins Node itself.
-  typecheck-package:
-    name: Typecheck & Package
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Run typecheck
+      - name: Check numeric ranges
         uses: ./.github/actions/run-gate
-        with: { gate: typecheck }
+        with: { gate: freerange }
 
-      - name: Build CLI
+      # Shares fallow's `.fallow` cache directory with the audit, so it starts once the audit ends.
+      - name: Wait for the Fallow audit
+        wait: fallow-audit
+
+      - name: Check for production-unused exports
         uses: ./.github/actions/run-gate
-        with: { gate: build }
-
-      - name: Verify emitted chunk ownership
-        uses: ./.github/actions/run-gate
-        with: { gate: bundle-owner-files }
-
-      # The build runs on the default toolchain Node and the package is verified on the minimum
-      # supported Node, so this job covers what a user on `engines.node` floor actually installs.
-      - name: Setup Node.js 22.12
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
-        with:
-          node-version: '22.12'
-
-      # Packs, lints the tarball with publint/attw, installs it outside the workspace, and imports
-      # every published entry point before running the CLI. See scripts/check-package.ts.
-      #
-      # Runs the script directly rather than through `pnpm check:package`: the repo's pinned pnpm
-      # requires Node >= 22.13 and refuses to start on the 22.12 floor this job exists to cover. The
-      # gate itself only needs `node` and `npm`, so it is the package.json script minus the launcher.
-      - name: Verify the published package on Node.js 22.12
-        run: node --experimental-strip-types scripts/check-package.ts
+        with: { gate: production-exports }
 
   # Runs the full unit + provider-integration suites under coverage with
   # thresholds, so a separate unit-tests job would rerun the same tests.

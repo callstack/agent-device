@@ -54,7 +54,7 @@ function worktreeWithCommit(name: string, files: readonly string[]): string {
   return dir;
 }
 
-function listAffected(cwd: string): ShardSpec[] {
+function listAffected(cwd: string, extraArgs: readonly string[] = []): ShardSpec[] {
   const result = runCmdSync(
     'node',
     [
@@ -63,6 +63,7 @@ function listAffected(cwd: string): ShardSpec[] {
       '--list-affected',
       '--base',
       'HEAD~1',
+      ...extraArgs,
     ],
     { cwd },
   );
@@ -101,16 +102,31 @@ test('non-harness paths, including near-miss manifests, select nothing', () => {
   }
 });
 
-test('workflow, Vitest, dependency, and workspace manifest changes select the harness canary', () => {
+test('lane code, config, and workflow changes select the harness canary', () => {
   for (const file of [
+    'scripts/lib/cli-args.ts',
+    'stryker.config.json',
     'vitest.mutation.config.ts',
     'vitest.config.ts',
     '.github/workflows/mutation-weekly.yml',
     '.github/workflows/mutation-affected.yml',
-    'package.json',
-    'pnpm-lock.yaml',
-    'packages/kernel/package.json',
   ]) {
     assert.deepEqual(affectedMatrixFor([file]), shardMatrix([LANE_CANARY]), file);
   }
+});
+
+// Workspace manifests change in most cross-package PRs; spending the canary on
+// each one is what the manual dispatch exists to avoid.
+test('dependency and workspace manifest changes select the canary only with --with-dependencies', () => {
+  for (const file of ['package.json', 'pnpm-lock.yaml', 'packages/kernel/package.json']) {
+    assert.deepEqual(affectedMatrixFor([file]), [], file);
+    assert.deepEqual(
+      affectedMatrixFor([file], { withDependencies: true }),
+      shardMatrix([LANE_CANARY]),
+      file,
+    );
+  }
+  const dir = worktreeWithCommit('manifest', ['packages/kernel/package.json']);
+  assert.deepEqual(listAffected(dir), []);
+  assert.deepEqual(listAffected(dir, ['--with-dependencies']), shardMatrix([LANE_CANARY]));
 });

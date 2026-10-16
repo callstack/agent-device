@@ -13,24 +13,12 @@ import { targetDagZone, type LayeringViolation, type ResolvedImportEdge } from '
 import type { LayeringRatchets } from './ratchet-reference.ts';
 
 // R7 ownership pressure and the largest type cycle (whole and per zone) are ratcheted against the
-// merge-base with origin/main (`ratchet-reference.ts`); the importer membership below stays a
-// recorded list, because it names files rather than counting them.
-export const DAEMON_MODULARITY_BASELINE = {
-  externalDaemonTypesImporters: [
-    'src/client/client-normalizers.ts',
-    // #2559 drove the `src/daemon-client/**` half of this list to zero value edges and moved its
-    // residual wire-only type reads to R78 (`daemon-client-entry.ts`), which names each measured
-    // edge and forbids any runtime import. The daemon-client files are skipped below so the two
-    // gates never own the same edge; the importers left here are zones the client-entry rule
-    // does not cover.
-    'src/remote/daemon-artifacts.ts',
-  ],
-} as const;
+// merge-base with origin/main (`ratchet-reference.ts`).
 
 // The modules that own the daemon's dispatch vocabulary since #2338 split `daemon/types.ts`:
 // the request shape and the live session record (the wire-only half moved to
-// `@agent-device/contracts/command` as `DaemonWireRequest`). Both are ratcheted
-// together, so moving a symbol between them cannot reopen the boundary to a new outside zone.
+// `@agent-device/contracts/command` as `DaemonWireRequest`). Production code
+// outside the daemon may import neither.
 const DAEMON_TYPE_MODULES: readonly string[] = [
   'packages/daemon/src/core/daemon-request.ts',
   'packages/daemon/src/core/session-state.ts',
@@ -216,34 +204,22 @@ function checkTypeCycleBaseline(
 }
 
 function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
-  const allowed = new Set<string>(DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters);
-  const importers = new Map<string, ResolvedImportEdge>();
+  const violations: LayeringViolation[] = [];
+  const reported = new Set<string>();
   for (const edge of edges) {
     if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith(DAEMON_SOURCE_ROOT))
       continue;
-    // #2559: the client's daemon-request/session-state reads are owned by the stricter
-    // R78 `daemon-client-entry` gate, which also bans runtime imports and names each edge.
-    if (edge.file.startsWith('src/daemon-client/')) continue;
-    importers.set(edge.file, edge);
-  }
-  const violations = [...importers]
-    .filter(([file]) => !allowed.has(file))
-    .map(([file, edge]) => ({
-      rule: 'R10 daemon-modularity',
-      file,
-      line: edge.line,
-      message:
-        `external production imports of the daemon request/session-state modules may only shrink ` +
-        `from the recorded ${allowed.size}. ` +
-        'Use an existing neutral contract; do not move DaemonRequest into contracts to satisfy this gate.',
-    }));
-  for (const file of allowed) {
-    if (importers.has(file)) continue;
+    // A module whose policy forbids the whole daemon package is held to that, not to this list.
+    if (forbidsDaemonPackage(edge.file) || reported.has(edge.file)) continue;
+    reported.add(edge.file);
     violations.push({
       rule: 'R10 daemon-modularity',
-      file: 'scripts/layering/daemon-modularity.ts',
-      line: 1,
-      message: `${file} no longer imports a daemon request/session-state module — delete it from externalDaemonTypesImporters in the same change so the dependency cannot return.`,
+      file: edge.file,
+      line: edge.line,
+      message:
+        `${edge.file} imports a daemon request/session-state module. Production code outside the ` +
+        'daemon reads the wire shapes in @agent-device/contracts/command (DaemonWireRequest) and ' +
+        '@agent-device/kernel/contracts (DaemonResponse).',
     });
   }
   return violations;
@@ -308,6 +284,10 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
   return violations;
 }
 
+function forbidsDaemonPackage(file: string): boolean {
+  return moduleForFile(file)?.forbiddenTargetRoots.includes(DAEMON_SOURCE_ROOT) ?? false;
+}
+
 function moduleForFile(file: string): LogicalModulePolicy | undefined {
   return LOGICAL_MODULE_POLICIES.find((module) =>
     module.roots.some((root) => matchesDeclaredRoot(file, root)),
@@ -348,7 +328,6 @@ export function daemonModularitySummary(reference: LayeringRatchets): string {
   return (
     `R10 holds R7 at the merge-base's ${session.writerOwnedFields} writer-owned fields / ` +
     `${session.ownerFileClaims} owner claims, R9 at its ${reference.largestTypeCycle.length} files per zone, ` +
-    `${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length} external daemon request/session-state importers, ` +
-    'and zero forbidden logical-module imports'
+    'no external daemon request/session-state importers, and zero forbidden logical-module imports'
   );
 }

@@ -5,10 +5,10 @@ import { test } from 'vitest';
 import { loadProviderPlugins, withPluginConnection } from './load.ts';
 import {
   pluginHome,
-  selectPlugin,
   registrationSource,
+  selectPlugin,
   webDriverPluginSource,
-} from '@agent-device/test-kit/plugin.fixtures';
+} from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderPluginHost } from '../sdk/plugins.ts';
 import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';

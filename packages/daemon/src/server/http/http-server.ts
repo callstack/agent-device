@@ -5,13 +5,14 @@
 // request's cancellation lifetime, and invocation. The envelope framing lives
 // in `http-rpc-envelope.ts`, the authorization decisions in
 // `http-authorization.ts`, and the RPC method vocabulary in `http-rpc-methods.ts`.
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import type { DiagnosticsRecordRef, NormalizedError } from '@agent-device/kernel/errors';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import { isRecord } from '@agent-device/kernel/record';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   clearRequestAbortRegistration,
@@ -70,6 +71,7 @@ const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   leaseRegistry?: LeaseRegistry;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
   token?: string;
   retainArtifacts?: boolean;
   env?: NodeJS.ProcessEnv;
@@ -126,6 +128,7 @@ export async function createDaemonHttpServer(options: {
         res,
         expectedToken: token,
         registry: options.leaseRegistry,
+        endSessionsForLease: options.endSessionsForLease,
       })
     ) {
       return;

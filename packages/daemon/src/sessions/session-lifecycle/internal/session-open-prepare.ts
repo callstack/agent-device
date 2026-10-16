@@ -1,9 +1,10 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type { RuntimeHintsApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import { openApplicationRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { startupDeadlineAtMs } from '../../startup-deadline.ts';
 import type { SessionRuntimeHints, SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';

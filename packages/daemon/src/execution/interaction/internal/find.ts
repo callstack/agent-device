@@ -1,4 +1,9 @@
-import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type {
+  PreresolvedInteractionTarget,
+  SurfaceScopedNodes,
+} from '@agent-device/contracts/interaction';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import {
   isReadOnlyFindAction,
   checkFindArgs,
@@ -15,11 +20,7 @@ import {
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../../../core/ref-frame.ts';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-} from '../../../core/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { contextFromFlags } from '../../../core/context.ts';
@@ -65,9 +66,8 @@ type ResolvedMatch = {
   node: SnapshotState['nodes'][number];
   resolvedNode: SnapshotAddressableNode;
   ref: string;
-  nodes: SnapshotState['nodes'];
-  /** The in-place iOS system surface the target capture described (#2438), if any. */
-  iosSystemSurfaceBundleId?: string;
+  /** The target capture's baseline: its nodes with the surface and presentation they describe. */
+  tree: SurfaceScopedNodes;
   /** The keyboard band that capture's producer measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
   actionFlags: Record<string, unknown>;
@@ -209,10 +209,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     node,
     resolvedNode,
     ref,
-    nodes,
-    ...(snapshotResult.iosSystemSurfaceBundleId
-      ? { iosSystemSurfaceBundleId: snapshotResult.iosSystemSurfaceBundleId }
-      : {}),
+    tree: surfaceScopedNodes(snapshotResult),
     ...(snapshotResult.keyboard ? { keyboard: snapshotResult.keyboard } : {}),
     actionFlags,
     ...(target.kind === 'occluded' ? { occludedNode: target.node } : {}),
@@ -268,12 +265,7 @@ function preresolvedTarget(match: ResolvedMatch): PreresolvedInteractionTarget {
   return {
     ref: match.ref,
     node: match.resolvedNode,
-    nodes: match.nodes,
-    // #2438: the leaf's post-action verify/settle compares against this tree, so it must know
-    // whether the tree describes the app or an in-place system surface served over it.
-    ...(match.iosSystemSurfaceBundleId
-      ? { iosSystemSurfaceBundleId: match.iosSystemSurfaceBundleId }
-      : {}),
+    tree: match.tree,
     // #2660: the leaf's keyboard guard measures the band this capture measured, not one it re-derives.
     ...(match.keyboard ? { keyboard: match.keyboard } : {}),
   };

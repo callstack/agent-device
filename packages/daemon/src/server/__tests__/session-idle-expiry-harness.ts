@@ -1,3 +1,4 @@
+import { deviceClaimFilePath, IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { assert } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,10 +14,7 @@ import {
 import {
   acquireDeviceClaim,
   type DeviceClaimSessionOwnership,
-} from '../../resources/device/device-claims.ts';
-import { resolveDeviceClaimPath } from '../../resources/device/device-claim-paths.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/daemon-contracts/device-claims';
 
 /** The inactivity window every harness session is already past, except where a test says otherwise. */
 export const WINDOW_MS = 1_000;
@@ -136,7 +134,7 @@ export function createIdleExpiryHarness(): Readonly<{
       fixture.sessionStore.publish(name, session);
       return { session, deviceClaim: acquired.ownership };
     },
-    claimFileHeld: (deviceClaim) => fs.existsSync(resolveDeviceClaimPath(deviceClaim.deviceKey)),
+    claimFileHeld: (deviceClaim) => fs.existsSync(deviceClaimFilePath(deviceClaim.deviceKey)),
     runUntilIdle: (controller, ms) => {
       controller.noteSessionsChanged();
       return new Promise((resolve) => setTimeout(resolve, ms));

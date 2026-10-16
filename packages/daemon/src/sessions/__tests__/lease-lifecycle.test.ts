@@ -118,7 +118,7 @@ test('releaseSessionLease releases with the stored session owner scope', async (
     },
   });
 
-  const provider = await releaseSessionLease({
+  const released = await releaseSessionLease({
     session,
     leaseRegistry,
     leaseLifecycleProvider: {
@@ -127,7 +127,7 @@ test('releaseSessionLease releases with the stored session owner scope', async (
   });
 
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
-  expect(provider).toEqual({ provider: 'proxy' });
+  expect(released).toEqual({ endedLeaseId: lease.leaseId, providerData: { provider: 'proxy' } });
 });
 
 test('releaseSessionLease leaves a retainOnClose lease and its provider device alone', async () => {
@@ -149,13 +149,13 @@ test('releaseSessionLease leaves a retainOnClose lease and its provider device a
   });
   const release = vi.fn(async () => ({ released: true }));
 
-  const provider = await releaseSessionLease({
+  const retained = await releaseSessionLease({
     session,
     leaseRegistry,
     leaseLifecycleProvider: { release },
   });
 
-  expect(provider).toBeUndefined();
+  expect(retained).toEqual({});
   expect(release).not.toHaveBeenCalled();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
   expect(vi.mocked(emitDiagnostic)).toHaveBeenCalledWith({
@@ -163,6 +163,19 @@ test('releaseSessionLease leaves a retainOnClose lease and its provider device a
     phase: 'session_lease_released',
     data: { session: 'default', leaseId: lease.leaseId, released: false, retained: true },
   });
+});
+
+test('releaseSessionLease ends no lease for a session that holds none', async () => {
+  const release = vi.fn(async () => ({ released: true }));
+
+  const outcome = await releaseSessionLease({
+    session: makeIosSession('default'),
+    leaseRegistry: new LeaseRegistry(),
+    leaseLifecycleProvider: { release },
+  });
+
+  expect(outcome).toEqual({});
+  expect(release).not.toHaveBeenCalled();
 });
 
 test('releaseSessionLease retains provider session ownership for artifact lookup', async () => {

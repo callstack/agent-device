@@ -20,9 +20,9 @@ import {
 import {
   closeLoopbackServer,
   listenOnLoopback,
-  skipWhenLoopbackUnavailable,
   type LoopbackServer,
-} from '@agent-device/test-kit/loopback';
+  skipWhenLoopbackUnavailable,
+} from '@agent-device/test-kit';
 
 function daemonInfo(over: { port?: number; httpPort?: number }): {
   port?: number;

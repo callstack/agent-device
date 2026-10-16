@@ -7,7 +7,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 
 /**
  * ADR 0006 health compatibility across every link a command RPC crosses. `sendToDaemon`

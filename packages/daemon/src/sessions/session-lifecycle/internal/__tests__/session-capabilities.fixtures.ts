@@ -16,7 +16,7 @@ import type {
 import {
   createUnavailableRuntimeFactsForTest,
   unavailableApplicationLifecycleOperationFacts,
-} from '@agent-device/test-kit/runtime-operation-facts';
+} from '@agent-device/test-kit';
 
 const nativeRefUnavailable = Object.freeze({
   available: false,

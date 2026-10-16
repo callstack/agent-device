@@ -1,10 +1,11 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { dispatchSnapshotViaRuntime } from '../../snapshot-runtime.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

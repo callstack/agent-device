@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -30,8 +31,8 @@ import {
   unavailableBindExactDevice,
   unavailableInspectFacts,
 } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';

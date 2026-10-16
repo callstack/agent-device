@@ -124,11 +124,7 @@ export {
   type AndroidKeyboardState,
 } from './device-input-state.ts';
 export { androidDeviceChecks, androidToolchainCheck } from './doctor.ts';
-export {
-  ensureAndroidEmulatorBooted,
-  waitForAndroidBoot,
-  type AndroidEmulatorLifecycleDependencies,
-} from './emulator-lifecycle.ts';
+export { waitForAndroidBoot } from './emulator-lifecycle.ts';
 export {
   androidFillFailureDetails,
   androidFillFailureMessage,
@@ -264,7 +260,7 @@ export {
   buildAndroidNativeToolUnavailableHint,
 } from './perf-native-errors.ts';
 export { androidRevokedPermissionWarning, setAndroidPermission } from './settings-permission.ts';
-export { readAndroidSetting, setAndroidSetting } from './settings.ts';
+export { readAndroidSetting, setAndroidSetting, type AndroidSetting } from './settings.ts';
 export {
   androidCaptureFailureReasonDetail,
   androidCaptureFailureReasonFromExitCode,

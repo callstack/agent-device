@@ -34,6 +34,7 @@ const kernel: WorkspacePackage = {
     ['@agent-device/kernel/device', 'packages/kernel/src/device.ts'],
   ]),
   workspaceDependencies: new Set(),
+  workspaceDevDependencies: new Set(),
   workspaceDependencyField: 'dependencies',
   externalDependencies: new Map(),
 };
@@ -45,6 +46,7 @@ const contracts: WorkspacePackage = {
     ['@agent-device/contracts/interaction', 'packages/contracts/src/interaction.ts'],
   ]),
   workspaceDependencies: new Set(['@agent-device/kernel']),
+  workspaceDevDependencies: new Set(),
   workspaceDependencyField: 'dependencies',
   externalDependencies: new Map(),
 };
@@ -110,10 +112,8 @@ test('specifier sites carry 1-based lines for static and dynamic imports', () =>
 });
 
 test('the compiled set classifies every file region the R11 walk visits', () => {
-  // The compiler-owned/compiler-exempt split above is keyed on this predicate (#3279), so the
-  // mutation it must fail on is a file region joining or leaving `tsc -b`'s programs without
-  // the predicate following: package `src/`, root `src/` and root `test/` compile; `scripts/`
-  // and the package harness dirs are the fail-closed side.
+  // Package src, root src and root test are compiler-owned. Project-reference pins record
+  // compiler-root changes; scripts and package harness directories retain full R11 checks.
   assert.equal(insideCompiledSources('packages/kernel/src/errors.ts'), true);
   assert.equal(insideCompiledSources('packages/maestro/src/index.ts'), true);
   assert.equal(insideCompiledSources('src/cli.ts'), true);
@@ -122,11 +122,11 @@ test('the compiled set classifies every file region the R11 walk visits', () => 
   assert.equal(insideCompiledSources('packages/maestro/test/conformance/harness.ts'), false);
   assert.equal(insideCompiledSources('packages/proxy/tsdown.config.ts'), false);
 
-  // The one scripts file the root program DOES compile is classified as uncompiled: R11
-  // keeps its full branch set there (redundant with tsc, never narrower). The exact root
-  // include list and the reference sets are pinned against the graph itself in
-  // project-references.test.ts, where the divergence is recorded rather than assumed absent.
   assert.equal(insideCompiledSources('scripts/help-conformance-command-validator.ts'), false);
+  assert.equal(insideCompiledSources('scripts/coverage-crap/stamp.ts'), false);
+  assert.equal(insideCompiledSources('scripts/coverage-changed/run.ts'), false);
+  assert.equal(insideCompiledSources('scripts/vitest-coverage-run-stamp-reporter.ts'), false);
+  assert.equal(insideCompiledSources('scripts/vitest-coverage-run-stamp-reporter.test.ts'), false);
 });
 
 test('readWorkspacePackages reads tracked manifests only', () => {
@@ -474,6 +474,9 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...captureKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/capture-kit/android-replacement-surface-occlusion',
+    '@agent-device/capture-kit/app-log-durable-resource',
+    '@agent-device/capture-kit/app-log-files',
+    '@agent-device/capture-kit/app-log-resource-recovery',
     '@agent-device/capture-kit/audio-probe-admission-ledger',
     '@agent-device/capture-kit/audio-probe-descriptor-fixtures',
     '@agent-device/capture-kit/audio-probe-recovery',
@@ -505,6 +508,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/png-size',
     '@agent-device/capture-kit/png-worker-client',
     '@agent-device/capture-kit/post-gesture-stability',
+    '@agent-device/capture-kit/provider-app-log',
     '@agent-device/capture-kit/quality-warnings',
     '@agent-device/capture-kit/react-native-overlay',
     '@agent-device/capture-kit/recording-artifact-fixtures',
@@ -528,6 +532,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/screenshot-diff-pixels',
     '@agent-device/capture-kit/screenshot-overlay',
     '@agent-device/capture-kit/scroll-edge-state',
+    '@agent-device/capture-kit/snapshot-baseline',
     '@agent-device/capture-kit/snapshot-chrome',
     '@agent-device/capture-kit/snapshot-chrome-fixtures',
     '@agent-device/capture-kit/snapshot-desktop-projection',
@@ -633,7 +638,6 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/platform-apple/runner/operations',
     // Test-only entry: the runner-requests.json check package and root tests share.
     '@agent-device/platform-apple/runner/requests-fixtures',
-    '@agent-device/platform-apple/runner/test-host',
     '@agent-device/platform-apple/session-observation',
     '@agent-device/platform-apple/simctl',
     '@agent-device/platform-apple/simctl-settings',
@@ -664,15 +668,17 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');
   assert.ok(maestroPackage, 'maestro package must exist');
-  // Locks the export surface: `.` (the engine) plus the two daemon-side port entries #2544
-  // moved out of `src/daemon/adapters/maestro`. The eager-closure budget gate
-  // (scripts/__tests__/eager-closure-budgets.test.ts) is what keeps the port off `.`.
+  // Locks the export surface: `.` (the engine), the replay backend plugin (#3377) with its
+  // engine-free declaration, and the runScript HTTP helper. The eager-closure budget gate
+  // (scripts/__tests__/eager-closure-budgets.test.ts) is what keeps the plugin off `.`.
   assert.deepEqual([...maestroPackage.exportTargets.keys()].sort(), [
     '@agent-device/maestro',
-    '@agent-device/maestro/daemon-runtime-port',
+    '@agent-device/maestro/replay-backend',
+    '@agent-device/maestro/replay-backend-declaration',
     '@agent-device/maestro/run-script-http',
   ]);
   assert.deepEqual([...maestroPackage.workspaceDependencies].sort(), [
+    '@agent-device/ad-script',
     '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/host-kit',
@@ -756,15 +762,9 @@ test('the real tree parses, declares, and passes R11', () => {
   // daemon used to own (#2340). The per-file subpaths under `./interaction-*`,
   // `./selector-pipeline*`, `./press-retarget`, `./touch-semantics` are the
   // execution surface the core selector pipeline moved into this package —
-  // one subpath per module so consumers pull only the stage they run; the
-  // `-fixtures` entries are the test-fixture surface (host-kit's
-  // `./audio-probe-fixtures` precedent) — `./interaction-targeting-fixtures`
-  // for the interaction-targeting node trees and `./snapshot-geometry-fixtures`
-  // for the geometry/touch-point builders both this package's and root's
-  // tests build on (#2402, replacing the copy that used to live under root's
-  // `src/__tests__/test-utils/`; it re-exports `makeSnapshotState` from
-  // capture-kit's own `./snapshot-state-fixtures`, its canonical home). Any
-  // other subpath, or the AST leaking into `.`, fails here.
+  // one subpath per module so consumers pull only the stage they run. The `-fixtures`
+  // entries are R83 burn-down, deleted with the export. Any other subpath, or the AST leaking
+  // into `.`, fails here.
   assert.deepEqual([...selectorsPackage.exportTargets.keys()].sort(), [
     '@agent-device/selectors',
     '@agent-device/selectors/absence-observation',

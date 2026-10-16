@@ -207,35 +207,6 @@ test(scenario('nonHittable'), async () => {
   assert.match(result.hint ?? '', /hittable: false/);
 });
 
-test(scenario('targetReadiness'), async () => {
-  const taps: Point[] = [];
-  let captures = 0;
-  const device = createContractDevice(viewportOnlySnapshot(), {
-    captureSnapshot: async () => {
-      captures += 1;
-      return {
-        // The first poll's interactive capture and its full-capture fallback both miss; the button
-        // appears only from the second poll on, so a loop that never polled again leaves the tap
-        // unsent.
-        snapshot: captures >= 3 ? continueButtonSnapshot() : viewportOnlySnapshot(),
-      };
-    },
-    tap: async (_context, point) => {
-      taps.push(point);
-    },
-  });
-
-  const result = await device.interactions.press(selector('label=Continue'), {
-    session: 'default',
-    // Never CLI- or model-writable, so the scenario supplies it directly.
-    readinessTimeoutMs: 2_000,
-  });
-
-  assert.equal(result.kind, 'selector');
-  assert.ok(captures >= 3, `expected at least 2 polls (>=3 captures), got ${captures}`);
-  assert.deepEqual(taps, [{ x: 60, y: 40 }]);
-});
-
 // #3471 targetStability: the session's last action animated the UI, so the rect this press resolved
 // may be a position the target has already left. The gate re-observes past the window: two agreeing
 // observations are the resting position it taps, and two disagreeing ones are a refusal.

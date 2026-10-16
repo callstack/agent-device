@@ -17,7 +17,7 @@ Use it when an agent needs to inspect and operate a running app, not only reason
 - **Token-efficient UI context**: accessibility snapshots give agents structured UI state instead of screenshots alone.
 - **Runtime evidence**: capture screenshots, recordings, logs, network traffic, audio-level probes for browser and host-rendered simulator/emulator audio, traces, CPU/memory/perf snapshots, and crash-related logs when the happy path breaks.
 - **Replayable checks**: turn stable exploratory sessions into `.ad` replay scripts that run again without AI.
-- **React Native and Expo workflows**: pair device automation with optional React DevTools profiling for component trees, props/state/hooks, slow renders, and rerenders.
+- **React Native and Expo workflows**: pair device automation with React component inspection and performance profiling that names slow renders, rerenders, and their causes.
 - **Local devices and app surfaces**: drive simulators, emulators, physical devices, TV targets, desktop apps, and browser sessions through one CLI.
 
 If you know `agent-browser`, `agent-device` brings the same workflow to mobile, TV, desktop, and a limited managed web browser.

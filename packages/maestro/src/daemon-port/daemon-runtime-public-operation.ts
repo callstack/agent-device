@@ -4,7 +4,7 @@ import type {
   MaestroDispatchSelector,
   MaestroSinglePointerGestureInput,
 } from '@agent-device/maestro';
-import type { GestureExecutionProfile } from '@agent-device/contracts/gesture-plan-types';
+import type { ReplayBackendDispatchOptions } from '@agent-device/contracts/replay-backend';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
 
 export type MaestroClickOptions = Pick<
@@ -21,6 +21,7 @@ export type MaestroPublicOperation =
       launchArgs: string[];
     }
   | { kind: 'stopApp'; appId?: string }
+  | { kind: 'killApp'; appId?: string }
   | { kind: 'clearState'; appId?: string }
   | {
       kind: 'settingsPermission';
@@ -50,18 +51,22 @@ export type MaestroPublicOperation =
  * each option into its own request-private vocabulary before dispatch. Nothing here names live
  * session state, which is what lets the port live outside the daemon.
  */
-export type MaestroDaemonDispatchOptions = Readonly<{
-  /** Terminate the targeted app without ending the owning daemon session. */
-  closeAppOnly?: true;
-  /** A hierarchy capture used as operational evidence only; it issues no client ref authority. */
-  observationOnly?: true;
-  /** Provider-owned viewport already resolved for a nested gesture command. */
-  gestureViewport?: Rect;
-  /** Execution profile for timed coordinate swipes projected to `gesture pan`. */
-  gestureExecutionProfile?: GestureExecutionProfile;
-  /** Maestro `setPermissions` app targeting; the settings handler prefers it over the session app. */
-  settingsAppBundleId?: string;
-}>;
+export type MaestroDaemonDispatchOptions = Omit<
+  ReplayBackendDispatchOptions,
+  'closeAppOnly' | 'killApp' | 'observationOnly'
+> &
+  Readonly<{
+    /**
+     * Terminate the targeted app without ending the owning daemon session. Presence-only (as are
+     * `killApp` and `observationOnly`): the daemon treats `false` like omission, so the port never
+     * sends it.
+     */
+    closeAppOnly?: true;
+    /** With `closeAppOnly`: Maestro `killApp` process death (`am kill` on Android) instead of `stop`. */
+    killApp?: true;
+    /** A hierarchy capture used as operational evidence only; it issues no client ref authority. */
+    observationOnly?: true;
+  }>;
 
 /**
  * One public daemon command the port asks the daemon to run on the replay's behalf. The daemon
@@ -88,12 +93,15 @@ export function projectMaestroPublicOperation(
 
 type MaestroAppOperation = Extract<
   MaestroPublicOperation,
-  { kind: 'launchApp' | 'stopApp' | 'openLink' }
+  { kind: 'launchApp' | 'stopApp' | 'killApp' | 'openLink' }
 >;
 
 function isAppOperation(operation: MaestroPublicOperation): operation is MaestroAppOperation {
   return (
-    operation.kind === 'launchApp' || operation.kind === 'stopApp' || operation.kind === 'openLink'
+    operation.kind === 'launchApp' ||
+    operation.kind === 'stopApp' ||
+    operation.kind === 'killApp' ||
+    operation.kind === 'openLink'
   );
 }
 
@@ -103,6 +111,8 @@ function projectAppOperation(operation: MaestroAppOperation): MaestroDaemonOpera
       return projectLaunchApp(operation);
     case 'stopApp':
       return projectStopApp(operation);
+    case 'killApp':
+      return projectKillApp(operation);
     case 'openLink':
       return projectOpenLink(operation);
   }
@@ -129,6 +139,16 @@ function projectStopApp(
     command: 'close',
     positionals: operation.appId ? [operation.appId] : [],
     dispatch: { closeAppOnly: true },
+  };
+}
+
+function projectKillApp(
+  operation: Extract<MaestroAppOperation, { kind: 'killApp' }>,
+): MaestroDaemonOperationRequest {
+  return {
+    command: 'close',
+    positionals: operation.appId ? [operation.appId] : [],
+    dispatch: { closeAppOnly: true, killApp: true },
   };
 }
 

@@ -9,8 +9,9 @@ import path from 'node:path';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   supportsLoopbackBind,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 import {
   beginStderrCapture,
   withCapturedStderrAsync,
@@ -25,7 +26,6 @@ import { canConnectSocket } from '../daemon-client-transport.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readVersion } from '@agent-device/host-kit/version';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 type MockHttpResponse = EventEmitter & {
   headers?: Record<string, string>;

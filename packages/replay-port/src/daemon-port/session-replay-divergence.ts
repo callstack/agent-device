@@ -16,12 +16,12 @@ import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
 } from '@agent-device/replay-port/repair-hint';
+import type { ReplayResumeStamper } from '@agent-device/replay-port/command-types';
 import type {
-  ReplayResumeStamper,
   ReplaySessionObservation,
   ReplaySessionState,
   ReplaySessionStore,
-} from '@agent-device/replay-port/command-types';
+} from '@agent-device/contracts/replay-backend';
 
 import type { ReplayObservationEvidence } from '@agent-device/contracts/replay';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';

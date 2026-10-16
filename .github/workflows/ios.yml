@@ -2,6 +2,7 @@ name: iOS
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths-ignore:
       - 'docs/**'
       - 'website/**'
@@ -61,6 +62,7 @@ concurrency:
 jobs:
   smoke-ios:
     name: Smoke Tests
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: macos-26
     timeout-minutes: 80
     env:

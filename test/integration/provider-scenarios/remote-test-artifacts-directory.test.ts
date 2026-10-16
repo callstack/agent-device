@@ -22,7 +22,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 
 const SUITE_INVOCATION_ID = 'cd5f9c01feec8d70';
 

@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   emitDiagnostic,
@@ -8,7 +9,7 @@ import {
   listSaveScriptFlagOwnerCommands,
   ownsSaveScriptFlag,
 } from '../core/daemon-command-registry.ts';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 
 /**
  * #1478: the released `--save-script` flag owners, read from the command

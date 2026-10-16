@@ -11,9 +11,9 @@ import { currentDaemonCodeSignature } from '../../__tests__/test-utils/daemon-ht
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   supportsLoopbackBind,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 
 const DEVELOPER_DIR = '/Applications/Xcode.app/Contents/Developer';
 

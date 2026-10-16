@@ -5,7 +5,7 @@ import {
   IOS_SIMULATOR,
   MACOS_DEVICE,
   WEB_DESKTOP_DEVICE,
-} from '@agent-device/test-kit/device-fixtures';
+} from '@agent-device/test-kit';
 import {
   makeAndroidSession,
   makeIosSession,
@@ -31,7 +31,7 @@ import type {
   PlatformProviderRequestContext,
 } from '@agent-device/contracts/platform-providers';
 import { resolvePlatformProviderRequestContext } from '@agent-device/daemon/testing/request-platform-provider-context';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 
 const OTHER_IOS_SIMULATOR: DeviceInfo = {
   platform: 'apple',

@@ -1,8 +1,6 @@
+import type { DaemonResponse as SharedDaemonResponse } from '@agent-device/kernel/contracts';
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
-import type {
-  DaemonRequest as SharedDaemonRequest,
-  DaemonResponse as SharedDaemonResponse,
-} from '@agent-device/daemon/daemon-request';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { AgentDeviceDaemonTransportContext } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -22,7 +20,7 @@ import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
-export type DaemonRequest = SharedDaemonRequest;
+export type DaemonRequest = DaemonWireRequest;
 export type DaemonResponse = SharedDaemonResponse;
 type DaemonTransportOptions = AgentDeviceDaemonTransportContext & {
   onProgress?: RequestProgressSink;

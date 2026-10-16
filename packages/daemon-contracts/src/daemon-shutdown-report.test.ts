@@ -3,7 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { readDaemonShutdownReport, buildDaemonShutdownReport } from './daemon-shutdown-report.ts';
-import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const claim = {
   deviceKey: 'local:android:none:emulator-5554',

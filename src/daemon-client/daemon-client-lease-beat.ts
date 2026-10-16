@@ -1,4 +1,4 @@
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { createRequestId, emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
@@ -272,11 +272,11 @@ export function buildLeaseHeartbeatRequest(
   leaseScope: LeaseScope,
   context: Readonly<{
     session: string;
-    sessionIsolation?: NonNullable<DaemonRequest['meta']>['sessionIsolation'];
+    sessionIsolation?: NonNullable<DaemonWireRequest['meta']>['sessionIsolation'];
     requestId: string;
     token: string;
   }>,
-): DaemonRequest {
+): DaemonWireRequest {
   return {
     command: INTERNAL_COMMANDS.leaseHeartbeat,
     positionals: [],
@@ -302,7 +302,7 @@ export function buildLeaseHeartbeatRequest(
 export function buildUploadLeaseHeartbeat(
   info: DaemonInfo,
   settings: DaemonClientSettings,
-  request: Omit<DaemonRequest, 'token'>,
+  request: Omit<DaemonWireRequest, 'token'>,
 ): ((budgetMs: number, signal: AbortSignal) => Promise<unknown>) | undefined {
   if (!isRemoteDaemon(info)) return undefined;
   const leaseScope = leaseScopeFromRequest(request);

@@ -223,11 +223,9 @@ export type AdReplayStepRuntime = Readonly<{
    * Captures a fresh snapshot (with the #1385 launch-race retry) and resolves
    * the recorded target against it using the SAME lookup/matching a real
    * dispatch would — daemon authority (`SessionStore`, the capture pipeline,
-   * tree helpers and the selectors package engine). A step whose dispatch
-   * would wait for its target under a readiness budget re-captures while the
-   * target does not match yet, under that same budget, so this gate never
-   * refuses a target the dispatch itself would have waited for. The last
-   * capture is the divergence's `screen`.
+   * tree helpers and the selectors package engine). A missing target is
+   * refused after this observation; scripts wait explicitly for loading
+   * screens. The capture is the divergence's `screen`.
    */
   observeTarget(params: {
     action: SessionAction;

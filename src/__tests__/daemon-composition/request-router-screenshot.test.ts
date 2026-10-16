@@ -23,15 +23,14 @@ import {
   type ScreenshotRuntimeFixture,
   type ScreenshotRuntimeFixtureOptions,
 } from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { makeSession as makeBaseSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 function makeSession(name: string): SessionState {
   return makeBaseSession(name, { device: ANDROID_EMULATOR });

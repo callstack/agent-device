@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isIosFamily } from '@agent-device/kernel/device';
-import type { PlatformResourceCleanup } from '@agent-device/daemon/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from '@agent-device/daemon';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';

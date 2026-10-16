@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { buildPrimaryEnvVarName } from '@agent-device/kernel/source-value';
 
 /**
@@ -42,6 +43,16 @@ export type InputAudience =
 
 /** Non-model audiences by input key. Keys absent from the map are model-writable. */
 export type InputAudienceMap = Readonly<Record<string, InputAudience>>;
+
+/** A retired key present in the input is refused with its migration message. */
+export function refuseRetiredInput(
+  record: Record<string, unknown>,
+  key: string,
+  message: string,
+): undefined {
+  if (Object.hasOwn(record, key)) throw new AppError('INVALID_ARGS', message);
+  return undefined;
+}
 
 export function operatorAudience(source: OperatorInputSource): InputAudience {
   return { kind: 'operator', source };

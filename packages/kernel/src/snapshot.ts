@@ -387,6 +387,21 @@ export type SnapshotKeyboardBandFact =
   | { kind: 'unmeasurable'; reason: string };
 
 /**
+ * Whether this capture read a modal presentation over the app's own content (#3565).
+ *
+ * The capture producer owns this: an interactive capture, a full capture, a depth cut, and a scoped
+ * capture of ONE screen all answer the same value, because the fact is decided on the acquired tree
+ * before any of those projections runs. Settle's dismissal confirmation (#1831) arms on this value
+ * instead of reconstructing a presentation from the shape of a tree it happens to hold.
+ *
+ * `'absent'` is a positive reading, not a default: the producer walked every window it captured and
+ * every window showed only its own presentation container. Anything the producer could not read —
+ * a tree from a producer that reports no UIKit class facts, an unexplained extra container, a
+ * truncated capture — answers `'unknown'`, never `'absent'`.
+ */
+export type PresentedSurface = 'presented' | 'absent' | 'unknown';
+
+/**
  * The box a capture's node rects are measured in, published beside them so a reader never has to
  * infer it from the tree (#3182). Two dimensions and no origin: the field answers "how big is the
  * surface these numbers describe", which is the only question a consumer that places points on the
@@ -736,6 +751,13 @@ export type SnapshotState = {
    * must never be compared as the same presentation; consumers that surface the tree disclose it.
    */
   iosSystemSurfaceBundleId?: string;
+  /**
+   * iOS: whether this capture read a modal presentation over the app's own content (#3565), decided
+   * on the acquired tree before interactive filtering, compaction, depth, or scope, so every view of
+   * one screen carries one value. `'absent'` is read, never defaulted; an unreadable or unexplained
+   * capture answers `'unknown'`. Settle's presented-surface confirmation arms on this fact.
+   */
+  presentedSurface?: PresentedSurface;
   /**
    * iOS and Android: keyboard observations made during acquisition. Measured and derived frames
    * take precedence over reconstruction from the presented tree. Visibility-only and unknown facts

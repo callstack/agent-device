@@ -626,8 +626,9 @@ function webDriverFacts(
         triggerAppEvent: interactorCell(reachable, appEventUnavailable),
       }),
       ...settingsRuntimeOperationFacts({
-        setSetting: settingsUnavailable,
-        readSetting: settingsUnavailable,
+        target: settingsUnavailable,
+        unsupported: settingsUnavailable,
+        write: {},
       }),
       // R59 cell delta, deliberate: the retired `supportsAlertSurface` closure ADMITTED `alert` on
       // a provider-owned physical iOS device (it keyed on `appleOs === 'ios'` alone), and the

@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -8,10 +9,10 @@ import {
   registerRequestAbort,
   withRequestProgressSink,
 } from '@agent-device/host-kit/request';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import {
   createReplaySession,

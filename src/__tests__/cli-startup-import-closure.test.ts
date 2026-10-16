@@ -21,8 +21,24 @@ import { eagerClosureOf, eagerlyEvaluatedModules } from './eager-import-closure.
 
 const srcRoot = path.resolve(import.meta.dirname, '..');
 const LAZY_HTTP_MODULES = new Set(['node:http', 'node:https']);
-/** Engines heavy enough that evaluating them on startup is a measurable regression. */
-const LAZY_ENGINE_MODULES = new Set(['@agent-device/maestro']);
+/**
+ * Engines heavy enough that evaluating them on startup is a measurable regression: the engine
+ * package and every subpath of it except the replay backend's engine-free declaration.
+ */
+function isLazyEngineModule(specifier: string): boolean {
+  return (
+    specifier === '@agent-device/maestro' ||
+    (specifier.startsWith('@agent-device/maestro/') &&
+      specifier !== '@agent-device/maestro/replay-backend-declaration')
+  );
+}
+
+test('the lazy engine set covers the plugin subpath but not its engine-free declaration', () => {
+  expect(isLazyEngineModule('@agent-device/maestro')).toBe(true);
+  expect(isLazyEngineModule('@agent-device/maestro/replay-backend')).toBe(true);
+  expect(isLazyEngineModule('@agent-device/maestro/replay-backend-declaration')).toBe(false);
+  expect(isLazyEngineModule('@agent-device/maestroish')).toBe(false);
+});
 
 test.for([
   // --- static forms ---
@@ -104,7 +120,7 @@ test('the CLI startup import closure never evaluates the Maestro engine', () => 
   const offenders: string[] = [];
   for (const file of eagerClosureOf(path.join(srcRoot, 'cli.ts'))) {
     for (const specifier of eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8'))) {
-      if (LAZY_ENGINE_MODULES.has(specifier)) {
+      if (isLazyEngineModule(specifier)) {
         offenders.push(`${path.relative(srcRoot, file)} -> ${specifier}`);
       }
     }
@@ -126,9 +142,7 @@ test('the replay command source closure keeps Maestro behind flow selection', ()
 
   expect(replayClosure).toContain(sourceBundle);
   for (const file of replayClosure) {
-    if (
-      eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8')).includes('@agent-device/maestro')
-    ) {
+    if (eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8')).some(isLazyEngineModule)) {
       offenders.push(path.relative(srcRoot, file));
     }
   }

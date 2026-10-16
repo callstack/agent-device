@@ -3,7 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTest } from '@agent-device/test-kit';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
 import type { DownloadableArtifactRegistration } from '@agent-device/daemon/testing/artifact-tracking';

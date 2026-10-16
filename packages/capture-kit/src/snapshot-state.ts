@@ -10,6 +10,7 @@ import {
   snapshotPresentationOptionsFromFlags,
   snapshotRefMinting,
   type IosTargetActivation,
+  type PresentedSurface,
   type RawSnapshotNode,
   type SnapshotBackend,
   type SnapshotCaptureProvenance,
@@ -55,6 +56,11 @@ export function buildSnapshotState(
     keyboard?: SnapshotKeyboardBandFact;
     /** The box the producer measured the rects in (#3182), carried to the response that reads this state. */
     viewport?: SnapshotViewportSize;
+    /**
+     * iOS: the producer's reading of a modal presentation over the app (#3565), decided on the
+     * acquired tree so every projection of one screen carries the same value.
+     */
+    presentedSurface?: PresentedSurface;
   } & SnapshotCaptureProvenance,
   flags:
     | (Pick<CommandFlags, 'snapshotDepth' | 'snapshotInteractiveOnly' | 'snapshotRaw'> &
@@ -92,6 +98,7 @@ export function buildSnapshotState(
       ? { comparisonKey: iosSnapshotComparisonIdentityKey(data.comparisonIdentity) }
       : {}),
     ...(data.systemSurface ? { iosSystemSurfaceBundleId: data.systemSurface.bundleId } : {}),
+    ...(data.presentedSurface ? { presentedSurface: data.presentedSurface } : {}),
     ...(data.targetActivation ? { targetActivation: data.targetActivation } : {}),
     ...(data.keyboard ? { keyboard: data.keyboard } : {}),
     ...(data.viewport ? { viewport: data.viewport } : {}),

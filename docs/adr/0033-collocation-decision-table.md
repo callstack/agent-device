@@ -79,7 +79,7 @@ already owns the operations behind the vocabulary.
 | `src/diagnostics.ts` | keep | The diagnostics seam every zone imports (AGENTS.md mandates it); highest fan-in in the repo is what a substrate looks like, not misplacement. |
 | `src/internal/request-cancel.ts` | keep | Request-cancellation mechanics AGENTS.md routes to `host-kit/request`; internal beside its facade is already the collocation. |
 | `src/request.ts` | keep | Cross-layer request contracts AGENTS.md names as a host-kit seam; consumers span every zone. |
-| `src/session-paths.ts` | keep | Session-artifact path grammar the daemon, cli, and platforms all resolve; AGENTS.md keeps the path *policy* in `packages/daemon/src/core/session-artifact-paths.ts`, which consumes this. |
+| `src/session-paths.ts` | keep | Session-artifact path grammar the daemon, cli, and platforms all resolve; AGENTS.md keeps the path *policy* in `packages/daemon-contracts/src/session-artifact-paths.ts`, which consumes this. |
 
 ### kernel
 
@@ -118,7 +118,7 @@ already owns the operations behind the vocabulary.
 
 | File | Decision | Reason |
 | --- | --- | --- |
-| `src/cli/commands/device-release.ts` | keep | Command surface belongs in `cli` by the folder spine; the daemon device-claim modules it reuses are already extracted, so what remains is thin daemonless-CLI composition. |
+| `src/cli/commands/device-release.ts` | moved | Now `src/platform-runtime-claim-recovery.ts`: the daemonless stale release composes the shared reconciler with the root gateway, and the CLI process may reach no daemon module (R78), so it sits beside the claim-recovery gateway in the platform-runtime composition. |
 
 ### (root)
 
@@ -133,8 +133,9 @@ the whole `daemon-contracts` zone has moved into `packages/daemon-contracts` —
 package derive the zone, so every moved file's `ROOT_MODULE_ZONES` row is gone.
 The daemon ⇄ client shared files that remain here (`provider-credential-fingerprint.ts`) trace
 to #2559, which relocated the shared contracts **to the process root** so the client stops
-importing `packages/daemon/src/` at all; R78 keeps any client→daemon
-edge at zero runtime and a five-line recorded type-only residue, and #3288's `daemon-contracts`
+importing `packages/daemon/src/` at all; the `client-side` logical-module policy bans every edge from the CLI, typed client, remote transports and
+`src/daemon-client/` into `packages/daemon/src/`, R78 bans the hop through any root module the CLI
+process reaches, and #3288's `daemon-contracts`
 zone was the declaration of that shared-below-both ownership — the extraction makes it
 physical, with R11 and the package's dependency edges holding the same boundary. Rows on
 path-keyed evidence alone (the `platform-runtime-*` seams) say "retain for this batch": a guard's
@@ -144,6 +145,7 @@ optimal.
 | File | Decision | Reason |
 | --- | --- | --- |
 | `src/daemon-diagnostics-scope.ts` | moved → `packages/daemon-contracts/src/daemon-diagnostics-scope.ts` ([#3297](https://github.com/callstack/agent-device/pull/3297) into `src/daemon-contracts/`, then the package extraction) | The whole `daemon-contracts` zone now lives as `packages/daemon-contracts`, so the package directory derives the zone and the per-file `ROOT_MODULE_ZONES` row stays deleted; an internal rename needs no ownership-table edit. |
+| `packages/daemon-contracts/src/device-claim-recovery.ts` | keep (shared-below-both) | The owner-scoped claim reconciler runs durable-resource recovery for a dead owner's state dir; the daemon runs it at `open` and startup and the daemonless `device release --stale` runs it too, so it lives below both. Runtime recovery may live in `daemon-contracts` only when both sides run it and root composition supplies just the gateway (ADR 0019 section 1); the package depends on `capture-kit`, which cannot depend back on it (a project-reference cycle through `selectors`). |
 | `src/daemon-policy-file.ts` | moved → `packages/daemon-contracts/src/daemon-policy-file.ts` | Daemon ⇄ client shared contract from #2559, declared `daemon-contracts` by #3288 — the shared-below-both ownership the spine needs, since daemon-client (rank 5) dynamically imports it. The extraction makes that placement physical: the package sits below both sides and its manifest exports own the boundary. |
 | `src/daemon.ts` | keep | Entry point (`internal/daemon` bundle entry); composition roots stay in root by umbrella §4. |
 | `src/platform-runtime-apple-runner-owner.ts` | retain for this batch | `platform-runtime-*` composition seam: R13's exact-importer rule and the ADR 0022 R76 inventory key on its path, so relocation requires coordinated ownership changes to both declarations — the rules constrain the move, they do not independently prove the placement. |
@@ -190,20 +192,25 @@ files have no seam (published facade, public-type collision, root dependency fac
 
 ## The daemon package's export surface
 
-`@agent-device/daemon` publishes a façade, not importer reach: one named subpath per
-production/script consumer — a subpath that only tests import is not production surface.
-Everything else a root test reaches lives under the `./testing/` namespace: named
-`./testing/<module>` entries for production modules tests drive, named `./testing/<fixture>`
-entries, and, per fixture folder, a `./testing/<dir>/*` pattern whose target template
-reconstructs the source path. Never a wildcard that also exposes production modules. R11
-refuses any `./testing/` import from a non-test file, so root production code cannot import
-a module the package publishes for tests (a package test double reached through the
-boundary is production code depending on a fake), and root production imports are limited
-to the named production surface. The exports keys stay exact except the per-folder fixture
-patterns; `resolveWorkspaceSpecifier` (layering model) owns Node's exports semantics — the
-layering edges, the depgraph, mutation ownership, and R11's named-surface check call it, and
-the Stryker alias table orders its Vite first-match list to resolve in exactly its order —
-so every lane gives a specifier the module id Node's exports resolution gives it.
+`@agent-device/daemon` has one entry, `.`, which is `packages/daemon/src/index.ts`: explicit named
+re-exports of what the daemon process root uses (`startDaemonRuntime` and the types its
+composition and platform-runtime modules name), no `export *`. It is the package boundary, the
+one place a barrel is allowed; the layer folders hold no barrel. A value import of the package
+evaluates the daemon server graph, so root code that needs only command metadata reads it from
+its owner: the route owner-file claims sit beside the per-command claims in
+`@agent-device/command-registry/owner-files`, and the wire request and response types come from
+`@agent-device/contracts/command` and `@agent-device/kernel/contracts`.
+
+Root tests that still drive daemon internals reach them through transitional `./testing/`
+entries: named `./testing/<module>` entries for production modules, named `./testing/<fixture>`
+entries, and per fixture folder a `./testing/<dir>/*` pattern. Each batch of tests that moves into
+`packages/daemon/src`, where they import their subject relatively, deletes the entries it frees.
+R11 refuses any `./testing/` import from a non-test file, so root production code cannot import
+a module the package publishes for tests (a package test double reached through the boundary is
+production code depending on a fake). `resolveWorkspaceSpecifier` (layering model) owns Node's
+exports semantics — the layering edges, the depgraph, mutation ownership, and R11's named-surface
+check call it, and the Stryker alias table orders its Vite first-match list to resolve in exactly
+its order — so every lane gives a specifier the module id Node's exports resolution gives it.
 
 ## Refuted alternatives
 

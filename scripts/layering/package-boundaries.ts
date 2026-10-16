@@ -1,7 +1,8 @@
 // Catches: a package importing a workspace sibling its manifest never declared, and a root
 //   file tunnelling into a package's src with a relative path — both for every file, compiled
 //   or not — plus the whole specifier sweep (unknown package, un-exported subpath) for the
-//   scripts/ files the type graph omits. `tsc -b` owns the rest of the old R11 surface for
+//   scripts/ files, including tooling roots the type graph also checks. `tsc -b` owns the
+//   rest of the old R11 surface for
 //   compiled sources: NodeNext resolution rejects a non-exported subpath and an unknown
 //   package (TS2307), and composite `rootDir` rejects a package→root relative escape
 //   (TS6059 + TS6307) — planted proofs recorded on #3279.
@@ -18,20 +19,30 @@
 //
 // R11 package-boundaries: the workspace rules of #1490, as data the gate walks.
 //
-// What remains is exactly what the type graph cannot see:
+// R11 retains the claims the type graph cannot see, plus conservative checks for scripts:
 // a package import of a sibling the manifest never declared (pnpm's root links make it resolve
 // anyway), a root file tunnelling into `packages/*/src` with a relative path (tsc typechecks
 // it fine; Node's ESM loader does not realpath specifiers, so a module loaded BOTH relatively
 // and via its package specifier instantiates twice in one process — duplicate AppError, broken
-// instanceof), and, for `scripts/` files which sit outside the type graph by design, the
-// root-side unknown-package and exports-map checks that compiled files get from TS2307.
-// On top, `TEST_ONLY_FIXTURE_SUBPATHS` mirrors R13's Android fixture gate for the non-platform
-// packages: a production file importing one of those fixture subpaths is an R11 violation.
+// instanceof), and, for all `scripts/` files, the root-side unknown-package and exports-map
+// checks. Explicit tooling roots also receive those resolution checks from TS2307.
+// The consumer half of R83 (production code importing a test-only export or test-kit) is checked at
+// the same import sites, so the one specifier walk serves both rules.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseImports, resolveWorkspaceSpecifier } from './model.ts';
-import { listTrackedPackageManifests, listTrackedProductionSources } from './tracked-sources.ts';
+import {
+  PACKAGE_EXPORT_SURFACE_RULE,
+  readExportManifests,
+  resolveAllConditionTargets,
+  testOnlyImportMessage,
+} from './package-export-surface.ts';
+import {
+  isProductionSourceFile,
+  listTrackedPackageManifests,
+  listTrackedProductionSources,
+} from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
   rule: string;
@@ -46,8 +57,17 @@ export type WorkspacePackage = {
   name: string;
   /** Full import specifier -> repo-relative source target, from `exports`. */
   exportTargets: ReadonlyMap<string, string>;
+  /** Export key -> every condition target (`types`, `import`, `default`, ...), repo-relative. */
+  exportConditionTargets?: ReadonlyMap<string, readonly string[]>;
   /** Declared `workspace:*` dependencies on sibling internal packages. */
   workspaceDependencies: ReadonlySet<string>;
+  /**
+   * Workspace siblings a private package declares in `devDependencies`. Only test support (tests,
+   * fixtures, test trees) may import through them; production source still needs
+   * `workspaceDependencyField`. A published package keeps every sibling in `devDependencies`
+   * already, so this is empty there.
+   */
+  workspaceDevDependencies: ReadonlySet<string>;
   /** Where siblings are declared: a published package bundles them, so it lists them as dev-only. */
   workspaceDependencyField: 'dependencies' | 'devDependencies';
   /** Non-workspace dependencies that the root build must externalize. */
@@ -102,13 +122,16 @@ export function specifierSites(file: string, source: string): SpecifierSite[] {
  * filtering the output.
  */
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {
-  return workspacePackagesFromManifests(
-    new Map(
-      listTrackedPackageManifests(repoRoot).map((manifestFile) => [
-        manifestFile,
-        fs.readFileSync(path.join(repoRoot, manifestFile), 'utf8'),
-      ]),
-    ),
+  return workspacePackagesFromManifests(readTrackedPackageManifests(repoRoot));
+}
+
+/** Tracked workspace package manifests, text keyed by repo-relative path. */
+export function readTrackedPackageManifests(repoRoot: string): Map<string, string> {
+  return new Map(
+    listTrackedPackageManifests(repoRoot).map((manifestFile) => [
+      manifestFile,
+      fs.readFileSync(path.join(repoRoot, manifestFile), 'utf8'),
+    ]),
   );
 }
 
@@ -136,11 +159,32 @@ export function workspacePackagesFromManifests(
         path.posix.join('packages', entry, path.posix.normalize(targetFile)),
       );
     }
+    const conditionTargets = new Map(
+      readExportManifests(new Map([[manifestFile, manifests.get(manifestFile)!]])).flatMap(
+        (declared) =>
+          declared.exports.map(
+            ({ key, targets }) =>
+              [
+                path.posix.join(manifest.name!, key),
+                targets.map((target) =>
+                  path.posix.join('packages', entry, path.posix.normalize(target)),
+                ),
+              ] as const,
+          ),
+      ),
+    );
     const workspaceDependencyField = manifest.private === true ? 'dependencies' : 'devDependencies';
     const workspaceDependencies = new Set(
       Object.entries(manifest[workspaceDependencyField] ?? {})
         .filter(([, range]) => range.startsWith('workspace:'))
         .map(([name]) => name),
+    );
+    const workspaceDevDependencies = new Set(
+      manifest.private === true
+        ? Object.entries(manifest.devDependencies ?? {})
+            .filter(([, range]) => range.startsWith('workspace:'))
+            .map(([name]) => name)
+        : [],
     );
     const externalDependencies = new Map(
       Object.entries(manifest.dependencies ?? {}).filter(
@@ -151,7 +195,9 @@ export function workspacePackagesFromManifests(
       dir: `packages/${entry}`,
       name: manifest.name,
       exportTargets,
+      exportConditionTargets: conditionTargets,
       workspaceDependencies,
+      workspaceDevDependencies,
       workspaceDependencyField,
       externalDependencies,
     });
@@ -173,45 +219,28 @@ function namedByExports(target: WorkspacePackage, specifier: string): boolean {
   return resolveWorkspaceSpecifier(specifier, target.exportTargets) !== undefined;
 }
 
-const TEST_CONSUMER_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|(?:^|\/)test\//;
-
 /**
- * The one file vocabulary for "this file consumes test data": the root `test/` tree, a
- * package-local `test/` harness tree, `*.test.*` files, and `__tests__/` trees (root or
- * nested). Both test-data gates call this — the `./testing/` façade check and the
- * TEST_ONLY_FIXTURE_SUBPATHS predicate — so what counts as a test consumer is one rule,
- * not two spellings that drift. Pinned by an accept/deny table in
- * `package-boundaries-facade.test.ts`.
+ * R83's consumer half (see package-export-surface.ts): a production file importing a test-only
+ * export, or the private test-kit package, is production code depending on a test double — it
+ * must use a production subpath or inject the real port.
  */
-export function isTestConsumerFile(file: string): boolean {
-  return TEST_CONSUMER_RE.test(file);
-}
-
-/**
- * Façade policy (ADR-0033 amendment): a package publishes test data only under its
- * `./testing/` namespace — named `./testing/<fixture>` entries and per-folder
- * `./testing/<dir>/*` patterns — and only test files may import it. The gate is the
- * namespace, not a pattern entry: narrowing the surface to exact keys must not
- * smuggle a fixture past the test-file rule. Production code that reaches a fixture
- * through the package boundary is production code depending on a test double — it
- * must inject the real port instead.
- */
-function checkTestDataOnlySites(
+function checkTestOnlyImportSite(
   site: SpecifierSite,
   target: WorkspacePackage,
 ): PackageBoundaryViolation | undefined {
-  if (!site.specifier.startsWith(`${target.name}/testing/`)) return undefined;
-  if (!namedByExports(target, site.specifier)) return undefined;
-  if (isTestConsumerFile(site.file)) return undefined;
-  return {
-    rule: 'R11 package-boundaries',
-    file: site.file,
-    line: site.line,
-    message:
-      `'${site.specifier}' resolves through ${target.dir}/package.json#exports './testing/' ` +
-      `namespace, which publishes test data to test files only. '${site.file}' is not a test ` +
-      `file: import a production subpath or inject the port.`,
-  };
+  const resolvedTargets = resolveAllConditionTargets(
+    site.specifier,
+    target.exportConditionTargets ??
+      new Map([...target.exportTargets].map(([key, file]) => [key, [file]])),
+  );
+  const message = testOnlyImportMessage(
+    site.file,
+    site.specifier,
+    target.name,
+    resolvedTargets.length > 0 ? resolvedTargets : undefined,
+  );
+  if (message === undefined) return undefined;
+  return { rule: PACKAGE_EXPORT_SURFACE_RULE, file: site.file, line: site.line, message };
 }
 
 function specifierPackageName(specifier: string): string | undefined {
@@ -221,20 +250,18 @@ function specifierPackageName(specifier: string): string | undefined {
 
 /**
  * The file set R11 treats as parsed by the `tsc -b` graph: each package project includes its
- * own `src/`, and the root project includes `src/` and `test/`. Everything else the R11 walk
- * visits — the rest of `scripts/` (gate and tooling modules run through
- * `--experimental-strip-types`, not a tsconfig program), the `packages/maestro/test/`
- * conformance harness, and package build configs — reaches packages through import sites the
+ * own `src/`, and the root project includes `src/` and `test/`. Other regions the R11 walk
+ * visits include `scripts/`, the `packages/maestro/test/` conformance harness, and package
+ * build configs. Files outside the compiler graph reach packages through import sites the
  * compiler never parses, so R11 stays the only owner of every boundary claim about those
  * routes (#3279). Only the RESOLUTION branches (unknown package, un-exported subpath) are
  * split this way; the relative-escape branch fires regardless — a planted sibling tunnel
  * `tsc -b` accepted, see `checkPackageInternalSites`.
  *
- * One documented divergence: the root program also includes
- * `scripts/help-conformance-command-validator.ts`, which this predicate classifies as
- * uncompiled. That is fail-closed — R11 keeps its full branch set (unknown package,
- * exports-map) for the file on top of what tsc enforces — never fail-open. The divergence
- * and the exact root include list are pinned in `project-references.test.ts`, and the
+ * The root program also includes explicit help-conformance and coverage-tooling roots.
+ * This predicate classifies all scripts as uncompiled. That is fail-closed — R11 keeps its
+ * full branch set (unknown package, exports-map) on top of what tsc enforces. The divergence
+ * and the root include regions are pinned in `project-references.test.ts`, and the
  * per-package `include: ["src"]` / no-`exclude` shape this predicate's regexes assume is
  * pinned there too, so widening any project's file set must be recorded there rather than
  * silently diverging from this predicate.
@@ -244,18 +271,26 @@ export function insideCompiledSources(file: string): boolean {
 }
 
 /**
- * Workspace fixture subpaths only non-production files may import — the same claim R13's
- * `ANDROID_TEST_ONLY_SUBPATHS` makes for the platform packages, which R13 cannot express for
- * non-platform packages. A production file (root or package) importing one is a violation.
+ * A sibling import must be declared `workspace:*` in the package manifest. Production source needs
+ * the production field (`dependencies`, or `devDependencies` for a published package, which
+ * bundles its siblings); test support — tests, `*.fixtures.*` files, test trees, test-kit — may
+ * also resolve through a private package's `devDependencies`, so a test-only sibling such as
+ * test-kit never ships as a runtime dependency.
  */
-export const TEST_ONLY_FIXTURE_SUBPATHS: ReadonlySet<string> = new Set([
-  '@agent-device/device-selection/inventory-gateways-fixtures',
-  '@agent-device/replay-port/replay-script-source-fixtures',
-]);
-
-/** Consumer side of `TEST_ONLY_FIXTURE_SUBPATHS`. */
-function importsTestOnlyFixtureFromProduction(file: string, specifier: string): boolean {
-  return TEST_ONLY_FIXTURE_SUBPATHS.has(specifier) && !isTestConsumerFile(file);
+function undeclaredSiblingMessage(
+  pkg: WorkspacePackage,
+  name: string,
+  site: SpecifierSite,
+): string | undefined {
+  if (name === pkg.name || pkg.workspaceDependencies.has(name)) return undefined;
+  const declaredForTests = pkg.workspaceDevDependencies.has(name);
+  if (declaredForTests && !isProductionSourceFile(site.file)) return undefined;
+  return declaredForTests
+    ? `${pkg.name} imports '${site.specifier}' from production source, but ${pkg.dir}/package.json ` +
+        `declares "${name}" only in devDependencies: declare it in ${pkg.workspaceDependencyField} ` +
+        `or import it from test support only.`
+    : `${pkg.name} imports '${site.specifier}' without declaring "${name}": "workspace:*" ` +
+        `in ${pkg.dir}/package.json ${pkg.workspaceDependencyField}.`;
 }
 
 /**
@@ -306,16 +341,6 @@ export function checkPackageInternalSites(
     }
     const name = specifierPackageName(site.specifier);
     if (!name || !name.startsWith('@agent-device/')) continue;
-    if (importsTestOnlyFixtureFromProduction(site.file, site.specifier)) {
-      violations.push({
-        rule: 'R11 package-boundaries',
-        file: site.file,
-        line: site.line,
-        message:
-          `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
-          `import it; use the package's production subpath instead.`,
-      });
-    }
     const target = packageByName(allPackages, name);
     if (!target) {
       if (!compiled) {
@@ -328,17 +353,16 @@ export function checkPackageInternalSites(
       }
       continue;
     }
-    if (name !== pkg.name && !pkg.workspaceDependencies.has(name)) {
+    const undeclared = undeclaredSiblingMessage(pkg, name, site);
+    if (undeclared) {
       violations.push({
         rule: 'R11 package-boundaries',
         file: site.file,
         line: site.line,
-        message:
-          `${pkg.name} imports '${site.specifier}' without declaring "${name}": "workspace:*" ` +
-          `in ${pkg.dir}/package.json ${pkg.workspaceDependencyField}.`,
+        message: undeclared,
       });
     }
-    const testDataOnly = checkTestDataOnlySites(site, target);
+    const testDataOnly = checkTestOnlyImportSite(site, target);
     if (testDataOnly) {
       violations.push(testDataOnly);
       continue;
@@ -364,8 +388,8 @@ export function checkPackageInternalSites(
  * fine (#3279), but Node's ESM loader does not realpath specifiers, so dual relative/specifier
  * loads instantiate the module twice — and a workspace specifier the root manifest never
  * declares, which the root's own link farm resolves anyway. For compiled root files the
- * compiler owns unknown packages and un-exported subpaths with TS2307; for scripts/ files,
- * which sit outside the type graph by design, R11 keeps every branch.
+ * compiler owns unknown packages and un-exported subpaths with TS2307. For scripts/ files,
+ * R11 keeps every branch, including where explicit tooling roots also receive compiler checks.
  */
 export function checkRootSites(
   sites: readonly SpecifierSite[],
@@ -392,16 +416,6 @@ export function checkRootSites(
     }
     const name = specifierPackageName(site.specifier);
     if (!name || !name.startsWith('@agent-device/')) continue;
-    if (importsTestOnlyFixtureFromProduction(site.file, site.specifier)) {
-      violations.push({
-        rule: 'R11 package-boundaries',
-        file: site.file,
-        line: site.line,
-        message:
-          `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
-          `import it; use the package's production subpath instead.`,
-      });
-    }
     const target = packageByName(packages, name);
     if (!target) {
       if (!compiled) {
@@ -424,7 +438,7 @@ export function checkRootSites(
           `package.json devDependencies.`,
       });
     }
-    const testDataOnly = checkTestDataOnlySites(site, target);
+    const testDataOnly = checkTestOnlyImportSite(site, target);
     if (testDataOnly) {
       violations.push(testDataOnly);
       continue;

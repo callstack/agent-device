@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { DryRunStatus } from '@stryker-mutator/api/test-runner';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { COVERAGE_CAPTURE_ENV } from './coverage-reporter.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
