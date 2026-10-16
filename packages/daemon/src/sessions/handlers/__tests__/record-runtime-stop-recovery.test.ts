@@ -10,22 +10,28 @@ import {
   recordingResourcePath,
 } from './record-runtime.fixtures.ts';
 
-// The stop lane that runs WITHOUT a held session resolves its device through the selection
-// dispatch. On a host that answers anything, an unconstrained request is exactly the #3674
-// symptom, so the dispatch double here behaves like a multi-device host: it only answers a
-// request that states a device identity, and an unconstrained one gets the ambiguity a
-// multi-boot host really returns. The restart tests below pass only while the recovery lane
-// resolves from the manifest instead of sweeping the host.
+// The stop lane WITHOUT a held session resolves through the selection dispatch. The double acts
+// like a multi-device host: it answers only requests that state the recorded identity (or the
+// linux family), so a lane that swept the host's flags instead of resolving from the manifest
+// gets the ambiguity such a host really returns.
 const RESTART_RECORDED_DEVICE = {
   platform: 'android',
   id: 'emulator-5554',
   name: 'Pixel',
   kind: 'emulator',
 } as const;
-const resolveTargetDeviceMock = vi.fn(async (flags: { udid?: string; serial?: string } = {}) => {
+const FLAGLESS_RECORDED_DEVICE = {
+  platform: 'linux',
+  id: 'linux',
+  name: 'Linux',
+  kind: 'device',
+  target: 'desktop',
+} as const;
+const resolveTargetDeviceMock = vi.fn(async (flags: Record<string, string | undefined> = {}) => {
   if (flags.serial === RESTART_RECORDED_DEVICE.id || flags.udid === RESTART_RECORDED_DEVICE.id) {
     return { ...RESTART_RECORDED_DEVICE };
   }
+  if (flags.platform === 'linux') return { ...FLAGLESS_RECORDED_DEVICE };
   throw new AppError('AMBIGUOUS_MATCH', 'Multiple attached devices detected');
 });
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
@@ -60,6 +66,69 @@ test('record stop after a daemon restart replays the completed export for the na
   // The recovery re-resolves the manifest's exact device, never an unconstrained sweep.
   expect(resolveTargetDeviceMock).toHaveBeenCalledWith(
     expect.objectContaining({ serial: 'emulator-5554' }),
+  );
+});
+
+test('record stop recovery after a daemon restart keeps the request host-scoping selectors', async () => {
+  // --android-device-allowlist says WHERE to look, not which device. A recovery that dropped it
+  // would resolve (or fail) outside the allowlist the recording was started under.
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-scoping-');
+  const outPath = path.join(
+    mkdtempForTestSync('record-runtime-restart-stop-scoping-output-'),
+    'capture.mp4',
+  );
+  fs.writeFileSync(outPath, 'mp4');
+  await harness.run(['start', outPath], undefined, { androidDeviceAllowlist: 'emulator-5554' });
+  await harness.run(['stop']);
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the stopped recording session');
+  harness.sessionStore.retire(ref);
+  resolveTargetDeviceMock.mockClear();
+
+  const recovered = await harness.run(
+    ['stop'],
+    { sessionExplicit: true },
+    {
+      androidDeviceAllowlist: 'emulator-5554',
+    },
+  );
+
+  expect(recovered).toMatchObject({
+    ok: true,
+    data: { recording: 'stopped', outPath },
+  });
+  expect(resolveTargetDeviceMock).toHaveBeenCalledWith(
+    expect.objectContaining({
+      serial: 'emulator-5554',
+      androidDeviceAllowlist: 'emulator-5554',
+    }),
+  );
+});
+
+test('record stop recovery for a family without identity flags resolves under the manifest family', async () => {
+  // A linux manifest names no identity flag the request could restate. The recovery still must
+  // not sweep the host from the request's (empty) flags: it asks for the manifest's family, and
+  // the double answers only such family-scoped requests.
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-flagless-', {
+    platform: 'linux',
+  });
+  const outPath = path.join(
+    mkdtempForTestSync('record-runtime-restart-stop-flagless-output-'),
+    'capture.mp4',
+  );
+  fs.writeFileSync(outPath, 'mp4');
+  await harness.run(['start', outPath]);
+  await harness.run(['stop']);
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the stopped recording session');
+  harness.sessionStore.retire(ref);
+  resolveTargetDeviceMock.mockClear();
+
+  const recovered = await harness.run(['stop'], { sessionExplicit: true });
+
+  expect(recovered).toMatchObject({ ok: true, data: { recording: 'stopped', outPath } });
+  expect(resolveTargetDeviceMock).toHaveBeenCalledWith(
+    expect.objectContaining({ platform: 'linux' }),
   );
 });
 

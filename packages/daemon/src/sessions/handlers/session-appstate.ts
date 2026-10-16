@@ -25,12 +25,9 @@ type AppStateTargetDecision =
   | {
       answeredBy: 'device-runtime';
       session: AppStateSessionStoreEntry;
-      /**
-       * Decided from the same store read as `session`: the request names a session this daemon
-       * does not hold. The device-runtime lane answers an Apple device from this admission-time
-       * fact, not from a re-read after the await — resolution cannot change which error family
-       * the request was admitted into.
-       */
+      /** Decided from the same store read as `session`, so a mid-await store change (e.g. the
+       *  session being recreated during device resolution) cannot move the refusal later answered
+       *  into another family. */
       namedSessionMissing: boolean;
     };
 
@@ -74,8 +71,6 @@ function admitAppStateTarget(params: RuntimeCommandHandlerParams): AppStateTarge
   if (useSessionStateForApple && session) {
     return { answeredBy: 'apple-session' as const, session };
   }
-  // Only an identity selector reaches the device-runtime lane with a named-but-missing session
-  // (the guard above refused the rest); this is the one read that decides it.
   return {
     answeredBy: 'device-runtime' as const,
     session,

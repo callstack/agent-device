@@ -172,19 +172,15 @@ async function resolveRecordingSession(
  * applies the named-session rule (#3674) at its only device selection.
  *
  * A request that names a session this daemon does not hold and states no device is answered from
- * the durable manifest the session address finds — never from an unconstrained sweep of the host,
- * which with several booted devices would answer `AMBIGUOUS_MATCH` (or, worse, silently pick a
- * different device) before the manifest is read. A decodable manifest names the exact device the
- * recording was started on; the stop recovery re-resolves that identity, so where its family has
- * an identity flag the host is asked only for the device the manifest already specified. A start,
- * or a stop with no decodable manifest to recover from, refuses with the named-session error.
- * `assertManifestBelongsToRequest` still proves the resolved device and the session address
- * against the manifest before anything is served, so a mismatch fails closed.
+ * the durable manifest the session address finds, never from a sweep of every device on the host:
+ * a decodable manifest is re-resolved under the manifest's family (plus the request's host
+ * scoping), and a start or a stop with no decodable manifest to recover from refuses with the
+ * named-session error. `assertManifestBelongsToRequest` owns the proof that the resolved device
+ * and session address match the manifest.
  *
  * The two shapes that keep their chosen target are unchanged: a request that never named a
  * session resolves sessionlessly from its flags, and one that states a device selector resolves
- * from it, with the manifest assertion failing the request closed when the stated device is not
- * the one the recording was started on.
+ * from it.
  */
 async function resolveUnheldRecordingDevice(
   params: RecordRuntimeHandlerParams,
@@ -211,23 +207,25 @@ function namesSessionWithoutTarget(req: DaemonRequest): boolean {
 }
 
 /**
- * Re-resolves the exact device a durable manifest names, by the identity flag that family answers
- * to. Families without an identity flag keep the request's own selection — an address the manifest
- * recorded but the request cannot restate stays resolved as it always has been, and the
- * device-match assertion below still refuses a different device.
+ * Re-resolves the device a durable manifest names: the manifest's family always, its identity flag
+ * where the family has one, plus the request's host-scoping selectors — `iosSimulatorDeviceSet`
+ * and `androidDeviceAllowlist` say WHERE to look, not which device, so carrying them preserves a
+ * recovery scoped to a simulator set or allowlist instead of regressing it to DEVICE_NOT_FOUND.
+ * No request device/identity selector reaches here: `assertManifestBelongsToRequest` proves the
+ * resolved device against the manifest.
  */
 async function resolveManifestDevice(
   params: RecordRuntimeHandlerParams,
   recorded: DeviceIdentity,
 ): Promise<DeviceInfo> {
-  const selector: ResolveDeviceFlags = { platform: recorded.family };
+  const { iosSimulatorDeviceSet, androidDeviceAllowlist } = params.req.flags ?? {};
+  const selector: ResolveDeviceFlags = {
+    platform: recorded.family,
+    ...(iosSimulatorDeviceSet === undefined ? {} : { iosSimulatorDeviceSet }),
+    ...(androidDeviceAllowlist === undefined ? {} : { androidDeviceAllowlist }),
+  };
   const identityFlag = deviceIdentityFlag(recorded.family);
-  if (!identityFlag) {
-    // A family whose manifest identity no flag can restate keeps the request's own selection; the
-    // manifest assertion still refuses anything but the device the recording was started on.
-    return await resolveTargetDevice(params.req.flags ?? {});
-  }
-  selector[identityFlag] = recorded.id;
+  if (identityFlag) selector[identityFlag] = recorded.id;
   return await resolveTargetDevice(selector);
 }
 

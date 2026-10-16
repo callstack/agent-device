@@ -71,11 +71,9 @@ test('appstate --platform apple missing-session error never suggests omitting --
 
 test('appstate --udid with no --platform resolves the stated device and THEN answers the typed reason', async () => {
   // `--udid` is the Apple identity flag, so a bare `--udid <ios>` reaches the device-runtime lane
-  // and lands on an Apple device. The commands.md row promises the typed reason "even with an
-  // explicit device", so this lane answers it too — and it answers it from the resolved device,
-  // NOT from a pre-resolution guard: the request states a target, and the route must first prove
-  // that target by resolving it. A refusal answered before resolution is a different policy, so
-  // the resolution call itself is the pin here.
+  // and lands on an Apple device, which answers the typed reason the commands.md row promises
+  // "even with an explicit device". The pin is resolution-first: the route must prove the stated
+  // target before refusing it, so a resolution call on that exact device is required here.
   const iosSim: DeviceInfo = {
     platform: 'apple',
     appleOs: 'ios',
@@ -88,8 +86,6 @@ test('appstate --udid with no --platform resolves the stated device and THEN ans
   const resolved = vi.mocked(resolveTargetDevice);
   resolved.mockReset();
   resolved.mockResolvedValue(iosSim);
-  // The refusal precedes runtime admission, so a fact read here would mean the lane queried a
-  // device it had just refused; the pin is that it never gets that far.
   const inspected: string[] = [];
   try {
     const response = await handleAppStateCommand({
@@ -119,6 +115,45 @@ test('appstate --udid with no --platform resolves the stated device and THEN ans
       expect.anything(),
     );
     expect(inspected).toEqual([]);
+  } finally {
+    resolved.mockReset();
+  }
+});
+
+test('appstate --udid on an Apple device without naming a session keeps the plain session-required advice', async () => {
+  // The typed named-session reason belongs to requests that named a session this daemon does not
+  // hold. A request that named none (only the implicit default) gets the plain advice to run
+  // open — the device-runtime arm must not type a reason it has no session for.
+  const iosSim: DeviceInfo = {
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'SIM-UDID-B',
+    name: 'iPhone 16',
+    kind: 'simulator',
+    target: 'mobile',
+    booted: true,
+  };
+  const resolved = vi.mocked(resolveTargetDevice);
+  resolved.mockReset();
+  resolved.mockResolvedValue(iosSim);
+  try {
+    const response = await handleAppStateCommand({
+      platformServices: daemonPlatformServicesFixture(),
+      req: appStateRequest('default', { udid: 'SIM-UDID-B' }),
+      sessionName: 'default',
+      sessionStore: makeSessionStore(),
+      inspectFacts: async (inspectedDevice) =>
+        createUnavailableRuntimeFactsForTest(inspectedDevice, localRuntimeOwner('apple'), {
+          available: false,
+          reason: 'owner-capability-missing',
+        }),
+    });
+
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
+    expect(response.error.code).toBe('SESSION_NOT_FOUND');
+    expect(response.error.message).toMatch(/iOS appstate requires an active session/i);
+    expect(response.error.details?.reason).toBeUndefined();
   } finally {
     resolved.mockReset();
   }
