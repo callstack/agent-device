@@ -972,10 +972,8 @@ The tombstone itself expires after its bounded window, after which the key is fu
 > repair target — `snapshot -i`, `get attrs`, `find`, `is` — recorded into the healed script exactly like
 > the corrective action itself. The wave-3 E3 experiment measured 0/4 trials producing a clean healed
 > script hands-off; one recorded `get attrs` caused a second, self-inflicted `identity-mismatch` divergence
-> on fresh replay. Stage 1 (#1287) shipped interim guidance only — the divergence `repairHint` and `help
-> workflow` told the agent to pass `--no-record` on those commands by hand. This amendment makes the safer
-> behavior the default, superseding stage 1's "opt out by hand" guidance with "opt in by hand" for the one
-> case that needs it.
+> on fresh replay. This amendment excludes these observations by default. An agent can explicitly record
+> a corrective observation with `--record`.
 >
 > **1. Which observations are excluded — a PROVENANCE rule, not a command-class rule.** The exclusion
 > applies to an observation that is BOTH:
