@@ -1,6 +1,6 @@
 # Audit tests
 
-Use this to audit or delete tests. Optimize for confidence, not deletion counts.
+Optimize for confidence, not deletion counts.
 Use [test authoring](test-authoring.md) for test quality and [validation](testing.md) for checks.
 
 ## Retain independent contracts

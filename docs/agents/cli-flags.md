@@ -61,5 +61,5 @@ steps 1-3, plus step 9.
 - Command-specific usage/flag metadata lives with the command family metadata that owns the command.
 - Argument parsing stays in `src/cli/parser/`. Help rendering stays in `src/commands/schema/`. Command schema metadata is derived from command
   metadata, family declarations, and the schema-only merge path in
-  `src/commands/schema/command-overrides.ts`. Keep the two separate.
+  `src/commands/schema/command-overrides.ts`.
 - Locating an owner: `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser`.

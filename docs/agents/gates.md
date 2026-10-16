@@ -1,6 +1,6 @@
 # Maintain gates
 
-Use this when changing gate selection or harnesses. For execution, read [validation](testing.md).
+For execution, read [validation](testing.md).
 
 `CHECK_CATALOG` in `scripts/check-affected/checks.ts` owns checks and commands.
 CI declares ownership through the shared `run-gate` action with a literal gate id.

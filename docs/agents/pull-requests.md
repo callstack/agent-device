@@ -13,7 +13,7 @@ Push once per review round. Each push restarts CI. Drafts skip device lanes.
 
 For device-facing changes, follow [device verification](device-verification.md).
 Prove the changed route ran live. Fixtures and neighbouring routes do not replace this evidence.
-Report missing devices or commands and incomplete session cleanup.
+Report missing devices or commands.
 
 - Published: branch pushed, PR opened, validation status recorded at a named commit.
 - Merge-ready: required checks pass at the actual head, with live evidence for device-facing changes.

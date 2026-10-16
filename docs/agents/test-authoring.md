@@ -1,6 +1,6 @@
 # Write tests
 
-Use this when adding or changing tests. Read [validation](testing.md) for checks and [test audits](test-audit.md) for deletions.
+Read [validation](testing.md) for checks and [test audits](test-audit.md) for deletions.
 
 ## Choose the boundary
 
