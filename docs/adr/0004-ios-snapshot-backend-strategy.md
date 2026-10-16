@@ -17,7 +17,8 @@ Structured snapshot quality verdicts and fallback warnings make degraded or reco
 
 - Route eligible local iOS Simulator snapshots through the host AX bridge. Present them once through the shared TypeScript engine.
 - If bridge acquisition or presentation fails, use one typed XCTest fallback.
-- After fallback, disable the bridge for that app generation, except for capture-scoped failures. A new app generation enables it again.
+- After fallback, disable the bridge for that app generation, except for `preparing` failures and capture-scoped failures.
+  A new app generation enables it again.
 - A refusal that provides evidence about the screen, not the app, has capture scope.
 - Keep the regular visible strategy and the raw diagnostic strategy explicit as the two public snapshot strategies.
 - The regular visible strategy must not use an arbitrary node-count cutoff.
@@ -52,7 +53,9 @@ Keep XCTest as the iOS automation runner.
 Route eligible local iOS Simulator snapshots through the host AX bridge.
 Present them once through the shared TypeScript engine.
 If bridge acquisition or presentation fails, use one typed XCTest fallback.
-After fallback, disable the bridge for that app generation, subject to the capture-scoped exception below.
+After fallback, disable the bridge for that app generation, except for `preparing` failures and the capture-scoped exception below.
+A `preparing` failure describes the bridge preparation queue, not the app.
+It sends only that capture to XCTest.
 A new app generation enables it again.
 Physical devices, providers, custom-action captures, and interactions remain on their existing owners.
 
