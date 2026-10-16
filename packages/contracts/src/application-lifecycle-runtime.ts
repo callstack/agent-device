@@ -169,10 +169,10 @@ export type PostOpenObservationFailure =
   | Readonly<{ source: 'circuit' }>;
 
 /**
- * A system confirmation the launch itself raised and the open reported on. `accepted`: iOS held a
- * launch URL behind `Open in "<App>"?` naming the session app, and the open accepted it.
- * `unanswered`: the open saw a confirmation it did not answer, and the required reason names which
- * leg outran it; the prompt stays on screen for `alert accept`.
+ * An alert seen in place of the launch, and what the open reported about it. `accepted`: iOS held
+ * a launch URL behind `Open in "<App>"?` naming the session app, and the open accepted it.
+ * `unanswered`: the open saw an alert it did not answer, and the required reason names which leg
+ * outran it; the prompt stays on screen for `alert accept`.
  */
 export type LaunchConfirmation = 'accepted' | 'unanswered';
 

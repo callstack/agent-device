@@ -296,6 +296,7 @@ test('open appends a probe-failure warning when the confirmation could not be re
   if (response?.ok !== true) throw new Error('open must survive an unreadable probe');
   const data = response.data ?? {};
   expect('launchConfirmation' in data).toBe(false);
+  expect(data.launchConfirmationProbeFailure).toBe('alert-read');
   expect(data.warnings).toEqual([
     expect.stringMatching(/could not read whether iOS is asking[\s\S]*alert get/),
   ]);

@@ -1,4 +1,7 @@
-import type { LaunchConfirmationOutcome } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  LaunchConfirmationAbsent,
+  LaunchConfirmationOutcome,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import {
   isIosFamily,
@@ -27,7 +30,7 @@ export function buildOpenResult(params: {
   runtimeHintCount: (runtime: SessionRuntimeHints) => number;
   sessionReused: boolean;
   selection?: DeviceSelectionResult;
-  launchConfirmation?: LaunchConfirmationOutcome;
+  launchConfirmation?: LaunchConfirmationOutcome | LaunchConfirmationAbsent;
 }): Record<string, unknown> {
   const {
     sessionName,

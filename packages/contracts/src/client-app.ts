@@ -2,8 +2,8 @@
 
 import type { AppsFilter } from './app-inventory.ts';
 import type {
-  LaunchConfirmation,
-  LaunchConfirmationUnansweredReason,
+  LaunchConfirmationAbsent,
+  LaunchConfirmationOutcome,
 } from './application-lifecycle-runtime.ts';
 import type { JsonObject } from './json.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -99,7 +99,12 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     runtime?: SessionRuntimeHints;
   };
 
-export type AppOpenResult = {
+export type AppOpenResult = AppOpenResultBase &
+  // The same discriminated report the platform outcome carries: a seen confirmation pairs its
+  // reason, and only the absent arm can name a probe step that could not read one.
+  (LaunchConfirmationOutcome | LaunchConfirmationAbsent);
+
+type AppOpenResultBase = {
   session: string;
   warnings?: string[];
   sessionStateDir?: string;
@@ -113,15 +118,6 @@ export type AppOpenResult = {
   runtime?: SessionRuntimeHints;
   selection?: DeviceSelectionMetadata;
   device?: AgentDeviceSessionDevice;
-  /**
-   * `accepted` when iOS held the launch URL behind an `Open in "<App>"?` confirmation naming the
-   * session app and the open answered it. `unanswered` when the open saw a confirmation it did not
-   * answer; the prompt is still on the screen and `launchConfirmationReason` names the leg that
-   * outran it. Answer it with `alert accept`.
-   */
-  launchConfirmation?: LaunchConfirmation;
-  /** Present alongside `launchConfirmation: 'unanswered'`. */
-  launchConfirmationReason?: LaunchConfirmationUnansweredReason;
   /**
    * Initial interactive snapshot captured immediately after an open that
    * requested `foreground`, composed from the same snapshot-runtime dispatch

@@ -184,6 +184,38 @@ test('apps.open drops an unrecognized launch confirmation outcome instead of gue
   assert.equal('launchConfirmationReason' in result, false);
 });
 
+test('apps.open reports a typed probe-failure step and drops an unrecognized one', async () => {
+  const responses = [
+    { step: 'alert-accept', reported: true },
+    { step: 'teleporter', reported: false },
+  ] as const;
+  for (const { step, reported } of responses) {
+    const setup = createTransport(async (req) => {
+      if (req.command === 'open') {
+        return {
+          ok: true,
+          data: {
+            session: 'qa',
+            appBundleId: 'com.example.app',
+            launchConfirmationProbeFailure: step,
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${req.command}`);
+    });
+    const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+    const result = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+
+    assert.equal(
+      'launchConfirmationProbeFailure' in result,
+      reported,
+      `${step} must ${reported ? '' : 'not '}reach the caller`,
+    );
+    assert.equal('launchConfirmation' in result, false);
+  }
+});
+
 test('apps.open preserves the full initialSnapshotError shape through client normalization', async () => {
   // open --foreground: open succeeded, composed snapshot did not. The public
   // client result must carry the FULL daemon error — dropping the boundary

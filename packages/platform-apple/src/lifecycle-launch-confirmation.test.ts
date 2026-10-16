@@ -180,38 +180,20 @@ test.each([
   },
 );
 
-test.each([
-  [
-    'the runner interactor cannot be resolved',
-    {
-      resolveInteractor: async () => {
-        throw SPAWN_TIMEOUT;
-      },
+test('an unobservable launch whose runner interactor cannot be resolved reports the runner step', async () => {
+  const { lifecycle, events } = launchUrlSimulator(async () => CONFIRMATION, [UNOBSERVABLE], {
+    resolveInteractor: async () => {
+      throw SPAWN_TIMEOUT;
     },
-    ['release', `open ${LAUNCH_URL}`, 'observe unobservable'],
-    'runner' as const,
-  ],
-])(
-  'an unobservable launch where %s returns the open as it was',
-  async (_case, legs, expected, probeFailure) => {
-    const { lifecycle, events } = launchUrlSimulator(
-      async () => CONFIRMATION,
-      [UNOBSERVABLE],
-      legs,
-    );
+  });
 
-    const outcome = await lifecycle.openApplication(launchUrlInput());
+  const outcome = await lifecycle.openApplication(launchUrlInput());
 
-    expect(outcome.launchConfirmation).toBeUndefined();
-    if (probeFailure) {
-      expect(outcome).toMatchObject({ launchConfirmationProbeFailure: probeFailure });
-    } else {
-      expect('launchConfirmationProbeFailure' in outcome).toBe(false);
-    }
-    expect(outcome.timing.postOpenObservation).toBe('unobservable');
-    expect(events).toEqual(expected);
-  },
-);
+  expect(outcome.launchConfirmation).toBeUndefined();
+  expect(outcome).toMatchObject({ launchConfirmationProbeFailure: 'runner' });
+  expect(outcome.timing.postOpenObservation).toBe('unobservable');
+  expect(events).toEqual(['release', `open ${LAUNCH_URL}`, 'observe unobservable']);
+});
 
 test('a prompt whose URL owner lookup fails reports the unanswered confirmation', async () => {
   const { lifecycle, interactor } = launchUrlSimulator(async () => CONFIRMATION, [UNOBSERVABLE], {
