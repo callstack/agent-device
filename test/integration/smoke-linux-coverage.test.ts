@@ -128,5 +128,6 @@ test('Linux accepted gaps name the permanent Linux limitation behind each row', 
     'reinstall',
     'shutdown',
     'trace',
+    'uninstall',
   ]);
 });

@@ -555,7 +555,10 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'uninstall reports the runtime-owned unavailable uninstall fact',
       'the web runtime fact rejects native app uninstall',
     ),
-    linux: linux.gap('No Linux-specific application uninstall command evidence exists yet'),
+    linux: linux.accepted(
+      'No Linux-specific application uninstall command evidence exists',
+      'Uninstall belongs to the app-deployment family the Linux runtime declares unavailable (unsupported-platform-leaf): a Linux desktop app is launched by name and there is no installed package model to remove, so the command refuses at admission and no lane will observe a Linux uninstall.',
+    ),
   },
   [C.push]: {
     androidEmulator: androidEmulator.live(
