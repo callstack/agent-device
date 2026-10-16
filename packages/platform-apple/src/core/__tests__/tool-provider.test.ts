@@ -178,7 +178,7 @@ test('local Apple tool provider exposes macOS host operations as semantic method
   const provider = createLocalAppleToolProvider({
     runCommand: async (cmd, args, options) => {
       // The bundle open's LaunchServices registration probe is the seam's own read, asserted in
-      // host-provider-open.test.ts; this routing test only reports it as listing the bundle.
+      // launch-services-registration.test.ts; this routing test only reports it as listing the bundle.
       if (cmd === '/usr/bin/lsappinfo') {
         return { exitCode: 0, stdout: 'ASN:0x0-0x1234-"Demo":\n', stderr: '' };
       }
