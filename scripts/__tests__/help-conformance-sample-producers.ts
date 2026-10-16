@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
 import { withCapturedStderrAsync } from '../../src/__tests__/test-utils/stream-capture.ts';
 import {
@@ -32,6 +34,10 @@ import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
 import { printHumanError } from '../../src/commands/output/error.ts';
 import { formatSnapshotText } from '../../src/commands/output/snapshot.ts';
+
+const daemonErrorSampleDriver = fileURLToPath(
+  new URL('../../packages/daemon/test/help-conformance/sample-producers.ts', import.meta.url),
+);
 
 // The production renderer behind each captured sample in
 // scripts/help-conformance-sample-outputs.mjs, as data rather than as one test
@@ -91,6 +97,19 @@ async function renderErrorResponse(response: ErrorResponse): Promise<string> {
     ),
   );
 }
+
+function assertErrorResponse(
+  response: { ok: boolean } | undefined,
+  what: string,
+): asserts response is ErrorResponse {
+  if (!response || response.ok) throw new Error(`${what} must be an error response`);
+}
+
+const DAEMON_ERROR_SAMPLE_RESPONSES = JSON.parse(
+  execFileSync(process.execPath, ['--experimental-strip-types', daemonErrorSampleDriver], {
+    encoding: 'utf8',
+  }),
+);
 
 export const SAMPLE_PRODUCERS: SampleProducer[] = [
   {
@@ -344,90 +363,42 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
   },
   {
     name: 'DEVICE_IN_USE_SAMPLE',
-    producer: 'the session-open by-session conflict fixture',
+    producer: 'the session-open by-session conflict producer',
     sample: DEVICE_IN_USE_SAMPLE,
-    render: () => {
-      return renderErrorResponse({
-        ok: false,
-        error: {
-          code: 'DEVICE_IN_USE',
-          message: 'Device is already in use by session "checkout".',
-          hint: 'Run agent-device session list to inspect active sessions. To reuse this device, rerun the command with --session checkout. To open a new session on this device, first run agent-device close --session checkout.',
-          details: {
-            session: 'checkout',
-            deviceId: 'SIM-001',
-            deviceName: 'iPhone 17 Pro',
-          },
-        },
-      });
+    render: async () => {
+      const response = DAEMON_ERROR_SAMPLE_RESPONSES.deviceInUse;
+      assertErrorResponse(response, 'the by-session conflict');
+      return await renderErrorResponse(response);
     },
   },
   {
     name: 'DEVICE_CLAIM_IN_USE_SAMPLE',
-    producer: 'the enforced device-claim conflict fixture',
+    producer: 'the enforced device-claim conflict producer',
     sample: DEVICE_CLAIM_IN_USE_SAMPLE,
-    render: () => {
-      return renderErrorResponse({
-        ok: false,
-        error: {
-          code: 'DEVICE_IN_USE',
-          message:
-            'android device emulator-5554 is owned by session "checkout" in workspace "/worktrees/checkout".',
-          hint: 'Inspect the owner with: agent-device device status --platform android --serial emulator-5554',
-          details: {
-            reason: 'DEVICE_CLAIM_LIVE_OWNER',
-            classification: 'live',
-            deviceKey: 'local:android:none:emulator-5554',
-            owner: {
-              session: 'checkout',
-              workspace: '/worktrees/checkout',
-              stateDir: '/state/checkout',
-            },
-            recovery: {
-              command: 'agent-device device status --platform android --serial emulator-5554',
-            },
-            retriable: false,
-          },
-        },
-      });
+    render: async () => {
+      const response = DAEMON_ERROR_SAMPLE_RESPONSES.deviceClaimInUse;
+      assertErrorResponse(response, 'the enforced device-claim conflict');
+      return await renderErrorResponse(response);
     },
   },
   {
     name: 'STALE_REF_SAMPLE',
-    producer: 'the ADR 0014 stale-ref rejection fixture',
+    producer: 'the ADR 0014 stale-ref admission producer',
     sample: STALE_REF_SAMPLE,
-    render: () => {
-      return renderErrorResponse({
-        ok: false,
-        error: {
-          code: 'COMMAND_FAILED',
-          message: 'Ref @e12 was minted from a superseded snapshot generation',
-          hint: "Ref @e12 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.",
-          details: { reason: 'stale_snapshot_ref', ref: '@e12', mintedGeneration: 5 },
-        },
-      });
+    render: async () => {
+      const response = DAEMON_ERROR_SAMPLE_RESPONSES.staleRef;
+      assertErrorResponse(response, 'a superseded pin');
+      return await renderErrorResponse(response);
     },
   },
   {
     name: 'AMBIGUOUS_MATCH_SAMPLE',
-    producer: 'the ambiguous-find error fixture',
+    producer: 'the find ambiguous-match error producer',
     sample: AMBIGUOUS_MATCH_SAMPLE,
-    render: () => {
-      return renderErrorResponse({
-        ok: false,
-        error: {
-          code: 'AMBIGUOUS_MATCH',
-          message:
-            'find matched 3 elements for text "Follow". Use a more specific locator or selector.',
-          hint: 'Multiple candidates matched. Narrow the query or pass an exact identifier.',
-          details: {
-            locator: 'text',
-            query: 'Follow',
-            matches: 3,
-            candidates: ['@e2 [button] "Follow"', '@e5 [button] "Follow"', '@e9 [button] "Follow"'],
-          },
-        },
-      });
+    render: async () => {
+      const response = DAEMON_ERROR_SAMPLE_RESPONSES.ambiguousMatch;
+      assertErrorResponse(response, 'an ambiguous find');
+      return await renderErrorResponse(response);
     },
   },
   {

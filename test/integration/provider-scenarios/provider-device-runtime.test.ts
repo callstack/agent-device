@@ -29,6 +29,34 @@ test('Provider-backed scenario composes lease, inventory, dispatch, and port rev
   });
 }, 15_000);
 
+test('provider session retains the allocated device and lease for implicit commands', async () => {
+  await withProviderScenarioResource(createFakeProviderWorld, async ({ daemon, runtime }) => {
+    const lease = await allocateFakeProviderLease(daemon);
+    assertRpcOk(
+      await daemon.callCommand('open', ['com.example.demo'], leaseFlags(lease.leaseId), {
+        meta: leaseMeta(lease.leaseId),
+      }),
+    );
+
+    const sessions = await daemon.client().sessions.list();
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0]?.device.id, runtime.deviceIdForLease(lease.leaseId));
+
+    const click = await daemon.callCommand('click', ['10', '20']);
+    assertRpcOk(click);
+    assert.deepEqual(
+      runtime.calls.filter((call) => call.type === 'tap').map((call) => call.deviceId),
+      [runtime.deviceIdForLease(lease.leaseId)],
+    );
+
+    assertRpcOk(await daemon.callCommand('close'));
+    assert.deepEqual(
+      runtime.calls.filter((call) => call.type === 'lease.release').map((call) => call.leaseId),
+      [lease.leaseId],
+    );
+  });
+}, 15_000);
+
 test('provider-owned iOS simulators relaunch without local CoreSimulator refresh', async () => {
   await withProviderScenarioResource(
     async () => await createFakeProviderWorld('ios'),

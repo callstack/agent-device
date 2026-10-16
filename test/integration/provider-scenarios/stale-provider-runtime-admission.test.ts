@@ -1,9 +1,16 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
+import { assertRpcError, assertRpcOk } from './assertions.ts';
+import { createProviderScenarioHarness } from './harness.ts';
 import {
   CloudWebDriverTestServer,
   cloudWebDriverTestJson,
@@ -131,29 +138,78 @@ test('an active AWS WebDriver device denies unsupported install from facts befor
   const server = await ProviderRegressionServer.start();
   const host = new AwsRemoteAccessHost({ appiumEndpoint: `${server.url}/wd/hub/` });
   const runtime = awsWebDriverRuntime(host);
-  const lease = providerLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm, 'aws-active-install');
+  const provider = runtime.platformRuntimeModule;
+  if (!provider) throw new Error('AWS WebDriver runtime requires its platform runtime module');
+  let bindCalls = 0;
+  const countedProvider = Object.freeze({
+    ...provider,
+    loadRuntime: async (...args: Parameters<typeof provider.loadRuntime>) => {
+      const owner = await provider.loadRuntime(...args);
+      return Object.freeze({
+        ...owner,
+        bind: async (request: Parameters<typeof owner.bind>[0]) => {
+          bindCalls += 1;
+          return await owner.bind(request);
+        },
+      });
+    },
+  });
+  const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
+  const daemon = await createProviderScenarioHarness({
+    ...providers,
+    deviceInventorySource: providers.deviceInventorySource!,
+    platformRuntime: {
+      providerRuntimes: [runtime],
+      providerModules: [{ runtime, module: countedProvider }],
+    },
+  });
+  const leaseId = 'a'.repeat(32);
+  const flags = {
+    ...awsRegressionContext().flags,
+    tenant: 'team-a',
+    runId: 'run-a',
+    leaseId,
+    leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+  };
+  const meta = {
+    tenantId: 'team-a',
+    runId: 'run-a',
+    leaseId,
+    leaseBackend: 'android-instance' as const,
+    leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+    deviceKey: 'provider-device-regression',
+    clientId: 'client-a',
+  };
+  let lease: DeviceLease | undefined;
 
   try {
-    await runtime.leaseLifecycle.allocate?.(lease, awsRegressionContext());
+    lease = assertRpcOk<{ lease: DeviceLease }>(
+      await daemon.callCommand('lease_allocate', [], flags, { meta }),
+    ).lease;
     const device = await allocatedDevice(runtime, lease);
+    const tempDir = mkdtempForTestSync('agent-device-provider-install-admission-');
+    const appPath = path.join(tempDir, 'demo.apk');
+    fs.writeFileSync(appPath, 'fake apk');
     const providerCallsBeforeAdmission = server.calls.length;
     const hostCallsBeforeAdmission = host.calls.length;
-
-    const facts = await inspectProviderDeploymentAdmission({
-      runtime,
-      module: runtime.platformRuntimeModule,
-      device,
-    });
-
-    expect(facts.operations.deployApp).toMatchObject({
-      available: false,
-      reason: 'owner-capability-missing',
-      hint: expect.stringMatching(/local artifact upload\/install is not implemented/),
-    });
+    const bindCallsBeforeAdmission = bindCalls;
+    const response = await daemon.callCommand(
+      'install',
+      [appPath],
+      { ...flags, serial: device.id },
+      { meta },
+    );
+    const error = assertRpcError(response, 'UNSUPPORTED_OPERATION', /not supported on this device/);
+    assert.equal(
+      (error.details as Record<string, unknown> | undefined)?.reason,
+      'owner-capability-missing',
+    );
+    expect(bindCalls).toBe(bindCallsBeforeAdmission);
     expect(server.calls).toHaveLength(providerCallsBeforeAdmission);
     expect(host.calls).toHaveLength(hostCallsBeforeAdmission);
   } finally {
-    await runtime.leaseLifecycle.release?.(lease);
+    if (lease) await daemon.callCommand('lease_release', [], flags, { meta });
+    await daemon.close();
     await runtime.shutdown();
     await server.close();
   }

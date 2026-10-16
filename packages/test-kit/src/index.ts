@@ -77,6 +77,13 @@ export {
   keyboardCoveredTabBarSnapshot,
 } from './keyboard-occlusion.fixtures.ts';
 export {
+  LANE_ENVELOPE_SCHEMA_VERSION,
+  laneEnvelope,
+  type LaneEnvelope,
+  type LaneEnvelopeInput,
+  type LaneResult,
+} from './lane-envelope.ts';
+export {
   closeLoopbackServer,
   listenOnLoopback,
   type LoopbackServer,

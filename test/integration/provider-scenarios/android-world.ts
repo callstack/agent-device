@@ -152,7 +152,6 @@ export async function createAndroidSettingsWorld(options?: {
     };
   }
   const daemon = await createProviderScenarioHarness({
-    platformRuntime: true,
     androidAdbProvider: () => adbProvider,
     deviceInventoryProvider: async (request) => {
       inventoryRequests.push({ ...request });

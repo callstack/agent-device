@@ -525,7 +525,6 @@ test('Provider-backed integration daemon HTTP server accepts uploads and streams
     assert.equal(rejectedUpload.status, 401);
   } finally {
     await closeLoopbackServer(server);
-    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -818,7 +817,6 @@ test('Provider-backed integration daemon HTTP auth hook can scope tenants and re
     }
     if (previousHook === undefined) delete process.env.AGENT_DEVICE_HTTP_AUTH_HOOK;
     else process.env.AGENT_DEVICE_HTTP_AUTH_HOOK = previousHook;
-    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 

@@ -45,8 +45,16 @@ async function createArtifactArchive(
   return gzipSync(Buffer.concat(chunks));
 }
 
-export function createArtifactDownloadServer(archives: ReadonlyMap<string, Buffer>): http.Server {
+export function createArtifactDownloadServer(
+  archives: ReadonlyMap<string, Buffer>,
+  expectedToken?: string,
+): http.Server {
   return http.createServer((request, response) => {
+    if (expectedToken && request.headers.authorization !== `Bearer ${expectedToken}`) {
+      response.statusCode = 401;
+      response.end('unauthorized');
+      return;
+    }
     const prefix = '/artifacts/';
     const artifactId = request.url?.startsWith(prefix)
       ? decodeURIComponent(request.url.slice(prefix.length))

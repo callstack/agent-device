@@ -75,7 +75,7 @@ test('the composed daemon and client path owners report the directory that was m
   const artifactId = 'materialized-suite-artifact';
   const archive = await createDirectoryArtifactArchive(artifact.path);
   response.data.artifacts = [{ ...artifact, artifactId }];
-  const server = createArtifactDownloadServer(new Map([[artifactId, archive]]));
+  const server = createArtifactDownloadServer(new Map([[artifactId, archive]]), 'daemon-token');
 
   try {
     const port = await listenOnLoopback(server);

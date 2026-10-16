@@ -41,6 +41,7 @@ const VOLATILE_KEYS = new Set([
   'requestId',
   'diagnosticId',
   'logPath',
+  'logPathUnavailable',
   'timing',
   'durationMs',
   'elapsedMs',
@@ -110,7 +111,6 @@ async function createParityWorld(options: ParityWorldOptions = {}): Promise<Pari
   });
   const daemon = await createProviderScenarioHarness({
     ...(options.leaseTtlMs === undefined ? {} : { leaseTtlMs: options.leaseTtlMs }),
-    platformRuntime: true,
     appleRunnerProvider: () =>
       createAppleRunnerProviderFromTranscript(runnerTranscript, 'ios.runner'),
     appleToolProvider: () => appleTool.provider,
@@ -288,6 +288,11 @@ function createRecordingUpstreamServer(baseUrl: string): {
 } {
   const forwarded: ForwardedRequest[] = [];
   const server = http.createServer((request, response) => {
+    if (request.method !== 'POST' || (request.url ?? '').split('?', 1)[0] !== '/rpc') {
+      response.statusCode = 404;
+      response.end('not found');
+      return;
+    }
     void (async () => {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -307,7 +312,7 @@ function createRecordingUpstreamServer(baseUrl: string): {
         }
         headers.set(name, Array.isArray(value) ? value.join(', ') : value);
       }
-      const upstreamResponse = await fetch(new URL(request.url ?? '/', baseUrl), {
+      const upstreamResponse = await fetch(new URL('/rpc', baseUrl), {
         method: request.method,
         headers,
         ...(body.length > 0 ? { body } : {}),
@@ -367,13 +372,18 @@ function assertPublishedParity(direct: LegRun, proxied: LegRun): void {
   });
 }
 
-/**
- * The remote client may add to the envelope (it materializes the failure record locally,
- * which yields a logPath the daemon never published); it may not lose anything.
- */
+/** The proxy may report an unavailable remote log path where direct execution has a local path. */
 function assertErrorEnvelopeKept(direct: DaemonError, proxied: DaemonError, step: string): void {
   for (const key of PRESERVED_ERROR_KEYS) {
     if (direct[key] === undefined) continue;
+    if (key === 'logPath' && proxied.logPathUnavailable !== undefined) {
+      assert.equal(
+        typeof proxied.logPathUnavailable,
+        'string',
+        `missing remote path reason at ${step}`,
+      );
+      continue;
+    }
     assert.equal(
       typeof proxied[key],
       typeof direct[key],

@@ -49,7 +49,10 @@ test('Provider-backed integration local proxy serves a plain-session diagnostics
   const stateDir = mkdtempForTestSync('agent-device-proxy-request-diagnostics-');
   const upstream = http.createServer((request, response) => {
     assert.equal(request.method, 'GET');
-    assert.match(request.url ?? '', /\/sessions\/.*\/requests\/abc123\/diagnostics$/);
+    assert.equal(
+      request.url,
+      `/sessions/${encodeURIComponent(PLAIN_SESSION)}/requests/${REQUEST_ID}/diagnostics`,
+    );
     assert.equal(request.headers.authorization, `Bearer ${UPSTREAM_TOKEN}`);
     assert.equal(request.headers['x-agent-device-tenant'], TENANT);
     response.statusCode = 200;

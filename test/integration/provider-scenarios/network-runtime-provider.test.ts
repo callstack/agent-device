@@ -28,7 +28,6 @@ test('iOS simulator network recovery stays on the request-scoped Apple tool prov
     },
   });
   const daemon = await createProviderScenarioHarness({
-    platformRuntime: true,
     appleToolProvider: () => appleTool.provider,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
   });

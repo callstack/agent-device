@@ -13,6 +13,7 @@ import {
   mockHoverRef,
   mockLongPressPoint,
   mockTapPoint,
+  mockTypeText,
   resetGetRuntimeFixture,
   runtimeBindingSpies,
 } from '../../__tests__/interaction-get-runtime-fixture.ts';
@@ -237,7 +238,69 @@ test('hover @ref on web dispatches through the provider hoverRef route, not coor
   });
   expect(mockHoverRef).toHaveBeenCalledWith(expect.objectContaining({ ref: '@e1' }));
   expect(mockHoverPoint).not.toHaveBeenCalled();
-  expect(sessionStore.get(sessionName)?.actions[0]?.command).toBe('hover');
+  const hoverAction = sessionStore.get(sessionName)?.actions[0];
+  expect(hoverAction?.command).toBe('hover');
+  expect(hoverAction?.result).toMatchObject({ ref: 'e1', gesture: 'hover' });
+  expect(hoverAction?.result).not.toHaveProperty('x');
+  expect(hoverAction?.result).not.toHaveProperty('y');
+
+  const typeResponse = await handleInteractionCommands({
+    createCommandSurface: touchCreateCommandSurface,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'type',
+      positionals: [' ok'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+
+  expect(typeResponse?.ok).toBe(true);
+  expect(mockTypeText).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)?.actions.at(-1)).toMatchObject({
+    command: 'type',
+    positionals: [' ok'],
+  });
+});
+
+test('click @ref on web records the ref result without fabricated coordinates', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'click-ref';
+  const session = makeSession(sessionName);
+  session.device = WEB_DESKTOP_DEVICE;
+  session.snapshot = {
+    nodes: attachRefs([{ index: 0, role: 'link', label: 'Second message', enabled: true }]),
+    createdAt: Date.now(),
+    backend: 'web',
+  };
+  sessionStore.publish(sessionName, session);
+
+  const response = await handleInteractionCommands({
+    createCommandSurface: touchCreateCommandSurface,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'click',
+      positionals: ['@e1'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+
+  expect(response).toMatchObject({ ok: true, data: { ref: 'e1' } });
+  const action = sessionStore.get(sessionName)?.actions[0];
+  expect(action?.command).toBe('click');
+  expect(action?.positionals).toEqual(['@e1']);
+  expect(action?.result).toMatchObject({ ref: 'e1' });
+  expect(action?.result).not.toHaveProperty('x');
+  expect(action?.result).not.toHaveProperty('y');
 });
 
 test('hover selector on web resolves the target and dispatches coordinate hover', async () => {

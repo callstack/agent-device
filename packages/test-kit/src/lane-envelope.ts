@@ -1,4 +1,4 @@
-const LANE_ENVELOPE_SCHEMA_VERSION = 1;
+export const LANE_ENVELOPE_SCHEMA_VERSION = 1;
 
 export type LaneResult = 'pass' | 'fail';
 

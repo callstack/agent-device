@@ -27,7 +27,6 @@ test('Provider-backed integration daemon command policies gate admission and pro
   await withProviderScenarioResource(
     async () =>
       await createProviderScenarioHarness({
-        platformRuntime: true,
         androidAdbProvider: () => adbProvider,
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
       }),

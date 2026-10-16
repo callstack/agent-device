@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { laneEnvelope, type LaneEnvelope, type LaneResult } from './lane-envelope.ts';
+import { laneEnvelope, type LaneEnvelope, type LaneResult } from '@agent-device/test-kit';
 
 const LANE_ID = 'concurrency-torture';
 

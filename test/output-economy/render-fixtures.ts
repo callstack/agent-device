@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
 import type { AgentDeviceClient } from '../../src/client/client-types.ts';
@@ -9,6 +11,7 @@ import {
   ACTIONABLE_ERROR,
   NOT_SETTLED_RESULT,
   POLICY_NORMALIZED_ERROR,
+  SCREENSHOT_RESULT,
   SELECTOR_READ_RESULT,
   SETTLE_ADDED_REF_RESULT,
   SETTLE_TAIL_RESULT,
@@ -21,15 +24,10 @@ import {
   NETWORK_SELECTION_RESULT,
   RECORDING_SELECTION_RESULT,
 } from './selection-fixtures.ts';
-import {
-  NETWORK_DIGEST,
-  SCREENSHOT_DEFAULT_VIEW,
-  SCREENSHOT_DIGEST,
-  SELECTOR_DIGEST,
-  SETTLE_DIGEST,
-  SETTLE_TAIL_DIGEST,
-  SNAPSHOT_DIGEST,
-} from './response-view-fixtures.ts';
+
+const responseViewsDriver = fileURLToPath(
+  new URL('../../packages/daemon/test/output-economy/response-views.ts', import.meta.url),
+);
 
 function interactionText(result: typeof SETTLE_ADDED_REF_RESULT): string {
   return interactionCliOutputFormatters.press({ input: {}, result }).text ?? '';
@@ -39,13 +37,35 @@ export async function renderOutputFixtures() {
   const snapshot = await snapshotCliOutput({
     result: SNAPSHOT_RESULT,
   });
-  const snapshotDigest = SNAPSHOT_DIGEST;
-  const settleDigest = SETTLE_DIGEST;
-  const settleTailDigest = SETTLE_TAIL_DIGEST;
-  const selectorDigest = SELECTOR_DIGEST;
-  const screenshotDefault = SCREENSHOT_DEFAULT_VIEW;
-  const screenshotDigest = SCREENSHOT_DIGEST;
-  const networkDigest = NETWORK_DIGEST;
+  const {
+    snapshotDigest,
+    settleDigest,
+    settleTailDigest,
+    selectorDigest,
+    screenshotDefault,
+    screenshotDigest,
+    networkDigest,
+  } = JSON.parse(
+    execFileSync(process.execPath, ['--experimental-strip-types', responseViewsDriver], {
+      input: JSON.stringify({
+        snapshot: SNAPSHOT_DAEMON_RESULT,
+        settle: SETTLE_ADDED_REF_RESULT,
+        settleTail: SETTLE_TAIL_RESULT,
+        selector: SELECTOR_READ_RESULT,
+        screenshot: SCREENSHOT_RESULT,
+        network: NETWORK_SELECTION_RESULT,
+      }),
+      encoding: 'utf8',
+    }),
+  ) as {
+    snapshotDigest: Record<string, unknown>;
+    settleDigest: Record<string, unknown>;
+    settleTailDigest: Record<string, unknown>;
+    selectorDigest: Record<string, unknown>;
+    screenshotDefault: Record<string, unknown>;
+    screenshotDigest: Record<string, unknown>;
+    networkDigest: Record<string, unknown>;
+  };
   const error = normalizeError(ACTIONABLE_ERROR);
   const errorPolicyNormalized = normalizeError(POLICY_NORMALIZED_ERROR);
   const mcpSnapshot = await createCommandToolExecutor({

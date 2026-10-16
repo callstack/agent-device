@@ -81,12 +81,10 @@ export type ClosableProviderScenarioResource = {
   close: () => Promise<void> | void;
 };
 
-export type ProviderScenarioPlatformRuntime =
-  | boolean
-  | Readonly<{
-      providerRuntimes: readonly ProviderDeviceRuntime[];
-      providerModules: readonly PlatformRuntimeProviderRegistration[];
-    }>;
+export type ProviderScenarioPlatformRuntime = Readonly<{
+  providerRuntimes: readonly ProviderDeviceRuntime[];
+  providerModules: readonly PlatformRuntimeProviderRegistration[];
+}>;
 
 type ProviderScenarioDependencies = Partial<Omit<DaemonRuntimeDeps, 'requestRouter'>> &
   Partial<DaemonRuntimeDeps['requestRouter']> &
@@ -119,7 +117,7 @@ export async function createProviderScenarioHarness(
     deviceInventoryProvider,
     deviceInventorySource,
     deviceRuntimeGateway: configuredDeviceRuntimeGateway,
-    platformRuntime = true,
+    platformRuntime,
     providerRuntimes,
     leaseTtlMs,
     requestPlatformProviders: configuredRequestPlatformProviders,
@@ -138,14 +136,10 @@ export async function createProviderScenarioHarness(
   let scopedAppleToolProvider: AppleToolProvider | undefined;
   const composeDeps: ComposeDaemonRuntimeDeps = async (input) => {
     const rootDeps = await createDaemonRuntimeDeps(input);
-    const configuredRuntimes =
-      typeof platformRuntime === 'object'
-        ? platformRuntime.providerRuntimes
-        : (providerRuntimes ?? []);
+    const configuredRuntimes = platformRuntime?.providerRuntimes ?? providerRuntimes ?? [];
     const providerModules =
-      typeof platformRuntime === 'object'
-        ? platformRuntime.providerModules
-        : createProviderPlatformRuntimeRegistrations(configuredRuntimes);
+      platformRuntime?.providerModules ??
+      createProviderPlatformRuntimeRegistrations(configuredRuntimes);
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
       assertShutdownAllowed: input.assertShutdownAllowed,
       providerRuntimes: configuredRuntimes,
