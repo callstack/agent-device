@@ -98,6 +98,9 @@ export interface CommandResultMap {
  * command falls back to the untyped `Record<string, unknown>` bag. That default
  * branch is what keeps the mapping total over every command name, so consumers
  * can switch to `CommandResult<Name>` without first migrating every command.
+ * Add a command to the map only when its producer exposes an accurate closed
+ * contract. Do not narrow an unmigrated result with casts, compatibility
+ * aliases, or invented partial shapes.
  */
 export type CommandResult<N extends string> = N extends keyof CommandResultMap
   ? CommandResultMap[N]
