@@ -19,7 +19,7 @@
 
 ## Context
 
-`src/kernel/errors.ts` centralizes `AppError`, `normalizeError`, `defaultHintForCode`, and `retriableForErrorCode`.
+`packages/kernel/src/errors.ts` centralizes `AppError`, `normalizeError`, `defaultHintForCode`, and `retriableForErrorCode`.
 However, approximately 1,200 sites construct errors across CLI, daemon, and platform layers.
 A July 2026 audit combined code examination with iOS/Android use.
 It found a sound kernel but inconsistent call sites:
