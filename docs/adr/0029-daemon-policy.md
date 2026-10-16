@@ -11,7 +11,7 @@ Accepted (2026-09-29).
    If the file cannot be read or validated, the daemon cannot start.
 2. Policy applies to **every admitted daemon request**, regardless of transport.
    It belongs to the daemon instance, not request origin.
-3. Three successive levels enforce policy:
+3. Policy is enforced at three points, each below the one before:
    - **Request gate:** `createRequestExecutionScope` refuses denied commands and `batch` requests with denied steps.
      It refuses `close --shutdown` when policy denies `device-shutdown`.
      It refuses explicit `--udid`/`--serial` values outside device scope.
@@ -19,14 +19,14 @@ Accepted (2026-09-29).
    - **Device scope:** before gateway binding, request runtime bindings refuse resolved devices outside scope.
      Inventory lists only allowed devices, including for `devices` and device selection.
    - **Capability gate:** the device-shutdown host capability refuses shutdown from every command.
-     One exception permits Apple readiness to roll back a Simulator boot started and then canceled by the same request.
+     The only exception permits Apple readiness to roll back a Simulator boot started and then canceled by the same request.
      That Simulator was not previously running.
 4. Denials use `UNAUTHORIZED`, `details.reason: 'DAEMON_POLICY_DENIED'`, `retriable: false`, a hint, and the policy digest.
    They include `rule`: `command`, `device`, `capability`, or `lease`.
    They never expose the policy's host path.
 5. The daemon publishes its policy digest in `daemon.json`.
-   A client with a named policy refuses a daemon with a different policy or no policy.
-   A client without a named policy reuses whichever policy the daemon enforces.
+   A client that names a policy refuses to reuse a daemon that enforces a different policy or no policy.
+   A client that names no policy reuses the daemon, whatever policy the daemon enforces.
 
 ## Policy shape
 
@@ -49,7 +49,7 @@ Accepted (2026-09-29).
     For example, `install_source` uses `install-from-source`.
     Otherwise, they use their own names, such as Maestro flows' `runtime`.
   - Rules do not decide internal commands without platform execution.
-    Leases, `human_control`, and session bookkeeping serve the protocol.
+    These commands (leases, `human_control`, and session bookkeeping) are protocol plumbing.
   - Rules decide every other name, so an allow list fails closed for it.
   Load-time validation checks names against this vocabulary.
   It refuses local-cli names such as `react-devtools` because they execute in the client.
@@ -70,7 +70,7 @@ A misspelled rule cannot silently remove a restriction.
 ## Context
 
 `agent-device proxy` and hook-authenticated HTTP daemons expose host devices to remote agents.
-Operators need to restrict an agent to one simulator and prevent its shutdown.
+Operators need to confine a remote agent to one simulator and prevent the agent from shutting down that simulator.
 The HTTP auth hook, `AGENT_DEVICE_HTTP_AUTH_HOOK`, sees every top-level RPC and could refuse commands.
 It cannot correctly own operation policy for these reasons:
 
@@ -103,13 +103,14 @@ The request gate produces an early, specific error before locks or device resolu
 It cannot see the device behind a name or anticipate every future shutdown command.
 Device scope sees the resolved device on every binding.
 The capability gate sees every shutdown.
-Each later level protects what the earlier level cannot decide.
+Each later point is the backstop for the earlier point.
 A new command or flag therefore cannot evade policy through another route to the operation.
 
 ### Why fail closed and never reload
 
-Startup without the operator's policy or a policy replacement mid-session would invalidate prior admission decisions.
-One load and refusal of invalid files ensure that each running daemon has exactly one policy.
+Startup without the operator's policy or a policy replacement mid-session would make every earlier admission decision stale.
+The daemon loads the policy once and refuses to start on an invalid file.
+Thus a running daemon has exactly one policy.
 Its digest identifies that policy.
 
 ## Consequences
@@ -146,6 +147,7 @@ Its digest identifies that policy.
   Both see only top-level RPCs; see Context.
 - **Per-request or per-tenant policy.**
   This first requires authenticated identity.
-  An authenticating front end can add per-user restrictions above this per-daemon policy.
+  An authenticating front end can add per-user rules on top of this per-daemon policy.
+  This per-daemon policy is the floor.
 - **A programmatic policy module: deferred.**
-  If added, it must decide at the same three levels, not the HTTP boundary.
+  If added, it must decide at the same three points, not the HTTP boundary.
