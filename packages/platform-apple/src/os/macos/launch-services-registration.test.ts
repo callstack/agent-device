@@ -3,19 +3,13 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
-import type { HostProcessInfo } from '@agent-device/host-kit/process';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 
 vi.mock('node:timers/promises', () => ({ setTimeout: vi.fn(async () => undefined) }));
-vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
-  listHostProcesses: vi.fn(async () => processTable.rows),
-}));
 vi.mock('@agent-device/host-kit/diagnostics', () => ({ emitDiagnostic: vi.fn() }));
 
 import { setTimeout as sleep } from 'node:timers/promises';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { listHostProcesses } from '@agent-device/host-kit/process';
 import { createLocalAppleMacOsHostProvider } from './host-provider.ts';
 import type { AppleToolCommandExecutor } from '../../core/tool-provider-types.ts';
 
@@ -28,6 +22,9 @@ const GHOST_PLIST = `${GHOST_BUNDLE}/Contents/Info.plist`;
 const COLON_BUNDLE = '/Applications/My App: Pro.app';
 const COLON_PLIST = `${COLON_BUNDLE}/Contents/Info.plist`;
 const LAUNCH_SERVICES_TOOL = '/usr/bin/lsappinfo';
+/** The probe reads the process table through the same executor seam, under this command. */
+const PROCESS_TABLE_TOOL = 'ps';
+const PROCESS_TABLE_ARGS = ['-ax', '-o', 'pid=,ppid=,command='];
 const LAUNCH_SERVICES_READ_CAP_MS = 1_000;
 const BUNDLE_ID_CAP_MS = 1_500;
 const PROCESS_TABLE_CAP_MS = 2_000;
@@ -35,17 +32,22 @@ const PROCESS_TABLE_CAP_MS = 2_000;
 /** `lsappinfo find` prints every instance it lists as an `ASN:` token, space-separated on one line. */
 const REGISTERED = 'ASN:0x0-0x1234-"Demo": ASN:0x0-0x1244-"Demo":\n';
 
-const processTable = vi.hoisted(() => ({ rows: [] as unknown[] }));
+/** The `ps` rows the fake host answers with, as the tool prints them: `pid ppid command`. */
+const processTable = { stdout: '' };
+
+function psRows(rows: ReadonlyArray<readonly [pid: number, command: string]>): string {
+  return rows.map(([pid, command]) => `${pid}     1 ${command}\n`).join('');
+}
 
 type RecordedCall = Readonly<{ cmd: string; args: string[]; timeoutMs: number | undefined }>;
 
 type Stub = Partial<ExecResult> | Error;
 
 /**
- * The host tools one bundle open reads — `lsappinfo`, `plutil`, and `open` itself — answered per
- * call, with every call and the budget it was given recorded in order. An `Error` answer throws, the
- * way a missing tool throws at the real seam. The process table is the separate `host-kit` seam this
- * module reads through.
+ * The host tools one bundle open reads — `lsappinfo`, `ps`, `plutil`, and `open` itself — answered
+ * per call through the one executor seam the probe runs end to end, with every call and the budget
+ * it was given recorded in order. An `Error` answer throws, the way a missing tool throws at the
+ * real seam. The `ps` answer is the current process table.
  */
 function fakeMacHost(respond: (call: RecordedCall, index: number) => Stub = () => ({})): {
   runCommand: AppleToolCommandExecutor;
@@ -56,6 +58,9 @@ function fakeMacHost(respond: (call: RecordedCall, index: number) => Stub = () =
   const runCommand: AppleToolCommandExecutor = async (cmd, args, options) => {
     const call = { cmd, args, timeoutMs: options?.timeoutMs };
     const index = calls.push(call) - 1;
+    if (cmd === PROCESS_TABLE_TOOL) {
+      return { stdout: processTable.stdout, stderr: '', exitCode: 0 };
+    }
     const answer = respond(call, index);
     if (answer instanceof Error) throw answer;
     return { stdout: '', stderr: '', exitCode: 0, ...answer };
@@ -68,30 +73,35 @@ function fakeMacHost(respond: (call: RecordedCall, index: number) => Stub = () =
   };
 }
 
+/** The `ps` entry of a transcript, for asserting the budget the scan was armed with. */
+function processTableCall(calls: readonly RecordedCall[]): RecordedCall | undefined {
+  return calls.find((call) => call.cmd === PROCESS_TABLE_TOOL);
+}
+
 /** Two copies of the same bundle plus an unrelated app, none of them LaunchServices-listed. */
 function runningCopies(): void {
-  processTable.rows = [
-    { pid: 1, command: '/sbin/launchd' },
-    { pid: 4242, command: `${DEMO_BUNDLE}/Contents/MacOS/Demo -DevFlag` },
-    { pid: 4243, command: `${DEMO_BUNDLE}/Contents/MacOS/Demo` },
-    { pid: 4300, command: `${GHOST_BUNDLE}/Contents/MacOS/Ghost` },
-  ] satisfies HostProcessInfo[];
+  processTable.stdout = psRows([
+    [1, '/sbin/launchd'],
+    [4242, `${DEMO_BUNDLE}/Contents/MacOS/Demo -DevFlag`],
+    [4243, `${DEMO_BUNDLE}/Contents/MacOS/Demo`],
+    [4300, `${GHOST_BUNDLE}/Contents/MacOS/Ghost`],
+  ]);
 }
 
 /** The opened bundle's copy plus a copy of a bundle whose directory name contains `": "`. */
 function runningCopiesIncludingColonBundle(): void {
-  processTable.rows = [
-    { pid: 4242, command: `${DEMO_BUNDLE}/Contents/MacOS/Demo -DevFlag` },
-    { pid: 4400, command: `${COLON_BUNDLE}/Contents/MacOS/My App: Pro` },
+  processTable.stdout = psRows([
+    [4242, `${DEMO_BUNDLE}/Contents/MacOS/Demo -DevFlag`],
+    [4400, `${COLON_BUNDLE}/Contents/MacOS/My App: Pro`],
     // A shell one-liner quoting some bundle's executable path looks exactly like a bundle process by
     // path shape, so it reaches the batch as a candidate whose plist does not exist. This is the
     // row that makes an unreadable-bundle name show up on stderr on a real host.
-    { pid: 4500, command: `/bin/zsh -c pkill -f ${DEMO_BUNDLE}/Contents/MacOS/Demo` },
-  ] satisfies HostProcessInfo[];
+    [4500, `/bin/zsh -c pkill -f ${DEMO_BUNDLE}/Contents/MacOS/Demo`],
+  ]);
 }
 
 function noRunningApps(): void {
-  processTable.rows = [{ pid: 1, command: '/sbin/launchd' }];
+  processTable.stdout = psRows([[1, '/sbin/launchd']]);
 }
 
 function openBundle(runCommand: AppleToolCommandExecutor): Promise<void> {
@@ -106,10 +116,9 @@ const mockSleep = vi.mocked(sleep);
 const mockEmitDiagnostic = vi.mocked(emitDiagnostic);
 
 beforeEach(() => {
-  // Rows and call history reset together: a later test's `not.toHaveBeenCalled()` must not depend
-  // on run order.
-  processTable.rows = [];
-  vi.mocked(listHostProcesses).mockClear();
+  // The table resets with every test so a later test's `not.toHaveBeenCalled`-style expectation on
+  // the scan does not depend on run order.
+  processTable.stdout = '';
 });
 
 afterEach(() => {
@@ -130,7 +139,6 @@ test('openBundle runs open at once when LaunchServices already lists an instance
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
     { cmd: 'open', args: ['-b', BUNDLE_ID] },
   ]);
-  expect(listHostProcesses).not.toHaveBeenCalled();
   expect(mockSleep).not.toHaveBeenCalled();
   // One read of the registration view, inside its own cap.
   expect(registrationReads(calls)[0]?.timeoutMs).toBeLessThanOrEqual(LAUNCH_SERVICES_READ_CAP_MS);
@@ -138,17 +146,19 @@ test('openBundle runs open at once when LaunchServices already lists an instance
 
 test('openBundle runs open at once when no process of the opened bundle runs', async () => {
   noRunningApps();
-  const { runCommand, transcript } = fakeMacHost();
+  const { runCommand, calls, transcript } = fakeMacHost();
 
   await openBundle(runCommand);
 
   // The first-launch case: nothing is listed, the process table holds no bundle whose identifier
   // matches, so this open is the launch and no plist of a candidate is read to prove a copy exists.
+  // The scan itself runs through the same executor seam as every other probe read.
   expect(transcript()).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
     { cmd: 'open', args: ['-b', BUNDLE_ID] },
   ]);
-  expect(listHostProcesses).toHaveBeenCalledWith({ timeoutMs: PROCESS_TABLE_CAP_MS });
+  expect(processTableCall(calls)?.timeoutMs).toBe(PROCESS_TABLE_CAP_MS);
   expect(mockSleep).not.toHaveBeenCalled();
 });
 
@@ -180,6 +190,7 @@ test('openBundle waits for LaunchServices to list a copy that runs unlisted', as
   // so the wait ends on whichever one the registration names — and never on the unrelated app.
   expect(transcript().slice(0, -1)).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
     { cmd: 'plutil', args: ['-extract', 'CFBundleIdentifier', 'raw', DEMO_PLIST, GHOST_PLIST] },
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`, 'pid=4242'] },
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`, 'pid=4243'] },
@@ -213,6 +224,7 @@ test('openBundle never waits for a running copy of some other bundle', async () 
 
   expect(transcript()).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
     { cmd: 'plutil', args: ['-extract', 'CFBundleIdentifier', 'raw', DEMO_PLIST, GHOST_PLIST] },
     { cmd: 'open', args: ['-b', BUNDLE_ID] },
   ]);
@@ -333,12 +345,11 @@ test('openBundle treats a failing first registration read as an instance to atta
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
     { cmd: 'open', args: ['-b', BUNDLE_ID] },
   ]);
-  expect(listHostProcesses).not.toHaveBeenCalled();
   expect(mockSleep).not.toHaveBeenCalled();
 });
 
 test('openBundle reports a process table that answers nothing rather than reading it as empty', async () => {
-  processTable.rows = [];
+  processTable.stdout = '';
   const { runCommand, transcript } = fakeMacHost((call) =>
     call.cmd === 'plutil' ? { stdout: 'com.example.demo\n' } : {},
   );
@@ -349,6 +360,7 @@ test('openBundle reports a process table that answers nothing rather than readin
   // running" from it would skip the wait and reproduce the duplicate this seam exists to prevent.
   expect(transcript()).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
     { cmd: 'open', args: ['-b', BUNDLE_ID] },
   ]);
   expect(mockEmitDiagnostic).toHaveBeenCalledWith(
@@ -380,6 +392,7 @@ test('openBundle spends its budget on reads rather than on a wait with nothing l
 
   expect(transcript()).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
     { cmd: 'plutil', args: ['-extract', 'CFBundleIdentifier', 'raw', DEMO_PLIST, GHOST_PLIST] },
     { cmd: 'open', args: ['-b', BUNDLE_ID] },
   ]);
@@ -408,11 +421,12 @@ test('openBundle arms every probe read with only the budget the deadline still a
 
   expect(calls.map(({ cmd, timeoutMs }) => ({ cmd, timeoutMs }))).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, timeoutMs: LAUNCH_SERVICES_READ_CAP_MS },
+    // The process-table read is armed through this same seam now, and its cap is the largest; with
+    // 600 ms left it takes the remainder, the way the identifier read beside it does.
+    { cmd: PROCESS_TABLE_TOOL, timeoutMs: 600 },
     { cmd: 'plutil', timeoutMs: 600 },
     { cmd: 'open', timeoutMs: undefined },
   ]);
-  // The process-table read is the other seam this probe arms, and it is the one whose cap is largest.
-  expect(listHostProcesses).toHaveBeenCalledWith({ timeoutMs: 600 });
   expect(mockSleep).not.toHaveBeenCalled();
 });
 
@@ -437,26 +451,20 @@ test('openBundle skips a read whose share of the budget falls below what a tool 
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
     { cmd: 'open', args: ['-b', BUNDLE_ID] },
   ]);
-  expect(listHostProcesses).not.toHaveBeenCalled();
   expect(mockSleep).not.toHaveBeenCalled();
   expect(mockEmitDiagnostic).not.toHaveBeenCalled();
 });
 
 test('openBundle reads identifiers only for candidates that are app bundles', async () => {
-  processTable.rows = [
-    ...([
-      { pid: 4242, command: `${DEMO_BUNDLE}/Contents/MacOS/Demo -DevFlag` },
-      { pid: 4300, command: `${GHOST_BUNDLE}/Contents/MacOS/Ghost` },
-      // An app extension and a driver extension are bundles of their own, and most rows carrying
-      // `/Contents/MacOS/` on a real host are these and XPC services, whose identifiers match no app
-      // anyone opens. Keeping them out is what keeps the batch the size of the running apps.
-      {
-        pid: 4600,
-        command: `${DEMO_BUNDLE}/Contents/PlugIns/Widget.appex/Contents/MacOS/Widget`,
-      },
-      { pid: 4700, command: '/opt/dext/driver.dext/Contents/MacOS/driver' },
-    ] satisfies HostProcessInfo[]),
-  ];
+  processTable.stdout = psRows([
+    [4242, `${DEMO_BUNDLE}/Contents/MacOS/Demo -DevFlag`],
+    [4300, `${GHOST_BUNDLE}/Contents/MacOS/Ghost`],
+    // An app extension and a driver extension are bundles of their own, and most rows carrying
+    // `/Contents/MacOS/` on a real host are these and XPC services, whose identifiers match no app
+    // anyone opens. Keeping them out is what keeps the batch the size of the running apps.
+    [4600, `${DEMO_BUNDLE}/Contents/PlugIns/Widget.appex/Contents/MacOS/Widget`],
+    [4700, '/opt/dext/driver.dext/Contents/MacOS/driver'],
+  ]);
   const { runCommand, transcript } = fakeMacHost((call) =>
     call.cmd === 'plutil' ? { stdout: '\n\n' } : {},
   );
@@ -465,6 +473,7 @@ test('openBundle reads identifiers only for candidates that are app bundles', as
 
   expect(transcript()).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
     {
       cmd: 'plutil',
       args: ['-extract', 'CFBundleIdentifier', 'raw', DEMO_PLIST, GHOST_PLIST],
@@ -510,7 +519,6 @@ test('openBundle leaves the open alone when the first registration read is kille
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
     { cmd: 'open', args: ['-b', BUNDLE_ID] },
   ]);
-  expect(listHostProcesses).not.toHaveBeenCalled();
   expect(mockSleep).not.toHaveBeenCalled();
   expect(mockEmitDiagnostic).not.toHaveBeenCalled();
 });
@@ -608,19 +616,23 @@ describe.skipIf(process.platform !== 'darwin')(
       const other = await bundle('Other.app', 'com.example.other');
       const target = await bundle('My Target.app', BUNDLE_ID);
       const spaced = await bundle('Late Night.app', 'com.example.late-night');
-      processTable.rows = [
-        { pid: 4300, command: `${other}/Contents/MacOS/Other` },
-        { pid: 4242, command: `${target}/Contents/MacOS/My Target -ProofFlag` },
-        { pid: 4301, command: `${spaced}/Contents/MacOS/Late Night` },
-      ] satisfies HostProcessInfo[];
+      processTable.stdout = psRows([
+        [4300, `${other}/Contents/MacOS/Other`],
+        [4242, `${target}/Contents/MacOS/My Target -ProofFlag`],
+        [4301, `${spaced}/Contents/MacOS/Late Night`],
+      ]);
 
       const registrationReadsMade: string[][] = [];
-      // plutil runs for real through the exec seam. The LaunchServices view and `open` itself stay
-      // scripted: an unlisted-then-listed registration cannot be arranged with a real bundle that
-      // is not actually running, and a real `open` would launch a real copy. Only the target's own
-      // pid ever reports an ASN, so the wait ends only if pairing handed the probe that pid.
+      // plutil runs for real through the exec seam. The LaunchServices view, the process table and
+      // `open` itself stay scripted: an unlisted-then-listed registration cannot be arranged with a
+      // real bundle that is not actually running, and a real `open` would launch a real copy. Only
+      // the target's own pid ever reports an ASN, so the wait ends only if pairing handed the probe
+      // that pid.
       const runCommand: AppleToolCommandExecutor = async (cmd, args, options) => {
         if (cmd === 'open') return { exitCode: 0, stdout: '', stderr: '' };
+        if (cmd === PROCESS_TABLE_TOOL) {
+          return { exitCode: 0, stdout: processTable.stdout, stderr: '' };
+        }
         if (cmd === LAUNCH_SERVICES_TOOL) {
           registrationReadsMade.push(args);
           const pinned = args.at(-1) === 'pid=4242';

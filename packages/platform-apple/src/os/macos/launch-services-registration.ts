@@ -1,11 +1,7 @@
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  isCommandTimeoutError,
-  withoutCommandExecutorOverride,
-  type ExecResult,
-} from '@agent-device/host-kit/command';
+import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { listHostProcesses } from '@agent-device/host-kit/process';
 import { Deadline } from '@agent-device/host-kit/retry';
@@ -147,9 +143,10 @@ async function findUnlistedInstancePids(
 ): Promise<number[]> {
   const timeoutMs = probeBudgetMs(deadline, PROCESS_TABLE_TIMEOUT_MS);
   if (timeoutMs === undefined) return [];
-  const processes = await withoutCommandExecutorOverride(
-    async () => await listHostProcesses({ timeoutMs }),
-  );
+  // The provider's own executor, so every read of this probe answers about the same host its
+  // `lsappinfo`, `plutil` and `open` run on: a scoped Apple provider must never pair pids from one
+  // host with tools on another.
+  const processes = await listHostProcesses({ runCommand, timeoutMs });
   if (processes.length === 0) {
     // A macOS host always has a process table, so no rows at all is the read failing rather than a
     // host running nothing. The open proceeds without this probe knowing anything, so the reason is
