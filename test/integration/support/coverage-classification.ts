@@ -36,7 +36,9 @@ type CoverageGapRow = {
  * - a `known-gap` row is owed work and carries a positive `trackingIssue` naming an open
  *   issue that owns it, an umbrella or a child of one;
  * - an `accepted-gap` row is a permanent limitation: it carries a non-empty `reason` saying
- *   why no evidence lane will cover it, and no tracking issue.
+ *   why no evidence lane will cover it, and no tracking issue. An accepted-gap reason may
+ *   only claim an absence that holds against the repository's lanes — if a lane runs or
+ *   asserts the command, the row is evidence-citable or owed, never accepted.
  *
  * This mirrors the `gap:` waiver rule ADR 0011 enforces for interaction guarantees.
  */

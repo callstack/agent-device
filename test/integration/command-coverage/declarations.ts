@@ -74,7 +74,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     linux: linux.accepted(
       'No Linux live command creates a downloadable daemon artifact for inventory',
-      'The Linux lanes run the local CLI, where every command output is a caller-owned local path; the daemon only inventories artifacts carried over remote artifact transport, so a Linux lane cannot create a downloadable inventory entry without a local-transport product decision.',
+      'The Linux lanes run the local CLI, where command outputs are caller-owned local paths; request finalization inventories a response artifact only when the request carries a client artifact path (remote transport) or it is the sparse-snapshot fallback screenshot, which no Linux lane observes, so a Linux lane cannot produce a downloadable inventory entry without a local-transport product decision.',
     ),
   },
   [C.devices]: {
@@ -142,7 +142,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     macos: macos.accepted(
       'No command-specific macOS doctor evidence exists',
-      "The doctor checks are daemon-owned host diagnostics (version, state dir, inventory probes, Metro) with no macOS device branch, already pinned by the daemon's own doctor tests; a macOS lane would re-run that identical code, so macOS carries no command-specific doctor evidence.",
+      'The doctor checks are daemon-owned host diagnostics — version, state dir, inventory probes, Metro — pinned platform-neutrally by the daemon doctor tests, and no macOS lane invokes the command: neither the System Settings replay nor the desktop and recording provider scenarios carry a doctor step.',
     ),
     tvos: tvos.gap('No tvOS-specific doctor command evidence exists yet'),
     web: web.contract(
@@ -310,7 +310,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     macos: macos.accepted(
       'No command-specific macOS event timeline evidence exists',
-      'The events timeline is daemon-owned session bookkeeping with no platform branch, already pinned for a daemon-backed session by request-router-events.test.ts; a macOS lane would re-run that identical code, so macOS carries no command-specific event timeline evidence.',
+      'The events timeline is daemon-owned session bookkeeping, pinned by request-router-events.test.ts for a daemon-backed web session, and no macOS lane invokes the command: neither the System Settings replay nor the desktop and recording provider scenarios carry an events step.',
     ),
     tvos: tvos.gap('No tvOS-specific session-event command evidence exists yet'),
     web: web.contract(
@@ -406,10 +406,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'full:fixture-replays',
       'fixture scripts run as a suite with JUnit artifacts',
     ),
-    macos: macos.accepted(
-      'No command-specific macOS test-suite evidence exists',
-      "The CI macOS replay lane dogfoods the test command to run the replay suite, whose per-command macOS claims are already carried by the replay:system-settings live rows; no lane asserts the test command's own suite result and JUnit output on macOS, and none will.",
-    ),
+    macos: macos.gap('No command-specific macOS test-suite evidence exists yet'),
     tvos: tvos.gap('No tvOS-specific test-suite command evidence exists yet'),
     web: web.accepted(
       'No command-specific web test-suite evidence exists',
@@ -798,7 +795,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     macos: macos.accepted(
       'No command-specific macOS React Native inspection evidence exists',
-      "react-native dismiss-overlay only answers meaningfully on a surface that carries a React Native overlay, and the repository's React Native fixtures run on iOS simulators and Android emulators; the macOS lanes drive desktop apps, so no macOS lane will cover this row.",
+      "react-native dismiss-overlay only answers meaningfully on a surface that carries a React Native overlay, the repository's React Native overlay evidence runs on iOS simulators and Android emulators, and no macOS lane invokes the command: neither the System Settings replay nor the desktop and recording provider scenarios carry a react-native step.",
     ),
     tvos: tvos.gap('No tvOS-specific React Native inspection command evidence exists yet'),
     // R61: no owner fact refuses this command on a browser — its whole device work is one bound
@@ -852,7 +849,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     macos: macos.accepted(
       'No command-specific macOS trace evidence exists',
-      "trace never binds a device runtime: its session-scoped start/stop bookkeeping is platform-neutral and already pinned by the daemon's trace-runtime tests, so a macOS lane would re-run identical code and macOS carries no command-specific trace evidence.",
+      'trace never binds a device runtime: handleTraceCommand carries no bindDevice or inspectFacts call, its start/stop bookkeeping is pinned by the daemon trace-runtime tests, and no macOS lane invokes the command: neither the System Settings replay nor the desktop and recording provider scenarios carry a trace step.',
     ),
     tvos: tvos.gap('No tvOS-specific trace command evidence exists yet'),
     web: web.contract(
@@ -862,7 +859,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     linux: linux.accepted(
       'No Linux-specific trace command evidence exists',
-      "trace never binds a device runtime: its session-scoped start/stop bookkeeping is platform-neutral and already pinned by the daemon's trace-runtime tests, so a Linux lane would re-run identical code and Linux carries no command-specific trace evidence.",
+      'trace never binds a device runtime: handleTraceCommand carries no bindDevice or inspectFacts call and its start/stop bookkeeping is pinned by the daemon trace-runtime tests, and no Linux lane invokes the command: neither the replay script nor the command-evidence lane carries a trace step.',
     ),
   },
   [C.find]: {
