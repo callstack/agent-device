@@ -137,11 +137,11 @@ describe('wait budget', () => {
     await expect(handleLimrunIosAlert(client, 'wait')).rejects.toThrow('websocket closed');
   });
 
-  it('refuses a confirm capture that outruns its window and reports the stuck alert', async () => {
+  it('refuses a confirm capture that outruns its window without claiming a visible dialog', async () => {
     // The Limrun WebSocket client cannot abort an in-flight `elementTree`, so a stalled capture
-    // can outlive the confirm budget. The driver must not consume that late answer: the press
-    // already landed, the capture proves nothing, and the honest terminal answer is the
-    // stuck-alert failure on the typed window reason.
+    // can outlive the confirm budget. The driver must not consume that late answer — and because
+    // no post-press capture ever answered, the failure may not accuse the dialog of still being
+    // visible; it reports the press as unconfirmed.
     const client = {
       elementTree: vi
         .fn()
@@ -164,7 +164,9 @@ describe('wait budget', () => {
     expect(client.tap).toHaveBeenCalledTimes(1);
     expect(thrown).toBeInstanceOf(AppError);
     const failure = thrown as AppError;
-    expect(failure.message).toBe('alert accept did not dismiss the visible alert');
+    expect(failure.message).toBe(
+      'alert accept pressed the button but the dismissal could not be confirmed',
+    );
     expect(failure.details?.reason).toBe('alert-window-expired');
   });
 });
@@ -209,28 +211,30 @@ describe('acting budgets', () => {
     expect(client.tap).not.toHaveBeenCalled();
   });
 
-  it('reports a stuck alert when the post-tap capture stays unresolvable to the end', async () => {
-    // The first probe resolves the single alert; every post-tap probe carries two disagreeing
+  it('reports an unconfirmed dismissal when the post-tap capture stays unresolvable to the end', async () => {
+    // The first probe resolves the single alert; every post-press probe carries two disagreeing
     // alert-shaped sheets. An unresolvable capture proves absence for nothing, so the confirm
-    // loop keeps its budget and fails rather than reporting the alert handled.
+    // loop keeps its budget and fails — and, having never named this alert on screen again, it
+    // reports the press as unconfirmed rather than claiming a dialog it never re-observed.
     const client = clientWithTrees([
       limrunAttAlertTree(),
       [limrunAttAlertTree(), limrunAttAlertTree()],
     ]);
 
     await expect(underFakeTimers(() => handleLimrunIosAlert(client, 'dismiss'))).rejects.toThrow(
-      'alert dismiss did not dismiss the visible alert',
+      'alert dismiss pressed the button but the dismissal could not be confirmed',
     );
   });
 
-  it('reports a stuck alert when the same root survives the tap with degraded buttons', async () => {
-    // The tap was ignored: the post-tap capture is the same alert root with its choices dropped
-    // to disabled, explicitly unhittable, and frameless. Degraded-but-present is not absence;
-    // the leg must fail, not report handled.
+  it('reports an unconfirmed dismissal when the same root survives with degraded buttons', async () => {
+    // The tap was ignored: the post-press capture is the same alert root with its choices dropped
+    // to disabled, explicitly unhittable, and frameless — an unresolvable shape, not a re-named
+    // alert. Degraded-but-present is not absence; the leg must fail, not report handled, and it
+    // may not claim "still visible" beyond what the undecided capture proved.
     const client = clientWithTrees([limrunAttAlertTree(), limrunAlertTreeWithUnpressableButtons()]);
 
     await expect(underFakeTimers(() => handleLimrunIosAlert(client, 'accept'))).rejects.toThrow(
-      'alert accept did not dismiss the visible alert',
+      'alert accept pressed the button but the dismissal could not be confirmed',
     );
     expect(client.tap).toHaveBeenCalledTimes(1);
   });

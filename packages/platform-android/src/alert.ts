@@ -493,10 +493,21 @@ async function confirmTreeAlertDismissed<
   action: 'accept' | 'dismiss',
   signal?: AbortSignal,
 ): Promise<void> {
+  // Only an observation that named this same alert on screen proves the "still visible" claim.
+  // Captures that were cut off or stayed unresolvable prove nothing, and the failure wording
+  // must not accuse a dialog that may already be gone of still standing.
+  let sameAlertObserved = false;
+  const probe: TreeAlertObserver<TCandidate> = async () => {
+    const observation = await observe();
+    if (observation.kind === 'alert' && sameTreeAlert(observation.candidate.alert, dismissed)) {
+      sameAlertObserved = true;
+    }
+    return observation;
+  };
   let settled: boolean;
   try {
     ({ settled } = await pollUntilSettled({
-      probe: observe,
+      probe,
       settled: (observation) =>
         observation.kind === 'none' ||
         (observation.kind === 'alert' && !sameTreeAlert(observation.candidate.alert, dismissed)),
@@ -505,23 +516,44 @@ async function confirmTreeAlertDismissed<
       signal,
     }));
   } catch (error) {
-    // A confirmation capture this phase cuts off says the same thing a budget spent without
-    // confirmation says — and it says it after a press landed, so the stuck-alert phrasing is
-    // the honest one here; the typed reason keeps the two causes distinguishable.
+    // A confirmation capture this phase cuts off says what the press cannot say alone: whether
+    // the dialog is still there, or whether the check itself never answered. Only the first is
+    // the stuck-alert failure; the second must not claim a visible dialog it never observed.
     if (isAlertWindowExpired(error)) {
-      throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
-        alert: dismissed,
-        reason: ALERT_WINDOW_EXPIRED_REASON,
-        hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
-      });
+      if (sameAlertObserved) {
+        throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
+          alert: dismissed,
+          reason: ALERT_WINDOW_EXPIRED_REASON,
+          hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
+        });
+      }
+      throw new AppError(
+        'COMMAND_FAILED',
+        `alert ${action} pressed the button but the dismissal could not be confirmed`,
+        {
+          alert: dismissed,
+          reason: ALERT_WINDOW_EXPIRED_REASON,
+          hint: 'The alert button was pressed; the post-press read never answered within the budget, so the dialog may already be gone. Run alert get --json before retrying.',
+        },
+      );
     }
     throw error;
   }
   if (settled) return;
-  throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
-    alert: dismissed,
-    hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
-  });
+  if (sameAlertObserved) {
+    throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
+      alert: dismissed,
+      hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
+    });
+  }
+  throw new AppError(
+    'COMMAND_FAILED',
+    `alert ${action} pressed the button but the dismissal could not be confirmed`,
+    {
+      alert: dismissed,
+      hint: 'The alert button was pressed; no post-press read resolved to an answer within the budget, so the dialog may already be gone. Run alert get --json before retrying.',
+    },
+  );
 }
 
 /** Alert identity across a dismissal re-check: the same title and the same button row, in order. */
