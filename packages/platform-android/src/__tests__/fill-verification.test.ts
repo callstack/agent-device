@@ -8,9 +8,10 @@
 // whether any of a commit reached the field, which both the soft-success guard and the IME rebind
 // share.
 
-import { afterEach, beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test } from 'vitest';
 import './test-utils/android-host-test-setup.ts';
 import assert from 'node:assert/strict';
+import { underFakeTimers } from './test-utils/fake-timers.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withAndroidAdbProvider, type AndroidAdbProvider } from '../adb-executor.ts';
 import type { AndroidFillVerificationNode } from '../fill-diagnostics.ts';
@@ -144,25 +145,6 @@ test('a value that never lands is a mismatch read from the last sample', async (
     `sampled until the deadline, took ${elapsedMs} ms`,
   );
 });
-
-/**
- * Runs the sampler with its sleeps advanced instead of waited out. The clock moves in slices
- * shorter than a sample interval so the helper session's own timers never fire ahead of its replies.
- */
-async function underFakeTimers<T>(run: () => Promise<T>): Promise<T> {
-  vi.useFakeTimers();
-  try {
-    let done = false;
-    const outcome = run().finally(() => {
-      done = true;
-    });
-    outcome.catch(() => {});
-    while (!done) await vi.advanceTimersByTimeAsync(10);
-    return await outcome;
-  } finally {
-    vi.useRealTimers();
-  }
-}
 
 test('the pre-action target read shares the daemon-session helper with the samples', async () => {
   const session = createFillHelperSession();

@@ -7,7 +7,7 @@ import {
   parseAndroidDeviceDescription,
   parseAndroidDeviceEntries,
   parseAndroidEmulatorAvdNameOutput,
-  parseAndroidFeatureListForTv,
+  androidFeatureListDeclares,
   parseAndroidTargetFromCharacteristics,
 } from './inventory-parsers.ts';
 
@@ -32,7 +32,14 @@ test('Android inventory parsers preserve device, AVD-name, and TV detection sema
   assert.equal(parseAndroidEmulatorAvdNameOutput('\r\nOK\r\n'), undefined);
   assert.equal(parseAndroidTargetFromCharacteristics('tv,nosdcard'), 'tv');
   assert.equal(parseAndroidTargetFromCharacteristics('phone,tablet'), null);
-  assert.equal(parseAndroidFeatureListForTv('feature:android.hardware.type.television'), true);
+  const features =
+    'feature:android.hardware.bluetooth_le\r\nfeature:android.hardware.type.television=1\n';
+  assert.equal(androidFeatureListDeclares(features, 'android.hardware.type.television'), true);
+  assert.equal(androidFeatureListDeclares(features, 'android.hardware.bluetooth'), false);
+  assert.equal(
+    androidFeatureListDeclares('feature:Android.Software.LEANBACK', 'android.software.leanback'),
+    true,
+  );
 });
 
 test('Android AVD list parser keeps AVD names and drops emulator log lines', () => {

@@ -28,6 +28,7 @@ import {
 import { runAndroidAdb, runAndroidShell } from './adb.ts';
 import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
+import { setAndroidBluetooth } from './settings-bluetooth.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
 import {
@@ -39,6 +40,7 @@ import {
 /** The settings {@link setAndroidSetting} applies over adb, wherever an owner runs it. */
 export const ANDROID_SETTINGS = [
   'wifi',
+  'bluetooth',
   'airplane',
   'mobile-data',
   'location',
@@ -99,6 +101,9 @@ export async function setAndroidSetting(
       const enabled = parseSettingState(state);
       await runAndroidShell(device, ['svc', 'wifi', enabled ? 'enable' : 'disable']);
       return;
+    }
+    case 'bluetooth': {
+      return await setAndroidBluetooth(device, parseSettingState(state), signal);
     }
     case 'airplane': {
       return await setAndroidAirplaneMode(device, parseSettingState(state));

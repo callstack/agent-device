@@ -101,6 +101,10 @@ export const SETTINGS = {
     forms: [{ kind: 'on-off' }],
     help: 'Android switches Wi-Fi with svc wifi; an Apple simulator overrides only its status bar.',
   },
+  bluetooth: {
+    forms: [{ kind: 'on-off' }],
+    help: 'Android over adb turns its Bluetooth adapter on or off with svc bluetooth, from Android 8.1. It reports the bluetooth state the device holds afterwards, or fails with bluetooth-not-applied or bluetooth-unreadable. A device without an adapter refuses with android_bluetooth_adapter_missing, and an older build with android_bluetooth_command_unavailable, before anything changes.',
+  },
   airplane: {
     forms: [{ kind: 'on-off' }],
     help: 'Android applies it through the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing anything. An Apple simulator overrides only its status bar.',
