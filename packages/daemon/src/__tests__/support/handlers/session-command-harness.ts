@@ -280,7 +280,11 @@ function deploymentAvailability(device: DeviceInfo) {
     source: deploy && (device.platform === 'apple' || device.platform === 'android'),
     push:
       device.platform === 'android' || (device.platform === 'apple' && device.kind === 'simulator'),
-    uninstall: deploy && (device.platform === 'apple' || device.platform === 'android'),
+    uninstall:
+      deploy &&
+      ((device.platform === 'apple' && (device.kind === 'simulator' || device.kind === 'device')) ||
+        (device.platform === 'android' &&
+          (device.kind === 'emulator' || device.kind === 'device'))),
   };
 }
 

@@ -70,12 +70,13 @@ async function uninstallAndroidApp(
   signal: AbortSignal,
 ): Promise<AppUninstallResult> {
   return await host.androidDeployment.withInvalidatedAppResolutionCache(device, async () => {
-    if (device.booted !== true) {
-      await ensureAndroidReady(host, device, { headless: false }, signal);
-    }
+    const ready =
+      device.booted === true
+        ? device
+        : await ensureAndroidReady(host, device, { headless: false }, signal);
     let packageName: string;
     try {
-      packageName = await host.androidDeployment.resolveAppPackage(device, input.app, {
+      packageName = await host.androidDeployment.resolveAppPackage(ready, input.app, {
         installedOnly: true,
       });
     } catch (error) {
@@ -85,7 +86,7 @@ async function uninstallAndroidApp(
       }
       throw error;
     }
-    await uninstallAndroidPackage(host, device, packageName, signal);
+    await uninstallAndroidPackage(host, ready, packageName, signal);
     return { wasInstalled: true, packageName };
   });
 }

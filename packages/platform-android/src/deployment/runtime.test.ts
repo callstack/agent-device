@@ -230,3 +230,25 @@ test('uninstall refuses a name that matches no installed package', async () => {
 async function notInstalled(): Promise<string> {
   throw new AppError('APP_NOT_INSTALLED', 'No package found');
 }
+
+test('uninstall resolves and removes through the device readiness returns', async () => {
+  const live = { ...device, id: 'emulator-5556', booted: true };
+  ensureAndroidReady.mockResolvedValueOnce(live);
+  const resolveAppPackage = vi.fn(async (): Promise<string> => 'com.example.demo');
+  const host = hostFixture({ resolveAppPackage });
+  const signal = new AbortController().signal;
+
+  await createAndroidAppDeploymentOperations({
+    host,
+    device: { ...device, id: 'Pixel_9_API_35', booted: false },
+    signal,
+  }).uninstallApp?.({ app: 'com.example.demo' });
+
+  expect(resolveAppPackage).toHaveBeenCalledWith(live, 'com.example.demo', { installedOnly: true });
+  expect(native.uninstallAndroidPackage).toHaveBeenCalledWith(
+    host,
+    live,
+    'com.example.demo',
+    signal,
+  );
+});
