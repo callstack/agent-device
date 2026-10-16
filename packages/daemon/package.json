@@ -164,10 +164,6 @@
       "types": "./src/core/session-store.ts",
       "default": "./src/core/session-store.ts"
     },
-    "./testing/snapshot-interactor-capture": {
-      "types": "./src/core/snapshot-interactor-capture.ts",
-      "default": "./src/core/snapshot-interactor-capture.ts"
-    },
     "./testing/web-session-names": {
       "types": "./src/sessions/web-session-names.ts",
       "default": "./src/sessions/web-session-names.ts"

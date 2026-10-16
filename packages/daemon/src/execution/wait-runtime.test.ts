@@ -342,6 +342,31 @@ test('a text wait returns a native owner hit without capturing a snapshot', asyn
   expect(harness.captureSnapshot).not.toHaveBeenCalled();
 });
 
+test('the native text reading runs in the same runner context as the capture', async () => {
+  let nativeReads = 0;
+  const harness = waitRuntimeHarness({
+    findText: available,
+    findTextAnswers: () => nativeReads++ > 0,
+    nodesPerPoll: [[{ index: 0, depth: 0, type: 'Button', label: 'Checkout', hittable: true }]],
+  });
+
+  const { response } = await runWait(['text', 'Ready', '4000'], harness, [], {
+    debug: true,
+    iosXctestrunFile: '/tmp/override.xctestrun',
+    iosXctestDerivedDataPath: '/tmp/derived',
+  });
+
+  expect(response.ok).toBe(true);
+  const captureExecution = harness.captureSnapshot.mock.calls[0]?.[0]?.execution;
+  const findTextExecution = harness.findText.mock.calls[0]?.[0]?.execution;
+  expect(captureExecution).toMatchObject({
+    requestId: 'wait-runtime-test',
+    iosXctestrunFile: '/tmp/override.xctestrun',
+    iosXctestDerivedDataPath: '/tmp/derived',
+  });
+  expect(findTextExecution).toEqual(captureExecution);
+});
+
 test('native text failure cannot hide a canonical capture failure', async () => {
   const harness = waitRuntimeHarness({ findText: available });
   harness.findText.mockRejectedValueOnce(new Error('native observation failed'));
@@ -373,6 +398,20 @@ test('a selector wait binds the capture use once and polls through the bound ope
   expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
   expect(harness.bindDevice).toHaveBeenCalledTimes(1);
   expect(harness.bindDevice).toHaveBeenCalledWith(harness.device, waitWithoutActiveAppUse);
+});
+
+test('an unavailable conditional native reading preserves the capture-backed wait path', async () => {
+  const harness = waitRuntimeHarness({
+    nodesPerPoll: [[{ index: 0, depth: 0, type: 'Button', label: 'Ready', hittable: true }]],
+  });
+
+  const { response } = await runWait(['text', 'Ready'], harness);
+
+  expect(response).toMatchObject({ ok: true, data: { text: 'Ready' } });
+  expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
+  expect(harness.bindDevice).toHaveBeenCalledTimes(1);
+  expect(harness.findText).not.toHaveBeenCalled();
+  expect(harness.captureSnapshot).toHaveBeenCalledTimes(1);
 });
 
 test('a @ref wait binds the capture use once and polls through the bound operation', async () => {
