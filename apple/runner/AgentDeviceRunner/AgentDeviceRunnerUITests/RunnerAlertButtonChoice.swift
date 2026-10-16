@@ -3,17 +3,16 @@ import Foundation
 /// Which of an alert's buttons an `accept` or `dismiss` activates, decided on the button labels
 /// alone, so the rule is checkable without a screen.
 ///
-/// `dismiss` activates only a button `isDismissButton` recognizes. Any label-based guess at an
-/// unrecognized decline can only ever land on a button the accept rule does not recognize either
-/// — iOS localizes the App Tracking Transparency prompt's "Allow", consent copy is open-ended,
-/// and no list closes either set — and answering such a button while reporting `dismissed` is
-/// exactly the failure #3627 reports. So an unrecognized decline is refused with
-/// `ALERT_BUTTON_NOT_FOUND` and no tap rather than guessed at.
+/// `dismiss` activates only a label `isDismissButton` recognizes. An unknown decline cannot be
+/// identified from labels or button position: iOS localizes prompts unevenly, so one prompt can
+/// pair a localized decline with a still-English affirmative, and a positional guess would tap
+/// that affirmative and record an authorization (#3627). An unrecognized decline is therefore
+/// refused with `ALERT_BUTTON_NOT_FOUND` and no tap.
 ///
-/// The one recognized decline outside the list is a dismiss-popup surface itself: its native
-/// accessibility marker is the app's own declaration that the surface closes the popover, so
-/// `popupMarkerSurface` lets `dismiss` take the last actionable element of that window, as
-/// before the #3627 rule existed. A consent prompt can never carry that marker.
+/// The one exception is a dismiss-popup surface itself: its native accessibility marker is the
+/// app's own declaration that the surface closes the popover, so `popupMarkerSurface` lets
+/// `dismiss` take the last actionable element of that window. A consent prompt can never carry
+/// that marker.
 enum RunnerAlertButtonChoice {
   static func buttonIndex(for labels: [String], action: String, popupMarkerSurface: Bool = false) -> Int? {
     if action == "accept" {
