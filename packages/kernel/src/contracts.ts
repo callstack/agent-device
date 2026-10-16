@@ -261,10 +261,12 @@ export const NO_ACTIVE_SESSION_MESSAGE = 'No active session. Run open first.';
  * from the session string. Every request has a session *name*, because an unnamed one inherits the
  * workspace's own session address, so comparing names cannot answer this. Both carriers count:
  * every client sets `meta.sessionExplicit`, and the commands whose own input schema declares
- * `--session` also deliver the value in `flags.session`.
+ * `--session` also deliver the value in `flags.session`. The flag bag reaches this predicate in
+ * both shapes the wire carries it in: a command's declared flag type, or a generic record from a
+ * runner that merges flags (batch steps); the string check below is what decides either way.
  */
 export function namesSessionExplicitly(request: {
-  flags?: { session?: unknown } | undefined;
+  flags?: { session?: unknown } | Record<string, unknown> | undefined;
   meta?: { sessionExplicit?: boolean } | undefined;
 }): boolean {
   if (request.meta?.sessionExplicit === true) return true;

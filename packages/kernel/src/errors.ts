@@ -310,6 +310,22 @@ export function sessionAppRequiredDetails(): RefusalDetails<
   };
 }
 
+/**
+ * The details of a request whose hand-named session this daemon does not hold. Every seam that
+ * answers this event (the resolution guard in the daemon, `appstate`'s platform-aware refusal)
+ * builds its details here, so one branch on `named_session_not_found` sees the same shape
+ * wherever a lost session surfaces (#3674).
+ */
+export function namedSessionNotFoundDetails(
+  session: string,
+): RefusalDetails<(typeof PRE_DISPATCH_REFUSAL_REASONS)['namedSessionNotFound']> {
+  return {
+    reason: PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound,
+    dispatched: 'no',
+    session,
+  };
+}
+
 /** The details of an app-scoped setting refused because its named app resolves to no installed app. */
 export function appNotInstalledDetails(): RefusalDetails<
   (typeof PRE_DISPATCH_REFUSAL_REASONS)['appNotInstalled']

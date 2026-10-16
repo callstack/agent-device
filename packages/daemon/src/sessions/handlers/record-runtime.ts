@@ -99,6 +99,19 @@ async function handleRecordCommandUnsafe(
   const { req, sessionName, sessionStore } = params;
   const existingRef = sessionStore.lookup(sessionName);
   const existingSession = existingRef?.session;
+  // The named-session refusal runs before any record-specific refusal: a request whose session
+  // this daemon lost is answered on the session first, whatever it wanted to record (#3674). The
+  // guard can only fire for a missing session, so only that path pays the function-scoped import
+  // (ADR-0019 loading shape).
+  if (!existingSession) {
+    const { requireNamedSessionHoldsDevice } =
+      await import('../../core/explicit-session-resolution.ts');
+    requireNamedSessionHoldsDevice({
+      req,
+      sessionAddress: sessionName,
+      session: existingSession,
+    });
+  }
   const { plan, scope } = resolveRecordPlan(req, existingSession);
   if (plan.kind === 'start' && !isWholeScreenRecordingScope(scope) && !existingSession) {
     return missingAppSessionResponse(req);
@@ -140,13 +153,6 @@ async function resolveRecordingSession(
   params: RecordRuntimeHandlerParams,
   ref: SessionRef | undefined,
 ): Promise<Readonly<{ session: SessionState; ref?: SessionRef; needsReadiness: boolean }>> {
-  const { requireNamedSessionHoldsDevice } =
-    await import('../../core/explicit-session-resolution.ts');
-  requireNamedSessionHoldsDevice({
-    req: params.req,
-    sessionAddress: params.sessionName,
-    session: ref?.session,
-  });
   const device = ref?.session.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
   await params.retainDeviceExecutionLock(device.id);
   if (ref) return { session: params.sessionStore.requireCurrent(ref), ref, needsReadiness: false };

@@ -115,13 +115,21 @@ async function resolveSelectorRuntimeDevice(
   params.captureProof ??= {};
   const ref = params.sessionStore.lookup(params.sessionName);
   const session = ref?.session;
+  // Ordered before the required-session return on purpose: a request that *named* this address
+  // deserves the typed named-session refusal, not the generic one; one that named nothing still
+  // lands on noActiveSessionError below, which is its own pre-existing refusal. The guard can only
+  // fire for a missing session, so only that path pays the function-scoped import (ADR-0019
+  // loading shape).
+  if (!session) {
+    const { requireNamedSessionHoldsDevice } =
+      await import('../core/explicit-session-resolution.ts');
+    requireNamedSessionHoldsDevice({
+      req: params.req,
+      sessionAddress: params.sessionName,
+      session,
+    });
+  }
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
-  const { requireNamedSessionHoldsDevice } = await import('../core/explicit-session-resolution.ts');
-  requireNamedSessionHoldsDevice({
-    req: params.req,
-    sessionAddress: params.sessionName,
-    session,
-  });
   const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
   return { ok: true, ref, session, device };
 }

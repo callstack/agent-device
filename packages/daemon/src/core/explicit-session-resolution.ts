@@ -3,7 +3,7 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
 import {
   AppError,
-  PRE_DISPATCH_REFUSAL_REASONS,
+  namedSessionNotFoundDetails,
   type RefusalDetails,
 } from '@agent-device/kernel/errors';
 import { hasDeviceSelectionInput } from './device/device-selector-intent.ts';
@@ -18,14 +18,15 @@ export function namedSessionNotFoundError(sessionAddress: string): AppError {
   return new AppError(
     'SESSION_NOT_FOUND',
     `No active session "${sessionAddress}". Run agent-device open <app> --session ${sessionArg} first, or omit --session to run against a device selector.`,
+    // One producer for the refusal shape: the reason, dispatched marker, and session address come
+    // from the kernel builder every named-session seam shares (#3674); only this site's message
+    // adds the open/omit guidance and the session-list hint.
     {
-      reason: PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound,
-      dispatched: 'no',
-      session: sessionAddress,
+      ...namedSessionNotFoundDetails(sessionAddress),
       hint:
         'Run agent-device session list to see the sessions this daemon holds. ' +
         "A daemon that was replaced or restarted starts without its predecessor's sessions.",
-    } satisfies RefusalDetails<(typeof PRE_DISPATCH_REFUSAL_REASONS)['namedSessionNotFound']>,
+    } satisfies RefusalDetails<'named_session_not_found'>,
   );
 }
 
