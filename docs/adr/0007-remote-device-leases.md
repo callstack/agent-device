@@ -41,7 +41,7 @@ It stays below daemon device leases and should not be weakened or replaced by th
 
 `open` is the natural point to acquire a device lease because target resolution and session creation meet there.
 Commands after `open` must refresh the lease.
-After five minutes without activity, the device should become available again.
+After the default 60 seconds without activity, the device should become available again.
 
 These operations must run under the same daemon request lock:
 
