@@ -4,21 +4,19 @@
 
 Accepted
 
-Completed process history is in git history.
-
 > **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Persistent protocols, invalidation, and explicitly safe one-shot fallback remain accepted.
-> The daemon owns helper lifetime policy.
+> In this ADR, "daemon-owned" means that the daemon owns helper lifetime policy.
 > Platform modules own process-lived helper managers and helper mechanics.
 > Request bindings attach to healthy helper generations but never own or stop them.
 
 ## Rules at a glance
 
 - When startup costs are high and an automation context is reusable, use persistent platform helper sessions.
-- The daemon owns lifetime policy. Platform modules own helper-manager mechanics.
-- Unless an explicit cache contract applies, helpers must execute each command against fresh platform state.
-- Keep Android snapshots and touch commands in one bundled automation helper.
-- For Android, retry one-shot only for idempotent reads after the failed session stops.
-- For Android, do not retry gesture injection after a session failure.
+- The daemon owns helper lifetime policy. Platform modules own helper-manager mechanics.
+- Unless a separate cache contract has explicit invalidation, a helper must execute each command against fresh platform state.
+- On Android, snapshot capture, gesture viewport resolution, and planned-touch injection share one bundled automation helper.
+- On Android, after a failed session command, retry one-shot only for idempotent reads, and only after the failed session has stopped.
+- On Android, return a session gesture failure directly. Do not retry it one-shot.
 - If the packaged Android helper is unavailable or invalid, agent-device must fail closed.
 
 ## Context
@@ -62,14 +60,14 @@ Unless a separate cache contract defines explicit invalidation, the helper must 
 
 Use this session pattern:
 
-1. On the first command that benefits from reuse, start the session lazily.
-2. Bind the session to a device identity and helper/runner identity.
-3. Communicate through a small validated protocol with request ids and version metadata.
-4. While the identity and protocol remain valid, reuse the session.
-5. When an invalidation condition occurs, invalidate the session.
-6. If reuse fails, use the existing one-shot path for the current command, subject to the retry limits below.
-7. Make shutdown best effort.
-8. Make stale sessions disposable.
+- On the first command that benefits from reuse, start the session lazily.
+- Bind the session to a device identity and helper/runner identity.
+- Communicate through a small validated protocol with request ids and version metadata.
+- While the identity and protocol remain valid, reuse the session.
+- When an invalidation condition occurs, invalidate the session.
+- If reuse fails, use the existing one-shot path as the fallback for the current command.
+- Make shutdown best effort.
+- Make stale sessions disposable.
 
 These conditions invalidate a session:
 
@@ -82,18 +80,20 @@ These conditions invalidate a session:
 
 For Android snapshots, productize a persistent helper mode that retains `UiAutomation` and serves fresh snapshot requests over an `adb forward` socket.
 Do not add snapshot result caching in this first step.
-Infrastructure reuse provides the first reliable improvement.
+The first reliable improvement is infrastructure reuse, not data reuse.
 The current implementation retains the existing one-shot instrumentation helper as the fallback for startup, socket, protocol, and request failures.
 Both transports execute the same packaged helper contract.
 If that helper is unavailable or invalid, agent-device must fail closed.
 It must not substitute the legacy `adb uiautomator dump` snapshot engine.
 
 Android permits only one reliable instrumentation-owned `UiAutomation` context per device.
-Thus, snapshot capture, gesture viewport resolution, and planned-touch injection share one bundled automation helper (issue #1275; consistent with ADR 0013).
+Thus, snapshot capture, gesture viewport resolution, and planned-touch injection share one bundled automation helper (amended 2026-07, issue #1275, consistent with ADR 0013).
 A live persistent helper session executes touch commands directly over its session socket.
 Without a live persistent session, the same helper runs one-shot.
+Before that amendment, touch synthesis shipped as a separate instrumentation helper.
+Thus, the daemon had to stop the persistent snapshot session before every gesture, and the next snapshot restarted it lazily.
 After a failed session command, one-shot retry applies only to idempotent reads, such as viewport resolution.
-The failed session must stop before this retry.
+The retry runs only after the failed session has stopped.
 Gesture injection is not idempotent because events may already be partially injected.
 Thus, session gesture failures return directly without a one-shot retry.
 Helper reuse must never let process ownership cause interference between commands.
@@ -113,8 +113,8 @@ Avoid platform-specific startup assumptions in command handlers.
 
 ## Alternatives Considered
 
-- **Keep only one-shot helpers.** This is the simplest robust option.
-  Android measurements show approximately ten times slower steady-state snapshots without reuse.
+- **Keep only one-shot helpers.** This option is the simplest, and it is robust.
+  However, Android measurements show that it loses an order of magnitude of steady-state snapshot performance.
 - **Cache snapshots in the daemon.** This accelerates repeated reads.
   Without a mutation generation contract, it is unsafe after mutations, animations, navigation, system dialogs, or app process changes.
   Cache infrastructure can be added later.
@@ -148,7 +148,7 @@ These tests cover:
 - One-shot fallback.
 
 Observability should report whether a command used, started, reused, or invalidated a persistent session, or used a one-shot fallback.
-This information helps diagnose CI failures and user bug reports when a fast path fails.
+When a fast path fails, this information keeps CI results and user bug reports diagnosable.
 
 Persistent sessions should not make direct interactive commands unexpectedly slow.
 Use short connect/request timeouts for the persistent path.
