@@ -40,10 +40,12 @@ const testCreateCommandSurface = commandSurfaceWithMembers((config) => ({
         await new Promise<void>((resolve) => setTimeout(resolve, target.durationMs));
         return { kind: 'sleep', waitedMs: target.durationMs };
       }
-      await config.backend.captureSnapshot?.(
-        { session, requestId, signal: signal ?? config.signal },
-        {},
-      );
+      const context = { session, requestId, signal: signal ?? config.signal };
+      if (target.kind === 'text') {
+        const native = await config.backend.findText?.(context, target.text);
+        if (native?.found) return { kind: 'text', text: target.text, waitedMs: 0 };
+      }
+      await config.backend.captureSnapshot?.(context, {});
       if (target.kind === 'text' && target.timeoutMs === 1) {
         throw new AppError('COMMAND_FAILED', `wait timed out for text: ${target.text}`, {
           reason: WAIT_REASONS.targetAbsent,
@@ -269,14 +271,22 @@ async function runWait(
 // ---------------------------------------------------------------------------
 
 test('a duration wait inspects no facts and binds no device', async () => {
-  const harness = waitRuntimeHarness({ capture: captureUnavailable });
+  vi.useFakeTimers();
+  try {
+    const harness = waitRuntimeHarness({ capture: captureUnavailable });
+    const pending = runWait(['5'], harness);
 
-  const { response } = await runWait(['5'], harness);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5);
+    const { response } = await pending;
 
-  expect(response).toMatchObject({ ok: true, data: { waitedMs: 5 } });
-  expect(harness.inspectFacts).not.toHaveBeenCalled();
-  expect(harness.bindDevice).not.toHaveBeenCalled();
-  expect(harness.captureSnapshot).not.toHaveBeenCalled();
+    expect(response).toMatchObject({ ok: true, data: { waitedMs: 5 } });
+    expect(harness.inspectFacts).not.toHaveBeenCalled();
+    expect(harness.bindDevice).not.toHaveBeenCalled();
+    expect(harness.captureSnapshot).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('an observing wait binds through the shared selector entry', async () => {
@@ -316,6 +326,20 @@ test('a text wait binds the capture use once and polls through the bound operati
   expect(harness.bindDevice).toHaveBeenCalledTimes(1);
   expect(harness.bindDevice).toHaveBeenCalledWith(harness.device, waitWithoutActiveAppUse);
   expect(harness.captureSnapshot).toHaveBeenCalled();
+});
+
+test('a text wait returns a native owner hit without capturing a snapshot', async () => {
+  const harness = waitRuntimeHarness({
+    findText: available,
+    findTextAnswers: (text) => text === 'Ready',
+  });
+
+  const { response } = await runWait(['text', 'Ready'], harness);
+
+  expect(response).toMatchObject({ ok: true, data: { text: 'Ready' } });
+  expect(harness.findText).toHaveBeenCalledWith(expect.objectContaining({ text: 'Ready' }));
+  expect(harness.bindDevice).toHaveBeenCalledWith(harness.device, waitWithoutActiveAppUse);
+  expect(harness.captureSnapshot).not.toHaveBeenCalled();
 });
 
 test('a selector wait binds the capture use once and polls through the bound operation', async () => {

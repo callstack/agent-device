@@ -125,6 +125,30 @@ test('runtime wait surfaces a canonical capture failure after a native text miss
   assert.equal(captureSnapshot.mock.calls.length, 1);
 });
 
+test('runtime wait surfaces a canonical capture failure after native text reading throws', async () => {
+  const captureSnapshot = vi.fn(async (): Promise<BackendSnapshotResult> => {
+    throw new AppError('COMMAND_FAILED', 'canonical capture failed', {
+      reason: 'capture_failed',
+    });
+  });
+  const findText = vi.fn(async () => {
+    throw new Error('native observation failed');
+  });
+  const device = textWaitDevice({ captureSnapshot, findText });
+
+  await assert.rejects(
+    device.selectors.wait({
+      session: 'default',
+      target: { kind: 'text', text: 'Ready', timeoutMs: 10_000 },
+    }),
+    (error: AppError) =>
+      error.message === 'canonical capture failed' && error.details?.reason === 'capture_failed',
+  );
+
+  assert.equal(findText.mock.calls.length, 1);
+  assert.equal(captureSnapshot.mock.calls.length, 1);
+});
+
 test('a native text hit does not make an older captured tree fresh for the next read', async () => {
   const snapshots = [
     makeSnapshotState([{ index: 0, type: 'StaticText', label: 'Home' }]),
