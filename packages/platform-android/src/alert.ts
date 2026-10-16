@@ -523,13 +523,7 @@ async function confirmTreeAlertDismissed<
     // when no completed post-press read named it — the 2482e24 Android smoke case, where the
     // confirm phase never got one answer — may the leg say the press went unconfirmed.
     if (isAlertWindowExpired(error)) {
-      if (lastCaptureNamesAlert) {
-        throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
-          alert: dismissed,
-          reason: ALERT_WINDOW_EXPIRED_REASON,
-          hint: 'The alert button was pressed but the dialog was visible on the last check that answered. Inspect alert get --json, then press the visible button by label/ref or retry.',
-        });
-      }
+      if (lastCaptureNamesAlert) throw visibleAfterPressFailure(action, dismissed);
       throw new AppError(
         'COMMAND_FAILED',
         `alert ${action} pressed the button but the dismissal could not be confirmed`,
@@ -543,13 +537,7 @@ async function confirmTreeAlertDismissed<
     throw error;
   }
   if (settled) return;
-  if (lastCaptureNamesAlert) {
-    throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
-      alert: dismissed,
-      reason: ALERT_WINDOW_EXPIRED_REASON,
-      hint: 'The alert button was pressed but the dialog was visible on the last check that answered. Inspect alert get --json, then press the visible button by label/ref or retry.',
-    });
-  }
+  if (lastCaptureNamesAlert) throw visibleAfterPressFailure(action, dismissed);
   throw new AppError(
     'COMMAND_FAILED',
     `alert ${action} pressed the button but the dismissal could not be confirmed`,
@@ -559,6 +547,21 @@ async function confirmTreeAlertDismissed<
       hint: 'The alert button was pressed; no post-press read resolved to an answer within the budget, so the dialog may already be gone. Run alert get --json before retrying.',
     },
   );
+}
+
+/**
+ * The stuck-alert failure: a post-press capture that answered named the same dialog again, so
+ * the press did not dismiss what the latest completed read still saw on screen.
+ */
+function visibleAfterPressFailure<TAlert extends AlertInfo & { buttons: string[] }>(
+  action: 'accept' | 'dismiss',
+  dismissed: TAlert,
+): AppError {
+  return new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
+    alert: dismissed,
+    reason: ALERT_WINDOW_EXPIRED_REASON,
+    hint: 'The alert button was pressed but the dialog was visible on the last check that answered. Inspect alert get --json, then press the visible button by label/ref or retry.',
+  });
 }
 
 /** Alert identity across a dismissal re-check: the same title and the same button row, in order. */

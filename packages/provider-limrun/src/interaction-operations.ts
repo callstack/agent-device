@@ -276,10 +276,9 @@ export function limrunClipboardOperationFacts(
  * both legs of a live session.
  */
 export function limrunAlertOperationFacts(
-  device: DeviceInfo,
+  _device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
-  void device;
   const cell = liveSessionUnavailable ?? available;
   return Object.freeze({
     ...alertRuntimeOperationFacts({ read: cell, wait: cell, accept: cell, dismiss: cell }),
