@@ -14,7 +14,7 @@ import { daemonPlatformServicesFixture } from '../../../__tests__/support/platfo
 import { makeSessionStore } from '../../../__tests__/support/handlers/session-test-harness.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
-import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { withClientReplayScriptSources } from '../../../__tests__/support/replay-script-source-fixture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import {
   mockBindDeviceRuntime,

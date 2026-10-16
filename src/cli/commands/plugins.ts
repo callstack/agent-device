@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { changePlugin, listPlugins } from '../../plugins/store.ts';
+import { changePlugin, listPlugins } from '@agent-device/plugins/store';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 

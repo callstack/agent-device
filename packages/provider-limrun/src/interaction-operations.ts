@@ -359,6 +359,7 @@ export function limrunSettingsOperationFacts(
             write: {
               wifi: available,
               airplane: available,
+              'mobile-data': available,
               location: available,
               animations: available,
               appearance: available,

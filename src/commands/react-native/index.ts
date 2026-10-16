@@ -56,5 +56,3 @@ function readReactNativeAction(value: string | undefined): 'dismiss-overlay' {
   if (value === 'dismiss-overlay') return value;
   throw new AppError('INVALID_ARGS', 'react-native supports only: dismiss-overlay');
 }
-
-export * from './overlay.ts';

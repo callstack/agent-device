@@ -1,4 +1,4 @@
-import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
+import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-schema';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';

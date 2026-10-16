@@ -1,8 +1,1 @@
-import type { AppError, AppErrorCode, AppErrorDetails } from '@agent-device/kernel/errors';
-
-export type ProviderPluginHost = Readonly<{
-  env: Readonly<Record<string, string | undefined>>;
-  options: Readonly<Record<string, unknown>>;
-  clientVersion: string;
-  createError(code: AppErrorCode, message: string, details?: AppErrorDetails): AppError;
-}>;
+export type { ProviderPluginHost } from '@agent-device/plugins/host';

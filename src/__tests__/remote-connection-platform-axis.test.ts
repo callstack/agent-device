@@ -22,7 +22,7 @@ import {
 import { connectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 
 afterEach(() => {
   vi.clearAllMocks();

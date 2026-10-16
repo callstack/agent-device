@@ -27,7 +27,7 @@ import {
 } from '../../__tests__/interaction-get-runtime-fixture.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { installLegacyCaptureInteractorResolution } from '../../../__tests__/support/legacy-capture-interactor-resolution.ts';
-import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
+import { createTouchCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
@@ -145,11 +145,11 @@ function settledDiff(baseline: SnapshotNode[] | undefined, settled: SnapshotNode
 }
 
 /**
- * The touch-forwarding surface with the post-action observation `--settle` owes: it captures the
+ * The touch command surface with the post-action observation `--settle` owes: it captures the
  * settled tree through the config's backend under the settle budget's deadline and answers with the
  * diff, or with the unavailable/stalled verdict the command family reports when that capture fails.
  */
-const settlingSurface = touchForwardingCreateCommandSurface({
+const settlingSurface = createTouchCommandSurface({
   observeSettle: async ({ settle, baseline, capture }): Promise<SettleObservation> => {
     const quietMs = settle.quietMs ?? 500;
     const timeoutMs = settle.timeoutMs ?? 10_000;

@@ -10,13 +10,11 @@ import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fix
 import { classifyReplayTarget } from '../target-classification.ts';
 import { resolveElementReportedTwice } from '@agent-device/selectors/interaction-targeting';
 import {
-  ELEMENT14_DISTINCT_SUBTREE_NODES,
-  UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
-} from '@agent-device/selectors/interaction-targeting-fixtures';
-import {
   bottomTabsRealCaptureFixture,
-  recordArticleEvidence,
   buildNodes,
+  ELEMENT14_DISTINCT_SUBTREE_NODES,
+  recordArticleEvidence,
+  UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
 } from '@agent-device/test-kit';
 
 /** Verified outcomes carry the verified member + matchCount (for the post-resolution guard). */

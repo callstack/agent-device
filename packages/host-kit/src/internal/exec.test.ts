@@ -623,3 +623,25 @@ test('a non-xcrun failure keeps the caller hint', () => {
     },
   );
 });
+
+test('runCmdStreaming can forward output without retaining it in the result', async () => {
+  let stdout = '';
+  let stderr = '';
+  const result = await runCmdStreaming(
+    process.execPath,
+    ['-e', "process.stdout.write('out'); process.stderr.write('err'); process.exitCode = 7;"],
+    {
+      allowFailure: true,
+      captureOutput: false,
+      onStdoutChunk: (chunk) => {
+        stdout += chunk;
+      },
+      onStderrChunk: (chunk) => {
+        stderr += chunk;
+      },
+    },
+  );
+  assert.equal(stdout, 'out');
+  assert.equal(stderr, 'err');
+  assert.deepEqual(result, { stdout: '', stderr: '', exitCode: 7, stdoutBuffer: undefined });
+});

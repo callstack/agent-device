@@ -11,7 +11,7 @@ import {
   resolveRequestedLeaseBackend,
 } from '../cli/commands/connection-runtime.ts';
 import { disconnectCommand } from '../cli/commands/connection.ts';
-import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 
 test('HarmonyOS platform resolves to its proxy lease backend', () => {

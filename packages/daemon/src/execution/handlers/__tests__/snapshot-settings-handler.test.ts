@@ -637,6 +637,50 @@ test('settings iOS location set refuses a named app before reaching the owner', 
 });
 
 // A macOS permission is a host-level TCC grant, so naming an app is refused rather than dropped.
+test('settings mobile-data reaches the Android owner as an on/off mutation', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-mobile-data';
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', { positionals: ['mobile-data', 'off'] }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({ setting: 'mobile-data', state: 'off' });
+});
+
+test('settings Android mobile-data refuses a named app before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-mobile-data-app-refused';
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['mobile-data', 'off'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.details?.reason).toBe('setting_app_not_consumed');
+    expect(response.error.details?.dispatched).toBe('no');
+  }
+});
+
 test('settings macOS permission grant refuses a named app before reaching the owner', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-permission-app-refused';

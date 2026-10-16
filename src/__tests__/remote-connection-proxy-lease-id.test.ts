@@ -9,12 +9,13 @@ import {
   seedConnectionState,
 } from './remote-connection.fixtures.ts';
 
-vi.mock('../metro/client-metro-companion.ts', () => ({
-  stopMetroCompanion: vi.fn(),
+vi.mock('@agent-device/react-native', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/react-native')>()),
+  stopMetroTunnel: vi.fn(),
 }));
 
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
-import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 
 const DAEMON_LEASE_ID = 'abc123abc123abc1';
 

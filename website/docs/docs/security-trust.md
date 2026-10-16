@@ -48,6 +48,8 @@ Screenshots, recordings, traces, logs, network dumps, audio probes, replay files
 
 Cloud provider artifact URLs returned by `artifacts`, `close --json`, or `disconnect --json` may be provider dashboard URLs, public share links, or pre-signed download URLs. Treat the URLs themselves as credentials until you know the provider's sharing and expiry policy.
 
+The privacy controls for typed input (`fill --text-stdin` and `--record-as`) keep the literal out of agent-device's own responses, diagnostics, and recorded scripts. They do not rewrite what the platform records: on iOS, XCTest writes its own diagnostic logs and its `.xcresult` bundle under the Apple runner's derived directory, and typed text can appear in both, on a simulator or a physical device. Treat those as sensitive, and use test-only credentials when they may be kept or shared.
+
 ## Permissions
 
 Some targets require local permissions or developer setup:

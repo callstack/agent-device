@@ -95,6 +95,27 @@ describe('settings CLI permission', () => {
     });
   });
 
+  test('reads mobile-data on|off and writes it as two positionals', () => {
+    for (const state of ['on', 'off'] as const) {
+      const input = settingsCliReader(['mobile-data', state], flags());
+      expect(input).toEqual({ setting: 'mobile-data', state });
+      expect(settingsDaemonWriter(input)).toMatchObject({
+        command: 'settings',
+        positionals: ['mobile-data', state],
+      });
+    }
+  });
+
+  test('forwards --app on mobile-data so the daemon refuses it instead of dropping it', () => {
+    const input = settingsCliReader(['mobile-data', 'off'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(settingsDaemonWriter(input)).toMatchObject({
+      positionals: ['mobile-data', 'off'],
+      input: { app: 'com.example.app' },
+    });
+  });
+
   test('carries an app on an iOS location toggle to the daemon request input', () => {
     const input = settingsCliReader(['location', 'on'], {
       targetApp: 'com.example.app',

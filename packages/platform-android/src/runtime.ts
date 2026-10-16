@@ -357,6 +357,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           write: {
             wifi: available,
             airplane: available,
+            'mobile-data': available,
             location: available,
             animations: available,
             appearance: available,

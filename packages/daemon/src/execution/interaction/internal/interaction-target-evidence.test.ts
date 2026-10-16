@@ -16,7 +16,7 @@ import {
   SAVE_BUTTON_EVIDENCE,
   makeSessionWithSaveButtonSnapshot,
 } from '../../../__tests__/support/target-evidence-fixture.ts';
-import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
+import { createTouchCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import {
   getRuntimeBindings,
   resetGetRuntimeFixture,
@@ -44,7 +44,7 @@ async function runCommand(
   command: string,
   positionals: string[],
   flags: CommandFlags = {},
-  createCommandSurface = touchForwardingCreateCommandSurface(),
+  createCommandSurface = createTouchCommandSurface(),
 ) {
   return await handleInteractionCommands({
     createCommandSurface,
@@ -138,7 +138,7 @@ const IDENTITY_EMPTY_ROW_NODES: RawSnapshotNode[] = [
  * The command family's answer for a press on that container: the response describes the dispatched
  * container, and the labeled descendant rides the recording-only `recordingTarget` side channel.
  */
-const containerPressSurface = touchForwardingCreateCommandSurface({
+const containerPressSurface = createTouchCommandSurface({
   members: (config) => ({
     interactions: {
       press: async (target, options) => {

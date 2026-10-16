@@ -19,7 +19,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createDaemonProxyServer } from '@agent-device/proxy';
-import { localizeRemoteDaemonError } from '../../../src/remote/remote-request-diagnostics.ts';
+import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import {

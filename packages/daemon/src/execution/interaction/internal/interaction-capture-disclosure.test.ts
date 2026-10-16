@@ -14,7 +14,7 @@ import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapsho
 import { markDeferredInteractionOutcome } from '../../../core/deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { installLegacyCaptureInteractorResolution } from '../../../__tests__/support/legacy-capture-interactor-resolution.ts';
-import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
+import { createTouchCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 
 installLegacyCaptureInteractorResolution();
 
@@ -56,7 +56,7 @@ async function pressSelector(params: {
   const sessionStore = makeSessionStore();
   sessionStore.publish(params.sessionName, makeSession(params.sessionName));
   const response = await handleInteractionCommands({
-    createCommandSurface: touchForwardingCreateCommandSurface(),
+    createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',
       session: params.sessionName,
@@ -109,7 +109,7 @@ test('a press that consumes no capture is not disclosed against an older tree', 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    createCommandSurface: touchForwardingCreateCommandSurface(),
+    createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',
       session: sessionName,
@@ -169,7 +169,7 @@ async function pressAfterUnsettledScroll(selector: string) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   let done = false;
   const pending = handleInteractionCommands({
-    createCommandSurface: touchForwardingCreateCommandSurface(),
+    createCommandSurface: createTouchCommandSurface(),
     req: { token: 't', session: 'default', command: 'press', positionals: [selector], flags: {} },
     sessionName: 'default',
     sessionStore,

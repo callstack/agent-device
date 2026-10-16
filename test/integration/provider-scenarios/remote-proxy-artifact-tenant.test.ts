@@ -13,7 +13,7 @@ import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { normalizeAgentDeviceError } from '@agent-device/kernel/errors';
-import { downloadRemoteArtifact } from '../../../src/remote/daemon-artifacts.ts';
+import { downloadRemoteArtifact } from '@agent-device/remote/daemon-artifacts';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import {
   closeLoopbackServer,

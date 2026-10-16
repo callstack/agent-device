@@ -1,6 +1,6 @@
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../commands/output/diff.ts';
-import type { ScreenshotDiffResult } from '../../screenshot-diff/screenshot-diff.ts';
+import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
 import { AppError } from '@agent-device/kernel/errors';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { resolveUserPath } from '@agent-device/host-kit/file';

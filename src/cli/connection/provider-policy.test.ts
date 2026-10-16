@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { connectionProviderCapabilities, isConnectProviderName } from './provider-policy.ts';
 import { pluginHome, selectPlugin } from '@agent-device/test-kit';
-import { installedPlugins } from '../../plugins/store.ts';
+import { installedPlugins } from '@agent-device/plugins/store';
 
 test('provider policy projects provider identity into semantic capabilities', () => {
   assert.deepEqual(connectionProviderCapabilities('limrun'), {

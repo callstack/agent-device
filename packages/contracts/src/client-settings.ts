@@ -43,6 +43,12 @@ export type SettingsUpdateOptions =
       state: 'clear';
       app?: string;
     })
+  /** Android only. Naming an app is refused with `setting_app_not_consumed`. */
+  | (DeviceCommandBaseOptions & {
+      setting: 'mobile-data';
+      state: 'on' | 'off';
+      app?: string;
+    })
   /** On Apple simulators `on`/`off` is a location-permission change for `app` (or the session app). */
   | (DeviceCommandBaseOptions & {
       setting: 'location';

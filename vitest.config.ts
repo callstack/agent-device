@@ -1,13 +1,18 @@
 import { defineConfig } from 'vitest/config';
+import { validationTestReporter } from './scripts/check-affected/test-report.ts';
 import { resolveVitestMaxWorkers } from './scripts/lib/vitest-concurrency.ts';
 import coverageRunStampReporter from './scripts/vitest-coverage-run-stamp-reporter.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
+
+const validationReport = process.env.AGENT_DEVICE_VALIDATION_REPORT;
+delete process.env.AGENT_DEVICE_VALIDATION_REPORT;
 
 // A real per-case spawn is timeout noise under thousands of mutant reruns, so the
 // mutation lane excludes these tests even though the unit lane runs them normally.
 const MUTATION_EXCLUDED_SUBPROCESS_TESTS: readonly string[] = [
   // Stubs npx plus the package managers and spawns a real Metro dev server per case.
-  'src/metro/client-metro.test.ts',
+  'packages/react-native/src/index-metro.test.ts',
+  'src/agent-device-client-metro.test.ts',
   // The SUT is the subprocess watchdog: a node subprocess per case, one hangs on purpose (#1414).
   'scripts/fuzz/harness.test.ts',
   // The daemon takeover test launches a branch-named daemon per case to prove
@@ -105,7 +110,10 @@ export default defineConfig({
     // Gate reporters for every lane; a `--reporter` flag would replace them, so no lane passes one.
     // The stamp reporter only acts on a lane that ran coverage — see its module.
     reporters: [
-      'default',
+      'dot',
+      validationTestReporter(
+        validationReport ? `${validationReport}.${process.pid}.json` : undefined,
+      ),
       slowTestGateReporter(),
       coverageRunStampReporter(COVERAGE_UNINSTRUMENTED_PROJECTS),
     ],
@@ -312,7 +320,7 @@ export default defineConfig({
         'src/bin.ts',
         'src/client/client-types.ts',
         'src/core/interactor-types.ts',
-        'src/remote/remote-config.ts',
+        'packages/remote/src/remote-config.ts',
       ],
     },
   },

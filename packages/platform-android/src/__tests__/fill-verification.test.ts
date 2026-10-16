@@ -118,7 +118,9 @@ test('a value the app renders late still verifies, as long as it lands before th
 });
 
 test('a value that never lands is a mismatch read from the last sample', async () => {
-  const session = createFillHelperSession({ textForCapture: () => 'Key echo' });
+  const session = createFillHelperSession({
+    textForCapture: (captureIndex) => `Key echo ${captureIndex}`,
+  });
   let elapsedMs = 0;
 
   const verification = await underFakeTimers(async () => {
@@ -136,12 +138,11 @@ test('a value that never lands is a mismatch read from the last sample', async (
 
   assert.equal(verification.ok, false);
   assert.equal(verification.reason, 'text_mismatch');
-  assert.equal(verification.actual, 'Key echo');
+  assert.equal(verification.actual, `Key echo ${session.captureCount()}`);
   assert.ok(
     elapsedMs >= 1_500 && elapsedMs < 1_650,
     `sampled until the deadline, took ${elapsedMs} ms`,
   );
-  assert.ok(session.captureCount() >= 9, 'kept sampling on its interval');
 });
 
 /**

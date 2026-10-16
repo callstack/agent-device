@@ -105,6 +105,12 @@ export const SETTINGS = {
     forms: [{ kind: 'on-off' }],
     help: 'Android applies it through the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing anything. An Apple simulator overrides only its status bar.',
   },
+  'mobile-data': {
+    forms: [{ kind: 'on-off' }],
+    app: 'input',
+    appScope: { mobile: 'device-level' },
+    help: 'Android only. Runs svc data and reports the stored mobileData state, or fails with mobile-data-not-applied or mobile-data-unreadable. Multi-SIM read-back is not covered yet, and --app is refused.',
+  },
   location: {
     forms: [
       { kind: 'on-off', appScope: { apple: 'app-scoped', mobile: 'device-level' } },

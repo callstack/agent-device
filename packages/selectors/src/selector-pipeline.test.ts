@@ -15,7 +15,7 @@ import {
   RN_TEXT_ECHO_OFFSET_RECT_NODES,
   TWO_ACTIONABLE_WRAPPER_CHAIN_NODES,
   UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
-} from './interaction-targeting.fixtures.ts';
+} from '@agent-device/test-kit';
 import {
   listSelectorPipelineMatches,
   resolveActionSelectorPipeline,

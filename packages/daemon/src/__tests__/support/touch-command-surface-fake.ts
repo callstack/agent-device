@@ -23,10 +23,20 @@ import {
   singlePointerPlanEndpoints,
 } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
-import type { Point, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type {
+  Point,
+  SnapshotNode,
+  SnapshotPreferredBackend,
+  SnapshotQualityVerdict,
+  SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import { extractReadableText } from '@agent-device/capture-kit/text-surface';
 import { buildSelectorChainForNode } from '@agent-device/selectors';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';
+import {
+  captureAndStoreSnapshot,
+  type CommandSurfaceMembers,
+} from './command-surface-override-fake.ts';
 
 /**
  * A command surface that answers the touch actions the way the real command family does at the two
@@ -37,9 +47,12 @@ import { fakeCreateCommandSurface } from './command-surface-fake.ts';
  *
  * Target resolution is deliberately the smallest rule that lets a dispatch happen: a point is
  * itself, a `@ref` is the centre of the node the session's authorized frame (or latest
- * observation) names, and a selector is the first node of one fresh capture that matches one of its `||` alternatives
- * (each a conjunction of `key=value` terms). Promotion, occlusion, off-screen and bounds guards, label recovery, and
- * `--verify` evidence are command-family behavior and are asserted beside that code.
+ * observation) names, and a selector is the first node of one fresh capture, written back as the
+ * session's stored snapshot, that a `matchSelector` rule names (by default one of its `||`
+ * alternatives, each a conjunction of `key=value` terms). A target that does not resolve refuses
+ * with the typed `ref_not_found` / `selector_not_found` reason and `dispatched: 'no'`. Promotion,
+ * occlusion, off-screen and bounds guards, label recovery, and `--verify` evidence are
+ * command-family behavior and are asserted beside that code.
  *
  * Values the fake supplies itself rather than reading from a backend: an `is` read always passes
  * (`pass: true`, `matches: 1`); selector reads (`get`, `is`) capture once with
@@ -65,25 +78,77 @@ type CommandOptions = Readonly<{
   preresolvedTarget?: PreresolvedInteractionTarget;
 }>;
 
-export const touchCreateCommandSurface: CreateDaemonCommandSurface = async (config) => {
-  touchSurfaceConfigs.push(config);
-  const inert = await fakeCreateCommandSurface(config);
-  return {
-    ...inert,
-    signal: config.signal,
-    selectors: touchSelectors(config, inert),
-    interactions: touchInteractions(config, inert),
-  };
+export type TouchSurfaceOptions = {
+  /**
+   * Which node a selector expression names. The default reads `||` alternatives of `key=value`
+   * terms; a suite that needs another selector shape states its own matcher.
+   */
+  matchSelector?: (nodes: SnapshotNode[], selector: string) => SnapshotNode | undefined;
+  /**
+   * The post-action observation a `--settle` touch owes. It runs after the touch with the settle
+   * parameters the daemon forwarded, the pre-action tree, and a capture taken through the config's
+   * backend and stored as the session snapshot; its answer rides on the result. Without it the
+   * touch answers a settled observation of its own.
+   */
+  observeSettle?: (params: {
+    settle: SettleParams;
+    baseline: SnapshotNode[] | undefined;
+    /** The quality verdict of the tree the touch resolved against, when it published one. */
+    baselineQuality: SnapshotQualityVerdict | undefined;
+    capture: (options?: {
+      signal?: AbortSignal;
+      preferredBackend?: SnapshotPreferredBackend;
+    }) => Promise<SnapshotState>;
+  }) => Promise<SettleObservation>;
+  /** Members the suite answers itself, layered over the touch actions (selector reads, gestures). */
+  members?: (config: AgentDeviceRuntimeConfig) => CommandSurfaceMembers;
 };
+
+type Rules = Readonly<{
+  matchSelector: NonNullable<TouchSurfaceOptions['matchSelector']>;
+  observeSettle: TouchSurfaceOptions['observeSettle'];
+}>;
+
+export function createTouchCommandSurface(
+  surfaceOptions: TouchSurfaceOptions = {},
+): CreateDaemonCommandSurface {
+  const rules: Rules = {
+    matchSelector: surfaceOptions.matchSelector ?? matchesSelector,
+    observeSettle: surfaceOptions.observeSettle,
+  };
+  return async (config) => {
+    touchSurfaceConfigs.push(config);
+    const inert = await fakeCreateCommandSurface(config);
+    const own = surfaceOptions.members?.(config) ?? {};
+    const selectors = touchSelectors(config, inert, rules);
+    const interactions = touchInteractions(config, inert, rules);
+    return {
+      ...inert,
+      signal: config.signal,
+      capture: { ...inert.capture, ...own.capture },
+      selectors: { ...selectors, ...own.selectors },
+      interactions: { ...interactions, ...own.interactions },
+    };
+  };
+}
+
+export const touchCreateCommandSurface: CreateDaemonCommandSurface = createTouchCommandSurface();
 
 function touchSelectors(
   config: AgentDeviceRuntimeConfig,
   inert: DaemonCommandSurface,
+  rules: Rules,
 ): DaemonCommandSurface['selectors'] {
   return {
     ...inert.selectors,
     get: async (options) => {
-      const resolved = await resolveTarget(config, options.target, options, READ_CAPTURE_OPTIONS);
+      const resolved = await resolveTarget(
+        config,
+        rules,
+        options.target,
+        options,
+        READ_CAPTURE_OPTIONS,
+      );
       if (resolved.kind === 'point' || !resolved.node) {
         throw new AppError('COMMAND_FAILED', 'get target did not resolve to a node');
       }
@@ -101,6 +166,7 @@ function touchSelectors(
     is: async (options) => {
       const resolved = await resolveTarget(
         config,
+        rules,
         { kind: 'selector', selector: options.selector },
         options,
         READ_CAPTURE_OPTIONS,
@@ -130,29 +196,30 @@ async function readNodeText(
 function touchInteractions(
   config: AgentDeviceRuntimeConfig,
   inert: DaemonCommandSurface,
+  rules: Rules,
 ): DaemonCommandSurface['interactions'] {
   const press = async (
     target: InteractionTarget,
     options: CommandOptions & { button?: unknown; [key: string]: unknown } = {},
   ) => {
-    const resolved = await resolveTarget(config, target, options, undefined, 'tapTarget');
+    const resolved = await resolveTarget(config, rules, target, options, undefined, 'tapTarget');
     const backendResult = await dispatch(resolved, () => dispatchTap(config, resolved, options));
-    return await finish(config, resolved, options, { backendResult });
+    return await finish(config, rules, resolved, options, { backendResult });
   };
   return {
     ...inert.interactions,
     click: press,
     press,
-    gesture: async (options) => await dragOrInert(config, inert, options),
+    gesture: async (options) => await dragOrInert(config, rules, inert, options),
     fill: async (target, text, options = {}) => {
-      const resolved = await resolveTarget(config, target, options, undefined, 'fillTarget');
+      const resolved = await resolveTarget(config, rules, target, options, undefined, 'fillTarget');
       const backendResult = await dispatch(resolved, () =>
         dispatchFill(config, resolved, text, options),
       );
-      return await finish(config, resolved, options, { backendResult, text });
+      return await finish(config, rules, resolved, options, { backendResult, text });
     },
     longPress: async (target, options = {}) => {
-      const resolved = await resolveTarget(config, target, options);
+      const resolved = await resolveTarget(config, rules, target, options);
       const backendResult = await dispatch(resolved, () =>
         backendOperation(config.backend.longPress?.bind(config.backend))(
           context(config, options),
@@ -160,17 +227,24 @@ function touchInteractions(
           { durationMs: options.durationMs },
         ),
       );
-      return await finish(config, resolved, options, {
+      return await finish(config, rules, resolved, options, {
         backendResult,
         durationMs: options.durationMs,
       });
     },
     hover: async (target, options = {}) => {
-      const resolved = await resolveTarget(config, target, options, undefined, 'hoverTarget');
+      const resolved = await resolveTarget(
+        config,
+        rules,
+        target,
+        options,
+        undefined,
+        'hoverTarget',
+      );
       const backendResult = await dispatch(resolved, () =>
         dispatchHover(config, resolved, options),
       );
-      return await finish(config, resolved, options, { backendResult });
+      return await finish(config, rules, resolved, options, { backendResult });
     },
   };
 }
@@ -182,6 +256,7 @@ function touchInteractions(
  */
 async function dragOrInert(
   config: AgentDeviceRuntimeConfig,
+  rules: Rules,
   inert: DaemonCommandSurface,
   options: Parameters<DaemonCommandSurface['interactions']['gesture']>[0],
 ) {
@@ -194,6 +269,7 @@ async function dragOrInert(
       async (expression) =>
         await resolveTarget(
           config,
+          rules,
           expression.startsWith('@')
             ? { kind: 'ref', ref: expression }
             : { kind: 'selector', selector: expression },
@@ -257,8 +333,12 @@ async function dragOrInert(
 /** What a read (`get`, `is`) asks its capture for: the whole tree, with rects. */
 const READ_CAPTURE_OPTIONS = { interactiveOnly: false, includeRects: true } as const;
 
+/** The quality verdict of the tree each resolution was read from, when it published one. */
+const resolvedTreeQuality = new WeakMap<object, SnapshotQualityVerdict | undefined>();
+
 async function resolveTarget(
   config: AgentDeviceRuntimeConfig,
+  rules: Rules,
   target: InteractionTarget,
   options: CommandOptions,
   captureOptions: BackendSnapshotOptions = { interactiveOnly: true },
@@ -271,44 +351,81 @@ async function resolveTarget(
     if (nativeRefRoute && config.backend[nativeRefRoute]) return { kind: 'ref', target };
     const record = await config.sessions?.get(options.session ?? 'default');
     const tree = record?.refFrameSnapshot ?? record?.snapshot;
-    const node = tree?.nodes.find((candidate) => `@${candidate.ref}` === refBody(target.ref));
-    if (!tree || !node) throw new AppError('COMMAND_FAILED', `Ref ${target.ref} not found`);
-    return resolvedFromNode(config, target, node, tree);
+    const node = tree?.nodes.find((candidate) => candidate.ref === refBody(target.ref));
+    if (!tree || !node) {
+      throw new AppError('COMMAND_FAILED', `Ref ${target.ref} not found`, {
+        reason: 'ref_not_found',
+        dispatched: 'no',
+      });
+    }
+    return resolvedFromNode(config, target, node, tree, chainAction(nativeRefRoute));
   }
-  const captured = await config.backend.captureSnapshot?.(context(config, options), captureOptions);
-  const tree = captured?.snapshot;
-  const node = tree?.nodes.find((candidate) => matchesSelector(candidate, target.selector));
-  if (!tree || !node) {
-    throw new AppError('COMMAND_FAILED', `Selector ${target.selector} did not match`);
+  const tree = await captureAndStoreSnapshot(config, {
+    session: options.session,
+    requestId: options.requestId,
+    signal: options.signal,
+    includeRects: true,
+    ...captureOptions,
+  });
+  const node = rules.matchSelector(tree.nodes, target.selector);
+  if (!node) {
+    throw new AppError('COMMAND_FAILED', `Selector did not match: ${target.selector}`, {
+      reason: 'selector_not_found',
+      dispatched: 'no',
+    });
   }
-  return {
-    kind: 'selector',
-    target: { kind: 'selector', selector: target.selector },
+  const resolved = {
+    kind: 'selector' as const,
+    target: { kind: 'selector' as const, selector: target.selector },
     point: centerOf(node) as Point,
     node,
-    selectorChain: buildSelectorChainForNode(node, config.backend.platform),
+    selectorChain: selectorChainFor(config, node, tree.nodes, chainAction(nativeRefRoute)),
     preAction: { nodes: tree.nodes },
   };
+  resolvedTreeQuality.set(resolved, tree.snapshotQuality);
+  return resolved;
+}
+
+function chainAction(
+  route: 'tapTarget' | 'fillTarget' | 'hoverTarget' | undefined,
+): 'click' | 'fill' | undefined {
+  if (route === 'tapTarget') return 'click';
+  if (route === 'fillTarget') return 'fill';
+  return undefined;
+}
+
+function selectorChainFor(
+  config: AgentDeviceRuntimeConfig,
+  node: SnapshotNode,
+  nodes: SnapshotNode[],
+  action: 'click' | 'fill' | undefined,
+): string[] {
+  return action
+    ? buildSelectorChainForNode(node, config.backend.platform, { action, nodes })
+    : buildSelectorChainForNode(node, config.backend.platform);
 }
 
 function resolvedFromNode(
   config: AgentDeviceRuntimeConfig,
   target: Extract<InteractionTarget, { kind: 'ref' }>,
   node: SnapshotNode,
-  tree: Pick<SnapshotState, 'nodes'>,
+  tree: Pick<SnapshotState, 'nodes' | 'snapshotQuality'>,
+  action?: 'click' | 'fill',
 ): ResolvedInteractionTarget {
-  return {
-    kind: 'ref',
-    target: { kind: 'ref', ref: target.ref },
+  const resolved = {
+    kind: 'ref' as const,
+    target: { kind: 'ref' as const, ref: target.ref },
     point: centerOf(node),
     node,
-    selectorChain: buildSelectorChainForNode(node, config.backend.platform),
+    selectorChain: selectorChainFor(config, node, tree.nodes, action),
     preAction: { nodes: tree.nodes },
   };
+  resolvedTreeQuality.set(resolved, tree.snapshotQuality);
+  return resolved;
 }
 
 function refBody(ref: string): string {
-  return ref.startsWith('@') ? ref : `@${ref}`;
+  return ref.replace(/^@/, '').replace(/~s\d+$/, '');
 }
 
 function centerOf(node: SnapshotNode): Point | undefined {
@@ -318,7 +435,11 @@ function centerOf(node: SnapshotNode): Point | undefined {
 }
 
 /** A selector chain: `||` alternatives, each a conjunction of `key=value` terms. */
-function matchesSelector(node: SnapshotNode, selector: string): boolean {
+function matchesSelector(nodes: SnapshotNode[], selector: string): SnapshotNode | undefined {
+  return nodes.find((node) => nodeMatchesSelector(node, selector));
+}
+
+function nodeMatchesSelector(node: SnapshotNode, selector: string): boolean {
   const actual: Record<string, string | undefined> = {
     id: node.identifier,
     label: node.label,
@@ -427,12 +548,15 @@ async function dispatchHover(
 
 async function finish<TExtra extends Record<string, unknown>>(
   config: AgentDeviceRuntimeConfig,
+  rules: Rules,
   resolved: ResolvedInteractionTarget,
   options: CommandOptions,
   extra: TExtra,
 ) {
   const evidence = options.verify ? await verifyEvidence(config, resolved, options) : undefined;
-  const settle = options.settle ? await settleObservation(config, resolved, options) : undefined;
+  const settle = options.settle
+    ? await settleObservation(config, rules, resolved, options, options.settle)
+    : undefined;
   return {
     ...resolved,
     ...extra,
@@ -461,9 +585,26 @@ async function verifyEvidence(
 
 async function settleObservation(
   config: AgentDeviceRuntimeConfig,
+  rules: Rules,
   resolved: ResolvedInteractionTarget,
   options: CommandOptions,
+  settle: SettleParams,
 ): Promise<SettleObservation> {
+  if (rules.observeSettle) {
+    return await rules.observeSettle({
+      settle,
+      baseline: resolved.kind === 'point' ? undefined : resolved.preAction?.nodes,
+      baselineQuality: resolvedTreeQuality.get(resolved),
+      capture: (capture) =>
+        captureAndStoreSnapshot(config, {
+          session: options.session,
+          requestId: options.requestId,
+          signal: capture?.signal ?? options.signal,
+          preferredBackend: capture?.preferredBackend,
+          includeRects: true,
+        }),
+    });
+  }
   const captures = resolved.kind === 'point' ? 2 : 1;
   for (let capture = 0; capture < captures; capture += 1) {
     await config.backend.captureSnapshot?.(context(config, options), { interactiveOnly: true });

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from '../../__tests__/support/request-router-dispatch-mocks.ts';
 
-import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { replayScriptSourceBundleFor } from '../../__tests__/support/replay-script-source-fixture.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('../../core/device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));

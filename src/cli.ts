@@ -42,7 +42,7 @@ import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
-} from './remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';

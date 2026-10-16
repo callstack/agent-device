@@ -20,7 +20,7 @@
         "count": 1
       }
     },
-    "src/client/client-companion-tunnel-worker.ts": {
+    "packages/react-native/src/companion/client-companion-tunnel-worker.ts": {
       "complexity_high": {
         "count": 1
       }
@@ -118,6 +118,6 @@
     "packages/platform-android/src/ui-hierarchy.ts:high impact",
     "packages/platform-android/src/sdk.ts:high impact",
     "src/daemon-client/daemon-client-lifecycle.ts:complexity",
-    "src/client/client-companion-tunnel-worker.ts:complexity"
+    "packages/react-native/src/companion/client-companion-tunnel-worker.ts:complexity"
   ]
 }

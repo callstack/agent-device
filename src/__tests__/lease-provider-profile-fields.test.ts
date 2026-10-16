@@ -16,7 +16,7 @@ import { createProviderDeviceRuntimeRequestProviders } from '../provider-device-
 import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,
-} from '../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { createTransport } from './client-transport-fixture.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { makeTempWorkspace } from './cli-config-fixtures.ts';

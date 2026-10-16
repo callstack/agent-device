@@ -990,19 +990,23 @@ anchor, not as a proposed commitment.
   `interaction-targeting` and the android UI-hierarchy fixtures) and
   `src/__tests__/snapshot-desktop-surface.test.ts` (pinned to the root
   eager-import-closure fixtures).
-- `src/screenshot-diff/*.ts` (region split/overlay/summarization/component composition) —
-  pixel-diff computation and PNG decode/encode already call capture-kit's `png`/
-  `png-worker-client`; the root files remain for daemon/CLI diff-report composition.
-  Equivalent: none (built atop already-migrated capture-kit mechanics).
+- `src/screenshot-diff/*.ts` (region split/overlay/summarization/component composition, with its
+  test) — **migrated to `packages/capture-kit/src/`** beside the pixel worker and screenshot
+  overlays it was built on. The CLI and command output consume it through
+  `@agent-device/capture-kit/screenshot-diff`, `/screenshot-diff-regions`, and
+  `/screenshot-diff-overlay-matches`.
 - `src/provider-device-runtime.ts`, `src/provider-device-runtimes.ts`,
   `src/provider-limrun-runtime.ts`, `src/provider-webdriver.ts`. Mostly already thin: the bulk of
   WebDriver and Limrun provider logic lives in `packages/provider-webdriver/src/` and
   `packages/provider-limrun/src/`; these root files are the composition-time wiring, comparable in
   role to `src/platform-runtime.ts` itself.
 - `src/core` (R13-governed consumer seams), `src/commands`, `src/cli`, `src/cli-schema`,
-  `src/mcp`, `src/client`, `src/sdk`, `src/ai-sdk`, `src/remote`, `src/request`, `src/metro`.
+  `src/mcp`, `src/client`, `src/sdk`, `src/ai-sdk`, `src/remote`, `src/request`.
   Not migration targets: these are command-surface, protocol-projection, and
   daemon-owned zones this ADR keeps in `src/` by design, not residue awaiting a package.
+- React Native development tooling lives in `@agent-device/react-native`: Metro preparation and
+  session bindings, companion tunnels, component inspection, and render profiling share one
+  package. CLI output and SDK session normalization remain application adapters in `src/`.
 
 Neither number has an owning issue, gate, or accepted budget yet. Treat both as inputs to a
 maintainer decision, not as a ratchet.

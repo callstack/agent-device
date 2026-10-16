@@ -8,8 +8,8 @@ import {
 } from '@agent-device/kernel/errors';
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
-import { materializeRemoteArtifacts } from '../remote/daemon-artifacts.ts';
-import { localizeRemoteDaemonError } from '../remote/remote-request-diagnostics.ts';
+import { materializeRemoteArtifacts } from '@agent-device/remote/daemon-artifacts';
+import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import {
   leaseScopeFromRequest,

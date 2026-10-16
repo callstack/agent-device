@@ -41,7 +41,7 @@ function expectInvalidArgs(run: () => unknown, message: string): void {
 describe('settings usage', () => {
   test('folds settings that share a form into one line', () => {
     expect(SETTINGS_USAGE_OVERRIDE.split(' | ')).toEqual([
-      'settings <wifi|airplane|location|animations> <on|off>',
+      'settings <wifi|airplane|mobile-data|location|animations> <on|off>',
       'settings location set <lat> <lon>',
       'settings appearance <light|dark|toggle>',
       `settings text-size [${TEXT_SIZE_CATEGORIES.join('|')}]`,
@@ -56,7 +56,7 @@ describe('settings usage', () => {
 
   test('the invalid-args message lists the same forms, with the last one as an alternative', () => {
     expect(SETTINGS_INVALID_ARGS_MESSAGE).toMatch(
-      /^settings requires <wifi\|airplane\|location\|animations> <on\|off>, .*, or permission <grant\|reset> <accessibility\|screen-recording\|input-monitoring>$/,
+      /^settings requires <wifi\|airplane\|mobile-data\|location\|animations> <on\|off>, .*, or permission <grant\|reset> <accessibility\|screen-recording\|input-monitoring>$/,
     );
   });
 
@@ -235,6 +235,16 @@ describe('settingsAppScope', () => {
     ['apple', ' PERMISSION ', 'GRANT', 'app-scoped'],
   ] as const)('%s %s %s is %s', (family, setting, state, scope) => {
     expect(settingsAppScope(family, setting, state)).toBe(scope);
+  });
+});
+
+describe('settingsAppScope mobile-data', () => {
+  test('mobile-data switches the whole device wherever it is served', () => {
+    expect(settingsAppScope('mobile', 'mobile-data', 'on')).toBe('device-level');
+    expect(settingsAppScope('mobile', 'mobile-data', 'off')).toBe('device-level');
+    // No Apple target serves it; its refusal belongs to the leaf, not to the app.
+    expect(settingsAppScope('apple', 'mobile-data', 'on')).toBe('unknown');
+    expect(settingsAppScope('macos-host', 'mobile-data', 'on')).toBe('unknown');
   });
 });
 

@@ -232,7 +232,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       path.join(installedPackageRoot, 'dist/src/plugins/webdriver.d.ts'),
     );
     assert.ok(webDriverPluginTypes.length < 5120);
-    assert.match(pluginTypes.toString(), /export \{ ProviderPluginHost \}/);
+    assert.match(pluginTypes.toString(), /export (?:type )?\{ ProviderPluginHost \}/);
     metroPort = await listenOnLoopback(metroServer);
     t.after(async () => {
       await closeLoopbackServer(metroServer);

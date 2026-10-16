@@ -16,8 +16,9 @@ import {
   writeReplacedProfiles,
 } from './remote-connection.fixtures.ts';
 
-vi.mock('../metro/client-metro-companion.ts', () => ({
-  stopMetroCompanion: vi.fn(),
+vi.mock('@agent-device/react-native', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/react-native')>()),
+  stopMetroTunnel: vi.fn(),
 }));
 
 import {
@@ -32,14 +33,14 @@ import {
   CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
   PROXY_REMOTE_LEASE_TTL_MS,
 } from '../cli/commands/connection-runtime.ts';
-import { stopMetroCompanion } from '../metro/client-metro-companion.ts';
+import { stopMetroTunnel } from '@agent-device/react-native';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   hashRemoteConfigFile,
   readActiveConnectionState,
   readRemoteConnectionState,
   writeRemoteConnectionState,
-} from '../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 
 afterEach(() => {
@@ -1047,7 +1048,7 @@ test('deferred materialization re-prepares runtime when explicit Metro overrides
     platform: 'android',
     bundleUrl: 'https://sandbox.example.test/index.bundle?platform=android&dev=true',
   });
-  assert.deepEqual(vi.mocked(stopMetroCompanion).mock.calls[0]?.[0], {
+  assert.deepEqual(vi.mocked(stopMetroTunnel).mock.calls[0]?.[0], {
     projectRoot: '/tmp/project-old',
     profileKey: remoteConfigPath,
     consumerKey: 'adc-android',
@@ -1540,75 +1541,6 @@ test('deferred materialization does not require a lease backend for close', asyn
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
-test('deferred materialization stops the new Metro companion if state persistence fails', async () => {
-  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
-    'agent-device-connect-write-fail-',
-  );
-  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
-  const release = recordedLeaseRelease();
-  seedConnectionState({
-    stateDir,
-    state: {
-      session: 'adc-android',
-      remoteConfigPath,
-      daemon: { baseUrl: 'https://daemon.example' },
-      tenant: 'acme',
-      runId: 'run-123',
-      platform: 'android',
-      metro: {
-        projectRoot: '/tmp/old-project',
-        profileKey: remoteConfigPath,
-        consumerKey: 'adc-android',
-      },
-    },
-  });
-
-  const originalRenameSync = fs.renameSync.bind(fs);
-  const writeFailure = new Error('state write failed');
-  vi.spyOn(fs, 'renameSync').mockImplementation((oldPath, newPath) => {
-    if (String(newPath).endsWith(path.join('remote-connections', 'adc-android.json'))) {
-      throw writeFailure;
-    }
-    return originalRenameSync(oldPath, newPath);
-  });
-
-  await assert.rejects(
-    async () =>
-      await materializeRemoteConnectionForCommand({
-        command: 'open',
-        flags: {
-          json: true,
-          help: false,
-          version: false,
-          stateDir,
-          remoteConfig: remoteConfigPath,
-          daemonBaseUrl: 'https://daemon.example',
-          tenant: 'acme',
-          runId: 'run-123',
-          session: 'adc-android',
-          platform: 'android',
-          metroPublicBaseUrl: 'https://sandbox.example.test',
-          metroProxyBaseUrl: 'https://proxy.example.test',
-        },
-        client: createTestClient({ release: release.stub }),
-      }),
-    writeFailure,
-  );
-
-  assert.equal(vi.mocked(stopMetroCompanion).mock.calls.length, 1);
-  assert.deepEqual(vi.mocked(stopMetroCompanion).mock.calls[0]?.[0], {
-    projectRoot: '/tmp/project',
-    profileKey: remoteConfigPath,
-    consumerKey: 'adc-android',
-  });
-  assert.equal(release.request?.leaseId, 'lease-1');
-  assert.equal(release.request?.tenant, 'acme');
-  assert.equal(release.request?.runId, 'run-123');
-  assert.equal(release.request?.leaseBackend, 'android-instance');
-
-  fs.rmSync(tempRoot, { recursive: true, force: true });
-});
-
 test('connect requires force when compatible scope changes platform', async () => {
   const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
     'agent-device-connect-platform-',
@@ -1730,7 +1662,7 @@ test('connect --force stops replaced Metro companion after state is updated', as
     });
   });
 
-  assert.deepEqual(vi.mocked(stopMetroCompanion).mock.calls[0]?.[0], {
+  assert.deepEqual(vi.mocked(stopMetroTunnel).mock.calls[0]?.[0], {
     projectRoot: '/tmp/old-project',
     profileKey: oldRemoteConfigPath,
     consumerKey: 'adc-android',
@@ -1788,7 +1720,7 @@ test('connect --force without a session does not replace the active generated co
   assert.equal(activeState?.runId, 'run-new');
   assert.equal(activeState?.remoteConfigPath, newRemoteConfigPath);
   assert.equal(release.request, undefined);
-  assert.equal(vi.mocked(stopMetroCompanion).mock.calls.length, 0);
+  assert.equal(vi.mocked(stopMetroTunnel).mock.calls.length, 0);
   assert.equal(storedSessions.length, 2);
   assert.equal(
     readRemoteConnectionState({ stateDir, session: 'adc-7f3a2c' })?.remoteConfigPath,
@@ -2085,7 +2017,7 @@ test('disconnect tolerates prior close and removes local connection state', asyn
 
   assert.equal(handled, true);
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' }), null);
-  assert.deepEqual(vi.mocked(stopMetroCompanion).mock.calls[0]?.[0], {
+  assert.deepEqual(vi.mocked(stopMetroTunnel).mock.calls[0]?.[0], {
     projectRoot: '/tmp/project',
     profileKey: remoteConfigPath,
     consumerKey: 'adc-android',

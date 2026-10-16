@@ -238,9 +238,21 @@
       "types": "./src/screenshot-density.ts",
       "default": "./src/screenshot-density.ts"
     },
+    "./screenshot-diff": {
+      "types": "./src/screenshot-diff.ts",
+      "default": "./src/screenshot-diff.ts"
+    },
+    "./screenshot-diff-overlay-matches": {
+      "types": "./src/screenshot-diff-overlay-matches.ts",
+      "default": "./src/screenshot-diff-overlay-matches.ts"
+    },
     "./screenshot-diff-pixels": {
       "types": "./src/screenshot-diff-pixels.ts",
       "default": "./src/screenshot-diff-pixels.ts"
+    },
+    "./screenshot-diff-regions": {
+      "types": "./src/screenshot-diff-regions.ts",
+      "default": "./src/screenshot-diff-regions.ts"
     },
     "./screenshot-overlay": {
       "types": "./src/screenshot-overlay.ts",

@@ -7,7 +7,7 @@ import { test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { SessionStore } from '../../../core/session-store.ts';
-import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 
 const { runReplayFixture, runReplayForTest, assertNoUnresolvedInterpolation } =

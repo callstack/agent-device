@@ -217,7 +217,11 @@ For broad refactors or when explicitly requested, run the deterministic core agg
 pnpm check
 ```
 
-`pnpm check` covers formatting, lint, typechecking, layering, dependency-graph parity, production
+Serialized validation (`pnpm check` and `check:affected --run`) requires macOS or Linux.
+On Windows, use the affected plan and direct focused checks.
+
+`pnpm check` takes the same host lock as `check:affected --run`, prints a receipt path, and writes
+logs under `.tmp/validation`. It covers formatting, lint, typechecking, layering, dependency-graph parity, production
 exports, MCP metadata, the distributable build, bundle ownership, Fallow, unit tests, and local smoke
 tests. It is intentionally not a simulation of every CI job: coverage, provider integration,
 history-backed compatibility, specialized toolchains, and live device/browser lanes remain separate.
@@ -238,8 +242,8 @@ Useful direct entry points:
 - `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
 - `pnpm fallow:baseline` — intentionally regenerate the reviewed Fallow health baseline
 
-See [`docs/agents/testing.md`](docs/agents/testing.md) for gate ownership, shared test utilities,
-mutation/fuzz lanes, contention policy, and test-speed rules. For real devices, follow
+See [`docs/agents/testing.md`](docs/agents/testing.md) for check selection and blocked validation; see
+[`test authoring`](docs/agents/test-authoring.md) for shared test utilities and test-speed rules. See [gate maintenance](docs/agents/gates.md) for mutation and fuzz harnesses. For real devices, follow
 [`docs/agents/device-verification.md`](docs/agents/device-verification.md); a fixture-backed test does
 not prove that a native path was active.
 

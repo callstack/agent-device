@@ -14,7 +14,7 @@ import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/t
 import {
   prepareRemoteRequestArtifacts,
   type PreparedRemoteRequest,
-} from '../remote/daemon-artifacts.ts';
+} from '@agent-device/remote/daemon-artifacts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';

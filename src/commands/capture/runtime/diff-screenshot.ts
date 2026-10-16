@@ -16,8 +16,8 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   compareScreenshots,
   type ScreenshotDiffResult,
-} from '../../../screenshot-diff/screenshot-diff.ts';
-import { attachCurrentOverlayMatches } from '../../../screenshot-diff/screenshot-diff-overlay-matches.ts';
+} from '@agent-device/capture-kit/screenshot-diff';
+import { attachCurrentOverlayMatches } from '@agent-device/capture-kit/screenshot-diff-overlay-matches';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import {
   createCommandTempFile,

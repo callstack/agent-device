@@ -1,0 +1,38 @@
+{
+  "name": "@agent-device/plugins",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Provider plugin manifest, installation store, host and loader for agent-device. Internal workspace package bundled into the published artifact.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provider-webdriver": "workspace:*"
+  },
+  "exports": {
+    "./connection": {
+      "types": "./src/connection.ts",
+      "default": "./src/connection.ts"
+    },
+    "./host": {
+      "types": "./src/host.ts",
+      "default": "./src/host.ts"
+    },
+    "./load": {
+      "types": "./src/load.ts",
+      "default": "./src/load.ts"
+    },
+    "./manifest": {
+      "types": "./src/manifest.ts",
+      "default": "./src/manifest.ts"
+    },
+    "./store": {
+      "types": "./src/store.ts",
+      "default": "./src/store.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
+  }
+}

@@ -432,6 +432,7 @@ A `click` or `press` whose target the daemon resolves to a point (`@ref` or sele
 - `fill` clears then types. `type` appends to the focused field and accepts text only: use `fill @ref "text"` to target a field, or `press @ref` then `type "text"`.
 - Use plain `fill` or `type` first. Add `--delay-ms` only when a debounced or search-as-you-type field misses characters, or the app must receive each incremental update; delayed typing enters characters one at a time instead of using a clipboard-style fallback.
 - `fill --text-stdin` reads the text from stdin so a secret never appears in process arguments. Pipe it with `printf %s`. It reads at most 64 KiB, removes one trailing newline, and refuses a terminal, empty input, invalid UTF-8, or an extra text argument. Output shows the value as `${VAR}` with `--record-as <VAR>` and as `[REDACTED]` otherwise, including in error messages and details. While script recording is armed, pass `--record-as <VAR>` or `--no-record`; passing neither is an error. Batch steps don't accept it.
+- The privacy controls for typed input (`--text-stdin` and `--record-as`) keep the literal out of agent-device's own responses, diagnostics, and recorded scripts. They do not rewrite what the platform records: on iOS, XCTest writes its own diagnostic logs and its `.xcresult` bundle, and typed text can appear in both, on a simulator or a physical device. Treat those as sensitive, and use test-only credentials when they may be kept or shared. See [Security & Trust](/docs/security-trust).
 - Android text entry is owned by `agent-device`. Don't fall back to raw `adb`, clipboard, or paste; if non-ASCII is unsupported on the current backend, report the gap. Android `fill` verifies the text and fails instead of retrying when the IME captures input.
 
 Text-entry errors and what to do:
@@ -631,6 +632,8 @@ agent-device settings wifi on
 agent-device settings wifi off
 agent-device settings airplane on
 agent-device settings airplane off
+agent-device settings mobile-data off
+agent-device settings mobile-data on
 agent-device settings location on
 agent-device settings location off
 agent-device settings location set 37.3349 -122.009
@@ -677,6 +680,9 @@ Device settings:
 
 - `settings animations off|on` (Android) sets the window, transition, and animator scales. Turn animations off to stabilize runs with heavy animation, and back on afterward.
 - `settings airplane on|off` (Android) needs the connectivity service's `cmd connectivity airplane-mode` command, available from Android 11. It reports the resulting `airplaneMode`; a build without that command fails with `UNSUPPORTED_OPERATION` without changing anything. Connectivity takes a moment to settle, so poll the app rather than asserting offline behavior immediately.
+- `settings mobile-data on|off` (Android over adb) switches mobile data with `svc data enable|disable` and reports the resulting `mobileData` from the global `mobile_data` row. If that row does not settle to the request within 2 seconds, it fails with `COMMAND_FAILED`: `error.details.reason` is `mobile-data-unreadable` if the final read is neither `0` nor `1`, or `mobile-data-not-applied` if it is the opposite state. Pair it with `settings wifi off` to move a session such as a video stream from Wi-Fi to cellular, and back with `settings wifi on`. Poll the app while the network hands over.
+- The read-back covers single-SIM targets only. A multi-SIM device stores the switch per subscription and can leave `mobile_data` unchanged, so the command may fail there even when the switch took effect. A target without an active SIM can also accept `svc data` without changing the row, and with Wi-Fi off it is offline rather than on cellular.
+- Mobile data is device-wide, so `--app` is refused with `setting_app_not_consumed`. Every target without adb refuses `mobile-data` with `UNSUPPORTED_OPERATION` before anything runs.
 - `settings text-size` reads the current size; `settings text-size <category>` sets one: `extra-small`, `small`, `medium`, `large`, `extra-large`, `extra-extra-large`, `extra-extra-extra-large`, `accessibility-medium`, `accessibility-large`, `accessibility-extra-large`, `accessibility-extra-extra-large`, or `accessibility-extra-extra-extra-large`. It works on iPhone and iPad simulators and on Android; every other target refuses both read and write. The read reports `category` and the target's own `platformValue` (iOS may capitalize it, for example `extra-Small`).
 - Android has only a font-scale multiplier, mapped so `large` is `1.0` and `accessibility-extra-extra-extra-large` is `3.2`. A value between rungs reads as the nearest category, with the exact multiplier in `platformValue`; an unset scale reads as `large`.
 - A running app adopts a new text size only at its next configuration change. Relaunch it (`open <app> --relaunch`) before asserting rendered sizes.
@@ -701,7 +707,7 @@ Permissions:
   - `app_not_installed` (`APP_NOT_INSTALLED`): the app resolves to nothing installed.
   - `session_app_required`: no session app and none named. Run `open <app>`, or name the app.
   - `setting_app_not_package` (`INVALID_ARGS`, Android): the name is an intent alias such as `settings`, not a package.
-  - `setting_app_not_consumed`: the change is device-wide and cannot take an app: `location set`, the Android `location on|off` toggle, and macOS permissions.
+  - `setting_app_not_consumed`: the change is device-wide and cannot take an app: `location set`, the Android `location on|off` toggle, macOS permissions, and `mobile-data`.
 - iOS targets: `all`, `camera`, `microphone`, `photos` (`full` or `limited`), `contacts`, `contacts-limited`, `notifications`, `calendar`, `location`, `location-always`, `media-library`, `motion`, `reminders`, `siri`. The simulator decides which it can change; one it refuses fails with `UNSUPPORTED_OPERATION` naming it. On current runtimes that is `notifications`, which `all` also leaves untouched.
 - Android targets: `all`, `calendar`, `camera`, `contacts`, `location`, `media-library`, `microphone`, `notifications`, `photos`. Targets covering several permissions apply only the ones the app declares and fail if it declares none; `all` applies every declared permission. The response reports `permission` (what you asked for) and `permissions` (what was changed).
 - macOS targets: `accessibility`, `screen-recording`, `input-monitoring`. `grant` checks or requests access and opens System Settings when needed; it never grants silently. `deny` is unsupported.

@@ -35,3 +35,13 @@ These are cross-route behavior requirements; their rationale and owning decision
 
 When changing one of these rules, update the relevant ADR, guarantee-matrix cell, contract scenario,
 and TypeScript/Swift parity table rather than describing a new exception here.
+
+## Replay and coordinates
+
+Element interactions support selector and `@ref`, then record a selector chain after resolution.
+Replay failures may re-resolve that chain only to produce a ranked divergence suggestion; ADR 0012
+retired silent script rewriting.
+
+Selector keys stay centralized in `@agent-device/selectors`; `is` predicates use
+`evaluateIsPredicate`. On macOS, snapshot rectangles are absolute in window space and point actions
+translate through the interaction root frame. Prefer selector or ref tests over raw coordinates.

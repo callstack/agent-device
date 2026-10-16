@@ -1,3 +1,4 @@
+import type { DeviceTarget, PlatformSelector } from '@agent-device/kernel/device';
 import type {
   DaemonServerMode,
   DaemonTransportPreference,
@@ -129,3 +130,17 @@ export type RemoteConnectionProfileFields = {
   deviceKey?: string;
   clientId?: string;
 };
+
+/** A resolved remote-config profile: the field groups above plus the device-selection fields. */
+export type RemoteConfigProfile = RemoteConfigMetroOptions &
+  CloudProviderProfileFields &
+  RemoteConnectionProfileFields & {
+    platform?: PlatformSelector;
+    target?: DeviceTarget;
+    device?: string;
+    udid?: string;
+    serial?: string;
+    iosSimulatorDeviceSet?: string;
+    androidDeviceAllowlist?: string;
+    session?: string;
+  };

@@ -1,184 +1,55 @@
-# Testing Notes
+# Validate a change
 
-Gate ownership lives in `scripts/check-affected/` and `scripts/gate/`.
+For mutations or base comparisons, use [isolated experiments](test-experiments.md).
 
-## Which gates a change needs
+## Run checks
 
-Three tiers:
+1. While editing, run the focused test or `pnpm check:quick`.
+2. Before pushing, commit the change. Run `pnpm check:affected --run --head <commit>`.
+3. For a broad refactor or an explicitly requested full gate, run `pnpm check`.
 
-1. While editing: a focused test or `pnpm check:quick`.
-2. On the exact pushed head (locally, or by a gate stage recording it on the PR):
-   `pnpm check:affected --run`. It derives the relevant local gates and lists checks CI or a
-   native toolchain owns.
-3. For a broad refactor, or when the full deterministic gate is requested: `pnpm check`.
+Serialized validation requires macOS or Linux. On Windows, use plan mode or focused checks.
+Both broad commands acquire the same host lock. Wait for the owner to finish, or cancel your waiter with Ctrl-C.
+Do not add lock wrappers or delete lock files. A wait ends after two hours. Nested validation fails immediately.
+Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
 
-GitHub stays authoritative for provider integration, full coverage, native builds, device lanes, and
-history-backed compatibility. To inspect the gate catalog or a plan:
+The runner prints progress and a receipt path with refs, checkout state, command logs, exits, skips, and Vitest results.
+Execution stops at the first failure. Unexecuted checks remain `not-run`.
 
-```sh
-pnpm check:affected
-pnpm check:affected --json
-pnpm gate --help
-```
+- `pnpm check:affected`: compact plan.
+- `pnpm check:affected --verbose`: plan with selection reasons.
+- `pnpm --silent check:affected --json`: JSON plan.
+- `pnpm --silent check:affected --run --json`: JSON execution receipt on stdout; progress on stderr.
+- `pnpm check:affected --run`: include staged, unstaged, and untracked changes for local feedback.
 
-`check:affected --run` reports coverage obligations without instrumenting; when related tests are
-selected, it runs one capped `vitest related` command. Run local coverage, then
-`check:coverage-crap` gates touched functions on that run's stamp (CONTRIBUTING.md).
+Only a passed receipt with `exactCommit: true` proves validation at the named commit.
+A dirty-tree pass is local feedback. Detected checkout changes invalidate the run.
+Initial/final checks detect persistent changes; they do not sandbox the checkout. Stop all edits during validation.
 
-Two selection traps recur:
+## Interpret selection
 
-- A response emitting `platform` or `appleOs` needs provider integration and coverage evidence;
-  only the provider project catches internal `apple` leaking onto the wire.
-- A workspace package manifest or TypeScript config can rewire all consumers, so the affected
-  selector fails open to the full gate set on purpose.
+A package manifest or TypeScript config can affect every consumer. A full selection for these changes is intentional.
+`FAIL-OPEN` means the selector could not safely narrow the set. Read `failOpenReasons` in plan JSON or `plan.failOpenReasons` in a receipt.
+Do not reduce selection to get a pass.
 
-Docs-only changes need no runtime tests or tests asserting prose. After the required gates, repeat
-or broaden only for changes, failures, or unresolved risks.
+Read required-check status on the PR. The receipt lists skipped checks and owners in `results[].reason`.
+GitHub owns full coverage, native builds, device lanes, provider integration, and history-backed compatibility.
+Related tests do not replace those obligations. Check the Integration Tests and Coverage jobs at the actual PR head.
+For docs-only changes, run the selected documentation checks. Do not add tests asserting prose.
 
-## Platform and live-device policy
+## A gate failed
 
-HarmonyOS has no provisioned CI emulator, physical device, DevEco image, or HDC installation. Unit,
-provider, and coverage tests mock the typed HDC seam. Real validation is local hardware evidence per
-`docs/agents/device-verification.md`. Do not add a CI lane that assumes a developer host.
+Keep failure attribution separate from validation status. Never call a failing gate passed.
 
-Apple runner changes run `pnpm check:xctest-selection` and build the affected target. The source
-`#if` guard is the XCTest lane classification — never maintain a second test-name list. Pure runner
-decisions use the macOS host lane; iOS/XCTest semantics need a simulator lane.
-The iOS PR lane derives platform-specific XCTests from Swift guards for runner changes;
-nightly runs the full suite.
+| Evidence | Next action | Outcome |
+| --- | --- | --- |
+| New failure caused by this change | Fix its owner. Rerun after the fix. | Validation failed until a new run passes. |
+| Suspected host contention or infrastructure fault | Save the log. Run the same failing command on unchanged base in an isolated checkout, without competing tests. | Cause unproven until compared. A solo pass does not prove contention. |
+| Same failure reproduced on unchanged base | Record SHAs, command, logs, and matching failure. Assign the blocker to a named person or linked issue. | Base-blocked. If publication is authorized, publish a draft with the blocker and remaining checks. Do not mark merge-ready. |
+| Base comparison unavailable or inconclusive | Record the missing tool/device/evidence and next action. | Blocked, cause unproven. An authorized draft can record this. |
+| Failure source fixed, environment repaired, or new upstream commit contains the fix | Run the failing check, then the affected gate on the current head. | Replace blocked status only with new evidence. |
 
-Local host-lane XCTest may need signing and automation permission:
-
-- System policy may refuse the unsigned bundle (`library load disallowed by system policy`, shown
-  as `Early unexpected exit … crashed with signal kill`). Rebuild signed:
-  `CODE_SIGN_IDENTITY="Apple Development"`, or pick an identity from
-  `security find-identity -v -p codesigning`.
-- The first run needs XCUITest automation permission for the host app.
-
-Live smoke commands and their environment contracts live with their harnesses:
-
-- web: `test/integration/smoke-web-platform.test.ts`
-- iOS: `test/integration/smoke-ios-simulator.test.ts` and
-  `test/integration/smoke-ios-simulator-coverage.test.ts`
-- concurrency: `test/integration/nightly/concurrency-torture.test.ts`
-
-Read the entry file before running a lane. Do not copy its environment matrix here — it changes.
-
-## Shared test utilities
-
-Before creating fixtures, look in `@agent-device/test-kit` and
-`packages/daemon/src/__tests__/support/`. Shared `DeviceInfo`, session, snapshot, store,
-runtime-fact, and mocked-binary values belong in a sibling fixture module, not in repeated test
-literals; a fixture one package uses is a `*.fixtures.ts` beside its module. The packages test-kit
-builds on (kernel, contracts, capture-kit, host-kit, daemon-contracts) cannot
-declare it; their tests keep helpers local. Never import test-kit in the `vi.mock` factory of a
-module its entry loads (`host-kit/process`, `command`, `file`): spy it in place, as
-`pinOwnProcessStartTime` does. Fixtures a package still exports (R83's legacy count) stay
-importable until moved.
-
-Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the run and
-removes it after every worker exits — skip per-test cleanup. An interrupted run may leave a
-directory behind; the next run prunes it once its owner and every process using its `TMPDIR` are
-gone.
-
-Mock the seam the subject consumes. A daemon handler that binds a runtime gets fake runtime facts
-and facets, not a mock of generic dispatch. Generic dispatch mocks are migration debt — do not add
-more. When an ADR 0019 command migrates, its tests move to the runtime seam in the same PR.
-
-Vitest workers may signal only themselves and their direct children; `hermetic-signal-setup.ts`
-rejects other process-table writes. Tests with fabricated PIDs mock `signalPidsBestEffort`,
-`signalProcessGroupBestEffort`, or the tool-provider seam. A real child the test spawned may be
-signalled directly.
-
-## Regression evidence
-
-Observe a regression test fail without the fix, then pass with it. For new or changed structural
-gates, plant a violation and verify the intended gate names it. Pure test moves retain their tests;
-verify discovery at the new path. If selection rules change, plant a failure to prove selection.
-
-A callback-based canary must observe semantic success, not just lifecycle completion — e.g. React
-Native Gesture Handler's
-[`onFinalize`](https://docs.swmansion.com/react-native-gesture-handler/docs/fundamentals/callbacks-events/)
-also fires on failed or interrupted recognition. Use an activation-dependent callback, or assert
-success state before publishing a pass.
-
-A device replay counts as automatic regression coverage only when an automatic PR or scheduled lane
-selects and runs it. Name the owning lane and confirm the scenario ran on the exact PR head. A
-replay in a manual or unselected tier is test material, not automatic evidence.
-
-For structured classifiers, pair the positive case with the closest negative. When an error message
-can be identical with and without a typed reason, the negative test must prove the message alone
-cannot activate retry, fallback, or recovery.
-
-Test through public interfaces; never add production exports or test-only dependency injection — a
-missing seam needs a real product seam.
-
-## Properties, fuzzing, and mutation
-
-Pure parser and geometry changes extend the shared fast-check arbitraries and properties — not just
-another example. Keep examples for a real past bug or a named decision. Reuse `PROPERTY_RUNS`
-budgets so property files stay inside the unit slow-test gate.
-
-Parser fuzz targets live in `scripts/fuzz/targets.ts`. Validation generators carry the invalid
-outcome they planted, so silent acceptance and wrong error codes are failures. Promote a discovered case with the command the harness prints — never
-hand-copy an unshrunk input.
-
-Mutation scope: `scripts/mutation/modules.ts#KERNEL_MODULES` (weekly), `scripts/mutation/run.ts#LANE_SOURCES`
-(PR canary; dispatch adds `LANE_DEPENDENCIES`). Scores are advisory; incomplete sweeps fail. Pilot protocol: `pnpm mutation:run --help`.
-
-## Before editing a shared module
-
-Run `pnpm depgraph affected` before touching a high-fan-in module:
-
-```sh
-pnpm depgraph affected packages/host-kit/src/command.ts
-pnpm depgraph affected packages/daemon/src/core/ref-frame.ts --json --limit 25
-```
-
-Use its dependent, command, and guarantee-cell report to scope inspection. `pnpm check:affected --run`
-selects gates independently from the diff; it does not consume the depgraph report.
-
-## Gate ownership
-
-`CHECK_CATALOG` is the executable check registry. CI owns a check only through the shared `run-gate`
-action with a literal gate id; `pnpm check:gate-manifest` verifies registration, workflow ownership,
-path reachability, and routed device lanes. Raw shell text cannot declare ownership.
-
-New check: update the catalog and its executable model.
-
-## Concurrency torture lane
-
-The harness uses a deterministic scheduler for modeled lock grants and a real request-scope
-serialization guard. A seed reproduces the scheduler trace and terminal invariant:
-
-```sh
-pnpm test:concurrency-torture
-TORTURE_SEED=1234 pnpm test:concurrency-torture
-```
-
-Lock plans come from the production request-lock decisions — never hand-author a parallel plan. The
-modeled boundary is documented in the harness module; every failure prints its exact replay command.
-
-## Test evidence and versioned inputs
-
-Run- or commit-stamped benchmark output is never committed under `scripts/`: produce it at run
-time or fetch it from the evidence branch. Versioned inputs (fuzz corpus, Maestro fixtures,
-schemas, `contracts/fixtures/` tables) are unaffected.
-
-## Speed rules
-
-Changing timeout failures that pass alone may be host contention. Reproduce on `origin/main` under
-the same load before classifying them as regressions.
-
-- Unit tests have no retry layer. Fix or remove flakes instead of hiding them behind retries.
-- Unit tests do not wait production time. Prefer budget-derived cadence, assert the caller passes
-  the right timeout to its tool seam, or use an existing clock seam.
-- The slow-test reporter enforces unit and integration budgets. Existing pins only shrink; a new
-  pin needs measured justification.
-- Test files over 1,000 lines may be no longer than at the merge-base with `origin/main`, and no
-  new test file may cross that line. Split the family before adding tests; shrinking needs no
-  gate edit.
-- Keep isolation enabled and the pool on forks; disabling isolation and changing pools did not
-  improve measured performance. Import the module under test, not a platform barrel.
-- Local Vitest runs use a four-worker cap. Override it when a run needs a different host share:
-  `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>` (clamped to host CPUs, ignored in CI).
+Match failures by check, location, diagnostic code, and assertion.
+The implementing agent owns diagnosis until a named owner or issue accepts the blocker.
+Do not loop on an unchanged failure. Do not widen timeouts, mask exit codes, or invoke CI authority as a local pass.
+Rerun failed CI once only when its log shows an infrastructure fault. Treat the same failure twice as a finding.

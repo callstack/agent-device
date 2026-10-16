@@ -11,7 +11,7 @@ import {
   resolveConnectionDeviceScope,
   type ConnectionDeviceScope,
   type RemoteConnectionState,
-} from '../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';

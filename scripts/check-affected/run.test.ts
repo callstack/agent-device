@@ -165,7 +165,7 @@ test('runChecks passes the selector change set to Vitest related', async () => {
   );
 });
 
-test('runChecks skips GitHub-authoritative checks and passes when locals succeed', async () => {
+test('runChecks skips CI checks, deduplicates related tests, and preserves local ordering', async () => {
   const executed: string[][] = [];
   const execute: CommandExecutor = async (command) => {
     executed.push(command);
@@ -194,19 +194,6 @@ test('runChecks skips GitHub-authoritative checks and passes when locals succeed
       `${skipped} is GitHub-authoritative and must not run locally`,
     );
   }
-});
-
-test('runChecks leaves coverage to CI and runs related tests once through Vitest config', async () => {
-  const executed: string[][] = [];
-  const execute: CommandExecutor = async (command) => {
-    executed.push(command);
-    return 0;
-  };
-  const plan = selectChecks({ changedFiles: ['unknown/path.xyz'], packageEntryFiles: [] });
-
-  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, { execute, cwd: '.' });
-
-  assert.equal(code, 0);
   const related = executed.filter((command) => command.includes('related'));
   assert.equal(related.length, 1);
   assert.ok(

@@ -30,7 +30,7 @@ import type { DaemonInvokeFn } from '@agent-device/daemon';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
-import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import type {
   DeviceInventoryProvider,
   ProviderDeviceRuntime,
