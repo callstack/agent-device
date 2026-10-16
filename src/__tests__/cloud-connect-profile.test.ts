@@ -1,3 +1,4 @@
+import { withCommandHost } from '@agent-device/host-kit/command';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -550,22 +551,21 @@ test('connect browserstack persists a local app artifact as an absolute path', a
   vi.stubEnv('BROWSERSTACK_ACCESS_KEY', 'browser-key');
 
   try {
-    const previousCwd = process.cwd();
-    process.chdir(tempRoot);
-    try {
-      await connectWithGeneratedProviderProfile({
-        stateDir,
-        positionals: ['browserstack'],
-        flags: {
-          platform: 'android',
-          device: 'Google Pixel 8',
-          providerOsVersion: '14.0',
-          providerApp: './sample.apk',
-        },
-      });
-    } finally {
-      process.chdir(previousCwd);
-    }
+    // The host the command runs in decides what `./sample.apk` is relative to.
+    await withCommandHost(
+      { host: { env: process.env, cwd: fs.realpathSync(tempRoot) }, requestEnv: undefined },
+      async () =>
+        await connectWithGeneratedProviderProfile({
+          stateDir,
+          positionals: ['browserstack'],
+          flags: {
+            platform: 'android',
+            device: 'Google Pixel 8',
+            providerOsVersion: '14.0',
+            providerApp: './sample.apk',
+          },
+        }),
+    );
 
     const state = readRequiredActiveState(stateDir);
     assert.equal(readGeneratedConfig(state.remoteConfigPath).providerApp, fs.realpathSync(appPath));

@@ -56,10 +56,17 @@ import {
 export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   const stateDir = resolveDaemonPaths(flags.stateDir, {
     cwd: commandHostEnvironment().cwd,
+    env: commandHostEnvironment().env,
   }).baseDir;
   const provider = readConnectProvider(positionals);
   assertConnectProviderUsage(provider, flags);
-  const resolved = await resolveConnectProviderProfile({ provider, flags, stateDir });
+  const resolved = await resolveConnectProviderProfile({
+    provider,
+    flags,
+    stateDir,
+    cwd: commandHostEnvironment().cwd,
+    env: commandHostEnvironment().env,
+  });
   const connectFlags = resolved.flags;
   const connectionMetadata = readRemoteConfigConnectionMetadata(resolved.remoteConfigPath);
   const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
@@ -422,6 +429,7 @@ function readRequestedConnectionState(flags: CliFlags): {
   const session = flags.session ?? 'default';
   const stateDir = resolveDaemonPaths(flags.stateDir, {
     cwd: commandHostEnvironment().cwd,
+    env: commandHostEnvironment().env,
   }).baseDir;
   return {
     session,

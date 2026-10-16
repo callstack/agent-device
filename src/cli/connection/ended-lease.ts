@@ -20,6 +20,7 @@ export function forgetEndedProxyLease(flags: CliFlags, response: DaemonResponse)
   if (endedLeaseIds.length === 0) return;
   const stateDir = resolveDaemonPaths(flags.stateDir, {
     cwd: commandHostEnvironment().cwd,
+    env: commandHostEnvironment().env,
   }).baseDir;
   const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
   if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;

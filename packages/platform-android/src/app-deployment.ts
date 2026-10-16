@@ -57,7 +57,7 @@ async function runBundletool(
   environment: AndroidAdbEnvironment,
 ): Promise<void> {
   const invocation = await resolveBundletoolInvocation(environment);
-  await runCmd(invocation.cmd, [...invocation.prefixArgs, ...args], { signal });
+  await runCmd(invocation.cmd, [...invocation.prefixArgs, ...args], { signal, env: environment });
 }
 
 function isAndroidAppBundlePath(appPath: string): boolean {

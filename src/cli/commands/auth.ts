@@ -9,6 +9,7 @@ export const authCommand: ClientCommandHandler = async ({ positionals, flags }) 
   const subcommand = positionals[0] ?? 'status';
   const stateDir = resolveDaemonPaths(flags.stateDir, {
     cwd: commandHostEnvironment().cwd,
+    env: commandHostEnvironment().env,
   }).baseDir;
   if (subcommand === 'status') {
     const status = summarizeCliSession({ stateDir });
