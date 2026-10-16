@@ -2,10 +2,7 @@
 
 ## Status
 
-Completed (2026-08-27). Accepted for staged adoption on 2026-08-09, with a successful checkpoint on
-2026-08-10 and broader-migration governance added on 2026-08-11. The historical checkpoint and
-per-unit evidence in sections 7–10 explain how the transition was kept shippable; they no longer
-authorize or schedule migration work.
+Completed (2026-08-27). Accepted on 2026-08-09. Completed process history is retained in git history.
 
 Amended 2026-08-26 while closing the Wave 6 residue: `host` covers host-scoped platform work through
 a narrow neutral typed service, not diagnostics alone. Host diagnostics, daemon-owner resource
@@ -72,9 +69,6 @@ recreate the old root path.
   host-scoped platform work through a neutral typed domain service: diagnostics, owner cleanup, or
   managed tooling. The command binds no device runtime as its own execution shape, and any
   device-runtime leg rides another command's declared use.
-- During adoption, the first real slices paused for an explicit continue/revise/stop checkpoint.
-  Later units were move-dominated: platform mechanics left root `src/` for platform packages and
-  exceptional shipped-size growth required an individual justification.
 - Evidence is tiered by what a unit imports: request-scoped device units prove facts, operations,
   and parity cells; only durable-resource units carry the section 4–5 lifecycle evidence.
 - A handler binds once with its execution use. Admission, `capabilities`, and doctor questions use
@@ -573,203 +567,9 @@ shrinks the cycle lowers the zone ceilings in the same change rather than leavin
 
 ### 7. Adoption checkpoint (historical)
 
-No command migration beyond the metadata/package substrate and complete `devices`, `logs`, and
-`network` command cutovers began until this ADR's Status recorded **continue**. `network` was included
-because it consumes the app-log resource. Daemon-owned generic session teardown may invoke the
-neutral app-log handle's forced-disposal contract without changing `close`'s legacy platform adapter;
-the `logs` unit proves that path through `close`. If `close`, `open`, or another command instead must
-bind a runtime or select app-log platform behavior, its full unit must be named in Status before the
-substrate lands. `logs` is the deliberate first descriptor/reattachment pilot, not merely a
-request-lifetime handle exercise.
-
-Before the substrate lands, the tracking issue records and reviews the exact commands, thresholds,
-scenario denominator, and scoped counts used below. The same measures are reported from the clean
-committed checkpoint tree.
-
-The checkpoint records exactly one outcome:
-
-- **continue**: every hard evidence item passes and broader command migration may proceed;
-- **revise**: amend the contracts/ADR, rerun the checkpoint, and begin no further command migration; or
-- **stop**: abandon broader migration; already-landed command units remain coherent or are retired by
-  a separate explicit decision.
-
-Any failed hard item requires **revise** or **stop**; recording evidence of the failure is not
-evidence for **continue**.
-
-Evidence must cover:
-
-- one platform-execution path, an unchanged ADR 0003 route/policy projection, and zero old capability
-  closures, tags/maps, or concrete daemon platform imports for each migrated command;
-- package direction and the absence of daemon request/session/command types in platform packages;
-- independent package builds/declarations, metadata-eager/implementation-lazy loading, and reviewed
-  startup/build/package thresholds;
-- typed runtime-use narrowing and a planted-red narrowing-gate violation;
-- six-family runtime ownership, six local inventory sources, provider inventory sources, and
-  independently enumerated leaf/device/provider support parity and scenario counts;
-- provider-first fail-closed behavior plus unique restart-stable exact-owner references;
-- rollback after every partial bind acquisition and published-binding disposal without
-  persistent-helper shutdown;
-- descriptor persistence and exact-owner recovery after loss of a process-local handle, including
-  validated decoding, resumed control for reattachable cells, executable descriptor-only cleanup,
-  and explicit cleanup-only/version-unreattachable behavior;
-- pending-handle cleanup across every start/persist/adopt/transfer gap, durable-handle transfer,
-  serialized or native-atomic fencing, idempotent teardown, and operation/cleanup error precedence;
-- semantic/provider/device parity for `devices`, `logs`, and `network`;
-- unchanged-or-lower R7/R10, type-cycle, and external-daemon-type ratchets; and
-- numeric before/after daemon platform import, branch, and tag counts with a strict net decrease.
-
-The seam is revised or stopped before broader migration if a platform package needs root/daemon or
-sibling-platform imports; a command needs old/new or provider/local execution fallback; runtime
-facets degenerate into tags, command switches, or opaque execution payloads; leaf/provider facts
-require default fallthrough; `SessionState` names/exposes concrete platform/provider types or raw
-mechanics rather than the permitted neutral live handle; a persisted record bypasses the validated
-neutral envelope or facet-owned descriptor codec, or contains raw live mechanics; implementation
-laziness cannot be preserved; R7/R10/type-cycle pressure grows; or the landed slices add more daemon
-platform ownership than they remove.
-
-#### Checkpoint result: continue under the revised cumulative budget (2026-08-10)
-
-The final checkpoint compares `44c298d7f3a0ef84bc47f34c54d88b6c9eeb0df2` with stack head
-`457fafe6399a95a4ddbfac57f02b3a7fe4157a54` on the same host and toolchain. Merged `devices`
-`c06bed9f773a27ae0a02cb012570def2f2d0b90e` is part of that range; rebasing the remaining PRs onto it
-does not reset the denominator. The earlier `99f5af1b7` checkpoint missed a stale owned-marker wedge,
-Apple scoped-provider bypass, Android optional-recovery loss, and absolute network line-number
-regression. The later cleanup review found a cross-device retained-marker wedge, a manual-recovery
-hint that remained blocked until daemon restart, and an Android app-log stream that stayed pinned to
-the pre-relaunch app PID. Each correction was observed red before its focused test passed; the final
-admission test proves removal of the matching retained marker permits a second start in the same
-daemon process. On exact final logs head `188795386`, a controlled Android relaunch moved the app from
-PID 10952 to 11455, rotated the durable logcat marker to PID 11455, and retained both before/after
-canaries plus the new process output in one `app.log`. Guarded daemon/dead-child recovery separately
-terminalized the manifest and allowed a clean second start.
-
-The required revision package is complete:
-
-- `@agent-device/capture-kit` is the private durable-capture implementation package. Contracts keeps
-  pure runtime types and plan models; capture-kit owns process/recovery/live-handle mechanics,
-  envelope/descriptor codecs, and network parsers. The dependency order is
-  `kernel < contracts < capture-kit < platform/provider/daemon`. A planted-red gate rejects process,
-  filesystem, or timer mechanics drifting into contracts. The package is wired into affected-check
-  selection, the layering test enumeration, and the workspace typecheck project list.
-- Canonical kernel device identity replaces the duplicate encoders while facts-shape validation stays
-  separate. The bounded Android/Harmony PID owner factory lives in capture-kit; Apple and Limrun stay
-  custom, there is no network factory, and all loaders retain their lazy boundary. The managed-command
-  allowlist, unused façade exports, public Limrun runtime-module declaration leak, quadratic JSON walk,
-  and duplicate lifecycle/reconnect mechanics are gone. The temporary Android implementation files
-  introduced by the devices PR are also absent from contracts at this checkpoint.
-- Plan-declared app-session requirements replace repeated handler guards. Persisted durable lifecycle
-  is `open | completed`, with transient phase retained as metadata. A daemon-owned admission ledger
-  scopes decodable evidence by device identity, rechecks manually removed legacy markers, bounds
-  undurable blocks, and remains subordinate to the durable manifest. Discriminated teardown settles
-  app-log state, re-reads the replaced session record, then runs generic teardown, avoiding the stale
-  reference and double-cleanup path.
-
-The final gates passed:
-
-- `pnpm check:affected --run` at `457fafe63` passed 799 test files / 6,424 tests with 2,097/2,401
-  changed executable lines covered (87.34%), plus format, lint, typecheck, build/declarations,
-  published-package clean install, fallow, provider integration, replay compatibility, and
-  integration-progress checks.
-- `pnpm check:layering` passed 131 structural/model tests and scanned 1,157 production source files.
-  R11 owns 17 workspace packages behind 39 exported subpaths with no root back-imports; R13 keeps six
-  private implementation-lazy platform packages above capture-kit behind one canonical composition
-  root and its single private provider-composition implementation submodule; the historical R14
-  and R15 rules retained one typed route for `logs` and `network` with no legacy route.
-- Six local inventory/runtime owners, all enumerated Apple leaf/kind cells, and the production
-  BrowserStack, AWS Device Farm, and Limrun provider modes remain covered. Provider ownership and
-  inventory are fail-closed; exact-owner recovery and provider-authoritative tests prove there is no
-  provider-to-local fallback. Durable tests cover every start/persist/adopt gap, exact-owner recovery,
-  cleanup-only and descriptor-only cleanup, fencing, idempotence, and primary-error precedence.
-- R7/R10 remain at 23 writer-owned `SessionState` fields and 29 owner claims, with all 34 fields
-  classified. The largest type cycle is 46 against the 47-file ceiling, and the two external
-  production `daemon/types.ts` importers are unchanged. Checkpoint-owned `logs`/`network` platform
-  decision lines remain zero.
-
-Issue 1704 revised the budget for this checkpoint for three explicit reasons: capture-pipeline
-reliability through fenced ownership and exact recovery, durable cloud log streaming that did not
-exist in the baseline, and a reusable durable-capture substrate. This is not a new observability
-layer: the CLI-observable `logs` behavior remains parity work. The budget stays cumulative from
-`44c298d7f`; the exact clean post-revision measurement is the reviewed upper bound for this checkpoint,
-not a reusable allowance for future units:
-
-| Metric             | Original baseline | Revised cumulative bound / checkpoint |              Change |
-| ------------------ | ----------------: | ------------------------------------: | ------------------: |
-| Raw JavaScript     |       2,036,067 B |                           2,131,689 B | +95,622 B (+4.696%) |
-| Gzipped JavaScript |         659,646 B |                             695,134 B | +35,488 B (+5.380%) |
-| npm tarball        |         797,027 B |                             826,761 B | +29,734 B (+3.731%) |
-| npm unpacked       |       2,781,186 B |                           2,878,492 B | +97,306 B (+3.499%) |
-
-The controlled 15-run startup medians showed no regression (`--version` 94.5 ms to 47.4 ms;
-`--help` 91.2 ms to 72.0 ms). Module-level source-map inspection found no duplicate implementation
-emission; the distribution cost is the accepted reliability/cloud/substrate decision above. Future
-units must define and review their own cumulative budget rather than inheriting this headroom.
-
-The recordings command unit has its own reviewed budget (2026-08-11). The cumulative denominator
-remains the original `44c298d7f` baseline; rebasing onto the completed checkpoint does not reset it.
-The immediate stack-base delta from durable-capture head `e3b0956b` is reported separately so the
-cost of this command unit stays visible. The exact #1724 head that reproduces this table is recorded
-in the acceptance comment before readiness. The increase pays for runtime-owned screen-recording
-transports, fenced artifact finalization and cross-daemon recovery, and provider parity. It is not
-unused checkpoint headroom and is not an allowance for a later command:
-
-| Metric             | Original baseline | Recording bound |    Cumulative change | Recording-only change |
-| ------------------ | ----------------: | --------------: | -------------------: | --------------------: |
-| Raw JavaScript     |       2,036,067 B |     2,166,159 B | +130,092 B (+6.389%) |   +32,026 B (+1.501%) |
-| Gzipped JavaScript |         659,646 B |       708,776 B |  +49,130 B (+7.448%) |   +12,902 B (+1.854%) |
-| npm tarball        |         797,027 B |       836,426 B |  +39,399 B (+4.943%) |    +8,987 B (+1.086%) |
-| npm unpacked       |       2,781,186 B |     2,913,430 B | +132,244 B (+4.755%) |   +32,494 B (+1.128%) |
-
-These bounds admit only the completed recordings cutover. Every subsequent command unit must define
-and review both its original-baseline cumulative bound and its immediate stack-base delta.
-
-The tracking issue owns command order, PR/file lists, test-only compatibility fixtures, exact
-benchmark commands and thresholds, raw evidence, and reviewers. Temporary fixtures never authorize
-a production bridge, duplicate route, or recorded package back-import. After the checkpoint, this
-ADR's status records its outcome; it does not retain a migration diary.
+The completed checkpoint procedures and results are retained in git history.
 
 ### 8. Broader migration was move-dominated and evidence-tiered
-
-The checkpoint and recordings budgets paid for machinery that later units reuse; they are not a
-precedent for growth. Every post-checkpoint unit still defines its original-baseline cumulative
-bound and immediate stack-base delta, but the default expectation inverts: a unit relocates
-existing platform mechanics from root `src/` into platform packages and deletes superseded daemon
-code, so its shipped-size delta trends to zero or negative. The unit's review reports root bytes
-removed against package bytes added; net growth is exceptional and each contributing addition is
-named and justified individually. Contract modules stay vocabulary-thin under the existing
-capture-kit rule; per-unit type inflation is size growth and is reviewed as such.
-
-#### W5 Android family accounting (PR #2117)
-
-The W5 exact-head size report at `9fa2778` against `437465f37` reported these rounded CI values:
-
-| Metric             | Original baseline | W5 head | W5 delta |
-| ------------------ | ----------------: | ------: | -------: |
-| Raw JavaScript     |          2.48 MB | 2.49 MB | +8.2 kB  |
-| Gzipped JavaScript |         835.0 kB | 831.2 kB | -3.9 kB |
-| npm tarball        |         958.5 kB | 959.6 kB | +1.1 kB |
-| npm unpacked       |          3.32 MB | 3.33 MB | +9.0 kB  |
-
-At source level, the moved Android production tree accounts for 456,492 B removed from
-`src/platforms/android` versus 475,413 B in changed package targets, a +18,921 B relocation
-delta; the new root host/facade seam adds 19,978 B. The published +9.0 kB unpacked result is the
-package result, not a source-byte estimate. The increase is attributable to the named `mechanics`
-closure, the injected root host composition, and preserving deferred helper loading while root
-chunks are removed or repartitioned. The largest packed increase is the mechanics chunk; it is
-offset by deletion or shrinkage of the superseded root Android chunks.
-
-A smaller design that retained root re-export shims, a broad barrel, or ambient filesystem/process
-access would reduce gross source movement but violate this ADR's package-closure,
-no-compatibility-shim, named-facet, host-injection, and implementation-lazy constraints. This is
-exceptional W5 accounting, not reusable checkpoint headroom; after rebasing on #2116, the
-combined-family CI size result remains the authoritative current measurement.
-
-Raw per-unit parity, planted-red, and size evidence belongs in #1739 and its PRs; this ADR retains
-the decision, the evidence tiers, and the rule that each unit must justify exceptional growth
-without treating checkpoint budget as an allowance.
-
-A command surface deprecated for the next major was deleted rather than migrated. Where a public
-surface was narrowed, the narrowing merged first so the migration denominator was the surviving
-surface only.
 
 Evidence requirements followed what a unit imported, in two tiers. A **request-scoped device unit**
 used facts and operations only and proved its typed declaration and every fact cell. A
