@@ -18,7 +18,7 @@ import { AppError } from '@agent-device/kernel/errors';
 const ALERT_COMMAND_NAME = 'alert';
 
 const alertCommandDescription =
-  'Inspect, wait for, accept, or dismiss a platform alert. Use get before acting when the alert content matters; accept and dismiss change the active alert state. Each iOS XCTest execution activates once, then only observes. On the Apple runner, dismiss taps only a button no accept label claims and refuses ALERT_BUTTON_NOT_FOUND rather than guess; a prompt whose every button reads affirmative taps nothing. Inspect again after an unconfirmed action; never assume a timeout means nothing happened.';
+  'Inspect, wait for, accept, or dismiss a platform alert. Use get before acting when the alert content matters; accept and dismiss change the active alert state. Each iOS XCTest execution activates once, then only observes. On the Apple runner, dismiss taps a known decline or the sole button no accept label recognizes, and refuses ALERT_BUTTON_NOT_FOUND rather than guess; a prompt whose every button the accept labels recognize taps nothing. Inspect again after an unconfirmed action; never assume a timeout means nothing happened.';
 
 const alertCommandMetadata = defineFieldCommandMetadata(
   ALERT_COMMAND_NAME,

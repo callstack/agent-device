@@ -31,7 +31,17 @@ enum RunnerAlertButtonChoice {
     let normalized = normalize(label)
     return [
       "ok",
+      "accept",
+      "agree",
+      "i agree",
+      "got it",
+      "i understand",
       "allow",
+      "allow all",
+      "allow all requests",
+      "allow tracking",
+      "start tracking",
+      "use app",
       "yes",
       "continue",
       "done",

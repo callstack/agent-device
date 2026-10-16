@@ -6,6 +6,18 @@ extension RunnerTests {
     XCTAssertTrue(RunnerAlertButtonChoice.isAcceptButton("Open"))
   }
 
+  func testAlertDismissRefusesPlainAffirmativeLabelsOutsideTheOriginalList() {
+    // The sole-unclaimed fallback may only ever reach a label `isAcceptButton` does not read as
+    // affirmative, so consent copy that plainly reads affirmative must be claimed here too —
+    // otherwise dismissing a one-button "Accept" prompt would activate it (#3627).
+    for labels in [["Accept"], ["I Agree"], ["Got it"], ["Allow Tracking"], ["Use App"]] {
+      XCTAssertNil(
+        RunnerAlertButtonChoice.buttonIndex(for: labels, action: "dismiss"),
+        "dismiss must fail without a tap rather than consent through \(labels)"
+      )
+    }
+  }
+
   func testAlertDismissPicksTheTrackingPromptDeclineLabel() {
     // The App Tracking Transparency prompt, as iOS words it in English (#3627).
     XCTAssertEqual(
@@ -35,20 +47,22 @@ extension RunnerTests {
       RunnerAlertButtonChoice.buttonIndex(for: ["More info", "Allow", "OK"], action: "dismiss"),
       0
     )
+    XCTAssertEqual(
+      RunnerAlertButtonChoice.buttonIndex(for: ["Not this time", "Allow Tracking"], action: "dismiss"),
+      0
+    )
   }
 
   func testAlertDismissRefusesAPromptWhoseLabelsNeitherListRecognizes() {
     // A fully localized prompt: iOS localizes the affirmative too, so no label is claimed by
     // either list, no position identifies the decline, and a guess could authorize (#3627).
-    for labels in [
-      ["Demander à l’app de ne pas suivre", "Autoriser"],
-      ["Not this time", "Allow Tracking"]
-    ] {
-      XCTAssertNil(
-        RunnerAlertButtonChoice.buttonIndex(for: labels, action: "dismiss"),
-        "dismiss must fail without a tap rather than guess through \(labels)"
-      )
-    }
+    XCTAssertNil(
+      RunnerAlertButtonChoice.buttonIndex(
+        for: ["Demander à l’app de ne pas suivre", "Autoriser le suivi"],
+        action: "dismiss"
+      ),
+      "dismiss must fail without a tap rather than guess through a localized prompt"
+    )
   }
 
   func testAlertDismissRefusesAPromptWhoseEveryButtonIsAffirmative() {
@@ -60,8 +74,8 @@ extension RunnerTests {
     }
   }
 
-  /// Pins, not evidence of this change: both branches predate it and hold under the old rule
-  /// too, so they fail only if the accept path or the known-label branches regress.
+  /// A known decline label wins ahead of any unclaimed label, and accept takes the label its own
+  /// list claims even when a decline is present.
   func testAlertDismissStillPicksTheKnownCancelLabelAndAcceptStillTakesOK() {
     XCTAssertEqual(
       RunnerAlertButtonChoice.buttonIndex(for: ["Cancel", "OK"], action: "dismiss"),
@@ -73,7 +87,8 @@ extension RunnerTests {
     )
   }
 
-  /// Pin, not evidence of this change: the accept path is untouched by the dismiss rule.
+  /// accept never activates a listed decline: alone it is no acceptance, and with a choice it
+  /// takes only a label its own list claims.
   func testAlertAcceptKeepsItsGuardsOnTheDeclineLabelsItMustNotTake() {
     // A lone declining button is not an acceptance, and with a choice, accept takes the first
     // label the accept list claims.
@@ -102,8 +117,10 @@ extension RunnerTests {
       app.terminate()
     }
     XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    // Resolution is a pure read; a contended hosted simulator can spend far more than the 10 s
+    // command timeout on it, so it runs under the sibling fixtures' resolution allowance.
     let alert = try XCTUnwrap(
-      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
+      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.alertResolutionAllowance))
     )
     XCTAssertEqual(alert.buttons.map(\.label).last, "Allow", "the fixture keeps the affirmative button last")
 
@@ -130,7 +147,7 @@ extension RunnerTests {
     }
     XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
     let alert = try XCTUnwrap(
-      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
+      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.alertResolutionAllowance))
     )
 
     let response = handleAlert(
