@@ -208,10 +208,19 @@ test('an active AWS WebDriver device denies unsupported install from facts befor
     expect(server.calls).toHaveLength(providerCallsBeforeAdmission);
     expect(host.calls).toHaveLength(hostCallsBeforeAdmission);
   } finally {
-    if (lease) await daemon.callCommand('lease_release', [], flags, { meta });
-    await daemon.close();
-    await runtime.shutdown();
-    await server.close();
+    try {
+      if (lease) await daemon.callCommand('lease_release', [], flags, { meta });
+    } finally {
+      try {
+        await daemon.close();
+      } finally {
+        try {
+          await runtime.shutdown();
+        } finally {
+          await server.close();
+        }
+      }
+    }
   }
 });
 

@@ -288,7 +288,11 @@ function createRecordingUpstreamServer(baseUrl: string): {
 } {
   const forwarded: ForwardedRequest[] = [];
   const server = http.createServer((request, response) => {
-    if (request.method !== 'POST' || (request.url ?? '').split('?', 1)[0] !== '/rpc') {
+    const route = (request.url ?? '').split('?', 1)[0] ?? '';
+    const isRpc = request.method === 'POST' && route === '/rpc';
+    const isDiagnostics =
+      request.method === 'GET' && /^\/sessions\/[^/]+\/requests\/[^/]+\/diagnostics$/.test(route);
+    if (!isRpc && !isDiagnostics) {
       response.statusCode = 404;
       response.end('not found');
       return;
@@ -297,7 +301,6 @@ function createRecordingUpstreamServer(baseUrl: string): {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body = Buffer.concat(chunks);
-      const route = (request.url ?? '').split('?', 1)[0] ?? '';
       const entry: ForwardedRequest = { method: request.method ?? '', route, body: '' };
       forwarded.push(entry);
       const headers = new Headers();
@@ -312,7 +315,7 @@ function createRecordingUpstreamServer(baseUrl: string): {
         }
         headers.set(name, Array.isArray(value) ? value.join(', ') : value);
       }
-      const upstreamResponse = await fetch(new URL('/rpc', baseUrl), {
+      const upstreamResponse = await fetch(new URL(request.url ?? '/', baseUrl), {
         method: request.method,
         headers,
         ...(body.length > 0 ? { body } : {}),
