@@ -23,7 +23,7 @@ import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settl
 import { buildAmbiguousMatchError } from '@agent-device/daemon/testing/selector-match-errors';
 import { refMutationAdmissionResponse } from '@agent-device/daemon/testing/interaction/index';
 import { buildDeviceInUseBySessionError } from '@agent-device/daemon/testing/session-recovery-hints';
-import { buildDeviceClaimConflictError } from '@agent-device/daemon/testing/device/device-claim-conflict';
+import { buildDeviceClaimConflictError } from '@agent-device/daemon-contracts/device-claim-conflict';
 import {
   activateCompleteRefFrame,
   readRefMutationFrame,

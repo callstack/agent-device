@@ -151,6 +151,18 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           );
           return;
         }
+        if (command === 'exec') {
+          // The claim wrapper runs to the child's own finish and exits with the
+          // child's code; it never needs the daemon, a lease, or a client.
+          const { runExecCommand } = await import('./cli/commands/exec.ts');
+          await exitAfterFlush(
+            await runExecCommand(positionals, {
+              flags: ctx.effectiveFlags,
+              stateDir: ctx.daemonPaths.baseDir,
+            }),
+          );
+          return;
+        }
         maybeRunUpgradeNotifier({
           command,
           currentVersion: version,
@@ -700,7 +712,10 @@ function resolveActiveConnectionDefaults(options: {
     options.command === 'connection' ||
     options.command === 'daemon' ||
     options.command === 'plugins' ||
-    options.command === 'proxy'
+    options.command === 'proxy' ||
+    // exec claims local devices only; an active remote connection's platform and
+    // device selectors must not leak into its local device resolution.
+    options.command === 'exec'
   ) {
     return null;
   }

@@ -199,6 +199,37 @@ agent-device close --platform web
 - `audio probe start [durationSeconds] [bucketMs]` samples HTML media elements into RMS/peak dBFS buckets; see [Debugging & Profiling](/docs/debugging-profiling#audio-probes).
 - Not supported: tab/window/devtools control, network routing/interception/HAR, cookies/storage, downloads/uploads, arbitrary page scripting, multi-page orchestration, and raw browser diagnostics. Use `agent-browser` directly for those.
 
+## Run a build or external command under a device claim
+
+`exec` runs any external command while holding the exclusive claim on the selected local device, so a
+build that installs through the platform tools directly is fenced against `agent-device` sessions on
+that device:
+
+```bash
+agent-device exec --platform ios --udid <udid> -- expo run:ios --device <udid>
+agent-device exec --platform android --serial emulator-5554 -- adb install app-debug.apk
+```
+
+- While `exec` runs, another workspace's `open`, `boot`, or `install` on that device fails with
+  `DEVICE_IN_USE` and names the holder (`session exec:<command>`); it works again once `exec` exits.
+  `exec` itself refuses to start with the same error while another session or `exec` holds the device.
+  One exception, shared with every other claim: if the device reboots while `exec` holds the claim,
+  the reboot already ended the build, so `open` settles the holder's durable resources, takes the
+  claim, and reports the release in `warnings`.
+- The command's exit code is `exec`'s exit code. Ctrl+C, terminal hangup, and Ctrl-\ (`SIGINT`,
+  `SIGHUP`, `SIGQUIT`, `SIGTERM`) are forwarded to the command and its whole process group, `exec`
+  waits for it to exit, and only then attempts to release the claim; a release that fails or can't
+  attribute the record prints to stderr and leaves a claim
+  that `device release --stale` reports. A killed `exec` leaves a claim that the next `open` or `exec`
+  reconciles once its owner process is proven dead.
+- Claims exist only for local devices: `exec` refuses targets on a cloud provider lease. `exec` runs
+  on macOS and Linux hosts only; it refuses to start on Windows.
+- `exec` doesn't boot the device or launch your app; it only selects the device, holds the claim, and
+  runs the command. Boot the device first, or let the build boot it while no session holds the claim.
+
+See [Sessions](/docs/sessions#run-an-external-command-on-a-claimed-device) for how this claim fits the
+session and daemon claims.
+
 ## Device isolation scopes
 
 ```bash

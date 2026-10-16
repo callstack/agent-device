@@ -6,14 +6,14 @@ import {
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
+import { errorResponse } from '@agent-device/kernel/contracts';
+import type { DeviceClaimConflictReason } from '@agent-device/contracts/device';
 import {
   deviceClaimOwnerCannotRelease,
   deviceClaimRequiresStaleInspection,
   type DeviceClaimClassification,
   type InspectedDeviceClaim,
-} from '@agent-device/daemon-contracts/device-claims';
-import { errorResponse } from '@agent-device/kernel/contracts';
-import type { DeviceClaimConflictReason } from '@agent-device/contracts/device';
+} from './device-claims.ts';
 
 export function buildDeviceClaimInspectionCommand(
   device: DeviceInfo,

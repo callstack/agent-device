@@ -132,10 +132,6 @@
       "types": "./src/core/deferred-interaction-outcome.ts",
       "default": "./src/core/deferred-interaction-outcome.ts"
     },
-    "./testing/device/device-claim-conflict": {
-      "types": "./src/resources/device/device-claim-conflict.ts",
-      "default": "./src/resources/device/device-claim-conflict.ts"
-    },
     "./testing/device/device-ready": {
       "types": "./src/core/device/device-ready.ts",
       "default": "./src/core/device/device-ready.ts"

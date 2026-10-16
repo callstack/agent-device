@@ -4,8 +4,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   buildDeviceClaimConflictError,
   buildDeviceClaimInspectionCommand,
-} from '../device-claim-conflict.ts';
-import type { InspectedDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+} from './device-claim-conflict.ts';
+import type { InspectedDeviceClaim } from './device-claims.ts';
 
 const device: DeviceInfo = {
   platform: 'android',
