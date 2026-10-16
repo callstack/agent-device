@@ -29,10 +29,7 @@ import {
   resolveTargetDevice,
   type ResolveDeviceFlags,
 } from '@agent-device/device-selection/dispatch-resolve';
-import {
-  hasDeviceSelectionInput,
-  leaseDiscoveryContextFromFlags,
-} from '../../core/device/device-selector-intent.ts';
+import { hasDeviceSelectionInput } from '../../core/device/device-selector-intent.ts';
 import { ensureBoundDeviceReady } from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/screen-recording-recovery';
@@ -176,9 +173,10 @@ async function resolveRecordingSession(
  *
  * A request that names a session this daemon does not hold and states no device is answered from
  * the durable manifest the session address finds, never from a sweep of every device on the host:
- * a decodable manifest is re-resolved under the manifest's family (plus the request's host
- * scoping), and a start or a stop with no decodable manifest to recover from refuses with the
- * named-session error. `assertManifestBelongsToRequest` owns the proof that the resolved device
+ * a decodable manifest is re-resolved with the request's scope and lease keys under the manifest's
+ * family (admission proved the request states no device), and a start or a stop with no decodable
+ * manifest to recover from refuses with the named-session error.
+ * `assertManifestBelongsToRequest` owns the proof that the resolved device
  * and session address match the manifest.
  *
  * The two shapes that keep their chosen target are unchanged: a request that never named a
@@ -210,24 +208,20 @@ function namesSessionWithoutTarget(req: DaemonRequest): boolean {
 }
 
 /**
- * Re-resolves the device a durable manifest names: the manifest's family always, its identity flag
- * where the family has one, plus the request's host-scoping and lease/discovery selectors —
- * `iosSimulatorDeviceSet` and `androidDeviceAllowlist` say WHERE to look, the lease fields say WHO
- * may see the inventory, and none of them states WHICH device. Dropping any of them would resolve
- * a scoped or leased recording outside the scope or lease it started under. No request
- * device/identity selector reaches here: `assertManifestBelongsToRequest` proves the resolved
- * device against the manifest.
+ * Re-resolves the device a durable manifest names. Admission (`namesSessionWithoutTarget`) has
+ * already proven this request states no device, udid, serial, platform, or target, so spreading
+ * its flags carries exactly the scope and lease keys `ResolveDeviceFlags` declares — now and
+ * later — without carrying any device choice. The manifest then decides which device: family
+ * always, identity flag where the family has one. `assertManifestBelongsToRequest` proves the
+ * resolved device against the manifest.
  */
 async function resolveManifestDevice(
   params: RecordRuntimeHandlerParams,
   recorded: DeviceIdentity,
 ): Promise<DeviceInfo> {
-  const { iosSimulatorDeviceSet, androidDeviceAllowlist } = params.req.flags ?? {};
   const selector: ResolveDeviceFlags = {
+    ...(params.req.flags ?? {}),
     platform: recorded.family,
-    ...leaseDiscoveryContextFromFlags(params.req.flags),
-    ...(iosSimulatorDeviceSet === undefined ? {} : { iosSimulatorDeviceSet }),
-    ...(androidDeviceAllowlist === undefined ? {} : { androidDeviceAllowlist }),
   };
   const identityFlag = deviceIdentityFlag(recorded.family);
   if (identityFlag) selector[identityFlag] = recorded.id;
