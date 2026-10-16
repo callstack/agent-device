@@ -88,6 +88,39 @@ test('accepting a button alert records the tapped button and its coordinates', a
   assert.deepEqual('coordinates' in result ? result.coordinates : undefined, { x: 116, y: 638 });
 });
 
+test('accepting the Android 11+ permission sheet taps the preferred grant once', async () => {
+  runAndroidAdb.mockClear();
+  // The regression the maintainer asked for at the action seam: both permission_allow_* ids
+  // classify accept, and the shared preference table must land one tap on the lasting grant.
+  const sheet = [
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(
+      1,
+      'Allow Probe to access location in the background?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(
+      2,
+      'While using the app',
+      'permission_allow_foreground_only_button',
+      { x: 32, y: 1420 },
+      true,
+    ),
+    button(3, 'Only this time', 'permission_allow_one_time_button', { x: 32, y: 1490 }, true),
+    button(4, 'Deny', 'permission_deny_button', { x: 32, y: 1560 }, true),
+  ];
+  const result = await handleAndroidAlert(device, 'accept', {
+    captureNodes: dialogUntilPressed(sheet),
+  });
+
+  assert.equal(result.kind, 'alertHandled');
+  assert.equal(result.kind === 'alertHandled' ? result.button : undefined, 'While using the app');
+  assert.deepEqual('coordinates' in result ? result.coordinates : undefined, { x: 96, y: 1446 });
+  assert.equal(runAndroidAdb.mock.calls.filter(([, args]) => args.includes('tap')).length, 1);
+});
+
 test('a fallback Back dismissal (no matching button) carries no coordinates', async () => {
   runAndroidAdb.mockClear();
   const result = await handleAndroidAlert(device, 'dismiss', {

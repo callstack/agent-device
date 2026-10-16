@@ -76,3 +76,35 @@ test('the shared vocabulary classifies iOS variant grants on Android trees too',
   );
   assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, "Don't allow");
 });
+
+test('the Android 11+ permission sheet resolves its two grants by the preference table', () => {
+  // The shipped Android 11+ shape: permission_allow_foreground_only_button and
+  // permission_allow_one_time_button both classify accept by id, so the shared ranked choice
+  // (not uniqueness) must pick the lasting grant; main pressed it too, so a refusal here
+  // regresses a working route.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(
+      1,
+      'Allow Probe to access location in the background?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(
+      2,
+      'While using the app',
+      'permission_allow_foreground_only_button',
+      { x: 32, y: 1420 },
+      true,
+    ),
+    button(3, 'Only this time', 'permission_allow_one_time_button', { x: 32, y: 1490 }, true),
+    button(4, 'Deny', 'permission_deny_button', { x: 32, y: 1560 }, true),
+  ]);
+
+  assert.equal(
+    chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept')?.label,
+    'While using the app',
+  );
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, 'Deny');
+});

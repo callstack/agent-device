@@ -36,36 +36,91 @@ export type AlertCapture<TCandidate> =
   | { kind: 'undecided' };
 
 /**
- * The one button label vocabulary every tree-based alert backend classifies with. English-only,
- * matching the untranslated device locale the alert lanes are validated against; a localized
- * button classifies `neutral`, so acting legs refuse on the button-undecided reason rather than
- * guessing at a translation.
+ * The one button label vocabulary every tree-based alert backend classifies with, declared as a
+ * per-role preference table: each entry names one English label (regex only for spelling
+ * variants of the *same* label), earlier entries outrank later ones, so a sheet offering several
+ * grants resolves by declared preference ("while using the app" over "only this time") instead
+ * of tree order. English-only, matching the untranslated device locale the alert lanes are
+ * validated against; a localized button classifies `neutral`, so acting legs refuse on the
+ * button-undecided reason rather than guessing at a translation.
  */
-const ACCEPT_LABEL_PATTERN =
-  /^(?:ok|allow|allow all|allow once|allow all the time|allow while using (?:the )?app|allow notifications|always allow|yes|continue|save|confirm|turn on|open settings|while using the app|only this time)$/i;
+const ACCEPT_LABEL_PREFERENCES: readonly RegExp[] = [
+  /^allow while using (?:the )?app$/i,
+  /^while using the app$/i,
+  /^allow all$/i,
+  /^always allow$/i,
+  /^allow all the time$/i,
+  /^allow notifications$/i,
+  /^allow$/i,
+  /^ok$/i,
+  /^yes$/i,
+  /^continue$/i,
+  /^save$/i,
+  /^confirm$/i,
+  /^turn on$/i,
+  /^open settings$/i,
+  // One-time grants last: a sheet offering a lasting grant should not spend the tap here.
+  /^allow once$/i,
+  /^only this time$/i,
+];
 // `don.?t allow` covers the straight, missing, and typographic apostrophe in one alternate.
-const DISMISS_LABEL_PATTERN =
-  /^(?:cancel|deny|don.?t allow|not now|no|dismiss|close|close app|later|skip|ask app not to track)$/i;
+const DISMISS_LABEL_PREFERENCES: readonly RegExp[] = [
+  /^cancel$/i,
+  /^deny$/i,
+  /^don.?t allow$/i,
+  /^not now$/i,
+  /^no$/i,
+  /^dismiss$/i,
+  /^close$/i,
+  /^close app$/i,
+  /^later$/i,
+  /^skip$/i,
+  /^ask app not to track$/i,
+];
+
+const LABEL_PREFERENCES: Record<'accept' | 'dismiss', readonly RegExp[]> = {
+  accept: ACCEPT_LABEL_PREFERENCES,
+  dismiss: DISMISS_LABEL_PREFERENCES,
+};
 
 /** One button's action role under the shared vocabulary; anything unnamed is neutral. */
 export function classifyAlertButtonRole(label: string): AlertButtonRole {
   const trimmed = label.trim();
-  if (ACCEPT_LABEL_PATTERN.test(trimmed)) return 'accept';
-  if (DISMISS_LABEL_PATTERN.test(trimmed)) return 'dismiss';
+  if (ACCEPT_LABEL_PREFERENCES.some((pattern) => pattern.test(trimmed))) return 'accept';
+  if (DISMISS_LABEL_PREFERENCES.some((pattern) => pattern.test(trimmed))) return 'dismiss';
   return 'neutral';
 }
 
 /**
- * The one choice boundary for a shared choice: a role exactly one visible button carries, or
- * null when none does and when two or more do — pressing one of a duplicated choice would pick
- * a side the capture does not name, so duplicates refuse rather than resolve by tree order.
+ * A role-named button's place in the declared preference table, or null when its role came from
+ * something other than the vocabulary (Android id classifiers, localized labels).
  */
-export function selectUniqueAlertButtonByRole<TButton extends Readonly<{ role: AlertButtonRole }>>(
-  buttons: readonly TButton[],
-  role: 'accept' | 'dismiss',
-): TButton | null {
+function alertButtonPreferenceRank(label: string, role: 'accept' | 'dismiss'): number | null {
+  const index = LABEL_PREFERENCES[role].findIndex((pattern) => pattern.test(label.trim()));
+  return index === -1 ? null : index;
+}
+
+/**
+ * The one choice boundary for a shared choice: pick the action's role candidates by the declared
+ * preference table. A single candidate wins outright; several resolve when one outscores the
+ * rest; a tie on the same entry (the same label at two points) or vocabulary-ranked-free
+ * multiplicity returns null, because the capture then names no single physical button for the
+ * action. Distinct labels that share a role are not a refusal: the table ranks them.
+ */
+export function selectRankedAlertButtonByRole<
+  TButton extends Readonly<{ role: AlertButtonRole; label: string }>,
+>(buttons: readonly TButton[], role: 'accept' | 'dismiss'): TButton | null {
   const matching = buttons.filter((button) => button.role === role);
-  return matching.length === 1 ? (matching[0] ?? null) : null;
+  if (matching.length === 1) return matching[0] ?? null;
+  if (matching.length === 0) return null;
+  const ranked = matching
+    .map((button) => ({ button, rank: alertButtonPreferenceRank(button.label, role) }))
+    .filter((entry): entry is { button: TButton; rank: number } => entry.rank !== null)
+    .sort((a, b) => a.rank - b.rank);
+  if (ranked.length === 0) return null;
+  const [first, second] = ranked;
+  if (!first || (second && second.rank === first.rank)) return null;
+  return first.button;
 }
 
 /**
