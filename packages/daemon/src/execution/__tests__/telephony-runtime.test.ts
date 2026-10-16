@@ -138,31 +138,6 @@ test.each([
   expect(harness.bindDevice).not.toHaveBeenCalled();
 });
 
-test('refuses a physical device on the route with the fact reason, never sending', async () => {
-  const harness = runtimeHarness({
-    available: false,
-    reason: 'unsupported-device-kind',
-    hint: 'TELEPHONY-KIND-HINT-SENTINEL',
-  });
-  const resolved = await resolveBoundTelephonyRuntime({
-    platformServices: daemonPlatformServicesFixture(),
-    device: testDevice,
-    positionals: ['call', '5551234'],
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
-  });
-  expect(resolved.ok).toBe(false);
-  if (resolved.ok || resolved.response.ok) throw new Error('the kind fact admitted telephony');
-  expect(resolved.response.error).toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    message: 'telephony is not supported on this device',
-    hint: 'TELEPHONY-KIND-HINT-SENTINEL',
-    details: { reason: 'unsupported-device-kind' },
-  });
-  expect(harness.bindDevice).not.toHaveBeenCalled();
-  expect(harness.sendTelephonyEvent).not.toHaveBeenCalled();
-});
-
 test('rejects an unavailable exact-owner fact before binding', async () => {
   await expectRefusesUnavailableExactOwnerFact({
     command: 'telephony',

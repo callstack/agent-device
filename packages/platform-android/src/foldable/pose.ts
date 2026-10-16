@@ -139,7 +139,6 @@ async function readDeviceStates(
   return states;
 }
 
-/** The console answers `OK` or `KO: …` on stdout and exits 0 either way, so the reply is the verdict. */
 async function sendEmulatorPosture(
   device: DeviceInfo,
   pose: FoldPose,

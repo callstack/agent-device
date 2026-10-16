@@ -305,7 +305,7 @@ const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 
 const telephonyCommandDescription =
-  'Simulate an incoming phone call or SMS on a local Android emulator through its console: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
+  'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
 
 const backCommandMetadata = defineFieldCommandMetadata(BACK_COMMAND_NAME, backCommandDescription, {
   mode: enumField(BACK_MODES),
@@ -409,7 +409,7 @@ const telephonyFields = {
   text: stringField('Message text for sms; required for sms and refused for the call actions.'),
 };
 
-const telephonyCommandMetadata = defineFieldCommandMetadata(
+const telephonyFieldMetadata = defineFieldCommandMetadata(
   TELEPHONY_COMMAND_NAME,
   telephonyCommandDescription,
   telephonyFields,
@@ -420,6 +420,17 @@ const telephonyCommandMetadata = defineFieldCommandMetadata(
     },
   },
 );
+
+const telephonyCommandMetadata = {
+  ...telephonyFieldMetadata,
+  inputSchema: {
+    ...telephonyFieldMetadata.inputSchema,
+    oneOf: [
+      { properties: { action: constSchema('sms') }, required: ['text'] },
+      { properties: { action: enumSchema(TELEPHONY_CALL_ACTIONS) }, not: { required: ['text'] } },
+    ],
+  },
+};
 
 const backCliSchema = {
   usageOverride: 'back [--in-app|--system] [--settle]',
@@ -661,9 +672,9 @@ const tvRemoteCommandFacet = defineCommandFacet({
 const telephonyCommandFacet = defineCommandFacet({
   name: TELEPHONY_COMMAND_NAME,
   text: {
-    summary: 'Simulate an incoming call or SMS on a local adb-driven Android emulator',
+    summary: 'Simulate an incoming call or SMS on an Android emulator over adb',
     cliDetail:
-      'Local adb-driven Android emulators only, through the emulator console; WebDriver (Appium) and Limrun sessions refuse it. Quote the SMS text, or pass it as the remaining words. Re-snapshot after the event: the call screen or notification can cover the app.',
+      'Android emulators reached through adb only, including an ADB provider that forwards adb emu; WebDriver (Appium) and Limrun sessions refuse it. Quote the SMS text, or pass it as the remaining words. Re-snapshot after the event: the call screen or notification can cover the app.',
   },
   metadata: telephonyCommandMetadata,
   run: (client, input) => client.command.telephony(input),

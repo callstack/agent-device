@@ -51,7 +51,7 @@ async function executeTelephonyEvent(
     return {
       action: input.action,
       number: input.number,
-      textLength: input.text.length,
+      textLength: Array.from(input.text).length,
       message: `Simulated an incoming SMS from ${input.number}`,
     };
   }

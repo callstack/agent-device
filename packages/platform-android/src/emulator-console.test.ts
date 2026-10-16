@@ -25,7 +25,7 @@ test('runs the command under adb emu with the caller signal and a bounded timeou
   expect(mockAdb).toHaveBeenCalledExactlyOnceWith(ANDROID_EMULATOR, ['emu', 'posture', '3'], {
     signal,
     allowFailure: true,
-    timeoutMs: expect.any(Number),
+    timeoutMs: 10_000,
   });
 });
 

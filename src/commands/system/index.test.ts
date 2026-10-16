@@ -406,7 +406,7 @@ test('the CLI reader parses each action and joins unquoted SMS words', () => {
   });
 });
 
-test('the CLI reader refuses a malformed event before any request is written', () => {
+test('the CLI reader refuses a malformed event', () => {
   expect(() => telephonyCliReader(['sms', '5551234'], flags())).toThrow(
     expect.objectContaining({ code: 'INVALID_ARGS', message: expect.stringContaining('text') }),
   );

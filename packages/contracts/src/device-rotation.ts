@@ -217,24 +217,24 @@ export function parseFoldKeyframesJson(value: string): readonly FoldKeyframe[] {
  */
 export const TELEPHONY_CALL_ACTIONS = ['call', 'accept', 'cancel'] as const;
 export const TELEPHONY_ACTIONS = [...TELEPHONY_CALL_ACTIONS, 'sms'] as const;
-export type TelephonyAction = (typeof TELEPHONY_ACTIONS)[number];
+type TelephonyAction = (typeof TELEPHONY_ACTIONS)[number];
 type TelephonyCallAction = (typeof TELEPHONY_CALL_ACTIONS)[number];
 
 export const TELEPHONY_USAGE =
   'telephony call|accept|cancel <number> | telephony sms <number> <text>';
 
 /**
- * A caller number the emulator modem accepts: digits with an optional leading `+`, at most the
- * 20 digits a GSM address carries.
+ * A caller number: digits with an optional leading `+`, at most the 15 digits of an E.164 number,
+ * which also fits the emulator modem's 16-character call number field.
  */
-const TELEPHONY_NUMBER_PATTERN = /^\+?\d{1,20}$/;
+const TELEPHONY_NUMBER_PATTERN = /^\+?\d{1,15}$/;
 /**
  * The emulator console reads one command per line, so a line break inside the text would end the
  * `sms send` command and start another. Line breaks are escaped for the console instead (a CRLF
  * pair counts as one); every other control character, including a lone CR, is refused.
  */
 // eslint-disable-next-line no-control-regex
-const TELEPHONY_TEXT_FORBIDDEN_CHARACTERS = /[\u0000-\u0009\u000b-\u001f\u007f]/;
+const TELEPHONY_TEXT_FORBIDDEN_CHARACTERS = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/;
 
 /** Neutral intent for one telephony event, already validated by {@link parseTelephonyEventInput}. */
 export type TelephonyEventInput =

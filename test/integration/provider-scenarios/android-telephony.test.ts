@@ -120,6 +120,7 @@ test('Provider-backed integration Android telephony reports a console refusal wi
         /refused telephony accept/,
       );
       assert.equal((data.details as Record<string, unknown>)?.reason, 'telephony-console-refused');
+      assert.deepEqual(emulatorConsoleCalls(adb.calls), [['emu', 'gsm', 'accept', '5551234']]);
     },
   );
 });
@@ -141,11 +142,12 @@ test('Provider-backed integration Android telephony refuses a physical device be
         actions: [],
       });
 
-      assertRpcError(
+      const data = assertRpcError(
         await daemon.callCommand('telephony', ['call', '5551234'], { platform: 'android' }),
         'UNSUPPORTED_OPERATION',
         /telephony is not supported on this device/,
       );
+      assert.equal((data.details as Record<string, unknown>)?.reason, 'unsupported-device-kind');
       assert.deepEqual(emulatorConsoleCalls(adb.calls), []);
     },
   );

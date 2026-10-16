@@ -14,6 +14,10 @@ test('parses each action with its number, normalizing the action and trimming th
     action: 'accept',
     number: '+15551234567',
   });
+  expect(parseTelephonyEventInput({ action: 'call', number: `+${'1'.repeat(15)}` })).toEqual({
+    action: 'call',
+    number: `+${'1'.repeat(15)}`,
+  });
   expect(parseTelephonyEventInput({ action: 'cancel', number: '5551234' })).toEqual({
     action: 'cancel',
     number: '5551234',
@@ -45,12 +49,13 @@ test.each([
   [{ action: 'call', number: '   ' }, 'telephony call requires a phone number'],
   [{ action: 'call', number: '555 1234' }, 'Invalid phone number'],
   [{ action: 'call', number: '+1-555-1234' }, 'Invalid phone number'],
-  [{ action: 'call', number: '1'.repeat(21) }, 'Invalid phone number'],
+  [{ action: 'call', number: '1'.repeat(16) }, 'Invalid phone number'],
   [{ action: 'cancel', number: '5551234', text: 'hi' }, 'takes only a phone number'],
   [{ action: 'sms', number: '5551234' }, 'telephony sms requires message text'],
   [{ action: 'sms', number: '5551234', text: '' }, 'telephony sms requires message text'],
   [{ action: 'sms', number: '5551234', text: 'a\rb' }, 'must not contain control characters'],
   [{ action: 'sms', number: '5551234', text: 'a\u0000b' }, 'must not contain control characters'],
+  [{ action: 'sms', number: '5551234', text: 'a\u0085b' }, 'must not contain control characters'],
 ])('refuses %o with INVALID_ARGS', (input, message) => {
   expect(() => parseTelephonyEventInput(input)).toThrow(
     expect.objectContaining({ code: 'INVALID_ARGS', message: expect.stringContaining(message) }),

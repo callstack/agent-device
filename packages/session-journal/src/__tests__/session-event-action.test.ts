@@ -317,6 +317,10 @@ test('telephony action events name the simulated event and carry neither number 
 
   assert.equal(buildActionSummary(sms), 'Simulated an incoming SMS');
   assert.equal(buildActionSummary(call), 'Simulated an incoming call');
+  assert.equal(
+    buildActionSummary(action('telephony', { action: 'accept', number: '5551234' })),
+    'Accepted the simulated call',
+  );
   assert.equal(buildActionSummary(cancel), 'Ended the simulated call');
   assert.equal(buildActionSummary(action('telephony', {})), 'Simulated a telephony event');
   assert.deepEqual(buildActionDetails(sms), {

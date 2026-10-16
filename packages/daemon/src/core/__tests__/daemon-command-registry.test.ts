@@ -168,6 +168,7 @@ test('daemon command registry preserves Android modal and lock-policy traits', (
   }
 
   assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.get), false);
+  assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.telephony), false);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.apps), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.capabilities), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.devices), true);

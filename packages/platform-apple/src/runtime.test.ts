@@ -374,7 +374,7 @@ test.each(Object.entries(leaves))(
   },
 );
 
-test.each(Object.entries(leaves))(
+test.each([...Object.entries(leaves), ['ios physical device', appleDevice({ kind: 'device' })]])(
   'refuses the telephony fact for the %s leaf',
   async (_name, device) => {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({

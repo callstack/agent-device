@@ -6,7 +6,7 @@ import { androidAdbResultError } from './adb-failure.ts';
 /** A console command answers in well under a second; this bounds a console that stopped answering. */
 const EMULATOR_CONSOLE_TIMEOUT_MS = 10_000;
 
-export type EmulatorConsoleReply = Readonly<{
+type EmulatorConsoleReply = Readonly<{
   stdout: string;
   /** The reason after `KO:` when the console refused the command (empty for a bare `KO`). */
   refusal?: string;
@@ -15,8 +15,7 @@ export type EmulatorConsoleReply = Readonly<{
 /**
  * Runs one emulator console command (`adb emu <command…>`). adb exits 0 whether the console answers
  * `OK` or `KO: <reason>`, so a refusal comes back in the reply for the caller to classify with its
- * own reason; only a failed adb exit throws. A non-zero exit names the first two command words,
- * never the caller's operands.
+ * own reason; only a failed adb exit throws, naming the first two command words.
  */
 export async function runEmulatorConsole(
   device: DeviceInfo,

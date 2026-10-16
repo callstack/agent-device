@@ -58,7 +58,6 @@ export type {
   FoldKeyframe,
   FoldScreenCoordinateSpace,
   SetFoldPoseInput,
-  TelephonyAction,
   TelephonyCommandResult,
   TelephonyEventInput,
   TelephonyRuntimeOperations,
