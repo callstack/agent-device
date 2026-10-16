@@ -84,6 +84,20 @@ test('the composed daemon and client path materializes the directory produced by
           assert.equal(typeof artifact?.artifactId, 'string');
           const artifactId = artifact?.artifactId as string;
 
+          assert.equal(proxy.forwarded.length, 1);
+          const forwardedCommand = proxy.forwarded[0];
+          assert.ok(forwardedCommand);
+          assert.equal(forwardedCommand.method, 'POST');
+          assert.equal(forwardedCommand.route, '/rpc');
+          assert.equal(forwardedCommand.authorization, `Bearer ${daemon.token}`);
+          assert.equal(forwardedCommand.statusCode, 200);
+          const forwardedRpc = JSON.parse(forwardedCommand.requestBody) as {
+            method?: string;
+            params?: { command?: string };
+          };
+          assert.equal(forwardedRpc.method, 'agent_device.command');
+          assert.equal(forwardedRpc.params?.command, 'test');
+
           const response: Extract<DaemonResponse, { ok: true }> = {
             ok: true,
             data: data as NonNullable<Extract<DaemonResponse, { ok: true }>['data']>,
@@ -107,15 +121,20 @@ test('the composed daemon and client path materializes the directory produced by
           const result = fs.readFileSync(path.join(attemptDir, 'result.txt'), 'utf8');
           assert.match(result, /status: passed/);
 
-          const artifactRequest = proxy.forwarded.find(
-            (entry) => entry.method === 'GET' && entry.route === `/artifacts/${artifactId}`,
+          assert.deepEqual(
+            proxy.forwarded.map((entry) => [
+              entry.method,
+              entry.route,
+              entry.authorization,
+              entry.tenantId,
+              entry.statusCode,
+            ]),
+            [
+              ['POST', '/rpc', `Bearer ${daemon.token}`, undefined, 200],
+              ['GET', `/artifacts/${artifactId}`, `Bearer ${daemon.token}`, undefined, 200],
+            ],
+            'the real daemon must produce and serve the artifact through the shared proxy',
           );
-          assert.ok(
-            artifactRequest,
-            'client materialization did not use the daemon artifact endpoint',
-          );
-          assert.equal(artifactRequest.authorization, `Bearer ${daemon.token}`);
-          assert.equal(artifactRequest.statusCode, 200);
         } finally {
           await proxy.close();
         }
