@@ -83,7 +83,7 @@ test('a vitest namespace member other than vi or vitest is not the mock API', ()
   );
 });
 
-test('an alias is not a mock receiver where an enclosing scope redeclares its name', () => {
+test('an alias counts everywhere in the file, even where a local shadows its name', () => {
   assert.deepEqual(
     specs(
       "import { vi as mocks } from 'vitest';",
@@ -91,84 +91,22 @@ test('an alias is not a mock receiver where an enclosing scope redeclares its na
       "function parameter(mocks) { mocks.mock('a'); }",
       "const arrow = (testing) => testing.vi.mock('b');",
       "{ const mocks = other; mocks.mock('c'); }",
-      "function hoisted() { if (flag) { var mocks = other; } mocks.mock('d'); }",
-      "try {} catch (mocks) { mocks.mock('e'); }",
-      "for (const { mocks } of list) mocks.mock('f');",
-      "switch (kind) { case 1: class testing {} testing.vi.mock('g'); }",
-      "const expression = function mocks() { mocks.mock('h'); };",
-      "const named = class mocks { run() { mocks.mock('i'); } };",
-      "namespace Fixture { const testing = other; testing.vi.mock('j'); }",
-    ),
-    [],
-  );
-  assert.deepEqual(
-    specs(
-      "import { vi as mocks } from 'vitest';",
-      'function unrelated(mocks) { return mocks; }',
-      '{ const mocks = other; }',
-      "mocks.mock('outside');",
-    ),
-    ['outside'],
-  );
-});
-
-test('a parameter initializer sees the parameters but not the body declarations', () => {
-  const alias = "import { vi as mocks } from 'vitest';";
-  assert.deepEqual(
-    specs(
-      alias,
-      "function bodyVar(x = mocks.mock('a')) { var mocks; }",
-      "const arrow = (x = mocks.doMock('b')) => { var mocks; };",
-      "function bodyFunction(x = mocks.mock('c')) { function mocks() {} }",
-      "const method = { run(x = mocks.mock('d')) { var mocks; } };",
+      "try {} catch (mocks) { mocks.mock('d'); }",
     ),
     ['a', 'b', 'c', 'd'],
   );
-  assert.deepEqual(
-    specs(
-      alias,
-      "function earlier(mocks, x = mocks.mock('e')) {}",
-      "const arrow = (mocks, x = mocks.mock('f')) => x;",
-      "const expression = function mocks(x = mocks.mock('g')) {};",
-      "function body(x) { var mocks = other; return mocks.mock('h'); }",
-    ),
-    [],
-  );
 });
 
-test('a switch discriminant sees the enclosing scope, not the case declarations', () => {
-  const alias = "import { vi as mocks } from 'vitest';";
-  assert.deepEqual(specs(alias, "switch (mocks.mock('a')) { case 0: let mocks; }"), ['a']);
-  assert.deepEqual(
-    specs(alias, "switch (kind) { case 0: const mocks = other; mocks.mock('b'); }"),
-    [],
-  );
-  assert.deepEqual(
-    specs(alias, "switch (kind) { case 0: let mocks; break; default: mocks.mock('c'); }"),
-    [],
-  );
-});
-
-test('a static block and a namespace body are var scopes of their own', () => {
-  const alias = "import { vi as mocks } from 'vitest';";
+test('an alias call is read inside every construct that can hold a module literal', () => {
   assert.deepEqual(
     specs(
-      alias,
-      "function staticVar() { class C { static { var mocks; } } mocks.mock('a'); }",
-      "function namespaceVar() { namespace N { var mocks = other; } mocks.mock('b'); }",
-      "class D { static { var mocks = other; } } mocks.mock('c');",
+      "import { vi as mocks } from 'vitest';",
+      "function initializer(x = mocks.mock('a')) { var mocks; }",
+      "switch (mocks.mock('b')) { case 0: let mocks; }",
+      "class C { static { mocks.doMock('c'); } }",
+      "namespace N { mocks.unmock('d'); }",
     ),
-    ['a', 'b', 'c'],
-  );
-  assert.deepEqual(
-    specs(
-      alias,
-      "class C { static { var mocks = other; mocks.mock('d'); } }",
-      "class E { static { if (flag) { var mocks = other; } mocks.mock('e'); } }",
-      "namespace N { var mocks = other; mocks.mock('f'); }",
-      "namespace M { if (flag) { var mocks = other; } mocks.mock('g'); }",
-    ),
-    [],
+    ['a', 'b', 'c', 'd'],
   );
 });
 

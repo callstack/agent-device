@@ -14,7 +14,8 @@
 //
 // The forbidden set is derived from the workspace layout, not from name patterns: every package
 // whose directory matches the policy, whatever name it publishes (e.g. `@agent-device/testmu` under
-// `packages/provider-testmu`). A new isolated package is one more row in ISOLATION_POLICIES.
+// `packages/provider-testmu`). A new isolated package is one more `PackageIsolationPolicy`
+// declaration passed to the check.
 
 import path from 'node:path';
 import type { LayeringViolation } from './model.ts';
