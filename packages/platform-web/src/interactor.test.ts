@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createWebInteractor } from '../interactors/web.ts';
+import { createWebInteractor } from './interactor.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { withWebProvider, type WebProvider } from '@agent-device/platform-web';
+import { withWebProvider, type WebProvider } from './index.ts';
 
 test('web interactor delegates first-slice operations to the scoped provider', async () => {
   const calls: string[] = [];

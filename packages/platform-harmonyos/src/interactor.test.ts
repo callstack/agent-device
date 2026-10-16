@@ -9,7 +9,7 @@ const { pressHarmonyKeyboardKey, snapshotHarmony } = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock('@agent-device/platform-harmonyos', () => ({
+vi.mock('./index.ts', () => ({
   appSwitcherHarmony: vi.fn(),
   backHarmony: vi.fn(),
   closeHarmonyApp: vi.fn(),
@@ -30,7 +30,7 @@ vi.mock('@agent-device/platform-harmonyos', () => ({
   typeHarmony: vi.fn(),
 }));
 
-import { createHarmonyInteractor } from '../interactors/harmonyos.ts';
+import { createHarmonyInteractor } from './interactor.ts';
 
 const device: DeviceInfo = {
   platform: 'harmonyos',

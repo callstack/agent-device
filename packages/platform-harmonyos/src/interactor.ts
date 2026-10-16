@@ -21,7 +21,7 @@ import {
   setHarmonySetting,
   snapshotHarmony,
   typeHarmony,
-} from '@agent-device/platform-harmonyos';
+} from './index.ts';
 
 export function createHarmonyInteractor(device: DeviceInfo, _runner?: RunnerContext): Interactor {
   const unsupported = (name: string) => async (): Promise<never> => {

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
-import { createLinuxInteractor } from './linux.ts';
-import { middleClickLinux, pressLinux, rightClickLinux } from '@agent-device/platform-linux';
+import { createLinuxInteractor } from './interactor.ts';
+import { middleClickLinux, pressLinux, rightClickLinux } from './index.ts';
 
-vi.mock('@agent-device/platform-linux', () => ({
+vi.mock('./index.ts', () => ({
   backLinux: vi.fn(),
   captureLinuxSurfaceSnapshot: vi.fn(),
   closeLinuxApp: vi.fn(),

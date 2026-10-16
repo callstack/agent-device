@@ -2,7 +2,7 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { resolveWebProvider, type WebProvider } from '@agent-device/platform-web';
+import { resolveWebProvider, type WebProvider } from './index.ts';
 import { createUnsupportedInteractor } from './unsupported-interactor.ts';
 
 export async function createWebInteractor(provider?: WebProvider): Promise<Interactor> {

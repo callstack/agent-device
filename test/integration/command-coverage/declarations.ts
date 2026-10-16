@@ -1224,7 +1224,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     macos: macos.gap('No command-specific macOS focus evidence exists yet'),
     tvos: tvos.gap('No tvOS-specific focus command evidence exists yet'),
     web: web.contract(
-      'src/core/__tests__/web-interactor.test.ts',
+      'packages/platform-web/src/interactor.test.ts',
       'web interactor delegates first-slice operations to the scoped provider',
       'web focus delegates to the scoped provider click primitive',
     ),

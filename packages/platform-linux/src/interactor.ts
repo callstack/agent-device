@@ -20,7 +20,7 @@ import {
   swipeLinux,
   typeLinux,
   writeLinuxClipboard,
-} from '@agent-device/platform-linux';
+} from './index.ts';
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 
