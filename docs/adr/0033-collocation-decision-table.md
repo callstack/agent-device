@@ -3,7 +3,7 @@
 Status: accepted. Decision pass over the 48 candidate files listed in umbrella issue #3276 §5
 (communities detected at `ff685ad80`: declared zones score 0.373 Louvain modularity versus 0.564
 for detected communities). One row per candidate: `move`, `merge`, or `keep`, with the reason.
-Moves land as `refactor(move)` PRs; batch 1 is the companion PR to this decision.
+Moves land as `refactor(move)` PRs.
 
 2026-10-10: `packages/managed-allocation` was removed with the withdrawn allocator design
 ([ADR 0021](0021-host-simlock-managed-device-allocation.md)). The `src/managed-device-allocation.ts`
@@ -26,9 +26,6 @@ longer bind; re-evaluate those files on their remaining edges.
   "retain for this batch — relocation requires coordinated ownership changes" instead of resting
   the placement on the rule's path. A package cycle rejects the proposed direction, not every
   future design that first removes the edge closing it.
-- Rows marked `move (batch N)` are tracked as unchecked items on #3281; batch 1 is this decision's
-  companion `refactor(move)` PR.
-
 ## Decision table
 
 ### capture-kit
@@ -167,28 +164,11 @@ optimal.
 
 ## Batch 1 (this decision's companion PR)
 
-- `packages/contracts/src/managed-device-allocation.ts` → `packages/managed-allocation/src/managed-device-allocation.ts`
-  (new `@agent-device/managed-allocation/managed-device-allocation` subpath).
-
-Batch 1 is exactly this one file. The moves the issue listed beside it failed re-verification
-against the current import graph, and the rows above record why: the four admission ledgers and
-`durable-json.ts` hit the capture-kit ⇄ managed-allocation package cycle, and the three limrun
-files have no seam (published facade, public-type collision, root dependency factory).
+The completed batch is retained in git history.
 
 ## Follow-ups (tracked on #3281)
 
-- Physical root-pass moves under [#3294](https://github.com/callstack/agent-device/issues/3294)
-  (child of #3276): the runtime assembly pair
-  `runtime-command-surface.ts` / `runtime-factory.ts` is collocated in `src/command-runtime/`
-  ([#3299](https://github.com/callstack/agent-device/pull/3299)). Each folder derives its zone,
-  replacing the moved files' `ROOT_MODULE_ZONES` rows; #3288's zone assignments alone were
-  classification, and each landed move completes its own file's collocation. The
-  `daemon-contracts` side landed as a workspace package: the zone's ten files (`daemon-owner-cleanup`,
-  `daemon-policy-file`, `daemon-process`, `daemon-registration-owner`, `daemon-registration`,
-  `daemon-resolution`, `daemon-shutdown-report`, `request-progress-protocol`,
-  `session-repair-tombstone`, and `daemon-diagnostics-scope` from `src/daemon-contracts/`, first
-  moved there by [#3297](https://github.com/callstack/agent-device/pull/3297)) are now
-  `packages/daemon-contracts/src/` behind narrow per-file subpath exports.
+The completed move records are retained in git history. The decision table records the ownership rationale.
 
 ## The daemon package's export surface
 
