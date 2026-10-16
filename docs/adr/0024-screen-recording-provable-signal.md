@@ -360,13 +360,13 @@ This proposal defines the following backend behavior alongside current daemon-lo
 
 | Backend | `stop` from a live handle | `stop` from a descriptor (recovery) | `collect` | Today after daemon loss |
 | --- | --- | --- | --- | --- |
-| iOS / tvOS simulator | `ChildProcess.kill` tiers; descendant markers probed before pid signals | probe markers; signal on ours; `unconfirmed` if the host is silent; `lost` on mismatch | local copy of the `simctl` output file; native file retained until the writer is proven gone | cleanup signals, then **throws** |
-| iOS device (CoreDevice), macOS | runner stop RPC bound to `runnerSessionId` | same RPC if the runner session matches; `lost` if the runner restarted | device copy (iOS); local copy of the runner's output file (macOS) | cleanup stops the runner, **never retrieves**, throws |
-| Android | probe `/proc`, then `kill -2` → `-9`; `unconfirmed` when `/proc` is unreadable | same, from the pid triple in the descriptor | `adb pull` of every chunk, playability sniff | reattach through the device manifest; five ownership states |
-| HarmonyOS | one `aa start` toggle, tracked by the handle | **no signal**; `mediatool query` by file name; `unconfirmed` if found, `lost` if not | stage + `hdc file recv` | `cleanup-pending`, manual |
-| Web | provider `record stop` on the session browser | stop if the browser is alive, else `lost` | local copy of the WebM; native file retained while the browser is not proven gone | `cleanup-pending`, manual |
-| Limrun (iOS, Android) | provider stop RPC on the live session; the served download URL is memoized so a stop is never repeated | **no signal**: the recording lives and dies with the instance; `unreattachable` | HTTP download of the served MP4 to the output path, bounded by a deadline that ends inside the `record` request window (60 s of its 90 s envelope) and not cancellable; retriable from the memoized URL while the instance lives | `cleanup-pending`, manual; the instance (and its file) is deleted on lease release |
-| WebDriver providers, Vega | unavailable | — | — | unchanged |
+| iOS / tvOS simulator | Use `ChildProcess.kill` tiers. Probe descendant markers before pid signals. | Probe markers. Signal `ours`. Report `unconfirmed` for host silence or `lost` for mismatch. | Copy the `simctl` output locally. Retain native output until writer absence is proven. | Cleanup signals, then throws. |
+| iOS device (CoreDevice), macOS | Send runner stop RPC bound to `runnerSessionId`. | Use the same RPC for a matching session. Report `lost` after runner restart. | Copy from device on iOS. Copy runner output locally on macOS. | Cleanup stops the runner, never retrieves output, then throws. |
+| Android | Probe `/proc`, then use `kill -2` → `-9`. Report `unconfirmed` for unreadable `/proc`. | Use the same sequence with the descriptor's pid triple. | Use `adb pull` for each chunk and validate playability. | Reattach through device manifest with five ownership states. |
+| HarmonyOS | Toggle once with `aa start`, tracked by the handle. | Send no signal. Query file name with `mediatool query`. Report `unconfirmed` if found, otherwise `lost`. | Stage the file and use `hdc file recv`. | `cleanup-pending`; manual recovery. |
+| Web | Request provider `record stop` on the session browser. | Stop a live browser; otherwise report `lost`. | Copy WebM locally. Retain native output until browser absence is proven. | `cleanup-pending`; manual recovery. |
+| Limrun (iOS, Android) | Send provider stop RPC on the live session. Memoize its served URL to prevent repeated stop. | Send no signal. Recording lifetime equals instance lifetime; `unreattachable`. | Download served MP4 over HTTP. The deadline is 60 s within the 90 s `record` request envelope. Download is not cancellable. Retry uses the memoized URL while the instance lives. | `cleanup-pending`; manual recovery. Lease release deletes the instance and its file. |
+| WebDriver providers, Vega | Unavailable. | — | — | Unchanged. |
 
 A blind HarmonyOS toggle starts recording.
 Only the live handle may toggle.
@@ -377,16 +377,16 @@ After keep-hot restart, `lost` is therefore correct.
 
 This proposal makes additive changes to published surfaces, with the behavior change identified below:
 
-| Surface | Change | Breaking? |
+| Surface | Proposed change | Breaking? |
 | --- | --- | --- |
-| Node client `RecordingStopCommandResult` | adds optional `recorder` and `capturedDurationMs` | no |
-| MCP `record` output schema | two optional properties; required list unchanged | no |
-| Daemon RPC (ADR 0006) | optional response fields; no protocol bump; wire ledger `compatibleChanges` entry | no |
-| Error `details.reason` `cleanup-unconfirmed`, `resource-missing` | `record stop` stops emitting them; `ownership-fence-lost` stays; the union stays for the other kinds | no |
-| CLI exit status | `record stop` after daemon loss on Apple, HarmonyOS, and web exits 0 with a warning where it exited 1 | behavior change, CHANGELOG |
-| Runtime operations `screenRecordingReattach` / `screenRecordingCleanup` | removed; workspace-internal | no |
-| Persisted manifests | newer daemons read every older shape; older content is recovery input | no |
-| Android API < 34 | unchanged | no |
+| Node client `RecordingStopCommandResult` | Add optional `recorder` and `capturedDurationMs`. | no |
+| MCP `record` output schema | Add two optional properties. Preserve the required list. | no |
+| Daemon RPC (ADR 0006) | Add optional response fields and wire-ledger `compatibleChanges`. Do not increase protocol version. | no |
+| Error `details.reason` `cleanup-unconfirmed`, `resource-missing` | Stop these emissions for `record stop`. Retain `ownership-fence-lost` and the union for other kinds. | no |
+| CLI exit status | After daemon loss on Apple, HarmonyOS, and web, return exit 0 with a warning instead of exit 1. | behavior change, CHANGELOG |
+| Runtime operations `screenRecordingReattach` / `screenRecordingCleanup` | Remove workspace-internal operations. | no |
+| Persisted manifests | New daemons read every older shape as recovery input. | no |
+| Android API < 34 | No change. | no |
 
 ## 5. Tests
 
