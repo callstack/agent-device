@@ -4,6 +4,8 @@
 
 Accepted
 
+Completed process history is in git history.
+
 > **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** The Apple family and explicit
 > `AppleOS` leaf axis remain accepted. The shallow `PlatformPlugin` shape and root
 > `src/platforms/**` location are superseded by the lazy platform-module registry and private
@@ -29,10 +31,8 @@ Model Apple OSes with an **`AppleOS` discriminant** (`ios | ipados | tvos | watc
 under a single `apple` Platform — **not** six `Platform` literals. The OS-agnostic Apple engine consolidates
 under `packages/platform-apple/src/core/`, with genuinely per-OS code in
 `packages/platform-apple/src/os/<os>/` leaves;
-the Apple plugin is the first instance of the platform-plugin registry (the platform axis of the
-completed perfect-shape refactor; the registry and enforcement paths below are authoritative).
-Per-OS capability differences become data keyed by `AppleOS`. The additive,
-non-breaking `appleOs` discriminant — the groundwork for this — shipped in #896.
+the Apple plugin is the first instance of the platform-plugin registry.
+Per-OS capability differences become data keyed by `AppleOS`.
 
 ## Alternatives Considered
 
@@ -54,15 +54,14 @@ net-new work (XCUITest supports it — a profile row, a build case, `#if os(visi
 filter, plus real spatial-input QA); watchOS is an explicit **unsupported sentinel** because XCUITest cannot
 drive watchOS UI. macOS stays a distinct AppKit leaf (its helper binary and menubar/desktop surface model are
 preserved). The tvOS focus-only interaction contract (no coordinate `tap`) must not be flattened across OSes,
-and snapshot fidelity is uneven (the deep-RN AX-server fallback is iOS-simulator-only). The internal
-`Platform` collapse of `ios`+`macos` into `apple` was the last, highest-diff step; public leaf output
+and snapshot fidelity is uneven (the deep-RN AX-server fallback is iOS-simulator-only). Public leaf output
 remains a separate compatibility projection.
 
 This composes with ADR 0008 (the descriptor's capability facet) and ADR 0003.
 
-Implementation status as of 2026-08:
+Support boundary:
 
-- Shipped: the internal `Platform` collapse to `apple`; additive `appleOs` groundwork; the shared
+- the internal `Platform` collapse to `apple`; additive `appleOs` groundwork; the shared
   Apple engine under `packages/platform-apple/src/core`; macOS leaf files under
   `packages/platform-apple/src/os/macos`; a dedicated tvOS leaf under
   `packages/platform-apple/src/os/tvos`;
@@ -82,6 +81,5 @@ Implementation status as of 2026-08:
   `PUBLIC_PLATFORMS`; internal family ownership must not leak into that projection.
 - Deferred: net-new visionOS spatial-input QA.
 
-This ADR owns the Apple family/leaf decision. The Phase 3 platform-plugin umbrella (#972) is closed;
-ADR 0019 now owns the staged package/runtime seam. Net-new visionOS spatial-input QA remains a
+This ADR owns the Apple family/leaf decision. ADR 0019 owns the staged package/runtime seam. Net-new visionOS spatial-input QA remains a
 separate follow-up outside the consolidation.
