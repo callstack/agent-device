@@ -76,7 +76,10 @@ function normalizeHumanControlHold(value: unknown): HumanControlHold {
 function normalizeLease(data: Record<string, unknown>): Lease {
   const rawLease = data.lease;
   if (!isRecord(rawLease)) {
-    throw new Error('Invalid lease response from daemon');
+    throw new AppError('COMMAND_FAILED', 'Invalid lease response from daemon', {
+      reason: 'invalid-lease-response',
+      response: data,
+    });
   }
   return {
     leaseId: readRequiredString(rawLease, 'leaseId'),

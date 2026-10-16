@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
 import { HUMAN_CONTROL_HOLD, HUMAN_CONTROL_SCOPE } from './human-control.fixtures.ts';
 import type { DaemonRequest } from '@agent-device/kernel/contracts';
@@ -128,3 +128,30 @@ test('allocate sends the lease id named on the call, never the configured one', 
   assert.equal(requests[1]?.meta?.leaseId, '0123456789abcdef');
   assert.equal(lease.leaseId, 'abcdef0123456789');
 });
+
+for (const operation of ['allocate', 'heartbeat'] as const) {
+  for (const lease of [undefined, null, [], 'invalid']) {
+    test(`${operation} rejects a non-object lease (${JSON.stringify(lease)}) with structured diagnostics`, async () => {
+      const data = { lease };
+      const client = createAgentDeviceClient(
+        {},
+        {
+          transport: async () => ({ ok: true, data }),
+        },
+      );
+      await assert.rejects(
+        client.leases[operation]({ tenant: 'tenant-a', runId: 'run-a', leaseId: 'lease-a' }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.deepEqual(error.details, { reason: 'invalid-lease-response', response: data });
+          const normalized = normalizeError(error);
+          assert.equal(normalized.code, 'COMMAND_FAILED');
+          assert.equal(normalized.details?.reason, 'invalid-lease-response');
+          assert.deepEqual(normalized.details?.response, data);
+          return true;
+        },
+      );
+    });
+  }
+}
