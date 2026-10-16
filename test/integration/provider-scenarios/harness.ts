@@ -92,6 +92,7 @@ export type ProviderScenarioHarness = {
 
 export type ProviderScenarioProxy = {
   baseUrl: string;
+  port: number;
   forwarded: ProviderScenarioForwardedRequest[];
   requestRpc: (
     authToken: string,
@@ -370,6 +371,7 @@ export async function createProviderScenarioProxy(
 
   return {
     baseUrl,
+    port: proxyPort,
     forwarded: upstream.forwarded,
     requestRpc,
     callCommand: async (authToken, command, positionals = [], flags = {}, commandOptions = {}) => {

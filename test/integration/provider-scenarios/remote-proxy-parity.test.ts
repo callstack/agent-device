@@ -65,6 +65,10 @@ type ParityWorld = {
   close: () => Promise<void>;
 };
 
+function loopbackProxyBaseUrl(port: number): string {
+  return `http://127.0.0.1:${port}/agent-device`;
+}
+
 function scriptedTree() {
   return {
     nodes: [
@@ -250,17 +254,28 @@ async function withProxiedWorld<T>(
   options: ParityWorldOptions = {},
 ): Promise<T> {
   const world = await createParityWorld(options);
-  const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: PROXY_TOKEN });
-  // The remote client's own state dir: localized failure records land here, not in the
-  // developer's real state dir.
-  const clientStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-proxy-parity-'));
+  let proxy: Awaited<ReturnType<typeof createProviderScenarioProxy>> | undefined;
+  let clientStateDir: string | undefined;
   try {
+    const activeProxy = await createProviderScenarioProxy(world.daemon, {
+      clientToken: PROXY_TOKEN,
+    });
+    proxy = activeProxy;
+    const proxyBaseUrl = loopbackProxyBaseUrl(activeProxy.port);
+    const activeClientStateDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-device-proxy-parity-'),
+    );
+    clientStateDir = activeClientStateDir;
     const proxied: ScenarioLeg = async (request) => {
       try {
         return await sendToDaemon(
           {
             ...request,
-            flags: { ...request.flags, daemonBaseUrl: proxy.baseUrl, stateDir: clientStateDir },
+            flags: {
+              ...request.flags,
+              daemonBaseUrl: proxyBaseUrl,
+              stateDir: activeClientStateDir,
+            },
           },
           { authToken: PROXY_TOKEN },
         );
@@ -268,11 +283,17 @@ async function withProxiedWorld<T>(
         return responseFromClientError(error);
       }
     };
-    return await run({ world, proxied, forwarded: proxy.forwarded });
+    return await run({ world, proxied, forwarded: activeProxy.forwarded });
   } finally {
-    await proxy.close();
-    await world.close();
-    fs.rmSync(clientStateDir, { recursive: true, force: true });
+    try {
+      if (proxy) await proxy.close();
+    } finally {
+      try {
+        await world.close();
+      } finally {
+        if (clientStateDir) fs.rmSync(clientStateDir, { recursive: true, force: true });
+      }
+    }
   }
 }
 
@@ -401,10 +422,11 @@ test(
     if (await skipWhenLoopbackUnavailable(t, 'daemon proxy error handling coverage')) return;
 
     const world = await createParityWorld();
-    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: PROXY_TOKEN });
+    let proxy: Awaited<ReturnType<typeof createProviderScenarioProxy>> | undefined;
     try {
+      proxy = await createProviderScenarioProxy(world.daemon, { clientToken: PROXY_TOKEN });
       await world.close();
-      const response = await fetch(`${proxy.baseUrl}/rpc`, {
+      const response = await fetch(`${loopbackProxyBaseUrl(proxy.port)}/rpc`, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${PROXY_TOKEN}`,
@@ -419,8 +441,11 @@ test(
       assert.ok(upstreamError instanceof Error);
       assert.equal((upstreamError as NodeJS.ErrnoException).code, 'ECONNREFUSED');
     } finally {
-      await proxy.close();
-      await world.close();
+      try {
+        if (proxy) await proxy.close();
+      } finally {
+        await world.close();
+      }
     }
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
