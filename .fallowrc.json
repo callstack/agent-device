@@ -3,6 +3,7 @@
   "entry": [
     "tsdown.config.ts",
     "scripts/check-provider-plugin.mjs",
+    "scripts/check-affected/command.ts",
     "packages/provider-testmu/test/package-smoke.mjs",
     "packages/provider-testmu/tsdown.config.ts",
     "packages/provider-testmu/src/plugin.ts",
