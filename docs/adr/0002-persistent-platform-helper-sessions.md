@@ -4,6 +4,8 @@
 
 Accepted
 
+Completed process history is in git history.
+
 > **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Persistent protocols,
 > invalidation, and explicitly safe one-shot fallback remain accepted. "Daemon-owned" means the
 > daemon owns helper lifetime policy; platform modules own process-lived helper managers and helper
@@ -62,10 +64,7 @@ the legacy `adb uiautomator dump` snapshot engine.
 Android permits only one reliable instrumentation-owned `UiAutomation` context per device. Snapshot
 capture, gesture viewport resolution, and planned-touch injection therefore share one bundled
 automation helper: a live persistent helper session executes touch commands directly over its
-session socket, and without one the same helper runs one-shot (amended 2026-07, issue #1275,
-consistent with ADR 0013; previously touch synthesis shipped as a separate instrumentation helper,
-so the daemon had to stop the persistent snapshot session before every gesture and let the next
-snapshot restart it lazily). One-shot retry after a failed session command applies only to
+session socket, and without one the same helper runs one-shot (issue #1275; consistent with ADR 0013). One-shot retry after a failed session command applies only to
 idempotent reads such as viewport resolution, and only after the failed session has been stopped.
 Gesture injection is not idempotent — events may already be partially injected — so a session
 gesture failure surfaces directly instead of retrying one-shot. Helper reuse must never turn
