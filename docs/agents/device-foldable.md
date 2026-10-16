@@ -1,9 +1,7 @@
 # Foldable Apple verification
 
 Before you change capture behavior on a multi-panel device, read ADR 0025.
-The iOS 27.1 runtime comes only with its Xcode. `xcode-select` can select an older Xcode.
-For each command, set the toolchain explicitly:
-`DEVELOPER_DIR=<Xcode-27.1>/Contents/Developer xcrun devicectl device info displays --device <udid>`.
+To list the panels, run `xcrun devicectl device info displays --device <udid>`.
 
 - Panels: the command lists each integrated panel with `backlightState`. Only the lit panel permits capture.
   A capture of the dark panel exits 0 and writes an all-black PNG.
@@ -22,11 +20,9 @@ For each command, set the toolchain explicitly:
   - An app interaction.
   Until GHA supports the runtime, Duo coverage remains local.
   To examine the angle separately, run:
-  `DEVELOPER_DIR=<Xcode-27.1>/Contents/Developer xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`.
+  `xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`.
 - Touch overlays export at the captured track size.
   The compositor checks its output size and non-black content against the raw capture.
   If that check fails, `record stop` keeps the raw file. It reports `overlayWarning`.
   `record start --hide-touches` is only for the fastest raw capture.
 - To launch on iOS 27.0/27.1, iOS 27 SDK apps need UIScene lifecycle.
-- The 27.1 beta accepts only the iPhone Duo device type.
-  For a non-foldable control, use another runtime.
