@@ -1,7 +1,10 @@
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ExecResult } from '@agent-device/host-kit/command';
+import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
 import type { HostProcessInfo } from '@agent-device/host-kit/process';
+import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 
 vi.mock('node:timers/promises', () => ({ setTimeout: vi.fn(async () => undefined) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
@@ -366,7 +369,7 @@ test('openBundle spends its budget on reads rather than on a wait with nothing l
       // A slow scan on a loaded host: by the time it answers, the probe's shared budget is nearly
       // gone. Spending the remainder on a 200 ms sleep and a read killed at 100 ms would spawn tools
       // that cannot answer, so the wait is left alone and the open runs.
-      vi.advanceTimersByTime(4_900);
+      vi.advanceTimersByTime(2_400);
       return { stdout: 'com.example.demo\ncom.ghost.app\n' };
     }
     return {};
@@ -393,7 +396,7 @@ test('openBundle arms every probe read with only the budget the deadline still a
     // be armed with the remainder rather than with its own cap: a read armed above what is left could
     // run past the budget that bounds this probe.
     if (call.cmd === LAUNCH_SERVICES_TOOL) {
-      vi.advanceTimersByTime(3_600);
+      vi.advanceTimersByTime(1_900);
       return {};
     }
     // Neither candidate is the opened bundle, so the wait never starts and the reads stay two.
@@ -405,11 +408,11 @@ test('openBundle arms every probe read with only the budget the deadline still a
 
   expect(calls.map(({ cmd, timeoutMs }) => ({ cmd, timeoutMs }))).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, timeoutMs: LAUNCH_SERVICES_READ_CAP_MS },
-    { cmd: 'plutil', timeoutMs: 1_400 },
+    { cmd: 'plutil', timeoutMs: 600 },
     { cmd: 'open', timeoutMs: undefined },
   ]);
   // The process-table read is the other seam this probe arms, and it is the one whose cap is largest.
-  expect(listHostProcesses).toHaveBeenCalledWith({ timeoutMs: 1_400 });
+  expect(listHostProcesses).toHaveBeenCalledWith({ timeoutMs: 600 });
   expect(mockSleep).not.toHaveBeenCalled();
 });
 
@@ -421,7 +424,7 @@ test('openBundle skips a read whose share of the budget falls below what a tool 
     // answer in time, and a zero timeout turns into no timer at all, which is how a probe that is
     // meant to be bounded would stop bounding itself.
     if (call.cmd === LAUNCH_SERVICES_TOOL) {
-      vi.advanceTimersByTime(4_950);
+      vi.advanceTimersByTime(2_450);
       return {};
     }
     return call.cmd === 'plutil' ? { stdout: 'com.example.demo\ncom.ghost.app\n' } : {};
@@ -577,3 +580,70 @@ test('openBundle reports a probe that failed for a reason no typed code describe
     }),
   );
 });
+
+// `plutil -extract` answers one `-extract` for every plist it is given, in argument order, so one
+// call can name every candidate bundle. This pins that batched shape against the real tool: a
+// candidate set the probe cannot pair with the rows it gets back ends the whole fix, and scripted
+// rows above cannot prove the tool actually behaves that way.
+describe.skipIf(process.platform !== 'darwin')(
+  'bundle identifier reads against the real plutil',
+  () => {
+    test('openBundle names every candidate plist in one real batch and waits on its own pid', async () => {
+      // Three bundles written to disk, the opened target second and under a name with a space.
+      // Their plists are real; only their being "running" is the mocked process table.
+      const root = await mkdtempForTest('ad-3406-plutil-batch-');
+      const bundle = async (name: string, bundleId: string): Promise<string> => {
+        const bundlePath = path.join(root, name);
+        await mkdir(path.join(bundlePath, 'Contents'), { recursive: true });
+        await writeFile(
+          path.join(bundlePath, 'Contents', 'Info.plist'),
+          '<?xml version="1.0" encoding="UTF-8"?>\n' +
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" ' +
+            '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' +
+            '<plist version="1.0"><dict><key>CFBundleIdentifier</key>' +
+            `<string>${bundleId}</string></dict></plist>\n`,
+        );
+        return bundlePath;
+      };
+      const other = await bundle('Other.app', 'com.example.other');
+      const target = await bundle('My Target.app', BUNDLE_ID);
+      const spaced = await bundle('Late Night.app', 'com.example.late-night');
+      processTable.rows = [
+        { pid: 4300, command: `${other}/Contents/MacOS/Other` },
+        { pid: 4242, command: `${target}/Contents/MacOS/My Target -ProofFlag` },
+        { pid: 4301, command: `${spaced}/Contents/MacOS/Late Night` },
+      ] satisfies HostProcessInfo[];
+
+      let pidPinnedReads = 0;
+      // plutil runs for real through the exec seam. The LaunchServices view and `open` itself stay
+      // scripted: an unlisted-then-listed registration cannot be arranged with a real bundle that
+      // is not actually running, and a real `open` would launch a real copy.
+      const runCommand: AppleToolCommandExecutor = async (cmd, args, options) => {
+        if (cmd === 'open') return { exitCode: 0, stdout: '', stderr: '' };
+        if (cmd === LAUNCH_SERVICES_TOOL) {
+          if (!args.some((arg) => arg.startsWith('pid='))) {
+            return { exitCode: 0, stdout: '', stderr: '' };
+          }
+          pidPinnedReads += 1;
+          return {
+            exitCode: 0,
+            stdout: pidPinnedReads > 1 ? 'ASN:0x0-0x1234-"My Target":\n' : '',
+            stderr: '',
+          };
+        }
+        return await runCmd(cmd, args, options);
+      };
+
+      try {
+        await openBundle(runCommand);
+
+        // The copy is found only if the real batch paired its row with its path among three, so
+        // the wait ran and ended on the target's own pid rather than the open going out blind.
+        expect(pidPinnedReads).toBe(2);
+        expect(mockSleep).toHaveBeenCalledTimes(2);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }, 10_000);
+  },
+);

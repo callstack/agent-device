@@ -17,16 +17,13 @@ const LAUNCH_SERVICES_READ_TIMEOUT_MS = 1_000;
 const PROCESS_TABLE_TIMEOUT_MS = 2_000;
 const BUNDLE_ID_READ_TIMEOUT_MS = 1_500;
 /**
- * Ceiling for the whole probe, shared by every read below. AGENTS.md asks an optional probe's
- * budget to stay shorter than the operation it precedes, and this one exceeds a healthy `open -b`
- * (~70 ms measured) on purpose — see the PR #3707 discussion: the operation this probe guards is
- * the open REQUEST, which runs inside the command registry's 90 s envelope, and the probe's own
- * worst case is bounded at this ceiling with every read failing open. The measured typical cost
- * is what makes that trade proportionate: one `lsappinfo find` (12-40 ms) plus one process-table
- * read (~0.2-0.3 s on a healthy host), and the 5 s ceiling is only ever reached when a host tool
- * hangs — the open then proceeds late rather than being withheld.
+ * Ceiling for the whole probe, shared by every read below. It has to exceed the full wait plus
+ * the reads ahead of it — registration lands 0.5-0.75 s after a direct spawn — or the probe gives
+ * up on the only case it exists for; the reads themselves fit the remainder with room on a healthy
+ * host. AGENTS.md sizes a probe budget against the operation it precedes: the cost tradeoff of
+ * this one against `open -b` is measured and argued in PR #3707.
  */
-const LAUNCH_SERVICES_PROBE_BUDGET_MS = 5_000;
+const LAUNCH_SERVICES_PROBE_BUDGET_MS = 2_500;
 /**
  * Below this remaining budget a read is worth skipping rather than spawning with a token amount. It
  * is also what keeps every read bounded: the exec seam turns a zero timeout into no timer at all, so
