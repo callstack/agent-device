@@ -2,130 +2,160 @@
 
 ## Status
 
-Accepted (2026-07-10). Implemented on `main`, including the amendments folded into the decisions
-below (#1264, #1269, #1271 stage 2, #1280, #1349, #1385, and the 2026-08-07 mutating-ambiguity
-amendment); only decision 5's replay benchmark extension remains deferred. The per-step landing
-record (PRs #1193-#1349) and the pre-acceptance migration plan live in this file's git history.
+Accepted (2026-07-10). The decisions are implemented on `main`, including the amendments below:
+
+- #1264
+- #1269
+- #1271 stage 2
+- #1280
+- #1349
+- #1385
+- The 2026-08-07 mutating-ambiguity amendment
+
+Only the replay benchmark extension in decision 5 remains deferred.
+The completed migration plan and implementation history (PRs #1193-#1349) are in git history.
 
 ## Rules at a glance
 
-Normative summary, one entry per decision. The binding contracts, amendments, and edge cases are in
-[Decision](#decision); the registries and tests named there are the living source of truth.
+This normative summary has one entry for each decision.
+[Decision](#decision) contains the full contracts, amendments, and exceptions.
+The named registries and tests are the living source of truth.
 
-1. **`--update` never rewrites.** Heal's candidate machinery only ranks the bounded `suggestions`
-   list inside a divergence report (identity components, then same `scrollRegion`, then document
-   order; deduplicated by node). No unattended repair path exists.
-2. **Every element resolution discloses how it resolved.** Additive `resolution` response field:
-   `runtime`/`unique` or `runtime`/`disambiguated` (`matchCount`, `tiebreak`, up to 5 alternatives),
-   `ref`/`exact` or `ref`/`label-fallback`, `direct-ios`/`not-observed`; coordinate dispatches and
-   executed maestro-fallbacks carry none. Successful structural-collapse alternatives are pre-action
-   diagnostics; distinct-subtree rejection candidates issue a partial ref frame for immediate retry.
-   Enforced as ADR 0011's `resolutionDisclosure` guarantee row
-   (`packages/contracts/src/interaction-guarantees.ts`).
-3. **Recording writes `target-v1` identity evidence; replay verifies it before acting.** One
-   versioned JSON comment per element-targeting action carries identity (unique id, else
-   role+label, plus a leaf-anchored ancestry prefix), disambiguation signals (`sibling`,
-   region-scoped `viewportOrder`), and never-compared diagnostics (`rect`). Replay classifies every
-   annotated step through six exact verification paths; anything the evidence cannot isolate is an
-   `identity-unverifiable` divergence, never a silent pick. Amendments: non-unique ids demote to
-   role+label (#1269); an identity-empty pressed container records its first labeled descendant,
-   double-guarded fail-closed (#1280); `wait` landmark identity and `is` coverage dispatch on the
-   `targetIdentityVerification` descriptor trait (#1349); the pre-dispatch verification capture
-   bounds-retries a content-quality `capture-failed`/`sparse-snapshot` verdict on an app-launch race,
-   opt-in per call site (#1385).
-4. **Divergence is a structured error, resumable by plan ordinal.** `ok:false` with code
-   `REPLAY_DIVERGENCE` and `details.divergence` v1: `kind` (`action-failure` | `selector-miss` |
-   `identity-mismatch` | `identity-unverifiable`), a bounded `screen` (same capture scope as plain
-   `snapshot`, ranked refs — #1264 — activating a partial ref frame per ADR 0014), one `repairHint`
-   enum, and `resume` (`from`, optional `alternateFrom`, `planDigest`, `repairSessionHeld`).
-   Serialized ceilings per response level: 8/24/64 KiB. Resume is `replay --from N --plan-digest
-   <sha>`, replay-only (`test` rejects `--from`), with no state reconstruction: skipped `outputEnv`
-   producers or control flow reject the resume.
-5. **Validation is contractual.** The coverage inventory under decision 5 (guarantee-matrix cells,
-   parser/writer round trips, all six verification paths, wire-projection parity, `--update`
-   no-write) gates acceptance; benchmark evidence alone is insufficient.
-6. **Repair is agent-performed and transactional.** `replay --save-script` opens a persisted
-   ARMED -> COMPLETE -> COMMITTED transaction governed by rules R1-R7: recording armed from step 1,
-   `--from` continuation only, daemon-computed `repairHint` routing, fail-loud on bare `@ref`
-   export, healed slice bounded by the `saveScriptBoundary` watermark, session kept alive until
-   commit or abort, and exclusive-`linkSync` publication that refuses any pre-existing target.
-   Out-of-band observations are excluded from the healed script by provenance
-   (`internal.replayPlanStep`), with `--record` as the per-action opt-in (#1271 stage 2).
+1. **`--update` never rewrites.** The candidate machinery only ranks bounded divergence `suggestions`.
+   It orders identity components, then the same `scrollRegion`, then document order.
+   It deduplicates suggestions by node. There is no unattended repair path.
+2. **Every element resolution discloses its method.** The additive `resolution` field identifies runtime resolution, ref provenance, or direct-iOS non-observation.
+   Runtime disambiguation includes `matchCount`, `tiebreak`, and at most 5 alternatives.
+   Coordinate dispatches and executed maestro-fallbacks have no disclosure.
+   Successful structural-collapse alternatives are pre-action diagnostics.
+   Distinct-subtree rejection candidates issue a partial ref frame for immediate retry.
+   ADR 0011's `resolutionDisclosure` row enforces this contract (`packages/contracts/src/interaction-guarantees.ts`).
+3. **Recording writes `target-v1` identity evidence. Replay verifies it before an action.**
+   Each element-targeting action has one versioned JSON comment.
+   Identity uses a unique id, otherwise role+label, and a leaf-anchored ancestry prefix.
+   Disambiguation uses `sibling` and region-scoped `viewportOrder`. Diagnostic `rect` values are never compared.
+   Six verification paths classify each annotated step.
+   Evidence that cannot isolate a target causes `identity-unverifiable`, never a silent selection.
+   Amendments cover non-unique ids (#1269), identity-empty pressed containers (#1280), and read-only identity verification (#1349).
+   The #1385 amendment adds bounded retries for launch-race content verdicts, with explicit activation at each call site.
+4. **Divergence is a structured error with resume by plan ordinal.**
+   `ok:false`, `REPLAY_DIVERGENCE`, and `details.divergence` v1 identify four divergence kinds.
+   The bounded `screen` uses plain `snapshot` capture scope and ranked refs (#1264).
+   It activates a partial ref frame under ADR 0014.
+   Each report includes one `repairHint` enum and `resume` data.
+   Serialized ceilings are 8/24/64 KiB for compact/default/full responses.
+   Resume uses `replay --from N --plan-digest <sha>` without state reconstruction.
+   `test` rejects `--from`. Skipped `outputEnv` producers or runtime control flow prevent resume.
+5. **Validation is contractual.** Decision 5 defines required coverage for acceptance.
+   Benchmark evidence alone is insufficient.
+6. **The agent performs repair within a transaction.** `replay --save-script` persists an ARMED -> COMPLETE -> COMMITTED transaction.
+   Rules R1-R7 require recording from step 1 and continuation with `--from`.
+   The daemon computes `repairHint`. The writer refuses bare `@ref` exports with an explicit error.
+   `saveScriptBoundary` bounds the healed slice. The session remains active until commit or abort.
+   Exclusive `linkSync` publication refuses every pre-existing target.
+   Provenance (`internal.replayPlanStep`) excludes out-of-band observations by default.
+   `--record` explicitly includes one corrective observation (#1271 stage 2).
 
 ## Decision
 
 ### 1. Retire `--update` healing as an actor; repurpose its candidate machinery as ranked suggestions
 
-`--update`/`-u` stops silently rewriting `.ad` files. The two pieces of machinery it already has —
-`collectReplaySelectorCandidates` (recorded-chain/positional extraction) and the `resolveSelectorChain`
-re-resolution it drives — are repurposed to populate the ranked `suggestions` list inside the
-divergence report (decision 4), not to act unattended.
+`--update`/`-u` no longer silently rewrites `.ad` files.
+Its existing machinery populates ranked `suggestions` in the divergence report (decision 4).
+`collectReplaySelectorCandidates` extracts recorded chains and positionals.
+Its `resolveSelectorChain` calls resolve those candidates again.
+Neither mechanism acts without agent supervision.
 
-**Ranking is a total order**: (1) candidates satisfying more identity components rank first — a
-recorded-id match outranks a role+label match, which outranks a label-only match; (2) among equals,
-candidates in the same `scrollRegion` as recorded rank before candidates in other regions; (3) document
-order is the final tie-break. Suggestions are deduplicated by node: a node reachable through several
-recorded selector terms appears once, tagged with its strongest match basis. The list is bounded by
-decision 4's suggestion cap. Response levels affect only report
-content, never file behavior: `--update` at any level performs no rewrite and returns the same bounded suggestions
-object, with `--level digest` omitting suggestion entries but carrying `suggestionCount` per decision 4.
+**Ranking is a total order:**
 
-With an agent in the loop, adjudicating a heal
-proposal costs one cheap model turn — cheaper than discovering a silent wrong repair later — and the
-audit ((a) above) already found heal rarely able to act. A proposal an agent can accept, reject, or edit
-is strictly more valuable than the same proposal applied blind.
+1. Candidates that satisfy more identity components rank first.
+   A recorded-id match precedes a role+label match. A role+label match precedes a label-only match.
+2. Among equal candidates, the recorded `scrollRegion` precedes other regions.
+3. Document order resolves the remaining ties.
+
+Suggestions are deduplicated by node.
+A node reached through several recorded selector terms appears once, with its strongest match basis.
+Decision 4 bounds the list.
+Response levels change report content only.
+At every level, `--update` performs no rewrite and returns the same bounded suggestions object.
+`--level digest` omits entries and includes `suggestionCount`, as decision 4 specifies.
+
+An agent can accept, reject, or edit a proposed repair in one inexpensive model turn.
+This costs less than detection of a silent incorrect repair later.
+Audit item (a) in Context also found that heal could rarely act.
+An agent-reviewed proposal is therefore more useful than the same proposal applied without review.
 
 ### 2. Disclose daemon-tree disambiguation and identify fast-path responses
 
-The daemon-tree selector path (`runtime-selector`) adds an additive `resolution` response field. A unique
-tree resolution is `{ source: "runtime", phase: "pre-action", kind: "unique" }`. Multiple matches succeed
-only when they form one ancestor–descendant wrapper chain resolving to the same actionable node; that
-structural collapse is `{ source: "runtime", phase: "pre-action", kind: "disambiguated", matchCount,
-winnerDiagnostic, tiebreak: "structural-equivalence", alternatives }`. Distinct subtrees fail before
-mutation with `AMBIGUOUS_MATCH` and at most five snapshot candidate lines. Geometry never chooses among
-distinct mutating targets.
+The daemon-tree selector path (`runtime-selector`) adds a `resolution` response field.
+A unique resolution is `{ source: "runtime", phase: "pre-action", kind: "unique" }`.
+Multiple matches succeed only if they form one ancestor–descendant wrapper chain for the same actionable node.
+That structural collapse returns `{ source: "runtime", phase: "pre-action", kind: "disambiguated", matchCount, winnerDiagnostic, tiebreak: "structural-equivalence", alternatives }`.
+Distinct subtrees fail before mutation with `AMBIGUOUS_MATCH` and at most five snapshot candidate lines.
+Geometry never selects among distinct mutating targets.
 
-Successful structural-collapse diagnostics remain **pre-action diagnostics**, not issued refs: after the
-mutation, neither `winnerDiagnostic` nor `alternatives` may be reused as an `@ref` target. An ambiguity
-rejection performs no mutation, so its bounded candidate lines instead issue a partial ref frame and
-`refsGeneration`; CLI prints pinned candidates and MCP remembers their generation for an immediate retry.
-A post-action `--settle` diff remains a separate actionable issuer. A target-binding divergence likewise
-sends no action and issues its fresh report snapshot as defined in decision 4.
+Successful structural-collapse diagnostics remain **pre-action diagnostics**.
+They issue no refs.
+After mutation, neither `winnerDiagnostic` nor `alternatives` may serve as an `@ref` target.
+An ambiguity rejection performs no mutation.
+Its bounded candidate lines issue a partial ref frame and `refsGeneration`.
+CLI prints pinned candidates. MCP remembers their generation for immediate retry.
+A post-action `--settle` diff remains a separate actionable issuer.
+A target-binding divergence also sends no action.
+It issues its fresh report snapshot under decision 4.
 
-The ref paths disclose ref provenance. A lookup that resolves the `@ref` itself is
-`{ source: "ref", phase: "pre-action", kind: "exact" }`. When the runtime-ref path recovers a stale or
-unusable `@ref` through its recorded trailing label (`tryResolveRefNode`'s `fallbackLabel` — a first-match
-label lookup, the replay recovery documented in Context), the response instead carries
-`{ source: "ref", phase: "pre-action", kind: "label-fallback" }`: label recovery is not exact ref
-provenance and must never claim it. The native-ref fast path always discloses `exact` — the ref handle is
-the dispatched target, and although the recorded `fallbackLabel` is forwarded to the backend, any
-label-based recovery a backend might perform with it is not observable daemon-side, so `exact` describes
-the daemon's own resolution and no more specific claim is possible on this path.
+Ref paths disclose ref provenance.
+A successful lookup of the `@ref` itself returns `{ source: "ref", phase: "pre-action", kind: "exact" }`.
+The runtime-ref path can recover a stale or unusable `@ref` through its recorded trailing label.
+`tryResolveRefNode` uses `fallbackLabel` for this first-match label lookup, as Context describes.
+This recovery returns `{ source: "ref", phase: "pre-action", kind: "label-fallback" }`.
+Label recovery must never claim exact ref provenance.
 
-The accepted direct-iOS selector fast path has no daemon tree and the XCTest response cannot truthfully
-provide a match count, candidate refs, or a runtime tiebreak. It remains enabled for an ordinary simple
-`press`, but its canonical unique-match response carries
-`resolution: { source: "direct-ios", kind: "not-observed" }`. It must never fabricate a unique-match or
-identity claim. XCTest counts raw exact matches before applying hittability; multiple matches return
-`AMBIGUOUS_MATCH` and delegate to the runtime structural rule for non-Maestro dispatches. `--verify`,
-`--settle`, fill, and recording paths continue to use runtime resolution directly.
+The native-ref fast path always discloses `exact`.
+It dispatches the ref handle and forwards the recorded `fallbackLabel` to the backend.
+The daemon cannot observe any backend label recovery.
+Thus, `exact` describes only daemon resolution.
+This path cannot make a more specific claim.
 
-ADR 0011's matrix must add a `resolutionDisclosure` guarantee with all six honest cells: `runtime-selector`
-enforces the complete pre-action diagnostic shape; `runtime-ref` enforces the ref-provenance shapes
-(`exact`, or `label-fallback` for trailing-label recovery) and `native-ref` enforces `exact`;
-`direct-ios-selector` enforces only the explicit
-`{ source: "direct-ios", kind: "not-observed" }` shape; `coordinate` is inapplicable because no element
-was resolved; and `maestro-non-hittable-fallback` is inapplicable because Maestro owns matching and the
-fallback is coordinate execution. Membership in the maestro cell is decided by the EXECUTED dispatch, not
-the permission flag: a press that was allowed to fall back but hit its element normally is the direct-iOS
-path and discloses `not-observed`; only a response whose runner actually executed the coordinate fallback
-is the inapplicable maestro cell. The four enforced cells use the shared response builder. Its existing
-direct path delegates `disambiguation` to `runtime-selector` after its raw-match count, while its
-`responseIdentity` limitation remains explicit. Layer-3 coverage must claim every enforced/delegated
-cell: runtime unique resolution, structural wrapper collapse, distinct-subtree rejection with candidates,
-exact-ref provenance for runtime and native refs, the runtime-ref `label-fallback` recovery case, and a
-direct-iOS no-snapshot `not-observed` case. No cross-language selection-parity table is claimed: XCTest
-only detects raw ambiguity, while the daemon tree owns structural equivalence and candidate publication.
+The accepted direct-iOS selector fast path has no daemon tree.
+The XCTest response cannot establish a match count, candidate refs, or a runtime tiebreak.
+This path remains enabled for an ordinary simple `press`.
+Its canonical unique-match response contains `resolution: { source: "direct-ios", kind: "not-observed" }`.
+It must never invent a unique-match or identity claim.
+XCTest counts raw exact matches before it applies hittability.
+Multiple matches return `AMBIGUOUS_MATCH`.
+For non-Maestro dispatches, they delegate to the runtime structural rule.
+`--verify`, `--settle`, fill, and recording paths continue to use runtime resolution directly.
+
+ADR 0011's matrix must add a `resolutionDisclosure` guarantee with six accurate cells:
+
+- `runtime-selector` enforces the complete pre-action diagnostic shape.
+- `runtime-ref` enforces `exact` or `label-fallback` for trailing-label recovery.
+- `native-ref` enforces `exact`.
+- `direct-ios-selector` enforces only `{ source: "direct-ios", kind: "not-observed" }`.
+- `coordinate` is inapplicable because no element resolves.
+- `maestro-non-hittable-fallback` is inapplicable because Maestro owns matching and the fallback executes coordinates.
+
+The **executed dispatch** determines maestro-cell membership.
+Permission to use a fallback does not determine membership.
+If a permitted fallback is unnecessary, the normal direct-iOS press discloses `not-observed`.
+Only an executed coordinate fallback belongs to the inapplicable maestro cell.
+The four enforced cells use the shared response builder.
+The existing direct path delegates `disambiguation` to `runtime-selector` after its raw-match count.
+Its `responseIdentity` limitation remains explicit.
+
+Layer-3 coverage must claim every enforced/delegated cell:
+
+- Unique runtime resolution
+- Structural wrapper collapse
+- Distinct-subtree rejection with candidates
+- Exact-ref provenance for runtime and native refs
+- Runtime-ref `label-fallback` recovery
+- Direct-iOS `not-observed` without a snapshot
+
+This decision claims no cross-language selection-parity table.
+XCTest detects only raw ambiguity.
+The daemon tree owns structural equivalence and candidate publication.
 
 ### 3. Versioned `.ad` target-binding evidence
 
