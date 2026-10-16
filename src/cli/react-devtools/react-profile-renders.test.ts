@@ -97,3 +97,22 @@ test('names and prop keys that differ only by control characters stay apart', ()
     ],
   );
 });
+
+test('edited profiles cannot render inherited component-kind keys', () => {
+  const raw = rawProfile({ 1: ['Valid'], 2: ['Invalid'] }, [
+    [
+      0,
+      2,
+      [],
+      [
+        [1, 1],
+        [2, 1],
+      ],
+    ],
+  ]);
+  raw.elements['2'] = JSON.parse('["Invalid","toString",0,0]');
+  assert.deepEqual(
+    summarizeRenders(raw).components.map(({ name, kind }) => [name, kind]),
+    [['Valid', 'function']],
+  );
+});

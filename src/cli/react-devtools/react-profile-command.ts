@@ -207,7 +207,13 @@ async function stopProfile(
       propKinds: {},
       notes: failures.map((failure) => `A React renderer's profile could not be read: ${failure}`),
     };
-    writeSavedProfile(options, saved);
+    writeSavedProfile(options, {
+      ...saved,
+      notes: [
+        ...saved.notes,
+        'Changed prop values have not been inspected; collection may have been interrupted.',
+      ],
+    });
     const described = await describeChangedProps(session, profile);
     saved.propKinds = described.propKinds;
     saved.notes.push(...described.notes);

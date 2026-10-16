@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { runReactProfileCommand } from './react-profile-command.ts';
 import { commandHarness } from './react-devtools-command.fixtures.ts';
 
 afterEach(() => {
@@ -11,7 +10,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const harness = () => commandHarness(runReactProfileCommand);
+const harness = () => commandHarness(['profile']);
 
 function bindSession(stateDir: string, controlBaseUrl: string) {
   fs.mkdirSync(path.join(stateDir, 'metro-sessions'), { recursive: true });

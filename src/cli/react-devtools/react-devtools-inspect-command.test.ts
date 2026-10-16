@@ -1,20 +1,12 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { isInspectCommand, runReactInspectCommand } from './react-devtools-inspect-command.ts';
 import { commandHarness } from './react-devtools-command.fixtures.ts';
 import { FakeAppRuntime, MEMO_TYPE, encodeOperations } from './react-devtools-runtime.fixtures.ts';
-import type { ReactDevtoolsCommandOptions } from './react-devtools-connection.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-
-async function inspectCommand(args: string[], options: ReactDevtoolsCommandOptions) {
-  const [command, ...rest] = args;
-  assert.ok(isInspectCommand(command));
-  return await runReactInspectCommand(command, rest, options);
-}
 
 /** An app whose list renders two memoized rows, one of which logged an error. */
 function listApp(): FakeAppRuntime {
@@ -43,7 +35,7 @@ function listApp(): FakeAppRuntime {
   return app;
 }
 
-const harness = (app = listApp()) => commandHarness(inspectCommand, app);
+const harness = (app = listApp()) => commandHarness([], app);
 
 test('tree prints the mounted components with refs', async () => {
   const { run } = harness();

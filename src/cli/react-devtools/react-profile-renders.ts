@@ -203,7 +203,7 @@ export function* commitRenders(
   for (let offset = 0; offset + 2 < commit.fibers.length; offset += 3) {
     const id = commit.fibers[offset]!;
     const element = elementOf(profile, id);
-    if (!element || !(element[1] in COMPONENT_KINDS)) continue;
+    if (!element || !Object.hasOwn(COMPONENT_KINDS, element[1])) continue;
     yield {
       ...componentOf(element),
       id,

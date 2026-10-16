@@ -1,6 +1,5 @@
-import type { CliOutput } from '../../commands/command-contract.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { writeCliOutput } from '../commands/shared.ts';
+import { runReactDevtoolsCommand } from '../commands/react-devtools.ts';
 import { vi } from 'vitest';
 import vm from 'node:vm';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -18,10 +17,10 @@ export const TARGET = {
 
 /**
  * Serves `targets` from `/json/list`, evaluates debugger calls in `app`'s realm, and captures what
- * `command` prints. Callers restore the stubbed globals and spies after each test.
+ * the CLI prints. Callers restore the stubbed globals and spies after each test.
  */
 export function commandHarness(
-  command: (args: string[], options: ReactDevtoolsCommandOptions) => Promise<CliOutput>,
+  prefix: string[] = [],
   app = new FakeAppRuntime(),
   targets: unknown[] = [TARGET],
 ) {
@@ -49,9 +48,8 @@ export function commandHarness(
   });
   const run = async (...args: string[]) => {
     output.length = 0;
-    const result = await command(args, options);
-    await writeCliOutput(options.flags ?? {}, result);
-    return { code: 0, text: output.join('') };
+    const code = await runReactDevtoolsCommand([...prefix, ...args], options);
+    return { code, text: output.join('') };
   };
   return { app, run, options, stateDir, requested };
 }

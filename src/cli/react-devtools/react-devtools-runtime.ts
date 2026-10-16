@@ -344,19 +344,21 @@ export const REACT_DEVTOOLS_RUNTIME_SOURCE = String.raw`
 
   function inspectBackendElement(id) {
     var found = null;
+    var failure = null;
     eachRenderer(function (ri) {
       if (found || (ri.hasElementWithId && !ri.hasElementWithId(id))) return;
       var result;
       try { result = ri.inspectElement(nextRequestID++, id, null, true); } catch (e) {
-        found = { error: String(e && e.message || e) };
-        return;
+        result = { type: 'error', message: String(e && e.message || e) };
       }
       if (!result || result.type === 'not-found') return;
-      found = result.type === 'full-data'
-        ? { value: result.value, name: lookupName(ri, id) }
-        : { error: result.message || result.type };
+      if (result.type === 'full-data') found = { value: result.value, name: lookupName(ri, id) };
+      else {
+        failure = { error: result.message || result.type };
+        if (ri.hasElementWithId) found = failure;
+      }
     });
-    return found || { missing: true };
+    return found || failure || { missing: true };
   }
 
   function inspectOne(id) {

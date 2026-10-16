@@ -221,7 +221,7 @@ export function createAgentDeviceClient(
           };
         } finally {
           // Close is teardown intent: drop the dev-server binding even if the daemon call fails.
-          clearMetroSessionHintsQuietly(metroSessionHintsScope(config, options));
+          clearMetroSessionHintsQuietly(mergeClientOptions(config, options));
         }
       },
       saveScript: async (
@@ -276,7 +276,7 @@ export function createAgentDeviceClient(
       open: async (options: AppOpenOptions) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('open', options);
-        recordOpenedMetroSession(metroSessionHintsScope(config, options), {
+        recordOpenedMetroSession(mergeClientOptions(config, options), {
           explicitRuntime: options.runtime !== undefined,
           runtime: mergeClientOptions(config, options).runtime,
           sessionReused: data.sessionReused === true,
@@ -361,13 +361,13 @@ export function createAgentDeviceClient(
           runtimeFilePath: options.runtimeFilePath,
           logPath: options.logPath,
         });
-        recordPreparedMetroSession(metroSessionHintsScope(config), result);
+        recordPreparedMetroSession(config, result);
         return result;
       },
       reload: async (options = {}) =>
         await reloadMetro({
           ...options,
-          runtime: readMetroSessionRuntime(metroSessionHintsScope(config)) ?? config.runtime,
+          runtime: readMetroSessionRuntime(config) ?? config.runtime,
         }),
     },
     capture: {
@@ -575,17 +575,6 @@ function mergeClientOptions(
   options: InternalRequestOptions,
 ): InternalRequestOptions {
   return { ...config, ...options };
-}
-
-function metroSessionHintsScope(
-  config: AgentDeviceClientConfig,
-  options: InternalRequestOptions = {},
-): { stateDir: string; session: string } {
-  const merged = mergeClientOptions(config, options);
-  return {
-    stateDir: resolveDaemonPaths(merged.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir,
-    session: resolveSessionName(merged.session),
-  };
 }
 
 export type * from './client/client-types.ts';

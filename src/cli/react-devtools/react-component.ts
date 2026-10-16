@@ -10,7 +10,7 @@ export const COMPONENT_KINDS: Readonly<Record<number, ComponentKind>> = {
 };
 
 export function componentKind(type: number): ComponentKind {
-  return COMPONENT_KINDS[type] ?? 'unknown';
+  return Object.hasOwn(COMPONENT_KINDS, type) ? COMPONENT_KINDS[type]! : 'unknown';
 }
 
 const HOC_PATTERN = /^([A-Za-z0-9_$]+)\((.+)\)$/;

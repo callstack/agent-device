@@ -1,5 +1,7 @@
 import type { PrepareMetroRuntimeResult } from '@agent-device/contracts/remote';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
+import { resolveSessionName } from '../client/client-normalizers.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import fs from 'node:fs';
 import path from 'node:path';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
@@ -12,6 +14,15 @@ export type MetroSessionHints = {
 };
 
 export type MetroSessionScope = { stateDir: string; session: string };
+
+type MetroSessionOptions = { stateDir?: string; session?: string };
+
+function resolveMetroSessionScope(options: MetroSessionOptions): MetroSessionScope {
+  return {
+    stateDir: resolveDaemonPaths(options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir,
+    session: resolveSessionName(options.session),
+  };
+}
 
 function metroSessionHintsPath(stateDir: string, session: string): string {
   return path.join(stateDir, 'metro-sessions', `${safeSessionName(session)}.json`);
@@ -91,9 +102,15 @@ export function resolveSessionMetroServerUrl(
   });
 }
 
-export function readMetroSessionRuntime(scope: MetroSessionScope): SessionRuntimeHints | undefined {
-  const binding = readMetroSessionHints(scope);
-  return binding ? { bundleUrl: binding.controlBaseUrl } : undefined;
+export function readMetroSessionRuntime(
+  options: MetroSessionOptions,
+): SessionRuntimeHints | undefined {
+  try {
+    const binding = readMetroSessionHints(resolveMetroSessionScope(options));
+    return binding ? { bundleUrl: binding.controlBaseUrl } : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function runtimeServerUrl(runtime: SessionRuntimeHints | undefined): string | undefined {
@@ -104,10 +121,11 @@ function runtimeServerUrl(runtime: SessionRuntimeHints | undefined): string | un
 }
 
 export function recordPreparedMetroSession(
-  scope: MetroSessionScope,
+  options: MetroSessionOptions,
   result: Pick<PrepareMetroRuntimeResult, 'statusUrl' | 'iosRuntime' | 'androidRuntime'>,
 ): void {
   try {
+    const scope = resolveMetroSessionScope(options);
     const deviceBaseUrls = new Set<string>();
     for (const runtime of [result.iosRuntime, result.androidRuntime]) {
       try {
@@ -126,7 +144,7 @@ export function recordPreparedMetroSession(
 }
 
 export function recordOpenedMetroSession(
-  scope: MetroSessionScope,
+  options: MetroSessionOptions,
   input: {
     runtime: SessionRuntimeHints | undefined;
     explicitRuntime: boolean;
@@ -134,6 +152,7 @@ export function recordOpenedMetroSession(
   },
 ): void {
   try {
+    const scope = resolveMetroSessionScope(options);
     const url = runtimeServerUrl(input.runtime);
     if (url) {
       const binding = input.explicitRuntime ? undefined : readMetroSessionHints(scope);
@@ -143,8 +162,8 @@ export function recordOpenedMetroSession(
   } catch {}
 }
 
-export function clearMetroSessionHintsQuietly(scope: MetroSessionScope): void {
+export function clearMetroSessionHintsQuietly(options: MetroSessionOptions): void {
   try {
-    clearMetroSessionHints(scope);
+    clearMetroSessionHints(resolveMetroSessionScope(options));
   } catch {}
 }

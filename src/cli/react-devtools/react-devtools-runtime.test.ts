@@ -268,6 +268,34 @@ test('prop sampling and inspection use the renderer that owns the element', () =
   assert.deepEqual(inspected.elements['3']?.props, { data: { label: 'owned' }, cleaned: [] });
 });
 
+for (const confirmedOwner of [false, true]) {
+  test(`${confirmedOwner ? 'confirmed' : 'unconfirmed'} renderer failure respects element ownership`, () => {
+    const app = new FakeAppRuntime();
+    app.install();
+    app.renderer.props.set(3, { data: { label: 'owned' }, cleaned: [] });
+    const foreign = Object.assign(Object.create(app.renderer), {
+      hasElementWithId: confirmedOwner ? () => true : undefined,
+      inspectElement: () => {
+        throw new Error('renderer unavailable');
+      },
+    });
+    app.hook.rendererInterfaces.clear();
+    app.hook.rendererInterfaces.set(1, foreign);
+    app.hook.rendererInterfaces.set(2, app.renderer);
+    assert.deepEqual(
+      app.call('describeProps', { '3': ['label'] }),
+      confirmedOwner ? {} : { '3': { label: 'string' } },
+    );
+    const inspected = app.call<{ elements: Record<string, { props?: unknown; error?: string }> }>(
+      'inspect',
+      [3],
+    );
+    if (confirmedOwner) assert.equal(inspected.elements['3']?.error, 'renderer unavailable');
+    else
+      assert.deepEqual(inspected.elements['3']?.props, { data: { label: 'owned' }, cleaned: [] });
+  });
+}
+
 test('a renderer whose profiling data cannot be read fails the stop instead of returning no commits', () => {
   const app = new FakeAppRuntime();
   app.install();
