@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { localRuntimeOwner, providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { asAppError, type AppError } from '@agent-device/kernel/errors';
-import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
+import * as hostProcess from '@agent-device/host-kit/process';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
@@ -21,7 +21,10 @@ import {
   canonicalLocalDeviceKey,
 } from '@agent-device/daemon-contracts/device-claims';
 import { createRequestExecutionScope } from '../../../server/request-execution-scope.ts';
-import { resolveEffectiveSessionName } from '../../../sessions/session-routing.ts';
+import {
+  resolveCallerScopeRoot,
+  resolveEffectiveSessionName,
+} from '../../../sessions/session-routing.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
@@ -46,6 +49,7 @@ function makeAdmission(
     session,
     workspace: callerCwd ?? '/worktrees/current',
     callerCwd: callerCwd ?? undefined,
+    resolveScopeRoot: resolveCallerScopeRoot,
     stateDir,
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
   });
@@ -234,52 +238,81 @@ test("an open session named after a command's label is not renew-adopted by that
   expect(await abandonDeviceClaim(open.ownership)).toBe('abandoned');
 });
 
-// A legacy record carries no kind, so decoding it kindless is only safe while no kind decision
-// can reach one. That decision sits behind `isClaimOwnedByThisDaemon`, which matches stateDir,
-// pid, and process start time; a record this process wrote states its kind. A record that names
-// this live process identity without stating a kind is therefore forged or a PID-reuse survivor,
-// and here it is written by hand to pin what such a record may never do: act as a command claim.
-test('a kindless legacy record under this process identity reads as the named session, never as a command claim', async () => {
-  const { stateDir, claimsDir } = setup();
-  fs.mkdirSync(claimsDir, { recursive: true });
-  const identity = readCurrentOwnerIdentity();
-  fs.writeFileSync(
-    deviceClaimFilePath(canonicalLocalDeviceKey(ANDROID_EMULATOR)),
-    JSON.stringify({
-      schemaVersion: 2,
-      deviceKey: canonicalLocalDeviceKey(ANDROID_EMULATOR),
-      device: {
-        family: 'android',
-        id: ANDROID_EMULATOR.id,
-        name: ANDROID_EMULATOR.name,
-        kind: ANDROID_EMULATOR.kind,
-      },
-      session: 'transient:install',
-      workspace: '/worktrees/current',
-      stateDir,
-      ownerPid: identity.pid,
-      ownerStartTime: identity.startTime,
-      ownerToken: 'legacy-token',
-      createdAtMs: 1,
-      updatedAtMs: 1,
-    }),
-  );
+// A legacy record states no kind, so coverage cannot treat it as an open session's claim. The
+// proof it would lean on — `isClaimOwnedByThisDaemon` — matches pid plus start time, and two
+// different processes agree on both whenever a start time is unreadable (`null === null`), so a
+// leftover v1/v2 command claim can outlive PID reuse and present as this daemon's own session.
+// Each case writes the record by hand with the identity this process reports.
+test('a legacy record under this process identity covers nothing, not even under an unreadable start time', async () => {
+  for (const startTimeUnavailable of [false, true]) {
+    const { stateDir, claimsDir } = setup();
+    fs.mkdirSync(claimsDir, { recursive: true });
+    // A host this process cannot read its own start time from is the window PID reuse walks
+    // through, so pin the identity the daemon reads rather than only the one on disk.
+    const identity = startTimeUnavailable
+      ? { pid: process.pid, startTime: null }
+      : hostProcess.readCurrentOwnerIdentity();
+    const owner = vi.spyOn(hostProcess, 'readCurrentOwnerIdentity').mockReturnValue(identity);
+    try {
+      fs.writeFileSync(
+        deviceClaimFilePath(canonicalLocalDeviceKey(ANDROID_EMULATOR)),
+        JSON.stringify({
+          schemaVersion: 2,
+          deviceKey: canonicalLocalDeviceKey(ANDROID_EMULATOR),
+          device: {
+            family: 'android',
+            id: ANDROID_EMULATOR.id,
+            name: ANDROID_EMULATOR.name,
+            kind: ANDROID_EMULATOR.kind,
+          },
+          session: 'transient:install',
+          workspace: '/worktrees/current',
+          stateDir,
+          ownerPid: identity.pid,
+          ownerStartTime: identity.startTime,
+          ownerToken: 'legacy-token',
+          createdAtMs: 1,
+          updatedAtMs: 1,
+        }),
+      );
 
-  // Another session's `install` must not adopt or renew it: the label guard refuses outright.
-  const foreign = makeAdmission('transient-exclusive', stateDir, 'install', 'other-session');
-  const error = asAppError(
-    await foreign.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
-  );
-  expect(error.code).toBe('DEVICE_IN_USE');
-  await foreign[Symbol.asyncDispose]();
-  expect(inspectDeviceClaims({})[0]?.claim?.ownerToken).toBe('legacy-token');
+      // Addressed exactly as the v2 record's own session, from that record's workspace: the most a
+      // caller can do without stating a kind, and still not enough to take the device.
+      const claimOwner = makeAdmission(
+        'transient-exclusive',
+        stateDir,
+        'install',
+        'transient:install',
+      );
+      const error = asAppError(
+        await claimOwner.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
+      );
+      expect(error.code).toBe('DEVICE_IN_USE');
+      expect(error.details?.reason).toBe('DEVICE_CLAIM_LIVE_OWNER');
+      await claimOwner[Symbol.asyncDispose]();
+      expect(inspectDeviceClaims({})[0]?.claim?.ownerToken).toBe('legacy-token');
+    } finally {
+      owner.mockRestore();
+    }
+  }
+});
 
-  // Addressed as the name itself from the claim's workspace, it covers like the v3 colon-named
-  // session's claim does — the schema version alone decides nothing about the kind.
-  const named = makeAdmission('transient-exclusive', stateDir, 'install', 'transient:install');
-  await named.admit(ANDROID_EMULATOR, localAndroid);
-  await named[Symbol.asyncDispose]();
-  expect(inspectDeviceClaims({})[0]?.claim?.ownerToken).toBe('legacy-token');
+// The same workspace and session address do cover once the record can state its kind, so the
+// refusal above is about an unstated kind rather than about the identity or workspace checks.
+test('a current-version open-session claim of this workspace still covers', async () => {
+  const { stateDir } = setup();
+  await acquireDeviceClaim({
+    device: ANDROID_EMULATOR,
+    session: 'transient:install',
+    workspace: '/worktrees/current',
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+
+  const admission = makeAdmission('transient-exclusive', stateDir, 'install', 'transient:install');
+  await admission.admit(ANDROID_EMULATOR, localAndroid);
+  await admission[Symbol.asyncDispose]();
+  expect(claimedSessions()).toEqual(['transient:install']);
 });
 
 // Binding dedupes a request's devices by `deviceIdentityKey`, which carries `target`, while the

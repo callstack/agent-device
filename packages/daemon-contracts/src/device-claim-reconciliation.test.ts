@@ -147,6 +147,7 @@ const unavailable = Object.freeze({
 function makeClaim(stateDir: string): DeviceClaim {
   return {
     schemaVersion: 3,
+    claimOwnerKind: 'open-session',
     deviceKey: 'local:android:none:emulator-5554',
     device: { family: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
     session: 'claimed-session',

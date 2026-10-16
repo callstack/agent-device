@@ -2,7 +2,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { resolveCallerScopeRoot } from '../../core/caller-scope-root.ts';
 import { deviceClaimConflictError } from './device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
 import {
@@ -54,15 +53,20 @@ export function createDeviceClaimAdmission(params: {
    * exactly the SDK requests whose own session claims should cover them.
    */
   callerCwd: string | undefined;
+  /**
+   * Canonicalizes a workspace to the root session routing hashes into a session address.
+   * The claim layer cannot reach routing itself, so the composition root hands over the same
+   * function routing uses: comparing raw directories would separate a caller that ran `open`
+   * at the checkout root from its own claim recorded against that root.
+   */
+  resolveScopeRoot: (workspace: string | undefined) => string | undefined;
   stateDir: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }): DeviceClaimAdmission {
   // The caller admits once per device binding, so this only has to remember what
   // it took in order to give it back.
   const acquired: DeviceClaimSessionOwnership[] = [];
-  // Comparing both sides through resolveCallerScopeRoot — the root routing hashes into
-  // the implicit address — keeps one checkout's commands together across directories.
-  const requestScopeRoot = resolveCallerScopeRoot(params.callerCwd);
+  const requestScopeRoot = params.resolveScopeRoot(params.callerCwd);
 
   /**
    * Only `transient-exclusive` writes the claim store here: `observe`/`require-owner` never do,
@@ -76,7 +80,7 @@ export function createDeviceClaimAdmission(params: {
       command: params.command,
       coveredBySession: params.session,
       coveredClaimIsOwnedByRequest: (claim) =>
-        !requestScopeRoot || resolveCallerScopeRoot(claim.workspace) === requestScopeRoot,
+        !requestScopeRoot || params.resolveScopeRoot(claim.workspace) === requestScopeRoot,
       workspace: params.workspace,
       stateDir: params.stateDir,
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,

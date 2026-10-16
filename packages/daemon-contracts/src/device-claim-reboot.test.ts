@@ -19,6 +19,7 @@ const device: DeviceInfo = {
 
 const CLAIM: DeviceClaim = {
   schemaVersion: 3,
+  claimOwnerKind: 'open-session',
   deviceKey: 'local:apple:ios:SIM-1',
   device: { family: 'apple', id: device.id, name: device.name, kind: device.kind },
   session: 'cwd:/w:default',

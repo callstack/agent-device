@@ -21,6 +21,7 @@ function conflict(classification: InspectedDeviceClaim['classification']): Inspe
     classification,
     claim: {
       schemaVersion: 3,
+      claimOwnerKind: 'open-session',
       deviceKey: 'local:android:none:emulator-5554',
       device: { family: 'android', id: device.id, name: device.name, kind: device.kind },
       session: 'checkout',

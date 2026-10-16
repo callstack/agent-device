@@ -128,8 +128,8 @@ export async function acquireTransientDeviceClaim(params: {
    * Whether the live claim under {@link coveredBySession} was taken by this request's
    * workspace rather than merely recorded under the same session string. Session
    * addresses are copyable (#3345), so session equality alone lets a caller that
-   * pasted another workspace's address act as that workspace's owner. Only open
-   * sessions' claims are ever candidates: a claim's `transientCommand` kind, not its
+   * pasted another workspace's address act as that workspace's owner. Only an
+   * `open-session` claim is ever a candidate: the record's `claimOwnerKind`, not its
    * label, decides whether it can cover anything.
    */
   coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
@@ -146,18 +146,19 @@ export async function acquireTransientDeviceClaim(params: {
       !isAbandonedDeviceClaim(existing.claim) &&
       isClaimOwnedByThisDaemon(existing.claim, params.stateDir, readCurrentOwnerIdentity())
     ) {
+      const claimKind = existing.claim.claimOwnerKind;
       if (
-        existing.claim.transientCommand === undefined &&
+        claimKind === 'open-session' &&
         existing.claim.session === params.coveredBySession &&
         params.coveredClaimIsOwnedByRequest(existing.claim)
       ) {
         return { status: 'covered-by-owned-claim' };
       }
-      // A command-scoped claim belongs to the one request in flight, and the request that holds
-      // it is covered by its release token at the admission layer — never by an address match.
-      // The kind decides this, so a caller that copies the claim's `transient:<command>` label
-      // into `--session` is refused instead of adopting it (#3345).
-      if (existing.claim.transientCommand !== undefined) {
+      // Only a record that states its kind can take part in a kind decision. A migrated record
+      // states none, and `isClaimOwnedByThisDaemon` matches pid plus start time — which two
+      // processes can share once a start time is unreadable — so coverage has to refuse rather
+      // than assume an old record was not some other owner's command claim (#3345).
+      if (claimKind !== 'open-session') {
         return { status: 'conflict', conflict: existing };
       }
       // A session literally named this command's label is not this command's claim either:
@@ -217,6 +218,7 @@ async function claimHeldDevice(params: {
     ownerToken: crypto.randomUUID(),
     createdAtMs: now,
     updatedAtMs: now,
+    claimOwnerKind: params.transientCommand === undefined ? 'open-session' : 'transient-command',
     ...(params.transientCommand === undefined ? {} : { transientCommand: params.transientCommand }),
   };
   writeDeviceClaim(claim);

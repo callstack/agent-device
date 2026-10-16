@@ -20,6 +20,7 @@ const scope = {
 function makeClaim(stateDir: string, session: string): DeviceClaim {
   return {
     schemaVersion: 3,
+    claimOwnerKind: 'open-session',
     deviceKey: `local:android:none:${session}`,
     device: { family: 'android', id: session, name: 'Pixel', kind: 'emulator' },
     session,

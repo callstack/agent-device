@@ -30,7 +30,12 @@ function v2Claim(overrides: Record<string, unknown> = {}): Record<string, unknow
 }
 
 function currentClaim(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { ...v2Claim(), schemaVersion: 3, ...overrides };
+  return {
+    ...v2Claim(),
+    schemaVersion: 3,
+    claimOwnerKind: 'open-session',
+    ...overrides,
+  };
 }
 
 test('v1, v2, and v3 records decode to the process-owned claim with its process principal intact', () => {
@@ -47,35 +52,48 @@ test('v1, v2, and v3 records decode to the process-owned claim with its process 
 });
 
 // Released v1/v2 recorded a command-scoped claim and an open session *named* `transient:<command>`
-// as the same record — no stored field separates them, so the kind of a legacy claim is not a
-// fact the decoder can read. Both decode kindless, which is safe by construction, not by guess:
-// the kind is consulted only for claims `isClaimOwnedByThisDaemon` accepts (same stateDir, pid,
-// and process start time), and a live process reads and writes only v3 records, whose kind is a
-// stored field. No in-flight command's claim is ever a legacy record; the original #3345 bypass
-// needs a current-process claim, which carries its kind.
-test('a legacy claim with a command-label session decodes kindless, not as a guessed command claim', () => {
+// as the same record, so no stored field can say which one a legacy record was. Such a record
+// still decodes — clearing, reconciliation, and stale settlement need its principal — but it
+// states no kind, so a migrated record can never cover a command.
+test('a migrated record normalizes to the current schema and states no claim kind', () => {
   for (const raw of [
     legacyClaim({ session: 'transient:install' }),
     v2Claim({ session: 'transient:install' }),
   ]) {
     const record = decodeStoredDeviceClaim(raw);
-    expect(record?.transientCommand).toBeUndefined();
-    expect(record?.session).toBe('transient:install');
+    expect(record).not.toBeNull();
+    if (!record) throw new Error('expected a decoded claim');
+    expect(record.schemaVersion).toBe(3);
+    expect(record.session).toBe('transient:install');
+    expect(record.claimOwnerKind).toBe('unstated');
+    expect(record.transientCommand).toBeUndefined();
   }
 });
 
-// The kind is a stored field from v3 on. A v3 open session may be named after a command, and a
-// v3 record without the field is exactly that session's claim; a malformed kind fails the record
-// closed instead of guessing.
-test('a v3 claim kind comes only from its stored field', () => {
+// A current record states its kind, and the kind fields have to agree. An open session may
+// legitimately be named after a command; a malformed kind fails the record closed.
+test('a current-version claim kind comes only from its stored fields', () => {
+  const named = decodeStoredDeviceClaim(currentClaim({ session: 'transient:install' }));
+  expect(named).not.toBeNull();
+  if (!named) throw new Error('expected a decoded claim');
+  expect(named.claimOwnerKind).toBe('open-session');
+  expect(named.transientCommand).toBeUndefined();
+
+  const scoped = decodeStoredDeviceClaim(
+    currentClaim({ claimOwnerKind: 'transient-command', transientCommand: 'install' }),
+  );
+  expect(scoped).not.toBeNull();
+  if (!scoped) throw new Error('expected a decoded claim');
+  expect(scoped.claimOwnerKind).toBe('transient-command');
+  expect(scoped.transientCommand).toBe('install');
+
+  expect(decodeStoredDeviceClaim(currentClaim({ transientCommand: 'install' }))).toBeNull();
   expect(
-    decodeStoredDeviceClaim(currentClaim({ session: 'transient:install' }))?.transientCommand,
-  ).toBeUndefined();
-  expect(
-    decodeStoredDeviceClaim(currentClaim({ transientCommand: 'install' }))?.transientCommand,
-  ).toBe('install');
-  expect(decodeStoredDeviceClaim(currentClaim({ transientCommand: '' }))).toBeNull();
-  expect(decodeStoredDeviceClaim(currentClaim({ transientCommand: 7 }))).toBeNull();
+    decodeStoredDeviceClaim(
+      currentClaim({ claimOwnerKind: 'transient-command', transientCommand: '' }),
+    ),
+  ).toBeNull();
+  expect(decodeStoredDeviceClaim(currentClaim({ claimOwnerKind: 'bogus' }))).toBeNull();
 });
 
 test('a record of an unknown schema version is unreadable', () => {

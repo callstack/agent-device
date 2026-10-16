@@ -94,6 +94,44 @@ test('preserves and reports a live foreign claim without overwriting it', async 
   assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.session, 'first');
 });
 
+// Renewal, abandon, and clear write a decoded claim back. A migrated record must therefore carry
+// the current schema version: a legacy version on the migrated device shape reads back as
+// inconsistent and locks the owner out of its own next command.
+test('a renewal of a migrated record writes back the shape the reader expects', async () => {
+  const root = useClaimsRoot();
+  fs.writeFileSync(
+    claimPath(root),
+    JSON.stringify({
+      schemaVersion: 1,
+      deviceKey: canonicalLocalDeviceKey(device),
+      device: { platform: 'android', id: device.id, name: device.name, kind: device.kind },
+      session: 'legacy-owner',
+      workspace: '/worktrees/legacy',
+      stateDir: root,
+      ownerPid: process.pid,
+      ownerStartTime: 'test-process-start-time',
+      ownerToken: 'legacy-token',
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }),
+  );
+
+  const held = await acquireDeviceClaim({
+    device,
+    session: 'legacy-owner',
+    workspace: '/worktrees/legacy',
+    stateDir: root,
+  });
+  assert.equal(held.status, 'acquired');
+
+  const persisted = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  assert.equal(persisted.schemaVersion, 3);
+  const reread = inspectDeviceClaims({ serial: device.id })[0];
+  assert.equal(reread?.classification, 'live');
+  assert.equal(reread?.claim?.session, 'legacy-owner');
+  assert.equal(reread?.claim?.claimOwnerKind, 'unstated');
+});
+
 test('does not treat a same-named session in another worktree as its claim owner', async () => {
   const root = useClaimsRoot();
   const first = await acquireDeviceClaim({

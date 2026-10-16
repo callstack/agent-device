@@ -21,7 +21,10 @@ import {
   contextFromFlags as contextFromFlagsWithLog,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
-import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
+import {
+  resolveCallerScopeRoot,
+  resolveEffectiveSessionName,
+} from '../sessions/session-routing.ts';
 import {
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
@@ -416,6 +419,7 @@ function createRequestDeviceAccess(params: {
     session: params.sessionName,
     workspace: params.workspace,
     callerCwd: params.callerCwd,
+    resolveScopeRoot: resolveCallerScopeRoot,
     stateDir: params.stateDir,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
       scope: platformRequestScope,
