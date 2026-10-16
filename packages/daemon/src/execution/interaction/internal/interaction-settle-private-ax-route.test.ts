@@ -12,7 +12,7 @@ import { contextFromFlags as buildDaemonContext } from '../../../core/context.ts
 import { installInteractorResolution } from '../../../core/interactor-resolution.ts';
 import { handleInteractionCommands } from '../index.ts';
 import { getRuntimeBindings } from '../../__tests__/interaction-get-runtime-fixture.ts';
-import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
+import { createTouchCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 
 // The settle loop pins `private-ax` on its captures once the observation reports that producer; the
 // daemon must carry that preference through its capture path to the interactor, which is what the
@@ -62,7 +62,7 @@ beforeEach(() => {
 });
 
 /** The pin the settle loop applies: every settle capture asks for `private-ax` once it is established. */
-const pinningSurface = touchForwardingCreateCommandSurface({
+const pinningSurface = createTouchCommandSurface({
   observeSettle: async ({ settle, baselineQuality, capture }): Promise<SettleObservation> => {
     let pinned = baselineQuality?.backend === 'private-ax';
     for (let captures = 0; captures < 3; captures += 1) {

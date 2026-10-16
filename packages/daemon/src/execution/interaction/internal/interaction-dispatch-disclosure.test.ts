@@ -37,7 +37,7 @@ import {
   makeSession,
   makeStaleRefSession,
 } from './__tests__/interaction-touch-fixtures.ts';
-import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
+import { createTouchCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 
 // contracts/fixtures/dispatch-disclosure.json, daemon rows: each drives a `press`, `fill`, `get`,
 // or `swipe` through the daemon interaction handler, inside the router's dispatch seam, over a
@@ -62,7 +62,7 @@ const GESTURE_PLAN: GesturePlan = {
   ],
 };
 
-const createCommandSurface = touchForwardingCreateCommandSurface({
+const createCommandSurface = createTouchCommandSurface({
   members: (config) => ({
     selectors: {
       get: async () => {

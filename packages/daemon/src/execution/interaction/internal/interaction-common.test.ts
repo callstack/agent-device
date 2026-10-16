@@ -16,7 +16,7 @@ import {
   mockFillPoint,
   resetGetRuntimeFixture,
 } from '../../__tests__/interaction-get-runtime-fixture.ts';
-import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
+import { createTouchCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
@@ -163,7 +163,7 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
   );
 
   const response = await handleInteractionCommands({
-    createCommandSurface: touchForwardingCreateCommandSurface(),
+    createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',
       session: sessionName,
@@ -221,7 +221,7 @@ test('parameterized fill collapses whitespace-only backend echoes through the ha
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: touchForwardingCreateCommandSurface(),
+    createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',
       session: sessionName,
@@ -327,7 +327,7 @@ test('a fill on a @ref acts on the node of the authorized ref frame, not on a ne
   mockFillPoint.mockResolvedValue({ filled: true });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: touchForwardingCreateCommandSurface(),
+    createCommandSurface: createTouchCommandSurface(),
     req: {
       token: 't',
       session: sessionName,
