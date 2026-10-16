@@ -19,8 +19,8 @@ await import('./alert.ts');
 /**
  * The four legs as the interactor exposes them: observation is one `elementTree()` read per
  * probe, action is a `tap()` at the chosen button's center. Trees are the live Limrun captures.
- * These cases resolve on the first probe each; budget loops are pinned through the legs' sleep
- * seam in `alert.test.ts`, so nothing here waits production time.
+ * These cases resolve on the first probe each; budget loops are pinned with driven clocks in
+ * `alert.test.ts`, so nothing here waits production time.
  */
 function sessionWithTrees(trees: Array<IosTreeNode | IosTreeNode[]>) {
   const elementTree = vi.fn(async () => {

@@ -58,7 +58,6 @@ export {
   type TreeAlertObservation,
   type TreeAlertPress,
   type TreeAlertResult,
-  type TreeAlertSleep,
 } from './alert.ts';
 export {
   classifyAndroidAlertIdentifier,
