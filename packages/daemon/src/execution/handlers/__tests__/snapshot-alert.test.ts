@@ -140,3 +140,34 @@ for (const action of ['accept', 'dismiss']) {
     expect(successor?.actions).toEqual([]);
   });
 }
+
+test('alert wait forwards its timeout budget to the runtime leg', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim';
+  sessionStore.publish(sessionName, makeSession(sessionName));
+
+  await handleSnapshotCommands(sessionName, sessionStore, ['wait', '1500']);
+
+  // The ceiling test below proves the refusal; this proves a legal budget crosses the runtime
+  // seam whole. (The Apple runner leg reads the state as `get` and waits on its own deadline.)
+  expect(mockRunnerCommand.mock.calls[0]?.[1]).toMatchObject({
+    command: 'alert',
+    timeoutMs: 1_500,
+  });
+});
+
+test('alert wait refuses a budget past the window ceiling instead of arming a misfired timer', async () => {
+  // Above 2^31-1 ms Node's timer overflows: `AbortSignal.timeout` throws outright and a bare
+  // setTimeout fires after 1 ms. The refusal must be the typed argument error, never either.
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim';
+  sessionStore.publish(sessionName, makeSession(sessionName));
+
+  await expect(
+    handleSnapshotCommands(sessionName, sessionStore, ['wait', '4294967296']),
+  ).rejects.toThrow(/exceeds the maximum/);
+  await expect(
+    handleSnapshotCommands(sessionName, sessionStore, ['wait', '2147483648']),
+  ).rejects.toThrow(/exceeds the maximum/);
+  expect(mockRunnerCommand).not.toHaveBeenCalled();
+});

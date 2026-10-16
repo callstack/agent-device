@@ -161,15 +161,20 @@ function findSystemDialogNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
 }
 
 function findAlertButtons(nodes: RawSnapshotNode[]): AndroidAlertButton[] {
-  const seen = new Set<string>();
+  const seenPhysicalButtons = new Set<string>();
   const buttons: AndroidAlertButton[] = [];
   for (const node of nodes) {
     const label = readNodeText(node);
     if (!label || !node.rect || !isButtonLike(node)) continue;
     const normalized = label.trim().toLowerCase();
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
+    if (!normalized) continue;
     const point = centerOfRect(node.rect);
+    // Two nodes over one center are the one physical button (uiautomator commonly nests it);
+    // the same label at two centers is two buttons, and the shared choice boundary refuses —
+    // collapsing them here would hand the first one back as if the capture had named it.
+    const physicalButton = `${normalized}|${point.x}|${point.y}`;
+    if (seenPhysicalButtons.has(physicalButton)) continue;
+    seenPhysicalButtons.add(physicalButton);
     buttons.push({
       label,
       x: point.x,

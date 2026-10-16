@@ -11,6 +11,7 @@ import {
   ALERT_WINDOW_EXPIRED_REASON,
   type AlertStatusKind,
   DEFAULT_ALERT_TIMEOUT_MS,
+  MAX_ALERT_WINDOW_MS,
 } from '@agent-device/contracts/alert-contract';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
@@ -29,12 +30,12 @@ import {
 import { backAndroid, pressAndroid } from './input-actions.ts';
 
 /**
- * THE tree-based alert driver (PR #3699 review): every backend that reads alerts out of a
- * capture tree — the Android ADB legs here and the Limrun iOS legs in `provider-limrun` —
- * reaches poll, confirm, same-alert, refusal, and response building through this one module,
- * and its button roles through the shared label vocabulary in `contracts/alert-contract`. A
- * backend supplies only its own observation (`capture` + `findCandidate`), its platform's
- * acting policy (`choose`), and its press seam (`press`).
+ * THE tree-based alert driver: every backend that reads alerts out of a capture tree — the
+ * Android ADB legs here and the Limrun iOS legs in `provider-limrun` — reaches poll, confirm,
+ * same-alert, refusal, and response building through this one module, and its button roles
+ * through the shared label vocabulary in `contracts/alert-contract`. A backend supplies only
+ * its own observation (`capture` + `findCandidate`), its platform's acting policy (`choose`),
+ * and its press seam (`press`).
  */
 
 /** The point a press seam aims at: a button's center in the backend's own coordinate space. */
@@ -60,13 +61,9 @@ export type TreeAlertCandidate<
 }>;
 
 /**
- * The seams one tree-based backend owns. `timeoutMs` bounds `wait`; the acting legs ride the
- * contract action budget. Poll sleeps ride the shared `pollUntilSettled` deadline primitive, so
- * tests drive the clock (`docs/agents/testing.md`) rather than the driver owning a timer seam.
- * `capture` and `press` receive the live cancellation signal for their attempt — the caller's
- * request signal joined with the loop's remaining window — so a backend whose transport can be
- * canceled stops in-flight work, and every backend refuses to consume a capture or dispatch a
- * press once the signal has fired. A transport that cannot cancel still gains both refusals.
+ * The seams one tree-based backend owns. `capture` and `press` receive the leg's live
+ * cancellation signal (caller cancellation joined with the leg's window): a transport that can
+ * cancel stops in-flight work; one that cannot still never has its late answer consumed.
  */
 export type TreeAlertSeam = Readonly<{ signal: AbortSignal }>;
 
@@ -81,12 +78,6 @@ export type TreeAlertDriver<
   timeoutMs?: number;
   /** The daemon request's cancellation, when the caller rides one; joined into every seam call. */
   signal?: AbortSignal;
-  /**
-   * One capture, offered the leg's live signal. A backend whose transport can abort (Android's
-   * adb executor kills the child) hands it down; a backend whose transport cannot (Limrun's
-   * WebSocket client) ignores it, and the driver's window guard is what keeps its late captures
-   * unconsumed.
-   */
   capture: (seam: TreeAlertSeam) => Promise<TCapture>;
   findCandidate: (capture: TCapture) => TreeAlertObservation<TCandidate>;
   choose: (candidate: TCandidate, action: 'accept' | 'dismiss') => TreeAlertPress<TButton> | null;
@@ -126,24 +117,23 @@ export type TreeAlertResult<
       message?: string;
     };
 
-/** One observation of the backend's own capture, bound by the driver from its two seams. */
-type TreeAlertObserver<TCandidate> = () => Promise<TreeAlertObservation<TCandidate>>;
+/** One observation of the backend's own capture. A windowed probe may answer window-closed. */
+type TreeAlertObservationOrClosed<TCandidate> =
+  | TreeAlertObservation<TCandidate>
+  | TreeAlertWindowClosed;
+
+type TreeAlertObserver<TCandidate> = () => Promise<TreeAlertObservationOrClosed<TCandidate>>;
 
 const ALERT_NOT_FOUND_HINT =
   'If a sheet is visible in snapshot but alert reports no alert, it is likely app-owned UI. Use snapshot -i and press the visible label/ref.';
 
 /**
- * Runs one alert leg. The deadline order is read-first on every budget: over a positive window
- * both predecessor loops took their first immediate observation before any waiting, and one
- * immediate observation is the honest answer shape for a zero-length `wait` window too. A
- * malformed `timeoutMs` is the bounded default, never a loop whose bound is never reached.
- *
- * Every budget also bounds the work inside it: each polling leg carries a window signal that
- * expires with its deadline and a request signal from the caller, and both reach the seams.
- * Captures then stop in-flight transport work wherever the backend's transport can cancel (the
- * Android legs hand the signal to the adb executor, which kills the child); backends whose
- * transport cannot cancel — Limrun's WebSocket client exposes no abort — still never consume a
- * capture that lands after its window closed, and no press is dispatched past the window.
+ * Runs one alert leg. The first observation of a polling leg is read-first: consumed whatever
+ * the clock says — the declared answer shape for a zero-length window and for a backend whose
+ * first capture is slow to start — and it arms the leg's window behind it. Later probes ride
+ * the window's joined signal; only Android's transport can be cut mid-flight (the adb executor
+ * kills the child), so on Limrun's non-abortable client the post-capture clock check is the
+ * guard. Nothing observed through a closed window is consumed or pressed.
  */
 export async function runTreeAlertAction<
   TCapture,
@@ -198,60 +188,94 @@ type ObserverDriver<TCapture, TCandidate> = Readonly<{
 }>;
 
 /**
- * One observation of the backend's capture, bound by the driver's window. `window` is the leg's
- * deadline clock plus the joined signal (this window's expiry, the caller's cancellation) the
- * seams carry. Android hands that signal to the adb executor, which kills the child process, so
- * a capture in flight when the window closes is actually stopped; Limrun's WebSocket client
- * exposes no abort, so the post-await check here is what keeps that backend honest — a capture
- * that lands once its window has closed proves nothing, is refused on the typed window reason,
- * and is never consumed. A probe that starts once the window is already spent is the polling
- * loop's own closing observation: it answers normally and the loop ends on its deadline. What
- * may never happen is consuming a spent-window observation as actionable, which the press-time
- * window check in `actOnTreeAlert` enforces. The first observation of a leg rides only the
- * caller's cancellation: the read-first contract promises one immediate honest answer even when
- * the window is already spent, and a probe that starts inside the window cannot have outrun a
- * deadline it has not reached yet — its own landing decides, not a race with the clock.
+ * A probe the window already answered: a poll that starts after its budget closed, whose answer —
+ * alert or absence — would be a late verdict on a question the deadline has closed. The observer
+ * returns this instead of capturing, and no settled predicate accepts it.
  */
-type TreeAlertWindow = Readonly<{ deadline: DeadlineClock; signal: AbortSignal }>;
+type TreeAlertWindowClosed = Readonly<{ kind: 'window-closed' }>;
 
 /**
  * One leg's window: a deadline clock the driver polls against and the joined signal (this
- * window's expiry, the caller's cancellation) the seams carry. The clock and signal start on
- * the same line, so an expired clock and an aborted signal agree on everything but the
- * millisecond.
+ * window's expiry, the caller's cancellation) the seams carry. `start()` arms both on the same
+ * line, so an expired clock and an aborted signal agree on everything but the millisecond.
+ * A lookup window arms when the leg's first read lands — that read is a read, not a wait, and
+ * spends none of the budget that bounds re-polls and the press; zero spends it instantly.
  */
+type TreeAlertWindow = {
+  readonly deadline: DeadlineClock;
+  readonly signal: AbortSignal;
+  isArmed(): boolean;
+  start(): void;
+};
+
 function treeAlertWindow(
   timeoutMs: number,
   callerSignal: AbortSignal | undefined,
 ): TreeAlertWindow {
+  let armed: Readonly<{ deadline: DeadlineClock; signal: AbortSignal }> | undefined;
   return {
-    deadline: Deadline.fromTimeoutMs(timeoutMs),
-    signal: AbortSignal.any([
-      AbortSignal.timeout(timeoutMs),
-      ...(callerSignal ? [callerSignal] : []),
-    ]),
+    // Stable delegating clock: the polling loop holds this reference across the arming.
+    deadline: {
+      remainingMs: () => armed?.deadline.remainingMs() ?? timeoutMs,
+      elapsedMs: () => armed?.deadline.elapsedMs() ?? 0,
+      isExpired: () => armed?.deadline.isExpired() ?? false,
+    },
+    get signal() {
+      return armed?.signal ?? callerSignal ?? neverSignal;
+    },
+    isArmed: () => armed !== undefined,
+    start() {
+      armed ??= {
+        deadline: Deadline.fromTimeoutMs(timeoutMs),
+        signal: AbortSignal.any([
+          AbortSignal.timeout(timeoutMs),
+          ...(callerSignal ? [callerSignal] : []),
+        ]),
+      };
+    },
   };
 }
 
+/**
+ * The window rules every observation of a leg obeys. The first observation is read-first: it
+ * rides only the caller's cancellation, is consumed whatever it costs (the declared answer for
+ * a zero-length window and for a slow first capture, like Android's helper cold start), and
+ * arms the window behind it. Later probes ride the window signal, and a probe starting after
+ * the window closed never captures at all.
+ */
+function treeAlertObserver<TCapture, TCandidate>(
+  driver: ObserverDriver<TCapture, TCandidate>,
+  window: undefined,
+): () => Promise<TreeAlertObservation<TCandidate>>;
+function treeAlertObserver<TCapture, TCandidate>(
+  driver: ObserverDriver<TCapture, TCandidate>,
+  window: TreeAlertWindow,
+): TreeAlertObserver<TCandidate>;
 function treeAlertObserver<TCapture, TCandidate>(
   driver: ObserverDriver<TCapture, TCandidate>,
   window: TreeAlertWindow | undefined,
 ): TreeAlertObserver<TCandidate> {
+  let firstObservation = true;
   return async () => {
     if (driver.signal?.aborted) throw createRequestCanceledError();
-    // A window already spent at probe start is the polling loop's own closing observation: it
-    // answers normally (the read-first contract keeps one immediate honest answer even for a
-    // spent window) and the loop ends on its deadline. A probe that starts inside the window is
-    // guarded: its seam can be canceled, and its landing is checked against the clock.
-    const guarded = window !== undefined && !window.deadline.isExpired();
+    // Read-first is only the first read over an un-armed window. A confirm window is armed at
+    // the press, so its first capture is already a bounded probe of what follows the tap.
+    const readFirst = firstObservation && window?.isArmed() !== true;
+    firstObservation = false;
+    const bounded = window !== undefined && !readFirst;
+    if (bounded && window.deadline.isExpired()) return { kind: 'window-closed' };
     const capture = await captureAlertState(
       driver,
-      guarded ? window.signal : (driver.signal ?? neverSignal),
+      bounded ? window.signal : (driver.signal ?? neverSignal),
     );
-    if (guarded && window.deadline.isExpired() && !driver.signal?.aborted) {
+    // A bounded capture that lands once its window has closed proves nothing: refuse it typed,
+    // never consume it. The read-first observation is exempt — consumed whatever it costs.
+    if (bounded && window.deadline.isExpired() && !driver.signal?.aborted) {
       throw alertWindowExpiredError('no');
     }
-    return driver.findCandidate(capture);
+    const observation = driver.findCandidate(capture);
+    window?.start();
+    return observation;
   };
 }
 
@@ -302,7 +326,10 @@ function isAlertWindowExpired(error: unknown): boolean {
 const neverSignal = new AbortController().signal;
 
 function alertWindowMs(timeoutMs: number | undefined): number {
-  return typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs >= 0
+  return typeof timeoutMs === 'number' &&
+    Number.isFinite(timeoutMs) &&
+    timeoutMs >= 0 &&
+    timeoutMs <= MAX_ALERT_WINDOW_MS
     ? timeoutMs
     : DEFAULT_ALERT_TIMEOUT_MS;
 }
@@ -311,7 +338,8 @@ function alertWindowMs(timeoutMs: number | undefined): number {
  * Polls for an actionable candidate within the budget, on the same deadline primitive the
  * daemon's other polling loops ride. The terminal answer distinguishes a window that stayed
  * quiet (`none`) from one that stayed alert-shaped yet unresolvable (`undecided`): a degraded
- * sheet that never resolved is not an absence, and callers must not report the two alike.
+ * sheet that never resolved is not an absence, and callers must not report the two alike. A
+ * window-closed sentinel settles nothing: the deadline, not a late capture, ends the loop.
  */
 async function pollTreeAlert<TCandidate>(
   observe: TreeAlertObserver<TCandidate>,
@@ -329,7 +357,7 @@ async function pollTreeAlert<TCandidate>(
     intervalMs: ALERT_POLL_INTERVAL_MS,
     signal,
   });
-  if (settled) return value;
+  if (settled && value.kind === 'alert') return value;
   return sawUndecided ? { kind: 'undecided' } : { kind: 'none' };
 }
 
@@ -424,11 +452,12 @@ async function actOnTreeAlert<
     }
     throw error;
   }
-  // The confirm window is its own budget: it only starts once the press has been dispatched,
-  // and it must not consume the lookup's already-spent window. A capture this phase cuts off
-  // lands after a press, so its failure keeps the stuck-alert phrasing, never "nothing was
-  // pressed" — the confirm observer maps its window expiry onto that failure below.
+  // The confirm window is its own budget, armed the moment the press is dispatched: unlike the
+  // lookup's, it bounds its first capture too, because a post-press read that lands late proves
+  // nothing about what followed the tap. Its cutoff keeps the stuck-alert phrasing — a press
+  // already landed — which the confirm loop maps below.
   const confirmWindow = treeAlertWindow(ALERT_ACTION_RETRY_MS, driver.signal);
+  confirmWindow.start();
   await confirmTreeAlertDismissed(
     treeAlertObserver(driver, confirmWindow),
     confirmWindow,
@@ -449,13 +478,10 @@ async function actOnTreeAlert<
 }
 
 /**
- * `alert accept|dismiss` means the dialog is gone, not that a press was sent: the next command
- * reads the app, and a capture that lands while the dialog window is still up sees only the
- * dialog. Only two answers confirm that: observed absence (`none`), or a different alert taking
- * the first's place. An undecided post-press capture proves nothing about absence, so it is
- * retried within the budget and reported as a failure at its end rather than returned as
- * handled. Bounded by the same budget the pre-press lookup uses; iOS's runner applies the same
- * re-check.
+ * `alert accept|dismiss` means the dialog is gone, not that a press was sent. Only two answers
+ * confirm that: observed absence (`none`), or a different alert taking the first's place. An
+ * undecided post-press capture proves nothing, so it is retried within the budget and fails at
+ * its end rather than returning handled. Bounded by the budget the pre-press lookup uses.
  */
 async function confirmTreeAlertDismissed<
   TAlert extends AlertInfo & { buttons: string[] },

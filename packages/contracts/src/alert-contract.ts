@@ -3,6 +3,15 @@ export const DEFAULT_ALERT_TIMEOUT_MS = 10_000;
 export const ALERT_ACTION_RETRY_MS = 2_000;
 
 /**
+ * The largest alert budget the legs accept. The window signal rides `AbortSignal.timeout`, whose
+ * Node ceiling is 2^31-1 ms: larger values are rejected outright there, and its underlying timer
+ * overflows to a 1 ms firing when merely exceeded. The daemon refuses a larger `alert wait`
+ * budget as `INVALID_ARGS`, and a tree driver reads one as the bounded default — never a
+ * silently shortened window.
+ */
+export const MAX_ALERT_WINDOW_MS = 2_147_483_647;
+
+/**
  * The one alert failure the family retries on: the backend looked and there was no alert *yet*.
  * Both Apple backends state it in typed form — the XCTest runner as this `ErrorPayload.code`
  * (surfacing as `details.runnerErrorCode`, like `RUNNER_BUSY`, without changing the wire error
@@ -112,10 +121,10 @@ function alertButtonPreferenceRank(label: string, role: 'accept' | 'dismiss'): n
 
 /**
  * The one choice boundary for a shared choice: pick the action's role candidates by the declared
- * preference table. A single candidate wins outright; several resolve when one outscores the
- * rest; a tie on the same entry (the same label at two points) or vocabulary-ranked-free
- * multiplicity returns null, because the capture then names no single physical button for the
- * action. Distinct labels that share a role are not a refusal: the table ranks them.
+ * preference table. A single candidate wins outright. Several resolve only when every one of
+ * them carries a vocabulary rank and one rank outscores the rest: a mix of ranked and
+ * id-classified grants cannot be ordered by the table, so it names no single physical button and
+ * is refused rather than resolved by tree order or by one side's label happening to be known.
  */
 export function selectRankedAlertButtonByRole<
   TButton extends Readonly<{ role: AlertButtonRole; label: string }>,
@@ -123,11 +132,12 @@ export function selectRankedAlertButtonByRole<
   const matching = buttons.filter((button) => button.role === role);
   if (matching.length === 1) return matching[0] ?? null;
   if (matching.length === 0) return null;
-  const ranked = matching
-    .map((button) => ({ button, rank: alertButtonPreferenceRank(button.label, role) }))
-    .filter((entry): entry is { button: TButton; rank: number } => entry.rank !== null)
-    .sort((a, b) => a.rank - b.rank);
-  if (ranked.length === 0) return null;
+  const ranked = matching.map((button) => ({
+    button,
+    rank: alertButtonPreferenceRank(button.label, role),
+  }));
+  if (ranked.some((entry) => entry.rank === null)) return null;
+  ranked.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
   const [first, second] = ranked;
   if (!first || (second && second.rank === first.rank)) return null;
   return first.button;

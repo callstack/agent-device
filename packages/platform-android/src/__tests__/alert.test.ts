@@ -2,6 +2,8 @@ import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { button, node, text } from './alert-fixtures.ts';
 
 const runAndroidAdb = vi.fn(async (_device: DeviceInfo, _args: readonly string[]) => ({
@@ -193,4 +195,58 @@ test('wait with a spent budget still reports an alert that is already visible', 
 
   assert.equal(result.kind, 'alertWait');
   assert.equal(result.alert?.title, 'Automation confirmation');
+});
+
+test('the read-first capture rides the caller cancellation and dies with it', async () => {
+  // Android's transport is cancellable, so the invariant here is the actual child-process cut:
+  // the capture seam receives the leg's live AbortSignal, and aborting the caller cuts the
+  // in-flight capture before any press exists.
+  runAndroidAdb.mockClear();
+  const caller = new AbortController();
+  const seamSignals: AbortSignal[] = [];
+  let rejectCapture: ((error: Error) => void) | undefined;
+  const result = handleAndroidAlert(device, 'dismiss', {
+    signal: caller.signal,
+    captureNodes: (seam) =>
+      new Promise<RawSnapshotNode[]>((_resolve, reject) => {
+        seamSignals.push(seam.signal);
+        rejectCapture = reject;
+        seam.signal.addEventListener('abort', () => reject(new Error('adb killed')), {
+          once: true,
+        });
+      }),
+  });
+  result.catch(() => {});
+  await Promise.resolve();
+  caller.abort();
+  rejectCapture?.(new Error('adb killed'));
+
+  await assert.rejects(result, (error: unknown) => isRequestCanceledError(error));
+  assert.equal(seamSignals.length, 1);
+  assert.equal(seamSignals[0]?.aborted, true);
+  assert.equal(runAndroidAdb.mock.calls.length, 0);
+});
+
+test('a slow first read is not cut off by its own action budget', async () => {
+  // The Android smoke timeline: the session's first capture pays the snapshot-helper cold
+  // start (install + session bring-up), landing well past the 2s action budget. That read is
+  // the leg's read-first observation — consumed whatever it costs — and the press rides the
+  // window it arms behind it. Without the read-first exemption this is the executed CI
+  // failure: `alert-window-expired, dispatched: no` with the dialog plainly on screen.
+  runAndroidAdb.mockClear();
+  let reads = 0;
+  const slowWarmRead = async () => {
+    reads += 1;
+    if (reads > 1) return runAndroidAdb.mock.calls.length === 0 ? dialog : [];
+    // 2.5 driven seconds: past the 2s lookup window the old guarded first probe enforced.
+    await new Promise<void>((resolve) => setTimeout(resolve, 2_500));
+    return dialog;
+  };
+
+  const result = await underFakeTimers(
+    async () => await handleAndroidAlert(device, 'dismiss', { captureNodes: slowWarmRead }),
+  );
+
+  assert.equal(result.kind, 'alertHandled');
+  assert.equal(runAndroidAdb.mock.calls.length, 1);
 });

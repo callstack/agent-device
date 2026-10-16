@@ -108,3 +108,35 @@ test('the Android 11+ permission sheet resolves its two grants by the preference
   );
   assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, 'Deny');
 });
+
+test('nested nodes over one button center deduplicate to one candidate', () => {
+  // uiautomator commonly nests the clickable wrapper and the label node at the same center.
+  // They are one physical button, and collapsing them must not read as ambiguity.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.app.AlertDialog'),
+    text(1, 'Discard draft?', 'android:id/alertTitle'),
+    button(2, 'OK', 'android:id/button1', { x: 52, y: 612 }),
+    node(3, 'android.widget.TextView', {
+      label: 'OK',
+      parentIndex: 2,
+      rect: { x: 52, y: 612, width: 128, height: 52 },
+    }),
+  ]);
+
+  assert.deepEqual(candidate?.alert.buttons, ['OK']);
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept')?.label, 'OK');
+});
+
+test('the same label at two distinct centers keeps two candidates so the choice refuses', () => {
+  // Two spatially distinct OKs are two physical buttons; the capture names no single one, so
+  // the shared ranked boundary refuses rather than taking the tree-first candidate.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.app.AlertDialog'),
+    text(1, 'Which OK?', 'android:id/alertTitle'),
+    button(2, 'OK', 'android:id/button1', { x: 52, y: 612 }),
+    button(3, 'OK', 'android:id/button1_copy', { x: 240, y: 612 }),
+  ]);
+
+  assert.deepEqual(candidate?.alert.buttons, ['OK', 'OK']);
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+});
