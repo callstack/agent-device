@@ -10,6 +10,9 @@
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*"
   },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
