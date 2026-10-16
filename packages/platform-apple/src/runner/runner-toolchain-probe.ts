@@ -13,6 +13,7 @@ import {
   runCmdSync,
 } from './host.ts';
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
   resolveRunnerPlatformName,
@@ -118,11 +119,12 @@ function createToolchainProbeClock(budget: RunnerPhaseBudget | undefined): Toolc
 // Lazy: createTtlMemo is a host capability, and module evaluation happens
 // before the composition root binds the host. Only a complete, parsed
 // fingerprint is ever memoized, so nothing unavailable can outlive the probe
-// that could not answer. The key carries the developer dir the read answers for,
-// so an entry is stale only until its own key stops being the host's selection,
-// which is what let a daemon serve the Xcode a host had left (#3300). A hit
-// therefore renews the entry, as it did before: an idle entry still goes away
-// after TOOLCHAIN_FINGERPRINT_TTL_MS, which also bounds how long a failure report
+// that could not answer. The key carries the developer dir the read answers for
+// and the identity of the bundle standing in it, so an entry is stale only until
+// its own key stops describing the host's selection, which is what let a daemon
+// serve the Xcode a host had left (#3300). A hit therefore renews the entry, as
+// it did before: an idle entry still goes away after
+// TOOLCHAIN_FINGERPRINT_TTL_MS, which also bounds how long a failure report
 // can name a selection no request is using any more.
 const TOOLCHAIN_FINGERPRINT_TTL_MS = 10 * 60_000;
 let lazyToolchainFingerprintCache: TtlMemo<string, RunnerToolchainFingerprint> | undefined;
@@ -135,11 +137,27 @@ function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint
 }
 
 /**
- * The selection the last default-selection read resolved, which is the entry a failure report
- * without a client-chosen `DEVELOPER_DIR` names. A read that threw or could not resolve its
- * selection leaves it alone. The entry it names can expire, and a report then names no Xcode.
+ * The halves of a key that answered, kept so a report reaches the same entry without resolving,
+ * stating, or spawning anything: a report has no budget to spend and no deadline to answer to.
  */
-let recordedDefaultSelection: string | undefined;
+type RecordedSelection = {
+  developerDir: string;
+  bundleIdentity: string | undefined;
+};
+
+/**
+ * What the last default-selection read answered for, which is what a report names when the client
+ * chose no `DEVELOPER_DIR`. A read that threw or could not resolve its selection leaves it alone,
+ * and the entry behind it can expire, so a report that finds nothing names no Xcode.
+ */
+let recordedDefaultSelection: RecordedSelection | undefined;
+
+/**
+ * What the last client-named read answered for, under the exact name that client used. A report for
+ * a client naming some other dir gets nothing: the key for that dir needs the identity of a bundle
+ * this path must not go and look up.
+ */
+let recordedChosenSelection: ({ readonly named: string } & RecordedSelection) | undefined;
 
 /**
  * The toolchain half of the cache key. It also names the derived-data directory, so an
@@ -155,18 +173,43 @@ export function requireRunnerToolchainFingerprint(
   const chosenDir = commandDeveloperDir();
   // Both sources are resolved to the dir they really name, so a client naming a symlinked Xcode and
   // a daemon reading the selection link land on one entry for one toolchain.
-  const developerDir =
+  const resolvedDir =
     chosenDir !== undefined
       ? (resolveRealDeveloperDir(chosenDir) ?? chosenDir)
       : resolveDefaultDeveloperDir(clock);
   // A read that cannot tell which Xcode it answers for has no entry to read or write: a shared
   // unknown key would let one host selection answer for the next, which is the fault here.
-  if (developerDir === undefined) return requireFreshRunnerToolchainFingerprint(sdkName, clock);
-  const cacheKey = toolchainFingerprintCacheKey(developerDir, sdkName);
+  if (resolvedDir === undefined) return requireFreshRunnerToolchainFingerprint(sdkName, clock);
+  const bundleIdentity = readBundleIdentity(resolvedDir);
+  // The key's two filesystem reads cannot be interrupted, so an owner that aborted while they ran
+  // is answered here rather than by a memo hit: a hit must not hide a cancellation either.
+  clock.throwIfCanceled();
+  const cacheKey = toolchainFingerprintCacheKey(resolvedDir, bundleIdentity, sdkName);
   const fingerprint = requireMemoizedRunnerToolchainFingerprint(cacheKey, sdkName, clock);
-  // A report finds its entry by the dir this read resolved, whether the read stored it or hit it.
-  if (chosenDir === undefined) recordedDefaultSelection = developerDir;
+  const answered = { developerDir: resolvedDir, bundleIdentity };
+  // A report finds its entry by the key this read built, whether the read stored it or hit it, so a
+  // report never has to resolve or stat anything itself.
+  if (chosenDir !== undefined) recordedChosenSelection = { named: chosenDir, ...answered };
+  else recordedDefaultSelection = answered;
   return fingerprint;
+}
+
+/**
+ * A cheap identity for the toolchain bundle at `developerDir`, or undefined when it has none to
+ * offer. The dir alone cannot see an update that replaces the bundle in place — an installer or App
+ * Store update at `/Applications/Xcode.app` keeps the path — and a hit renews its entry, so a key
+ * blind to that would keep answering with the fingerprint the update replaced for as long as the
+ * daemon stays busy. The version file `xcodebuild -version` reads is the marker: replacing or
+ * rewriting the bundle moves its inode or mtime, which moves the key, and the entry the old key held
+ * expires once nothing renews it.
+ */
+function readBundleIdentity(developerDir: string): string | undefined {
+  try {
+    const versionFile = fs.statSync(path.join(developerDir, '..', 'version.plist'));
+    return `${versionFile.ino}:${Math.trunc(versionFile.mtimeMs)}`;
+  } catch {
+    return undefined;
+  }
 }
 
 /** This key's fingerprint, read from the memo when one answers for it and stored when it does not. */
@@ -177,8 +220,9 @@ function requireMemoizedRunnerToolchainFingerprint(
 ): RunnerToolchainFingerprint {
   const cached = toolchainFingerprintCache().get(cacheKey);
   if (cached) {
-    // A hit can only be an entry keyed on the dir this read resolved, so it is still the host's
-    // selection and renews itself. Only an entry no request reads expires (#3300).
+    // A hit is an entry keyed on both this dir and the identity of the bundle standing in it, so the
+    // toolchain behind the key is still the one in place and the entry renews itself. Only an entry
+    // no request reads expires (#3300).
     toolchainFingerprintCache().set(cacheKey, cached);
     return cached;
   }
@@ -187,8 +231,12 @@ function requireMemoizedRunnerToolchainFingerprint(
   return fingerprint;
 }
 
-function toolchainFingerprintCacheKey(developerDir: string, sdkName: string): string {
-  return `${developerDir}\0${sdkName}`;
+function toolchainFingerprintCacheKey(
+  developerDir: string,
+  bundleIdentity: string | undefined,
+  sdkName: string,
+): string {
+  return `${developerDir}\0${bundleIdentity ?? ''}\0${sdkName}`;
 }
 
 function requireFreshRunnerToolchainFingerprint(
@@ -259,19 +307,22 @@ function probeSelectedDeveloperDir(clock: ToolchainProbeClock): string | undefin
 /**
  * The selected Xcode's version as this process's runner cache decision memoized it, for a failure
  * report that names it; undefined when no decision has read the toolchain in the last
- * `TOOLCHAIN_FINGERPRINT_TTL_MS`. Never probes: a report must not wait on the toolchain it
- * describes, and the dir its entry is keyed on is the one that read resolved.
+ * `TOOLCHAIN_FINGERPRINT_TTL_MS`. Reads nothing but the memo: a report has no budget to spend and
+ * must not wait on the toolchain it describes, so it reuses the key a real read already built.
  */
 export function memoizedRunnerXcodeVersion(device: DeviceInfo): string | undefined {
   const chosenDir = commandDeveloperDir();
-  const developerDir =
-    chosenDir !== undefined
-      ? (resolveRealDeveloperDir(chosenDir) ?? chosenDir)
-      : recordedDefaultSelection;
-  if (developerDir === undefined) return undefined;
+  const answered =
+    chosenDir === undefined
+      ? recordedDefaultSelection
+      : recordedChosenSelection?.named === chosenDir
+        ? recordedChosenSelection
+        : undefined;
+  if (answered === undefined) return undefined;
   return toolchainFingerprintCache().get(
     toolchainFingerprintCacheKey(
-      developerDir,
+      answered.developerDir,
+      answered.bundleIdentity,
       resolveRunnerSdkName(resolveRunnerPlatformName(device), device.kind),
     ),
   )?.xcodeVersion;
