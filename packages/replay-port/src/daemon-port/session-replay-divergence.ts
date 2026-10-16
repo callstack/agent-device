@@ -508,8 +508,7 @@ function buildReplayDivergenceScreenRefs(
 /**
  * Decision 1's candidate machinery reused READ-ONLY over the shared capture.
  * Ranking: identity-component strength (id > role+label > label > other),
- * then document order; the same-scrollRegion tier awaits decision 3's
- * recorded evidence (migration step 4).
+ * then recorded scroll region, then document order.
  */
 function collectReplayDivergenceSuggestions(params: {
   action: ReplayReportAction;
@@ -576,7 +575,10 @@ function rankSuggestionCandidates(params: {
     if (!entry) continue;
     entries.push(entry);
   }
-  return rankAndDedupeReplaySuggestions(entries).map((entry) => entry.suggestion);
+  return rankAndDedupeReplaySuggestions(entries, {
+    nodes,
+    targetEvidence: action.targetEvidence,
+  }).map((entry) => entry.suggestion);
 }
 
 function resolveSuggestionCandidate(params: {

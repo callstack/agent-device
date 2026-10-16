@@ -58,6 +58,7 @@ export async function buildReplayBackendActionFailureResponse(
           failure
             .suggestNodes({ createdAt: Date.now(), nodes: observation.nodes })
             .map(({ node, basis }) => ({ node, nodeIndex: node.index, basis })),
+          { nodes: observation.nodes, targetEvidence: undefined },
         ).map(({ node, basis }) =>
           buildReplayDivergenceSuggestionForNode({
             node,

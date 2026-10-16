@@ -73,3 +73,68 @@ test('buildReplayFailureDivergence dedupes suggestions using the strongest basis
   expect(divergence.suggestions[0]?.ref).toBe('e1');
   expect(divergence.suggestions[0]?.basis).toBe('id');
 });
+
+test.each([true, false])(
+  'suggestions rank identity, recorded region, then document order (evidence: %s)',
+  async (recorded) => {
+    const root = mkdtempForTestSync('agent-device-replay-suggest-region-');
+    const sessionStore = new SessionStore(path.join(root, 'sessions'));
+    sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+    const button = (index: number, parentIndex: number, label: string) => ({
+      index,
+      parentIndex,
+      depth: 1,
+      type: 'Button',
+      label,
+      rect: { x: 0, y: index * 10, width: 100, height: 44 },
+      hittable: true,
+    });
+    mockDispatchCommand.mockResolvedValue({
+      nodes: [
+        { index: 0, depth: 0, type: 'ScrollView', identifier: 'other' },
+        button(1, 0, 'Other'),
+        { ...button(2, 0, 'Strong'), identifier: 'strong' },
+        { index: 3, depth: 0, type: 'ScrollView', identifier: 'recorded' },
+        button(4, 3, 'First'),
+        button(5, 3, 'Second'),
+      ],
+      truncated: false,
+      backend: 'xctest',
+    });
+    const action = {
+      ts: 0,
+      command: 'click',
+      positionals: ['label="Other"'],
+      flags: {},
+      result: { selectorChain: ['label="Second"', 'label="First"', 'id="strong"'] },
+      ...(recorded
+        ? {
+            targetEvidence: {
+              role: 'button',
+              label: 'Original',
+              ancestry: [],
+              sibling: 0,
+              viewportOrder: 0,
+              scrollRegion: { role: 'scrollview', id: 'recorded' },
+              verification: 'verified' as const,
+            },
+          }
+        : {}),
+    };
+    const divergence = await buildReplayFailureDivergence({
+      error: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      action,
+      index: 0,
+      sourcePath: path.join(root, 'flow.ad'),
+      sourceLine: 1,
+      ...replayDivergenceForTest(sessionStore, 'default'),
+      logPath: path.join(root, 'daemon.log'),
+      responseLevel: 'full',
+      planActions: [action],
+      planDigest: 'test-plan-digest',
+    });
+    expect(divergence.suggestions.map(({ label }) => label)).toEqual(
+      recorded ? ['Strong', 'First', 'Second', 'Other'] : ['Strong', 'Other', 'First', 'Second'],
+    );
+  },
+);

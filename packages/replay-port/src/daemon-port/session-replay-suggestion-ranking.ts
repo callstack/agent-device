@@ -1,3 +1,10 @@
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { buildIndexMap } from '@agent-device/ad-script';
+import {
+  computeScrollRegionKey,
+  scrollRegionKeysEqual,
+} from '@agent-device/selectors/target-evidence';
 import type { ReplayDivergenceSuggestionBasis } from '@agent-device/contracts/divergence';
 
 const BASIS_RANK: Record<ReplayDivergenceSuggestionBasis, number> = {
@@ -12,7 +19,13 @@ export function rankAndDedupeReplaySuggestions<
     readonly nodeIndex: number;
     readonly basis: ReplayDivergenceSuggestionBasis;
   },
->(entries: Iterable<T>): T[] {
+>(
+  entries: Iterable<T>,
+  context: {
+    nodes: readonly SnapshotNode[];
+    targetEvidence: TargetAnnotationV1 | undefined;
+  },
+): T[] {
   const byNode = new Map<number, T>();
   for (const entry of entries) {
     const existing = byNode.get(entry.nodeIndex);
@@ -20,9 +33,26 @@ export function rankAndDedupeReplaySuggestions<
       byNode.set(entry.nodeIndex, entry);
     }
   }
+  const sameRegion = new Set<number>();
+  if (context.targetEvidence) {
+    const byIndex = buildIndexMap(context.nodes);
+    for (const nodeIndex of byNode.keys()) {
+      const node = byIndex.get(nodeIndex);
+      if (
+        node &&
+        scrollRegionKeysEqual(
+          computeScrollRegionKey(node, byIndex),
+          context.targetEvidence.scrollRegion,
+        )
+      )
+        sameRegion.add(nodeIndex);
+    }
+  }
   return [...byNode.values()].sort(
     (left, right) =>
-      basisRank(left.basis) - basisRank(right.basis) || left.nodeIndex - right.nodeIndex,
+      basisRank(left.basis) - basisRank(right.basis) ||
+      Number(sameRegion.has(right.nodeIndex)) - Number(sameRegion.has(left.nodeIndex)) ||
+      left.nodeIndex - right.nodeIndex,
   );
 }
 
