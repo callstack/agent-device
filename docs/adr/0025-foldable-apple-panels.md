@@ -181,16 +181,7 @@ fold request policy. Hosted Duo tests remain local-only.
 
 ## Pose control: Device Hub's control, CoreDevice's verdict
 
-`agent-device fold` sets the pose, and the split above still holds: the press is not evidence,
-the read-back is. The pieces, each of which was checked on the shipping 27.1 toolchain:
-
-| Piece | Finding |
-| --- | --- |
-| Who sets the pose | Device Hub's `CoreDevicePopDeviceKitExtension` (the V68 device view with its `poses` action bar) hands a "vendor defined" orientation-control payload to `CoreDevicePopCoreDeviceExtension`, which sends it through CoreDevice's private HID channel. No CLI, `simctl`, `devicectl`, or XCUITest surface reaches that channel |
-| The public seam | The action bar's pose controls are ordinary `AXButton`s described `Closed`, `Book`, and `Open` in the Device Hub window; the simulated screen inside the same window is an `iOSContentGroup` with the app's own nodes. The earlier finding that the device surface exposes "zero accessibility nodes" was an artifact of System Events, which sees Device Hub with pid 0 because the app is launched through a trampoline; an `AXUIElement` built from the real pid works |
-| Reading the pose | `xcrun devicectl device motion hinge-angle --device <udid>` streams the hinge angle for the Duo simulator (`Range:0-180°`): Closed 0°, Book 130°, Open 180°. The stream does not end when `--session-timeout` elapses, so one read is bounded by devicectl's own `--timeout`, whose smallest accepted value is 5 seconds; the sample it printed before aborting itself is the reading |
-| Device identity | Device Hub titles the window `<name> – iOS 27.1`, which two simulators sharing a name cannot distinguish. Its sidebar rows carry `AXIdentifier` `TableRow.Device.<UDID>`, and setting `AXSelected` on a row switches the window to that device, so the row is `fold`'s only device handle — but a missing row plus a same-named twin's matching title skips the selection before any press, and the confirmation is by title too (see Accepted evidence gaps) |
-| No window | A simulator booted headlessly leaves Device Hub running with no window. LaunchServices cannot address the trampolined process by bundle id (`open -b`, `NSRunningApplication.activate` do nothing), but a `kAEReopenApplication` event sent to the pid restores the device window, the same event a Dock click sends |
+The superseded Device Hub process is retained in git history.
 
 The rule this yields: `closed` and `open` are the hinge's two end stops, so one read at the stop is
 the pose. Every other angle is `half-open`, including the ones a hinge sweeps through on its way
@@ -205,28 +196,7 @@ unsettled `half-open` angle is refused as `fold-pose-unsettled` (see the amendme
 response of a verified pose carries the angle and the lit panel's point
 size, because the point size is what tells an agent its refs are stale.
 
-Requirements the command states in its own errors: Accessibility permission for the host
-(`accessibility-permission`), a running Device Hub (`fold` launches it in the background the way
-`open` does), a device window it can reopen (`device-hub-window-missing`), and a sidebar row for
-the UDID (otherwise `device-hub-identity-unconfirmed`). A single-panel simulator is refused before anything is
-pressed (`single-panel-device`), and the leaf fact refuses physical devices and every non-iPhone
-simulator OS.
-
-Window discovery reads `AXWindows` from every matching Device Hub process within one shared
-retry budget. These are application-wide windows; discovery does not click through monitors or
-move windows to the main display. A failed accessibility read retains its AX status and returns
-`device-hub-window-read-failed`, rather than masquerading as an empty window list. Only successful
-empty reads trigger a reopen. A matching UDID sidebar row is required before pressing, including
-when a window title already matches. An unrelated window does not stop attempts on other
-windows or empty processes. A hidden sidebar is revealed through that window’s own toolbar button;
-application-wide menus cannot redirect the action to another window. Sidebar reads and
-restoration use bounded AX calls. Cleanup is registered before a sidebar press, since an AX reply
-can time out after the action applied. Selection verifies the row's `AXSelected` state and the
-window title even after an uncertain reply. Discovery passes the proven row to selection instead
-of searching twice. Inconclusive candidates report `device-hub-identity-unconfirmed` with each
-candidate's outcome; exhausting the shared budget before finishing work reports
-`device-hub-discovery-timeout`. Neither claims a device is absent. Active host display IDs stay
-in discovery error details; display geometry does not participate in AX window selection.
+A single-panel simulator is refused before a pose mutation (`single-panel-device`). The leaf fact refuses physical devices and every non-iPhone simulator OS.
 
 ## Amendment: an observed half-open angle is not a settled pose (issue #2730)
 
@@ -285,10 +255,7 @@ claims:
 - Device Hub's control could live in a private framework outside `Xcode.app`. That would not make it
   usable: it is still not an API.
 
-Consequences that are now policy: no private per-guest XPC channel is driven, because an undocumented
-hook is exactly the kind that breaks without notice; the one host control that exists is Device
-Hub's own, and `fold` drives it through the accessibility API and trusts only the CoreDevice
-read-back (see the section above). A pose derived from panel power alone is still documented to
+A pose derived from panel power alone is still documented to
 cover Apple's `fullyOpen` **and** `partiallyOpen` — panel power cannot separate them, so only the
 hinge angle or an in-app `UIHinge.status` read can.
 
@@ -532,21 +499,11 @@ incorrect viewport, not an inner-panel delivery prohibition.
 
 - **Quarter-turn detection.** Both Duo panels report
   `currentOrientation: rot90`, and no available path rotates a foldable, so the orientation half of
-  the inventory is carried but never exercised against a changed value. - **Pose control on a
-  second Device Hub instance.** Discovery checks every matching process, but simultaneous Xcodes
-  and the secondary-display fold matrix remain unverified on live hardware. - **A hinge that
+  the inventory is carried but never exercised against a changed value. - **A hinge that
   settles slowly.** Four reads is twenty seconds of streams, and a Duo that needs longer to come to
   rest inside `half-open` is now refused where the superseded rule would have reported a pose.
   Every Duo run observed for this change settled inside the budget; no simulator that needs longer
   was seen, so the budget stays as it is rather than growing on a hypothesis.
-
-- **Pose control when two simulators share a name.** The earlier title-only fallback could press
-  a different Duo when the intended device's row was unavailable; hinge verification refused the
-  result only after the other device had moved. Discovery now requires the UDID row, and selection
-  confirms `AXSelected` as well as the window title before pressing. Live wrong-UDID refusal and
-  hidden-sidebar recovery were checked; the simultaneous same-name simulator matrix remains open.
-- **Physical foldables.** Device Hub poses simulators only; the leaf fact refuses a physical device,
-  and the hinge stream on one was not exercised.
 
 ## Android emulators (amendment, 2026-10-10)
 
