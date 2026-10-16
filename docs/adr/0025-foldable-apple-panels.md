@@ -65,7 +65,7 @@ It is the only reader of CoreDevice display information.
   Every decision uses `primary` and panel power.
   Array order or geometry would create another authority that could silently invert identity.
   If the primary panel is also largest, `primary` still decides.
-  Emit `apple_display_primary_geometry_conflict`; do not silently replace identity with a geometry rule.
+  In that case, emit `apple_display_primary_geometry_conflict`. Do not silently replace identity with a geometry rule.
 - **Capture target.**
   `resolveAppleCaptureDisplay` returns a panel for every multi-panel device.
   It returns `undefined` only for a single-panel device or unresolved inventory.
@@ -122,7 +122,7 @@ It encodes the capture upright because a turned panel supplies a sideways buffer
 The capture reports its display ID, encoded pixel size, and image pixels-per-point.
 Normalization uses this source metadata instead of a host-inferred scale.
 If the runner reports nothing, it measured nothing.
-Normalization preserves its pre-panel result instead of borrowing another panel's scale.
+In that case, normalization keeps its pre-panel result instead of borrowing a scale from a panel that nobody captured.
 This payload is a cross-language contract, not a consumer-specific cast.
 `packages/contracts/src/screen-capture-contract.ts` owns the read.
 The Swift struct owns the write.

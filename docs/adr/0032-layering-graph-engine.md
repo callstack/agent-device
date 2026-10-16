@@ -184,7 +184,7 @@ These additional migration costs do not independently decide the outcome:
 
 - Dependency-cruiser includes dependency type in its deduplication key.
 - Fallow boundaries gain a dynamic-import kind and rule packs cover unreachable files.
-- An engine supplies the shared model to existing consumers with less total machinery than `parseImports` and `resolveImportEdges`.
+- An engine can supply the shared import model above to the existing consumers with less total machinery than `parseImports` and `resolveImportEdges`.
   Source-only AST checks do not need to change first.
 
 ## Deletion
