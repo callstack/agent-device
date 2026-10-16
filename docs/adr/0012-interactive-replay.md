@@ -1167,7 +1167,7 @@ After bounded expiry, the tombstone disappears and the key is free.
 > Only provenance distinguishes authored observations from interactive diagnostics using the same command.
 >
 > `invokeResolvedReplayAction` stamps `internal.replayPlanStep` at the one dispatch point for every annotated or unannotated plan step.
-> Its pointer is `src/daemon/handlers/session-replay-action-runtime.ts`.
+> Its pointer is `packages/replay-port/src/daemon-port/session-replay-action-runtime.ts`.
 > `internal` is daemon-only.
 > `toDaemonRequest` in `packages/daemon/src/server/http/http-rpc-methods.ts` never copies it from the wire.
 > A client therefore cannot forge authored provenance.
@@ -1238,7 +1238,7 @@ After bounded expiry, the tombstone disappears and the key is free.
 > Exclusion occurs before `session.actions`, at the same point as `--no-record`.
 > Excluded reads never increase `session.actions.length`.
 > `describeUnperformedRecordAndHeal` already compares this count with `actionsCountAtDivergence`.
-> Its pointer is `src/daemon/handlers/session-replay-runtime-plan.ts`, using R2/#1262's `pendingRecordAndHeal` watermark.
+> Its pointer is `packages/ad-replay/src/internal/resume.ts`, using R2/#1262's `pendingRecordAndHeal` watermark.
 > Count growth proves a corrective action before a `record-and-heal`-shaped resume.
 > A segment with only excluded diagnostics fails the existing guard like an empty segment.
 > No new state is necessary.

@@ -31,7 +31,7 @@ This ADR proposes these rules; full contracts and rationale follow:
   Each invocation suppresses its own errors without effects on other sinks or requests.
   Concurrent work uses forked scopes that clone mutable envelope, log-path, and routing bindings.
   Only concurrency-safe aggregation state is shared as mutable state.
-- **Progress remains transport-owned.** `src/request/progress.ts` and its typed `RequestProgressEvent` union do not change.
+- **Progress remains transport-owned.** `packages/host-kit/src/internal/request-progress.ts` and its typed `RequestProgressEvent` union do not change.
 - **Existing formats remain byte-compatible, with one exception.** Golden fixtures preserve `events.ndjson` v1, `cost.runnerRoundTrips`, per-request diagnostics ndjson, and replay-timing shapes.
   The currently unredacted replay-timing helper's events become redacted.
   This intentional security fix is a declared behavior change.
@@ -61,20 +61,20 @@ Each has separate emit calls, shapes, redaction rules, and sinks:
    Some appends occur outside requests.
    `finalizeRepairTeardown` in `packages/daemon/src/core/session-store.ts` records synthetic `close` during idle reap or shutdown.
    Its comment states "no live request here."
-3. **Progress streaming**, `src/request/progress.ts` and `src/daemon/request-progress-protocol.ts`, uses a closed typed `RequestProgressEvent` union.
+3. **Progress streaming**, `packages/host-kit/src/internal/request-progress.ts` and `packages/daemon-contracts/src/request-progress-protocol.ts`, uses a closed typed `RequestProgressEvent` union.
    Socket/HTTP transport installs single-sink `AsyncLocalStorage`.
    Ndjson envelopes share the final-response stream.
    Client disconnect feeds cancellation.
    `meta.requestProgress` explicitly enables the channel per request.
    `--json` disables it.
    Current wire events are **unredacted**.
-4. **Replay timing trace**, `src/daemon/handlers/session-replay-trace.ts` and `session-test-runtime.ts`, uses per-attempt `replay-timing.ndjson` files.
+4. **Replay timing trace**, `packages/replay-port/src/daemon-port/session-replay-trace.ts` and `session-test-runtime.ts`, uses per-attempt `replay-timing.ndjson` files.
    Each attempt creates its path dynamically.
    `src/cli/replay-test/trace.ts` reads them.
    Two helpers write them: `appendReplayTraceEvent` and `appendReplayTestTimingEvent`.
    Only one redacts.
 
-`src/upload-progress.ts` is a fifth local callback sink for artifact uploads.
+`packages/remote/src/upload-progress.ts` is a fifth local callback sink for artifact uploads.
 It never crosses request scope and remains out of scope.
 Production has no `EventEmitter` usage.
 The proposal preserves that avoidance of implicit pub/sub.
@@ -186,7 +186,7 @@ The proposed normative semantics are:
   Only the sink list and concurrency-safe aggregation state remain shared.
   Request-global `phaseCounts` uses single-threaded atomic increments because agent-cost must include every shard.
 
-Concurrent `test` attempts use `Promise.allSettled` in `runReplayTestShards` (`src/daemon/handlers/session-test.ts`).
+Concurrent `test` attempts use `Promise.allSettled` in `runReplayTestShards` (`packages/replay-test/src/internal/session-test.ts`).
 Nested dispatch invokes `createRequestExecutionScope` in `request-router.ts` child scopes.
 It rebinds `session` and `logPath` during execution.
 A shared mutable envelope could route debug and session-log events to another shard, even with frozen trace bindings.
@@ -244,7 +244,7 @@ A journal route would weaken payloads to `Record<string, unknown>` or place the 
 Neither improves current behavior.
 Current progress is unredacted, so boundary redaction would also silently change wire bytes.
 
-`src/request/progress.ts`, `request-progress-protocol.ts`, and both transports therefore remain unchanged.
+`packages/host-kit/src/internal/request-progress.ts`, `request-progress-protocol.ts`, and both transports therefore remain unchanged.
 If a future feature needs journal progress visibility, the progress emitter can additionally emit a cataloged journal kind.
 It must not route the wire path through the journal.
 Such **mirror emits** require a separate explicit decision.

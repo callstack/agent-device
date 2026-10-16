@@ -602,11 +602,11 @@ Audited tests are:
 
 - `packages/ad-script/src/internal/__tests__/script.test.ts`
 - `packages/ad-replay/src/internal/__tests__/plan-digest.test.ts`
-- `src/commands/replay/script-source-bundle.test.ts`
+- `packages/replay-port/src/__tests__/script-source-bundle.test.ts`
 - `packages/maestro/src/internal/__tests__/replay-plan.test.ts`
 - `source-closure.test.ts`
 - `program-loader.test.ts`
-- `src/daemon/handlers/__tests__/session-replay-runtime.test.ts`
+- `packages/daemon/src/sessions/__tests__/replay-runtime/session-replay-runtime.test.ts`
 
 Each implementation part owns its planted-red unit/fixture assertions below.
 This docs-only spike does not already have those structural gates.
