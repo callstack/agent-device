@@ -438,7 +438,7 @@ A `click` or `press` whose target the daemon resolves to a point (`@ref` or sele
 Text-entry errors and what to do:
 
 - `TEXT_INPUT_NOT_FOCUSED` (`type`): focus a visible text input and retry. If accessibility does not expose the input, focus it by coordinates.
-- `NO_TEXT_INPUT_AT_POINT` (iOS `fill <x> <y>`): no text input sits under the point, so the runner refused before dispatching anything (`error.details.reason` is `no_text_input_at_point`, `dispatched: no`) and no field changed. Run `snapshot -i` and `fill` the field by ref or selector, or aim at a point inside its rect.
+- `NO_TEXT_INPUT_AT_POINT` (iOS `fill <x> <y>`): the runner identified no text input under the point, so it refused before dispatching anything (`error.details.reason` is `no_text_input_at_point`, `dispatched: no`) and no field changed. The same code covers a lookup that could not answer, so an empty point is not proven — run `snapshot -i` again, then `fill` the field by ref or selector, or aim at a point inside its rect.
 - `TEXT_INPUT_SYNTHESIS_UNAVAILABLE` (iOS `type "\n"` with the software keyboard hidden): show the software keyboard, then retry.
 - `TEXT_INPUT_COMMIT_NOT_OBSERVED` (iOS `fill`): the runner could not confirm the text landed before its deadline, or the text equals the field's placeholder. The field may hold none, part, or all of it. Run `snapshot -i`; if it doesn't match, retry with the full text quoted and `fill --delay-ms 80`.
 - `TEXT_INPUT_CLEAR_NOT_OBSERVED` (iOS `fill`): the old text was not seen cleared, so nothing was typed. Inspect with `snapshot -i`, then retry `fill`.

@@ -56,17 +56,24 @@ extension RunnerTests {
   /// A penalized coordinate `fill` whose point names no text input cannot bind its replacement to a
   /// target, so it refuses with the typed reason instead of clearing and typing through the app-level
   /// first responder — which, while an earlier field still holds focus, destroys that field's text.
+  /// The aim point is a button that counts its presses: a refusal that dispatched its focus tap first
+  /// would move that counter even though the field came through, so the counter is what proves the
+  /// refusal happened before the tap rather than after it.
   @MainActor
-  func testPenalizedCoordinateFillAtAPointWithNoTextInputRefusesAndKeepsTheFocusedField() throws {
-    let field = try focusSynthesizedReplacementField()
+  func testPenalizedCoordinateFillAtAPointWithNoTextInputRefusesBeforeItsTapAndKeepsTheFocusedField() throws {
+    let field = try focusSynthesizedReplacementField(extraLaunchArguments: [
+      "--agent-device-text-entry-tap-witness",
+    ])
     defer { tearDownSynthesizedReplacementField() }
     let seeded = try replaceSynthesizedFieldText(field, text: "stale", commandId: "seed-non-text-point")
     XCTAssertTrue(seeded.ok, String(describing: seeded.error))
 
-    let nonTextTarget = app.staticTexts["Agent Device Runner"]
+    let nonTextTarget = app.buttons["agent-device-tap-witness"]
     XCTAssertTrue(nonTextTarget.waitForExistence(timeout: appExistenceTimeout))
     let nonTextFrame = nonTextTarget.frame
     XCTAssertFalse(nonTextFrame.isEmpty)
+    let pressCount = app.staticTexts["agent-device-tap-witness-presses"]
+    XCTAssertTrue(pressCount.waitForExistence(timeout: appExistenceTimeout))
 
     let fillCommand = try runnerCommandFixture(
       #"{"command":"type","commandId":"fill-penalized-non-text-point","text":"must-not-replace","textEntryMode":"replace","x":\#(nonTextFrame.midX),"y":\#(nonTextFrame.midY)}"#
@@ -78,6 +85,11 @@ extension RunnerTests {
     XCTAssertFalse(fillResponse.ok, String(describing: fillResponse.error))
     XCTAssertEqual(fillResponse.error?.code, "NO_TEXT_INPUT_AT_POINT")
     XCTAssertEqual(String(describing: field.value ?? ""), "stale")
+    XCTAssertEqual(
+      pressCount.label,
+      "presses=0",
+      "the refusal dispatched its focus tap: the point's control took the press"
+    )
   }
 #endif
 }

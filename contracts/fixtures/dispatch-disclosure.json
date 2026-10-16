@@ -196,7 +196,7 @@
   {
     "id": "ios-runner.reply.NO_TEXT_INPUT_AT_POINT",
     "producer": "ios-runner",
-    "trigger": "structured runner reply with code NO_TEXT_INPUT_AT_POINT: a coordinate fill refused before its focus tap because the point named no text input",
+    "trigger": "structured runner reply with code NO_TEXT_INPUT_AT_POINT: a coordinate fill refused before its focus tap because the runner identified no text input under the point",
     "dispatched": "no"
   },
   {

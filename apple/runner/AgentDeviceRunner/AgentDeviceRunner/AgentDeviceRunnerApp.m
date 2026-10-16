@@ -91,6 +91,10 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, strong) UILabel *textEntryWriteBackStatus;
 @property(nonatomic, strong) UILabel *textEntryDigitSlots;
+// Counts presses a gesture landed on a control that is not a text input, so a test can tell a
+// refusal that ran nothing from one that dispatched its gesture first and refused afterwards.
+@property(nonatomic, strong) UILabel *tapWitnessStatus;
+@property(nonatomic, assign) NSUInteger tapWitnessPresses;
 // Filled from the fixture field's own delegate callbacks so a test can tell that a gesture really
 // took focus from an input that has stopped answering the accessibility query that found it.
 @property(nonatomic, strong) UILabel *textEntryFocusWitness;
@@ -529,6 +533,17 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   [self updateMaskedToggleStatus];
 }
 
+- (void)agentDeviceTapWitnessDidPress:(UIButton *)sender {
+  (void)sender;
+  self.tapWitnessPresses += 1;
+  [self updateTapWitnessStatus];
+}
+
+- (void)updateTapWitnessStatus {
+  self.tapWitnessStatus.text =
+      [NSString stringWithFormat:@"presses=%lu", (unsigned long)self.tapWitnessPresses];
+}
+
 - (void)updateMaskedToggleStatus {
   self.maskedToggleStatus.text =
       [NSString stringWithFormat:@"presses=%lu", (unsigned long)self.maskedTogglePresses];
@@ -659,6 +674,32 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       } else {
         ((AgentDeviceSubmitClearingTextField *)textField).entryStatus = entryStatus;
       }
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-tap-witness"]) {
+      // A control that is not a text input, sitting below the field. Its press count is the only
+      // witness a test has that a coordinate gesture reached this screen: a refusal that dispatched
+      // its focus tap here would move the counter, and one that refused first would not.
+      UIButton *witness = [UIButton buttonWithType:UIButtonTypeSystem];
+      witness.accessibilityIdentifier = @"agent-device-tap-witness";
+      [witness setTitle:@"Tap witness" forState:UIControlStateNormal];
+      witness.translatesAutoresizingMaskIntoConstraints = NO;
+      [witness addTarget:self
+                  action:@selector(agentDeviceTapWitnessDidPress:)
+        forControlEvents:UIControlEventTouchUpInside];
+      [self.view addSubview:witness];
+      self.tapWitnessStatus = [[UILabel alloc] init];
+      self.tapWitnessStatus.accessibilityIdentifier = @"agent-device-tap-witness-presses";
+      self.tapWitnessStatus.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.tapWitnessStatus];
+      [NSLayoutConstraint activateConstraints:@[
+        [witness.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [witness.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:24],
+        [witness.widthAnchor constraintEqualToConstant:200],
+        [witness.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+        [self.tapWitnessStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.tapWitnessStatus.topAnchor constraintEqualToAnchor:witness.bottomAnchor constant:12],
+      ]];
+      [self updateTapWitnessStatus];
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unqueryable-on-focus"]) {
       self.textEntryFocusWitness = [[UILabel alloc] init];

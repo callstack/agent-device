@@ -112,7 +112,7 @@ test('a coordinate fill refused for a point with no input keeps its code and pub
   assert.equal(isRunnerBusyError(refusalError), false);
   // The closest negative: the same words from an unclassified failure earn no reason, so a
   // consumer keyed on `reason` cannot mistake a reply that may have landed for this refusal.
-  const untyped = commandFailed('no text input at the provided coordinates');
+  const untyped = commandFailed('no text input identified at the provided coordinates');
   assert.equal(untyped.details?.reason, undefined);
   assert.equal(isRetryableRunnerError(untyped), false);
 });

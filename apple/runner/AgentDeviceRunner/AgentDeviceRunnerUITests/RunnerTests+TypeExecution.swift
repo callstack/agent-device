@@ -157,17 +157,16 @@ extension RunnerTests {
   }
 
   /// The refusal of a coordinate `fill` whose point names no text input, answered before the focus
-  /// tap is dispatched so nothing runs. The synthesized first-responder replacement has no element
-  /// and re-resolves by the point on every read, so without the input the point named, its clear and
-  /// its typed text reach the app-level first responder: while an earlier field still holds focus,
-  /// that earlier field.
+  /// tap is dispatched so nothing runs. Without an input at the point the synthesized replacement has
+  /// no element to bind to, so its clear and its typed text would reach the app-level first
+  /// responder and overwrite whatever field currently holds focus.
   private func noTextInputAtPointResponse() -> Response {
     Response(
       ok: false,
       error: ErrorPayload(
         code: RunnerWireErrorCode.noTextInputAtPoint,
-        message: "no text input at the provided coordinates",
-        hint: "A coordinate fill replaces the text of the input under the point, so the point must sit inside one. Run snapshot -i, then fill the field by ref or selector, or aim at a point inside its rect."
+        message: "no text input identified at the provided coordinates",
+        hint: "A coordinate fill replaces the text of the input under the point, so the point must sit inside one. Run snapshot -i, then fill the field by ref or selector, or aim at a point inside its rect. The runner also reports this when its input lookup cannot answer, so re-run snapshot before concluding the point is empty."
       )
     )
   }
