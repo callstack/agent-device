@@ -348,6 +348,30 @@ describe('the developer dir a toolchain fingerprint answers for', () => {
     expect(realpathSync.mock.calls).toEqual([]);
   });
 
+  test('each client-named selection keeps its own report across another client read', () => {
+    // A daemon serves clients with different request-scoped DEVELOPER_DIRs at once. The second
+    // client's read must not erase what the first one needs to report on, even though both of their
+    // fingerprints are still cached.
+    const dirA = realSelectionDir(XCODE_A);
+    const dirB = realSelectionDir(XCODE_B);
+    let chosen: string | undefined = dirA;
+    appleRunnerTestHost.update({ commandDeveloperDir: () => chosen });
+    runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
+      command === 'xcodebuild' && chosen === dirA
+        ? { exitCode: 0, stdout: 'Xcode 15.1\nBuild version 1A111\n', stderr: '' }
+        : appleToolchainProbeResult(command, args),
+    );
+
+    expect(readFingerprint().xcodeBuildVersion).toBe('1A111');
+    chosen = dirB;
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+
+    chosen = dirA;
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBe('15.1');
+    chosen = dirB;
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
+  });
+
   test('a report for a client dir this process never read answers with nothing', () => {
     appleSelectionLink.target = realSelectionDir(XCODE_A);
     readFingerprint();
