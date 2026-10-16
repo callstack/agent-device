@@ -231,11 +231,18 @@ async function notInstalled(): Promise<string> {
   throw new AppError('APP_NOT_INSTALLED', 'No package found');
 }
 
-test('uninstall resolves and removes through the device readiness returns', async () => {
+test('uninstall resolves, removes and invalidates on the device readiness returns', async () => {
   const live = { ...device, id: 'emulator-5556', booted: true };
   ensureAndroidReady.mockResolvedValueOnce(live);
   const resolveAppPackage = vi.fn(async (): Promise<string> => 'com.example.demo');
-  const host = hostFixture({ resolveAppPackage });
+  const cacheDevices: DeviceInfo[] = [];
+  const host = hostFixture({
+    resolveAppPackage,
+    withInvalidatedAppResolutionCache: async (cacheDevice, operation) => {
+      cacheDevices.push(cacheDevice);
+      return await operation();
+    },
+  });
   const signal = new AbortController().signal;
 
   await createAndroidAppDeploymentOperations({
@@ -244,6 +251,7 @@ test('uninstall resolves and removes through the device readiness returns', asyn
     signal,
   }).uninstallApp?.({ app: 'com.example.demo' });
 
+  expect(cacheDevices).toEqual([live]);
   expect(resolveAppPackage).toHaveBeenCalledWith(live, 'com.example.demo', { installedOnly: true });
   expect(native.uninstallAndroidPackage).toHaveBeenCalledWith(
     host,

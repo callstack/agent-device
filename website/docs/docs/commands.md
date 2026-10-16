@@ -304,7 +304,7 @@ agent-device snapshot -i --platform apple --target desktop
 - Prefer selectors and `@ref`s; window positions shift between runs, so raw x/y is less stable. Use `click --button secondary` for context menus, then run `snapshot -i` again.
 - On `frontmost-app` and `menubar`, `press` and `click` post synthetic mouse events (`desktop` is inspect-only). `--hold-ms` keeps the button down (at least 40 ms, default 60 ms), `--count` sends independent clicks, and `--double-tap` sends double-click pairs. Apps like Finder read two clicks at the default interval as one double-click; pass an `--interval-ms` longer than the system double-click time to keep them apart. Long schedules get the time they need, and a cancelled or interrupted click releases the button. `--jitter-px` is ignored on these surfaces.
 - macOS also supports `clipboard read|write`, `trigger-app-event`, `logs`, `network dump`, `audio probe`, `alert`, and part of `settings` (see [Settings helpers](#settings-helpers)). `audio probe` samples host system audio and needs Screen Recording permission; see [Debugging & Profiling](/docs/debugging-profiling#audio-probes).
-- Mobile-only commands are unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `fold`, `install`, `reinstall`, `install-from-source`, and `push`.
+- Mobile-only commands are unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `fold`, `install`, `reinstall`, `uninstall`, `install-from-source`, and `push`.
 
 Set `AGENT_DEVICE_MACOS_APP_BACKEND=native` to run macOS app sessions without XCTest. There is no Automation Mode overlay, the app can stay behind other windows, and your pointer stays yours while a drawn pointer shows each action.
 

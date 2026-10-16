@@ -2,7 +2,7 @@ import { daemonPlatformServicesFixture } from '../../../__tests__/support/platfo
 import { expect, test } from 'vitest';
 import type { SessionState } from '../../../core/session-state.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
-import { ANDROID_EMULATOR } from '@agent-device/test-kit';
+import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR } from '@agent-device/test-kit';
 import {
   handleSessionCommands,
   mockBindDeviceRuntime,
@@ -15,7 +15,12 @@ async function uninstall(device: SessionState['device'], app: string) {
   sessionStore.publish('default', { name: 'default', createdAt: Date.now(), actions: [], device });
   return await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture({
+      appleSessionObservation: {
+        observeRunnerSession: async (deviceId) => ({ alive: true, sessionId: `${deviceId}:1` }),
+        resolveSoleForegroundApp: async () => undefined,
+      },
+    }),
     req: { token: 't', session: 'default', command: 'uninstall', positionals: [app], flags: {} },
     sessionName: 'default',
     logPath: '/tmp/daemon.log',
@@ -28,19 +33,57 @@ async function uninstall(device: SessionState['device'], app: string) {
 
 test.each([
   [
+    'an Android removal',
+    ANDROID_EMULATOR,
     { wasInstalled: true, packageName: 'com.example.app' },
-    { wasInstalled: true, appId: 'com.example.app', message: 'Uninstalled: com.example.app' },
+    {
+      platform: 'android',
+      wasInstalled: true,
+      appId: 'com.example.app',
+      message: 'Uninstalled: com.example.app',
+    },
   ],
-  [{ wasInstalled: false }, { wasInstalled: false, message: 'Not installed: com.example.app' }],
-] as const)('uninstall reports %j through one admitted binding', async (removed, expected) => {
-  mockUninstallAppRuntime.mockResolvedValueOnce(removed);
+  [
+    'an Android no-op',
+    ANDROID_EMULATOR,
+    { wasInstalled: false },
+    { platform: 'android', wasInstalled: false, message: 'Not installed: com.example.app' },
+  ],
+  [
+    'an iOS simulator removal',
+    IOS_SIMULATOR,
+    { wasInstalled: true, bundleId: 'com.example.app' },
+    {
+      platform: 'ios',
+      wasInstalled: true,
+      appId: 'com.example.app',
+      message: 'Uninstalled: com.example.app',
+    },
+  ],
+  [
+    'a CoreDevice removal',
+    IOS_DEVICE,
+    { wasInstalled: true, bundleId: 'com.example.app' },
+    {
+      platform: 'ios',
+      wasInstalled: true,
+      appId: 'com.example.app',
+      message: 'Uninstalled: com.example.app',
+    },
+  ],
+] as const)(
+  'uninstall reports %s through one admitted binding',
+  async (_name, device, removed, expected) => {
+    mockUninstallAppRuntime.mockResolvedValueOnce(removed);
 
-  await expect(uninstall(ANDROID_EMULATOR, 'com.example.app')).resolves.toEqual({
-    ok: true,
-    data: { platform: 'android', app: 'com.example.app', ...expected },
-  });
-  expect(mockBindDeviceRuntime.mock.calls[0]?.[1]).toMatchObject({ required: ['uninstallApp'] });
-});
+    await expect(uninstall(device, 'com.example.app')).resolves.toEqual({
+      ok: true,
+      data: { app: 'com.example.app', ...expected },
+    });
+    expect(mockUninstallAppRuntime).toHaveBeenCalledWith({ app: 'com.example.app' });
+    expect(mockBindDeviceRuntime.mock.calls[0]?.[1]).toMatchObject({ required: ['uninstallApp'] });
+  },
+);
 
 test('uninstall is refused before binding where the runtime fact closes it', async () => {
   const harmony = {
@@ -53,7 +96,7 @@ test('uninstall is refused before binding where the runtime fact closes it', asy
 
   await expect(uninstall(harmony, 'com.example.app')).resolves.toMatchObject({
     ok: false,
-    error: { code: 'UNSUPPORTED_OPERATION' },
+    error: { code: 'UNSUPPORTED_OPERATION', details: { reason: 'owner-capability-missing' } },
   });
   expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
   expect(mockUninstallAppRuntime).not.toHaveBeenCalled();

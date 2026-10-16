@@ -69,11 +69,11 @@ async function uninstallAndroidApp(
   input: AppUninstallInput,
   signal: AbortSignal,
 ): Promise<AppUninstallResult> {
-  return await host.androidDeployment.withInvalidatedAppResolutionCache(device, async () => {
-    const ready =
-      device.booted === true
-        ? device
-        : await ensureAndroidReady(host, device, { headless: false }, signal);
+  const ready =
+    device.booted === true
+      ? device
+      : await ensureAndroidReady(host, device, { headless: false }, signal);
+  return await host.androidDeployment.withInvalidatedAppResolutionCache(ready, async () => {
     let packageName: string;
     try {
       packageName = await host.androidDeployment.resolveAppPackage(ready, input.app, {
