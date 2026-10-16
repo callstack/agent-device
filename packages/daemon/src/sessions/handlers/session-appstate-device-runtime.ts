@@ -32,9 +32,10 @@ export async function queryDeviceRuntimeAppState(
 ): Promise<DaemonResponse> {
   if (isIosFamily(device) || isMacOs(device)) {
     // A request admitted without the session it names (#3674) keeps the typed refusal whatever
-    // flag routed it here — the fact comes from admission, so resolving the device cannot change
-    // the error family. A request that named no session keeps the plain session-required refusal,
-    // which is the right advice for it.
+    // flag routed it here — the fact comes from admission, so once a device resolves, a store
+    // change mid-await cannot move this refusal into another family. (Resolution itself can
+    // still fail first, and that error is the device's.) A request that named no session keeps
+    // the plain session-required refusal, which is the right advice for it.
     if (namedSessionMissing) {
       return appStateSessionNotFoundResponse(params.sessionName, device.platform);
     }

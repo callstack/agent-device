@@ -175,9 +175,9 @@ async function resolveRecordingSession(
  * the durable manifest the session address finds — never from an unconstrained sweep of the host,
  * which with several booted devices would answer `AMBIGUOUS_MATCH` (or, worse, silently pick a
  * different device) before the manifest is read. A decodable manifest names the exact device the
- * recording was started on; the stop recovery re-resolves that identity, so the host is asked
- * only for the device the manifest already specified. A start, or a stop with no decodable
- * manifest to recover from, refuses with the named-session error.
+ * recording was started on; the stop recovery re-resolves that identity, so where its family has
+ * an identity flag the host is asked only for the device the manifest already specified. A start,
+ * or a stop with no decodable manifest to recover from, refuses with the named-session error.
  * `assertManifestBelongsToRequest` still proves the resolved device and the session address
  * against the manifest before anything is served, so a mismatch fails closed.
  *

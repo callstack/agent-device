@@ -99,7 +99,7 @@ test('appstate --udid with no --platform resolves the stated device and THEN ans
       sessionStore: makeSessionStore(),
       inspectFacts: async (inspectedDevice) => {
         inspected.push(inspectedDevice.id);
-        return createUnavailableRuntimeFactsForTest(inspectedDevice, localRuntimeOwner('ios'), {
+        return createUnavailableRuntimeFactsForTest(inspectedDevice, localRuntimeOwner('apple'), {
           available: false,
           reason: 'owner-capability-missing',
         });
