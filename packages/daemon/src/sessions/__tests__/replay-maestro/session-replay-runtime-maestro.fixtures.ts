@@ -52,7 +52,7 @@ import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,
-} from '@agent-device/replay-port/replay-script-source-fixtures';
+} from '../../../__tests__/support/replay-script-source-fixture.ts';
 import { captureSnapshotThroughLegacyDispatchFixture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor-capture.ts';
 import { seedReplayFixtureSession } from '../replay-runtime/session-replay-runtime.fixtures.ts';

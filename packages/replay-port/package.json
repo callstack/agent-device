@@ -135,10 +135,6 @@
     "./source-discovery": {
       "types": "./src/source-discovery.ts",
       "default": "./src/source-discovery.ts"
-    },
-    "./replay-script-source-fixtures": {
-      "types": "./src/replay-script-source.fixtures.ts",
-      "default": "./src/replay-script-source.fixtures.ts"
     }
   },
   "devDependencies": {

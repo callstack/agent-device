@@ -26,7 +26,7 @@ import {
   applicationLifecycleRuntimeFixture,
   type LifecycleOperationsLoader,
 } from '../application-lifecycle-runtime-fixture.ts';
-import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { withClientReplayScriptSources } from '../replay-script-source-fixture.ts';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../platform-resource-cleanup-fixture.ts';
 

@@ -1,11 +1,9 @@
-// The single owner of the client-collected replay source bundles test requests carry (#1802).
 import fs from 'node:fs';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { MaestroSourceReader } from '@agent-device/maestro';
 import { resolveUserPath } from '@agent-device/host-kit/file';
-import { loadReplayScriptSourceBundle } from './script-source-bundle.ts';
-import { discoverReplaySourcePaths } from './source-discovery.ts';
+import { loadReplayScriptSourceBundle } from '@agent-device/replay-port/script-source-bundle';
+import { discoverReplaySourcePaths } from '@agent-device/replay-port/source-discovery';
 
 /** A native `.ad` script's one-entry source bundle for test requests. */
 export function replayScriptSourceBundleFor(filePath: string): ReplayScriptSourceBundle {
@@ -23,15 +21,6 @@ export async function maestroScriptSourceBundleFor(
     replayBackend: 'maestro',
   });
 }
-
-/**
- * `readSource` for a flow that declares no `runFlow` includes: the engine must
- * never reach for one, so a call here means the fixture drifted rather than a
- * missing file.
- */
-export const noMaestroIncludeSources: MaestroSourceReader = (resolvedPath) => {
-  throw new Error(`unexpected Maestro include read: ${resolvedPath}`);
-};
 
 /**
  * Attaches the script sources a real client would have collected for a `replay`/`test` request

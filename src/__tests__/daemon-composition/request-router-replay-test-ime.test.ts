@@ -38,7 +38,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 
 import { ANDROID_DEVICE, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { replayScriptSourceBundleFor } from '../test-utils/replay-script-source.fixtures.ts';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import { realLifecycleDeviceRuntimeGateway } from './lifecycle-runtime-gateway.ts';
