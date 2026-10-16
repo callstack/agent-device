@@ -445,10 +445,14 @@ test('open reports the launch confirmation its platform answered', async () => {
       ...binding,
       operations: {
         ...binding.operations,
-        openApplication: async (input: OpenApplicationInput) => ({
-          ...(await operations.openApplication(input)),
-          launchConfirmation: 'accepted' as const,
-        }),
+        openApplication: async (input: OpenApplicationInput) => {
+          const base = await operations.openApplication(input);
+          return {
+            appBundleId: base.appBundleId,
+            timing: base.timing,
+            launchConfirmation: 'accepted' as const,
+          };
+        },
       },
     };
   });

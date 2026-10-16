@@ -297,6 +297,38 @@ test('an accept that dies with the runner session hands the URL over again and r
   ]);
 });
 
+test('an accept whose read-back also fails reports the unknown prompt state', async () => {
+  const readAlert = vi
+    .fn<() => Promise<Record<string, unknown>>>()
+    .mockResolvedValueOnce(CONFIRMATION)
+    .mockRejectedValue(SPAWN_TIMEOUT);
+  const { lifecycle } = launchUrlSimulator(readAlert, [UNOBSERVABLE, COMING_UP], {
+    acceptAlert: async () => {
+      throw SPAWN_TIMEOUT;
+    },
+  });
+
+  const outcome = await lifecycle.openApplication(launchUrlInput());
+
+  expect(outcome.launchConfirmation).toBeUndefined();
+  expect(outcome).toMatchObject({ launchConfirmationProbeFailure: 'alert-accept' });
+});
+
+test('a redispatch whose second probe fails reports the unknown state, not the earlier accept', async () => {
+  // Round 1 accepts but the app stays proven not running, so the URL is handed over again; round 2
+  // cannot even read the prompt. The earlier accepted must not hide the unknown final state.
+  const readAlert = vi
+    .fn<() => Promise<Record<string, unknown>>>()
+    .mockResolvedValueOnce(CONFIRMATION)
+    .mockRejectedValue(SPAWN_TIMEOUT);
+  const { lifecycle } = launchUrlSimulator(readAlert, [UNOBSERVABLE, UNOBSERVABLE, COMING_UP]);
+
+  const outcome = await lifecycle.openApplication(launchUrlInput());
+
+  expect(outcome.launchConfirmation).toBeUndefined();
+  expect(outcome).toMatchObject({ launchConfirmationProbeFailure: 'alert-read' });
+});
+
 test.each([
   ['still coming up', COMING_UP],
   ['observable', OBSERVABLE],
