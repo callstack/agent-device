@@ -9,6 +9,7 @@ import type {
   AndroidAdbProvider,
 } from '@agent-device/platform-android/mechanics';
 import type { DeviceInventoryRequest } from '@agent-device/device-selection/dispatch-resolve';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { ANDROID_IME_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-ime-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
@@ -60,11 +61,12 @@ type AndroidSettingsWorld = {
 };
 
 export async function createAndroidSettingsWorld(options?: {
+  device?: DeviceInfo;
   nativeTextInjection?: boolean;
   onTextInjection?: (request: AndroidSettingsWorld['textInjectionCalls'][number]) => void;
   snapshotXml?: () => string;
   dumpsysWindow?: () => string;
-  onAdbExec?: (args: readonly string[]) => void;
+  onAdbExec?: (args: readonly string[]) => void | AndroidAdbResult;
 }): Promise<AndroidSettingsWorld> {
   // The world's helper version probe always reports no helper, so no install may be remembered
   // from an earlier world on the same serial.
@@ -80,6 +82,7 @@ export async function createAndroidSettingsWorld(options?: {
   const shellState = createAndroidProviderShellState();
   const appState = createAndroidProviderAppState();
   const spawnedLogcat: AndroidAdbProcess[] = [];
+  const device = options?.device ?? PROVIDER_SCENARIO_ANDROID;
   const tempRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-provider-scenario-android-deploy-'),
   );
@@ -105,7 +108,8 @@ export async function createAndroidSettingsWorld(options?: {
     exec: async (received) => {
       const args = [...received];
       adbCalls.push(args);
-      options?.onAdbExec?.([...args]);
+      const override = options?.onAdbExec?.([...args]);
+      if (override) return override;
       updateAndroidProviderShellState(args, shellState);
       const stateResult = updateAndroidProviderAppState(args, appState);
       if (stateResult) return stateResult;
@@ -155,7 +159,7 @@ export async function createAndroidSettingsWorld(options?: {
     androidAdbProvider: () => adbProvider,
     deviceInventoryProvider: async (request) => {
       inventoryRequests.push({ ...request });
-      return [PROVIDER_SCENARIO_ANDROID];
+      return [device];
     },
   });
 
@@ -176,7 +180,7 @@ export async function createAndroidSettingsWorld(options?: {
     apkPath,
     aabPath,
     manifestApkPath,
-    selection: { platform: 'android', serial: PROVIDER_SCENARIO_ANDROID.id },
+    selection: { platform: 'android', serial: device.id },
     assertNoHostAdbCalls: () => {
       assert.deepEqual(readHostAdbCalls(hostAdbGuard.argsLogPath), []);
     },

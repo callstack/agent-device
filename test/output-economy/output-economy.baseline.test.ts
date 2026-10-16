@@ -123,6 +123,27 @@ describe('actionability and reliability floors', () => {
     expect(rendered.settleTailDigest.settle.refsGeneration).toEqual(expect.any(Number));
   });
 
+  test('settle generations advance from the corresponding pre-action snapshots', () => {
+    expect(rendered.settleDefault.settle.refsGeneration).toBeGreaterThan(
+      rendered.daemonSnapshotDefault.refsGeneration,
+    );
+    expect(rendered.settleTailDefault.settle.refsGeneration).toBeGreaterThan(
+      rendered.postOrderSnapshotDefault.refsGeneration,
+    );
+    expect(rendered.settleTailDefault.settle.refsGeneration).toBeGreaterThan(
+      rendered.settleDefault.settle.refsGeneration,
+    );
+    expect(rendered.settleDigest.settle.refsGeneration).toBeGreaterThan(
+      rendered.snapshotDigestBeforeSettle.refsGeneration,
+    );
+    expect(rendered.settleTailDigest.settle.refsGeneration).toBeGreaterThan(
+      rendered.postOrderSnapshotDigest.refsGeneration,
+    );
+    expect(rendered.settleTailDigest.settle.refsGeneration).toBeGreaterThan(
+      rendered.settleDigest.settle.refsGeneration,
+    );
+  });
+
   test('selector digest keeps the answer and drops the redundant node', () => {
     expect(rendered.selectorDigest).toMatchObject({
       ref: 'e2',

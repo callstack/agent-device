@@ -42,9 +42,15 @@ export async function renderOutputFixtures() {
 
   return {
     snapshot,
+    daemonSnapshotDefault: daemon.snapshotDefault,
     snapshotDigest: daemon.snapshotDigest,
     settleDigest: daemon.settleDigest,
     settleTailDigest: daemon.settleTailDigest,
+    settleDefault: daemon.settleDefault,
+    settleTailDefault: daemon.settleTailDefault,
+    postOrderSnapshotDefault: daemon.postOrderSnapshotDefault,
+    postOrderSnapshotDigest: daemon.postOrderSnapshotDigest,
+    snapshotDigestBeforeSettle: daemon.snapshotDigestBeforeSettle,
     selectorDigest: daemon.selectorDigest,
     screenshotDefault: daemon.screenshotDefault,
     screenshotDigest: daemon.screenshotDigest,

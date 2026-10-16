@@ -1,168 +1,302 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { normalizeAgentDeviceError } from '@agent-device/kernel/errors';
-import { downloadRemoteArtifact } from '@agent-device/remote/daemon-artifacts';
-import { createDaemonProxyServer } from '@agent-device/proxy';
 import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit';
+  downloadRemoteArtifact,
+  materializeRemoteArtifacts,
+} from '@agent-device/remote/daemon-artifacts';
+import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
+import {
+  createProviderScenarioProxy,
+  withProviderScenarioResource,
+  withProviderScenarioTempDir,
+} from './harness.ts';
+import { FAKE_PROVIDER, createFakeProviderWorld } from './provider-device-runtime.fixtures.ts';
 
 const TENANT = 'local-proxy-tenant';
 const OTHER_TENANT = 'other-tenant';
+const TENANT_TOKEN = 'tenant-a-key';
+const OTHER_TENANT_TOKEN = 'tenant-b-key';
 
-test('Provider-backed integration local proxy materializes tenant-scoped screenshots', async (t) => {
+function tenantAuthentication(request: Request) {
+  const token = request.headers.get('authorization');
+  if (token === `Bearer ${TENANT_TOKEN}`) return { tenantId: TENANT };
+  if (token === `Bearer ${OTHER_TENANT_TOKEN}`) return { tenantId: OTHER_TENANT };
+  return null;
+}
+
+test('Provider-backed integration proxy materializes tenant-owned test artifacts from the daemon route', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'local proxy artifact tenant coverage')) return;
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-proxy-artifact-tenant-'));
-  const localScreenshotPath = path.join(tempDir, 'local-shot.png');
-  const rejectedScreenshotPath = path.join(tempDir, 'rejected-shot.png');
-  const protectedArtifactId = 'protected-screenshot';
-  const upstream = http.createServer((request, response) => {
-    assert.equal(request.headers.authorization, 'Bearer upstream-token');
-    assert.equal(request.url, `/artifacts/${protectedArtifactId}`);
-    if (request.headers['x-agent-device-tenant'] !== TENANT) {
-      response.statusCode = 401;
-      response.end('Artifact belongs to a different tenant');
-      return;
-    }
-    response.statusCode = 200;
-    response.end('tenant-scoped-png');
-  });
-  const proxy = createDaemonProxyServer({
-    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
-    upstreamToken: 'upstream-token',
-    clientToken: 'proxy-token',
-  });
+  await withProviderScenarioResource(
+    async () => await createFakeProviderWorld(),
+    async ({ daemon }) => {
+      await withProviderScenarioTempDir('agent-device-proxy-artifact-tenant-', async (tempDir) => {
+        const sourceDir = path.join(tempDir, 'source');
+        const daemonArtifactsRoot = path.join(tempDir, 'daemon-side');
+        const clientRoot = path.join(tempDir, 'caller-side', 'artifacts');
+        const scriptPath = path.join(sourceDir, 'flow.ad');
+        const rejectedArchivePath = path.join(tempDir, 'rejected.tar.gz');
+        fs.mkdirSync(sourceDir, { recursive: true });
+        fs.writeFileSync(scriptPath, '');
+        const proxy = await createProviderScenarioProxy(daemon, {
+          authenticate: tenantAuthentication,
+        });
+        try {
+          const allocation = await proxy.requestRpc(TENANT_TOKEN, {
+            jsonrpc: '2.0',
+            id: 'tenant-artifact-lease',
+            method: 'agent_device.lease.allocate',
+            params: {
+              tenantId: TENANT,
+              runId: 'artifact-run',
+              backend: 'android-instance',
+              leaseProvider: FAKE_PROVIDER,
+              platform: 'android',
+              deviceKey: 'android-a',
+              clientId: 'tenant-artifact-client',
+            },
+          });
+          assert.equal(allocation.statusCode, 200, JSON.stringify(allocation.json));
+          const leaseId = allocation.json.result?.data?.lease?.leaseId;
+          assert.equal(typeof leaseId, 'string', JSON.stringify(allocation.json));
+          const leaseScope = {
+            leaseId,
+            leaseBackend: 'android-instance',
+            leaseProvider: FAKE_PROVIDER,
+            deviceKey: 'android-a',
+            clientId: 'tenant-artifact-client',
+          } as const;
+          const request: DaemonWireRequest = {
+            token: TENANT_TOKEN,
+            session: 'default',
+            command: 'test',
+            positionals: [scriptPath],
+            flags: { artifactsDir: daemonArtifactsRoot },
+            meta: {
+              cwd: sourceDir,
+              tenantId: TENANT,
+              runId: 'artifact-run',
+              requestId: 'tenant-artifact-run',
+              ...leaseScope,
+              clientArtifactPaths: { artifactsDir: clientRoot },
+            },
+          };
 
-  try {
-    const proxyPort = await listenOnLoopback(proxy);
-    const daemonBaseUrl = `http://127.0.0.1:${proxyPort}/agent-device`;
+          const rpc = await proxy.callCommand(
+            TENANT_TOKEN,
+            request.command,
+            request.positionals,
+            request.flags,
+            { meta: request.meta, session: request.session },
+          );
+          assert.equal(rpc.statusCode, 200, JSON.stringify(rpc.json));
+          const data = rpc.json.result?.data as
+            | {
+                total?: number;
+                passed?: number;
+                failed?: number;
+                artifacts?: Array<{ artifactId?: string; artifactType?: string }>;
+              }
+            | undefined;
+          assert.equal(data?.total, 1, JSON.stringify(rpc.json));
+          assert.equal(data?.passed, 1, JSON.stringify(rpc.json));
+          assert.equal(data?.failed, 0, JSON.stringify(rpc.json));
+          const artifact = data?.artifacts?.[0];
+          assert.equal(artifact?.artifactType, 'test-artifacts');
+          assert.equal(typeof artifact?.artifactId, 'string');
+          const artifactId = artifact?.artifactId as string;
 
-    await assert.rejects(
-      async () =>
-        await downloadRemoteArtifact({
-          baseUrl: daemonBaseUrl,
-          token: 'proxy-token',
-          artifactId: protectedArtifactId,
-          destinationPath: rejectedScreenshotPath,
-          requestScope: { tenantId: OTHER_TENANT },
-        }),
-      (error: unknown) => {
-        const normalized = normalizeAgentDeviceError(error);
-        assert.equal(normalized.details?.statusCode, 401);
-        assert.match(String(normalized.details?.body), /different tenant/i);
-        return true;
-      },
-    );
-    assert.equal(fs.existsSync(rejectedScreenshotPath), false);
+          const testRequest = proxy.forwarded.find((entry) => {
+            if (entry.method !== 'POST' || entry.route !== '/rpc') return false;
+            const payload = JSON.parse(entry.requestBody) as {
+              params?: { command?: string };
+            };
+            return payload.params?.command === 'test';
+          });
+          assert.ok(testRequest, 'the test command did not reach the daemon');
+          const forwardedParams = JSON.parse(testRequest.requestBody) as {
+            params: { command?: string; tenantId?: string; meta?: Record<string, unknown> };
+          };
+          assert.equal(forwardedParams.params.command, 'test');
+          assert.equal(forwardedParams.params.tenantId, TENANT);
+          assert.equal(forwardedParams.params.meta?.tenantId, TENANT);
+          assert.equal(testRequest.authorization, `Bearer ${daemon.token}`);
+          assert.equal(testRequest.tenantId, TENANT);
 
-    await downloadRemoteArtifact({
-      baseUrl: daemonBaseUrl,
-      token: 'proxy-token',
-      artifactId: protectedArtifactId,
-      destinationPath: localScreenshotPath,
-      requestScope: { tenantId: TENANT },
-    });
+          await assert.rejects(
+            async () =>
+              await downloadRemoteArtifact({
+                baseUrl: proxy.baseUrl,
+                token: OTHER_TENANT_TOKEN,
+                artifactId,
+                destinationPath: rejectedArchivePath,
+                requestScope: { tenantId: OTHER_TENANT },
+                isDirectory: true,
+              }),
+            (error: unknown) => {
+              const normalized = normalizeAgentDeviceError(error);
+              assert.equal(normalized.details?.statusCode, 401);
+              return true;
+            },
+          );
+          assert.deepEqual(fs.readdirSync(rejectedArchivePath), []);
 
-    assert.equal(fs.readFileSync(localScreenshotPath, 'utf8'), 'tenant-scoped-png');
-  } finally {
-    await closeLoopbackServer(proxy);
-    await closeLoopbackServer(upstream);
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+          const response: Extract<DaemonResponse, { ok: true }> = {
+            ok: true,
+            data: data as NonNullable<Extract<DaemonResponse, { ok: true }>['data']>,
+          };
+          const materialized = await materializeRemoteArtifacts(
+            { baseUrl: proxy.baseUrl, token: TENANT_TOKEN },
+            request,
+            response,
+          );
+          assert.equal(materialized.ok, true);
+          if (!materialized.ok) return;
+          const materializedSuiteDir = materialized.data?.artifactsDir;
+          if (typeof materializedSuiteDir !== 'string') {
+            throw new Error('the artifact route did not materialize a suite directory');
+          }
+          assert.equal(path.dirname(materializedSuiteDir), clientRoot);
+          assert.ok(fs.existsSync(materializedSuiteDir));
+          const attemptDir = path.join(materializedSuiteDir, 'flow.ad', 'attempt-1');
+          assert.equal(fs.readFileSync(path.join(attemptDir, 'replay.ad'), 'utf8'), '');
+          assert.match(
+            fs.readFileSync(path.join(attemptDir, 'result.txt'), 'utf8'),
+            /status: passed/,
+          );
+
+          const downloads = proxy.forwarded.filter(
+            (entry) => entry.method === 'GET' && entry.route === `/artifacts/${artifactId}`,
+          );
+          assert.deepEqual(
+            downloads.map((entry) => [entry.authorization, entry.tenantId, entry.statusCode]),
+            [
+              [`Bearer ${daemon.token}`, OTHER_TENANT, 401],
+              [`Bearer ${daemon.token}`, TENANT, 200],
+            ],
+          );
+        } finally {
+          await proxy.close();
+        }
+      });
+    },
+  );
 });
 
-test('Provider-backed integration authenticated proxy sends every admitted RPC method as the caller tenant', async (t) => {
+test('Provider-backed integration authenticated proxy stamps every admitted RPC method before the daemon handles it', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'authenticated proxy rpc tenant coverage')) return;
 
-  const observed: Array<{
-    method: string;
-    params: Record<string, unknown>;
-    authorization: string | undefined;
-  }> = [];
-  const upstream = http.createServer(async (request, response) => {
-    if (request.method !== 'POST' || request.url !== '/rpc') {
-      response.statusCode = 404;
-      response.end('not found');
-      return;
-    }
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
-      id: string | number;
-      method: string;
-      params: Record<string, unknown>;
+  await withProviderScenarioResource(createFakeProviderWorld, async ({ daemon }) => {
+    const proxy = await createProviderScenarioProxy(daemon, {
+      authenticate: (request) =>
+        request.headers.get('authorization') === 'Bearer alice-key' ? { tenantId: 'alice' } : null,
+    });
+    const nextTenantParams = { session: 'default', tenantId: 'bob', runId: 'run-1' };
+    const leaseOwnerScope = {
+      leaseBackend: 'android-instance',
+      leaseProvider: FAKE_PROVIDER,
+      deviceKey: 'android-a',
+      clientId: 'client-a',
     };
-    observed.push({ ...payload, authorization: request.headers.authorization });
-    response.setHeader('content-type', 'application/json');
-    response.end(
-      JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { ok: true, data: {} } }),
-    );
-  });
-  const proxy = createDaemonProxyServer({
-    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
-    upstreamToken: 'upstream-token',
-    authenticate: (request) =>
-      request.headers.get('authorization') === 'Bearer alice-key' ? { tenantId: 'alice' } : null,
-  });
-  const otherTenantParams = { session: 'bob:default', tenantId: 'bob', runId: 'run-1' };
-  const admitted: Array<[string, Record<string, unknown>]> = [
-    ['agent_device.command', { command: 'devices', meta: { tenantId: 'bob' } }],
-    ['agent_device.lease.allocate', { backend: 'ios-simulator' }],
-    ['agent_device.lease.heartbeat', { leaseId: 'lease-1' }],
-    ['agent_device.lease.release', { leaseId: 'lease-1' }],
-  ];
-  const refused: Array<[string, Record<string, unknown>]> = [
-    [
-      'agent_device.install_from_source',
-      { platform: 'ios', source: { kind: 'url', url: 'https://example.test/app.ipa' } },
-    ],
-    ['agent_device.release_materialized_paths', { materializationId: 'materialization-1' }],
-  ];
-
-  try {
-    const rpcUrl = `http://127.0.0.1:${await listenOnLoopback(proxy)}/agent-device/rpc`;
-    const call = async (method: string, params: Record<string, unknown>) =>
-      await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: 'Bearer alice-key' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: method,
-          method,
-          params: { ...otherTenantParams, ...params },
-        }),
+    const rpc = async (id: string, method: string, params: Record<string, unknown>) =>
+      await proxy.requestRpc('alice-key', {
+        jsonrpc: '2.0',
+        id,
+        method,
+        params: { ...nextTenantParams, ...params },
       });
 
-    for (const [method, params] of admitted) {
-      const response = await call(method, params);
-      assert.equal(response.status, 200, method);
-      assert.equal(observed.at(-1)?.authorization, 'Bearer upstream-token', method);
-      assert.equal(observed.at(-1)?.params.tenantId, 'alice', method);
-      assert.equal(
-        (observed.at(-1)?.params.meta as Record<string, unknown> | undefined)?.tenantId,
-        'alice',
-        method,
-      );
-    }
-    assert.equal(
-      (observed[0]?.params.meta as Record<string, unknown> | undefined)?.sessionIsolation,
-      'tenant',
-    );
+    try {
+      const commandId = 'tenant-command';
+      const command = await rpc(commandId, 'agent_device.command', {
+        command: 'devices',
+        positionals: [],
+        flags: { tenant: 'bob', sessionIsolation: 'none' },
+        meta: { tenantId: 'bob', sessionIsolation: 'none', requestId: commandId },
+      });
+      assert.equal(command.statusCode, 200, JSON.stringify(command.json));
+      assert.equal(command.json.result?.ok, true, JSON.stringify(command.json));
 
-    for (const [method, params] of refused) {
-      const response = await call(method, params);
-      assert.equal(response.status, 401, method);
+      const allocationId = 'tenant-lease-allocate';
+      const allocation = await rpc(allocationId, 'agent_device.lease.allocate', {
+        backend: 'android-instance',
+        leaseProvider: FAKE_PROVIDER,
+        platform: 'android',
+        deviceKey: 'android-a',
+        clientId: 'client-a',
+      });
+      assert.equal(allocation.statusCode, 200, JSON.stringify(allocation.json));
+      assert.equal(allocation.json.result?.ok, true, JSON.stringify(allocation.json));
+      const leaseId = allocation.json.result?.data?.lease?.leaseId;
+      assert.equal(typeof leaseId, 'string', JSON.stringify(allocation.json));
+
+      const heartbeatId = 'tenant-lease-heartbeat';
+      const heartbeat = await rpc(heartbeatId, 'agent_device.lease.heartbeat', {
+        leaseId,
+        ...leaseOwnerScope,
+      });
+      assert.equal(heartbeat.statusCode, 200, JSON.stringify(heartbeat.json));
+      assert.equal(heartbeat.json.result?.ok, true, JSON.stringify(heartbeat.json));
+
+      const releaseId = 'tenant-lease-release';
+      const release = await rpc(releaseId, 'agent_device.lease.release', {
+        leaseId,
+        ...leaseOwnerScope,
+      });
+      assert.equal(release.statusCode, 200, JSON.stringify(release.json));
+      assert.equal(release.json.result?.ok, true, JSON.stringify(release.json));
+
+      for (const [id, method] of [
+        [commandId, 'agent_device.command'],
+        [allocationId, 'agent_device.lease.allocate'],
+        [heartbeatId, 'agent_device.lease.heartbeat'],
+        [releaseId, 'agent_device.lease.release'],
+      ]) {
+        const forwarded = proxy.forwarded.find((entry) => {
+          if (entry.method !== 'POST' || entry.route !== '/rpc') return false;
+          return (JSON.parse(entry.requestBody) as { id?: unknown }).id === id;
+        });
+        assert.ok(forwarded, `${method} was not forwarded to the daemon`);
+        const payload = JSON.parse(forwarded.requestBody) as {
+          method?: string;
+          params?: Record<string, unknown>;
+        };
+        assert.equal(payload.method, method);
+        assert.equal(payload.params?.tenantId, 'alice', method);
+        assert.equal(payload.params?.token, daemon.token, method);
+        assert.equal(forwarded.authorization, `Bearer ${daemon.token}`, method);
+        assert.equal(forwarded.tenantId, 'alice', method);
+        if (method === 'agent_device.command') {
+          assert.equal((payload.params?.meta as Record<string, unknown>)?.tenantId, 'alice');
+          assert.equal(
+            (payload.params?.meta as Record<string, unknown>)?.sessionIsolation,
+            'tenant',
+          );
+        }
+      }
+
+      const forwardedCount = proxy.forwarded.length;
+      const refused = await Promise.all([
+        rpc('tenant-install-refusal', 'agent_device.install_from_source', {
+          platform: 'ios',
+          source: { kind: 'url', url: 'https://example.test/app.ipa' },
+        }),
+        rpc('tenant-release-materialized-refusal', 'agent_device.release_materialized_paths', {
+          materializationId: 'materialization-1',
+        }),
+      ]);
+      assert.deepEqual(
+        refused.map((response) => response.statusCode),
+        [401, 401],
+      );
+      assert.equal(proxy.forwarded.length, forwardedCount);
+    } finally {
+      await proxy.close();
     }
-    assert.equal(observed.length, admitted.length);
-  } finally {
-    await closeLoopbackServer(proxy);
-    await closeLoopbackServer(upstream);
-  }
+  });
 });

@@ -157,23 +157,32 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
   const webProvider = emptyWebProvider(() =>
     currentPage === 'checkout' ? checkoutNodes : ambiguousNodes,
   );
-  const claimsDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-help-conformance-'));
-  const ownerStateDirectory = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-help-conformance-owner-'),
-  );
+  let claimsDirectory: string | undefined;
+  let ownerStateDirectory: string | undefined;
   const previousClaimsDirectory = process.env.AGENT_DEVICE_CLAIMS_DIR;
-  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDirectory;
-  const webDaemon = await createProviderScenarioHarness({
-    deviceInventoryProvider: async (request) =>
-      request.platform === 'web' ? [PROVIDER_SCENARIO_WEB] : [],
-    webProvider: () => webProvider,
-  });
+  let webDaemon: Awaited<ReturnType<typeof createProviderScenarioHarness>> | undefined;
   let androidDaemon: Awaited<ReturnType<typeof createProviderScenarioHarness>> | undefined;
 
   try {
+    const activeClaimsDirectory = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-device-help-conformance-'),
+    );
+    claimsDirectory = activeClaimsDirectory;
+    const activeOwnerStateDirectory = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-device-help-conformance-owner-'),
+    );
+    ownerStateDirectory = activeOwnerStateDirectory;
+    process.env.AGENT_DEVICE_CLAIMS_DIR = activeClaimsDirectory;
+    const activeWebDaemon = await createProviderScenarioHarness({
+      deviceInventoryProvider: async (request) =>
+        request.platform === 'web' ? [PROVIDER_SCENARIO_WEB] : [],
+      webProvider: () => webProvider,
+    });
+    webDaemon = activeWebDaemon;
+
     const webOpen = async (session: string) => {
       currentPage = 'checkout';
-      const response = await webDaemon.callCommand(
+      const response = await activeWebDaemon.callCommand(
         'open',
         ['https://example.test'],
         { platform: 'web' },
@@ -184,7 +193,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
 
     await webOpen('checkout');
     const deviceInUse = responseError(
-      await webDaemon.callCommand(
+      await activeWebDaemon.callCommand(
         'open',
         ['https://example.test'],
         { platform: 'web' },
@@ -194,7 +203,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
       'session owns the selected web device',
     );
 
-    const firstSnapshot = await webDaemon.callCommand(
+    const firstSnapshot = await activeWebDaemon.callCommand(
       'snapshot',
       [],
       { platform: 'web' },
@@ -202,14 +211,14 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
     );
     const firstGeneration = firstSnapshot.json?.result?.data?.refsGeneration;
     assert.equal(typeof firstGeneration, 'number');
-    const currentPress = await webDaemon.callCommand(
+    const currentPress = await activeWebDaemon.callCommand(
       'press',
       [`@e2~s${firstGeneration}`],
       { platform: 'web' },
       { session: 'checkout' },
     );
     assert.equal(currentPress.json?.error, undefined, JSON.stringify(currentPress.json));
-    const refreshedSnapshot = await webDaemon.callCommand(
+    const refreshedSnapshot = await activeWebDaemon.callCommand(
       'snapshot',
       [],
       { platform: 'web' },
@@ -219,7 +228,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
     assert.equal(typeof currentGeneration, 'number');
     assert.notEqual(currentGeneration, firstGeneration);
     const staleRefRaw = responseError(
-      await webDaemon.callCommand(
+      await activeWebDaemon.callCommand(
         'press',
         [`@e2~s${firstGeneration}`],
         { platform: 'web' },
@@ -244,7 +253,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
     };
 
     currentPage = 'feed';
-    const ambiguousSnapshot = await webDaemon.callCommand(
+    const ambiguousSnapshot = await activeWebDaemon.callCommand(
       'snapshot',
       [],
       { platform: 'web' },
@@ -252,7 +261,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
     );
     assert.equal(ambiguousSnapshot.json?.error, undefined, JSON.stringify(ambiguousSnapshot.json));
     const ambiguousMatch = responseError(
-      await webDaemon.callCommand(
+      await activeWebDaemon.callCommand(
         'find',
         ['text', 'Follow'],
         { platform: 'web' },
@@ -273,7 +282,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
         device: { ...identity, name: androidDevice.name },
         session: 'checkout',
         workspace: '/worktrees/checkout',
-        stateDir: ownerStateDirectory,
+        stateDir: activeOwnerStateDirectory,
         ownerPid: owner.pid,
         ownerStartTime: owner.startTime,
         ownerToken: 'help-conformance-owner',
@@ -303,11 +312,25 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
 
     return { deviceInUse, deviceClaimInUse, staleRef, ambiguousMatch };
   } finally {
-    await androidDaemon?.close();
-    await webDaemon.close();
-    fs.rmSync(claimsDirectory, { recursive: true, force: true });
-    fs.rmSync(ownerStateDirectory, { recursive: true, force: true });
-    if (previousClaimsDirectory === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
-    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDirectory;
+    try {
+      await androidDaemon?.close();
+    } finally {
+      try {
+        await webDaemon?.close();
+      } finally {
+        try {
+          if (claimsDirectory) fs.rmSync(claimsDirectory, { recursive: true, force: true });
+        } finally {
+          try {
+            if (ownerStateDirectory) {
+              fs.rmSync(ownerStateDirectory, { recursive: true, force: true });
+            }
+          } finally {
+            if (previousClaimsDirectory === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+            else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDirectory;
+          }
+        }
+      }
+    }
   }
 }

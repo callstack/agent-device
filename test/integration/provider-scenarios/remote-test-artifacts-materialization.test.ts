@@ -1,112 +1,133 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
-import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import { attachRemoteReplayTestArtifacts } from '@agent-device/replay-port/test-command';
 import {
   downloadRemoteArtifact,
   materializeRemoteArtifacts,
 } from '@agent-device/remote/daemon-artifacts';
 import {
-  createArtifactDownloadServer,
-  createDirectoryArtifactArchive,
-} from './artifact-download-fixtures.ts';
-import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
+import {
+  createProviderScenarioProxy,
+  createProviderScenarioHarness,
+  withProviderScenarioResource,
+  withProviderScenarioTempDir,
+} from './harness.ts';
 
-const SUITE_INVOCATION_ID = 'cd5f9c01feec8d70';
+const PROXY_TOKEN = 'remote-test-artifacts-proxy-token';
 
-test('the composed daemon and client path owners report the directory that was materialized', async (t) => {
+test('the composed daemon and client path materializes the directory produced by a test command', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'remote test-artifacts materialization coverage'))
     return;
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-suite-response-'));
-  const daemonSuiteDir = path.join(tempDir, 'daemon-side', SUITE_INVOCATION_ID);
-  const daemonAttemptDir = path.join(daemonSuiteDir, 'flow.ad', 'attempt-1');
-  const clientRoot = path.join(tempDir, 'caller-side', 'artifacts');
-  const clientSuiteDir = path.join(clientRoot, SUITE_INVOCATION_ID);
-  fs.mkdirSync(daemonAttemptDir, { recursive: true });
-  fs.writeFileSync(path.join(daemonAttemptDir, 'replay.ad'), 'open "Demo"\n');
-  fs.writeFileSync(path.join(daemonAttemptDir, 'result.txt'), 'status: passed\n');
+  await withProviderScenarioResource(
+    async () => await createProviderScenarioHarness({ deviceInventoryProvider: async () => [] }),
+    async (daemon) => {
+      await withProviderScenarioTempDir('agent-device-remote-suite-response-', async (tempDir) => {
+        const sourceDir = path.join(tempDir, 'source');
+        const daemonArtifactsRoot = path.join(tempDir, 'daemon-side');
+        const clientRoot = path.join(tempDir, 'caller-side', 'artifacts');
+        const scriptPath = path.join(sourceDir, 'flow.ad');
+        const source = '';
+        fs.mkdirSync(sourceDir, { recursive: true });
+        fs.writeFileSync(scriptPath, source);
 
-  const request: DaemonWireRequest = {
-    token: 'daemon-token',
-    session: 'default',
-    command: 'test',
-    positionals: [],
-    meta: { clientArtifactPaths: { artifactsDir: clientRoot } },
-  };
-  const suite: ReplaySuiteResult = {
-    total: 1,
-    executed: 1,
-    passed: 1,
-    failed: 0,
-    skipped: 0,
-    notRun: 0,
-    durationMs: 1,
-    failures: [],
-    artifactsDir: daemonSuiteDir,
-    tests: [
-      {
-        file: 'flow.ad',
-        session: 'default:test:1',
-        status: 'passed',
-        durationMs: 1,
-        attempts: 1,
-        artifactsDir: daemonAttemptDir,
-        replayed: 1,
-        healed: 0,
-      },
-    ],
-  };
-  const response = {
-    ok: true as const,
-    data: attachRemoteReplayTestArtifacts(suite, request),
-  };
-  const artifact = response.data.artifacts?.[0];
-  assert.ok(artifact?.path);
-  const artifactId = 'materialized-suite-artifact';
-  const archive = await createDirectoryArtifactArchive(artifact.path);
-  response.data.artifacts = [{ ...artifact, artifactId }];
-  const server = createArtifactDownloadServer(new Map([[artifactId, archive]]), 'daemon-token');
+        const proxy = await createProviderScenarioProxy(daemon, { clientToken: PROXY_TOKEN });
+        const request: DaemonWireRequest = {
+          token: PROXY_TOKEN,
+          session: 'default',
+          command: 'test',
+          positionals: [scriptPath],
+          flags: { artifactsDir: daemonArtifactsRoot },
+          meta: {
+            cwd: sourceDir,
+            requestId: 'remote-test-artifact-materialization',
+            clientArtifactPaths: { artifactsDir: clientRoot },
+          },
+        };
 
-  try {
-    const port = await listenOnLoopback(server);
-    const materialized = await materializeRemoteArtifacts(
-      { baseUrl: `http://127.0.0.1:${port}`, token: 'daemon-token' },
-      request,
-      response,
-    );
+        try {
+          const rpc = await proxy.callCommand(
+            PROXY_TOKEN,
+            request.command,
+            request.positionals,
+            request.flags,
+            { meta: request.meta, session: request.session },
+          );
+          assert.equal(rpc.statusCode, 200, JSON.stringify(rpc.json));
+          const data = rpc.json.result?.data as
+            | {
+                total?: number;
+                passed?: number;
+                failed?: number;
+                artifactsDir?: string;
+                artifacts?: Array<{
+                  artifactId?: string;
+                  artifactType?: string;
+                }>;
+              }
+            | undefined;
+          assert.equal(data?.total, 1, JSON.stringify(rpc.json));
+          assert.equal(data?.passed, 1, JSON.stringify(rpc.json));
+          assert.equal(data?.failed, 0, JSON.stringify(rpc.json));
+          const artifact = data?.artifacts?.[0];
+          assert.ok(artifact, 'the test command did not register its directory artifact');
+          assert.equal(artifact?.artifactType, 'test-artifacts');
+          assert.equal(typeof artifact?.artifactId, 'string');
+          const artifactId = artifact?.artifactId as string;
 
-    assert.equal(materialized.ok, true);
-    if (!materialized.ok) return;
-    assert.equal(materialized.data?.artifactsDir, clientSuiteDir);
-    assert.equal(materialized.data?.artifacts?.[0]?.localPath, clientSuiteDir);
-    assert.equal(
-      fs.readFileSync(path.join(clientSuiteDir, 'flow.ad', 'attempt-1', 'replay.ad'), 'utf8'),
-      'open "Demo"\n',
-    );
-    assert.equal(
-      fs.readFileSync(path.join(clientSuiteDir, 'flow.ad', 'attempt-1', 'result.txt'), 'utf8'),
-      'status: passed\n',
-    );
-  } finally {
-    await closeLoopbackServer(server);
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+          const response: Extract<DaemonResponse, { ok: true }> = {
+            ok: true,
+            data: data as NonNullable<Extract<DaemonResponse, { ok: true }>['data']>,
+          };
+          const materialized = await materializeRemoteArtifacts(
+            { baseUrl: proxy.baseUrl, token: PROXY_TOKEN },
+            request,
+            response,
+          );
+          assert.equal(materialized.ok, true);
+          if (!materialized.ok) return;
+
+          const materializedSuiteDir = materialized.data?.artifactsDir;
+          if (typeof materializedSuiteDir !== 'string') {
+            throw new Error('the artifact route did not materialize a suite directory');
+          }
+          assert.equal(path.dirname(materializedSuiteDir), clientRoot);
+          assert.ok(fs.existsSync(materializedSuiteDir));
+          const attemptDir = path.join(materializedSuiteDir, 'flow.ad', 'attempt-1');
+          assert.equal(fs.readFileSync(path.join(attemptDir, 'replay.ad'), 'utf8'), source);
+          const result = fs.readFileSync(path.join(attemptDir, 'result.txt'), 'utf8');
+          assert.match(result, /status: passed/);
+
+          const artifactRequest = proxy.forwarded.find(
+            (entry) => entry.method === 'GET' && entry.route === `/artifacts/${artifactId}`,
+          );
+          assert.ok(
+            artifactRequest,
+            'client materialization did not use the daemon artifact endpoint',
+          );
+          assert.equal(artifactRequest.authorization, `Bearer ${daemon.token}`);
+          assert.equal(artifactRequest.statusCode, 200);
+        } finally {
+          await proxy.close();
+        }
+      });
+    },
+  );
 });
 
 test('directory downloads stage beside the destination and finish timeout cleanup before rejecting', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'remote test-artifacts atomic staging coverage')) return;
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-suite-timeout-'));
+  const tempDir = mkdtempForTestSync('agent-device-remote-suite-timeout-');
   const clientRoot = path.join(tempDir, 'caller-side', 'artifacts');
   const server = http.createServer((_req, res) => {
     res.statusCode = 200;
@@ -138,6 +159,5 @@ test('directory downloads stage beside the destination and finish timeout cleanu
     );
   } finally {
     await closeLoopbackServer(server);
-    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

@@ -303,7 +303,7 @@ export async function captureOutputEconomyDaemonResponses() {
     );
 
     const settleDefault = await clickAndSettle('default');
-    stableResponseData(
+    const postOrderSnapshotDefault = stableResponseData(
       await daemon.callCommand('snapshot', [], { platform: 'web' }, { session: 'default' }),
       'post-order snapshot',
     );
@@ -339,12 +339,12 @@ export async function captureOutputEconomyDaemonResponses() {
       ),
       'screenshot digest',
     );
-    stableResponseData(
+    const snapshotDigestBeforeSettle = stableResponseData(
       await daemon.callCommand('snapshot', [], { platform: 'web' }, { session: 'digest' }),
       'digest pre-click snapshot',
     );
     const settleDigest = await clickAndSettle('digest', 'digest');
-    stableResponseData(
+    const postOrderSnapshotDigest = stableResponseData(
       await daemon.callCommand('snapshot', [], { platform: 'web' }, { session: 'digest' }),
       'digest post-order snapshot',
     );
@@ -372,12 +372,15 @@ export async function captureOutputEconomyDaemonResponses() {
     return {
       snapshotDefault,
       snapshotDigest,
+      snapshotDigestBeforeSettle,
       selectorDefault,
       selectorDigest,
       settleDefault,
       settleDigest,
       settleTailDefault,
       settleTailDigest,
+      postOrderSnapshotDefault,
+      postOrderSnapshotDigest,
       screenshotDefault,
       screenshotDigest,
       networkDefault,

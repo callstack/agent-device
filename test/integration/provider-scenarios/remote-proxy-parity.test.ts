@@ -2,20 +2,19 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
-import { createDaemonProxyServer } from '@agent-device/proxy';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
-import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit';
+import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
-import { createProviderScenarioHarness, type ProviderScenarioHarness } from './harness.ts';
+import {
+  createProviderScenarioHarness,
+  createProviderScenarioProxy,
+  type ProviderScenarioForwardedRequest,
+  type ProviderScenarioHarness,
+} from './harness.ts';
 import {
   createAppleRunnerProviderFromTranscript,
   createRecordingAppleToolProvider,
@@ -246,96 +245,36 @@ async function withProxiedWorld<T>(
   run: (context: {
     world: ParityWorld;
     proxied: ScenarioLeg;
-    forwarded: ForwardedRequest[];
+    forwarded: ProviderScenarioForwardedRequest[];
   }) => Promise<T>,
   options: ParityWorldOptions = {},
 ): Promise<T> {
   const world = await createParityWorld(options);
-  const { server: upstream, forwarded } = createRecordingUpstreamServer(world.daemon.baseUrl);
-  const proxy = createDaemonProxyServer({
-    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
-    upstreamToken: world.daemon.token,
-    clientToken: PROXY_TOKEN,
-  });
+  const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: PROXY_TOKEN });
   // The remote client's own state dir: localized failure records land here, not in the
   // developer's real state dir.
   const clientStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-proxy-parity-'));
   try {
-    const daemonBaseUrl = `http://127.0.0.1:${await listenOnLoopback(proxy)}/agent-device`;
     const proxied: ScenarioLeg = async (request) => {
       try {
         return await sendToDaemon(
-          { ...request, flags: { ...request.flags, daemonBaseUrl, stateDir: clientStateDir } },
+          {
+            ...request,
+            flags: { ...request.flags, daemonBaseUrl: proxy.baseUrl, stateDir: clientStateDir },
+          },
           { authToken: PROXY_TOKEN },
         );
       } catch (error) {
         return responseFromClientError(error);
       }
     };
-    return await run({ world, proxied, forwarded });
+    return await run({ world, proxied, forwarded: proxy.forwarded });
   } finally {
-    await closeLoopbackServer(proxy);
-    await closeLoopbackServer(upstream);
+    await proxy.close();
     await world.close();
     fs.rmSync(clientStateDir, { recursive: true, force: true });
   }
 }
-
-/** Records the proxy's HTTP boundary while forwarding requests to the real daemon. */
-function createRecordingUpstreamServer(baseUrl: string): {
-  server: http.Server;
-  forwarded: ForwardedRequest[];
-} {
-  const forwarded: ForwardedRequest[] = [];
-  const server = http.createServer((request, response) => {
-    const route = (request.url ?? '').split('?', 1)[0] ?? '';
-    const isRpc = request.method === 'POST' && route === '/rpc';
-    const isDiagnostics =
-      request.method === 'GET' && /^\/sessions\/[^/]+\/requests\/[^/]+\/diagnostics$/.test(route);
-    if (!isRpc && !isDiagnostics) {
-      response.statusCode = 404;
-      response.end('not found');
-      return;
-    }
-    void (async () => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      const body = Buffer.concat(chunks);
-      const entry: ForwardedRequest = { method: request.method ?? '', route, body: '' };
-      forwarded.push(entry);
-      const headers = new Headers();
-      for (const [name, value] of Object.entries(request.headers)) {
-        if (
-          value === undefined ||
-          ['host', 'content-length', 'connection', 'transfer-encoding', 'accept-encoding'].includes(
-            name,
-          )
-        ) {
-          continue;
-        }
-        headers.set(name, Array.isArray(value) ? value.join(', ') : value);
-      }
-      const upstreamResponse = await fetch(new URL(request.url ?? '/', baseUrl), {
-        method: request.method,
-        headers,
-        ...(body.length > 0 ? { body } : {}),
-      });
-      const responseBody = Buffer.from(await upstreamResponse.arrayBuffer());
-      entry.body = responseBody.toString('utf8');
-      response.statusCode = upstreamResponse.status;
-      const contentType = upstreamResponse.headers.get('content-type');
-      if (contentType) response.setHeader('content-type', contentType);
-      response.end(responseBody);
-    })().catch((error: unknown) => {
-      response.statusCode = 502;
-      response.end(error instanceof Error ? error.message : String(error));
-    });
-  });
-  return { server, forwarded };
-}
-
-/** One request the proxy forwarded, with the exact bytes the daemon answered it with. */
-type ForwardedRequest = { method: string; route: string; body: string };
 
 /**
  * What a published `snapshot --interactive-only` response is made of. #2198 forbids the
@@ -551,7 +490,7 @@ test(
       // wire's `result` against the client's response would prove nothing — the client
       // publishes whatever `result` holds, so both sides move together — so each level is
       // pinned against its declared key set instead.
-      const rpcBody = JSON.parse(snapshotRequests.at(-1)?.body ?? '{}') as {
+      const rpcBody = JSON.parse(snapshotRequests.at(-1)?.responseBody ?? '{}') as {
         result?: { data?: Record<string, unknown> };
       };
       assert.deepEqual(
