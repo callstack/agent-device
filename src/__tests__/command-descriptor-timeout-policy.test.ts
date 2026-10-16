@@ -147,6 +147,7 @@ test('request envelopes deviating from the default are bounded, reviewed sets', 
     prepare: 270_000,
     install: 180_000,
     reinstall: 180_000,
+    uninstall: 180_000,
     install_source: 180_000,
     longpress: 210_000,
     // fold: proven by the worst-case ledger test in

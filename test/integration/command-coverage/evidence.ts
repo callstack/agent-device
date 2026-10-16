@@ -50,6 +50,12 @@ export const ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
     [C.fold],
     'Android admits the fold fact on emulators and refuses every other kind',
   );
+export const ANDROID_UNINSTALL_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'test/integration/provider-scenarios/android-uninstall.test.ts',
+    [C.uninstall],
+    'Provider-backed integration Android uninstall removes an installed package and no-ops on a missing one',
+  );
 export const ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'packages/daemon/src/execution/__tests__/viewport-runtime.test.ts',

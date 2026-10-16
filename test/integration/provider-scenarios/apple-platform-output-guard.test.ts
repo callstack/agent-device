@@ -85,6 +85,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.apps]: () => one(),
   [PUBLIC_COMMANDS.install]: ({ appPath }) => one(['com.example.demo', appPath]),
   [PUBLIC_COMMANDS.reinstall]: ({ appPath }) => one(['com.example.demo', appPath]),
+  [PUBLIC_COMMANDS.uninstall]: () => one(['com.example.demo']),
   [PUBLIC_COMMANDS.installFromSource]: ({ appPath }) => one([appPath]),
   [PUBLIC_COMMANDS.push]: ({ tmpDir }) => one([path.join(tmpDir, 'push-src.txt'), '/tmp/dest']),
   [PUBLIC_COMMANDS.triggerAppEvent]: () => one(['url', 'https://example.com']),

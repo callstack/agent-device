@@ -19,6 +19,7 @@ import {
   ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE,
+  ANDROID_UNINSTALL_CONTRACT_EVIDENCE,
   ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE,
   APPLE_ACTION_BUTTON_FACT_EVIDENCE,
   APPLE_HOVER_DENIAL_EVIDENCE,
@@ -501,6 +502,33 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'the web runtime fact rejects native app reinstallation',
     ),
     linux: linux.gap('No Linux-specific application reinstallation command evidence exists yet'),
+  },
+  [C.uninstall]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_UNINSTALL_CONTRACT_EVIDENCE,
+      'scripted ADB scenario removes an installed package and skips adb for a missing one',
+    ),
+    iosSimulator: iosSimulator.contract(
+      'packages/platform-apple/src/deployment/runtime.test.ts',
+      'uninstall on the %s removes an installed bundle and skips a missing one',
+      'simctl uninstall dispatch through the shared Apple deployment operations',
+    ),
+    macos: macos.contract(
+      'packages/platform-apple/src/deployment/runtime.test.ts',
+      'classifies deployment facts for the %s denominator cell',
+      'Apple deployment facts close application uninstall on the macOS host',
+    ),
+    tvos: tvos.contract(
+      'packages/platform-apple/src/deployment/runtime.test.ts',
+      'classifies deployment facts for the %s denominator cell',
+      'shared Apple deployment facts admit app uninstall on tvOS simulators',
+    ),
+    web: web.contract(
+      'packages/platform-web/src/runtime.test.ts',
+      'uninstall reports the runtime-owned unavailable uninstall fact',
+      'the web runtime fact rejects native app uninstall',
+    ),
+    linux: linux.gap('No Linux-specific application uninstall command evidence exists yet'),
   },
   [C.push]: {
     androidEmulator: androidEmulator.live(

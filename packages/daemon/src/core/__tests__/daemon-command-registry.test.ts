@@ -135,6 +135,7 @@ test('daemon command registry preserves replay and recording traits', () => {
     PUBLIC_COMMANDS.triggerAppEvent,
     PUBLIC_COMMANDS.tvRemote,
     PUBLIC_COMMANDS.type,
+    PUBLIC_COMMANDS.uninstall,
     PUBLIC_COMMANDS.viewport,
     PUBLIC_COMMANDS.wait,
   ]) {
