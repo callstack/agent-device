@@ -1,31 +1,34 @@
 # Issue Tracker: GitHub
 
-Issues and PRDs for this repo live as GitHub issues in `callstack/agent-device`. Use the `gh` CLI for issue operations.
+Issues and PRDs for this repo are GitHub issues in `callstack/agent-device`. Use the `gh` CLI for issue operations.
 
 ## Triage scope
 
-External PRs are not task requests in the issue-triage queue. Reading linked PRs to verify an issue's
-dependencies is allowed; it does not expand the task into PR maintenance.
+An external PR is not a task request in the issue-triage queue. To verify issue dependencies, you can read linked PRs.
+Do not maintain those PRs.
 
 ## Conventions
 
-Write issues as implementation contracts: purpose, required behavior, observable completion
-conditions, and dependencies. Include an API, data shape, or CLI example for boundary changes.
+Write each issue as an implementation contract: purpose, required behavior, observable completion
+conditions, and dependencies. For a boundary change, include an API, data shape, or CLI example.
 
-Sandboxed `gh` may lack host login credentials. Retry the focused command with host authentication
-access when permitted before treating it as an authentication failure. Do not reconfigure
-credentials; report the command and remaining blocker if the retry fails.
+If sandboxed `gh` fails with an authentication error, run the same command with host access, if permitted.
+Do not reconfigure credentials. If it fails again, report the command and blocker.
 
 For label meanings and state flow, see `docs/agents/triage-labels.md`.
 
+## Current state
+
+When you change a decision or the scope of your issue, post a comment that starts with `Decision:`.
+After a PR merges on your umbrella issue, post a `Current state:` comment: merged PRs, open PRs, and the next step.
+Before you continue work, read all `Decision:` comments (newest wins per topic) and the newest `Current state:` comment.
+
 ## Dependencies and sequencing
 
-- Treat `Blocked by: ...` lines, linked prerequisite issues, and branch-base notes as part of the issue contract.
-- Before scheduling or reviewing work, check blockers and decide whether the work should wait, stack on a prerequisite branch, or explicitly rescope.
-- Do not mark an issue ready for implementation while prerequisite semantics are unresolved.
-  A dependent PR can be published with its base and blockers explicit; merge-readiness follows
-  `docs/agents/pull-requests.md`.
-- When closing an umbrella issue, verify child issue states and the key implementation PRs instead of relying only on checked boxes.
+- `Blocked by: ...` lines, linked prerequisite issues, and branch-base notes are part of the issue contract.
+- Before you schedule or review work, examine the blockers. If one is open, decide: wait, stack on its branch, or rescope explicitly.
+- If the prerequisite semantics are not resolved, do not mark the issue as ready for implementation.
+  You can publish a dependent PR with its base and blockers explicit.
+- Before you close an umbrella issue, verify child issue states and key implementation PRs, not only checked boxes.
 
-For authorized issue publication, use GitHub issues. A skill workflow alone is not authorization
-to publish.
+A skill workflow alone does not authorize you to publish an issue.
