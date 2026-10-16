@@ -138,6 +138,19 @@ describe('the developer dir a toolchain fingerprint answers for', () => {
     expect(runCmdSync.mock.calls).toEqual([]);
   });
 
+  test('a selection that comes back to a dir answers its report from that dir as well', () => {
+    scriptSelectableXcodes();
+    readFingerprint();
+    selectedDeveloperDir = XCODE_B;
+    readFingerprint();
+
+    selectedDeveloperDir = XCODE_A;
+    // The read itself is a hit on A's entry, so it stores nothing; the report pointer still has to
+    // follow the selection this read resolved, or it would blame B for an A-backed runner (#3300).
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
+  });
+
   test('a client that chooses DEVELOPER_DIR keys its read without resolving the default', () => {
     scriptSelectableXcodes();
     appleRunnerTestHost.update({ commandDeveloperDir: () => XCODE_A });
