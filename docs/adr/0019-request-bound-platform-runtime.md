@@ -679,20 +679,6 @@ Descriptors cannot carry capability admission.
 R66 rejects manufactured runtime proof and restored legacy admission.
 R65 rejects daemon dependencies on concrete platform implementations.
 
-A behavior-neutral package/registry substrate may precede the first command only under all these conditions:
-
-- It routes no production descriptor.
-- It contains no dead code.
-- It is independently revertible.
-- It preserves lazy loads.
-
-Otherwise, it accompanies the `devices` command unit.
-Migrated and legacy commands do not duplicate shared Apple-runner or Android-helper mechanics.
-They do not use package-to-root back-imports.
-Mechanics either remain in place until the last consumer can move or use a neutral lower-level capability injected by composition.
-Composition injects that capability into both the package facet and complete legacy adapter.
-Command execution retains one owner.
-
 Review the substrate and each command unit from a clean committed tree with all production files in `HEAD`.
 A passing layering check with untracked production files is not evidence.
 Platform packages receive no migration allowlist or root back-import exception.
