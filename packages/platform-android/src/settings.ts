@@ -28,7 +28,6 @@ import {
 import { runAndroidAdb, runAndroidShell } from './adb.ts';
 import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
-import { setAndroidBluetooth } from './settings-bluetooth.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
 import {
@@ -103,6 +102,7 @@ export async function setAndroidSetting(
       return;
     }
     case 'bluetooth': {
+      const { setAndroidBluetooth } = await import('./settings-bluetooth.ts');
       return await setAndroidBluetooth(device, parseSettingState(state), signal);
     }
     case 'airplane': {
