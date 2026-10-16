@@ -126,9 +126,9 @@ function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint
 }
 
 /**
- * The developer dir of the last fingerprint a default-selection read stored, which is the entry a
- * failure report without a client-chosen `DEVELOPER_DIR` names. Undefined until such a read stored
- * one, since only a stored fingerprint has an entry to name.
+ * The selection the last default-selection read resolved, which is the entry a failure report
+ * without a client-chosen `DEVELOPER_DIR` names. A read that threw or could not resolve its
+ * selection leaves it alone, so it always names a dir with an entry behind it.
  */
 let recordedDefaultSelection: string | undefined;
 
@@ -149,12 +149,22 @@ export function requireRunnerToolchainFingerprint(
   // unknown key would let one host selection answer for the next, which is the fault here.
   if (developerDir === undefined) return requireFreshRunnerToolchainFingerprint(sdkName, clock);
   const cacheKey = toolchainFingerprintCacheKey(developerDir, sdkName);
+  const fingerprint = requireMemoizedRunnerToolchainFingerprint(cacheKey, sdkName, clock);
+  // A report finds its entry by the dir this read resolved, whether the read stored it or hit it.
+  if (chosenDir === undefined) recordedDefaultSelection = developerDir;
+  return fingerprint;
+}
+
+/** This key's fingerprint, read from the memo when one answers for it and stored when it does not. */
+function requireMemoizedRunnerToolchainFingerprint(
+  cacheKey: string,
+  sdkName: string,
+  clock: ToolchainProbeClock,
+): RunnerToolchainFingerprint {
   const cached = toolchainFingerprintCache().get(cacheKey);
   if (cached) return cached;
   const fingerprint = requireFreshRunnerToolchainFingerprint(sdkName, clock);
   toolchainFingerprintCache().set(cacheKey, fingerprint);
-  // A report finds its entry by the same dir, so only a read that stored one points at it.
-  if (chosenDir === undefined) recordedDefaultSelection = developerDir;
   return fingerprint;
 }
 
@@ -305,7 +315,7 @@ function runToolchainProbeCommand(
   }
 }
 
-/** The guard for a value probe: cancellation and a spent budget both throw or skip here, before any exec. */
+/** The guard for a value probe: cancellation and a spent budget both throw here, before any exec. */
 function attemptToolchainProbe(
   cmd: string,
   args: string[],
