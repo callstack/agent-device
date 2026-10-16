@@ -48,10 +48,6 @@
       "types": "./src/core/__tests__/capture-disclosure-target-activation-fact.ts",
       "default": "./src/core/__tests__/capture-disclosure-target-activation-fact.ts"
     },
-    "./testing/__tests__/human-control-fixtures": {
-      "types": "./src/__tests__/support/human-control-fixtures.ts",
-      "default": "./src/__tests__/support/human-control-fixtures.ts"
-    },
     "./testing/__tests__/interaction-get-runtime-fixture": {
       "types": "./src/execution/__tests__/interaction-get-runtime-fixture.ts",
       "default": "./src/execution/__tests__/interaction-get-runtime-fixture.ts"
@@ -59,10 +55,6 @@
     "./testing/__tests__/legacy-snapshot-capture-fixture": {
       "types": "./src/__tests__/support/legacy-snapshot-capture-fixture.ts",
       "default": "./src/__tests__/support/legacy-snapshot-capture-fixture.ts"
-    },
-    "./testing/__tests__/platform-services-fixture": {
-      "types": "./src/__tests__/support/platform-services-fixture.ts",
-      "default": "./src/__tests__/support/platform-services-fixture.ts"
     },
     "./testing/__tests__/request-router-dispatch-mocks": {
       "types": "./src/__tests__/support/request-router-dispatch-mocks.ts",
@@ -156,21 +148,9 @@
       "types": "./src/core/gesture-runtime.ts",
       "default": "./src/core/gesture-runtime.ts"
     },
-    "./testing/handlers/__tests__/*": {
-      "types": "./src/__tests__/support/handlers/*.ts",
-      "default": "./src/__tests__/support/handlers/*.ts"
-    },
-    "./testing/handlers/lease": {
-      "types": "./src/sessions/handlers/lease.ts",
-      "default": "./src/sessions/handlers/lease.ts"
-    },
     "./testing/handlers/session-app-deployment": {
       "types": "./src/sessions/handlers/session-app-deployment.ts",
       "default": "./src/sessions/handlers/session-app-deployment.ts"
-    },
-    "./testing/handlers/session-appstate": {
-      "types": "./src/sessions/handlers/session-appstate.ts",
-      "default": "./src/sessions/handlers/session-appstate.ts"
     },
     "./testing/handlers/snapshot": {
       "types": "./src/sessions/handlers/snapshot.ts",
@@ -284,10 +264,6 @@
       "types": "./src/server/http/http-server.ts",
       "default": "./src/server/http/http-server.ts"
     },
-    "./testing/server/transport": {
-      "types": "./src/server/http/transport.ts",
-      "default": "./src/server/http/transport.ts"
-    },
     "./testing/session-action-recorder": {
       "types": "./src/core/session-action-recorder.ts",
       "default": "./src/core/session-action-recorder.ts"
@@ -303,10 +279,6 @@
     "./testing/session-recovery-hints": {
       "types": "./src/core/session-recovery-hints.ts",
       "default": "./src/core/session-recovery-hints.ts"
-    },
-    "./testing/session-runtime": {
-      "types": "./src/sessions/session-runtime.ts",
-      "default": "./src/sessions/session-runtime.ts"
     },
     "./testing/session-snapshot": {
       "types": "./src/execution/session-snapshot.ts",
