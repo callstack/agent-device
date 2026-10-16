@@ -2,9 +2,9 @@
 
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import {
-  composedPlatformServicesFixture,
-  composedClaimRecoveryGatewayFixture,
-} from '../../../../src/__tests__/daemon-composition/platform-services-fixture.ts';
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from '../../../src/__tests__/support/platform-services-fixture.ts';
 // (#1416). The seeded sweep models the mutex GRANT (a seed cannot reproduce
 // `withKeyedLock`'s native microtask hand-off), so on its own it could stay
 // green if the PRODUCTION lock APPLICATION path regressed. This guard closes
@@ -21,9 +21,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { createRequestExecutionScope } from '@agent-device/daemon/testing/request-execution-scope';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { createRequestExecutionScope } from '../../../src/server/request-execution-scope.ts';
+import { LeaseRegistry } from '../../../src/resources/lease-registry.ts';
+import { SessionStore } from '../../../src/core/session-store.ts';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 
 import { DEVICE_POOL } from './bindings.ts';
@@ -69,8 +69,8 @@ export async function measureRealScopeMaxOverlap(concurrency: number): Promise<n
         const scopes = await Promise.all(
           Array.from({ length: concurrency }, (_, i) =>
             createRequestExecutionScope({
-              platformServices: composedPlatformServicesFixture(),
-              claimRecoveryGateway: composedClaimRecoveryGatewayFixture(),
+              platformServices: daemonPlatformServicesFixture(),
+              claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
               req: openRequest(`real-${i}`, device.id),
               sessionStore,
               leaseRegistry,

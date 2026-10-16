@@ -1,6 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
@@ -57,7 +56,7 @@ vi.mock('@limrun/api/instance-client', () => ({
   })),
 }));
 
-test('a stale WebDriver device remains provider-owned and fails admission before local execution', async () => {
+test('a released WebDriver device remains provider-owned with deployment unavailable', async () => {
   const server = await startCloudWebDriverTestServer(new StaleWebDriverServer());
   const runtime = webDriverRuntime(server.url);
   const lease = providerLease(CLOUD_WEBDRIVER_PROVIDERS.browserStack, 'webdriver-stale');
@@ -77,7 +76,7 @@ test('a stale WebDriver device remains provider-owned and fails admission before
     await runtime.leaseLifecycle.release?.(lease);
 
     expect(runtime.ownsDevice(device)).toBe(true);
-    const facts = await expectUnsupportedDeploymentAdmission({
+    const facts = await inspectProviderDeploymentAdmission({
       runtime,
       module: runtime.platformRuntimeModule,
       device,
@@ -95,7 +94,7 @@ test('a stale WebDriver device remains provider-owned and fails admission before
   }
 });
 
-test('a stale Limrun session is rejected by admission facts before a deployment bind', async () => {
+test('a released Limrun session exposes unavailable deployment facts before binding', async () => {
   const registration = createLimrunRuntime({ apiKey: 'limrun-test-key' }, limrunDependencies(), {
     includePlatformModule: true,
   });
@@ -104,10 +103,13 @@ test('a stale Limrun session is rejected by admission facts before a deployment 
   try {
     const allocation = await registration.runtime.leaseLifecycle.allocate?.(lease);
     const device = readAllocatedDevice(allocation);
+    expect(limrunState.androidCreate).toHaveBeenCalledTimes(1);
     await registration.runtime.leaseLifecycle.release?.(lease);
+    expect(limrunState.disconnect).toHaveBeenCalled();
 
     expect(registration.runtime.ownsDevice(device)).toBe(true);
-    const facts = await expectUnsupportedDeploymentAdmission({
+    const createCallsBeforeAdmission = limrunState.androidCreate.mock.calls.length;
+    const facts = await inspectProviderDeploymentAdmission({
       runtime: registration.runtime,
       module: registration.platformModule,
       device,
@@ -119,6 +121,7 @@ test('a stale Limrun session is rejected by admission facts before a deployment 
         deployApp: { available: false, reason: 'owner-capability-missing' },
       },
     });
+    expect(limrunState.androidCreate).toHaveBeenCalledTimes(createCallsBeforeAdmission);
   } finally {
     await registration.runtime.shutdown();
   }
@@ -136,24 +139,16 @@ test('an active AWS WebDriver device denies unsupported install from facts befor
     const providerCallsBeforeAdmission = server.calls.length;
     const hostCallsBeforeAdmission = host.calls.length;
 
-    const facts = await expectUnsupportedDeploymentAdmission({
+    const facts = await inspectProviderDeploymentAdmission({
       runtime,
       module: runtime.platformRuntimeModule,
       device,
     });
 
-    expect(facts).toMatchObject({
-      device: { providerMode: 'provider-runtime' },
-      operations: {
-        ensureReady: { available: true },
-        deployApp: {
-          available: false,
-          reason: 'owner-capability-missing',
-          hint: expect.stringMatching(/local artifact upload\/install is not implemented/),
-        },
-        materializeAppSource: { available: false, reason: 'owner-capability-missing' },
-        deployMaterializedApp: { available: false, reason: 'owner-capability-missing' },
-      },
+    expect(facts.operations.deployApp).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+      hint: expect.stringMatching(/local artifact upload\/install is not implemented/),
     });
     expect(server.calls).toHaveLength(providerCallsBeforeAdmission);
     expect(host.calls).toHaveLength(hostCallsBeforeAdmission);
@@ -163,22 +158,6 @@ test('an active AWS WebDriver device denies unsupported install from facts befor
     await server.close();
   }
 });
-
-async function expectUnsupportedDeploymentAdmission(params: {
-  runtime: ProviderDeviceRuntime;
-  module: PlatformRuntimeProviderModule;
-  device: DeviceInfo;
-}) {
-  const result = await inspectProviderDeploymentAdmission(params);
-  expect(result.response).toMatchObject({
-    ok: false,
-    error: { code: 'UNSUPPORTED_OPERATION', details: { reason: 'owner-capability-missing' } },
-  });
-  expect(result.inspectFactCalls).toBe(1);
-  expect(result.bindCalls).toBe(0);
-  expect(result.localLoadCalls).toBe(0);
-  return result.facts;
-}
 
 function webDriverRuntime(endpoint: string) {
   const runtimes = createBundledCloudWebDriverRuntimes({

@@ -1,12 +1,9 @@
-import { formatPortableActionLine, parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
 import { MAX_FOLD_DURATION_MS } from '@agent-device/contracts/device';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import type { ExecResult } from '@agent-device/host-kit/command';
-import { recordActionEntry } from '@agent-device/daemon/testing/session-action-recorder';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { makeIosAppSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -75,6 +72,18 @@ test('timed fold keyframes reach simulator HID through the public client and dae
   let angle = 0;
   const tool = createRecordingAppleToolProvider({
     simctl: async (args, options) => {
+      if (args[0] === 'list') {
+        return {
+          stdout: JSON.stringify({
+            devices: {
+              'iOS 18.5': [{ udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id, state: 'Booted' }],
+            },
+          }),
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      if (args[0] === 'launch') return ok;
       assert.equal(args[0], 'spawn');
       assert.equal(args[1], PROVIDER_SCENARIO_IOS_SIMULATOR.id);
       assert.deepEqual(JSON.parse(args[3]!), trajectory);
@@ -92,6 +101,10 @@ test('timed fold keyframes reach simulator HID through the public client and dae
   let builds = 0;
   const daemon = await createProviderScenarioHarness({
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+    appleRunnerProvider: () => ({
+      hasLiveSession: () => true,
+      runCommand: async () => ({}),
+    }),
     appleToolProvider: () => ({
       ...tool.provider,
       runCommand: async (command, args) => {
@@ -105,11 +118,13 @@ test('timed fold keyframes reach simulator HID through the public client and dae
       },
     }),
   });
-  daemon.publishSession(
-    'default',
-    makeIosAppSession('default', { device: PROVIDER_SCENARIO_IOS_SIMULATOR }),
-  );
   try {
+    await daemon.client().apps.open({
+      app: 'com.example.demo',
+      platform: 'ios',
+      udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+    });
+    tool.calls.splice(0);
     const result = await daemon.client().command.fold({
       platform: 'ios',
       udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -117,20 +132,11 @@ test('timed fold keyframes reach simulator HID through the public client and dae
     });
     assert.equal(result.pose, 'half-open');
     assert.equal(result.hingeAngleDegrees, 100);
-    const recorded = recordActionEntry(daemon.session()!, {
-      command: 'fold',
-      positionals: [],
-      flags: { keyframes: JSON.stringify(trajectory) },
-      result,
+    const replayed = await daemon.client().command.fold({
+      platform: 'ios',
+      udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+      keyframes: trajectory,
     });
-    assert.ok(recorded);
-    const line = formatPortableActionLine(recorded);
-    assert.match(line, /--keyframes/);
-    const [parsed] = parseReplayScriptDetailed(line).actions;
-    assert.ok(parsed);
-    const replayed = assertRpcOk(
-      await daemon.callCommand(parsed.command, parsed.positionals ?? [], parsed.flags),
-    );
     assert.equal(replayed.hingeAngleDegrees, 100);
     // The second fold call reuses the cached fold helper binary instead of rebuilding (#2796).
     assert.equal(builds, 1);
@@ -163,6 +169,7 @@ function alternatingHingeAngle(readIndex: number): number {
 function createFoldLedgerAppleToolProvider(params: {
   hingeAngleAt: (readIndex: number) => number;
   onCall: (call: FoldLedgerCall) => void;
+  isTracking: () => boolean;
 }): { provider: AppleToolProvider; ledger: FoldLedgerCall[]; hingeReadCount: () => number } {
   const ledger: FoldLedgerCall[] = [];
   let hingeReads = 0;
@@ -193,6 +200,19 @@ function createFoldLedgerAppleToolProvider(params: {
   // macosHost, plist, or an unexpected runCommand) throws instead of being silently answered.
   const recording = createRecordingAppleToolProvider({
     simctl: async (args, options) => {
+      if (args[0] === 'list') {
+        if (params.isTracking()) record('simctl', args, options);
+        return {
+          stdout: JSON.stringify({
+            devices: {
+              'iOS 18.5': [{ udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id, state: 'Booted' }],
+            },
+          }),
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      if (args[0] === 'launch') return ok;
       record('simctl', args, options);
       return ok;
     },
@@ -264,25 +284,36 @@ async function runFoldLedgerScenario(params: {
       { atMs: MAX_FOLD_DURATION_MS, angle: 100 },
     ];
     let virtualElapsedMs = 0;
-    const originNowMs = Date.now();
-    const dateSpy = params.withVirtualClock
-      ? vi.spyOn(Date, 'now').mockImplementation(() => originNowMs + virtualElapsedMs)
-      : undefined;
+    const dateSpy = params.withVirtualClock ? vi.spyOn(Date, 'now') : undefined;
+    let trackFoldCalls = false;
     const { provider, ledger, hingeReadCount } = createFoldLedgerAppleToolProvider({
       hingeAngleAt: params.hingeAngleAt,
+      isTracking: () => trackFoldCalls,
       onCall: (call) => {
         virtualElapsedMs += Math.max(0, call.timeoutMs - 1) + (call.graceMs ?? 0);
       },
     });
     const daemon = await createProviderScenarioHarness({
       deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+      appleRunnerProvider: () => ({
+        hasLiveSession: () => true,
+        runCommand: async () => ({}),
+      }),
       appleToolProvider: () => provider,
     });
-    daemon.publishSession(
-      'default',
-      makeIosAppSession('default', { device: PROVIDER_SCENARIO_IOS_SIMULATOR }),
-    );
     try {
+      await daemon.client().apps.open({
+        app: 'com.example.demo',
+        platform: 'ios',
+        udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+      });
+      ledger.splice(0);
+      virtualElapsedMs = 0;
+      trackFoldCalls = true;
+      if (dateSpy) {
+        const originNowMs = Date.now();
+        dateSpy.mockImplementation(() => originNowMs + virtualElapsedMs);
+      }
       const response = await daemon.callCommand('fold', [], {
         platform: 'ios',
         udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,

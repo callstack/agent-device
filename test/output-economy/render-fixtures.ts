@@ -1,7 +1,6 @@
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
 import type { AgentDeviceClient } from '../../src/client/client-types.ts';
-import { RESPONSE_VIEWS } from '@agent-device/daemon/testing/response-views';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { createCommandToolExecutor } from '../../src/mcp/command-tools.ts';
 import type { EconomySample } from './economy-metrics.ts';
@@ -10,7 +9,6 @@ import {
   ACTIONABLE_ERROR,
   NOT_SETTLED_RESULT,
   POLICY_NORMALIZED_ERROR,
-  SCREENSHOT_RESULT,
   SELECTOR_READ_RESULT,
   SETTLE_ADDED_REF_RESULT,
   SETTLE_TAIL_RESULT,
@@ -23,6 +21,15 @@ import {
   NETWORK_SELECTION_RESULT,
   RECORDING_SELECTION_RESULT,
 } from './selection-fixtures.ts';
+import {
+  NETWORK_DIGEST,
+  SCREENSHOT_DEFAULT_VIEW,
+  SCREENSHOT_DIGEST,
+  SELECTOR_DIGEST,
+  SETTLE_DIGEST,
+  SETTLE_TAIL_DIGEST,
+  SNAPSHOT_DIGEST,
+} from './response-view-fixtures.ts';
 
 function interactionText(result: typeof SETTLE_ADDED_REF_RESULT): string {
   return interactionCliOutputFormatters.press({ input: {}, result }).text ?? '';
@@ -32,13 +39,13 @@ export async function renderOutputFixtures() {
   const snapshot = await snapshotCliOutput({
     result: SNAPSHOT_RESULT,
   });
-  const snapshotDigest = RESPONSE_VIEWS.snapshot!(SNAPSHOT_DAEMON_RESULT, 'digest');
-  const settleDigest = RESPONSE_VIEWS.press!(SETTLE_ADDED_REF_RESULT, 'digest');
-  const settleTailDigest = RESPONSE_VIEWS.press!(SETTLE_TAIL_RESULT, 'digest');
-  const selectorDigest = RESPONSE_VIEWS.find!(SELECTOR_READ_RESULT, 'digest');
-  const screenshotDefault = RESPONSE_VIEWS.screenshot!(SCREENSHOT_RESULT, 'default');
-  const screenshotDigest = RESPONSE_VIEWS.screenshot!(SCREENSHOT_RESULT, 'digest');
-  const networkDigest = RESPONSE_VIEWS.network!(NETWORK_SELECTION_RESULT, 'digest');
+  const snapshotDigest = SNAPSHOT_DIGEST;
+  const settleDigest = SETTLE_DIGEST;
+  const settleTailDigest = SETTLE_TAIL_DIGEST;
+  const selectorDigest = SELECTOR_DIGEST;
+  const screenshotDefault = SCREENSHOT_DEFAULT_VIEW;
+  const screenshotDigest = SCREENSHOT_DIGEST;
+  const networkDigest = NETWORK_DIGEST;
   const error = normalizeError(ACTIONABLE_ERROR);
   const errorPolicyNormalized = normalizeError(POLICY_NORMALIZED_ERROR);
   const mcpSnapshot = await createCommandToolExecutor({

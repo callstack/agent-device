@@ -65,7 +65,7 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
     const abortedClose = await daemon.callCommand('close', [], { saveScript: true });
     assertRpcError(abortedClose, 'COMMAND_FAILED', /repair was aborted/);
     assert.equal(fs.existsSync(path.join(tempRoot, 'repair.healed.ad')), false);
-    assert.equal(daemon.session(), undefined);
+    assert.equal(await daemon.hasSession(), false);
     await daemon.close();
 
     // 2. Aborted repair with plain close succeeds and leaves no artifact
@@ -80,7 +80,7 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
     const plainClose = await daemon.callCommand('close', []);
     assertRpcOk(plainClose);
     assert.equal(fs.existsSync(path.join(tempRoot, 'repair.healed.ad')), false);
-    assert.equal(daemon.session(), undefined);
+    assert.equal(await daemon.hasSession(), false);
     await daemon.close();
 
     // 3. Committed repair with close --save-script succeeds and writes artifact
@@ -103,7 +103,7 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
     const committedClose = await daemon.callCommand('close', [], { saveScript: true });
     assertRpcOk(committedClose);
     assert.equal(fs.existsSync(path.join(tempRoot, 'repair.healed.ad')), true);
-    assert.equal(daemon.session(), undefined);
+    assert.equal(await daemon.hasSession(), false);
     await daemon.close();
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });

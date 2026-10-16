@@ -137,7 +137,10 @@ test('iOS simulator recording reports host contention and recovers through the f
         assert.equal(busyStart.json?.error?.data?.details?.exitCode, 16);
         assert.match(busyStart.json?.error?.data?.hint ?? '', /record stop/);
         assert.match(busyStart.json?.error?.data?.hint ?? '', /CoreSimulator/);
-        assert.equal(daemon.session()?.screenRecording, undefined);
+        assert.equal(
+          fs.existsSync(path.join(daemon.sessionDir(), 'screen-recording.resource.json')),
+          false,
+        );
         assert.equal(fs.existsSync(recordingPath), false);
 
         const recordStart = await daemon.callCommand(

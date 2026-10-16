@@ -6,16 +6,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import {
-  cleanupDownloadableArtifact,
-  trackDownloadableArtifact,
-} from '@agent-device/daemon/testing/artifact-tracking';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { attachRemoteReplayTestArtifacts } from '@agent-device/replay-port/test-command';
 import {
   downloadRemoteArtifact,
   materializeRemoteArtifacts,
 } from '@agent-device/remote/daemon-artifacts';
+import {
+  createArtifactDownloadServer,
+  createDirectoryArtifactArchive,
+} from './artifact-download-fixtures.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -73,19 +72,10 @@ test('the composed daemon and client path owners report the directory that was m
   };
   const artifact = response.data.artifacts?.[0];
   assert.ok(artifact?.path);
-  const artifactId = trackDownloadableArtifact({
-    artifactPath: artifact.path,
-    artifactType: artifact.artifactType,
-    fileName: artifact.fileName,
-  });
+  const artifactId = 'materialized-suite-artifact';
+  const archive = await createDirectoryArtifactArchive(artifact.path);
   response.data.artifacts = [{ ...artifact, artifactId }];
-
-  const server = await createDaemonHttpServer({
-    token: 'daemon-token',
-    handleRequest: async () => {
-      throw new Error('not exercised: this test only hits the /artifacts route');
-    },
-  });
+  const server = createArtifactDownloadServer(new Map([[artifactId, archive]]));
 
   try {
     const port = await listenOnLoopback(server);
@@ -108,7 +98,6 @@ test('the composed daemon and client path owners report the directory that was m
       'status: passed\n',
     );
   } finally {
-    cleanupDownloadableArtifact(artifactId);
     await closeLoopbackServer(server);
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

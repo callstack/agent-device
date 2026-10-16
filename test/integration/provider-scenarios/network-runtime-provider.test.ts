@@ -2,11 +2,23 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness } from './harness.ts';
-import { createRecordingAppleToolProvider } from './providers.ts';
+import { createRecordingAppleToolProvider, simctlListDevicesResult } from './providers.ts';
 
 test('iOS simulator network recovery stays on the request-scoped Apple tool provider', async () => {
   const appleTool = createRecordingAppleToolProvider({
     simctl: async (args) => {
+      const devices = simctlListDevicesResult(args, 'com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+        { name: 'iPhone 15', udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id },
+      ]);
+      if (devices) return devices;
+      if (args.join(' ') === 'listapps sim-1') {
+        return {
+          stdout: '{"com.example.demo":{"CFBundleDisplayName":"Demo"}}',
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      if (args[0] === 'launch') return { stdout: '', stderr: '', exitCode: 0 };
       assert.deepEqual(args.slice(0, 4), ['spawn', 'sim-1', 'log', 'show']);
       return {
         stdout: '2026-08-10T10:00:00Z GET https://provider-recovery.example.test status=200\n',
@@ -20,15 +32,12 @@ test('iOS simulator network recovery stays on the request-scoped Apple tool prov
     appleToolProvider: () => appleTool.provider,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
   });
-  daemon.publishSession('default', {
-    name: 'default',
-    device: PROVIDER_SCENARIO_IOS_SIMULATOR,
-    appBundleId: 'com.example.app',
-    createdAt: Date.now(),
-    actions: [],
-  });
-
   try {
+    await daemon.client().apps.open({
+      app: 'com.example.demo',
+      platform: 'ios',
+      udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+    });
     const result = await daemon.client().observability.network({
       action: 'dump',
       limit: 5,

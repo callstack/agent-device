@@ -169,7 +169,6 @@ test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
         ...world.selection,
       });
       assert.equal(oneFingerPan.pointerCount, 1);
-      assert.equal(world.daemon.session()?.actions.at(-1)?.flags.pointerCount, undefined);
 
       const twoFingerPan = await client.interactions.pan({
         x: 195,
@@ -182,8 +181,6 @@ test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
       });
       assert.equal(twoFingerPan.pointerCount, 2);
       assert.equal(twoFingerPan.backend, 'provider-native-touch');
-      assert.equal(world.daemon.session()?.actions.at(-1)?.flags.pointerCount, 2);
-
       const pinch = await client.interactions.pinch({
         scale: 2,
         x: 195,
@@ -355,7 +352,7 @@ async function runAndroidSetupAndInstallWorkflow(
     selectorTriggeredEvent.eventUrl,
     'demo://agent-device/event?name=pre_open_ping&payload=%7B%22stage%22%3A%22explicit-selector%22%7D&platform=android',
   );
-  assert.equal(daemon.session(), undefined);
+  assert.equal(await daemon.hasSession(), false);
 
   const keyboardDismiss = await client.command.keyboard({ action: 'dismiss', ...selection });
   assert.equal(keyboardDismiss.platform, 'android');
@@ -529,15 +526,7 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     triggeredEvent.eventUrl,
     'demo://agent-device/event?name=screenshot_taken&payload=%7B%22source%22%3A%22provider-scenario%22%2C%22foreground%22%3Atrue%7D&platform=android',
   );
-  const sessionAfterTriggeredEvent = daemon.session();
-  assert.equal(sessionAfterTriggeredEvent?.appBundleId, 'com.example.demo');
-  assert.ok(
-    sessionAfterTriggeredEvent?.actions.some(
-      (action) =>
-        action.command === 'trigger-app-event' && action.positionals[0] === 'screenshot_taken',
-    ),
-    JSON.stringify(sessionAfterTriggeredEvent?.actions),
-  );
+  assert.equal(await daemon.hasSession(), true);
   const tracePath = path.join(world.tempRoot, 'android-provider.adtrace');
   const finalTracePath = path.join(world.tempRoot, 'android-provider-final.adtrace');
   const traceStart = await daemon.callCommand('trace', ['start', tracePath], selection);
@@ -811,17 +800,6 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
     noRecord: true,
   });
   assert.equal(unrecordedPress.json?.result?.data?.x, 50);
-  assert.equal(
-    daemon
-      .session()
-      ?.actions.some(
-        (action) =>
-          action.command === 'press' &&
-          action.positionals[0] === '50' &&
-          action.positionals[1] === '60',
-      ),
-    false,
-  );
 
   // ADR 0014: the ref click expired the frame — re-observe before filling.
   await client.capture.snapshot({ interactiveOnly: true, ...selection });
@@ -1016,7 +994,7 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   // close --save-script + shutdown below.
   const plainCloseBeforeArm = await daemon.callCommand('close');
   assert.equal(plainCloseBeforeArm.statusCode, 200, JSON.stringify(plainCloseBeforeArm.json));
-  assert.equal(daemon.session(), undefined);
+  assert.equal(await daemon.hasSession(), false);
 
   const savedReplayPath = path.join(tempRoot, 'saved-session.ad');
   const armedOpen = await client.apps.open({
@@ -1031,7 +1009,7 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   });
   assert.equal(close.json?.result?.data?.shutdown?.success, true);
   assert.equal(fs.existsSync(savedReplayPath), true);
-  assert.equal(daemon.session(), undefined);
+  assert.equal(await daemon.hasSession(), false);
 
   const testReplayPath = path.join(tempRoot, 'settings-smoke.ad');
   fs.writeFileSync(

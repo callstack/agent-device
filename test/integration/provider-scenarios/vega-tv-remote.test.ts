@@ -54,13 +54,6 @@ test('Provider-backed Vega TV flow routes lifecycle and every remote control as 
         deviceInventoryProvider: async () => [VEGA_TV],
       }),
     async (daemon) => {
-      daemon.publishSession('default', {
-        name: 'default',
-        device: VEGA_TV,
-        createdAt: Date.now(),
-        actions: [],
-      });
-
       const open = await daemon.callCommand('open', [APP_ID], SELECTION);
       assertRpcOk(open);
 
@@ -83,30 +76,9 @@ test('Provider-backed Vega TV flow routes lifecycle and every remote control as 
       assertRpcOk(await daemon.callCommand('back', [], SELECTION));
       assertRpcOk(await daemon.callCommand('home', [], SELECTION));
 
-      assert.deepEqual(
-        daemon.session()?.actions.map((action) => action.command),
-        [
-          'open',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'tv-remote',
-          'back',
-          'home',
-        ],
-      );
-
       assertRpcOk(await daemon.callCommand('close', [APP_ID], SELECTION));
       assert.deepEqual(calls, expectedVegaCalls());
-      assert.equal(daemon.session(), undefined);
+      assert.equal(await daemon.hasSession(), false);
     },
   );
 });

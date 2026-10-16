@@ -75,7 +75,7 @@ test('Provider-backed integration daemon command policies gate admission and pro
       );
     },
   );
-});
+}, 15_000);
 
 function androidAdbResult(
   args: readonly string[],

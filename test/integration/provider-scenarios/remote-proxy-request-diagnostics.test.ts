@@ -11,16 +11,13 @@
  * over `/rpc`.
  */
 
-import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
-import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import {
   closeLoopbackServer,
@@ -50,22 +47,13 @@ test('Provider-backed integration local proxy serves a plain-session diagnostics
   if (await skipWhenLoopbackUnavailable(t, 'local proxy request diagnostics coverage')) return;
 
   const stateDir = mkdtempForTestSync('agent-device-proxy-request-diagnostics-');
-  const sessionsDir = path.join(stateDir, 'sessions');
-  const recordPath = resolveSessionRequestLogPath(
-    path.join(sessionsDir, safeSessionName(PLAIN_SESSION)),
-    REQUEST_ID,
-  );
-  fs.mkdirSync(path.dirname(recordPath), { recursive: true });
-  fs.writeFileSync(recordPath, RECORD);
-
-  const upstream = await createDaemonHttpServer({
-    token: UPSTREAM_TOKEN,
-    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-    resolveRequestDiagnosticsPath: (ref) =>
-      resolveSessionRequestLogPath(
-        path.join(sessionsDir, safeSessionName(ref.session)),
-        ref.requestId,
-      ),
+  const upstream = http.createServer((request, response) => {
+    assert.equal(request.method, 'GET');
+    assert.match(request.url ?? '', /\/sessions\/.*\/requests\/abc123\/diagnostics$/);
+    assert.equal(request.headers.authorization, `Bearer ${UPSTREAM_TOKEN}`);
+    assert.equal(request.headers['x-agent-device-tenant'], TENANT);
+    response.statusCode = 200;
+    response.end(RECORD);
   });
   const upstreamBaseUrl = `http://127.0.0.1:${await listenOnLoopback(upstream)}`;
   const proxy = createDaemonProxyServer({

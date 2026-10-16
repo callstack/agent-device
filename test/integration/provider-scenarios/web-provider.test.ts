@@ -139,7 +139,6 @@ test('web provider is scoped through the request router and dispatch path', asyn
         label: 'main',
         rect: { x: 0, y: 0, width: 320, height: 240 },
         depth: 0,
-        parentIndex: undefined,
         ref: 'e1',
         kind: 'section',
       },

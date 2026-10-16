@@ -1,4 +1,3 @@
-import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
@@ -6,10 +5,8 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import {
@@ -94,7 +91,7 @@ function scriptedTree() {
   };
 }
 
-type ParityWorldOptions = { leaseRegistry?: LeaseRegistry };
+type ParityWorldOptions = { leaseTtlMs?: number };
 
 async function createParityWorld(options: ParityWorldOptions = {}): Promise<ParityWorld> {
   const runnerTranscript = createProviderTranscript([
@@ -112,7 +109,7 @@ async function createParityWorld(options: ParityWorldOptions = {}): Promise<Pari
     ]),
   });
   const daemon = await createProviderScenarioHarness({
-    ...(options.leaseRegistry ? { leaseRegistry: options.leaseRegistry } : {}),
+    ...(options.leaseTtlMs === undefined ? {} : { leaseTtlMs: options.leaseTtlMs }),
     platformRuntime: true,
     appleRunnerProvider: () =>
       createAppleRunnerProviderFromTranscript(runnerTranscript, 'ios.runner'),
@@ -228,18 +225,33 @@ async function runLeg(leg: ScenarioLeg, legName: string): Promise<DaemonResponse
   return responses;
 }
 
+async function callDaemonCommand(
+  daemon: ProviderScenarioHarness,
+  request: ScenarioRequest,
+): Promise<DaemonResponse> {
+  const response = await daemon.callCommand(request.command, request.positionals, request.flags, {
+    input: request.input,
+    meta: request.meta,
+    runtime: request.runtime,
+    session: request.session,
+  });
+  const result = response.json?.result;
+  if (result) return { ok: true, data: result.data };
+  const error = response.json?.error?.data;
+  if (error) return { ok: false, error: error as DaemonError };
+  throw new Error(`daemon returned no response for ${request.command}`);
+}
+
 async function withProxiedWorld<T>(
-  run: (context: { world: ParityWorld; proxied: ScenarioLeg; upstream: http.Server }) => Promise<T>,
+  run: (context: {
+    world: ParityWorld;
+    proxied: ScenarioLeg;
+    forwarded: ForwardedRequest[];
+  }) => Promise<T>,
   options: ParityWorldOptions = {},
 ): Promise<T> {
   const world = await createParityWorld(options);
-  const upstream = await createDaemonHttpServer({
-    token: world.daemon.token,
-    handleRequest: world.daemon.handleRequest,
-    // Same composition as the daemon runtime: remote clients localize failure records.
-    resolveRequestDiagnosticsPath: (ref) =>
-      resolveSessionRequestLogPath(world.daemon.sessionDir(ref.session), ref.requestId),
-  });
+  const { server: upstream, forwarded } = createRecordingUpstreamServer(world.daemon.baseUrl);
   const proxy = createDaemonProxyServer({
     upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
     upstreamToken: world.daemon.token,
@@ -260,7 +272,7 @@ async function withProxiedWorld<T>(
         return responseFromClientError(error);
       }
     };
-    return await run({ world, proxied, upstream });
+    return await run({ world, proxied, forwarded });
   } finally {
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(upstream);
@@ -269,39 +281,53 @@ async function withProxiedWorld<T>(
   }
 }
 
-/**
- * Every request the proxy forwards upstream, in order. Registering a second `request`
- * listener records without displacing the server's own handler, so the daemon behaves
- * exactly as it does untraced.
- */
-function recordUpstreamRequests(upstream: http.Server): { forwarded: ForwardedRequest[] } {
+/** Records the proxy's HTTP boundary while forwarding requests to the real daemon. */
+function createRecordingUpstreamServer(baseUrl: string): {
+  server: http.Server;
+  forwarded: ForwardedRequest[];
+} {
   const forwarded: ForwardedRequest[] = [];
-  upstream.on('request', (req, res) => {
-    const route = (req.url ?? '').split('?', 1)[0] ?? '';
-    const entry: ForwardedRequest = { method: req.method ?? '', route, body: '' };
-    const end = res.end.bind(res);
-    const write = res.write.bind(res);
-    res.write = ((chunk: unknown, ...rest: unknown[]) => {
-      entry.body += textOf(chunk);
-      return (write as (...args: unknown[]) => boolean)(chunk, ...rest);
-    }) as typeof res.write;
-    res.end = ((chunk?: unknown, ...rest: unknown[]) => {
-      entry.body += textOf(chunk);
-      return (end as (...args: unknown[]) => http.ServerResponse)(chunk, ...rest);
-    }) as typeof res.end;
-    forwarded.push(entry);
+  const server = http.createServer((request, response) => {
+    void (async () => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = Buffer.concat(chunks);
+      const route = (request.url ?? '').split('?', 1)[0] ?? '';
+      const entry: ForwardedRequest = { method: request.method ?? '', route, body: '' };
+      forwarded.push(entry);
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(request.headers)) {
+        if (
+          value === undefined ||
+          ['host', 'content-length', 'connection', 'transfer-encoding', 'accept-encoding'].includes(
+            name,
+          )
+        ) {
+          continue;
+        }
+        headers.set(name, Array.isArray(value) ? value.join(', ') : value);
+      }
+      const upstreamResponse = await fetch(new URL(request.url ?? '/', baseUrl), {
+        method: request.method,
+        headers,
+        ...(body.length > 0 ? { body } : {}),
+      });
+      const responseBody = Buffer.from(await upstreamResponse.arrayBuffer());
+      entry.body = responseBody.toString('utf8');
+      response.statusCode = upstreamResponse.status;
+      const contentType = upstreamResponse.headers.get('content-type');
+      if (contentType) response.setHeader('content-type', contentType);
+      response.end(responseBody);
+    })().catch((error: unknown) => {
+      response.statusCode = 502;
+      response.end(error instanceof Error ? error.message : String(error));
+    });
   });
-  return { forwarded };
+  return { server, forwarded };
 }
 
 /** One request the proxy forwarded, with the exact bytes the daemon answered it with. */
 type ForwardedRequest = { method: string; route: string; body: string };
-
-function textOf(chunk: unknown): string {
-  if (typeof chunk === 'string') return chunk;
-  if (chunk instanceof Uint8Array) return Buffer.from(chunk).toString('utf8');
-  return '';
-}
 
 /**
  * What a published `snapshot --interactive-only` response is made of. #2198 forbids the
@@ -386,8 +412,7 @@ test(
     try {
       direct = {
         responses: await runLeg(
-          async (request) =>
-            await directWorld.daemon.handleRequest({ ...request, token: directWorld.daemon.token }),
+          async (request) => await callDaemonCommand(directWorld.daemon, request),
           'direct',
         ),
         sessionRoot: sessionRootOf(directWorld.daemon),
@@ -475,12 +500,12 @@ test(
   },
   async (t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
-    await withProxiedWorld(async ({ world, proxied, upstream }) => {
+    await withProxiedWorld(async ({ world, proxied, forwarded }) => {
       const flags = { platform: 'ios', udid: SIM.id } as const;
       await proxied({ session: 'default', command: 'open', positionals: [APP], flags });
 
       // Record only the snapshot: the open above is setup and makes its own calls.
-      const { forwarded } = recordUpstreamRequests(upstream);
+      const forwardedBeforeSnapshot = forwarded.length;
       const response = await proxied({
         session: 'default',
         command: 'snapshot',
@@ -491,8 +516,9 @@ test(
 
       // The open above established the daemon identity. A persistent client should now
       // forward only the snapshot RPC, with no additional health or helper request.
+      const snapshotRequests = forwarded.slice(forwardedBeforeSnapshot);
       assert.deepEqual(
-        forwarded.map((entry) => `${entry.method} ${entry.route}`),
+        snapshotRequests.map((entry) => `${entry.method} ${entry.route}`),
         ['POST /rpc'],
         'a proxied snapshot must cross the wire as one RPC',
       );
@@ -501,7 +527,7 @@ test(
       // wire's `result` against the client's response would prove nothing — the client
       // publishes whatever `result` holds, so both sides move together — so each level is
       // pinned against its declared key set instead.
-      const rpcBody = JSON.parse(forwarded.at(-1)?.body ?? '{}') as {
+      const rpcBody = JSON.parse(snapshotRequests.at(-1)?.body ?? '{}') as {
         result?: { data?: Record<string, unknown> };
       };
       assert.deepEqual(
@@ -543,84 +569,90 @@ test(
     if (await skipWhenLoopbackUnavailable(t, 'daemon proxy parity coverage')) return;
 
     let now = 1_000_000;
-    const leaseRegistry = new LeaseRegistry({ now: () => now });
-    await withProxiedWorld(
-      async ({ world, proxied }) => {
-        const session = 'leased';
-        const flags = { platform: 'ios', udid: SIM.id } as const;
-        const allocate = async (): Promise<{ leaseId: string; expiresAt: number }> => {
-          const response = await proxied({
-            session,
-            command: 'lease_allocate',
-            positionals: [],
-            flags: {},
-            meta: LEASE_SCOPE,
-          });
-          assert.equal(response.ok, true, JSON.stringify(response));
-          const lease = (response.ok ? response.data : {})?.lease as {
-            leaseId?: string;
-            expiresAt?: number;
+    const dateSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      await withProxiedWorld(
+        async ({ proxied }) => {
+          const session = 'leased';
+          const flags = { platform: 'ios', udid: SIM.id } as const;
+          const allocate = async (): Promise<{ leaseId: string; expiresAt: number }> => {
+            const response = await proxied({
+              session,
+              command: 'lease_allocate',
+              positionals: [],
+              flags: {},
+              meta: LEASE_SCOPE,
+            });
+            assert.equal(response.ok, true, JSON.stringify(response));
+            const lease = (response.ok ? response.data : {})?.lease as {
+              leaseId?: string;
+              expiresAt?: number;
+            };
+            assert.equal(typeof lease?.leaseId, 'string');
+            assert.equal(typeof lease?.expiresAt, 'number');
+            return { leaseId: lease.leaseId!, expiresAt: lease.expiresAt! };
           };
-          assert.equal(typeof lease?.leaseId, 'string');
-          assert.equal(typeof lease?.expiresAt, 'number');
-          return { leaseId: lease.leaseId!, expiresAt: lease.expiresAt! };
-        };
-        const run = async (
-          command: string,
-          positionals: string[],
-          leaseId: string,
-          stepFlags: DaemonWireRequest['flags'] = flags,
-        ) =>
-          await proxied({
-            session,
-            command,
-            positionals,
-            flags: stepFlags,
-            meta: { ...LEASE_SCOPE, leaseId },
+          const run = async (
+            command: string,
+            positionals: string[],
+            leaseId: string,
+            stepFlags: DaemonWireRequest['flags'] = flags,
+          ) =>
+            await proxied({
+              session,
+              command,
+              positionals,
+              flags: stepFlags,
+              meta: { ...LEASE_SCOPE, leaseId },
+            });
+
+          const firstLease = await allocate();
+          assert.equal((await run('open', [APP], firstLease.leaseId)).ok, true);
+          assert.equal(
+            (await run('snapshot', [], firstLease.leaseId, { snapshotInteractiveOnly: true })).ok,
+            true,
+          );
+          assert.equal(
+            baselineInitialized(
+              await run('diff', ['snapshot'], firstLease.leaseId, {
+                snapshotInteractiveOnly: true,
+              }),
+            ),
+            false,
+            'the leased session holds comparison state before it expires',
+          );
+
+          // The lease lapses without a heartbeat; the next request through the proxy finds it expired.
+          // The jump is the window the lease itself was allocated with — a client that names no ttl
+          // gets the registry default, which is the only window the daemon promises it.
+          now = firstLease.expiresAt + 1;
+          const expired = await run('diff', ['snapshot'], firstLease.leaseId, {
+            snapshotInteractiveOnly: true,
           });
-
-        const firstLease = await allocate();
-        assert.equal((await run('open', [APP], firstLease.leaseId)).ok, true);
-        assert.equal(
-          (await run('snapshot', [], firstLease.leaseId, { snapshotInteractiveOnly: true })).ok,
-          true,
-        );
-        assert.equal(
-          baselineInitialized(
-            await run('diff', ['snapshot'], firstLease.leaseId, { snapshotInteractiveOnly: true }),
-          ),
-          false,
-          'the leased session holds comparison state before it expires',
-        );
-
-        // The lease lapses without a heartbeat; the next request through the proxy finds it expired.
-        // The jump is the window the lease itself was allocated with — a client that names no ttl
-        // gets the registry default, which is the only window the daemon promises it.
-        now = firstLease.expiresAt + 1;
-        const expired = await run('diff', ['snapshot'], firstLease.leaseId, {
-          snapshotInteractiveOnly: true,
-        });
-        assert.equal(expired.ok, false);
-        if (expired.ok) return;
-        assert.equal(expired.error.code, 'UNAUTHORIZED');
-        assert.equal(expired.error.details?.reason, 'LEASE_NOT_FOUND');
-        assert.equal(typeof expired.error.hint, 'string');
-        assert.equal(world.daemon.session(session), undefined, 'expiry tears the session down');
-
-        const secondLease = await allocate();
-        assert.notEqual(secondLease.leaseId, firstLease.leaseId);
-        assert.equal((await run('open', [APP], secondLease.leaseId)).ok, true);
-        assert.equal(
-          baselineInitialized(
-            await run('diff', ['snapshot'], secondLease.leaseId, { snapshotInteractiveOnly: true }),
-          ),
-          true,
-          'a reacquired lease must not compare against the expired session tree',
-        );
-        assert.equal((await run('close', [], secondLease.leaseId, {})).ok, true);
-      },
-      { leaseRegistry },
-    );
+          assert.equal(expired.ok, false);
+          if (expired.ok) return;
+          assert.equal(expired.error.code, 'UNAUTHORIZED');
+          assert.equal(expired.error.details?.reason, 'LEASE_NOT_FOUND');
+          assert.equal(typeof expired.error.hint, 'string');
+          const secondLease = await allocate();
+          assert.notEqual(secondLease.leaseId, firstLease.leaseId);
+          assert.equal((await run('open', [APP], secondLease.leaseId)).ok, true);
+          assert.equal(
+            baselineInitialized(
+              await run('diff', ['snapshot'], secondLease.leaseId, {
+                snapshotInteractiveOnly: true,
+              }),
+            ),
+            true,
+            'a reacquired lease must not compare against the expired session tree',
+          );
+          assert.equal((await run('close', [], secondLease.leaseId, {})).ok, true);
+        },
+        { leaseTtlMs: 5_000 },
+      );
+    } finally {
+      dateSpy.mockRestore();
+    }
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );
@@ -631,52 +663,55 @@ test(
     if (await skipWhenLoopbackUnavailable(t, 'daemon proxy parity coverage')) return;
 
     let now = 2_000_000;
-    const leaseRegistry = new LeaseRegistry({ now: () => now });
-    await withProxiedWorld(
-      async ({ world, proxied }) => {
-        const session = 'renewed';
-        const flags = { platform: 'ios', udid: SIM.id } as const;
-        const allocated = await proxied({
-          session,
-          command: 'lease_allocate',
-          positionals: [],
-          flags: {},
-          meta: LEASE_SCOPE,
-        });
-        assert.equal(allocated.ok, true, JSON.stringify(allocated));
-        const lease = (allocated.ok ? allocated.data : {})?.lease as { leaseId: string };
-        const meta = { ...LEASE_SCOPE, leaseId: lease.leaseId };
-        const run = async (
-          command: string,
-          positionals: string[],
-          stepFlags: DaemonWireRequest['flags'],
-        ) => await proxied({ session, command, positionals, flags: stepFlags, meta });
+    const dateSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      await withProxiedWorld(
+        async ({ proxied }) => {
+          const session = 'renewed';
+          const flags = { platform: 'ios', udid: SIM.id } as const;
+          const allocated = await proxied({
+            session,
+            command: 'lease_allocate',
+            positionals: [],
+            flags: {},
+            meta: LEASE_SCOPE,
+          });
+          assert.equal(allocated.ok, true, JSON.stringify(allocated));
+          const lease = (allocated.ok ? allocated.data : {})?.lease as { leaseId: string };
+          const meta = { ...LEASE_SCOPE, leaseId: lease.leaseId };
+          const run = async (
+            command: string,
+            positionals: string[],
+            stepFlags: DaemonWireRequest['flags'],
+          ) => await proxied({ session, command, positionals, flags: stepFlags, meta });
 
-        assert.equal((await run('open', [APP], flags)).ok, true);
-        assert.equal((await run('snapshot', [], { snapshotInteractiveOnly: true })).ok, true);
-        const heartbeatExpiry = async (): Promise<number> => {
-          const heartbeat = await run('lease_heartbeat', [], {});
-          assert.equal(heartbeat.ok, true, JSON.stringify(heartbeat));
-          const renewed = (heartbeat.ok ? heartbeat.data : {})?.lease as { expiresAt: number };
-          return renewed.expiresAt;
-        };
+          assert.equal((await run('open', [APP], flags)).ok, true);
+          assert.equal((await run('snapshot', [], { snapshotInteractiveOnly: true })).ok, true);
+          const heartbeatExpiry = async (): Promise<number> => {
+            const heartbeat = await run('lease_heartbeat', [], {});
+            assert.equal(heartbeat.ok, true, JSON.stringify(heartbeat));
+            const renewed = (heartbeat.ok ? heartbeat.data : {})?.lease as { expiresAt: number };
+            return renewed.expiresAt;
+          };
 
-        // One explicit heartbeat through the proxy just before the lease would lapse moves the
-        // expiry forward; a request past the old expiry but inside the new window still finds
-        // the session and its diff baseline.
-        const firstExpiry = await heartbeatExpiry();
-        now = firstExpiry - 1_000;
-        const renewedExpiry = await heartbeatExpiry();
-        assert.ok(renewedExpiry > firstExpiry, 'the heartbeat moved the expiry forward');
-        now = firstExpiry + 1_000;
-        const diff = await run('diff', ['snapshot'], { snapshotInteractiveOnly: true });
-        assert.equal(diff.ok, true, JSON.stringify(diff));
-        assert.equal(baselineInitialized(diff), false, 'the renewed session kept its baseline');
-        assert.notEqual(world.daemon.session(session), undefined);
-        assert.equal((await run('close', [], {})).ok, true);
-      },
-      { leaseRegistry },
-    );
+          // One explicit heartbeat through the proxy just before the lease would lapse moves the
+          // expiry forward; a request past the old expiry but inside the new window still finds
+          // the session and its diff baseline.
+          const firstExpiry = await heartbeatExpiry();
+          now = firstExpiry - 1_000;
+          const renewedExpiry = await heartbeatExpiry();
+          assert.ok(renewedExpiry > firstExpiry, 'the heartbeat moved the expiry forward');
+          now = firstExpiry + 1_000;
+          const diff = await run('diff', ['snapshot'], { snapshotInteractiveOnly: true });
+          assert.equal(diff.ok, true, JSON.stringify(diff));
+          assert.equal(baselineInitialized(diff), false, 'the renewed session kept its baseline');
+          assert.equal((await run('close', [], {})).ok, true);
+        },
+        { leaseTtlMs: 5_000 },
+      );
+    } finally {
+      dateSpy.mockRestore();
+    }
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
 );

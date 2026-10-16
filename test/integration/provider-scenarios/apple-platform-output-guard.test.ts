@@ -353,7 +353,7 @@ async function createWorldDaemon(world: World): Promise<ProviderScenarioHarness>
 }
 
 async function ensureSession(daemon: ProviderScenarioHarness, world: World): Promise<void> {
-  if (daemon.session()) return;
+  if (await daemon.hasSession()) return;
   const { positionals, flags } = WORLDS[world].open;
   await daemon.callCommand('open', positionals ?? [], flags ?? {});
 }

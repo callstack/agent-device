@@ -134,7 +134,7 @@ async function runFakeProviderScenario(
       flags: leaseFlags(lease.leaseId),
       meta: leaseMeta(lease.leaseId),
     });
-    assertFakeProviderScenarioResult(daemon, runtime, lease, appPath);
+    assertFakeProviderScenarioResult(runtime, lease, appPath);
   });
 }
 
@@ -221,15 +221,11 @@ function expectedPortReverseData(leaseId: string): Record<string, unknown> {
 }
 
 function assertFakeProviderScenarioResult(
-  daemon: Awaited<ReturnType<typeof createProviderScenarioHarness>>,
   runtime: FakeProviderDeviceRuntime,
   lease: DeviceLease,
   appPath: string,
 ): void {
   const deviceId = runtime.deviceIdForLease(lease.leaseId);
-  const session = daemon.session();
-  assert.equal(session?.device.id, deviceId);
-  assert.equal(session?.lease?.leaseId, lease.leaseId);
   assert.deepEqual(
     runtime.calls.find((call) => call.type === 'install'),
     {

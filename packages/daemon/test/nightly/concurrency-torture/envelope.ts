@@ -1,20 +1,10 @@
-// Standard scheduled-lane artifact envelope (#1430) for the concurrency torture
-// lane (#1416). Builds the shared `LaneEnvelope` from scripts/lib/lane-envelope.ts
-// so the #1430 health watcher parses one dialect, not a lane-local one; the
-// lane's seed range / run count ride in the typed `data` payload, and the lane
-// source hash maps onto the generic `configHash`. Written when TORTURE_ENVELOPE
-// names an output path (set by the nightly workflow, which uploads it as an
-// artifact); a no-op otherwise.
+// Standard scheduled-lane artifact envelope (#1430) for the concurrency torture lane (#1416).
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  laneEnvelope,
-  type LaneEnvelope,
-  type LaneResult,
-} from '../../../../scripts/lib/lane-envelope.ts';
+import { laneEnvelope, type LaneEnvelope, type LaneResult } from './lane-envelope.ts';
 
 const LANE_ID = 'concurrency-torture';
 

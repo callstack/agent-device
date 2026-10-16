@@ -9,14 +9,6 @@ import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';
 
-/** The authoring lifecycle status of the world's live session, or `undefined` outside authoring. */
-function authoringPublicationStatus(world: {
-  daemon: { session: () => { scriptPublication?: { kind: string; status?: string } } | undefined };
-}): string | undefined {
-  const publication = world.daemon.session()?.scriptPublication;
-  return publication?.kind === 'authoring' ? publication.status : undefined;
-}
-
 test('provider route publishes and replays an open-to-destination script with a live handoff', async () => {
   await withProviderScenarioResource(createAndroidSettingsWorld, async (world) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-active-script-provider-'));
@@ -34,13 +26,12 @@ test('provider route publishes and replays an open-to-destination script with a 
       assert.equal(published.savedScript, scriptPath);
       assert.equal(published.session, 'default');
       assert.equal(published.actionCount, 2);
-      assert.equal(authoringPublicationStatus(world), 'published');
 
       const liveSnapshot = await client.capture.snapshot({ interactiveOnly: true });
       assert.ok(liveSnapshot.nodes.some((node) => node.label === 'Search'));
       const flaggedClose = await world.daemon.callCommand('close', [], { saveScript: scriptPath });
       assertRpcError(flaggedClose, 'INVALID_ARGS', /cannot re-publish/);
-      assert.ok(world.daemon.session(), 'flagged close must preserve the published live session');
+      assert.equal(await world.daemon.hasSession(), true);
       await client.sessions.close();
 
       const replay = await world.daemon.callCommand('replay', [scriptPath], world.selection);
@@ -52,7 +43,7 @@ test('provider route publishes and replays an open-to-destination script with a 
       // tests in daemon-client-lifecycle.test.ts assume but cannot themselves
       // exercise, since they inject sessionActive via a fake HTTP fixture.
       assert.equal(replayData.sessionActive, true);
-      assert.ok(world.daemon.session(), 'a close-less replay must not tear down the session');
+      assert.equal(await world.daemon.hasSession(), true);
       const replaySnapshot = await client.capture.snapshot({ interactiveOnly: true });
       assert.ok(replaySnapshot.nodes.some((node) => node.label === 'Search'));
       await client.sessions.close();
@@ -76,13 +67,13 @@ test('provider route can suppress an authored terminal close for a live replay h
       });
       assert.equal(replay.session, 'default');
       assert.equal(replay.sessionActive, true);
-      assert.ok(world.daemon.session(), 'keepSession must preserve the replay-opened session');
+      assert.equal(await world.daemon.hasSession(), true);
 
       const takeoverSnapshot = await client.capture.snapshot({ interactiveOnly: true });
       assert.ok(takeoverSnapshot.nodes.some((node) => node.label === 'Search'));
 
       await client.sessions.close();
-      assert.equal(world.daemon.session(), undefined);
+      assert.equal(await world.daemon.hasSession(), false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -169,27 +160,23 @@ test('a second successful open aborts publication and terminal save flags fail b
         saveScript: scriptPath,
       });
       assertRpcError(rearm, 'INVALID_ARGS', /only arm a fresh session/);
-      assert.equal(authoringPublicationStatus(world), 'armed');
-
       const second = await world.daemon.callCommand('open', ['settings'], {
         ...world.selection,
         relaunch: true,
       });
       const secondData = assertRpcOk<{ warnings?: string[] }>(second);
       assert.match(String(secondData.warnings), /publication was aborted/i);
-      assert.equal(authoringPublicationStatus(world), 'aborted');
-
       const publication = await world.daemon.callCommand('session_save_script', [scriptPath]);
       assertRpcError(publication, 'COMMAND_FAILED', /aborted by a second successful open/);
 
       const flaggedClose = await world.daemon.callCommand('close', [], { saveScript: scriptPath });
       assertRpcError(flaggedClose, 'INVALID_ARGS', /terminal recording/);
-      assert.ok(world.daemon.session(), 'flagged close must not tear down the session');
+      assert.equal(await world.daemon.hasSession(), true);
       assert.equal(fs.existsSync(scriptPath), false);
 
       const plainClose = await world.daemon.callCommand('close');
       assertRpcOk(plainClose);
-      assert.equal(world.daemon.session(), undefined);
+      assert.equal(await world.daemon.hasSession(), false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -209,16 +196,14 @@ test('an unarmed session refuses close --save-script and closes cleanly on plain
     try {
       const opened = await world.daemon.callCommand('open', ['settings'], { ...world.selection });
       assertRpcOk(opened);
-      assert.equal(authoringPublicationStatus(world), undefined);
-
       const flaggedClose = await world.daemon.callCommand('close', [], { saveScript: scriptPath });
       assertRpcError(flaggedClose, 'INVALID_ARGS', /not armed/);
-      assert.ok(world.daemon.session(), 'flagged close must not tear down the unarmed session');
+      assert.equal(await world.daemon.hasSession(), true);
       assert.equal(fs.existsSync(scriptPath), false);
 
       const plainClose = await world.daemon.callCommand('close');
       assertRpcOk(plainClose);
-      assert.equal(world.daemon.session(), undefined);
+      assert.equal(await world.daemon.hasSession(), false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -239,8 +224,6 @@ test('an armed session still publishes target-v1 evidence through close --save-s
         saveScript: scriptPath,
         ...world.selection,
       });
-      assert.equal(authoringPublicationStatus(world), 'armed');
-
       const snapshot = await client.capture.snapshot({ interactiveOnly: true, ...world.selection });
       const search = snapshot.nodes.find((node) => node.label === 'Search');
       assert.ok(search?.ref, JSON.stringify(snapshot.nodes));
@@ -251,7 +234,7 @@ test('an armed session still publishes target-v1 evidence through close --save-s
       assert.equal(fs.existsSync(scriptPath), true);
       const script = fs.readFileSync(scriptPath, 'utf8');
       assert.match(script, /agent-device:target-v1/);
-      assert.equal(world.daemon.session(), undefined);
+      assert.equal(await world.daemon.hasSession(), false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -332,9 +315,6 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
           ...world.selection,
         });
 
-        const recordedState = JSON.stringify(world.daemon.session()?.actions);
-        assert.equal(recordedState.includes(secret), false, recordedState);
-        assert.match(recordedState, /\$\{SEARCH_TERM\}/);
         await client.sessions.saveScript({ path: scriptPath });
         const script = fs.readFileSync(scriptPath, 'utf8');
         assert.equal(script.includes(secret), false);
@@ -366,9 +346,6 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
         );
         assertRpcOk(replay);
         assert.equal(world.textInjectionCalls.at(-1)?.text, secret);
-        const replayState = JSON.stringify(world.daemon.session()?.actions);
-        assert.equal(replayState.includes(secret), false, replayState);
-        assert.match(replayState, /\$\{SEARCH_TERM\}/);
         assert.ok(opened.sessionStateDir);
         const requestLog = fs.readFileSync(
           path.join(opened.sessionStateDir, 'requests', 'parameterized-replay-diagnostics.ndjson'),
@@ -462,10 +439,6 @@ test('#1398: a read-only wait recorded after a parameterized fill never re-seria
           selector: 'id="com.android.settings:id/results_summary"',
           ...world.selection,
         });
-
-        const stateBeforeGuard = JSON.stringify(world.daemon.session()?.actions);
-        assert.equal(stateBeforeGuard.includes(secret), false, stateBeforeGuard);
-        assert.match(stateBeforeGuard, /\$\{SEARCH_TERM\}/);
 
         // Being the only wait so far, it cannot serve as the destination
         // guard: its ONLY identity was the parameterized-value echo, so

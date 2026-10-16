@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -12,9 +11,9 @@ import {
   cleanupUploadedArtifact,
   prepareUploadedArtifact,
   trackDownloadableArtifact,
-} from '@agent-device/daemon/testing/artifact-tracking';
+} from '../../resources/artifact-tracking.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import { createDaemonHttpServer } from './http-server.ts';
 import {
   emitRequestProgress,
   getRequestSignal,
@@ -24,9 +23,9 @@ import {
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
-import { restoreEnv } from './harness.ts';
 
 type RpcResponse = {
   status: number;
@@ -476,7 +475,7 @@ test('Provider-backed integration daemon HTTP server accepts uploads and streams
     return;
   }
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-http-server-'));
+  const root = mkdtempForTestSync('agent-device-http-server-');
   const downloadablePath = path.join(root, 'screen.png');
   fs.writeFileSync(downloadablePath, 'png-binary');
   const artifactId = trackDownloadableArtifact({
@@ -759,7 +758,7 @@ test('Provider-backed integration daemon HTTP auth hook can scope tenants and re
     return;
   }
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-http-auth-hook-'));
+  const root = mkdtempForTestSync('agent-device-http-auth-hook-');
   const hookPath = path.join(root, 'auth-hook.mjs');
   fs.writeFileSync(
     hookPath,
@@ -817,7 +816,8 @@ test('Provider-backed integration daemon HTTP auth hook can scope tenants and re
     if (server) {
       await closeLoopbackServer(server);
     }
-    restoreEnv('AGENT_DEVICE_HTTP_AUTH_HOOK', previousHook);
+    if (previousHook === undefined) delete process.env.AGENT_DEVICE_HTTP_AUTH_HOOK;
+    else process.env.AGENT_DEVICE_HTTP_AUTH_HOOK = previousHook;
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

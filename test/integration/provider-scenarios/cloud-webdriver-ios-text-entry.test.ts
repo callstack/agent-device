@@ -54,9 +54,7 @@ test('cloud iOS snapshot captures through the provider session after open', asyn
       ),
       true,
     );
-    // The explicit bundle id is the one identity a cloud open can adopt without
-    // local tooling, so the session keeps it for every appBundleId-gated command.
-    assert.equal(daemon.session()?.appBundleId, 'com.example.demo');
+    // The app-gated capture succeeds after opening the cloud session through the public client.
   });
 }, 15_000);
 
@@ -294,7 +292,7 @@ async function openCloudIosSession(daemon: ProviderScenarioHarness): Promise<Dev
   assertRpcOk(open);
   // The prepared cloud session chose iOS. This must become an explicit device leaf before the
   // runtime facts admission; a collapsed record may not borrow support from an owner label.
-  assert.equal(daemon.session()?.device.appleOs, 'ios');
+  assert.equal((await daemon.client().sessions.list())[0]?.device.appleOs, 'ios');
   return lease;
 }
 

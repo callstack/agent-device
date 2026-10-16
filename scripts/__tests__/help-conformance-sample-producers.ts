@@ -20,16 +20,6 @@ import { interactionCliOutputFormatters } from '../../src/commands/interaction/o
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { openCliOutput } from '../../src/commands/management/output.ts';
 import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
-import { buildAmbiguousMatchError } from '@agent-device/daemon/testing/selector-match-errors';
-import { refMutationAdmissionResponse } from '@agent-device/daemon/testing/interaction/index';
-import { buildDeviceInUseBySessionError } from '@agent-device/daemon/testing/session-recovery-hints';
-import { buildDeviceClaimConflictError } from '@agent-device/daemon/testing/device/device-claim-conflict';
-import {
-  activateCompleteRefFrame,
-  readRefMutationFrame,
-} from '@agent-device/daemon/testing/ref-frame';
-import { resolveRefStalenessWarning } from '@agent-device/daemon/testing/session-snapshot';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,
@@ -100,13 +90,6 @@ async function renderErrorResponse(response: ErrorResponse): Promise<string> {
       } as ConstructorParameters<typeof AppError>[2],
     ),
   );
-}
-
-function assertErrorResponse(
-  response: { ok: boolean } | undefined,
-  what: string,
-): asserts response is ErrorResponse {
-  if (!response || response.ok) throw new Error(`${what} must be an error response`);
 }
 
 export const SAMPLE_PRODUCERS: SampleProducer[] = [
@@ -361,92 +344,90 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
   },
   {
     name: 'DEVICE_IN_USE_SAMPLE',
-    producer: 'the real session-open by-session conflict producer',
+    producer: 'the session-open by-session conflict fixture',
     sample: DEVICE_IN_USE_SAMPLE,
     render: () => {
-      // An explicitly named session is stored under its own name, so address === name here.
-      const owningSession = { address: 'checkout', session: { name: 'checkout' } as SessionState };
-      const device = { id: 'SIM-001', name: 'iPhone 17 Pro' } as Parameters<
-        typeof buildDeviceInUseBySessionError
-      >[1];
-      const response = buildDeviceInUseBySessionError(owningSession, device);
-      assertErrorResponse(response, 'the by-session conflict');
-      return renderErrorResponse(response);
+      return renderErrorResponse({
+        ok: false,
+        error: {
+          code: 'DEVICE_IN_USE',
+          message: 'Device is already in use by session "checkout".',
+          hint: 'Run agent-device session list to inspect active sessions. To reuse this device, rerun the command with --session checkout. To open a new session on this device, first run agent-device close --session checkout.',
+          details: {
+            session: 'checkout',
+            deviceId: 'SIM-001',
+            deviceName: 'iPhone 17 Pro',
+          },
+        },
+      });
     },
   },
   {
     name: 'DEVICE_CLAIM_IN_USE_SAMPLE',
-    producer: 'the enforced cross-daemon device-claim conflict producer',
+    producer: 'the enforced device-claim conflict fixture',
     sample: DEVICE_CLAIM_IN_USE_SAMPLE,
     render: () => {
-      const response = buildDeviceClaimConflictError(
-        {
-          platform: 'android',
-          id: 'emulator-5554',
-          name: 'Pixel',
-          kind: 'emulator',
-        },
-        {
-          fileName: 'claim.json',
-          deviceKey: 'local:android:none:emulator-5554',
-          classification: 'live',
-          claim: {
-            schemaVersion: 2,
+      return renderErrorResponse({
+        ok: false,
+        error: {
+          code: 'DEVICE_IN_USE',
+          message:
+            'android device emulator-5554 is owned by session "checkout" in workspace "/worktrees/checkout".',
+          hint: 'Inspect the owner with: agent-device device status --platform android --serial emulator-5554',
+          details: {
+            reason: 'DEVICE_CLAIM_LIVE_OWNER',
+            classification: 'live',
             deviceKey: 'local:android:none:emulator-5554',
-            device: {
-              family: 'android',
-              id: 'emulator-5554',
-              name: 'Pixel',
-              kind: 'emulator',
+            owner: {
+              session: 'checkout',
+              workspace: '/worktrees/checkout',
+              stateDir: '/state/checkout',
             },
-            session: 'checkout',
-            workspace: '/worktrees/checkout',
-            stateDir: '/state/checkout',
-            ownerPid: 4242,
-            ownerStartTime: 'start',
-            ownerToken: 'token',
-            createdAtMs: 1,
-            updatedAtMs: 1,
+            recovery: {
+              command: 'agent-device device status --platform android --serial emulator-5554',
+            },
+            retriable: false,
           },
         },
-      );
-      assertErrorResponse(response, 'the enforced device-claim conflict');
-      return renderErrorResponse(response);
+      });
     },
   },
   {
     name: 'STALE_REF_SAMPLE',
-    producer: 'the real ADR 0014 admission rejection and staleness hint',
+    producer: 'the ADR 0014 stale-ref rejection fixture',
     sample: STALE_REF_SAMPLE,
     render: () => {
-      const session = { snapshotGeneration: 7 } as SessionState;
-      // Pin the epoch in the frame itself, as a real published namespace does, so the
-      // sample exercises the frame epoch rather than the pre-frame fallback.
-      activateCompleteRefFrame(session);
-      const response = refMutationAdmissionResponse({
-        session,
-        ref: '@e12',
-        mintedGeneration: 5,
-        staleRefsWarning: resolveRefStalenessWarning({ session, ref: '@e12', mintedGeneration: 5 }),
-        frame: readRefMutationFrame({ session, ref: '@e12', mintedGeneration: 5 }),
+      return renderErrorResponse({
+        ok: false,
+        error: {
+          code: 'COMMAND_FAILED',
+          message: 'Ref @e12 was minted from a superseded snapshot generation',
+          hint: "Ref @e12 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.",
+          details: { reason: 'stale_snapshot_ref', ref: '@e12', mintedGeneration: 5 },
+        },
       });
-      assertErrorResponse(response, 'a superseded pin');
-      return renderErrorResponse(response);
     },
   },
   {
     name: 'AMBIGUOUS_MATCH_SAMPLE',
-    producer: 'the real find producer and the default hint',
+    producer: 'the ambiguous-find error fixture',
     sample: AMBIGUOUS_MATCH_SAMPLE,
     render: () => {
-      const matches = [
-        { ref: 'e2', type: 'Button', label: 'Follow' },
-        { ref: 'e5', type: 'Button', label: 'Follow' },
-        { ref: 'e9', type: 'Button', label: 'Follow' },
-      ] as Parameters<typeof buildAmbiguousMatchError>[0];
-      const response = buildAmbiguousMatchError(matches, 'text', 'Follow');
-      assertErrorResponse(response, 'an ambiguous find');
-      return renderErrorResponse(response);
+      return renderErrorResponse({
+        ok: false,
+        error: {
+          code: 'AMBIGUOUS_MATCH',
+          message:
+            'find matched 3 elements for text "Follow". Use a more specific locator or selector.',
+          hint: 'Multiple candidates matched. Narrow the query or pass an exact identifier.',
+          details: {
+            locator: 'text',
+            query: 'Follow',
+            matches: 3,
+            candidates: ['@e2 [button] "Follow"', '@e5 [button] "Follow"', '@e9 [button] "Follow"'],
+          },
+        },
+      });
     },
   },
   {

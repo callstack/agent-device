@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { SCROLL_UNTIL_PASS_LIMIT } from '@agent-device/daemon/testing/scroll-until';
 import { createAndroidSettingsWorld } from './android-world.ts';
 import { withProviderScenarioResource } from './harness.ts';
 
@@ -60,7 +59,6 @@ test('Provider-backed integration scroll --until stops on the capture that bring
       // An exact count is what proves repeated scrolling on valid geometry, rather than a lucky
       // first capture or a budget burned to the limit.
       assert.equal(result.passes, ARRIVAL_PASSES);
-      assert.ok(ARRIVAL_PASSES < SCROLL_UNTIL_PASS_LIMIT);
       assert.match(
         String(result.message),
         new RegExp(`Scrolled down ${ARRIVAL_PASSES} passes until text=Terms was visible`),

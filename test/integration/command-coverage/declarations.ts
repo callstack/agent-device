@@ -1,5 +1,4 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '@agent-device/daemon/testing/session-observability/__tests__/session-audio.coverage';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from '../../../src/__tests__/install-source.coverage.ts';
 import { ANDROID_LIFECYCLE_CONTRACT_EVIDENCE } from '../provider-scenarios/android-lifecycle.coverage.ts';
 import {
@@ -349,7 +348,11 @@ const COMMAND_COVERAGE_DECLARATIONS = {
   },
   [C.audio]: {
     androidEmulator: androidEmulator.contract(
-      ANDROID_AUDIO_CONTRACT_EVIDENCE,
+      {
+        commands: [C.audio],
+        owner: 'daemon/session-observability',
+        testName: 'audio probe starts host helper for Android emulator audio',
+      },
       'host audio probing has an Android-emulator session contract',
     ),
     iosSimulator: iosSimulator.contract(

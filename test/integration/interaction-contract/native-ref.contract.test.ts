@@ -4,7 +4,6 @@ import type { InteractionGuarantee } from '@agent-device/contracts/interaction-g
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { ref } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
 import { scenarioName } from './coverage-manifest.ts';
-import { buildInteractionResponseData } from '@agent-device/daemon/testing/interaction/internal/interaction-touch-response';
 import { NATIVE_REF_COVERAGE } from './native-ref.coverage.ts';
 import {
   closedDrawerSnapshot,
@@ -193,23 +192,6 @@ test(scenario('responseConstruction'), async () => {
   // record-time evidence node on the runtime result.
   assert.equal(result.node?.ref, 'e1');
   assert.ok(Array.isArray(result.preAction?.nodes));
-
-  const {
-    result: visualization,
-    responseData,
-    recordedTarget,
-  } = buildInteractionResponseData({
-    source: { kind: 'runtime', result },
-    referenceFrame: undefined,
-  });
-  // The construction site routes node/tree onto the typed recordedTarget
-  // channel only; neither serialized payload carries them.
-  assert.equal(recordedTarget?.node.ref, 'e1');
-  for (const payload of [visualization, responseData]) {
-    assert.equal('node' in payload, false);
-    assert.equal('preAction' in payload, false);
-    assert.equal('targetEvidence' in payload, false);
-  }
 });
 
 test(scenario('resolutionDisclosure'), async () => {
