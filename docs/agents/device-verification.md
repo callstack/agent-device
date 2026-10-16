@@ -4,14 +4,15 @@ Use this for Apple runner changes or manual device runs. For foldables, also rea
 
 ## Prepare
 
-1. Build runtime changes with `pnpm build`, then `pnpm clean:daemon`. The daemon does not reload code.
-2. For Android source verification, also run `pnpm build:android` before cleaning the daemon.
-3. For Swift runner changes, run `pnpm build:xcuitest` before verification.
+1. Build runtime changes with `pnpm build`.
+2. For Android source verification, run `pnpm build:android`.
+3. For Swift runner changes, run `pnpm build:xcuitest`.
    Graceful shutdown can hand off an active runner; a new daemon can adopt the old binary.
-4. Use distinct devices for parallel worktrees. Inspect worktree-scoped state with `pnpm daemon:state-dir`.
-5. For `Agent Device Tester`, follow `examples/test-app/README.md` for the build, Metro, and expected app surface.
+4. Run `pnpm clean:daemon` after the builds. The daemon does not reload code.
+5. Use distinct devices for parallel worktrees. Inspect worktree-scoped state with `pnpm daemon:state-dir`.
+6. For `Agent Device Tester`, follow `examples/test-app/README.md` for the build, Metro, and expected app surface.
    An installed `com.callstack.agentdevicelab` alone is insufficient.
-6. For Android apps using Metro, run `adb reverse tcp:<port> tcp:<port>` before opening the app or URL.
+7. For Android apps using Metro, run `adb reverse tcp:<port> tcp:<port>` before opening the app or URL.
 
 ## Prove the path
 
@@ -33,7 +34,9 @@ For `DEVICE_IN_USE`:
 
 - "already in use by session X": follow this daemon's `close --session` hint.
 - "owned by session X in workspace Y": inspect `device status`; follow `device release --stale` only for provably dead owners.
-  A live or uncertain owner blocks `open`. Do not hunt PIDs or steal the claim.
+  A live or uncertain owner blocks `open` unless the device rebooted after the claim.
+  With reboot evidence, `open` settles old resources, takes the claim, and reports release in `warnings`.
+  Do not hunt PIDs or steal the claim.
 
 For stuck cleanup, run `agent-device device status --stale`.
 Stop the owning daemon with `agent-device daemon stop --state-dir <dir>`; add `--clean` for retained runners.

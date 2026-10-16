@@ -28,8 +28,18 @@ test('checkout fingerprint distinguishes edits with identical porcelain status a
     const untracked = readCheckoutState(cwd);
     fs.writeFileSync(path.join(cwd, 'new.ts'), 'two');
     assert.notEqual(untracked.fingerprint, readCheckoutState(cwd).fingerprint);
+    const beforeChmod = readCheckoutState(cwd);
+    fs.chmodSync(path.join(cwd, 'new.ts'), 0o755);
+    if (process.platform !== 'win32')
+      assert.notEqual(beforeChmod.fingerprint, readCheckoutState(cwd).fingerprint);
     git('add', '.');
     assert.notEqual(second.fingerprint, readCheckoutState(cwd).fingerprint);
+    // Both status and ls-files must tolerate more than spawnSync's default 1 MiB.
+    const wide = path.join(cwd, ...Array<string>(3).fill('d'.repeat(220)));
+    fs.mkdirSync(wide, { recursive: true });
+    for (let index = 0; index < 1200; index++)
+      fs.writeFileSync(path.join(wide, `${index}-${'x'.repeat(220)}`), '');
+    assert.ok(readCheckoutState(cwd).status.length > 1024 * 1024);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
   }

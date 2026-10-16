@@ -16,7 +16,7 @@ toolchain per command:
   Verify locally with Device Hub stopped and the simulator booted through `simctl boot`; test all
   three poses, active panel capture, and an app interaction. Duo coverage remains local until GHA
   supports the runtime. To inspect the angle independently:
-  `xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`.
+  `DEVELOPER_DIR=<Xcode-27.1>/Contents/Developer xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`.
 - Touch overlays export at the captured track size. The compositor checks its output (size,
   non-black) against the raw capture; on failure `record stop` keeps the raw file and reports
   `overlayWarning`. `record start --hide-touches` is only for the fastest raw capture.

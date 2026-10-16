@@ -12,7 +12,9 @@ Use `PROPERTY_RUNS` budgets. Keep examples for past bugs or named decisions.
 Parser fuzz targets live in `scripts/fuzz/targets.ts`. Generators carry planted invalid outcomes.
 Promote discoveries with the harness command; do not hand-copy unshrunk inputs.
 
-Mutation scope lives in `scripts/mutation/modules.ts` and `scripts/mutation/run.ts`.
+Mutation declarations live in `scripts/mutation/modules.ts`; test ownership lives in `scripts/mutation/ownership.ts`.
+`scripts/mutation/run.ts` uses `KERNEL_MODULES` weekly and `LANE_SOURCES` for PR canaries.
+Dispatch with `--with-dependencies` adds `LANE_DEPENDENCIES`.
 Scores are advisory; incomplete sweeps fail. Read `pnpm mutation:run --help` before a pilot.
 Concurrency torture uses production lock decisions. Run `pnpm test:concurrency-torture`; replay with the printed `TORTURE_SEED`.
 

@@ -10,7 +10,7 @@ Keep the reviewed and implementation checkouts unchanged. Reviewers have read sc
 
 ```sh
 reviewed_sha=$(git rev-parse HEAD)
-experiment_dir=$(mktemp -d /private/tmp/agent-device-experiment.XXXXXX)
+experiment_dir=$(mktemp -d "${TMPDIR:-/tmp}/agent-device-experiment.XXXXXX")
 git worktree add --detach "$experiment_dir" "$reviewed_sha"
 ```
 

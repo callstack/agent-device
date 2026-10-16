@@ -1,16 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdStreaming } from '@agent-device/host-kit/command';
-import {
-  recordValidationCommand,
-  finishValidationCommand,
-  VALIDATION_PARENT_ENV,
-} from './host-lock.ts';
+import { VALIDATION_PARENT_ENV, type ValidationLock } from './host-lock.ts';
 import type { CheckResult, ValidationRun } from './execution.ts';
 import type { TestReport } from './test-report.ts';
 
 export async function executeValidationCommand(
   run: ValidationRun,
+  lock: ValidationLock,
   result: CheckResult,
   command: string[],
   cwd: string,
@@ -29,21 +26,28 @@ export async function executeValidationCommand(
     15_000,
   );
   let commandPid: number | undefined;
+  const cancelTree = () => {
+    if (commandPid !== undefined) lock.cancelCommand(commandPid);
+  };
   try {
-    recordValidationCommand(run.receiptPath, null);
+    lock.recordCommand(run.receiptPath, null);
     const output = await runCmdStreaming(
       process.execPath,
       ['--experimental-strip-types', path.join(import.meta.dirname, 'command.ts'), ...command],
       {
         cwd,
         allowFailure: true,
+        captureOutput: false,
         detached: process.platform !== 'win32',
         kill: { signal: 'SIGTERM', graceMs: 5000 },
         signal: run.controller.signal,
         stdin: 'run\n',
         onSpawn: (child) => {
           commandPid = child.pid;
-          if (commandPid) recordValidationCommand(run.receiptPath, commandPid);
+          if (commandPid) lock.recordCommand(run.receiptPath, commandPid);
+          // Register before host-kit installs its abort handler, which can kill the wrapper.
+          if (process.platform === 'win32')
+            run.controller.signal.addEventListener('abort', cancelTree, { once: true });
         },
         env: {
           ...process.env,
@@ -68,25 +72,33 @@ export async function executeValidationCommand(
     result.reason = error instanceof Error ? error.message : String(error);
     throw error;
   } finally {
+    run.controller.signal.removeEventListener('abort', cancelTree);
     clearInterval(heartbeat);
     fs.closeSync(descriptor);
     result.durationMs = Date.now() - started;
     collectTestReports(result, run.directory, reportPrefix);
     run.save();
-    await finishValidationCommand(commandPid);
+    await lock.finishCommand(commandPid);
   }
 }
 
 function reportFailureTail(logPath: string, report: (line: string) => void): void {
-  report(
-    fs
-      .readFileSync(logPath, 'utf8')
-      .slice(-8000)
-      .split('\n')
-      .slice(-35)
-      .map((line) => line.slice(0, 400))
-      .join('\n'),
-  );
+  const descriptor = fs.openSync(logPath, 'r');
+  try {
+    const size = fs.fstatSync(descriptor).size;
+    const tail = Buffer.alloc(Math.min(size, 8000));
+    fs.readSync(descriptor, tail, 0, tail.length, size - tail.length);
+    report(
+      tail
+        .toString('utf8')
+        .split('\n')
+        .slice(-35)
+        .map((line) => line.slice(0, 400))
+        .join('\n'),
+    );
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 function collectTestReports(result: CheckResult, directory: string, reportPrefix: string): void {

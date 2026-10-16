@@ -10,6 +10,7 @@ runEntrypoint('validation command', async () => {
   if (!command) return 1;
   const result = await runCmdStreaming(command, args, {
     allowFailure: true,
+    captureOutput: false,
     onStdoutChunk: (chunk) => {
       process.stdout.write(chunk);
     },
@@ -17,5 +18,13 @@ runEntrypoint('validation command', async () => {
       process.stderr.write(chunk);
     },
   });
+  await Promise.all(
+    [process.stdout, process.stderr].map(
+      (stream) =>
+        new Promise<void>((resolve, reject) =>
+          stream.write('', (error) => (error ? reject(error) : resolve())),
+        ),
+    ),
+  );
   return result.exitCode;
 });

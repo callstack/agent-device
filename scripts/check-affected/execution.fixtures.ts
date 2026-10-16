@@ -39,7 +39,7 @@ export function run(cwd: string, head: string, body: string) {
     {
       cwd,
       allowFailure: true,
-      env: { ...process.env, HOME: cwd, AGENT_DEVICE_VALIDATION_PARENT: '' },
+      env: { ...process.env, HOME: cwd, USERPROFILE: cwd, AGENT_DEVICE_VALIDATION_PARENT: '' },
     },
   );
   return { ...result, receipt: JSON.parse(result.stdout) as ExecutionReceipt };

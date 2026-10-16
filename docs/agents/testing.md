@@ -1,7 +1,6 @@
 # Validate a change
 
-Use this to select checks and interpret results. For test code, read [test authoring](test-authoring.md).
-For mutations or base comparisons, read [isolated experiments](test-experiments.md).
+Use this to select checks and interpret results. Use [isolated experiments](test-experiments.md) for mutations or base comparisons.
 
 ## Run checks
 
@@ -13,8 +12,8 @@ Both broad commands acquire the same host lock. Wait for the owner to finish, or
 Do not add lock wrappers or delete lock files. A wait ends after two hours. Nested validation fails immediately.
 Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
 
-The runner prints a receipt path and progress. Each command has a log; Vitest also writes JSON.
-The receipt records refs, checkout state, commands, exit codes, skips, and test failures.
+The runner prints progress and a receipt path. The receipt links command logs and Vitest JSON.
+It records refs, checkout state, commands, exit codes, skips, and failures.
 Execution stops at the first failure. Unexecuted checks remain `not-run`.
 
 - `pnpm check:affected`: compact plan.
@@ -24,20 +23,19 @@ Execution stops at the first failure. Unexecuted checks remain `not-run`.
 - `pnpm check:affected --run`: include staged, unstaged, and untracked changes for local feedback.
 
 Only a passed receipt with `exactCommit: true` proves validation at the named commit.
-A dirty-tree pass is local feedback. Checkout changes during execution invalidate the run.
+A dirty-tree pass is local feedback. Detected checkout changes invalidate the run.
 Initial/final checks detect persistent changes; they do not sandbox the checkout. Stop all edits during validation.
 
 ## Interpret selection
 
 A package manifest or TypeScript config can affect every consumer. A full selection for these changes is intentional.
-`FAIL-OPEN` means the selector could not safely narrow the set. Read `plan.failOpenReasons` in the receipt.
+`FAIL-OPEN` means the selector could not safely narrow the set. Read `plan.failOpenReasons`.
 Do not reduce selection to get a pass.
 
 Read required-check status on the PR. The receipt lists skipped checks and owners in `results[].reason`.
 GitHub owns full coverage, native builds, device lanes, provider integration, and history-backed compatibility.
 Related tests do not replace those obligations. Check the Integration Tests and Coverage jobs at the actual PR head.
-Docs-only changes need guidance checks, not runtime tests or tests asserting prose.
-See `CONTRIBUTING.md` for local coverage and [gate maintenance](gates.md) for declarations.
+For docs-only changes, run the selected documentation checks. Do not add tests asserting prose.
 
 ## A gate failed
 
@@ -46,12 +44,12 @@ Keep failure attribution separate from validation status. Never call a failing g
 | Evidence | Next action | Outcome |
 | --- | --- | --- |
 | New failure caused by this change | Fix its owner. Rerun after the fix. | Validation failed until a new run passes. |
-| Suspected host contention or infrastructure fault | Save the log. Run the same failing command on unchanged base in an isolated checkout, without competing tests. | Cause unproven until compared. Compare both runs. A solo pass alone does not prove contention. |
-| Same failure reproduced on unchanged base | Record both SHAs, command, logs, and matching failure. Assign the blocker to a named person or linked issue. | Base-blocked. If publication is authorized, open/update an incomplete draft with the blocker and remaining checks. Do not mark merge-ready. |
-| Base comparison unavailable or inconclusive | Record the missing tool/device/evidence and next action. | Blocked, cause unproven. An authorized draft can carry this limitation. |
+| Suspected host contention or infrastructure fault | Save the log. Run the same failing command on unchanged base in an isolated checkout, without competing tests. | Cause unproven until compared. A solo pass does not prove contention. |
+| Same failure reproduced on unchanged base | Record SHAs, command, logs, and matching failure. Assign the blocker to a named person or linked issue. | Base-blocked. If publication is authorized, publish a draft with the blocker and remaining checks. Do not mark merge-ready. |
+| Base comparison unavailable or inconclusive | Record the missing tool/device/evidence and next action. | Blocked, cause unproven. An authorized draft can record this. |
 | Failure source fixed, environment repaired, or new upstream commit contains the fix | Run the failing check, then the affected gate on the current head. | Replace blocked status only with new evidence. |
 
-Match failures by check, location, diagnostic code, and failing assertion. Log comparison is evidence, not production error-text branching.
+Match failures by check, location, diagnostic code, and assertion.
 The implementing agent owns diagnosis until a named owner or issue accepts the blocker.
 Do not loop on an unchanged failure. Do not widen timeouts, mask exit codes, or invoke CI authority as a local pass.
 Rerun failed CI once only when its log shows an infrastructure fault. Treat the same failure twice as a finding.

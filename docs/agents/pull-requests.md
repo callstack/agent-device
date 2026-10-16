@@ -37,7 +37,7 @@ An independent reviewer is required at the growth thresholds in [review guidance
 
 Keep gross diffs below 1,000 lines, or 2,500 for one coherent change in self-contained commits.
 Measure with `git diff --stat origin/main...HEAD`. Stack only independently landable layers.
-Rename-only `refactor(move)` PRs are exempt when `git diff -M90% --stat` proves no material content change.
+Rename-only `refactor(move)` PRs are exempt when `git diff -M90% --stat origin/main...HEAD` proves no material content change.
 Use conventional commit prefixes, without agent tags. Put enforcement edits in a final `chore(gates): <what and why>` commit.
 
 Rebase for conflicts or relevant upstream changes. Disjoint changes alone do not require rebase.

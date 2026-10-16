@@ -15,11 +15,16 @@ function fixture() {
   git('init', '-q');
   git('config', 'user.email', 'test@example.com');
   git('config', 'user.name', 'Test');
-  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const { scripts } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const pkg = { name: 'validation-fixture', private: true, scripts };
   pkg.scripts['check:agent-guidance'] = 'node -e "process.exit(7)"';
   for (const script of ['check:tooling', 'check:fallow', 'check:unit'])
     pkg.scripts[script] = 'node -e "process.exit(0)"';
   fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg));
+  fs.writeFileSync(
+    path.join(cwd, 'pnpm-workspace.yaml'),
+    'packages: []\npmOnFail: warn\nverifyDepsBeforeRun: warn\n',
+  );
   fs.writeFileSync(path.join(cwd, '.gitignore'), '.tmp\n.cache\n');
   fs.writeFileSync(path.join(cwd, 'AGENTS.md'), 'base');
   git('add', '.');
@@ -41,6 +46,7 @@ function invoke(cwd: string, args: string[]) {
       env: {
         ...process.env,
         HOME: path.join(cwd, '.tmp', 'home'),
+        USERPROFILE: path.join(cwd, '.tmp', 'home'),
         AGENT_DEVICE_VALIDATION_PARENT: '',
       },
     },

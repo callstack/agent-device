@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runCmdStreaming, runCmdSync } from '@agent-device/host-kit/command';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import {
   checkLockfileInstallSync,
   STALE_NODE_MODULES_MESSAGE,
@@ -188,16 +188,6 @@ function printPlanHuman(plan: CheckPlan, args: Args): void {
 // testable without spawning real processes.
 export type CommandExecutor = (command: string[], cwd: string, id: string) => Promise<number>;
 
-const streamingExecutor: CommandExecutor = async (command, cwd) => {
-  const result = await runCmdStreaming(command[0]!, command.slice(1), {
-    cwd,
-    allowFailure: true,
-    onStdoutChunk: (chunk) => void process.stdout.write(chunk),
-    onStderrChunk: (chunk) => void process.stderr.write(chunk),
-  });
-  return result.exitCode;
-};
-
 export async function runChecks(
   plan: CheckPlan,
   pkg: PackageJson,
@@ -205,10 +195,10 @@ export async function runChecks(
   options: {
     cwd?: string;
     skip?: ValidationContext['skip'];
-    execute?: CommandExecutor;
+    execute: CommandExecutor;
     changedFiles?: readonly string[];
     checkLockfileSync?: (cwd: string) => LockfileInstallSyncResult;
-  } = {},
+  },
 ): Promise<number> {
   const cwd = options.cwd ?? repoRoot;
   const checkLockfileSync = options.checkLockfileSync ?? checkLockfileInstallSync;
@@ -218,7 +208,7 @@ export async function runChecks(
     reportStaleInstall(lockfileSync.reason, cwd);
     return 1;
   }
-  const execute = options.execute ?? streamingExecutor;
+  const execute = options.execute;
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
   const relatedSelected = plan.checks.includes('vitest-related');
@@ -234,7 +224,6 @@ export async function runChecks(
       continue;
     }
     const command = resolveCommand(spec, pkg.scripts, args.base, options.changedFiles ?? []);
-    if (!options.execute) process.stderr.write(`[run] ${spec.id}: ${command.join(' ')}\n`);
     const exitCode = await execute(command, cwd, spec.id);
     if (exitCode !== 0) {
       process.stderr.write(`\ncheck:affected: ${spec.id} failed.\n`);

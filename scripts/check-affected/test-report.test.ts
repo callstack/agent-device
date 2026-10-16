@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { runCmdSync } from '@agent-device/host-kit/command';
+import { fixture, run } from './execution.fixtures.ts';
 import type { TestReport } from './test-report.ts';
 
 test('real Vitest report preserves assertion, suite, and unhandled failures separately', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'validation-report-'));
-  const reportPath = path.join(root, 'report.json');
+  const { cwd: root } = fixture();
   const reporter = pathToFileURL(path.join(import.meta.dirname, 'test-report.ts')).href;
   try {
     fs.writeFileSync(
@@ -17,7 +15,7 @@ test('real Vitest report preserves assertion, suite, and unhandled failures sepa
       `
       import { validationTestReporter } from ${JSON.stringify(reporter)};
       export default { test: { root: ${JSON.stringify(root)}, maxWorkers: 1,
-        reporters: ['dot', validationTestReporter(${JSON.stringify(reportPath)})] } };
+        reporters: ['dot', validationTestReporter(process.env.AGENT_DEVICE_VALIDATION_REPORT + '.' + process.pid + '.json')] } };
     `,
     );
     fs.writeFileSync(
@@ -30,18 +28,15 @@ test('real Vitest report preserves assertion, suite, and unhandled failures sepa
       describe('suite', () => { beforeAll(() => { throw new Error('fixture-suite'); }); test('not reached', () => {}); });
     `,
     );
-    const result = runCmdSync(
-      'pnpm',
-      ['exec', 'vitest', 'run', '--config', path.join(root, 'vitest.config.ts')],
-      {
-        cwd: path.resolve(import.meta.dirname, '../..'),
-        allowFailure: true,
-        env: { ...process.env, AGENT_DEVICE_VALIDATION_REPORT: '' },
-      },
+    const result = run(
+      root,
+      'HEAD',
+      `return execute(['pnpm', 'exec', 'vitest', 'run', '--config', ${JSON.stringify(path.join(root, 'vitest.config.ts'))}], ${JSON.stringify(path.resolve(import.meta.dirname, '../..'))}, 'report');`,
     );
     assert.equal(result.exitCode, 1);
-    assert.ok(fs.existsSync(reportPath), result.stderr + result.stdout);
-    const report = JSON.parse(fs.readFileSync(reportPath, 'utf8')) as TestReport;
+    const check = result.receipt.results[0]!;
+    assert.equal(check.testReportPaths?.length, 1);
+    const report = check.tests?.[0] as TestReport;
     assert.equal(report.passed, 2);
     assert.ok(report.failed >= 1);
     assert.equal(report.unhandledErrors, 1);

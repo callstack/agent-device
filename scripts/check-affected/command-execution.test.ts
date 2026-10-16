@@ -22,7 +22,7 @@ test('SIGTERM cancels the command group, records cancellation, and releases the 
     {
       cwd,
       allowFailure: true,
-      env: { ...process.env, HOME: cwd, AGENT_DEVICE_VALIDATION_PARENT: '' },
+      env: { ...process.env, HOME: cwd, USERPROFILE: cwd, AGENT_DEVICE_VALIDATION_PARENT: '' },
     },
   );
   try {
@@ -48,7 +48,7 @@ test('SIGTERM cancels the command group, records cancellation, and releases the 
 test('a killed validation parent does not let a waiter overlap its surviving command group', async () => {
   const { cwd } = fixture();
   const ready = path.join(cwd, '.tmp', 'orphan.json');
-  const env = { ...process.env, HOME: cwd, AGENT_DEVICE_VALIDATION_PARENT: '' };
+  const env = { ...process.env, HOME: cwd, USERPROFILE: cwd, AGENT_DEVICE_VALIDATION_PARENT: '' };
   const source = `
     import { runValidation } from ${JSON.stringify(entry)};
     const code = await runValidation(${JSON.stringify(cwd)}, { base: 'HEAD', head: 'HEAD', json: true }, async ({execute}) => execute([process.execPath, '-e', ${JSON.stringify(`require('node:fs').writeFileSync(${JSON.stringify(ready)}, JSON.stringify(process.pid)); setInterval(() => {}, 1000);`)}], ${JSON.stringify(cwd)}, 'orphan'));

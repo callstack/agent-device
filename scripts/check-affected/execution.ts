@@ -64,7 +64,8 @@ export async function runValidation(
   report(`[receipt] ${receiptPath}`);
 
   try {
-    release = await acquireValidationLock(controller.signal);
+    const lock = await acquireValidationLock(controller.signal);
+    release = lock.release;
     prepareCheckout(cwd, args, receipt);
     receipt.status = 'running';
     save();
@@ -72,7 +73,7 @@ export async function runValidation(
     receipt.exitCode = await task({
       receipt,
       execute: (command, commandCwd, id) =>
-        executeValidationCommand(run, checkResult(receipt, id), command, commandCwd),
+        executeValidationCommand(run, lock, checkResult(receipt, id), command, commandCwd),
       skip: (id, reason, deduplicated) => {
         Object.assign(checkResult(receipt, id), {
           status: deduplicated ? 'deduplicated' : 'skipped',

@@ -6,7 +6,7 @@ import { runCmdSync } from '@agent-device/host-kit/command';
 export type CheckoutState = { head: string; status: string; fingerprint: string };
 
 export function gitValue(cwd: string, args: string[]): string {
-  return runCmdSync('git', args, { cwd }).stdout.trim();
+  return runCmdSync('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }).stdout.trim();
 }
 
 export function readCheckoutState(cwd: string): CheckoutState {
@@ -21,6 +21,7 @@ export function readCheckoutState(cwd: string): CheckoutState {
   }
   const untracked = runCmdSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
     cwd,
+    maxBuffer: 64 * 1024 * 1024,
   }).stdout;
   for (const file of untracked.split('\0').filter(Boolean).sort())
     hashWorktreePath(hash, cwd, file);
@@ -38,6 +39,7 @@ function hashWorktreePath(hash: crypto.Hash, cwd: string, file: string): void {
     hash.update('missing\0');
     return;
   }
+  hash.update(String(stat.mode)).update('\0');
   if (stat.isDirectory()) {
     hash.update('directory\0');
     const files = runCmdSync(

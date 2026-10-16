@@ -37,6 +37,8 @@ export type ExecOptions = {
 };
 
 export type ExecStreamOptions = ExecOptions & {
+  /** Set false when chunk callbacks own output and only the exit code is needed. */
+  captureOutput?: boolean;
   onStdoutChunk?: (chunk: string) => void;
   onStderrChunk?: (chunk: string) => void;
   onSpawn?: (child: ReturnType<typeof spawn>) => void;
@@ -189,7 +191,8 @@ function runSpawnedCommand(
     options.onSpawn?.(child);
 
     let stdout = '';
-    const stdoutChunks: Buffer[] | undefined = options.binaryStdout ? [] : undefined;
+    const stdoutChunks: Buffer[] | undefined =
+      options.binaryStdout && options.captureOutput !== false ? [] : undefined;
     let stderr = '';
     let didTimeout = false;
     const timeoutMs = normalizeTimeoutMs(options.timeoutMs);
@@ -266,13 +269,13 @@ function runSpawnedCommand(
         return;
       }
       const text = String(chunk);
-      stdout += text;
+      if (options.captureOutput !== false) stdout += text;
       options.onStdoutChunk?.(text);
     });
 
     child.stderr.on('data', (chunk) => {
       const text = String(chunk);
-      stderr += text;
+      if (options.captureOutput !== false) stderr += text;
       options.onStderrChunk?.(text);
     });
 
