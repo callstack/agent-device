@@ -14,7 +14,7 @@ const DAEMON_KILL_TIMEOUT_MS = 2_000;
 const PRUNE_DEV_FLAG = '--prune-dev';
 const PRUNE_DEV_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
-const paths = resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR);
+const paths = resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR, { cwd: process.cwd() });
 const retirement = await stopAndRetireDaemon({
   paths,
   observed: readRegisteredDaemonIdentity(paths.infoPath),
@@ -48,7 +48,7 @@ async function pruneStaleDevStateDirs(): Promise<void> {
   const cutoffMs = Date.now() - PRUNE_DEV_MAX_AGE_MS;
   for (const dirPath of listDevStateDirs(devRoot)) {
     if (newestMtimeMs(dirPath) > cutoffMs) continue;
-    const paths = resolveDaemonPaths(dirPath);
+    const paths = resolveDaemonPaths(dirPath, { cwd: process.cwd() });
     const result = await recoverAbandonedDaemonRegistration({
       paths,
       observed: readRegisteredDaemonIdentity(paths.infoPath),

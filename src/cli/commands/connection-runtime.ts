@@ -74,7 +74,7 @@ export async function materializeRemoteConnectionForCommand(options: {
     return { flags, runtime: options.runtime };
   }
 
-  const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() }).baseDir;
   const remoteConfig = resolveRemoteConfigProfile({
     configPath: flags.remoteConfig,
     cwd: process.cwd(),

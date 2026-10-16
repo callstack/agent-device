@@ -94,7 +94,7 @@ export function resolveClientSettings(
     ? createOwnedReplayStateDir()
     : undefined;
   return {
-    paths: ownedStateDir?.paths ?? resolveDaemonPaths(explicitStateDir),
+    paths: ownedStateDir?.paths ?? resolveDaemonPaths(explicitStateDir, { cwd: process.cwd() }),
     transportPreference: transport.preference,
     serverMode: transport.serverMode,
     ownedStateDir,

@@ -53,7 +53,7 @@ import {
 } from './connection-presentation.ts';
 
 export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
-  const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() }).baseDir;
   const provider = readConnectProvider(positionals);
   assertConnectProviderUsage(provider, flags);
   const resolved = await resolveConnectProviderProfile({ provider, flags, stateDir });
@@ -417,7 +417,7 @@ function readRequestedConnectionState(flags: CliFlags): {
   state: RemoteConnectionState | null;
 } {
   const session = flags.session ?? 'default';
-  const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() }).baseDir;
   return {
     session,
     stateDir,

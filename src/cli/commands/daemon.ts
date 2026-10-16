@@ -17,7 +17,7 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }
   if (subcommand !== 'stop' || positionals.length !== 1) {
     throw new AppError('INVALID_ARGS', 'daemon accepts only: stop');
   }
-  const paths = resolveDaemonPaths(flags.stateDir);
+  const paths = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() });
   const identity = readDaemonStopIdentity(paths.infoPath);
   const stopped = await stopDaemon({ paths });
   const report = stopped.mode === 'graceful' ? readDaemonShutdownReport(paths.baseDir) : null;

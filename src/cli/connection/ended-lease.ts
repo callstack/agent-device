@@ -17,7 +17,7 @@ export function forgetEndedProxyLease(flags: CliFlags, response: DaemonResponse)
   if (!flags.remoteConfig) return;
   const endedLeaseIds = readEndedLeases(response).map((lease) => lease.leaseId);
   if (endedLeaseIds.length === 0) return;
-  const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() }).baseDir;
   const state = readRemoteConnectionState({ stateDir, session: flags.session ?? 'default' });
   if (!state?.leaseId || !endedLeaseIds.includes(state.leaseId)) return;
   if (isHostAllocatedLease(state)) return;

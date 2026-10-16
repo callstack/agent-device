@@ -18,7 +18,9 @@ export type MetroSessionOptions = { stateDir?: string; session: string };
 
 function resolveMetroSessionScope(options: MetroSessionOptions): MetroSessionScope {
   return {
-    stateDir: resolveDaemonPaths(options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir,
+    stateDir: resolveDaemonPaths(options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR, {
+      cwd: process.cwd(),
+    }).baseDir,
     session: options.session,
   };
 }

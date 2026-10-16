@@ -47,7 +47,7 @@ export function resolveLimrunConnectProfile(options: {
 function buildLimrunRemoteProfile(options: { flags: CliFlags }): RemoteConfigProfile {
   const flags = options.flags;
   const leaseBackend = validateLimrunConnectFlags(flags);
-  const daemonPaths = resolveDaemonPaths(flags.stateDir);
+  const daemonPaths = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() });
   return {
     stateDir: daemonPaths.baseDir,
     daemonTransport: 'auto',

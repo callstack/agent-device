@@ -96,6 +96,7 @@ export function resolveDaemonStartupHint(
   state: { hasInfo: boolean; hasLock: boolean },
   paths: Pick<DaemonPaths, 'infoPath' | 'lockPath'> = resolveDaemonPaths(
     process.env.AGENT_DEVICE_STATE_DIR,
+    { cwd: process.cwd() },
   ),
 ): string {
   const artifacts = [state.hasInfo ? paths.infoPath : null, state.hasLock ? paths.lockPath : null]

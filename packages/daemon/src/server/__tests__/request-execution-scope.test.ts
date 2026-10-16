@@ -71,6 +71,21 @@ test('createRequestExecutionScope applies tenant scoping and locked lease admiss
   expect(admittedLeaseId).toBe(lease.leaseId);
 });
 
+test('createRequestExecutionScope exposes the host of the daemon serving the request', async () => {
+  const host = createTestHostEnvironment({
+    env: { AGENT_DEVICE_TEST: '1' },
+    cwd: '/host/workspace',
+  });
+  const scope = await createTestRequestScope({
+    host,
+    req: makeRequest(),
+    sessionStore: makeSessionStore('agent-device-request-scope-host-'),
+    leaseRegistry: new LeaseRegistry(),
+  });
+
+  expect(scope.host).toBe(host);
+});
+
 test('createRequestExecutionScope is the single defaulting authority for the apps filter', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-defaults-');
   const leaseRegistry = new LeaseRegistry();

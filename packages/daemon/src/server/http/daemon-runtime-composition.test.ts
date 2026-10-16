@@ -105,6 +105,37 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
   await held.owner.finish();
 });
 
+test('the server runs on the host it was given and hands that host to the composition', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-host-');
+  const host = createTestHostEnvironment({
+    env: {
+      ...process.env,
+      AGENT_DEVICE_STATE_DIR: stateDir,
+      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+    },
+    cwd: '/agent-device-test/host-cwd',
+  });
+  let composed: DaemonRuntimeDepsInput | undefined;
+  const fixtureDeps = daemonRuntimeDepsFixture();
+  const runtime = await startDaemonRuntime({
+    host,
+    registerProcessHandlers: false,
+    exit: () => {},
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+    composeDeps: async (input) => {
+      composed = input;
+      return await fixtureDeps(input);
+    },
+  });
+  try {
+    assert.equal(composed?.host, host);
+    assert.equal(composed?.baseDir, resolveDaemonPaths(stateDir).baseDir);
+  } finally {
+    await runtime?.shutdown();
+  }
+});
+
 /**
  * The one-assembly guarantee (#3431 review): the server owns the paths, the ADR 0029 policy load,
  * the session store, and the `assertShutdownAllowed` derivation, and passes them to the

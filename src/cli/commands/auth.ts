@@ -6,7 +6,7 @@ import type { ClientCommandHandler } from './router-types.ts';
 
 export const authCommand: ClientCommandHandler = async ({ positionals, flags }) => {
   const subcommand = positionals[0] ?? 'status';
-  const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() }).baseDir;
   if (subcommand === 'status') {
     const status = summarizeCliSession({ stateDir });
     await writeCommandOutput(flags, status, () => renderAuthStatus(status));
