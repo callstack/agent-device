@@ -437,9 +437,7 @@ test(
       assert.equal(response.status, 502);
       assert.equal(await response.text(), 'upstream request failed');
 
-      const upstreamError = proxy.forwarded[0]?.upstreamError;
-      assert.ok(upstreamError instanceof Error);
-      assert.equal((upstreamError as NodeJS.ErrnoException).code, 'ECONNREFUSED');
+      assert.equal(proxy.forwarded[0]?.upstreamErrorCode, 'ECONNREFUSED');
     } finally {
       try {
         if (proxy) await proxy.close();
