@@ -18,8 +18,18 @@ import {
 } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import type { Platform } from '@agent-device/kernel/device';
-import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
+import {
+  deviceIdentityFlag,
+  type DeviceIdentity,
+  type DeviceInfo,
+  type Platform,
+} from '@agent-device/kernel/device';
+import {
+  resolveTargetDevice,
+  type ResolveDeviceFlags,
+} from '@agent-device/device-selection/dispatch-resolve';
+import { hasDeviceSelectionInput } from '../../core/device/device-selector-intent.ts';
 import { ensureBoundDeviceReady } from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/screen-recording-recovery';
@@ -31,6 +41,7 @@ import {
 } from '@agent-device/capture-kit/screen-recording-session-resource';
 import {
   resolveScreenRecordingStopRecovery,
+  screenRecordingManifestDevice,
   screenRecordingManifestIsTerminal,
 } from '@agent-device/capture-kit/screen-recording-stop-recovery';
 import { resolveSessionScope } from '../session-routing.ts';
@@ -100,25 +111,19 @@ async function handleRecordCommandUnsafe(
   const existingRef = sessionStore.lookup(sessionName);
   const existingSession = existingRef?.session;
   const { plan, scope } = resolveRecordPlan(req, existingSession);
-  // Only the start half can be answered on a device, so only it answers on the session: a named
-  // missing session refuses before any device is chosen, ahead of the record-specific refusals.
-  // The stop half must reach the durable manifest first — after a daemon restart the memory-only
-  // session is gone for exactly the callers whose manifest the named session addresses, and the
-  // recovery lane proves the manifest's session and device before serving anything.
-  // Only that branch pays the function-scoped import (ADR-0019 loading shape).
-  if (!existingSession && plan.kind === 'start') {
-    const { requireNamedSessionHoldsDevice } =
-      await import('../../core/explicit-session-resolution.ts');
-    requireNamedSessionHoldsDevice({
-      req,
-      sessionAddress: sessionName,
-      session: existingSession,
-    });
-  }
-  if (plan.kind === 'start' && !isWholeScreenRecordingScope(scope) && !existingSession) {
+  // The app-scope refusal states what a start needs beyond a device, so it answers only for a
+  // request that can still reach one: a start naming a session this daemon does not hold is
+  // answered on the session first, at resolveRecordingSession below, where every record lane
+  // meets the one named-session rule at the only device selection the handler makes.
+  if (
+    plan.kind === 'start' &&
+    !isWholeScreenRecordingScope(scope) &&
+    !existingSession &&
+    !namesSessionWithoutTarget(req)
+  ) {
     return missingAppSessionResponse(req);
   }
-  const resolvedSession = await resolveRecordingSession(params, existingRef);
+  const resolvedSession = await resolveRecordingSession(params, existingRef, plan);
   const { session } = resolvedSession;
   if (plan.kind === 'start') {
     return await startRecording(
@@ -154,11 +159,75 @@ function resolveRecordPlan(req: DaemonRequest, session: SessionState | undefined
 async function resolveRecordingSession(
   params: RecordRuntimeHandlerParams,
   ref: SessionRef | undefined,
+  plan: ReturnType<typeof resolveRecordPlan>['plan'],
 ): Promise<Readonly<{ session: SessionState; ref?: SessionRef; needsReadiness: boolean }>> {
-  const device = ref?.session.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
-  await params.retainDeviceExecutionLock(device.id);
   if (ref) return { session: params.sessionStore.requireCurrent(ref), ref, needsReadiness: false };
+  const device = await resolveUnheldRecordingDevice(params, plan);
+  await params.retainDeviceExecutionLock(device.id);
   return { session: createRecordOnlySession(params, device), needsReadiness: true };
+}
+
+/**
+ * The device an unheld record request is answered on, and the single place the record handler
+ * applies the named-session rule (#3674) at its only device selection.
+ *
+ * A request that names a session this daemon does not hold and states no device is answered from
+ * the durable manifest the session address finds — never from an unconstrained sweep of the host,
+ * which with several booted devices would answer `AMBIGUOUS_MATCH` (or, worse, silently pick a
+ * different device) before the manifest is read. A decodable manifest carries the exact device the
+ * recording was started on, so the stop recovery resolves that device; a start, or a stop with no
+ * decodable manifest to recover from, refuses with the named-session error. The manifest's own
+ * session and device are still proven against the request by `assertManifestBelongsToRequest`
+ * before anything is served, so a manifest belonging to another session or device fails closed.
+ *
+ * The two shapes that keep their chosen target are unchanged: a request that never named a
+ * session resolves sessionlessly from its flags, and one that states a device selector resolves
+ * from it, with the manifest assertion failing the request closed when the stated device is not
+ * the one the recording was started on.
+ */
+async function resolveUnheldRecordingDevice(
+  params: RecordRuntimeHandlerParams,
+  plan: ReturnType<typeof resolveRecordPlan>['plan'],
+): Promise<DeviceInfo> {
+  const { req, sessionName } = params;
+  if (!namesSessionWithoutTarget(req)) return await resolveTargetDevice(req.flags ?? {});
+  if (plan.kind === 'stop-recovery') {
+    const recorded = screenRecordingManifestDevice({
+      sessionName,
+      sessionStore: params.sessionStore,
+    });
+    if (recorded) {
+      return await resolveManifestDevice(params, recorded);
+    }
+  }
+  const { namedSessionNotFoundError } = await import('../../core/explicit-session-resolution.ts');
+  throw namedSessionNotFoundError(sessionName);
+}
+
+/** Whether this request is addressed to a session and leaves its device to the session. */
+function namesSessionWithoutTarget(req: DaemonRequest): boolean {
+  return namesSessionExplicitly(req) && !hasDeviceSelectionInput(req.flags);
+}
+
+/**
+ * Re-resolves the exact device a durable manifest names, by the identity flag that family answers
+ * to. Families without an identity flag keep the request's own selection — an address the manifest
+ * recorded but the request cannot restate stays resolved as it always has been, and the
+ * device-match assertion below still refuses a different device.
+ */
+async function resolveManifestDevice(
+  params: RecordRuntimeHandlerParams,
+  recorded: DeviceIdentity,
+): Promise<DeviceInfo> {
+  const selector: ResolveDeviceFlags = { platform: recorded.family };
+  const identityFlag = deviceIdentityFlag(recorded.family);
+  if (!identityFlag) {
+    // A family whose manifest identity no flag can restate keeps the request's own selection; the
+    // manifest assertion still refuses anything but the device the recording was started on.
+    return await resolveTargetDevice(params.req.flags ?? {});
+  }
+  selector[identityFlag] = recorded.id;
+  return await resolveTargetDevice(selector);
 }
 
 async function startRecording(

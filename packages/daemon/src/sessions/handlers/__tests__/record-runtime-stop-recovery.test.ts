@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { AppError } from '@agent-device/kernel/errors';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import {
   expectDecodedCompletedRecording,
@@ -10,22 +11,33 @@ import {
 } from './record-runtime.fixtures.ts';
 
 // The stop lane that runs WITHOUT a held session resolves its device through the selection
-// dispatch. The daemon-restart tests below pin that lane, so the dispatch answers with the
-// harness device here; the live-handle tests never reach it because their session is held.
-const RESTART_SELECTED_DEVICE = {
+// dispatch. On a host that answers anything, an unconstrained request is exactly the #3674
+// symptom, so the dispatch double here behaves like a multi-device host: it only answers a
+// request that states a device identity, and an unconstrained one gets the ambiguity a
+// multi-boot host really returns. The restart tests below pass only while the recovery lane
+// resolves from the manifest instead of sweeping the host.
+const RESTART_RECORDED_DEVICE = {
   platform: 'android',
   id: 'emulator-5554',
   name: 'Pixel',
   kind: 'emulator',
 } as const;
+const resolveTargetDeviceMock = vi.fn(async (flags: { udid?: string; serial?: string } = {}) => {
+  if (flags.serial === RESTART_RECORDED_DEVICE.id || flags.udid === RESTART_RECORDED_DEVICE.id) {
+    return { ...RESTART_RECORDED_DEVICE };
+  }
+  throw new AppError('AMBIGUOUS_MATCH', 'Multiple attached devices detected');
+});
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
-  resolveTargetDevice: vi.fn(async () => ({ ...RESTART_SELECTED_DEVICE })),
+  resolveTargetDevice: (...args: unknown[]) =>
+    resolveTargetDeviceMock(...(args as [Record<string, string> | undefined])),
 }));
 
 test('record stop after a daemon restart replays the completed export for the named session', async () => {
   // The #3674 state itself: sessions are memory-only, so a restart drops `recording`, while the
   // on-disk manifest survives. The caller still names the session (the only address that finds
-  // the manifest at all), and `help record` promises the completed recording on that stop.
+  // the manifest at all), and `help record` promises the completed recording on that stop — even
+  // on a host whose unconstrained resolution would answer AMBIGUOUS_MATCH.
   const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-');
   const outPath = path.join(
     mkdtempForTestSync('record-runtime-restart-stop-output-'),
@@ -37,8 +49,92 @@ test('record stop after a daemon restart replays the completed export for the na
   const ref = harness.sessionStore.lookup(harness.sessionName);
   if (!ref) throw new Error('Expected the stopped recording session');
   harness.sessionStore.retire(ref);
+  resolveTargetDeviceMock.mockClear();
 
   const recovered = await harness.run(['stop'], { sessionExplicit: true });
+
+  expect(recovered).toMatchObject({
+    ok: true,
+    data: { recording: 'stopped', outPath, recordingBackend: 'adb screenrecord' },
+  });
+  // The recovery re-resolves the manifest's exact device, never an unconstrained sweep.
+  expect(resolveTargetDeviceMock).toHaveBeenCalledWith(
+    expect.objectContaining({ serial: 'emulator-5554' }),
+  );
+});
+
+test('record stop for a named session with no decodable manifest refuses on the session', async () => {
+  // No manifest means there is nothing to recover from and nothing to take a device from: the
+  // answer is the named-session refusal, and the host is never swept for a device.
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-no-manifest-');
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the published session');
+  harness.sessionStore.retire(ref);
+
+  const response = await harness.run(['stop'], { sessionExplicit: true });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'SESSION_NOT_FOUND', details: { reason: 'named_session_not_found' } },
+  });
+  expect(resolveTargetDeviceMock).not.toHaveBeenCalled();
+});
+
+test('a named stop recovery keeps failing closed when the manifest names another session', async () => {
+  // The manifest-first lane reads the envelope before resolving, so the session proof must stay
+  // on the served path: a manifest whose sessionId belongs to another address never answers.
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-cross-session-', {
+    sessionName: 'recording-a',
+  });
+  const outPath = path.join(
+    mkdtempForTestSync('record-runtime-restart-stop-cross-session-output-'),
+    'capture.mp4',
+  );
+  fs.writeFileSync(outPath, 'mp4');
+  await harness.run(['start', outPath]);
+  await harness.run(['stop']);
+  const resourcePath = recordingResourcePath(harness.sessionStore, harness.sessionName);
+  const record = screenRecordingResourceStore.read(resourcePath);
+  if (record.status !== 'decoded') throw new Error('Expected decoded recording manifest');
+  screenRecordingResourceStore.write(resourcePath, {
+    ...record.envelope,
+    sessionId: 'recording-b',
+  });
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the stopped recording session');
+  harness.sessionStore.retire(ref);
+
+  const response = await harness.run(['stop'], { sessionExplicit: true });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'COMMAND_FAILED', details: { reason: 'runtime-contract-invalid' } },
+  });
+});
+
+test('record stop after a daemon restart answers an explicitly targeted request from its device', async () => {
+  // The closest positive: the same unheld named session, but the request states the very device
+  // the manifest names, so the selector lane serves the recovery — the stated target still wins.
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-targeted-');
+  const outPath = path.join(
+    mkdtempForTestSync('record-runtime-restart-stop-targeted-output-'),
+    'capture.mp4',
+  );
+  fs.writeFileSync(outPath, 'mp4');
+  await harness.run(['start', outPath]);
+  await harness.run(['stop']);
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the stopped recording session');
+  harness.sessionStore.retire(ref);
+
+  const recovered = await harness.run(
+    ['stop'],
+    { sessionExplicit: true },
+    {
+      platform: 'android',
+      serial: 'emulator-5554',
+    },
+  );
 
   expect(recovered).toMatchObject({
     ok: true,
@@ -58,6 +154,7 @@ test('record start after a daemon restart still refuses the named missing sessio
   const ref = harness.sessionStore.lookup(harness.sessionName);
   if (!ref) throw new Error('Expected the live recording session');
   harness.sessionStore.retire(ref);
+  resolveTargetDeviceMock.mockClear();
 
   const response = await harness.run(['start', outPath], { sessionExplicit: true });
 
@@ -66,6 +163,8 @@ test('record start after a daemon restart still refuses the named missing sessio
     error: { code: 'SESSION_NOT_FOUND', details: { reason: 'named_session_not_found' } },
   });
   expect(harness.runtime.start).toHaveBeenCalledOnce();
+  // A start has no manifest to recover from, so the refusal answers before any device is sought.
+  expect(resolveTargetDeviceMock).not.toHaveBeenCalled();
 });
 
 test('record stop with a live handle binds no runtime and terminalizes the durable record', async () => {

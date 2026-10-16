@@ -8,7 +8,12 @@ import type {
   ScreenRecordingCompletion,
 } from '@agent-device/contracts/screen-recording-runtime';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
-import { deviceIdentity, sameDeviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  deviceIdentity,
+  sameDeviceIdentity,
+  type DeviceIdentity,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -68,6 +73,21 @@ export function resolveScreenRecordingStopRecovery(
 export function screenRecordingManifestIsTerminal(params: ScreenRecordingManifestParams): boolean {
   const { record } = readSessionManifest(params);
   return record.status === 'decoded' && record.envelope.lifecycle === 'completed';
+}
+
+/**
+ * The device a stop without a held session must be answered on: the one the session's durable
+ * manifest names, when a decodable manifest exists. `undefined` means there is nothing to recover
+ * from, and a caller that addressed a session answers on the session instead of choosing a device.
+ * The device is not re-picked from the host; it is read from the manifest the named session
+ * addresses, and `assertManifestBelongsToRequest` still fails the request closed when the
+ * resolved device or the session address does not match what the manifest recorded.
+ */
+export function screenRecordingManifestDevice(
+  params: ScreenRecordingManifestParams,
+): DeviceIdentity | undefined {
+  const { record } = readSessionManifest(params);
+  return record.status === 'decoded' ? record.envelope.device : undefined;
 }
 
 function readSessionManifest(params: ScreenRecordingManifestParams): Readonly<{

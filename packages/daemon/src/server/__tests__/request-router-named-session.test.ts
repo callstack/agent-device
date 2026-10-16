@@ -130,6 +130,24 @@ test('a record start naming a missing session answers on the session, not on app
   expect(listings.count).toBe(0);
 });
 
+test('a record stop naming a missing session answers on the session, not on a host sweep', async () => {
+  // The daemon-restart recovery (#3674): the durable manifest is the only thing that can answer
+  // this stop, and the manifest is addressed by the session — so with two booted devices the
+  // answer is still the typed session refusal or the manifest's own verdict, never the
+  // AMBIGUOUS_MATCH an unconstrained sweep of this inventory would answer.
+  const listings = { count: 0 };
+  const { handler } = makeHandler(listings);
+
+  const response = await handler(request({ command: 'record', positionals: ['stop'] }));
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('SESSION_NOT_FOUND');
+  expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+  expect(response.error.details?.session).toBe(LOST_SESSION);
+  expect(listings.count).toBe(0);
+});
+
 test('the same command with no session named still resolves a device sessionlessly', async () => {
   // The closest negative: same daemon, same two booted simulators, same command. What changes is
   // only whether the caller named a session, and that is what the answer must turn on.
