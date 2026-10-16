@@ -40,7 +40,7 @@ import {
   readActiveConnectionState,
   readRemoteConnectionState,
   writeRemoteConnectionState,
-} from '../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 
 afterEach(() => {

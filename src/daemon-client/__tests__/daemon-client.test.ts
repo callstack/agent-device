@@ -20,7 +20,7 @@ import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sendToDaemon } from '../daemon-client.ts';
 import { currentDaemonCodeSignature } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
-import { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
+import { downloadRemoteArtifact } from '@agent-device/remote/daemon-artifacts';
 import { resolveDaemonStartupHint } from '../daemon-client-metadata.ts';
 import { canConnectSocket } from '../daemon-client-transport.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';

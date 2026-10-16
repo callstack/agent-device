@@ -1,0 +1,43 @@
+{
+  "name": "@agent-device/remote",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Remote-daemon client plumbing: remote config profiles and their provenance, the persisted remote connection state, request artifact upload/download, and remote diagnostics localization. Internal workspace package bundled into the published agent-device artifact.",
+  "dependencies": {
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/daemon-contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    "./daemon-artifacts": {
+      "types": "./src/daemon-artifacts.ts",
+      "default": "./src/daemon-artifacts.ts"
+    },
+    "./remote-config": {
+      "types": "./src/remote-config.ts",
+      "default": "./src/remote-config.ts"
+    },
+    "./remote-config-core": {
+      "types": "./src/remote-config-core.ts",
+      "default": "./src/remote-config-core.ts"
+    },
+    "./remote-config-schema": {
+      "types": "./src/remote-config-schema.ts",
+      "default": "./src/remote-config-schema.ts"
+    },
+    "./remote-connection-state": {
+      "types": "./src/remote-connection-state.ts",
+      "default": "./src/remote-connection-state.ts"
+    },
+    "./remote-request-diagnostics": {
+      "types": "./src/remote-request-diagnostics.ts",
+      "default": "./src/remote-request-diagnostics.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
+  }
+}

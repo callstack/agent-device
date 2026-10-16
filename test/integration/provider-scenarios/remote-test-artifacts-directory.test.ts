@@ -17,7 +17,7 @@ import {
   trackDownloadableArtifact,
 } from '@agent-device/daemon/testing/artifact-tracking';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import { downloadRemoteArtifact } from '../../../src/remote/daemon-artifacts.ts';
+import { downloadRemoteArtifact } from '@agent-device/remote/daemon-artifacts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

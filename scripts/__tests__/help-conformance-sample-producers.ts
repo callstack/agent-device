@@ -36,7 +36,7 @@ import {
   renderConnectSuccess,
 } from '../../src/cli/commands/connection-presentation.ts';
 import type { ConnectVerification } from '../../src/cli/connection/connect-provider-adapters.ts';
-import type { RemoteConnectionState } from '../../src/remote/remote-connection-state.ts';
+import type { RemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';

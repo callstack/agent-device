@@ -3,7 +3,7 @@ import type {
   CloudProviderSessionResult,
 } from '@agent-device/contracts/observability';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
+import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import {
   readActiveConnectionState,
   buildRemoteConnectionRequestMetadata,
@@ -16,7 +16,7 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
-} from '../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   connectProviderNamesForError,

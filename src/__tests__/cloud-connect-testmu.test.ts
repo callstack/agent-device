@@ -6,7 +6,7 @@ import { runCliCapture } from './cli-capture.ts';
 import {
   readActiveConnectionState,
   type RemoteConnectionState,
-} from '../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 import { verifyTestMuConnection } from '@agent-device/testmu/connection-verification';
 import testMuPlugin from '@agent-device/testmu';

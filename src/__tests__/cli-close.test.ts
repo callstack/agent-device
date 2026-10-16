@@ -9,7 +9,7 @@ import {
   seedConnectionState,
   type StoredConnectionSeed,
 } from './remote-connection.fixtures.ts';
-import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import type { DaemonRequest, DaemonResponse } from '../daemon-client/daemon-client.ts';
 
 function runCliWithDaemonStartupFailure(argv: string[]): Promise<CapturedCliRun> {

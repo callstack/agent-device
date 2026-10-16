@@ -14,7 +14,7 @@ import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,
-} from '../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
 
 afterEach(() => {

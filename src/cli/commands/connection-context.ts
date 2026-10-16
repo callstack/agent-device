@@ -5,7 +5,7 @@ import {
   hashRemoteConfigFile,
   readRemoteConnectionState,
   type RemoteConnectionState,
-} from '../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 
 export type ConnectContext = {
   session: string;

@@ -1,20 +1,30 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { withCapturedStderr } from '../../__tests__/test-utils/stream-capture.ts';
 import {
   createStderrUploadProgressReporter,
   type UploadProgressEvent,
 } from '../upload-progress.ts';
 
 function renderEvents(events: UploadProgressEvent[]): string {
-  return withCapturedStderr(
-    () => {
-      const sink = createStderrUploadProgressReporter();
-      assert.equal(sink !== undefined, true);
-      for (const event of events) sink!(event);
-    },
-    { interactive: true },
-  );
+  let output = '';
+  const write = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+    output += String(chunk);
+    return true;
+  });
+  vi.stubEnv('CI', undefined);
+  const isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stderr, 'isTTY');
+  Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
+  try {
+    const sink = createStderrUploadProgressReporter();
+    assert.equal(sink !== undefined, true);
+    for (const event of events) sink!(event);
+  } finally {
+    if (isTTYDescriptor) Object.defineProperty(process.stderr, 'isTTY', isTTYDescriptor);
+    else delete (process.stderr as unknown as Record<string, unknown>).isTTY;
+    write.mockRestore();
+    vi.unstubAllEnvs();
+  }
+  return output;
 }
 
 test('the stderr reporter formats start, resume, progress and fallback events', () => {

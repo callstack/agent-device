@@ -15,7 +15,7 @@ import { attachRemoteReplayTestArtifacts } from '@agent-device/replay-port/test-
 import {
   downloadRemoteArtifact,
   materializeRemoteArtifacts,
-} from '../../../src/remote/daemon-artifacts.ts';
+} from '@agent-device/remote/daemon-artifacts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

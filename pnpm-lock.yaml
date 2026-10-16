@@ -88,6 +88,9 @@ importers:
       '@agent-device/react-native':
         specifier: workspace:*
         version: link:packages/react-native
+      '@agent-device/remote':
+        specifier: workspace:*
+        version: link:packages/remote
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:packages/replay-port
@@ -689,6 +692,28 @@ importers:
 
   packages/react-native:
     dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/daemon-contracts':
+        specifier: workspace:*
+        version: link:../daemon-contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+
+  packages/remote:
+    dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

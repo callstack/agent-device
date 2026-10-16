@@ -10,7 +10,7 @@ import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,
   type RemoteConnectionState,
-} from '../../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 type ConnectionFixture = {

@@ -1,4 +1,7 @@
-import { fingerprint, type RemoteConnectionState } from '../../remote/remote-connection-state.ts';
+import {
+  fingerprint,
+  type RemoteConnectionState,
+} from '@agent-device/remote/remote-connection-state';
 import type { ConnectVerification } from '../connection/connect-provider-adapters.ts';
 import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';

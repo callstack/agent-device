@@ -2,8 +2,8 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import {
   REMOTE_CONFIG_FIELD_SPECS,
   type RemoteConfigProfile,
-} from '../remote/remote-config-schema.ts';
-import { resolveRemoteConfigProfile } from '../remote/remote-config-core.ts';
+} from '@agent-device/remote/remote-config-schema';
+import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config-core';
 
 // Remote config can supply defaults for any supported CLI flag that exists in the profile schema.
 // Command validation later strips unsupported defaults for the active command.

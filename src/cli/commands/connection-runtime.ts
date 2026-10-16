@@ -2,11 +2,11 @@ import crypto from 'node:crypto';
 import type { MetroBridgeScope } from '@agent-device/contracts/remote';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { stopMetroTunnel } from '@agent-device/react-native';
-import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
+import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 // Provenance-preserving file-only read (no ambient env defaults merged in) —
 // see resolvePreviousOwnDaemonAuthToken below for why this must not be
 // resolveRemoteConfigProfile.
-import { readRemoteConfigFile } from '../../remote/remote-config-core.ts';
+import { readRemoteConfigFile } from '@agent-device/remote/remote-config-core';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
 import {
@@ -19,7 +19,7 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
-} from '../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import type { BatchStep } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';

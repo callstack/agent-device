@@ -19,7 +19,7 @@ vi.mock('@agent-device/react-native', async (importOriginal) => ({
 }));
 
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
-import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 
 const IPHONE_SIMULATOR = {
   platform: 'ios',
