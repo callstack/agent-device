@@ -208,8 +208,9 @@ export function parseFoldKeyframesJson(value: string): readonly FoldKeyframe[] {
 }
 
 // ---- Telephony -------------------------------------------------------------------------------
-// The CLI and session journal load this module eagerly; a separate telephony module would grow
-// their eager closures past scripts/__tests__/eager-closure-budgets.ts.
+// The CLI and session journal load this module eagerly; moving these values to a module of their
+// own would grow their eager closures past scripts/__tests__/eager-closure-budgets.ts. The types
+// live in telephony-runtime.ts.
 
 /**
  * The telephony events an emulator can be asked to simulate: an incoming voice call (`call`),
@@ -240,31 +241,6 @@ const TELEPHONY_TEXT_FORBIDDEN_CHARACTERS = /[\u0000-\u0009\u000b-\u001f\u007f-\
 export type TelephonyEventInput =
   | Readonly<{ action: TelephonyCallAction; number: string }>
   | Readonly<{ action: 'sms'; number: string; text: string }>;
-
-/**
- * One simulated telephony event. The owner returns nothing: the emulator console acknowledges the
- * event, and what the app does with the call or message is observed through the next capture.
- */
-export type TelephonyRuntimeOperations = Readonly<{
-  sendTelephonyEvent(input: TelephonyEventInput): Promise<void>;
-}>;
-
-/**
- * Closed result of the `telephony` command: a discriminated union on `action`. The call actions
- * echo the number; `sms` also reports the length of the text it delivered.
- */
-export type TelephonyCommandResult =
-  | {
-      action: TelephonyCallAction;
-      number: string;
-      message: string;
-    }
-  | {
-      action: 'sms';
-      number: string;
-      textLength: number;
-      message: string;
-    };
 
 function parseTelephonyAction(input: unknown): TelephonyAction {
   if (input === undefined) {
