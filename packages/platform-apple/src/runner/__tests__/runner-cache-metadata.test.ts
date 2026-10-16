@@ -800,9 +800,11 @@ test('a toolchain fingerprint is renewed by each hit and expires once nothing us
     });
     resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
     runCmdSync.mockClear();
-    // The key names the dir the read resolved, so a hit is evidence the entry still answers for
-    // this host and renews itself (#3300 asked to keep this). What an idle entry cannot outlast is
-    // the TTL, measured from the hit that last renewed it.
+    // A hit is an entry keyed on the resolved dir AND the identity of the bundle standing in it, so
+    // the toolchain behind that key is still the one in place and the entry renews itself (#3300
+    // asked to keep this). A bundle replaced in place moves the identity, not just the dir; see
+    // `a bundle replaced in place at the same path moves the key`. What an idle entry cannot
+    // outlast is the TTL, measured from the hit that last renewed it.
     vi.advanceTimersByTime(9 * 60_000);
     resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
     expect(runCmdSync).not.toHaveBeenCalled();

@@ -62,12 +62,14 @@ afterEach(() => {
 });
 
 /**
- * A developer dir the host can resolve, standing in for an installed Xcode at `dir`. `realpath` only
- * answers for a dir that exists, so a key built from a missing one would be no key at all.
+ * A developer dir the host can resolve, standing in for an installed Xcode at `dir`. Cases below
+ * compare keys through the memo, and a dir that does not exist cannot be resolved to its real path,
+ * so its key would fall back to the name rather than the resolved dir the case means.
  */
 function realSelectionDir(dir: string): string {
   const created = path.join(tempRoot, dir);
   fs.mkdirSync(created, { recursive: true });
+  fs.writeFileSync(path.join(created, '..', 'version.plist'), '<plist>build 1</plist>\n');
   return created;
 }
 
@@ -305,6 +307,61 @@ describe('the developer dir a toolchain fingerprint answers for', () => {
     expect(runCmdSync.mock.calls).toEqual([]);
   });
 
+  test('a bundle replaced in place at the same path moves the key', () => {
+    // An App Store or installer update replaces the bundle without moving it, and the selection keeps
+    // naming the same dir. Renewal on a hit means a key blind to that would keep serving the
+    // fingerprint the update replaced for as long as the daemon stays busy, which is #3300 again.
+    const selected = realSelectionDir(XCODE_A);
+    appleSelectionLink.target = selected;
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+
+    // The installer writes a new bundle: same path, new inode for the version file.
+    const versionFile = path.join(selected, '..', 'version.plist');
+    fs.unlinkSync(versionFile);
+    fs.writeFileSync(versionFile, '<plist>build 2</plist>\n');
+
+    runCmdSync.mockClear();
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+    expect(valueProbeCommands(runCmdSync.mock.calls)).toEqual(['xcodebuild', 'xcrun', 'xcrun']);
+  });
+
+  test('a report reads only the memo, never the filesystem', () => {
+    // A report runs after a failure, with no budget of its own to spend and no deadline to answer
+    // to. Everything it needs is the key a real read already built, so a slow or vanished bundle
+    // cannot make reporting wait, on either of its two paths.
+    const selected = realSelectionDir(XCODE_A);
+    appleSelectionLink.target = selected;
+    readFingerprint();
+    appleRunnerTestHost.update({ commandDeveloperDir: () => selected });
+    readFingerprint();
+
+    // The selection-link stub already spies realpathSync, so its history from the reads above is
+    // cleared before the report is asked to answer.
+    const statSync = vi.spyOn(fs, 'statSync').mockClear();
+    const realpathSync = vi.spyOn(fs, 'realpathSync').mockClear();
+
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
+    appleRunnerTestHost.update({ commandDeveloperDir: () => undefined });
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
+
+    expect(statSync.mock.calls).toEqual([]);
+    expect(realpathSync.mock.calls).toEqual([]);
+  });
+
+  test('a report for a client dir this process never read answers with nothing', () => {
+    appleSelectionLink.target = realSelectionDir(XCODE_A);
+    readFingerprint();
+
+    const otherDir = realSelectionDir(XCODE_B);
+    appleRunnerTestHost.update({ commandDeveloperDir: () => otherDir });
+    runCmdSync.mockClear();
+
+    // That dir has an entry only after a read resolves it, and looking one up would mean going and
+    // stat-ing a bundle a report must not wait on.
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBeUndefined();
+    expect(runCmdSync.mock.calls).toEqual([]);
+  });
+
   test('a selection that answers nothing, or dies on exec, is no dir rather than a bad one', () => {
     for (const unanswered of [
       { exitCode: 0, stdout: '   \n', stderr: '' } satisfies ExecResult,
@@ -391,6 +448,30 @@ describe('the budget and cancellation a default-selection resolution answers to'
       45_000 - COLD_TOOLCHAIN_PROBE_TIMEOUT_MS - XCODE_SELECT_TIMEOUT_MS,
     ]);
     expect(clock.nowMs).toBe(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS + XCODE_SELECT_TIMEOUT_MS);
+  });
+
+  test('a request aborted during the key reads is canceled even on a warm cache', () => {
+    const request = new AbortController();
+    appleSelectionLink.target = realSelectionDir(XCODE_A);
+    readFingerprint(createRunnerPhaseBudget(undefined, request.signal));
+
+    // The key's filesystem reads cannot be interrupted, so cancellation is observed after them. On a
+    // warm cache the answer is already in hand, which is exactly when a hit could otherwise hide the
+    // abort from the owner that asked for this request to stop.
+    const statTheBundle = fs.statSync;
+    vi.spyOn(fs, 'statSync').mockImplementation(((...args: Parameters<typeof fs.statSync>) => {
+      request.abort();
+      return statTheBundle(...args);
+    }) as typeof fs.statSync);
+    runCmdSync.mockClear();
+
+    try {
+      readFingerprint(createRunnerPhaseBudget(undefined, request.signal));
+      assert.fail('expected the aborted request to be canceled at the key reads');
+    } catch (error) {
+      assert.ok(isRequestCanceledError(error), `got ${String(error)}`);
+    }
+    assert.deepEqual(valueProbeCommands(runCmdSync.mock.calls), []);
   });
 
   for (const cache of ['cold', 'warm'] as const) {
