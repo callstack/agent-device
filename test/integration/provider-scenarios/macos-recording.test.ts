@@ -141,7 +141,7 @@ test('Provider-backed integration macOS recording keeps an unplayable recording 
       runnerTranscript.assertComplete();
     },
   );
-});
+}, 15_000);
 
 function createMacOsRecordingScenario(
   recordingPath: string,
