@@ -31,7 +31,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseImports, resolveWorkspaceSpecifier } from './model.ts';
+import { parseImports, parseModuleMockSpecifiers, resolveWorkspaceSpecifier } from './model.ts';
 import {
   PACKAGE_EXPORT_SURFACE_RULE,
   readExportManifests,
@@ -86,27 +86,22 @@ export type SpecifierSite = {
  * and both quote styles are covered by one scanner instead of a private regex
  * that silently missed double-quoted routes.
  *
- * `vi.mock`/`vi.doMock`/`vi.mockActual`/`vi.unmock`/`vi.importActual` join the sweep
- * by literal scan: they are plain call expressions the AST import parser never
- * visits, yet the loader resolves their specifier and instantiates that module under
- * test — the same double-instance route a relative tunnel takes. `importOriginal
- * <typeof import('...')>` needs no extra branch; the parser already sees it as a
+ * Vitest mock-family calls (`vi.mock`, `vi.doMock`, `vi.unmock`, `vi.importActual`,
+ * `vi.importMock`, ...) join the sweep through `parseModuleMockSpecifiers`: they are plain call
+ * expressions the import parser never visits, yet the loader resolves their specifier and
+ * instantiates that module under test — the same double-instance route a relative tunnel takes.
+ * `importOriginal<typeof import('...')>` needs no extra branch; the parser already sees it as a
  * TSImportType.
  */
-const VI_MOCK_CALL_RE =
-  /\bvi\.(?:mock|doMock|mockActual|unmock|importActual)\(\s*(['"])([^'"\n]*)\1/g;
-
 export function specifierSites(file: string, source: string): SpecifierSite[] {
   const sites: SpecifierSite[] = parseImports(source).map((edge) => ({
     file,
     line: edge.line,
     specifier: edge.spec,
   }));
-  for (const match of source.matchAll(VI_MOCK_CALL_RE)) {
-    const line = source.slice(0, match.index).split('\n').length;
-    const specifier = match[2]!;
-    if (!sites.some((site) => site.line === line && site.specifier === specifier))
-      sites.push({ file, line, specifier });
+  for (const { spec, line } of parseModuleMockSpecifiers(source)) {
+    if (!sites.some((site) => site.line === line && site.specifier === spec))
+      sites.push({ file, line, specifier: spec });
   }
   return sites.sort((a, b) => a.line - b.line);
 }

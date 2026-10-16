@@ -3,7 +3,7 @@ import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { createGraph, genDFS, getStronglyConnectedComponents, getSubgraph } from '@statelyai/graph';
 import { parseSync } from 'oxc-parser';
-import { destructuredDynamicImportBindings, visitAst } from './layering-ast.ts';
+import { destructuredDynamicImportBindings, memberName, visitAst } from './layering-ast.ts';
 import { declaredRootModuleZone } from './root-module-zones.ts';
 import {
   importGraphFromResolvedEdges,
@@ -294,6 +294,57 @@ export function parseImports(source: string): ImportEdge[] {
         left.start - right.start,
     )
     .map(({ edge }) => edge);
+}
+
+const MODULE_MOCK_RECEIVERS = new Set(['vi', 'vitest']);
+// Vitest's module-path-taking APIs: every member of `vi` whose first argument names a module.
+const MODULE_MOCK_METHODS = new Set([
+  'mock',
+  'doMock',
+  'mockActual',
+  'unmock',
+  'doUnmock',
+  'importActual',
+  'importMock',
+]);
+
+function mockCallMethod(callee: unknown): string | undefined {
+  if (callee === null || typeof callee !== 'object') return undefined;
+  const record = callee as Record<string, unknown>;
+  if (record.type === 'ChainExpression') return mockCallMethod(record.expression);
+  if (record.type !== 'MemberExpression') return undefined;
+  const object = record.object as Record<string, unknown> | null;
+  if (object?.type !== 'Identifier' || !MODULE_MOCK_RECEIVERS.has(object.name as string)) {
+    return undefined;
+  }
+  const method = record.computed === true ? literalSpecifier(record.property) : memberName(record);
+  return method !== undefined && MODULE_MOCK_METHODS.has(method) ? method : undefined;
+}
+
+/**
+ * Module specifiers named by Vitest mock-family calls (`vi.mock('x')`, `vi.doMock`, `vi.unmock`,
+ * `vi.importActual`, `vi.importMock`, ...), with their 1-based lines. The loader resolves and
+ * instantiates the named module under test just as an `import` would, yet `parseImports` never
+ * sees a call expression. Only a literal first argument counts — a quoted string or a template
+ * without substitutions; `vi.mock(import('x'))` is already a dynamic `ImportExpression` edge.
+ */
+export function parseModuleMockSpecifiers(source: string): { spec: string; line: number }[] {
+  const parsed = parseSync('layering-mocks.ts', source);
+  if (parsed.errors.length > 0) {
+    throw new SyntaxError(
+      `Cannot parse mocks: ${parsed.errors.map(({ message }) => message).join('; ')}`,
+    );
+  }
+  const sites: { spec: string; line: number }[] = [];
+  visitAst(parsed.program, (node) => {
+    if (node.type !== 'CallExpression' || mockCallMethod(node.callee) === undefined) return;
+    const args = node.arguments;
+    const spec = Array.isArray(args) ? literalSpecifier(args[0]) : undefined;
+    if (spec !== undefined) {
+      sites.push({ spec, line: sourceLine(source, node.start as number | undefined) });
+    }
+  });
+  return sites;
 }
 
 export function topFolder(file: string): string {

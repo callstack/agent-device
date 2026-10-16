@@ -54,6 +54,13 @@ test('R85 rejects a static, type-only, dynamic, re-export, inline-type or mocked
     `export { createCloudWebDriverRuntime } from ${PROVIDER_ENTRY};`,
     `type Options = import(${PROVIDER_ENTRY}).CloudWebDriverProviderOptions;`,
     `vi.mock(${PROVIDER_ENTRY}, () => ({}));`,
+    `vi.mock(${PROVIDER_ENTRY.replaceAll("'", '`')}, () => ({}));`,
+    `vi['mock'](${PROVIDER_ENTRY}, () => ({}));`,
+    `vi.doMock(${PROVIDER_ENTRY});`,
+    `vi.unmock(${PROVIDER_ENTRY});`,
+    `await vi.importActual(${PROVIDER_ENTRY});`,
+    `await vi.importMock(${PROVIDER_ENTRY});`,
+    `vi.mock(import(${PROVIDER_ENTRY}));`,
     `import plugin from '@agent-device/testmu';`,
   ]) {
     const [result, ...rest] = check(source);
@@ -93,4 +100,14 @@ test('R85 admits the foundations the framework builds on and imports elsewhere i
     ),
     [],
   );
+});
+
+test('R85 ignores a provider named only in a comment, a non-literal mock argument or another object', () => {
+  for (const source of [
+    `// vi.mock(${PROVIDER_ENTRY});`,
+    'vi.mock(`@agent-device/provider-webdriver/${entry}`);',
+    `other.mock(${PROVIDER_ENTRY});`,
+  ]) {
+    assert.deepEqual(check(source), [], source);
+  }
 });
