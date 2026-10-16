@@ -128,7 +128,7 @@ function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint
 /**
  * The selection the last default-selection read resolved, which is the entry a failure report
  * without a client-chosen `DEVELOPER_DIR` names. A read that threw or could not resolve its
- * selection leaves it alone, so it always names a dir with an entry behind it.
+ * selection leaves it alone. The entry it names can expire, and a report then names no Xcode.
  */
 let recordedDefaultSelection: string | undefined;
 

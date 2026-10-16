@@ -351,6 +351,20 @@ describe('the lifetime of a memoized toolchain fingerprint', () => {
     expect(runCmdSync.mock.calls.map(([command]) => command)).toEqual(['xcode-select']);
   });
 
+  test('a report names no Xcode once the entry its selection recorded has expired', () => {
+    scriptSelectableXcodes();
+    readFingerprint();
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
+
+    // The selection stays recorded past expiry; what goes away is the entry behind it, and a report
+    // answers with nothing rather than probing or naming another selection's Xcode.
+    advance(FINGERPRINT_TTL_MS);
+    runCmdSync.mockClear();
+
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBeUndefined();
+    expect(runCmdSync.mock.calls).toEqual([]);
+  });
+
   test('a fingerprint expired under one selection is read again under the current one', () => {
     scriptSelectableXcodes();
     readFingerprint();
