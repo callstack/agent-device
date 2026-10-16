@@ -6,14 +6,17 @@ import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { button, node, text } from './alert-fixtures.ts';
 
-const runAndroidAdb = vi.fn(async (_device: DeviceInfo, _args: readonly string[]) => ({
-  exitCode: 0,
-  stdout: '',
-  stderr: '',
-}));
+type FakeShellOptions = { signal?: AbortSignal };
+const runAndroidAdb = vi.fn(
+  async (_device: DeviceInfo, _args: readonly string[], _options?: FakeShellOptions) => ({
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+  }),
+);
 const runAndroidShell = vi.fn(
-  async (device: DeviceInfo, words: ShellWord[]) =>
-    await runAndroidAdb(device, deviceShellArgv('adb', 'shell', words)),
+  async (device: DeviceInfo, words: ShellWord[], options?: FakeShellOptions) =>
+    await runAndroidAdb(device, deviceShellArgv('adb', 'shell', words), options),
 );
 vi.mock('../adb.ts', () => ({ runAndroidAdb, runAndroidShell }));
 
@@ -196,6 +199,38 @@ test('wait with a spent budget still reports an alert that is already visible', 
 
   assert.equal(result.kind, 'alertWait');
   assert.equal(result.alert?.title, 'Automation confirmation');
+});
+
+test('a press cut off mid-flight discloses that it may or may not have landed', async () => {
+  // The one typed exit that must never collapse into 'no': the adb child is killed between
+  // the tap's dispatch and its rejection, so the device may already have received it. The
+  // press hangs until the action window's 2 s closes, then the child dies with the signal.
+  runAndroidAdb.mockClear();
+  const tapSignals: (AbortSignal | undefined)[] = [];
+  runAndroidAdb.mockImplementationOnce(async (_device, args, options) => {
+    if (args.includes('tap')) {
+      tapSignals.push(options?.signal);
+      await new Promise<void>((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(new Error('adb killed')), {
+          once: true,
+        });
+      });
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
+
+  await assert.rejects(
+    handleAndroidAlert(device, 'dismiss', { captureNodes: dialogUntilPressed() }),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message ===
+        'alert dismiss was cut off while pressing; the press may or may not have landed' &&
+      (error as { details?: { dispatched?: unknown; reason?: unknown } }).details?.dispatched ===
+        'unknown' &&
+      (error as { details?: { reason?: unknown } }).details?.reason === 'alert-window-expired',
+  );
+  assert.equal(tapSignals.length, 1);
+  assert.equal(tapSignals[0]?.aborted, true);
 });
 
 test('the read-first capture rides the caller cancellation and dies with it', async () => {
