@@ -154,6 +154,8 @@ export type InteractionPathContract = {
 
 const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
 const TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/3335';
+// The four guarantees this route's own seam leaves open are owned by #3734.
+const FIND_FOCUS_DISPATCH_GAPS_ISSUE = 'https://github.com/callstack/agent-device/issues/3734';
 
 /**
  * The moving-target gate's shared cell (#3471). Scoped to the two commands that dispatch a tap the
@@ -573,13 +575,13 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason:
           'gap: the `findAct` row declares `offscreen: "ignore"` because find ranks across the whole tree and prefers on-screen matches rather than refusing off-screen ones (#1625), and focus/type never re-enter the acting leaf where the runtime rows refuse. So the seam dispatches at a captured rect center the acting paths would reject as outside the root viewport — a closed drawer or an off-viewport carousel is a silent no-op focus here.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
       parentOwnedTouchPoint: {
         kind: 'waived',
         reason:
           'gap: the seam aims `centerOfRect` of the resolved node rather than the parent-owned point `resolveInteractionTouchPoint` chooses, so a match whose center is tiled by an independently interactive descendant activates that descendant instead of failing closed — and the keyboard guard above measures the same center the tap uses, which is the point actually dispatched but not the point the acting paths would aim.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
       // The guarantee is promotion AND annotation. This seam runs only the first half, so the
       // cell cannot claim `runtime` for the whole guarantee (the same shape `native-ref` classifies
@@ -588,7 +590,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason:
           "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's center (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
       // One construction site per dispatch kind, both shared with the plain commands: the focus
       // payload is `executeFocusPoint`'s (the same owner `focus <x> <y>` reaches), and `type`'s
@@ -635,7 +637,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason:
           "gap: the seam dispatches a rect center captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's (`guardResolvedTargetAgainstMotion`), and this route does not pass through it.",
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
     },
   },
