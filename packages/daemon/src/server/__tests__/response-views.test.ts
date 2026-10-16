@@ -264,7 +264,7 @@ test('find get-text digest keeps ref + text, drops the verbose node', () => {
   expect('node' in digest).toBe(false);
 });
 
-test('a text read keeps every OTHER cheap field (e.g. warning) while dropping the node', () => {
+test('selector text digest preserves a recovery warning while dropping the verbose node', () => {
   const digest = findView!(
     {
       ref: '@e7',
