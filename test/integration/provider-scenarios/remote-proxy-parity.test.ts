@@ -434,10 +434,21 @@ test(
       await directWorld.close();
     }
 
-    const proxied = await withProxiedWorld(async ({ world, proxied: leg }) => ({
-      responses: await runLeg(leg, 'proxied'),
-      sessionRoot: sessionRootOf(world.daemon),
-    }));
+    const proxied = await withProxiedWorld(async ({ world, proxied: leg, forwarded }) => {
+      const responses = await runLeg(leg, 'proxied');
+      const missingRef = responses[4];
+      assert.equal(missingRef?.ok, false);
+      if (!missingRef || missingRef.ok) throw new Error('expected the missing-ref route to fail');
+      assert.equal(typeof missingRef.error.logPath, 'string');
+      assert.equal(missingRef.error.logPathUnavailable, undefined);
+      assert.equal(
+        forwarded.filter(
+          (entry) => entry.method === 'GET' && /\/requests\/[^/]+\/diagnostics$/.test(entry.route),
+        ).length,
+        1,
+      );
+      return { responses, sessionRoot: sessionRootOf(world.daemon) };
+    });
 
     assertPublishedParity(direct, proxied);
     assertScriptOutcomes(direct.responses);
