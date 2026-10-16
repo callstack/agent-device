@@ -7,22 +7,24 @@ Accepted
 Completed process history is in git history.
 
 > **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Provider-first scenario coverage and semantic provider operations remain accepted.
-> Request-bound runtime facets and explicit provider ownership supersede the monolithic `Interactor` and request callback-stack topology one command at a time.
+> Request-bound runtime facets and explicit provider ownership supersede the monolithic `Interactor` and the request callback-stack topology one command at a time.
 
 ## Rules at a glance
 
-- For commands not yet migrated under ADR 0019, keep the legacy `Interactor` interface.
-- For new command migrations, use bound runtime facets from ADR 0019.
-- In provider-backed integration tests, run the real daemon request path. Replace only providers.
-- By default, match provider transcripts without order. Use ordered transcripts only to test order.
-- Keep HTTP coverage in a narrow suite for transport, auth, and response finalization.
-- Keep synchronous host-tool calls local until their paths have semantic provider contracts.
-- Mock-heavy handler tests should be deleted only after equivalent integration scenarios exist.
+- For commands not yet migrated under ADR 0019, keep `Interactor` as the legacy semantic interface.
+- For new command cutovers, use the bound runtime facets of ADR 0019.
+- Provider-backed integration tests run the real daemon request path and replace only the providers.
+- By default, provider transcripts match calls as an unordered contract.
+  Use ordered transcripts only when order is the behavior under test.
+- Keep HTTP coverage as a narrow contract suite for JSON-RPC transport, auth, and response finalization.
+- Synchronous host-tool calls are intentionally outside the provider seam.
+  Before a remote or cloud provider can own the path of a synchronous Apple helper, you must convert the helper.
+- Mock-heavy handler unit tests should be deleted only after equivalent provider-backed integration scenario coverage exists.
 
 ## Context
 
 The test suite had many mocked unit tests for daemon handlers and dispatch.
-These tests cost much to maintain and omitted important behavior in:
+These tests were expensive to maintain, and they skipped important behavior in these areas:
 
 - Request admission.
 - Locking.
@@ -32,64 +34,66 @@ These tests cost much to maintain and omitted important behavior in:
 - Interactor resolution.
 - Command translation in platform modules.
 
-Android already had an ADB provider boundary.
+Android already had an ADB provider seam.
 Apple-family and Linux platform modules mostly called host tools or runner commands directly.
-Thus, device-free integration tests required mocks above important platform behavior.
+Thus, device-free integration tests were difficult unless the tests mocked too high in the stack.
 
 ## Decision
 
 For commands not yet migrated under ADR 0019, keep `Interactor` as the legacy semantic interface between dispatch and platform behavior.
-For new command migrations, use bound runtime facets from ADR 0019.
+New command cutovers use the bound runtime facets of ADR 0019.
 
-For commands that still use the legacy adapter, use these request-scoped provider boundaries below platform modules:
+For commands that still use the legacy adapter, use these request-scoped provider seams below platform modules:
 
 - Android ADB provider.
 - Apple tool provider with semantic `simctl`, `devicectl`, macOS helper, and macOS host subproviders.
 - Apple runner provider.
 - Linux tool provider with semantic subproviders for desktop lifecycle, accessibility, clipboard, and screenshots.
 - App-log provider for semantic start and stop of app log streams.
-- Recording provider for semantic local and remote screen-recording starts that would otherwise use raw host processes.
+- Recording provider for semantic local and remote screen-recording start operations that would otherwise be raw host processes.
 
-When platform intent is sufficiently stable to name, provider contracts should expose semantic operations.
+When the platform intent is stable enough to name, provider contracts should expose semantic operations.
 Android already does this for install, pull, and port-reverse behavior.
-Apple tool execution has started this change through semantic `simctl`, `devicectl`, macOS helper, and macOS host runners.
-For unclassified host-tool paths, generic command execution remains a local compatibility fallback.
+Apple tool execution has started to move in that direction with semantic `simctl`, `devicectl`, macOS helper, and macOS host runners.
+Generic command execution remains as a local compatibility fallback for host-tool paths that are not classified yet.
 
 The macOS host provider owns these operations:
 
 - App open.
 - App inventory.
-- Clipboard access.
-- Appearance control.
+- Clipboard.
+- Appearance.
 
-Remote desktop providers should not need to infer these intents from `open`, `find`, `plutil`, `pbcopy`, `pbpaste`, or `osascript`.
-Linux desktop lifecycle exposes semantic `openTarget` and `closeApp` operations.
-Provider-backed integration covers these user workflows.
-Remote desktop providers should not need to infer intent from `xdg-open`, binary launch, `wmctrl`, or `pkill`.
+The reason is that remote desktop providers should not need to infer these intents from `open`, `find`, `plutil`, `pbcopy`, `pbpaste`, or `osascript`.
 
-Linux accessibility snapshots, clipboard access, screenshots, and input synthesis are also semantic.
-Their stable contracts are:
+Linux desktop lifecycle exposes semantic `openTarget` and `closeApp` operations for two reasons:
 
-- Capture this surface.
-- Read or write clipboard text.
-- Write a screenshot artifact.
-- Perform this user input.
+- Provider-backed integration covers these user workflows.
+- Remote desktop providers should not need to infer intent from `xdg-open`, binary launch, `wmctrl`, or `pkill`.
 
-These contracts describe intent independently of `python3`/AT-SPI, `xclip`, `scrot`, `grim`, `xdotool`, or `ydotool`.
-App-log stream start and stop are semantic observability behavior.
-Thus, provider-backed integration injects an app-log provider instead of starting `log stream` or `logcat`.
-iOS simulator screen recording uses a recording provider.
-Its stable contract starts simulator recording for a specified device and output path.
-The local implementation uses `xcrun simctl io recordVideo`.
+Linux accessibility snapshots, clipboard, screenshots, and input synthesis are also semantic, because their stable contracts are these:
 
-Provider-backed integration tests run the real daemon request path and replace only these providers.
+- "capture this surface"
+- "read/write clipboard text"
+- "write a screenshot artifact"
+- "perform this user input"
+
+The local implementation details `python3`/AT-SPI, `xclip`, `scrot`, `grim`, `xdotool`, and `ydotool` are not the contracts.
+
+App-log stream start/stop is semantic observability behavior, not generic host process execution.
+Thus, provider-backed integration injects an app-log provider, and it does not spawn `log stream` or `logcat`.
+
+iOS simulator screen recording now uses a recording provider, because the stable contract is "start simulator recording for this device and output path".
+The local implementation detail `xcrun simctl io recordVideo` is not the contract.
+
+Provider-backed integration tests run the real daemon request path and replace only those providers.
 Tests may use provider transcripts for platform command contracts.
 Tests may use scenario transcripts for broader user workflows.
-By default, provider transcripts match calls without order.
+By default, provider transcripts match calls as an unordered contract.
 Use ordered transcripts only when order is the behavior under test.
 
-Prefer an in-process harness with providers for broad integration scenarios.
-The harness should invoke the daemon request handler directly without a TCP listener.
+For broad scenarios, prefer an in-process provider-backed integration harness.
+The harness should invoke the daemon request handler directly, without a bound TCP listener.
 It should preserve:
 
 - Admission.
@@ -98,82 +102,84 @@ It should preserve:
 - Handler routing.
 - Dispatch.
 - Platform modules.
-- Provider boundaries.
+- Provider seams.
 
 Keep HTTP coverage as a narrow contract suite for JSON-RPC transport, auth, and response finalization.
 
-Descriptors control request provider scope inside the request router layer.
+Inside the request router layer, descriptors drive the request provider scope.
 Each provider entry declares:
 
 - How the provider applies to the resolved device.
 - How the provider installs its scoped provider.
 - Which request-local data the provider exposes to handlers.
 
-If a request id exists, Apple runner providers use request-id scope.
-Only unscoped local runner calls may use a fallback based on the device alone.
+When a request id exists, Apple runner providers are request-id scoped.
+A fallback by device alone is allowed only for unscoped local runner calls.
 
-Synchronous host-tool calls are intentionally outside the provider boundary.
-Each remaining synchronous Apple helper is local-only.
-Before a remote or cloud provider can own that path, convert the helper.
+Synchronous host-tool calls are intentionally not part of the provider seam.
+Any remaining synchronous Apple helper is local-only.
+Before a remote or cloud provider can own the path of such a helper, you must convert the helper.
 
-Remaining generic Apple host-tool calls intentionally stay local-only unless a new adapter requires semantic operations:
+Remaining generic Apple host-tool calls intentionally stay local-only, unless a new adapter creates pressure to promote them:
 
-- Perf process discovery and samples: `mdfind`, `ps`.
+- Perf process discovery and sampling: `mdfind`, `ps`.
 - Launch diagnostics: `plutil`, `otool`.
-- Local runner product build and signature: `swift`, `codesign`, synchronous `plutil`.
+- Local runner product build and signing: `swift`, `codesign`, synchronous `plutil`.
 - Local simulator UI launch: `open -a Simulator`.
 - Plist compatibility fallbacks.
 - Fallback implementations behind semantic macOS providers.
 
-Provider-backed integration scenarios should avoid scripts of these host commands for user workflows.
-If a user-facing workflow depends on one, consider a semantic provider method for that intent.
+Provider-backed integration scenarios should avoid scripted calls to these host commands for user workflows.
+A user-facing workflow that depends on one of these commands is naming pressure for a semantic provider method.
 
 ## Alternatives Considered
 
-- **Mock handlers or `dispatchCommand`.** These tests cost less to write.
-  They omit request admission, locking, session state, and platform command translation, where the main test gaps occurred.
-- **Put the boundary at `Interactor`.** This is simpler and more uniform.
-  It bypasses platform modules and would miss the iOS/Linux host-tool connections that motivated this change.
-- **Start with a full semantic provider per platform operation.** This gives a cleaner final design.
-  Too many operations require names in one change.
-  The migration starts where contracts exist or tests show a need.
+- **Mock handlers or `dispatchCommand`.** These tests are cheaper to write.
+  But they skip request admission, locking, session state, and platform command translation.
+  These areas were the main sources of test blind spots.
+- **Put the seam at `Interactor`.** This is simpler and more uniform.
+  But it bypasses platform modules, and it would not catch the iOS/Linux host-tool wiring issues that motivated this change.
+- **Start with a full semantic provider per platform operation.** This gives a cleaner end state.
+  But it has too much surface to name correctly in one pass.
+  The migration starts where contracts already exist or where tests create pressure.
 - **Run every provider-backed integration scenario through HTTP.** This gives maximum end-to-end coverage.
-  Most scenarios would require TCP setup, sandbox permissions, and transport timeouts even when they do not test transport behavior.
+  But most scenarios would pay for TCP setup, sandbox permissions, and transport timeouts, even when transport behavior is not under test.
 
 ## Consequences
 
 Integration tests continue to cover platform command translation without real devices.
 
-The request router owns a provider registry boundary.
-The registry keeps platform-specific provider applicability local.
-It composes provider scopes linearly.
+The request router owns a provider registry seam.
+But platform-specific provider applicability remains localized in that registry.
+The registry composes provider scopes linearly.
 Thus, a new platform does not require another chain of nested wrappers.
 
-New remote or cloud adapters can implement neutral provider contracts without changes to daemon, dispatch, or session contracts.
-Generic tool-provider fallbacks provide interim compatibility.
+New remote or cloud-backed adapters can implement neutral provider contracts without changes to daemon, dispatch, or session contracts.
+Generic tool-provider fallbacks are an interim compatibility layer.
 They are not the target contract for cloud adapters.
-If an integration scenario still scripts raw host commands, reassess whether the platform intent is sufficiently stable for a semantic provider method.
+If a provider-backed integration scenario still scripts raw host commands, that is a signal to reassess whether the platform intent is stable enough for a semantic provider method.
 
-Mock-heavy handler unit tests should be deleted only after equivalent provider-backed integration scenarios exist.
-Unit tests remain appropriate for pure logic, parser matrices, selector matching, capability maps, and edge/error cases that integration tests express poorly.
+Mock-heavy handler unit tests should be deleted only after equivalent provider-backed integration scenario coverage exists.
+Unit tests remain appropriate for pure logic, parser matrices, selector matching, capability maps, and edge/error cases that integration tests would express poorly.
 
-A provider-backed integration scenario covers more of the real request path.
-However, its failures may require more diagnosis than failures in narrow unit tests.
-Scenario names and provider transcript entries should describe user workflows and real e2e examples, so failures identify useful actions.
+The trade-off is coarser failure localization.
+A provider-backed integration scenario catches more of the real request path.
+But its failures may require more diagnosis than failures in a narrow unit test.
+Scenario names and provider transcript entries should stay rooted in user workflows and real e2e examples, so that failures remain actionable.
 
-Coverage is expected to improve over the old suite of handler unit tests.
-However, the first migration does not meet the original 90% target.
+Coverage is expected to improve over the old handler-heavy unit suite.
+But the first migration does not meet the original 90% target.
 The current coverage denominator also excludes some entrypoint and configuration files.
-Thus, coverage should indicate trends instead of proving that tests exercise every public surface.
+Thus, coverage should be treated as a trend signal, not as proof that tests exercise every public surface.
 
 `pnpm test:integration:progress` generates operational metrics.
-After integration tests, CI runs `pnpm test:integration:progress:check` to prevent silent regressions in:
+After integration tests, CI runs `pnpm test:integration:progress:check`, so that these metrics cannot silently regress:
 
 - Public-command coverage.
 - Device-observable workflow flag coverage.
 - Public-flag classification.
 
-After a coverage run, the script is the source of truth for:
+The script is the source of truth for:
 
 - Provider-backed integration size.
 - Handler-unit size.
@@ -182,9 +188,9 @@ After a coverage run, the script is the source of truth for:
 - Command-family ownership.
 - Device-observable workflow flag coverage.
 - Provider transcript pressure.
-- Files with low coverage.
+- Low-coverage files after a coverage run.
 
-These flag categories stay in their owning unit/CLI suites:
+These flags stay in their owning unit/CLI suites:
 
 - Config.
 - Remote transport.
@@ -193,21 +199,21 @@ These flag categories stay in their owning unit/CLI suites:
 - Report-writing.
 - Boot-fallback.
 
-The report lists them as explicit exclusions from the denominator.
-Provider pressure distinguishes semantic Apple `simctl`/`devicectl`, macOS helper, and macOS host usage from generic Apple host-tool usage.
-It also distinguishes semantic Linux desktop/accessibility/clipboard/screenshot/input usage from generic Linux tool usage.
-Thus, the report shows remote-adapter pressure without classifying named subproviders as raw shell intent.
+The report lists these flags as explicit exclusions, so they are not silently missing from the denominator.
+Provider pressure separates semantic Apple `simctl`/`devicectl`, macOS helper, and macOS host usage from generic Apple host-tool usage.
+It also separates semantic Linux desktop/accessibility/clipboard/screenshot/input usage from generic Linux tool usage.
+Thus, remote-adapter pressure is visible, and named subproviders do not count as raw shell intent.
 
-The progress CLI should remain a small report and check runner over a progress model.
+The progress CLI should stay a thin report and check runner over a progress model.
 The model owns discovery, coverage classification, provider-pressure accounting, and check-failure derivation.
 The CLI owns Markdown output and process exit behavior.
 The progress script runs as a Node type-stripped TypeScript script.
-When the metadata API exposes the required facet, the script should consume command metadata directly.
+When the metadata API exposes the necessary facet, the script should consume command metadata directly.
 Source parsing inside the model is an implementation detail, not the desired long-term interface.
-It should remain limited to facets absent from runtime metadata.
-Maps from typed client method calls to command names are one example.
+Source parsing should remain limited to facets that runtime metadata does not represent yet.
+One example is the map from typed client method calls back to command names.
 
-Every public command should have at least one provider-backed integration scenario through the request router and request-scoped provider boundaries.
+Every public command should have at least one provider-backed integration scenario that runs through the request router and the request-scoped provider seams.
 Unit tests remain for:
 
 - Parser matrices.
@@ -219,5 +225,5 @@ Unit tests remain for:
 - Provider scope routing.
 - Platform error boundaries.
 
-Future work should follow current evidence from the progress script, failing tests, or concrete adapter needs.
-It should not follow a permanent refactor backlog.
+Future work should be justified from live pressure in the progress script, from failing tests, or from concrete adapter needs.
+A standing refactor backlog is not a justification for future work.
