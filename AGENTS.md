@@ -9,7 +9,7 @@ Read only the row for your current task. Follow other links only when they apply
 
 | When the task involves | Read |
 | --- | --- |
-| Domain vocabulary | `CONTEXT.md`, `docs/agents/domain.md` |
+| Domain vocabulary | `CONTEXT.md` |
 | Architecture decisions | `docs/adr/README.md` |
 | Source changes, package boundaries, routing, diagnostics | `docs/agents/code-ownership.md` |
 | Checks or a failed gate | `docs/agents/testing.md` |

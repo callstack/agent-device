@@ -7,7 +7,9 @@ Keep reviewed source read-only. Run checks in an isolated checkout if they can m
 Review for concrete regressions. Follow callers and siblings as needed to verify changed behavior.
 Apply each check only when the change affects its subject. Reopen a resolved concern only when new evidence changes the conclusion.
 
-- Dependencies and ADRs: resolve prerequisite conflicts. Update or supersede conflicting decisions explicitly.
+- Dependencies and ADRs: for each relevant ADR, read its Status and "Rules at a glance" first.
+  Read other sections only for the rules that the change touches. Resolve prerequisite conflicts.
+  Update or supersede conflicting decisions explicitly.
 - Routing and surfaces: trace through daemon and backend to affected entrypoints. Helper tests bypassing the router do not prove dispatch.
 - Typed errors: follow reasons from producers through normalization, transport, and consumers. Never replace them with text matching.
 - Interaction paths: verify `packages/contracts/src/interaction-guarantees.ts` claims against native code.

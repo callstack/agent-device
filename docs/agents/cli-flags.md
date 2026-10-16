@@ -43,7 +43,8 @@ steps 1-3, plus step 9.
 
 ## Where CLI help and schema live
 
-- Long help prose: `src/commands/schema/cli-help.ts`. Flag definitions: `src/commands/cli-grammar/`.
+- Long help prose: `src/commands/schema/cli-help.ts`. Flag definitions: `packages/command-registry/src/flag-definitions-*.ts`.
+  CLI input readers: `src/commands/cli-grammar/`.
 - Synopsis: `src/commands/schema/usage.ts` generates the `[label]` flag tail from `allowedFlags`, so a
   new option reaches `--help` without any synopsis edit. Declare `usageFlags` on the command only
   when its synopsis names fewer options: `[]` for a synopsis that is pure grammar (or writes its own
@@ -58,7 +59,7 @@ steps 1-3, plus step 9.
   `record stop`. Keep an option every action reads out of the table — a row list is the only set the
   parser refuses, and refusing `--json` would refuse the command.
 - Command-specific usage/flag metadata lives with the command family metadata that owns the command.
-- Parser/help *rendering* stays in `src/cli/parser/`; command schema metadata is derived from command
+- Argument parsing stays in `src/cli/parser/`. Help rendering stays in `src/commands/schema/`. Command schema metadata is derived from command
   metadata, family declarations, and the schema-only merge path in
   `src/commands/schema/command-overrides.ts`. Keep the two separate.
 - Locating an owner: `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser`.
