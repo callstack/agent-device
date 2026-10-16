@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
@@ -7,10 +9,12 @@ import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import {
   appleToolchainProbeResult,
+  appleSelectionLink,
   blockForWholeTimeout,
   installToolchainProbeClock,
   selectedDeveloperDirResult,
   STUBBED_APPLE_TOOLCHAIN,
+  stubAppleSelectionLink,
   valueProbeCommands,
 } from './apple-toolchain-fixtures.ts';
 import {
@@ -18,6 +22,7 @@ import {
   requireRunnerToolchainFingerprint,
 } from '../runner-toolchain-probe.ts';
 import { createRunnerPhaseBudget, type RunnerPhaseBudget } from '../runner-phase-budget.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../apple-runner-platform.ts';
 
 // The fingerprint memo is process-wide and the selection it keys on is host state, so these cases
@@ -35,9 +40,15 @@ const runCmdSync = vi.fn();
 let selectedDeveloperDir = XCODE_A;
 let nowMs = 1_700_000_000_000;
 
+stubAppleSelectionLink();
+
+/** A scratch root the case's fake developer dirs and selection links live under. */
+let tempRoot: string;
+
 beforeEach(() => {
   resetAllProcessMemosForTests();
   selectedDeveloperDir = XCODE_A;
+  tempRoot = mkdtempForTestSync('runner-selection-');
   runCmdSync.mockReset().mockImplementation(appleToolchainProbeResult);
   appleRunnerTestHost.update({
     runCmdSync,
@@ -49,6 +60,16 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+/**
+ * A developer dir the host can resolve, standing in for an installed Xcode at `dir`. `realpath` only
+ * answers for a dir that exists, so a key built from a missing one would be no key at all.
+ */
+function realSelectionDir(dir: string): string {
+  const created = path.join(tempRoot, dir);
+  fs.mkdirSync(created, { recursive: true });
+  return created;
+}
 
 /** Two Xcodes and the `sudo xcode-select -s` that moves the host's default selection between them. */
 function scriptSelectableXcodes(): void {
@@ -203,6 +224,87 @@ describe('the developer dir a toolchain fingerprint answers for', () => {
     expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBeUndefined();
   });
 
+  test('a warm read resolves its key from the selection link without spawning anything', () => {
+    appleSelectionLink.target = realSelectionDir(XCODE_A);
+    readFingerprint();
+    runCmdSync.mockClear();
+
+    readFingerprint();
+
+    // The link is what a warm read reads, so the memo costs no process at all. `xcode-select -p` is
+    // the fallback, not the per-read cost, which is what made the key change expensive before.
+    expect(runCmdSync.mock.calls).toEqual([]);
+  });
+
+  test('a selection link naming a toolchain answers from that toolchain, not from xcode-select', () => {
+    appleSelectionLink.target = realSelectionDir(XCODE_A);
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+
+    // The two sources disagree, which is what a host whose selection moved without its link keeping
+    // up looks like. The link is what `xcode-select -s` writes, so it is the one that names it.
+    scriptSelectableXcodes();
+    selectedDeveloperDir = XCODE_B;
+    runCmdSync.mockClear();
+
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+    expect(runCmdSync.mock.calls).toEqual([]);
+  });
+
+  test('a selection link moved to another developer dir moves the key with it', () => {
+    appleSelectionLink.target = realSelectionDir(XCODE_A);
+    readFingerprint();
+
+    appleSelectionLink.target = realSelectionDir(XCODE_B);
+    runCmdSync.mockClear();
+
+    // The entry under the dir the host left cannot answer for the dir it moved to.
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+    expect(valueProbeCommands(runCmdSync.mock.calls)).toEqual(['xcodebuild', 'xcrun', 'xcrun']);
+    expect(runCmdSync.mock.calls.some(([command]) => command === 'xcode-select')).toBe(false);
+  });
+
+  test('a bundle swapped behind a stable selection path moves the key', () => {
+    // What a tool like xcodes does: it replaces the Xcode.app bundle, so the selection keeps naming
+    // the same path while the toolchain behind it changes. Keying on the link's raw target would
+    // keep answering for the Xcode that path used to reach, so the key follows the real dir.
+    const stable = path.join(tempRoot, 'Xcode.app');
+    const first = path.join(tempRoot, 'Xcode-1.app');
+    const second = path.join(tempRoot, 'Xcode-2.app');
+    for (const bundle of [first, second]) {
+      fs.mkdirSync(path.join(bundle, 'Contents', 'Developer'), { recursive: true });
+    }
+    fs.symlinkSync(path.basename(first), stable);
+    appleSelectionLink.target = stable;
+
+    readFingerprint();
+    fs.unlinkSync(stable);
+    fs.symlinkSync(path.basename(second), stable);
+
+    runCmdSync.mockClear();
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+    expect(valueProbeCommands(runCmdSync.mock.calls)).toEqual(['xcodebuild', 'xcrun', 'xcrun']);
+  });
+
+  test('a selection reported with its trailing newline keys on the dir alone', () => {
+    // `xcode-select -p` answers with a newline. A key that kept it would never match the dir a
+    // client's DEVELOPER_DIR names, so one Xcode would look like two toolchains.
+    const reported = realSelectionDir(XCODE_A);
+    runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
+      command === 'xcode-select'
+        ? { exitCode: 0, stdout: `${reported}\n`, stderr: '' }
+        : appleToolchainProbeResult(command, args),
+    );
+
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+    runCmdSync.mockClear();
+
+    appleRunnerTestHost.update({ commandDeveloperDir: () => reported });
+    expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+
+    // The client-named dir hit the entry the newline-built key stored, so nothing re-read.
+    expect(runCmdSync.mock.calls).toEqual([]);
+  });
+
   test('a selection that answers nothing, or dies on exec, is no dir rather than a bad one', () => {
     for (const unanswered of [
       { exitCode: 0, stdout: '   \n', stderr: '' } satisfies ExecResult,
@@ -325,11 +427,12 @@ describe('the lifetime of a memoized toolchain fingerprint', () => {
     nowMs += ms;
   }
 
-  test('a hit answers to the end of the TTL its read started, and no longer', () => {
+  test('a hit renews the entry it answered from, because its key is still the selection', () => {
     readFingerprint();
 
-    // Hits used to push expiry ahead of themselves, so a daemon reading more often than the TTL
-    // never re-resolved its selection at all (#3300).
+    // The key names the dir this host selects, so a hit is itself evidence the entry is still the
+    // answer for that host. #3300 asked to keep this renewal; the stale answer it could once serve
+    // now costs a key change instead of a TTL.
     advance(FINGERPRINT_TTL_MS / 2);
     runCmdSync.mockClear();
     readFingerprint();
@@ -338,6 +441,18 @@ describe('the lifetime of a memoized toolchain fingerprint', () => {
     advance(FINGERPRINT_TTL_MS / 2);
     runCmdSync.mockClear();
     readFingerprint();
+    expect(valueProbeCommands(runCmdSync.mock.calls)).toEqual([]);
+  });
+
+  test('an entry no read takes expires at the TTL its storing read started', () => {
+    readFingerprint();
+
+    advance(FINGERPRINT_TTL_MS);
+    runCmdSync.mockClear();
+    readFingerprint();
+
+    // Renewal is for entries in use. One that nothing has asked for goes away, which is also the
+    // ceiling on how long a failure report can name a selection no request is using.
     expect(valueProbeCommands(runCmdSync.mock.calls)).toEqual(['xcodebuild', 'xcrun', 'xcrun']);
   });
 

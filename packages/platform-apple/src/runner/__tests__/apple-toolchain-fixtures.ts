@@ -1,6 +1,8 @@
 import { beforeEach, vi } from 'vitest';
+import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { XCODE_SELECT_LINK_PATH } from '../runner-toolchain-probe.ts';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
 export const STUBBED_APPLE_TOOLCHAIN = {
@@ -43,6 +45,7 @@ export function appleToolchainProbeResult(command: string, args: readonly string
  * make a probe fail.
  */
 export function stubAppleToolchainProbes(): ReturnType<typeof vi.fn> {
+  stubAppleSelectionLink();
   const runCmdSync = vi.fn(appleToolchainProbeResult);
   beforeEach(() => {
     runCmdSync.mockImplementation(appleToolchainProbeResult);
@@ -52,6 +55,31 @@ export function stubAppleToolchainProbes(): ReturnType<typeof vi.fn> {
     });
   });
   return runCmdSync;
+}
+
+/**
+ * The host's default selection link as the Apple toolchain probes see it. Undefined keeps the link
+ * unreadable, which sends every read down the `xcode-select -p` fallback a case already scripts; a
+ * case that owns a link points it at a path it created.
+ */
+export const appleSelectionLink: { target: string | undefined } = { target: undefined };
+
+/**
+ * Hides the selection link of the machine running the suite, so a case decides the host's selection
+ * rather than inheriting it. The real host has one, and where it points is not this suite's business.
+ */
+export function stubAppleSelectionLink(): void {
+  const realRealpathSync = fs.realpathSync;
+  beforeEach(() => {
+    appleSelectionLink.target = undefined;
+    vi.spyOn(fs, 'realpathSync').mockImplementation((target: fs.PathLike) => {
+      if (String(target) !== XCODE_SELECT_LINK_PATH) return realRealpathSync(target);
+      if (appleSelectionLink.target === undefined) {
+        throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+      }
+      return realRealpathSync(appleSelectionLink.target);
+    });
+  });
 }
 
 /**
