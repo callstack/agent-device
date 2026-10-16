@@ -3,10 +3,11 @@
 ## Status
 
 Accepted (2026-09-06). This ADR implements issue #2278's audit deliverables.
-Gates enforce the classification inventory and structural no-regrowth checks.
-The ADR records decisions and references gates instead of duplicating the inventory.
+R76 prohibits daemon coupling to root platform-runtime modules.
+Gates enforce structural no-regrowth checks.
+The ADR records decisions and references gates instead of duplicating their checks.
 
-Amended 2026-10-11 by #3431.
+Amended 2026-10-12 by #3431 and #3430.
 Daemon-runtime composition edges moved from `packages/daemon/src/` to process-root `src/daemon-composition.ts`:
 
 - Gateway, diagnostics, resource-cleanup, and lifecycle edges.
