@@ -2,107 +2,103 @@
 
 ## Status
 
-Proposed (2026-07-24; revised same day after architecture review). Nothing here is implemented.
+Proposed (2026-07-24; revised the same day after architecture review).
+Nothing here is implemented.
 
-Scope reduction relative to the first draft, per review: progress streaming stays a permanent,
-transport-owned second channel (it is an output port, not telemetry); the journal absorbs
-diagnostics, agent-cost, the session event log, and the replay timing trace. Out-of-request
-session events get an explicit scope model, and the replay-trace redaction fix is declared as an
-intentional compatibility change rather than hidden under a byte-compatibility claim.
+The reviewed proposal has less scope than the first draft.
+Progress remains a permanent transport-owned output channel, separate from telemetry.
+The journal would combine diagnostics, agent-cost, session events, and replay timing traces.
+Explicit scopes cover out-of-request session events.
+Replay-trace redaction is a declared compatibility change, not byte-compatible behavior.
 
 ## Rules at a glance
 
-Normative summary of the proposal; contracts and rationale below.
+This ADR proposes these rules; full contracts and rationale follow:
 
-- One **event catalog** (`packages/contracts/src/events.ts`) is the single declaration site for every
-  diagnostic/telemetry event kind: key, subsystem, default level, and derivation traits. Emitting a
-  kind not in the catalog is a compile error; consumers derive kind sets from traits, never from
-  parsing kind names.
-- Catalog keys are **internal identities**. Legacy wire/file discriminators (today's diagnostics
-  `phase` strings, the replay trace's `type` values) are preserved by sinks as output mappings;
-  a wire name is never automatically the canonical cross-channel identity.
-- One **journal** per scope is the single append point (`emitDiagnostic` evolves into it). Scopes
-  are: the existing per-request scope, and explicit short-lived **session-scoped teardown scopes**
-  for out-of-request work (idle reap, daemon shutdown), following the existing fatal-scope
-  precedent. Emitters state facts; they never know who is listening. No `EventEmitter`, no dynamic
-  subscription.
-- Every consumer is a **sink**: explicitly registered at scope construction, invoked synchronously
-  in registration order, individually best-effort (a sink error is swallowed and must not affect
-  other sinks or the request). Concurrent sub-work (sharded test attempts run under
-  `Promise.allSettled`) runs in **forked child scopes that clone every mutable binding** —
-  envelope, log path, routing — and share only concurrency-safe aggregation state; nothing mutable
-  is ever shared across concurrent scopes.
-- **Progress streaming is not journal-owned.** `src/request/progress.ts` and its typed
-  `RequestProgressEvent` union remain the transport's channel, unchanged.
-- **Existing formats do not change, with one declared exception.** `events.ndjson` v1 entries,
-  `cost.runnerRoundTrips`, per-request diagnostics ndjson, and `replay-timing.ndjson` shapes stay
-  byte-compatible behind golden fixtures. The exception: replay-timing events written by the
-  currently unredacted helper become redacted — an intentional security fix, called out as a
-  behavior change, not smuggled in as "compatible."
-- **Redaction happens once, at the journal boundary**, for every journal-owned output.
-- The journal is an observability spine, **not** a source of truth: `session.actions` and all other
-  session state remain owned by their stores. No state is ever rebuilt from journal events.
-- Anything that leaves the machine goes through a **closed, allowlist-by-construction schema**
-  (the usage sink's `UsageRecord`): every field drawn from a registry-enumerated vocabulary —
-  command names, typed error codes, flag names, durations — with positionals, selectors, labels,
-  and messages unrepresentable by type, not merely redacted.
+- One **event catalog**, `packages/contracts/src/events.ts`, declares each diagnostic/telemetry kind's key, subsystem, default level, and derivation traits.
+  An uncataloged emit is a compile error.
+  Consumers derive kind sets from traits, never from kind-name parsing.
+- Catalog keys are **internal identities**.
+  Sinks map them to unchanged legacy output discriminators, including diagnostics `phase` and replay `type`.
+  A wire name does not automatically become the canonical identity across channels.
+- One **journal per scope** provides the only append point through an evolved `emitDiagnostic`.
+  Existing request scopes remain.
+  Explicit short-lived session teardown scopes cover idle reap and shutdown, following fatal-scope precedent.
+  Emitters state facts without consumer knowledge.
+  There is no `EventEmitter` or dynamic subscription.
+- Scope construction registers each **sink** explicitly.
+  Sinks run synchronously in registration order.
+  Each invocation suppresses its own errors without effects on other sinks or requests.
+  Concurrent work uses forked scopes that clone mutable envelope, log-path, and routing bindings.
+  Only concurrency-safe aggregation state is shared as mutable state.
+- **Progress remains transport-owned.** `src/request/progress.ts` and its typed `RequestProgressEvent` union do not change.
+- **Existing formats remain byte-compatible, with one exception.** Golden fixtures preserve `events.ndjson` v1, `cost.runnerRoundTrips`, per-request diagnostics ndjson, and replay-timing shapes.
+  The currently unredacted replay-timing helper's events become redacted.
+  This intentional security fix is a declared behavior change.
+- **One journal boundary redacts every journal-owned output.**
+- **The journal owns observability, not application truth.** Existing stores retain `session.actions` and all other session state.
+  Events never reconstruct that state.
+- Machine-external output uses a **closed allowlist schema**, the usage sink's `UsageRecord`.
+  Registry-enumerated metadata and durations are representable.
+  Positionals, selectors, labels, and messages are unrepresentable by type, rather than merely redacted.
 
 ## Context
 
-The codebase has grown four parallel event vocabularies, each with its own emit call, shape,
-redaction discipline, and sink (inventoried 2026-07-24):
+The 2026-07-24 inventory identifies four parallel event vocabularies.
+Each has separate emit calls, shapes, redaction rules, and sinks:
 
-1. **Diagnostics** (`packages/host-kit/src/internal/diagnostics.ts`).
-   ~155 distinct stringly-typed `phase` values across
-   ~70 files, an `AsyncLocalStorage` request scope entered in exactly three places (CLI pre-parse,
-   daemon per-request in `request-router.ts`, daemon fatal catch-all), an in-memory buffer plus a
-   `phaseCounts` tally, and debug-mode live streaming to the per-request ndjson file (after
-   `createRequestExecutionScope` rebinds `logPath`), `daemon.log`, or stderr. The
-   `traceLogPath` scope option is dead: no call site ever sets it.
-2. **Session event log** (`@agent-device/session-journal/session-event-log`). Append-only per-session
-   `events.ndjson` with kinds `request.started`/`request.finished`/`action.recorded`, written from
-   three request-lifecycle points plus `SessionStore.recordAction`, read only by the public
-   `events` command. `action.recorded` is already a projection of `session.actions` pushes — the
-   model this ADR generalizes. Crucially, not every append happens inside a request:
-   `finalizeRepairTeardown` (`packages/daemon/src/core/session-store.ts`) records a synthesized `close` action
-   during idle reap or daemon shutdown, with — per its own comment — "no live request here."
-3. **Progress streaming** (`src/request/progress.ts`, `src/daemon/request-progress-protocol.ts`).
-   A closed, typed `RequestProgressEvent` union emitted through a single-sink `AsyncLocalStorage`
-   installed by the socket/HTTP transport, serialized as ndjson envelopes multiplexed onto the same
-   stream as the final response, with client-disconnect-as-cancellation tracking. Opt-in per
-   request via `meta.requestProgress`; disabled under `--json`. Events are written to the wire
-   **unredacted** today.
-4. **Replay timing trace** (`src/daemon/handlers/session-replay-trace.ts`,
-   `session-test-runtime.ts`, read by `src/cli/replay-test/trace.ts`). Per-**attempt**
-   `replay-timing.ndjson` files whose paths are created dynamically inside each attempt — written
-   by **two different helpers, one of which redacts and one of which does not**
-   (`appendReplayTraceEvent` vs `appendReplayTestTimingEvent`).
+1. **Diagnostics**, `packages/host-kit/src/internal/diagnostics.ts`, has about 155 string-typed `phase` values in about 70 files.
+   Three entry points establish `AsyncLocalStorage` request scopes:
+   CLI pre-parse, daemon per-request `request-router.ts`, and the daemon fatal catch-all.
+   Diagnostics has an in-memory buffer and `phaseCounts` tally.
+   Debug mode streams to per-request ndjson after `createRequestExecutionScope` rebinds `logPath`, or to `daemon.log`/stderr.
+   No caller sets `traceLogPath`; that option is unused.
+2. **Session event log**, `@agent-device/session-journal/session-event-log`, appends per-session `events.ndjson`.
+   Kinds are `request.started`, `request.finished`, and `action.recorded`.
+   Three request-lifecycle points and `SessionStore.recordAction` write it.
+   Only public `events` reads it.
+   `action.recorded` already projects `session.actions` pushes, which this proposal generalizes.
+   Some appends occur outside requests.
+   `finalizeRepairTeardown` in `packages/daemon/src/core/session-store.ts` records synthetic `close` during idle reap or shutdown.
+   Its comment states "no live request here."
+3. **Progress streaming**, `src/request/progress.ts` and `src/daemon/request-progress-protocol.ts`, uses a closed typed `RequestProgressEvent` union.
+   Socket/HTTP transport installs single-sink `AsyncLocalStorage`.
+   Ndjson envelopes share the final-response stream.
+   Client disconnect feeds cancellation.
+   `meta.requestProgress` explicitly enables the channel per request.
+   `--json` disables it.
+   Current wire events are **unredacted**.
+4. **Replay timing trace**, `src/daemon/handlers/session-replay-trace.ts` and `session-test-runtime.ts`, uses per-attempt `replay-timing.ndjson` files.
+   Each attempt creates its path dynamically.
+   `src/cli/replay-test/trace.ts` reads them.
+   Two helpers write them: `appendReplayTraceEvent` and `appendReplayTestTimingEvent`.
+   Only one redacts.
 
-(`src/upload-progress.ts` is a fifth, local-only callback sink for artifact uploads; it never
-crosses the request scope and is out of scope here. Production code contains no `EventEmitter`
-usage at all — the codebase already avoids implicit pub/sub, which this design preserves.)
+`src/upload-progress.ts` is a fifth local callback sink for artifact uploads.
+It never crosses request scope and remains out of scope.
+Production has no `EventEmitter` usage.
+The proposal preserves that avoidance of implicit pub/sub.
 
-The channels overlap but share nothing: no common envelope, no shared kind vocabulary, and
-consumers couple to emit sites by string. The sharpest instance: agent-cost's `runnerRoundTrips`
-is `countDiagnosticEventsByPhase(['ios_runner_command_send', 'ios_runner_readiness_preflight'])`
-(`packages/daemon/src/server/request-router.ts`) — a hand-picked name list a new runner phase can silently drift
-from. That violates two established repo rules: *what enumerates N?* (nothing enumerates
-round-trip phases), and *categories come from recorded fields, never parsed names*.
+The channels overlap without a common envelope or kind vocabulary.
+Consumers depend on strings at emit sites.
+For example, agent-cost computes `runnerRoundTrips` with `countDiagnosticEventsByPhase(['ios_runner_command_send', 'ios_runner_readiness_preflight'])` in `packages/daemon/src/server/request-router.ts`.
+A new runner phase can silently escape this manually selected list.
+No owner enumerates round-trip phases.
+Selection also violates the repository rule that categories come from recorded fields, not parsed names.
 
-The near-term consumer motivating the unification is opt-in usage analytics over agent behavior —
-command frequencies, failure codes, and outcome sequences that trip agents — under a hard privacy
-constraint: request metadata only, never request content (decision 4).
-
-ADR 0008 solved the same shape of problem for commands: one declaration registry, behavior derived
-by parity-tested projection. This ADR applies that thesis to events — to the channels that are
-genuinely telemetry. Progress is not one of them (decision 3).
+The immediate motivation is opt-in analytics for command frequency, failure codes, and outcome sequences that cause agent difficulty.
+Privacy requires request metadata only, never content (decision 4).
+ADR 0008 uses one command declaration registry with parity-tested projections.
+This proposal applies the same method to telemetry events.
+Progress remains separate under decision 3.
 
 ## Decision
 
 ### 1. Event catalog: kinds are declared data
 
-`packages/contracts/src/events.ts` exports one `EVENT_CATALOG` — a const object with one entry per event
-kind, keyed by today's diagnostics phase strings (no renames in this ADR):
+This section proposes one `EVENT_CATALOG` const object in `packages/contracts/src/events.ts`.
+Each kind has one entry.
+Existing diagnostics phase strings remain unchanged as keys:
 
 ```ts
 type EventDescriptor = {
@@ -117,271 +113,272 @@ type EventDescriptor = {
 type EventKind = keyof typeof EVENT_CATALOG;
 ```
 
-`emitDiagnostic`'s `phase` parameter narrows from `string` to `EventKind`, making every
-uncataloged emit a compile error — the same completeness mechanism as the ADR 0011 matrix. The
-existing ~155 phases enter the catalog verbatim; per-kind `data` payloads stay
-`Record<string, unknown>` in this ADR (typed payload schemas are a possible per-kind follow-up,
-not a prerequisite — see Alternatives).
+`emitDiagnostic`'s `phase` narrows from `string` to `EventKind`.
+Uncataloged emits fail compilation, as with ADR 0011's completeness mechanism.
+The approximately 155 phases enter verbatim.
+Per-kind `data` remains `Record<string, unknown>`.
+Typed payload schemas can follow incrementally; they are not a prerequisite.
 
-Kinds absorbed from other channels (the session event log's `request.started`/`request.finished`/
-`action.recorded`, the replay trace's `replay_action_start`/`replay_action_stop`/attempt-lifecycle
-events) get catalog entries whose **internal keys need not equal their legacy wire discriminators**;
-the owning sink maps the internal kind to the exact legacy `kind`/`type` value on output. Wire and
-file names stay frozen for consumers; catalog identities stay free to be consistent.
+Other channels receive catalog entries, including these legacy discriminators:
 
-Consumers derive kind sets from traits: `RUNNER_ROUND_TRIP_PHASES` becomes
-`kindsWithTrait('runner-round-trip')` (exactly `ios_runner_command_send` and
-`ios_runner_readiness_preflight` carry the trait; their `_skipped`/`_recovered` variants
-deliberately do not, preserving today's cost semantics). A parity test pins the derived sets so a
-trait edit is a reviewed decision, not a drift.
+- Session `request.started`
+- Session `request.finished`
+- Session `action.recorded`
+- Replay `replay_action_start`
+- Replay `replay_action_stop`
+- Attempt-lifecycle events
 
-The catalog lives in `contracts` (ranked, kernel-adjacent) so every zone may import it without a
-layering back-edge. The journal runtime evolves in place in
-`packages/host-kit/src/internal/diagnostics.ts`, keeping all existing import directions legal.
+Internal keys need not equal those discriminators.
+The owning sink maps each internal kind to exact legacy `kind`/`type` output.
+Consumer wire/file names remain fixed.
+Internal identities can remain consistent independently.
+
+Consumers derive sets through traits.
+`RUNNER_ROUND_TRIP_PHASES` becomes `kindsWithTrait('runner-round-trip')`.
+Only `ios_runner_command_send` and `ios_runner_readiness_preflight` have that trait.
+Their `_skipped`/`_recovered` variants deliberately do not.
+This preserves existing cost semantics.
+A parity test fixes the derived sets so a trait edit requires review.
+
+The catalog belongs to ranked, kernel-adjacent `contracts`.
+All zones can import it without a layering back-edge.
+Runtime evolves in `packages/host-kit/src/internal/diagnostics.ts` with existing legal import directions.
 
 ### 2. One journal, explicit sinks, defined scope model
 
-The diagnostics scope becomes the **journal**: the single append point for diagnostics, agent-cost
-tallies, session lifecycle events, and replay traces. `emit(event)` does exactly what
-`emitDiagnostic` does today — stamp the scope envelope (`ts`, `requestId?`, `session?`,
-`command?`), redact `data`, buffer, tally `phaseCounts` — and then offers the event to each
-registered sink.
+This section proposes the diagnostics scope as the **journal**.
+It is the sole append point for diagnostics, agent-cost tallies, session lifecycle events, and replay traces.
+`emit(event)` retains existing operations:
 
-**Scope model.** Two scope shapes, both explicit:
+1. Stamp `ts`, `requestId?`, `session?`, and `command?` from the scope envelope.
+2. Redact `data`.
+3. Buffer the event.
+4. Tally `phaseCounts`.
+5. Offer the event to each registered sink.
 
-- the existing **per-request scope** (CLI entry, daemon `handleRequest`, fatal catch-all),
-  unchanged; and
-- a **session-scoped teardown scope** for out-of-request work: idle reap and daemon-shutdown
-  finalizers (`finalizeRepairTeardown`, session teardown cleanup) open a short-lived scope bound to
-  the session (no `requestId`), following the existing `emitFatalDiagnostic` precedent. This is
-  what keeps "no sink writes without the journal" true for the teardown-recorded `close` action —
-  today's direct event-log append from `SessionStore.recordAction` must keep working when no
-  request exists, and silently dropping it is unacceptable.
+**Scope model.** Two explicit scope forms apply:
 
-**Sink contract.** Sinks are constructed with the scope and listed in one place per entry point —
-statically enumerable, greppable, no dynamic subscription API. Semantics, normative:
+- Existing per-request scopes remain unchanged at CLI entry, daemon `handleRequest`, and fatal catch-all.
+- Short-lived session teardown scopes cover idle reap and shutdown finalizers, including `finalizeRepairTeardown` and session cleanup.
+  They bind a session without `requestId`, following `emitFatalDiagnostic` precedent.
+  This permits teardown's synthetic `close` event without bypassing the journal.
+  The existing out-of-request `SessionStore.recordAction` append must continue.
+  Silent omission is unacceptable.
 
-- **Ordering:** sinks are invoked synchronously, in registration order, at emit time. A sink may
-  queue its own I/O (the session event log keeps its per-path serialized write queue).
-- **Isolation:** each sink invocation is individually best-effort — an error is swallowed (as
-  `emitDiagnostic`'s stream writes are today) and must never affect other sinks, the buffer, or
-  the request.
-- **Flushing:** flush remains journal-owned (`flushDiagnosticsToSessionFile` semantics unchanged);
-  sinks that buffer expose flush hooks the journal calls on request finalization and fatal paths.
-- **Concurrency — fork, never rebind; forks clone all mutable state:** the journal gains a fork
-  primitive: `journal.fork(bindings, fn)` runs `fn` inside a new AsyncLocalStorage scope object
-  that **clones every mutable field of the parent scope** — the envelope (`session`, `command`,
-  `debug`), `logPath`, and all routing bindings — applies the fork's own frozen `bindings` on top,
-  and owns its own event buffer, flushed against the fork's bindings when the fork ends. Shared
-  with the parent are only the sink list and concurrency-safe aggregation state: the `phaseCounts`
-  tally stays request-global (single-threaded atomic increments; agent-cost must span shards).
-  Sharded `test` runs execute attempts concurrently (`Promise.allSettled` in
-  `runReplayTestShards`, `src/daemon/handlers/session-test.ts`) and their **nested dispatch calls
-  `createRequestExecutionScope` (`request-router.ts` child scopes), which rebinds `session` and
-  `logPath` mid-flight** — so a shared mutable envelope would cross-route debug and session-log
-  events between shards even with frozen trace bindings. Therefore: `updateDiagnosticsScope`
-  mutates only the innermost (current) scope, each shard/attempt lifecycle wraps its work —
-  including all nested replay dispatch — in a fork, and every mid-flight rebind lands on that
-  shard's clone. The fork's trace binding (the attempt's `replay-timing.ndjson` path) dies with
-  the fork, so no clearing step exists to race; the replay trace sink drops trace-kind events
-  emitted with no bound destination.
-- **Scope identity (exporter readiness):** every scope — request, teardown, and fork — carries a
-  `scopeId`, and a fork records its parent's as `parentScopeId`; both ride the event envelope.
-  This is deliberately minimal span plumbing: forks already form a tree, so a future exporter sink
-  (e.g. OpenTelemetry) can emit real parent-child spans from envelope fields alone, without
-  retrofitting the envelope or touching emit sites. Cross-process correlation stays `requestId`
-  (already stamped on both sides of the RPC); a W3C `traceparent`-style request-meta field is
-  additive under ADR 0006 and deferred to whatever ADR introduces an exporter. No exporter is part
-  of this ADR.
+**Sink contract.** Each entry point lists sinks at scope construction.
+The list is statically enumerable and searchable.
+There is no dynamic subscription API.
+The proposed normative semantics are:
+
+- **Ordering:** invoke sinks synchronously at emit time, in registration order.
+  A sink may queue its own I/O.
+  Session logging retains its per-path serialized write queue.
+- **Isolation:** suppress each sink's error independently.
+  It must never affect another sink, the buffer, or the request.
+  This follows current diagnostic stream writes.
+- **Flush:** journal ownership and `flushDiagnosticsToSessionFile` semantics remain unchanged.
+  Buffered sinks expose hooks for journal finalization and fatal paths.
+- **Concurrency:** use `journal.fork(bindings, fn)` instead of shared rebinding.
+  It runs `fn` in a new `AsyncLocalStorage` scope object.
+  The fork clones every mutable envelope field (`session`, `command`, `debug`), `logPath`, and routing binding.
+  It applies its own frozen `bindings` and owns a separate buffer.
+  Fork completion flushes against its own bindings.
+  Only the sink list and concurrency-safe aggregation state remain shared.
+  Request-global `phaseCounts` uses single-threaded atomic increments because agent-cost must include every shard.
+
+Concurrent `test` attempts use `Promise.allSettled` in `runReplayTestShards` (`src/daemon/handlers/session-test.ts`).
+Nested dispatch invokes `createRequestExecutionScope` in `request-router.ts` child scopes.
+It rebinds `session` and `logPath` during execution.
+A shared mutable envelope could route debug and session-log events to another shard, even with frozen trace bindings.
+Thus, `updateDiagnosticsScope` changes only the innermost current scope.
+Every shard/attempt wraps its complete lifecycle, including nested replay dispatch, in a fork.
+All rebindings affect that clone.
+Its trace destination ends with the fork.
+No separate clearing step can race.
+The trace sink drops trace-kind events without a destination.
+
+**Scope identity:** each request, teardown, and fork scope has `scopeId`.
+Forks also carry `parentScopeId`.
+Both enter the event envelope.
+The existing fork tree then permits future exporters, such as OpenTelemetry, to produce parent-child spans without emit-site or envelope changes.
+Cross-process correlation remains `requestId`, already present on both RPC sides.
+A W3C `traceparent`-style request-meta field would be additive under ADR 0006.
+It is deferred to an exporter ADR.
+This ADR includes no exporter.
 
 **Registered sinks:**
 
-- **debug stream sink** — today's debug-mode live ndjson writer (per-request file / `daemon.log` /
-  stderr fallback), unchanged behavior including the `liveWrittenEventCount` flush watermark;
-- **session event log sink** — consumes the `session-lifecycle` trait kinds and writes today's
-  `events.ndjson` v1 entries, reusing the existing presentation builders (`buildActionSummary`,
-  `buildRequestSuccessEventPresentation`), write queue, and retention window
-  (`session-event-log-window.ts`, #1788: size-capped rotation to one retained generation,
-  `events.ndjson.1`). Entry bytes are unchanged by the cap, but the window's sidecar
-  (`events.ndjson.window.json`) is **new journal-owned state that cursor identity depends on**:
-  it records each retained generation's first absolute line index, line count, and first-line
-  digest, and the reader verifies those against the files before answering. A sink that ever owns
-  this file owns that contract too — it is not a cache and cannot be regenerated from the entries;
-- **replay trace sink** — consumes `replay-trace` trait kinds, maps internal kinds to the legacy
-  `type` values, writes the per-attempt file via bound routing context; replaces both existing
-  append helpers;
-- **agent-cost tally** — already a projection (`phaseCounts`); now reads its kind set from the
-  `runner-round-trip` trait.
+- **Debug stream:** existing debug ndjson output uses per-request files, `daemon.log`, or stderr fallback.
+  Behavior and the `liveWrittenEventCount` flush watermark remain unchanged.
+- **Session event log:** consumes `session-lifecycle` traits and writes byte-identical `events.ndjson` v1 entries.
+  It reuses `buildActionSummary`, `buildRequestSuccessEventPresentation`, the write queue, and the #1788 retention window in `session-event-log-window.ts`.
+  Size-capped rotation retains one generation, `events.ndjson.1`.
+  The cap does not change entry bytes.
+  `events.ndjson.window.json` is journal-owned state required for cursor identity, not a cache.
+  It records each retained generation's first absolute line index, line count, and first-line digest.
+  Before answers, readers verify those values against files.
+  A sink that owns the sidecar also owns this contract.
+  Entries cannot reconstruct it.
+- **Replay trace:** consumes `replay-trace` traits, maps legacy `type`, and writes to the bound per-attempt path.
+  It replaces both append helpers.
+- **Agent-cost tally:** existing `phaseCounts` projection derives its kind set from `runner-round-trip`.
 
-The request-lifecycle points that today call `sessionStore.recordEvent`/`appendActionEvent`
-directly (`request-execution-scope.ts`, `request-router.ts`, `session-store.ts`) instead `emit`
-the corresponding journal kinds; the sink owns the file. `SessionAction` recording itself is
-untouched: `recordActionEntry` still pushes to `session.actions` first, and the `action.recorded`
-journal event remains a projection of that push.
+Existing direct calls to `sessionStore.recordEvent`/`appendActionEvent` become journal emits.
+The affected lifecycle points are `request-execution-scope.ts`, `request-router.ts`, and `session-store.ts`.
+The sink owns file output.
+`SessionAction` recording remains unchanged.
+`recordActionEntry` still pushes `session.actions` first.
+`action.recorded` remains a projection of that push.
 
 ### 3. Progress streaming stays a separate, transport-owned channel
 
-Progress is an **output port of the transport**, not telemetry: it has ordering and
-interleaving guarantees relative to the final response on the same stream, client-disconnect
-tracking that feeds request cancellation, a closed typed union (`RequestProgressEvent`) consumed
-directly by the wire serializer, and a single-sink `AsyncLocalStorage` installed by the transport
-outside `handleRequest`. Forcing it through the journal would either weaken its payload type to
-`Record<string, unknown>` at the wire boundary or make the journal envelope part of the RPC
-protocol — both worse than the status quo. It also writes unredacted today, so journal-boundary
-redaction would silently alter wire bytes.
+This section proposes no change to progress transport.
+Progress is a transport **output port** with these requirements:
 
-`src/request/progress.ts`, `request-progress-protocol.ts`, and both transports are therefore
-unchanged by this ADR. If a future feature needs progress events in the journal (e.g. a request
-timeline), the correct shape is a **mirror emit** — the progress emitter additionally emitting a
-cataloged journal kind — never rerouting the wire path through the journal. That is a separate,
-opt-in decision.
+- Ordering and interleaving with the final response on the same stream
+- Disconnect tracking for cancellation
+- Closed typed `RequestProgressEvent` input to the wire serializer
+- Single-sink `AsyncLocalStorage` installed outside `handleRequest`
+
+A journal route would weaken payloads to `Record<string, unknown>` or place the journal envelope in the RPC protocol.
+Neither improves current behavior.
+Current progress is unredacted, so boundary redaction would also silently change wire bytes.
+
+`src/request/progress.ts`, `request-progress-protocol.ts`, and both transports therefore remain unchanged.
+If a future feature needs journal progress visibility, the progress emitter can additionally emit a cataloged journal kind.
+It must not route the wire path through the journal.
+Such **mirror emits** require a separate explicit decision.
 
 ### 4. First planned consumer: the usage sink (privacy by construction)
 
-The motivating consumer for this architecture is opt-in **usage analytics over agent behavior**:
-which commands run, how often, what fails with which error codes, and outcome sequences that trip
-agents (consecutive full snapshots, screenshot-after-snapshot, repeated same-command failures).
-The unit of observation is request **metadata**, never request **content**.
+This section proposes schema discipline for a future opt-in usage sink.
+It observes command frequency, typed failures, and problematic outcome sequences.
+Examples include consecutive full snapshots, screenshot-after-snapshot, and repeated same-command failures.
+Observation uses request **metadata**, never content.
 
-The privacy rule is therefore **allowlist by construction, not redaction**. Redaction is a
-blocklist over rich data and one missed field leaks a selector or label; the usage sink instead
-projects `session-lifecycle` events into a closed `UsageRecord` schema in which every field draws
-from an enumerated vocabulary:
+A closed allowlist schema prevents content representation.
+Redaction alone risks a missed field in rich data.
+The sink projects `session-lifecycle` events into `UsageRecord` with these permitted fields:
 
-- `command`/action — enumerated by the CommandDescriptor registry;
-- outcome — `ok` or the typed error **code** (ADR 0010's closed set); never the error message;
-- `durationMs`, cost fields (`runnerRoundTrips`, `nodeCount`), `platform`/`appleOs`;
-- flag **names** present on the request — never flag values;
-- a hashed session identity plus per-session sequence number, so command bigrams are computable
-  downstream.
+- Command/action from the CommandDescriptor registry
+- Outcome `ok` or a typed error code from ADR 0010's closed set, never a message
+- `durationMs`, cost fields (`runnerRoundTrips`, `nodeCount`), and `platform`/`appleOs`
+- Present flag names, never values
+- Hashed session identity and per-session sequence number for downstream command bigrams
 
-Positionals, selectors, labels, fill text, snapshot content, and error messages are unrepresentable
-in the schema — there is nothing to scrub. Sequence/anti-pattern detection is downstream analysis
-over the record stream (a local stats read first; opt-in export later), never emission-side logic.
-The sink itself is a follow-up landing after migration step 3 (it consumes the
-`session-lifecycle` kinds); this ADR fixes only its schema discipline so no richer interim export
-gets built.
+Positionals, selectors, labels, fill text, snapshot content, and error messages cannot be represented.
+Sequence/anti-pattern detection occurs downstream over records, never during emission.
+Local statistics come first; explicit export follows later.
+The sink remains follow-up work after migration step 3 because it consumes `session-lifecycle` kinds.
+This ADR fixes only schema discipline to prevent an interim richer export.
 
 ## Invariants
 
-- **Byte compatibility, one declared exception.** `events.ndjson` v1, per-request diagnostics
-  ndjson, `replay-timing.ndjson` shapes and legacy `type` discriminators, and
-  `cost.runnerRoundTrips` are produced identically by the sinks; golden fixtures under
-  `contracts/fixtures/` pin each format. The declared exception: replay-timing events from the
-  previously unredacted helper become redacted (URL query stripping, sensitive-key masking, long
-  string truncation may alter those lines). This is an intentional security fix shipped as such —
-  changelog-visible, fixture-updated — not an unnoticed side effect.
-- **Single redaction boundary for journal-owned outputs.** `redactDiagnosticData` runs once, on
-  append. The flush path's second whole-entry pass is retained only until sinks own their writes,
-  then removed. No sink may write an event that did not pass through the journal. (Progress is not
-  journal-owned and keeps its current unredacted wire behavior.)
-- **Emitters never branch on consumers.** An emit site must not know or care whether debug mode or
-  a replay trace is active. Anything consumer-conditional lives in the sink.
-- **No state from events.** The journal is write-only telemetry. Recovering session state, replay
-  provenance, or repair watermarks from journal events is out of scope and rejected (see
-  Alternatives).
-- **Traits over names.** No production code may select events by matching kind-name substrings
-  (`startsWith('ios_runner_')` etc.); a lint-style test enforces this for the derived-set helpers.
+This proposal requires these invariants:
+
+- **Byte compatibility with one declared exception.** Sinks preserve `events.ndjson` v1, per-request diagnostics, replay-timing shapes/legacy `type`, and `cost.runnerRoundTrips`.
+  Golden fixtures in `contracts/fixtures/` fix each format.
+  Events from the formerly unredacted replay helper become redacted.
+  URL-query removal, sensitive-key masking, and long-string truncation can change those lines.
+  The security fix requires updated fixtures and a changelog entry.
+- **One redaction boundary.** `redactDiagnosticData` runs once at append for journal-owned output.
+  The second whole-entry flush pass remains only until sinks own their writes.
+  It is then removed.
+  No sink may write an event that bypasses the journal.
+  Transport-owned progress retains unredacted wire behavior.
+- **No consumer-dependent emitters.** Emit sites must not depend on debug mode or active replay traces.
+  Consumer conditions belong to sinks.
+- **No state reconstruction.** Journal events are write-only telemetry.
+  Session state, replay provenance, and repair watermarks must not be recovered from them.
+- **Traits instead of name parsing.** Production code must not select kinds through name substrings such as `startsWith('ios_runner_')`.
+  A lint-style test enforces this for derived-set helpers.
 
 ## Consequences
 
-- Traceability becomes "filter the journal by `requestId`" (or by `session` for teardown scopes):
-  one envelope, one ordering, across what are today three telemetry files with different envelope
-  shapes. Progress remains separately observable on the wire, as an operational channel should be.
-- New observability features (a timeline command, an OTel exporter, a perf-phase report) are new
-  sinks — no new emit sites, no new vocabularies.
-- Adding an event kind is a catalog entry plus emit sites; forgetting the catalog is a compile
-  error. Renaming an internal kind is invisible on the wire when the owning sink maps it; changing
-  a **wire** name remains a breaking change for log consumers and needs the same care as today.
-- The dead `traceLogPath` option, the duplicate redaction pass, and the unredacted replay-timing
-  helper are deleted; replay-timing redaction is the one visible output change.
-- Cost: a mechanical, wide migration (~70 files import the typed kind; the string values
-  themselves do not change, so diffs are type-level). Runtime overhead is one synchronous
-  sink-dispatch loop per event over today's buffer push — negligible against device I/O.
+If accepted and implemented, this proposal would have these consequences:
+
+- Traceability filters the journal by `requestId`, or `session` for teardown.
+  One envelope and order replace three telemetry-file envelope shapes.
+  Progress remains separately observable on the wire.
+- Timelines, OTel export, and performance-phase reports become sinks without new emit sites or vocabularies.
+- New kinds require catalog entries and emits.
+  Missing entries fail compilation.
+  Internal renames are wire-invisible when sinks map them.
+  Wire renames remain breaking changes for log consumers.
+- Unused `traceLogPath`, duplicate redaction, and the unredacted replay helper are removed.
+  Replay-timing redaction is the only visible output change.
+- Migration affects about 70 files through typed kinds without string-value changes.
+  Runtime adds one synchronous sink-dispatch loop per event to existing buffering.
+  That cost is negligible relative to device I/O.
 
 ## Alternatives considered
 
-- **Absorb progress streaming into the journal** (the first draft's step 5): rejected after
-  review. Progress is a transport-owned output port with ordering, cancellation, and closed-union
-  type-safety requirements; rerouting it through a generic journal weakens a protocol contract to
-  gain nothing operationally. Mirror emits remain available if journal visibility is ever needed.
-- **One closed discriminated union with typed payloads per kind:** rejected for this ADR — 155
-  kinds × payload schemas is a large, low-yield migration, and payload types can be added per-kind
-  incrementally once the catalog exists. The catalog is the enforcement point; payload typing is a
-  follow-up, not a prerequisite. (Progress keeps its typed union precisely because it stays on its
-  own channel.)
-- **`EventEmitter`/pub-sub bus:** rejected. Implicit subscription defeats both goals: deletability
-  (who listens is not statically visible) and traceability (causality disappears into `.on()`).
-  The codebase currently has zero production `EventEmitter` usage; this design keeps it that way.
-- **Event sourcing (rebuild session state from the journal):** rejected. Session state has owners
-  (`SessionStore`, ref frames, repair transactions) with their own invariants and gates; deriving
-  it from telemetry would couple correctness to an observability channel and is a large behavioral
-  rewrite with no user-facing benefit.
-- **A process-global fallback scope instead of explicit teardown scopes:** rejected — an ambient
-  catch-all scope would make "which scope did this event land in" environment-dependent and hide
-  missing-scope bugs; teardown entry points are few and known, so explicit scopes are cheap.
-- **Leave the channels, just type the phases:** considered as a stopping point — step 1 alone
-  fixes the stringly agent-cost coupling — but it leaves the duplicate envelopes, the redaction
-  inconsistency, and three write paths. Kept as the migration's first independently useful step
-  instead.
-- **Merge `upload-progress` and `app-events` in:** rejected. Upload progress is a local
-  byte-counter callback that never crosses the request scope; `packages/daemon/src/execution/app-events.ts` is a deep-link
-  builder for the `trigger-app-event` command, not an event channel.
+This proposal evaluates these alternatives:
+
+- **Absorb progress: rejected after review.** Transport ordering, cancellation, and closed-union safety require its separate output port.
+  A generic journal weakens that protocol without operational benefit.
+  Mirror emits remain possible.
+- **Typed payload union for all kinds: rejected for this ADR.** About 155 payload schemas create a large migration with limited benefit.
+  The catalog is the enforcement boundary.
+  Payload types can follow per kind.
+  Progress retains its typed union on its own channel.
+- **`EventEmitter`/pub-sub: rejected.** Implicit subscriptions hide consumers and causality in `.on()`.
+  This harms deletion analysis and traceability.
+  Production currently has no `EventEmitter`, and the proposal preserves that.
+- **Event sourcing: rejected.** `SessionStore`, ref frames, and repair transactions already own state invariants and gates.
+  Telemetry-based reconstruction couples correctness to observability and requires a broad behavior rewrite without user benefit.
+- **Process-global fallback scope: rejected.** Ambient scope selection depends on environment and conceals missing-scope defects.
+  Teardown entry points are few and known, so explicit scopes are inexpensive.
+- **Type phases only: retained as migration step 1.** It independently removes string-based agent-cost coupling.
+  As a final design, it leaves duplicate envelopes, inconsistent redaction, and three write paths.
+- **Include `upload-progress` and `app-events`: rejected.** Upload progress is a local byte-counter callback within request scope.
+  `packages/daemon/src/execution/app-events.ts` builds deep links for `trigger-app-event`; it is not an event channel.
 
 ## Validation required for implementation
 
-- Type-level completeness: an emit with an uncataloged kind fails to compile. Orphan detection
-  (declared-but-never-emitted kinds) is **static**: a source-scan check in the layering-lint style
-  proves every catalog kind has at least one emit reference; runtime observation is explicitly not
-  the mechanism (it conflates untested branches with dead declarations).
-- Golden byte-compatibility fixtures for `events.ndjson`, the per-request diagnostics file, and
-  `replay-timing.ndjson` — the latter's fixture updated once, in the same change that declares the
-  redaction fix.
-- Out-of-request coverage: an idle-reap/shutdown `finalizeRepairTeardown` still lands its
-  synthesized `close` as an `action.recorded` entry in `events.ndjson`, via a teardown scope, with
-  no request active.
-- Retention: the size cap (#1788) is orthogonal to sink ownership but shares the file. A sink
-  migration keeps rotation inside the one serialized write path, keeps the sidecar written before
-  the rename it describes, and keeps reads failing typed
-  (`EVENT_LOG_CURSOR_EXPIRED` / `EVENT_LOG_WINDOW_UNVERIFIED`) rather than answering a cursor it
-  cannot place.
-- Per-attempt routing: a multi-attempt `test` run writes each attempt's trace to its own file with
-  legacy `type` values; trace-kind events emitted with no bound destination are dropped, not
-  misrouted. A **concurrent nested-action regression** runs sharded attempts in parallel — each
-  performing nested dispatch that rebinds `session`/`logPath` via `createRequestExecutionScope` —
-  and proves per-fork isolation across **all three routed outputs**: each `replay-timing.ndjson`,
-  each per-request diagnostics ndjson, and each session's `events.ndjson` plus its retained generation contain only
-  their own shard's events — no cross-writes, no drops — including events emitted after `await` points.
-- Sink isolation: a sink that throws does not affect the buffer, other sinks, or the response;
-  ordering across sinks is registration order.
-- `cost.runnerRoundTrips` parity: the trait-derived set equals the current literal list; the
-  existing `request-router-cost` test keeps passing unchanged.
-- Redaction: a fixture proves a sensitive value emitted in `data` never reaches any journal-owned
-  sink output, including the replay timing trace.
-- Usage schema gate: a type/test check proves every `UsageRecord` field's vocabulary source — a
-  field is either numeric, an enum imported from the owning registry (command names, error codes,
-  flag keys), or a hash — and that no open-string field exists; adding one is a failing gate, not
-  a review comment.
-- Layering: `scripts/layering/check.ts` stays green — catalog in `contracts`, runtime in `host-kit`,
-  no new back-edges.
+Before this proposal can be implemented successfully, validation must prove these properties:
+
+- Uncataloged emits fail compilation.
+  A static source scan, in layering-lint style, proves an emit reference for every kind.
+  Runtime observation is not orphan detection because untested branches are not dead declarations.
+- Golden fixtures preserve `events.ndjson`, per-request diagnostics, and replay timing bytes.
+  The replay fixture changes once with the declared redaction fix.
+- Without an active request, idle-reap/shutdown `finalizeRepairTeardown` emits synthetic `close` as `action.recorded` through a teardown scope.
+- Retention #1788 remains within the one serialized write path.
+  The sidecar precedes the rename it describes.
+  Unplaceable cursors fail with typed `EVENT_LOG_CURSOR_EXPIRED` / `EVENT_LOG_WINDOW_UNVERIFIED` instead of an unverified answer.
+- Each attempt writes its own trace with legacy `type` values.
+  Trace-kind events without destinations are dropped instead of misrouted.
+  A concurrent nested-action regression exercises parallel shards and nested `createRequestExecutionScope` session/log-path rebindings.
+  Each replay trace, diagnostics file, session event log, and retained generation contains only its shard's events.
+  There are no cross-writes or omissions, including after `await`.
+- A throwing sink affects neither buffer, other sinks, nor response.
+  Sinks retain registration order.
+- Trait-derived `cost.runnerRoundTrips` kinds equal the existing literal list.
+  Existing `request-router-cost` tests pass unchanged.
+- Sensitive `data` never reaches any journal sink, including replay timing.
+- Every `UsageRecord` field is numeric, a registry-owned enum, or a hash.
+  The gate rejects open-string fields.
+  Enum sources include command names, error codes, and flag keys.
+- `scripts/layering/check.ts` passes with catalog in `contracts`, runtime in `host-kit`, and no new back-edges.
 
 ## Migration plan
 
-Each step lands green and independently useful:
+This active proposal plans independently useful steps that each pass validation:
 
-1. **Catalog + typed kinds** — introduce `EVENT_CATALOG`, narrow `emitDiagnostic`'s `phase` to
-   `EventKind`, migrate all emit sites mechanically (string values unchanged), derive
-   `RUNNER_ROUND_TRIP_PHASES` from the `runner-round-trip` trait with a parity test, add the
-   static orphan check. No runtime behavior change.
-2. **Sink seam** — restructure `diagnostics.ts` so the scope owns an explicit sink list with the
-   ordering/isolation/flush contract; move the debug stream and agent-cost tally behind it; delete
-   `traceLogPath`; collapse to a single redaction pass. Byte-compat fixtures land here.
-3. **Session event log as sink + teardown scopes** — request-lifecycle emit points route through
-   the journal; the `events.ndjson` writer becomes a sink; idle-reap/shutdown finalizers open
-   session-scoped teardown scopes so out-of-request `action.recorded` events keep flowing; the
-   `events` command keeps its paging contract, including the typed cursor-expiry and
-   window-verification errors the #1788 retention window added to it.
-4. **Replay trace as sink** — the journal fork primitive lands with its concurrent-shard
-   regression; both trace helpers are replaced by one sink with fork-bound per-attempt routing and
-   legacy `type` mapping; the declared redaction change ships here with its fixture and changelog
-   entry.
+1. **Catalog and typed kinds.** Introduce `EVENT_CATALOG` and narrow `emitDiagnostic.phase` to `EventKind`.
+   Migrate emits without string changes.
+   Derive `RUNNER_ROUND_TRIP_PHASES` from its trait with parity coverage.
+   Add static orphan detection.
+   Runtime behavior remains unchanged.
+2. **Sink boundary.** Add scope-owned sink lists with ordering, isolation, and flush contracts.
+   Move debug streaming and agent-cost behind that boundary.
+   Delete `traceLogPath`.
+   Use one redaction pass.
+   Add byte-compatibility fixtures.
+3. **Session sink and teardown scopes.** Route lifecycle emits through the journal and make the event-log writer a sink.
+   Add idle-reap/shutdown session scopes to preserve out-of-request actions.
+   Preserve `events` paging and #1788's typed cursor-expiry/window-verification errors.
+4. **Replay sink.** Add fork scopes and the concurrent-shard regression.
+   Replace both helpers with one fork-routed sink and legacy `type` mappings.
+   Deliver the declared redaction fix with its fixture and changelog entry.
