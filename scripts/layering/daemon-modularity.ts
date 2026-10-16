@@ -4,8 +4,8 @@ import {
   INTERACTION_RETIRED_HANDLER_PATHS,
   LOGICAL_MODULE_POLICIES,
   matchesDeclaredRoot,
-  SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
-  SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
+  SESSION_LIFECYCLE_RETIRED_PATHS,
+  SESSION_OBSERVABILITY_RETIRED_PATHS,
   SNAPSHOT_EXECUTION_RETIRED_HANDLER_PATHS,
   type LogicalModulePolicy,
 } from './architecture-ownership.ts';
@@ -63,7 +63,7 @@ export function checkRetiredSessionLifecyclePaths(
 ): LayeringViolation[] {
   return checkRetiredHandlerPaths(
     sourceFiles,
-    SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
+    SESSION_LIFECYCLE_RETIRED_PATHS,
     /^packages\/daemon\/src\/handlers\/session-(?:open|close)(?:-[^/]+)?\.ts$/,
     'session lifecycle',
   );
@@ -74,7 +74,7 @@ export function checkRetiredSessionObservabilityPaths(
 ): LayeringViolation[] {
   return checkRetiredHandlerPaths(
     sourceFiles,
-    SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
+    SESSION_OBSERVABILITY_RETIRED_PATHS,
     /^packages\/daemon\/src\/handlers\/session-(?:observability|perf|logs|events|network|audio)(?:-[^/]+)?\.ts$/,
     'session observability',
   );

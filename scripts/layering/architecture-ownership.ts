@@ -46,7 +46,7 @@ const DAEMON_SESSION_OBSERVABILITY_FACADES = [
   },
 ] as const;
 
-export const SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS = [
+export const SESSION_LIFECYCLE_RETIRED_PATHS = [
   'packages/daemon/src/sessions/session-lifecycle/index.ts',
   'packages/daemon/src/handlers/session-device-utils.ts',
   'packages/daemon/src/handlers/session-runtime-admission.ts',
@@ -104,7 +104,7 @@ const DAEMON_INTERACTION_FACADE = {
   ],
 } as const;
 
-export const SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS = [
+export const SESSION_OBSERVABILITY_RETIRED_PATHS = [
   'packages/daemon/src/sessions/session-observability/index.ts',
   'packages/daemon/src/handlers/session-observability.ts',
   'packages/daemon/src/handlers/session-perf-runtime.ts',
