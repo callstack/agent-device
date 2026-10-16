@@ -22,15 +22,14 @@ Do not wait for CI merely to report publication. Do not claim skipped integratio
 
 ## Self-review
 
-Give a fresh reviewer the worktree, head, base ref, and this prompt. Do not supply an implementation summary.
+Commit the change. Give an independent reviewer the worktree, merge-base SHA, head SHA, and task requirements.
+Keep the first review free of implementation summaries.
+Review that SHA range using AGENTS.md and [review guidance](review.md).
 
-> You did not write this change. Assume it has bugs and find them. Read AGENTS.md and docs/agents/review.md.
-> Read the full diff against the merge-base and untracked files. Open callers and siblings for each hunk.
-> Keep this checkout read-only. Run experiments only in a separate disposable checkout.
-> Report only findings with a triggering scenario: file:line, severity, what breaks, and the fix. If none, say so.
-
+In later rounds, provide the previously reviewed SHA, findings, and dispositions. Review changes since that SHA and their affected interactions.
+After a rebase, compare the old and new branch ranges with `git range-diff`.
 Fix accepted findings and rerun affected checks. Record a reason for rejected findings.
-If no independent reviewer is available, reread the full diff cold and report that limitation.
+If no independent reviewer is available, review the diff yourself and report that limitation.
 An independent reviewer is required at the growth thresholds in [review guidance](review.md).
 
 ## Scope and commits
