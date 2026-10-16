@@ -2,9 +2,12 @@
 
 ## Status
 
-Accepted; implemented on `main` (`packages/daemon/src/sessions/handlers/session-script-publication.ts`,
-`packages/daemon/src/core/session-script-active-publication.ts`), including the #1349 identity-level
-destination-guard amendment.
+Accepted.
+
+Completed process history is in git history.
+
+Implementation owners: `packages/daemon/src/sessions/handlers/session-script-publication.ts` and
+`packages/daemon/src/core/session-script-active-publication.ts`.
 
 ## Rules at a glance
 
@@ -25,7 +28,7 @@ Normative summary; the binding contracts and refusal cases are in [Decision](#de
 - `ReplayCommandResult.sessionActive` (from the daemon's session store, never script re-parsing) is
   what lets a one-shot client keep the daemon alive on a close-less handoff.
 - Sensitive `fill` inputs must be recorded as placeholders via `fill --record-as <VAR>`
-  (ADR 0017, shipped for #1348); unparameterized `fill`/`type` values persist literally into the
+  (ADR 0017, #1348); unparameterized `fill`/`type` values persist literally into the
   artifact, so a secret entered without `--record-as` is published. The protection is
   recording-session-scoped (ADR 0017's #1398 amendment): a later action's own recorded evidence can
   never re-serialize an app-rendered echo of an already-parameterized value either.
@@ -98,7 +101,7 @@ work, so the caller can retry with plain `close`. Plain `close` tears down ABORT
 writing; closing an unpublished ARMED recording retains the existing close-time publication behavior. A
 fresh session is the only re-arming boundary.
 
-> **Amendment (2026-08-02, shipped).** A session that was never armed — no recorded
+> **Amendment (2026-08-02).** A session that was never armed — no recorded
 > `open --save-script` at all — has no fourth pre-ARMED state name here, but it previously fell
 > through the same close-time write path as an ARMED recording: `close --save-script` on it folded
 > the request into the authoring lifecycle at record time and published anyway. Live evidence
@@ -113,7 +116,7 @@ fresh session is the only re-arming boundary.
 > *bare* `close` (no `--save-script` on the close itself) publish; that case is resolved by the
 > amendments below.
 
-> **Amendment (#1533, shipped).** ABORTED terminality above was enforced only by
+> **Amendment (#1533).** ABORTED terminality above was enforced only by
 > `abortAuthoringOnSecondOpen` clearing `session.recordSession` — inert by ordering, not by
 > construction. `recordSession` is an evidence-capture flag that several surfaces set directly, so
 > a later `--save-script` re-armed it while the status stayed ABORTED, and a *bare* `close` then
@@ -122,17 +125,7 @@ fresh session is the only re-arming boundary.
 > caller that plain `close` "tears down without writing", so the gap also made an existing error
 > message untrue.
 >
-> ABORTED is now terminal by construction. `--save-script` arms recording through one rule owned by
-> the publication projection, which answers "not recording" for an ABORTED lifecycle on every
-> surface that handles the flag — the re-open builder, the close finalizer, and the recorded-action
-> ingress — so the flag can no longer contradict the status. Publication authorization is likewise
-> the aggregate's to answer: the writer asks one publication-blocked question covering
-> not-recording, an uncommittable or committed repair, and an ABORTED authoring lifecycle alike, so
-> every path that reaches it (bare `close`, teardown, idle-reap, active publication) refuses. ARMED
-> and PUBLISHED lifecycles and every repair transaction are unchanged; no state name, transition,
-> or entry point in the lifecycle above is added or altered.
-
-> **Amendment (#1533 follow-up, shipped).** The rule above still relied on a stored
+> **Amendment (#1533 follow-up).** The rule above still relied on a stored
 > `SessionState.recordSession` that every writer had to set in step with the lifecycle. Routing the
 > writes through one place made the two agree; it did not make disagreement unrepresentable, and
 > the field remained a second source of truth for a question the aggregate already answered.
@@ -177,7 +170,7 @@ the serialized guard before filesystem work and never relies on repair-only bare
 `session save-script` refuses publication without this **destination guard** and tells the author to
 record one. V1 does not infer a screen identity from a snapshot or synthesize an implicit guard.
 
-> **Amendment (#1349, shipped).** The guard is now identity-level, not merely selector-level. A
+> **Amendment (#1349).** The guard is now identity-level, not merely selector-level. A
 > selector wait recorded while ARMED captures landmark-mode `target-v1` evidence for the matched
 > element (ADR 0012's read-only-step amendment), and a qualifying destination guard is exactly a
 > selector wait whose annotation is `verification: "verified"` — a selector wait on an identity-empty
