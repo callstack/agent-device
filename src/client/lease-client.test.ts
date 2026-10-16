@@ -130,8 +130,20 @@ test('allocate sends the lease id named on the call, never the configured one', 
 });
 
 for (const operation of ['allocate', 'heartbeat'] as const) {
-  for (const lease of [undefined, null, [], 'invalid']) {
-    test(`${operation} rejects a non-object lease (${JSON.stringify(lease)}) with structured diagnostics`, async () => {
+  const validLease = {
+    leaseId: 'lease-a',
+    tenantId: 'tenant-a',
+    runId: 'run-a',
+    backend: 'ios-instance',
+  };
+  const invalidLeases: unknown[] = [undefined, null, [], 'invalid'];
+  for (const field of ['leaseId', 'tenantId', 'runId', 'backend'] as const) {
+    for (const value of [undefined, null, '', 42]) {
+      invalidLeases.push({ ...validLease, [field]: value });
+    }
+  }
+  for (const lease of invalidLeases) {
+    test(`${operation} rejects an invalid lease (${JSON.stringify(lease)}) with structured diagnostics`, async () => {
       const data = { lease };
       const client = createAgentDeviceClient(
         {},
@@ -144,10 +156,10 @@ for (const operation of ['allocate', 'heartbeat'] as const) {
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'COMMAND_FAILED');
-          assert.deepEqual(error.details, { reason: 'invalid-lease-response', response: data });
+          assert.deepEqual(error.details, { reason: 'INVALID_LEASE_RESPONSE', response: data });
           const normalized = normalizeError(error);
           assert.equal(normalized.code, 'COMMAND_FAILED');
-          assert.equal(normalized.details?.reason, 'invalid-lease-response');
+          assert.equal(normalized.details?.reason, 'INVALID_LEASE_RESPONSE');
           assert.deepEqual(normalized.details?.response, data);
           return true;
         },
