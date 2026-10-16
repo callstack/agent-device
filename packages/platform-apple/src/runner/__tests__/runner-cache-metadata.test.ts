@@ -792,7 +792,7 @@ test('a default selection the host moved does not answer from the fingerprint it
   );
 });
 
-test('a toolchain fingerprint expires at the end of the TTL its read started, hits included', () => {
+test('a toolchain fingerprint is renewed by each hit and expires once nothing uses it', () => {
   vi.useFakeTimers();
   try {
     appleRunnerTestHost.update({
@@ -800,14 +800,15 @@ test('a toolchain fingerprint expires at the end of the TTL its read started, hi
     });
     resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
     runCmdSync.mockClear();
-    // A hit answers the read and leaves the expiry where the read put it. Hits used to push it
-    // ahead of themselves, so a busy daemon never re-resolved what it was answering for (#3300).
+    // The key names the dir the read resolved, so a hit is evidence the entry still answers for
+    // this host and renews itself (#3300 asked to keep this). What an idle entry cannot outlast is
+    // the TTL, measured from the hit that last renewed it.
     vi.advanceTimersByTime(9 * 60_000);
     resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
     expect(runCmdSync).not.toHaveBeenCalled();
     expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
 
-    vi.advanceTimersByTime(60_001);
+    vi.advanceTimersByTime(10 * 60_001);
     expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBeUndefined();
     resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
     expect(runCmdSync.mock.calls.map(([command]) => command)).toEqual([
