@@ -18,6 +18,9 @@ import {
 } from './cloud-webdriver-regression-fixtures.ts';
 import { inspectProviderDeploymentAdmission } from './stale-provider-runtime-admission.fixtures.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
+import { bindTestCommandHost } from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const limrunState = vi.hoisted(() => ({
   androidCreate: vi.fn(async () => ({
