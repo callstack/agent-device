@@ -99,7 +99,8 @@ But these invariants are fixed:
   It is a format envelope, not a `SessionAction`, and it has no device side effect.
   A composed native parent uses the corresponding `composition-v1` guard as its first executable line, before root `open` or any `include`.
   An old reader parses either guard as an unknown action.
-  The existing `dispatchKnownCommand` seam rejects it with `INVALID_ARGS` before it invokes any platform handler.
+  The generic-dispatch owner would reject the unknown guard before platform execution.
+  The fragment codec must prove the required `INVALID_ARGS` format rejection through that path.
   The fragment has no `open`, `close`, or hidden launch action.
   The writer always emits the effective `context platform` and `target`.
   A parser rejects a fragment that is missing either constraint.
@@ -530,8 +531,10 @@ Readers that do not know the executable guard reject the artifact at its format 
 The new reader consumes the native guard during source preflight.
 An old reader can get either a v1 fragment or a composed parent.
 It parses the guard as an ordinary action.
-Then the existing `dispatchKnownCommand` rejection in `src/core/dispatch.ts` throws `INVALID_ARGS` before the platform handler is invoked.
-Therefore, the old reader cannot execute a root `open`, a known prefix, or an expanded child body.
+The current generic-dispatch owner is `resolveGenericRuntimeExecution` in `packages/daemon/src/execution/generic-runtime-execution.ts`.
+Its default returns `COMMAND_FAILED` with reason `generic-route-runtime-missing` before platform execution.
+The proposed fragment codec must establish the required `INVALID_ARGS` format rejection before any platform handler runs.
+Then the old reader would not execute a root `open`, a known prefix, or an expanded child body.
 An old reader that gets an unguarded legacy `.ad` retains its existing behavior.
 This includes the possibility that it executes a known prefix before a later unknown command.
 That legacy case is explicitly outside the v1 composed-artifact acceptance contract, and it is not safety evidence.
@@ -539,8 +542,8 @@ The new reader rejects a fragment supplied as a top-level replay artifact with `
 Unknown future reference comments remain ordinary comments to an older reader.
 An unknown future executable guard fails before device work.
 
-The old-reader evidence points to the actual unknown-command seam in `src/core/dispatch.ts`.
-The current `src/core/__tests__/dispatch-keyboard.test.ts` does not prove this contract.
+The current generic-dispatch evidence is `packages/daemon/src/execution/__tests__/generic-route-runtime-completeness.test.ts`.
+Its unknown-command test proves the routing-gap response, not the proposed fragment format contract.
 The fragment codec implementation must add planted-red tests with these properties:
 
 - They run a guarded composition with `open` through the old dispatch path.
@@ -676,8 +679,8 @@ The planted-red checks below are unit or fixture assertions.
 The slice that introduces each check owns it.
 They are not a claim that this docs-only spike already has a structural gate.
 
-The old-reader dispatch seam is `src/core/dispatch.ts`.
-The existing keyboard-dispatch test is not evidence for unknown-command rejection.
+The current generic-dispatch seam is `resolveGenericRuntimeExecution` in `packages/daemon/src/execution/generic-runtime-execution.ts`.
+Its completeness test does not prove the proposed old-reader fragment contract.
 
 1. **Shared pure model and canonical fixtures.**
    Add typed composition nodes, fragment identity, invocation paths, local addresses, digest canonicalization, cycle/depth/size validation, and preflight result types without dispatch.
