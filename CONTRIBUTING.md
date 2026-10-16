@@ -238,8 +238,9 @@ Useful direct entry points:
 - `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
 - `pnpm fallow:baseline` — intentionally regenerate the reviewed Fallow health baseline
 
-See [`docs/agents/testing.md`](docs/agents/testing.md) for gate ownership, shared test utilities,
-mutation/fuzz lanes, contention policy, and test-speed rules. For real devices, follow
+See [`docs/agents/testing.md`](docs/agents/testing.md) for check selection and blocked validation; see
+[`test authoring`](docs/agents/test-authoring.md) for shared test utilities,
+and test-speed rules. See [gate maintenance](docs/agents/gates.md) for mutation and fuzz harnesses. For real devices, follow
 [`docs/agents/device-verification.md`](docs/agents/device-verification.md); a fixture-backed test does
 not prove that a native path was active.
 
