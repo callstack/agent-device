@@ -28,7 +28,7 @@ Name modules for the domain question they answer. Colocate claims with their enf
 Use barrels only at package boundaries. Split files over 1,000 lines before adding behavior, except generated or fixture data.
 Split a source module and its tests together. Do not extend legacy interaction or platform index test aggregations.
 Keep tests beside their named module. Put repository artifact guards in `test/repo-guards/`.
-Keep a single-package fixture local. Shared helpers belong in `@agent-device/test-kit`, a devDependency.
+Shared helpers belong in `@agent-device/test-kit`, a devDependency.
 Production code never imports test-kit. Test-kit never depends on platforms, providers, the daemon, or root.
 Do not export test support from production packages.
 

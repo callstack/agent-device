@@ -34,7 +34,7 @@ Vitest workers signal only themselves and direct children. Mock process-signal h
 Do not disable isolation, switch the fork pool, or add unit retries to hide failures.
 Use existing clocks or tool seams instead of waiting production time.
 Slow-test pins only shrink; a new pin needs measured justification.
-Split oversized test families with their source. Do not extend test files over 1,000 lines.
+Do not extend test files over 1,000 lines.
 Import the subject module, not a platform barrel.
 
 ## Run a focused test

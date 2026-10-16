@@ -5,7 +5,7 @@ Apply authorization already given. Merging and releasing need separate authoriza
 
 ## Validate
 
-Follow [validation](testing.md). Before pushing, run `pnpm check:affected --run --head <commit>`.
+Follow [validation](testing.md).
 Record its receipt in the PR body. A serialized gate stage can validate the pushed head instead.
 Record that result before reporting publication.
 For unresolved failures, follow the blocked-validation table. An authorized incomplete draft can record a blocker; it is not a pass.
