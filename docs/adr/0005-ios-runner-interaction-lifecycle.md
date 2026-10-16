@@ -4,6 +4,8 @@
 
 Accepted
 
+Completed process history is in git history.
+
 ## Context
 
 The iOS runner is a long-lived XCTest process with an HTTP command loop. A command can appear to
@@ -41,7 +43,7 @@ same `appBundleId` within 5 seconds. This recency lives only on the `RunnerSessi
 `lastHealthyMutation`, so it dies with every invalidation/restart, and it is recorded only after the
 `runnerFatal` check, so sparse AX-fallback snapshots and `runnerFatal` payloads never refresh it.
 Snapshots and other read-only responses never count as a health signal. This narrow skip is
-permitted now because the future-work precondition below is met: coordinate-first activation removed
+permitted because: coordinate-first activation removed
 the command-induced teardown trigger, and the lifecycle status journal plus the status-before-
 invalidate recovery is the teardown-surviving status surface that resolves any ambiguous post-send
 failure before invalidation. A transport failure after a skip clears the recency record and is marked
@@ -147,6 +149,3 @@ an app target across process identity. The reset adds one local runner request i
 runner restart and clears the old process's hostile-screen capture penalty before the replacement is
 reacquired.
 
-Future optimization work should only reduce these preflights after the runner exposes status in a
-way that survives command-induced XCTest teardown and can prove the session is still serving new
-requests.
