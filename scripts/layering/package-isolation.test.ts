@@ -288,6 +288,20 @@ test('an alias an enclosing scope redeclares is a local object, not the mock API
   }
 });
 
+test('a mock of a provider survives a shadow that only a later scope boundary declares', () => {
+  for (const policy of POLICIES) {
+    const entry = "'@agent-device/provider-webdriver/plugin'";
+    const vitest = "import { vi as mocks } from 'vitest';";
+    for (const text of [
+      `${vitest}\nfunction f(x = mocks.mock(${entry})) { var mocks; }`,
+      `${vitest}\nswitch (mocks.mock(${entry})) { case 0: let mocks; }`,
+      `${vitest}\nfunction f() { class C { static { var mocks; } } mocks.mock(${entry}); }`,
+    ]) {
+      assert.equal(check(policy, {}, source(policy, text)).length, 1, `${policy.name}: ${text}`);
+    }
+  }
+});
+
 test('relative reach out of the package directory is refused', () => {
   for (const policy of POLICIES) {
     for (const specifier of [

@@ -184,10 +184,15 @@ function isFunctionNode(node: AstNode): boolean {
   );
 }
 
+/** Bodies that open their own `var` scope: a `var` inside one never reaches the enclosing function. */
+function isVarScopeBoundary(node: AstNode): boolean {
+  return isFunctionNode(node) || node.type === 'StaticBlock' || node.type === 'TSModuleBlock';
+}
+
 function hoistedVarNames(node: unknown, into: string[]): void {
   for (const child of Array.isArray(node) ? node : [node]) {
     const record = asNode(child);
-    if (record === undefined || isFunctionNode(record)) continue;
+    if (record === undefined || isVarScopeBoundary(record)) continue;
     if (record.type === 'VariableDeclaration' && record.kind === 'var') {
       for (const declarator of nodeList(record.declarations)) {
         patternNames(asNode(declarator)?.id, into);
@@ -197,18 +202,20 @@ function hoistedVarNames(node: unknown, into: string[]): void {
   }
 }
 
-/** Names `node` itself declares for its own subtree: parameters, `var`s, block-level lexical declarations. */
+/**
+ * Names `node` declares for its own subtree: parameters, block-level lexical declarations, and the
+ * `var`s of a static block or namespace body. A function's own `var`s join its body only
+ * (`childScope`), since a parameter initializer runs before the body declarations exist.
+ */
 function scopeBindings(node: AstNode): string[] {
   const names: string[] = [];
   if (isFunctionNode(node)) {
     for (const param of nodeList(node.params)) patternNames(param, names);
     if (node.type === 'FunctionExpression') patternNames(node.id, names);
+  } else if (node.type === 'StaticBlock' || node.type === 'TSModuleBlock') {
+    lexicalNames(nodeList(node.body), names);
     hoistedVarNames(node.body, names);
-  } else if (
-    node.type === 'BlockStatement' ||
-    node.type === 'StaticBlock' ||
-    node.type === 'TSModuleBlock'
-  ) {
+  } else if (node.type === 'BlockStatement') {
     lexicalNames(nodeList(node.body), names);
   } else if (node.type === 'ClassExpression') {
     patternNames(node.id, names);
@@ -226,10 +233,36 @@ function scopeBindings(node: AstNode): string[] {
   return names;
 }
 
+function withNames(scope: ReadonlySet<string>, names: readonly string[]): ReadonlySet<string> {
+  return names.length > 0 ? new Set([...scope, ...names]) : scope;
+}
+
+/**
+ * The scope a child property sees. Most children see everything the node declares; a switch
+ * discriminant runs before the case declarations exist, and only a function body sees the
+ * function's `var`s.
+ */
+function childScope(
+  node: AstNode,
+  key: string,
+  outer: ReadonlySet<string>,
+  inner: ReadonlySet<string>,
+): ReadonlySet<string> {
+  if (node.type === 'SwitchStatement' && key === 'discriminant') return outer;
+  if (isFunctionNode(node) && key === 'body') {
+    const vars: string[] = [];
+    hoistedVarNames(node.body, vars);
+    return withNames(inner, vars);
+  }
+  return inner;
+}
+
 /**
  * `visitAst` that also hands the visitor the names declared by the enclosing scopes: function
  * parameters and `var`s, block-level `let`/`const`/`function`/`class`, loop heads and `catch`
- * parameters. A `with` statement or `eval` can rebind names invisibly and is not modelled.
+ * parameters. A parameter initializer, a switch discriminant, a static block and a namespace
+ * body keep their own boundaries. A `with` statement or `eval` can rebind names invisibly and is
+ * not modelled.
  */
 export function visitAstScoped(
   node: unknown,
@@ -242,8 +275,9 @@ export function visitAstScoped(
   }
   const record = asNode(node);
   if (record === undefined) return;
-  const declared = scopeBindings(record);
-  const scope = declared.length > 0 ? new Set([...shadowed, ...declared]) : shadowed;
+  const scope = withNames(shadowed, scopeBindings(record));
   visitor(record, scope);
-  for (const child of Object.values(record)) visitAstScoped(child, scope, visitor);
+  for (const [key, child] of Object.entries(record)) {
+    visitAstScoped(child, childScope(record, key, shadowed, scope), visitor);
+  }
 }

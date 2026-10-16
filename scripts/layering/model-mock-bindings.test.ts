@@ -112,6 +112,66 @@ test('an alias is not a mock receiver where an enclosing scope redeclares its na
   );
 });
 
+test('a parameter initializer sees the parameters but not the body declarations', () => {
+  const alias = "import { vi as mocks } from 'vitest';";
+  assert.deepEqual(
+    specs(
+      alias,
+      "function bodyVar(x = mocks.mock('a')) { var mocks; }",
+      "const arrow = (x = mocks.doMock('b')) => { var mocks; };",
+      "function bodyFunction(x = mocks.mock('c')) { function mocks() {} }",
+      "const method = { run(x = mocks.mock('d')) { var mocks; } };",
+    ),
+    ['a', 'b', 'c', 'd'],
+  );
+  assert.deepEqual(
+    specs(
+      alias,
+      "function earlier(mocks, x = mocks.mock('e')) {}",
+      "const arrow = (mocks, x = mocks.mock('f')) => x;",
+      "const expression = function mocks(x = mocks.mock('g')) {};",
+      "function body(x) { var mocks = other; return mocks.mock('h'); }",
+    ),
+    [],
+  );
+});
+
+test('a switch discriminant sees the enclosing scope, not the case declarations', () => {
+  const alias = "import { vi as mocks } from 'vitest';";
+  assert.deepEqual(specs(alias, "switch (mocks.mock('a')) { case 0: let mocks; }"), ['a']);
+  assert.deepEqual(
+    specs(alias, "switch (kind) { case 0: const mocks = other; mocks.mock('b'); }"),
+    [],
+  );
+  assert.deepEqual(
+    specs(alias, "switch (kind) { case 0: let mocks; break; default: mocks.mock('c'); }"),
+    [],
+  );
+});
+
+test('a static block and a namespace body are var scopes of their own', () => {
+  const alias = "import { vi as mocks } from 'vitest';";
+  assert.deepEqual(
+    specs(
+      alias,
+      "function staticVar() { class C { static { var mocks; } } mocks.mock('a'); }",
+      "function namespaceVar() { namespace N { var mocks = other; } mocks.mock('b'); }",
+      "class D { static { var mocks = other; } } mocks.mock('c');",
+    ),
+    ['a', 'b', 'c'],
+  );
+  assert.deepEqual(
+    specs(
+      alias,
+      "class C { static { var mocks = other; mocks.mock('d'); } }",
+      "class E { static { if (flag) { var mocks = other; } mocks.mock('e'); } }",
+      "namespace N { var mocks = other; mocks.mock('f'); }",
+      "namespace M { if (flag) { var mocks = other; } mocks.mock('g'); }",
+    ),
+    [],
+  );
+});
+
 test('the global vi and vitest names stay mock receivers beside import aliases', () => {
   assert.deepEqual(
     specs(
