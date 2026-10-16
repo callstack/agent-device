@@ -1,8 +1,7 @@
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveCallerScopeRoot } from '../core/caller-scope-root.ts';
 import {
   PLATFORM_SELECTORS,
   type PlatformSelector,
@@ -303,31 +302,4 @@ function buildAmbiguousWorkspaceSessionError(candidates: SessionRef[]): AppError
 
 function hashScopeRoot(scopeRoot: string): string {
   return crypto.createHash('sha256').update(scopeRoot).digest('hex').slice(0, 16);
-}
-
-function resolveCallerScopeRoot(rawCwd: string | undefined): string | undefined {
-  if (!rawCwd || rawCwd.trim().length === 0) return undefined;
-  const cwd = resolveExistingPath(rawCwd);
-  return findGitWorktreeRoot(cwd) ?? cwd;
-}
-
-function resolveExistingPath(rawPath: string): string {
-  const resolved = path.resolve(rawPath);
-  try {
-    return fs.realpathSync.native(resolved);
-  } catch {
-    return resolved;
-  }
-}
-
-function findGitWorktreeRoot(startDir: string): string | undefined {
-  let current = startDir;
-  while (true) {
-    if (fs.existsSync(path.join(current, '.git'))) {
-      return current;
-    }
-    const parent = path.dirname(current);
-    if (parent === current) return undefined;
-    current = parent;
-  }
 }

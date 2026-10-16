@@ -257,8 +257,10 @@ export async function createRequestExecutionScope(params: {
     const dispatchLedger = requestDispatchLedger(scopedReq);
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
       command,
+      sessionName,
       dispatchLedger,
       workspace: scopedReq.meta?.cwd ?? process.cwd(),
+      callerCwd: scopedReq.meta?.cwd,
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
@@ -391,8 +393,10 @@ export async function createRequestExecutionScope(params: {
  */
 function createRequestDeviceAccess(params: {
   command: string;
+  sessionName: string;
   dispatchLedger: RequestDispatchLedger;
   workspace: string;
+  callerCwd: string | undefined;
   stateDir: string;
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> | undefined;
   platformRequestScope: PlatformRequestScope | undefined;
@@ -409,7 +413,9 @@ function createRequestDeviceAccess(params: {
   const claimAdmission = createDeviceClaimAdmission({
     policy: resolveCommandDeviceClaimPolicy(params.command),
     command: params.command,
+    session: params.sessionName,
     workspace: params.workspace,
+    callerCwd: params.callerCwd,
     stateDir: params.stateDir,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
       scope: platformRequestScope,

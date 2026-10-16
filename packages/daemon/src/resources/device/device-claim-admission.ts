@@ -2,9 +2,11 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { resolveCallerScopeRoot } from '../../core/caller-scope-root.ts';
 import { deviceClaimConflictError } from './device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
 import {
+  abandonDeviceClaim,
   acquireTransientDeviceClaim,
   clearDeviceClaim,
   type DeviceClaimReconciler,
@@ -35,13 +37,32 @@ export type DeviceClaimAdmission = AsyncDisposable &
 export function createDeviceClaimAdmission(params: {
   policy: DeviceClaimPolicy;
   command: string;
+  /**
+   * The session this request runs in, which is the only session whose own claim
+   * covers a `transient-exclusive` command. Sessions of one daemon are separate
+   * device owners (#3345), so the request's routed session address — not the
+   * daemon's process identity — is what admission compares a held claim against.
+   * Addresses are copyable, so session equality alone is not ownership: the
+   * covered claim must also record this request's workspace.
+   */
+  session: string;
   workspace: string;
+  /**
+   * The caller's raw cwd when the request carried one, or nothing for a caller without a
+   * workspace of its own (SDK requests). The covered-claim check compares workspaces;
+   * {@link workspace} cannot serve it because its daemon-directory fallback would refuse
+   * exactly the SDK requests whose own session claims should cover them.
+   */
+  callerCwd: string | undefined;
   stateDir: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }): DeviceClaimAdmission {
   // The caller admits once per device binding, so this only has to remember what
   // it took in order to give it back.
   const acquired: DeviceClaimSessionOwnership[] = [];
+  // Comparing both sides through resolveCallerScopeRoot — the root routing hashes into
+  // the implicit address — keeps one checkout's commands together across directories.
+  const requestScopeRoot = resolveCallerScopeRoot(params.callerCwd);
 
   /**
    * Only `transient-exclusive` writes the claim store here: `observe`/`require-owner` never do,
@@ -53,12 +74,24 @@ export function createDeviceClaimAdmission(params: {
     const result = await acquireTransientDeviceClaim({
       device,
       command: params.command,
+      coveredBySession: params.session,
+      coveredClaimIsOwnedByRequest: (claim) =>
+        !requestScopeRoot || resolveCallerScopeRoot(claim.workspace) === requestScopeRoot,
       workspace: params.workspace,
       stateDir: params.stateDir,
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
     });
-    if (result.status === 'conflict') throw deviceClaimConflictError(device, result.conflict);
-    if (result.status === 'acquired') acquired.push(result.ownership);
+    if (result.status === 'acquired') {
+      acquired.push(result.ownership);
+      return;
+    }
+    if (result.status === 'conflict') {
+      // A command-scoped claim this request took for this device covers a re-bind of
+      // it; the same claim seen by any other request is a live owner.
+      const held = result.conflict.claim;
+      if (held && acquired.some((ownership) => ownership.ownerToken === held.ownerToken)) return;
+      throw deviceClaimConflictError(device, result.conflict);
+    }
   }
 
   return {
@@ -84,6 +117,22 @@ export function createDeviceClaimAdmission(params: {
               error: error instanceof Error ? error.message : String(error),
             },
           });
+          // A live record whose unlink failed would refuse this session's own next
+          // command, so it must not stay live: abandoned means "holds it for nobody",
+          // which the next acquire supersedes.
+          try {
+            await abandonDeviceClaim(ownership);
+          } catch (abandonError) {
+            emitDiagnostic({
+              level: 'error',
+              phase: 'transient_device_claim_abandon_failed',
+              data: {
+                command: params.command,
+                deviceKey: ownership.deviceKey,
+                error: abandonError instanceof Error ? abandonError.message : String(abandonError),
+              },
+            });
+          }
         }
       }
     },

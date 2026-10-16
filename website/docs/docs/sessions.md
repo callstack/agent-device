@@ -149,11 +149,15 @@ budget, so several agents can queue on one device.
 
 `--wait` waits only for another session. A device claimed by another workspace's
 daemon is never waited for; `open` fails at once and names the command that releases it.
+Device-mutating commands like `install` and `reinstall` don't wait either: while a
+session other than yours holds the device, they fail at once with `DEVICE_IN_USE` and
+name the owner.
 
-## Release a device another workspace holds
+## Release a device another session or workspace holds
 
 Each daemon claims the devices its sessions use. A claim whose owner is live, or can't be proven
-gone, blocks `open` from another workspace. List the claims on this host without starting a daemon:
+gone, blocks `open` from another workspace, and blocks device-mutating commands like `install`
+from any session other than the owner's. List the claims on this host without starting a daemon:
 
 ```bash
 agent-device device status
