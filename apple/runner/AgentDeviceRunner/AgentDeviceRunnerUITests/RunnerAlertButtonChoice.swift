@@ -7,8 +7,10 @@ import Foundation
 /// Transparency prompt's decline in every language differently, so no decline list carries it,
 /// and a fallback to the last button answered "Allow" while reporting `dismissed` (#3627). With
 /// no known decline label, the only candidate that could decline is a label the accept list does
-/// not claim, so `dismiss` takes the last such button; when every button reads affirmative there
-/// is no decline to name and the command fails without a tap.
+/// not claim — but iOS localizes the affirmative too, so a fully localized prompt leaves every
+/// label unclaimed and no candidate is identifiable. So `dismiss` takes a fallback only when
+/// exactly one button is unclaimed; when more than one is, or every button reads affirmative,
+/// there is no decline to name and the command fails without a tap.
 enum RunnerAlertButtonChoice {
   static func buttonIndex(for labels: [String], action: String) -> Int? {
     if action == "accept" {
@@ -21,7 +23,8 @@ enum RunnerAlertButtonChoice {
     if let decline = labels.firstIndex(where: { isDismissButton($0) }) {
       return decline
     }
-    return labels.lastIndex { !isAcceptButton($0) }
+    let unclaimed = labels.enumerated().filter { !isAcceptButton($0.element) }
+    return unclaimed.count == 1 ? unclaimed.first?.offset : nil
   }
 
   static func isAcceptButton(_ label: String) -> Bool {

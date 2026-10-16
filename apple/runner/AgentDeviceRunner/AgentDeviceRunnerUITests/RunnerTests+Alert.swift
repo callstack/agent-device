@@ -16,6 +16,11 @@ extension RunnerTests {
 
   static let defaultAlertCommandTimeout: TimeInterval = 10
 
+  /// One recovery sentence for every alert failure that activated nothing, so the refusal in
+  /// `handleAlert` and the unactivated `alertVerificationResponse` branches cannot drift apart.
+  static let alertNoButtonActivatedHint =
+    "No alert button was activated. Inspect the current alert before deciding on an action."
+
   static func alertCommandTimeout(timeoutMs: Double?) -> TimeInterval {
     guard let timeoutMs, timeoutMs.isFinite else { return defaultAlertCommandTimeout }
     return max(0.001, timeoutMs / 1000)
@@ -64,7 +69,7 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(
           code: "ALERT_BUTTON_NOT_FOUND",
           message: "alert \(action) button not found",
-          hint: "No alert button was activated. Inspect the current alert before deciding on an action."
+          hint: RunnerTests.alertNoButtonActivatedHint
         ))
       }
       guard Date() < deadline else {

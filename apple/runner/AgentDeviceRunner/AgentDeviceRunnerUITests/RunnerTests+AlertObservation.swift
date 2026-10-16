@@ -117,7 +117,7 @@ extension RunnerTests {
       message: message,
       hint: activated
         ? "The button was activated once. Inspect the current alert before deciding on another action."
-        : "No alert button was activated. Inspect the current alert before deciding on an action."
+        : RunnerTests.alertNoButtonActivatedHint
     ))
   }
 }
