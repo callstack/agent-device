@@ -95,7 +95,24 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/tool-provider',
   ],
   android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE, ANDROID_DEVICE_BOOT_FACADE],
+  harmonyos: ['@agent-device/platform-harmonyos/interactor'],
+  linux: ['@agent-device/platform-linux/interactor'],
+  web: ['@agent-device/platform-web/interactor'],
 };
+const INTERACTOR_COMPOSITION_FILE = 'src/core/interactors/register-builtins.ts';
+
+function isInteractorSubpathImport(
+  file: string,
+  site: { spec: string; dynamic: boolean },
+  family: string,
+): boolean {
+  return (
+    site.spec === `@agent-device/platform-${family}/interactor` &&
+    (MECHANICS_FACET_SUBPATHS[family as PlatformFamily] ?? []).includes(site.spec) &&
+    file === INTERACTOR_COMPOSITION_FILE &&
+    site.dynamic
+  );
+}
 
 function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
   if (specifier === ANDROID_HOST_FACET) return file === ANDROID_HOST_BINDING;
@@ -166,10 +183,13 @@ function isPackageOwnedFacadeTest(file: string, family: string, specifier: strin
   );
 }
 
-function isWebPackageTestSelectorImport(file: string, family: string, specifier: string): boolean {
+// The web interactor reuses the selectors package's canonical positional-ref normalizer.
+const WEB_SELECTORS_PRODUCTION_SUBPATH = '@agent-device/selectors/interaction-positionals';
+
+function isWebPackageSelectorImport(file: string, family: string, specifier: string): boolean {
+  if (family !== 'web' || !file.startsWith('packages/platform-web/')) return false;
+  if (specifier === WEB_SELECTORS_PRODUCTION_SUBPATH) return true;
   return (
-    family === 'web' &&
-    file.startsWith('packages/platform-web/') &&
     (file.endsWith('.test.ts') || file.includes('/__tests__/')) &&
     specifier === '@agent-device/selectors'
   );
@@ -298,7 +318,8 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       !isAppleFacadeSubpathImport(site.spec) &&
       !isAllowedPlatformRootImport(file, site, importedFamily) &&
       !isPackageOwnedFacadeTest(file, importedFamily, site.spec) &&
-      !isAndroidFacetSubpathImport(file, site.spec)
+      !isAndroidFacetSubpathImport(file, site.spec) &&
+      !isInteractorSubpathImport(file, site, importedFamily)
     ) {
       violations.push(
         violation(
@@ -322,7 +343,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       site.spec !== '@agent-device/xml' &&
       !isAppleFacadeSubpathImport(site.spec) &&
       !isPackageOwnedFacadeTest(file, ownerFamily, site.spec) &&
-      !isWebPackageTestSelectorImport(file, ownerFamily, site.spec) &&
+      !isWebPackageSelectorImport(file, ownerFamily, site.spec) &&
       !isTestKitTestImport(file, site.spec)
     ) {
       violations.push(

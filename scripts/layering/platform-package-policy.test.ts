@@ -56,7 +56,9 @@ function declarations(): PlatformPackageDeclaration[] {
               '@agent-device/platform-android/snapshot-capture-fixtures',
               '@agent-device/platform-android/ui-hierarchy-fixtures',
             ]
-          : [`@agent-device/platform-${family}`],
+          : family === 'harmonyos' || family === 'linux' || family === 'web'
+            ? [`@agent-device/platform-${family}`, `@agent-device/platform-${family}/interactor`]
+            : [`@agent-device/platform-${family}`],
   }));
 }
 
@@ -516,6 +518,88 @@ test('platform packages may use capture-kit but no unrelated workspace implement
       /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
     );
   }
+});
+
+test('platform-web production source may use only the canonical positional-ref selectors subpath', () => {
+  const allowed = validSources();
+  allowed.set(
+    'packages/platform-web/src/interactor.ts',
+    "import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), []);
+
+  for (const [file, specifier] of [
+    ['packages/platform-web/src/interactor.ts', '@agent-device/selectors'],
+    ['packages/platform-web/src/interactor.ts', '@agent-device/selectors/selector-pipeline'],
+    ['packages/platform-apple/src/probe.ts', '@agent-device/selectors/interaction-positionals'],
+    ['packages/platform-linux/src/probe.ts', '@agent-device/selectors/interaction-positionals'],
+  ] as const) {
+    const sources = validSources();
+    sources.set(file, `import { forbidden } from '${specifier}';`);
+    assert.match(
+      messages(sources).join('\n'),
+      /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
+      `${file} ${specifier}`,
+    );
+  }
+
+  for (const statement of [
+    "import { x } from '../../platform-apple/src/index.ts';",
+    "import { x } from '@agent-device/platform-apple';",
+    "import { x } from '../../../src/core/interactors.ts';",
+  ]) {
+    const sources = validSources();
+    sources.set(
+      'packages/platform-web/src/interactor.ts',
+      `import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';\n${statement}`,
+    );
+    assert.notDeepEqual(messages(sources), [], statement);
+  }
+});
+
+test('interactor subpaths are loaded only by the builtin registry, dynamically', () => {
+  for (const family of ['harmonyos', 'linux', 'web']) {
+    const allowed = validSources();
+    allowed.set(
+      'src/core/interactors/register-builtins.ts',
+      `const load = () => import('@agent-device/platform-${family}/interactor');`,
+    );
+    assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), [], family);
+
+    for (const [file, source] of [
+      [
+        'src/core/interactors/register-builtins.ts',
+        `import { x } from '@agent-device/platform-${family}/interactor';`,
+      ],
+      ['src/core/interactors.ts', `void import('@agent-device/platform-${family}/interactor');`],
+      [
+        'packages/daemon/src/probe.ts',
+        `void import('@agent-device/platform-${family}/interactor');`,
+      ],
+      [
+        'src/core/interactors/register-builtins.ts',
+        `void import('@agent-device/platform-${family}/snapshot');`,
+      ],
+      [
+        `packages/platform-${family === 'web' ? 'linux' : 'web'}/src/probe.ts`,
+        `void import('@agent-device/platform-${family}/interactor');`,
+      ],
+    ] as const) {
+      const sources = validSources();
+      sources.set(file, source);
+      assert.notDeepEqual(messages(sources), [], `${family} ${file} ${source}`);
+    }
+  }
+
+  const undeclared = declarations().map((declaration) =>
+    declaration.family === 'linux'
+      ? { ...declaration, exportedSubpaths: ['@agent-device/platform-linux'] }
+      : declaration,
+  );
+  assert.match(
+    messages(validSources(), undeclared).join('\n'),
+    /platform-linux must export exactly its root façade.*mechanics subpaths/,
+  );
 });
 
 test('platform package tests may import test-kit, production source may not', () => {

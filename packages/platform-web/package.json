@@ -15,6 +15,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./interactor": {
+      "types": "./src/interactor-facade.ts",
+      "default": "./src/interactor-facade.ts"
     }
   },
   "devDependencies": {
