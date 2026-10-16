@@ -51,8 +51,6 @@ Without `--udid` or `--serial`, `open` does not pick the device on the agent mac
 
 `open` names each new lease with an id it makes (32 lowercase hex characters) and sends it with the allocation, so a host in front of the daemon knows the lease id before the daemon allocates. A direct `agent_device.lease.allocate` RPC can pass `leaseId` (16 to 128 hex characters) the same way; repeating the id of a live lease returns that lease when the retry carries the same tenant, run, client, lease backend, and provider, and either names no device or the device the lease binds, so a retry after a lost reply does not allocate a second one. A retry without `ttlMs` keeps the lease's window. A retry that changes any of those fields is refused like any other reused id. The id identifies the lease: one run can hold several leases. Any other id this daemon has already given a lease, active or ended, is refused with `INVALID_ARGS` and reason `LEASE_ID_IN_USE`, and without one the daemon makes the id. Use the id the reply carries: a run that already holds a lease gets that lease back, and an older daemon ignores the requested id.
 
-If the daemon returns a missing or non-object lease, SDK `leases.allocate` and `leases.heartbeat` reject with `COMMAND_FAILED` and `details.reason: "invalid-lease-response"`.
-
 Several agents can share one proxy when each follows the same `connect proxy`, `open`, commands, `close`, and `disconnect` flow. A busy device error means another agent holds the device until it closes its session or its lease expires.
 
 Do not put the proxy endpoint, token, tenant, or provider fields in `./agent-device.json`: repository
