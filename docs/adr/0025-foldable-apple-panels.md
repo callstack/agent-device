@@ -24,8 +24,9 @@ Only inference answers the second question.
 | Zero or multiple lit panels | Name the `primary` panel. Emit `apple_display_capture_ambiguous`. Report pose as `unknown`. |
 | One integrated panel | Preserve pre-panel behavior exactly: no display flag, no pose, unchanged scale probe. |
 | Density normalization | Use the captured panel's `pointScale`. For runner fallback, use that capture's reported pixels-per-point. |
-| Pose report | From panel power alone, report only `closed`, `fully-open`, or `unknown`, never a narrower pose. `fold` reports the exact pose because it reads the hinge angle. |
+| Pose report | From panel power alone, report only `closed`, `fully-open`, or `unknown`, never a narrower pose. `fold` reports an exact pose only after hinge readings verify it. |
 | Pose request | `agent-device fold <closed\|half-open\|open>` sends private HID inside the simulator. Then it reads the hinge angle back from CoreDevice until the angle agrees. For `half-open`, two consecutive readings must agree. If the readings never agree, refuse the pose. |
+| The first hinge read returns no sample | Refuse with `fold-pose-dispatched-unverified`. Panel power does not verify the pose. |
 | The hinge reaches `half-open` but keeps moving | Refuse with `fold-pose-unsettled` and the observed and previous angles. An angle inside the open interval is an observed category, not a pose that the hinge holds. |
 | External display | It is not a panel. It creates neither multi-screen classification nor a pose. |
 | CoreDevice cannot answer | Return unresolved inventory. Preserve single-panel capture. An absent host feature is not a capture failure. |
@@ -227,12 +228,16 @@ Hosted Duo tests remain local-only.
 
 Git history retains the superseded Device Hub process.
 
-`xcrun devicectl device motion hinge-angle --device <udid>` streams the Duo simulator hinge angle over `Range:0-180°`.
+In the 2026-09-21 run, `xcrun devicectl device motion hinge-angle --device <udid>` streamed the Duo simulator hinge angle over `Range:0-180°`.
 Measured presets are Closed 0°, Book 130°, and Open 180°.
 `--session-timeout` does not stop the stream.
 Each read therefore uses devicectl's own `--timeout`, whose minimum accepted value is 5 seconds.
 The sample printed before timeout is the reading.
-This read path was checked on the shipping 27.1 toolchain.
+This run did not establish support in every 27.1 toolchain.
+On 2026-10-16, the host reports Xcode 27.1 build 27A9275 and devicectl 651.13.5.
+Its `device` help lists no `motion` subcommand.
+The 2026-10-14 fix (#3587) records the same limitation for that build, then identified as 27.1 RC.
+Without a sample, the pose remains unconfirmed as described below.
 
 `closed` and `open` are hinge end stops.
 One read at the stop proves the pose.
@@ -283,7 +288,7 @@ Attempt count, per-read timeout, cancellation, and open/closed end-stop rules re
 An unsettled fold still consumes four hinge streams.
 
 If the first hinge read returns no sample, the pose remains unconfirmed regardless of cause.
-For example, devicectl 651.13.5 in Xcode 27.1 RC build 27A9275 lacks `device motion`.
+The 2026-10-14 evidence identifies devicectl 651.13.5 in Xcode 27.1 build 27A9275 as an example without `device motion`.
 An unreachable device also prints no sample.
 HID has already dispatched, so refusal uses `fold-pose-dispatched-unverified`.
 This distinguishes unconfirmed dispatch from an observed contradictory pose.
@@ -308,8 +313,8 @@ The shipping-toolchain investigation recorded these candidate results:
 | `simctl` subcommands | No `hinge`/`fold`/`pose` surface; No such token in the `simctl` binary or in `CoreSimulator.framework` |
 | `simctl io` | `screenshot`/`recordVideo` take `--display`; `screenConfig` sets `power` and `geometry` per screen — Neither changes hinge state. |
 | XCUITest | No hinge token in any `XCUIAutomation` header; `XCUIDeviceButton` is Home/VolumeUp/VolumeDown/Action/Camera only |
-| CoreDevice | `com.apple.coredevice.action.streamhingeangle`, `HingeAngleManager`, `DeviceHingeAngleSnapshot` and `HingeAngleStreamConfig` exist in `/Library/Developer/PrivateFrameworks/CoreDeviceUtilities.framework` (and `dtdeviceinfod`), They **stream** an angle. The Duo reports no such feature. `devicectl` exposes no CLI for it. |
-| `devicectl` | `device info displays` reports panel state only |
+| CoreDevice | The initial 2026-09-20 examination found `com.apple.coredevice.action.streamhingeangle`, `HingeAngleManager`, `DeviceHingeAngleSnapshot`, and `HingeAngleStreamConfig` in `/Library/Developer/PrivateFrameworks/CoreDeviceUtilities.framework` and `dtdeviceinfod`. The Duo then reported no such feature. The 2026-09-21 run above later observed a CLI stream. |
+| `devicectl` | `device info displays` reports panel state only. Hinge-stream availability depends on the toolchain; the 2026-10-16 host examination above found no `device motion`. |
 | `Xcode.app` frameworks | No hinge reference in `Xcode.app/Contents/{SharedFrameworks,Frameworks}`, Device Hub control is therefore not a hinge API shipped inside Xcode. |
 
 Two searches came back empty, not negative. This ADR records them as limits, not as refuted claims:
