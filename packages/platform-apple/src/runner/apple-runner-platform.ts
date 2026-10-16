@@ -21,6 +21,14 @@ import { readHostCpuArchSync } from './host.ts';
  */
 export const COLD_TOOLCHAIN_PROBE_TIMEOUT_MS = 30_000;
 
+/**
+ * The symlink `xcode-select -s` writes and `xcode-select -p` reads back. Resolving it answers which
+ * developer dir the host selects, without a subprocess, so the toolchain memo can key on that answer
+ * on a hit as well as on a miss. Beside the probe ceiling above so both Apple toolchain probers read
+ * one value without either owning it.
+ */
+export const XCODE_SELECT_LINK_PATH = '/var/db/xcode_select_link';
+
 export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS' | 'visionOS';
 
 type RunnerPlatformDeviceKind = 'simulator' | 'device';
