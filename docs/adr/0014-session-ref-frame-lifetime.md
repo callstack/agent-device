@@ -293,9 +293,6 @@ A later paste/type action invalidates independently.
 
 Generic routes have no exception.
 `back`, `home`, `orientation`, `scroll`, `tv-remote`, and `app-switcher` must cross the transition in the generic daemon leaf when they act.
-A direct writer currently projects `app-switcher` to the daemon.
-Unlike generic-routed siblings, it omits an explicit daemon descriptor facet and uses the registry's generic fallback.
-The migration adds that facet and effect classification without a specialized route.
 The completeness gate covers every daemon-projected command, including generic fallbacks.
 Thus, a missing facet cannot hide an unclassified mutation.
 Mutations from unrelated external tools remain outside this session guarantee.
