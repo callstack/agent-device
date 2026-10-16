@@ -246,27 +246,39 @@ test('open <app> <url> --relaunch hands the lifecycle both positionals', async (
   ]);
 });
 
-test('open reports an unanswered launch confirmation and appends its warning to the response', async () => {
-  const sessionStore = makeSessionStore();
-  publishSession(sessionStore, 'ios-confirmation-session', IOS_SIMULATOR);
-  mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
+test.each([
+  {
+    reason: 'alert-unrecognized' as const,
+    warning: /did not recognize \(alert-unrecognized\)[\s\S]*alert get[\s\S]*alert accept/,
+  },
+  {
+    reason: 'url-owner-unresolved' as const,
+    warning: /could not be resolved[\s\S]*alert accept/,
+  },
+])(
+  'open reports an unanswered $reason launch confirmation and appends its warning',
+  async ({ reason, warning }) => {
+    const sessionStore = makeSessionStore();
+    publishSession(sessionStore, 'ios-confirmation-session', IOS_SIMULATOR);
+    mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
 
-  const { response } = await openRelaunch({
-    sessionStore,
-    sessionName: 'ios-confirmation-session',
-    openOutcome: {
-      launchConfirmation: 'unanswered',
-      launchConfirmationReason: 'alert-unrecognized',
-    } as LaunchConfirmationOutcome,
-  });
+    const { response } = await openRelaunch({
+      sessionStore,
+      sessionName: 'ios-confirmation-session',
+      openOutcome: {
+        launchConfirmation: 'unanswered',
+        launchConfirmationReason: reason,
+      } as LaunchConfirmationOutcome,
+    });
 
-  expect(response?.ok).toBe(true);
-  if (response?.ok !== true) throw new Error('open must answer an unanswered confirmation');
-  const data = response.data ?? {};
-  expect(data.launchConfirmation).toBe('unanswered');
-  expect(data.launchConfirmationReason).toBe('alert-unrecognized');
-  expect(data.warnings).toEqual([expect.stringMatching(/alert-unrecognized[\s\S]*alert accept/)]);
-});
+    expect(response?.ok).toBe(true);
+    if (response?.ok !== true) throw new Error('open must answer an unanswered confirmation');
+    const data = response.data ?? {};
+    expect(data.launchConfirmation).toBe('unanswered');
+    expect(data.launchConfirmationReason).toBe(reason);
+    expect(data.warnings).toEqual([expect.stringMatching(warning)]);
+  },
+);
 
 test('open --relaunch --clear-app-state hands the lifecycle the clear-state execution', async () => {
   const sessionStore = makeSessionStore();

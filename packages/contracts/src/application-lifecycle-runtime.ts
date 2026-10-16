@@ -192,14 +192,8 @@ type OpenApplicationOutcomeBase = Readonly<{
   timing: OpenApplicationTiming;
 }>;
 
-export type OpenApplicationOutcome =
-  | Readonly<OpenApplicationOutcomeBase & { launchConfirmation?: undefined }>
-  | (OpenApplicationOutcomeBase & Readonly<{ launchConfirmation: 'accepted' }>)
-  | (OpenApplicationOutcomeBase &
-      Readonly<{
-        launchConfirmation: 'unanswered';
-        launchConfirmationReason: LaunchConfirmationUnansweredReason;
-      }>);
+export type OpenApplicationOutcome = OpenApplicationOutcomeBase &
+  (LaunchConfirmationOutcome | Readonly<{ launchConfirmation?: undefined }>);
 
 /** Applies or clears a platform's native representation of neutral runtime hints. */
 export type RuntimeHintsApplicationInput = Readonly<{
