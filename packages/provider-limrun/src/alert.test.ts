@@ -226,10 +226,12 @@ describe('acting budgets', () => {
     expect(failure.details?.reason).toBe('alert-window-expired');
   });
 
-  it('reports an unconfirmed dismissal when a later capture hangs after one re-named the alert', async () => {
-    // Same alert at confirm probe 1, then a stalled transport the budget cuts off. With the
-    // newest read unanswered, the dialog's state at the budget's end is unknown: the leg must
-    // not claim it is still visible on the older match.
+  it('keeps the still-visible claim when a later capture hangs after one re-named the alert', async () => {
+    // Same alert at confirm probe 1, then a stalled transport the budget cuts off. A hung probe
+    // is not an observation: the still-visible failure rides the latest capture that answered,
+    // which named the dialog, exactly as commands.md states. This is the executed provider
+    // integration timeline (Coverage run 38924441176), where the f584 catch unconditionally
+    // downgraded it to unconfirmed.
     const client = {
       elementTree: vi
         .fn()
@@ -249,9 +251,7 @@ describe('acting budgets', () => {
       (error: unknown) => error,
     );
     expect(thrown).toBeInstanceOf(AppError);
-    expect((thrown as AppError).message).toBe(
-      'alert accept pressed the button but the dismissal could not be confirmed',
-    );
+    expect((thrown as AppError).message).toBe('alert accept did not dismiss the visible alert');
     expect((thrown as AppError).details?.reason).toBe('alert-window-expired');
     expect(client.tap).toHaveBeenCalledTimes(1);
   });
