@@ -140,6 +140,17 @@ type RecordedSelection = {
   bundleIdentity: string | undefined;
 };
 
+// One clock with the fingerprints it points at, and expiry scheduled for the same reason: nothing
+// renews a client dir whose reads stopped, so its record cannot outlive the entry it names.
+let lazyRecordedClients: TtlMemo<string, RecordedSelection> | undefined;
+function lazyRecordedClientSelections(): TtlMemo<string, RecordedSelection> | undefined {
+  lazyRecordedClients ??= createTtlMemo<string, RecordedSelection>({
+    ttlMs: TOOLCHAIN_FINGERPRINT_TTL_MS,
+    scheduleExpiry: true,
+  });
+  return lazyRecordedClients;
+}
+
 /**
  * What the last default-selection read answered for, which is what a report names when the client
  * chose no `DEVELOPER_DIR`. A read that threw or could not resolve its selection leaves it alone,
@@ -148,11 +159,19 @@ type RecordedSelection = {
 let recordedDefaultSelection: RecordedSelection | undefined;
 
 /**
- * What the last client-named read answered for, under the exact name that client used. A report for
- * a client naming some other dir gets nothing: the key for that dir needs the identity of a bundle
- * this path must not go and look up.
+ * What each client-named selection answered for, under the exact name that client used. Kept per
+ * name rather than in one slot because a daemon serves clients with different request-scoped
+ * `DEVELOPER_DIR`s at once: one global record would let the last read erase what an earlier client
+ * needs to report on, even though its fingerprint is still cached. It is a memo and not a map, so a
+ * name drops out on the same clock as the entry it points at.
  */
-let recordedChosenSelection: ({ readonly named: string } & RecordedSelection) | undefined;
+function recordedClientSelection(named: string): RecordedSelection | undefined {
+  return lazyRecordedClientSelections()?.get(named);
+}
+
+function rememberRecordedClientSelection(named: string, answered: RecordedSelection): void {
+  lazyRecordedClientSelections()?.set(named, answered);
+}
 
 /**
  * The toolchain half of the cache key. It also names the derived-data directory, so an
@@ -184,7 +203,7 @@ export function requireRunnerToolchainFingerprint(
   const answered = { developerDir: resolvedDir, bundleIdentity };
   // A report finds its entry by the key this read built, whether the read stored it or hit it, so a
   // report never has to resolve or stat anything itself.
-  if (chosenDir !== undefined) recordedChosenSelection = { named: chosenDir, ...answered };
+  if (chosenDir !== undefined) rememberRecordedClientSelection(chosenDir, answered);
   else recordedDefaultSelection = answered;
   return fingerprint;
 }
@@ -308,11 +327,7 @@ function probeSelectedDeveloperDir(clock: ToolchainProbeClock): string | undefin
 export function memoizedRunnerXcodeVersion(device: DeviceInfo): string | undefined {
   const chosenDir = commandDeveloperDir();
   const answered =
-    chosenDir === undefined
-      ? recordedDefaultSelection
-      : recordedChosenSelection?.named === chosenDir
-        ? recordedChosenSelection
-        : undefined;
+    chosenDir === undefined ? recordedDefaultSelection : recordedClientSelection(chosenDir);
   if (answered === undefined) return undefined;
   return toolchainFingerprintCache().get(
     toolchainFingerprintCacheKey(
