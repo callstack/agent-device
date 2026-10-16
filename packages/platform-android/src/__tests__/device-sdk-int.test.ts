@@ -8,6 +8,7 @@ test.each([
   { response: '', expected: null },
   { response: 'unknown', expected: null },
   { response: '0', expected: null },
+  { response: '27garbage', expected: null },
   { response: { stderr: 'error: closed', exitCode: 1 }, expected: null },
 ] satisfies { response: FakeAdbResponse; expected: number | null }[])(
   'readAndroidSdkInt reads $response as $expected',

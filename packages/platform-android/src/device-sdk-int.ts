@@ -15,6 +15,6 @@ export async function readAndroidSdkInt(
     signal,
   });
   if (result.exitCode !== 0) return { sdkInt: null, result };
-  const value = Number.parseInt(result.stdout.trim(), 10);
-  return { sdkInt: Number.isFinite(value) && value > 0 ? value : null, result };
+  const value = result.stdout.trim();
+  return { sdkInt: /^[1-9]\d{0,3}$/.test(value) ? Number(value) : null, result };
 }

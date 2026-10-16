@@ -103,7 +103,9 @@ export const SETTINGS = {
   },
   bluetooth: {
     forms: [{ kind: 'on-off' }],
-    help: 'Android over adb turns its Bluetooth adapter on or off with svc bluetooth, from Android 8.1. It reports the bluetooth state the device holds afterwards, or fails with bluetooth-not-applied or bluetooth-unreadable. A device without an adapter refuses with android_bluetooth_adapter_missing, and an older build with android_bluetooth_command_unavailable, before anything changes.',
+    app: 'input',
+    appScope: { mobile: 'device-level' },
+    help: 'Android over adb turns its Bluetooth adapter on or off with svc bluetooth, from Android 8.1. It reports the bluetooth state the device holds afterwards, or fails with bluetooth-not-applied or bluetooth-unreadable. A device without an adapter refuses with android_bluetooth_adapter_missing, and an adapter on a build older than 8.1 with android_bluetooth_command_unavailable, before anything changes. --app is refused.',
   },
   airplane: {
     forms: [{ kind: 'on-off' }],
