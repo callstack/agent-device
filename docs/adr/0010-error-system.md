@@ -5,94 +5,95 @@
 
 > **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Existing normalization and cause-preservation rules remain accepted.
 > If an operation and binding/resource cleanup both fail, the operation remains primary.
-> Cleanup becomes structured secondary diagnostic evidence.
-> A cleanup-only failure returns normally as a failure.
+> In that case, the cleanup failure is structured secondary diagnostic evidence.
+> If only cleanup fails, the cleanup failure surfaces normally.
 
 ## Rules at a glance
 
-- Every reachable thrown error is an `AppError`. Reserve bare `Error` for provably unreachable invariants.
-- For input validation, use `INVALID_ARGS`. For unknown caught errors, use `asAppError(err, fallbackCode)`.
-- Use the most specific `KnownAppErrorCode`. Put machine-dispatchable subclasses in `details.reason`.
-- Supply a hint only when the default would mislead. Preserve existing hints and causes through wrappers.
-- Every consumer must carry at least code, message, and hint. Rehydration helpers copy all error fields.
-- Failed requests always flush diagnostics. Messages must not contain raw stderr dumps or secrets.
+- Every thrown error that a user or agent can reach is an `AppError`. Reserve bare `Error` for provably unreachable invariants.
+- For input validation, throw `AppError('INVALID_ARGS', ...)`. To coerce an unknown caught error, use `asAppError(err, fallbackCode)`.
+- Use the most specific `KnownAppErrorCode`. Put machine-dispatchable sub-classification in `details.reason`.
+- If the per-code default hint would mislead, supply a hint. If the default suffices, omit the hint.
+- When you wrap an error, preserve an existing hint and the cause chain.
+- Every consumer surface must carry at least code, message, and hint. Rehydration helpers copy all fields.
+- Failed requests always flush diagnostics. Messages must not embed raw stderr dumps or secrets.
 
 ## Context
 
-`packages/kernel/src/errors.ts` centralizes `AppError`, `normalizeError`, `defaultHintForCode`, and `retriableForErrorCode`.
-However, approximately 1,200 sites construct errors across CLI, daemon, and platform layers.
-A July 2026 audit combined code examination with iOS/Android use.
-It found a sound kernel but inconsistent call sites:
+The error system is centralized in `packages/kernel/src/errors.ts` (`AppError`, `normalizeError`, `defaultHintForCode`, `retriableForErrorCode`).
+However, approximately 1,200 construction sites exist across the CLI, daemon, and platform layers.
+A July 2026 audit combined a code sweep with iOS/Android dogfooding.
+It found the kernel sound, but call-site quality had drifted:
 
-- Internal validation threw bare `Error`, which appeared as `UNKNOWN` with a misleading hint.
-- Some codes had incorrect semantics, such as `COMMAND_FAILED` for busy devices or `INVALID_ARGS` for expired server-side resources.
-- Common selector/ref failures lacked hints.
-- Consumers lost fields, such as MCP tool errors that carried only `message`.
+- Internal validation threw bare `Error`, which surfaced as `UNKNOWN` with a misleading hint.
+- Some codes were semantically wrong, such as `COMMAND_FAILED` for busy devices and `INVALID_ARGS` for expired server-side resources.
+- The most common agent failures, selector/ref misses, had no hints.
+- Some consumers dropped fields; for example, MCP tool errors carried only `message`.
 
-Without documented conventions, each new site selected its own behavior.
+Nothing documented the conventions, so each new site decided them again.
 
 ## Decision
 
 1. **Every thrown error a user or agent can reach is an `AppError`.**
-   Reserve bare `throw new Error(...)` for provably unreachable invariants.
-   Input validation, including daemon-side command input decode, throws `AppError('INVALID_ARGS', ...)`.
-   For unknown caught errors, use `asAppError(err, fallbackCode)` to preserve the cause chain.
-   Do not construct a replacement through `err instanceof AppError ? err : new AppError(...)`.
+   Bare `throw new Error(...)` is reserved for provably unreachable invariants.
+   Input validation, including daemon-side decoding of command input, throws `AppError('INVALID_ARGS', ...)`.
+   To coerce an unknown caught error, use `asAppError(err, fallbackCode)`, which preserves the cause chain.
+   Do not hand-roll `err instanceof AppError ? err : new AppError(...)`.
 2. **Code selection.** Use the most specific `KnownAppErrorCode`.
-   `COMMAND_FAILED` means a genuine runtime failure of a well-formed request.
-   Never use it as a general code for:
-   - Capability gaps: `UNSUPPORTED_OPERATION`.
-   - Contention: `DEVICE_IN_USE`.
-   - Ambiguity: `AMBIGUOUS_MATCH`.
-   Only `DEVICE_IN_USE` is retriable by default.
-   The cross-worktree device-claim path overrides it with `retriable: false`.
+   `COMMAND_FAILED` is for genuine runtime failures of a well-formed request.
+   Never use `COMMAND_FAILED` as a catch-all for these cases:
+   - Capability gaps. Use `UNSUPPORTED_OPERATION`.
+   - Contention. Use `DEVICE_IN_USE`.
+   - Ambiguity. Use `AMBIGUOUS_MATCH`.
+   `DEVICE_IN_USE` is the only code that is retriable by default.
+   The cross-worktree device-claim path overrides that default to `retriable: false`.
    Add new codes to the union deliberately.
-   Put machine-dispatchable subclasses in `details.reason`, as the lease registry does.
+   Machine-dispatchable sub-classification goes in `details.reason`; the lease registry is the model.
 3. **Hints answer "what should the agent run next".**
    If the per-code default from `defaultHintForCode` would mislead, a hint is required.
    If the default suffices, omit the hint.
-   Repeated boilerplate hints are worse than the default.
-   Shared failure modes use shared hint constants beside their detection code, instead of copied strings:
+   Boilerplate hints added in bulk are worse than the default.
+   Shared failure modes get shared hint constants next to the code that detects them, not copy-pasted strings:
    - `selectorFailureHint` and `STALE_REF_HINT` in `packages/selectors/src/internal/resolve.ts`.
    - `resolveIosDevicectlHint`.
    - `bootFailureHint`.
-   Wrappers preserve an existing hint instead of replacing it.
-4. **Wrapping external tool failures.** Prefer unchanged errors from `exec.ts`.
-   A manual wrapper of an `allowFailure` result must carry `{ stdout, stderr, exitCode, processExitError: true }`.
-   Thus, `normalizeError` can expose the first meaningful stderr line instead of "tool exited with code N".
+   A re-wrap preserves an existing hint instead of overwriting it.
+4. **Wrapping external tool failures.** Prefer `exec.ts` errors as they are.
+   A hand-rolled wrap of an `allowFailure` result must carry `{ stdout, stderr, exitCode, processExitError: true }`.
+   Thus, `normalizeError` can surface the first meaningful stderr line instead of "tool exited with code N".
 5. **The wire error contract** contains:
    - `code`.
    - `message`.
    - `hint`.
-   - Redacted `details`.
+   - `details` (redacted).
    - `diagnosticId`.
    - `logPath`.
    - Optional typed signals `retriable` / `supportedOn`.
-   Unless confidently known, typed signals are absent.
+   The typed signals are absent unless they are confidently known.
    Every consumer surface must carry at least code, message, and hint:
    - CLI human output.
    - CLI `--json`.
    - SDK.
    - MCP.
    - Events timeline.
-   Rehydration helpers `throwDaemonError` and `toDaemonHttpRpcError` copy all fields.
-   `NormalizedError` exposes typed signals at its top level for `--json` consumers.
+   Rehydration helpers (`throwDaemonError`, `toDaemonHttpRpcError`) copy all fields.
+   `NormalizedError` hoists the typed signals, so `--json` consumers see them.
 6. **Observability.** Failed requests always flush diagnostics.
-   Every error carries `diagnosticId` and ndjson `logPath`.
-   Daemon diagnostics reside under the session state dir.
-   Client diagnostics reside under `~/.agent-device/logs`.
-   Messages must not contain raw stderr dumps or secrets.
-   Structured context belongs in `details`, which is redacted at normalization/write time.
+   A `diagnosticId` and an ndjson `logPath` accompany every error.
+   Daemon-side diagnostics are under the session state dir.
+   Client-side diagnostics are under `~/.agent-device/logs`.
+   Messages must not embed raw stderr dumps or secrets.
+   Structured context belongs in `details`, which is redacted at normalize/write time.
 
 ## Consequences
 
-- Agents can select behavior by `code`, retry by `retriable`, and follow `hint` without prose parsing.
-  Wording can improve without breaking consumers, except for strings fixed by help-text guarantees.
-  When those strings change, update their tests together.
-- The known-code union remains small and meaningful.
-  The wider `(string & {})` type still passes runner/daemon codes through, so SDK consumers retain a `default` branch.
-- New call sites have documented requirements:
-  - Correct code.
-  - Contextual message that names the target.
-  - Hint only when the default misleads.
-  - Preserved cause.
+- Agents can branch on `code`, retry on `retriable`, and follow `hint` without prose parsing.
+  Wording can improve without breaking consumers, except for strings that help-text guarantees pin.
+  If you change one of those strings, update its tests in the same change.
+- The known-code union stays small and meaningful.
+  The widened `(string & {})` type still lets runner/daemon codes pass through, so SDK consumers keep a `default` branch.
+- New call sites have a documented bar:
+  - The correct code.
+  - A contextual message that names the target.
+  - A hint only when the default misleads.
+  - A preserved cause.
