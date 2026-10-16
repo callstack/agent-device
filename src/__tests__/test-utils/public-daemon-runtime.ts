@@ -28,6 +28,7 @@ export async function startPublicDaemonRuntime(
     createCommandSurface?: CreateDaemonCommandSurface;
   } = {},
 ): Promise<PublicDaemonRuntimeFixture> {
+  const ownsStateDir = options.stateDir === undefined;
   const stateDir = options.stateDir ?? mkdtempForTestSync('agent-device-public-daemon-');
   const runtime = await startDaemonRuntime({
     composeDeps: async (input) => {
@@ -55,26 +56,31 @@ export async function startPublicDaemonRuntime(
     stdout: { write: () => {} },
   });
   if (!runtime) throw new Error('The public daemon runtime did not start.');
-  const paths = resolveDaemonPaths(stateDir);
-  const info = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as Record<string, unknown>;
-  fs.writeFileSync(
-    paths.infoPath,
-    `${JSON.stringify({ ...info, codeSignature: currentDaemonCodeSignature() })}\n`,
-  );
-  const port = runtime.httpPort ?? runtime.socketPort;
-  if (port === undefined) {
-    await runtime.shutdown();
-    throw new Error('The public daemon runtime published no transport port.');
+  try {
+    const paths = resolveDaemonPaths(stateDir);
+    const info = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as Record<string, unknown>;
+    fs.writeFileSync(
+      paths.infoPath,
+      `${JSON.stringify({ ...info, codeSignature: currentDaemonCodeSignature() })}\n`,
+    );
+    const port = runtime.httpPort ?? runtime.socketPort;
+    if (port === undefined) {
+      throw new Error('The public daemon runtime published no transport port.');
+    }
+    return {
+      stateDir,
+      baseUrl: `http://127.0.0.1:${port}`,
+      runtime,
+      close: async () => {
+        await runtime.shutdown();
+        fs.rmSync(stateDir, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    await runtime.shutdown().catch(() => {});
+    if (ownsStateDir) fs.rmSync(stateDir, { recursive: true, force: true });
+    throw error;
   }
-  return {
-    stateDir,
-    baseUrl: `http://127.0.0.1:${port}`,
-    runtime,
-    close: async () => {
-      await runtime.shutdown();
-      fs.rmSync(stateDir, { recursive: true, force: true });
-    },
-  };
 }
 
 export function createPublicWaitCommandSurface(

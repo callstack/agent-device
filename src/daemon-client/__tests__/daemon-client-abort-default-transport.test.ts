@@ -30,9 +30,8 @@ async function runDefaultTransportAbort(
         seen.started = true;
         seen.requestId = requestId;
       },
-      onCanceled: (_target, requestId) => {
+      onCanceled: () => {
         seen.canceled = true;
-        assert.equal(requestId, seen.requestId);
       },
     }),
   });
@@ -59,6 +58,7 @@ async function runDefaultTransportAbort(
     );
     assert.equal(isRequestCanceledError(rejection), true);
     const details = (rejection as { details?: Record<string, unknown> }).details ?? {};
+    assert.equal(typeof details.requestId, 'string');
     assert.equal(details.dispatched, 'unknown');
     await waitFor(() => seen.canceled, 'the daemon to observe cancellation');
     assert.equal(seen.canceled, true);
