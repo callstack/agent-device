@@ -29,7 +29,7 @@ export function getRecordingOverlaySupportWarning(
  * the caller gets "Daemon request timed out" while the daemon finishes the stop. So the overlay must
  * end well inside it. The budget starts with the stop's finalization, so the playability checks
  * before the overlay (on a cold host they compile their validator first) come out of it, as do
- * compiling the helper, its export and its exit; past it the stop keeps the raw video and its
+ * compiling the helper, its export, its exit and verifying its output; past it the stop keeps the raw video and its
  * gesture telemetry, with a warning.
  */
 export const OVERLAY_BUDGET_MS = 70_000;
@@ -104,7 +104,14 @@ async function exportProcessedVideo(params: {
       exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
       throw error;
     }
-    await waitForPlayableVideo(outputPath);
+    await waitForPlayableVideo(outputPath, { deadline });
+    if (deadline.isExpired()) {
+      exportOverran = true;
+      throw new AppError(
+        'COMMAND_FAILED',
+        'The composited video was not verified within the budget',
+      );
+    }
     fs.renameSync(outputPath, videoPath);
   } catch (error) {
     const description = exportOverran
