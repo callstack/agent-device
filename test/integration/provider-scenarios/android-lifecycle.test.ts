@@ -439,36 +439,50 @@ async function runAndroidSetupAndInstallWorkflow(
     }),
     'utf8',
   );
-  const filePush = await daemon.callCommand(
-    'push',
-    ['com.example.demo', './payload.json'],
-    selection,
-    {
-      meta: { cwd: tempRoot },
-    },
-  );
-  assert.equal(filePush.json.result.data.package, 'com.example.demo');
-  assert.equal(filePush.json.result.data.action, 'com.example.demo.FILE_PUSH');
-  assert.equal(filePush.json.result.data.extrasCount, 1);
+  // #3345: a raw request routes to the implicit session of the workspace its `cwd` sits in,
+  // and a claim covers only the session-and-workspace pair that took it. The client calls
+  // above sent no cwd, so the open claimed this process's own workspace (the checkout) at
+  // the `default` address. This push joins that address the way `--session` does and runs
+  // from a directory inside the checkout: the canonical scope root is the worktree root from
+  // either directory, so coverage holds the way it holds for a real CLI owner, and the
+  // relative payload still resolves against `cwd`. A cwd in another workspace would refuse
+  // even under the same session name — that is the copyable-address rule.
+  fs.mkdirSync(path.join(process.cwd(), '.tmp'), { recursive: true });
+  const callerWorkspace = fs.mkdtempSync(path.join(process.cwd(), '.tmp', 'push-'));
+  try {
+    fs.cpSync(pushPayloadPath, path.join(callerWorkspace, 'payload.json'));
+    const filePush = await daemon.callCommand(
+      'push',
+      ['com.example.demo', './payload.json'],
+      selection,
+      { meta: { cwd: callerWorkspace, sessionExplicit: true } },
+    );
+    assert.equal(filePush.json.result.data.package, 'com.example.demo');
+    assert.equal(filePush.json.result.data.action, 'com.example.demo.FILE_PUSH');
+    assert.equal(filePush.json.result.data.extrasCount, 1);
 
-  const bracePayloadPath = path.join(tempRoot, '{payload}.json');
-  fs.writeFileSync(
-    bracePayloadPath,
-    JSON.stringify({
-      action: 'com.example.demo.BRACE_PUSH',
-      extras: { source: 'brace-file' },
-    }),
-    'utf8',
-  );
-  const braceFilePush = await daemon.callCommand(
-    'push',
-    ['com.example.demo', './{payload}.json'],
-    selection,
-    { meta: { cwd: tempRoot } },
-  );
-  assert.equal(braceFilePush.json.result.data.package, 'com.example.demo');
-  assert.equal(braceFilePush.json.result.data.action, 'com.example.demo.BRACE_PUSH');
-  assert.equal(braceFilePush.json.result.data.extrasCount, 1);
+    const bracePayloadPath = path.join(tempRoot, '{payload}.json');
+    fs.writeFileSync(
+      bracePayloadPath,
+      JSON.stringify({
+        action: 'com.example.demo.BRACE_PUSH',
+        extras: { source: 'brace-file' },
+      }),
+      'utf8',
+    );
+    fs.cpSync(bracePayloadPath, path.join(callerWorkspace, '{payload}.json'));
+    const braceFilePush = await daemon.callCommand(
+      'push',
+      ['com.example.demo', './{payload}.json'],
+      selection,
+      { meta: { cwd: callerWorkspace, sessionExplicit: true } },
+    );
+    assert.equal(braceFilePush.json.result.data.package, 'com.example.demo');
+    assert.equal(braceFilePush.json.result.data.action, 'com.example.demo.BRACE_PUSH');
+    assert.equal(braceFilePush.json.result.data.extrasCount, 1);
+  } finally {
+    fs.rmSync(callerWorkspace, { recursive: true, force: true });
+  }
 
   const clipboard = await client.command.clipboard({ action: 'read', ...selection });
   if (clipboard.action !== 'read') throw new Error('expected clipboard read result');
