@@ -239,14 +239,17 @@ describe('settingsAppScope', () => {
   });
 });
 
-describe('settingsAppScope mobile-data', () => {
-  test('mobile-data switches the whole device wherever it is served', () => {
-    expect(settingsAppScope('mobile', 'mobile-data', 'on')).toBe('device-level');
-    expect(settingsAppScope('mobile', 'mobile-data', 'off')).toBe('device-level');
-    // No Apple target serves it; its refusal belongs to the leaf, not to the app.
-    expect(settingsAppScope('apple', 'mobile-data', 'on')).toBe('unknown');
-    expect(settingsAppScope('macos-host', 'mobile-data', 'on')).toBe('unknown');
-  });
+describe('settingsAppScope device-wide radios', () => {
+  test.each(['mobile-data', 'bluetooth'])(
+    '%s switches the whole device wherever it is served',
+    (setting) => {
+      expect(settingsAppScope('mobile', setting, 'on')).toBe('device-level');
+      expect(settingsAppScope('mobile', setting, 'off')).toBe('device-level');
+      // No Apple target serves it; its refusal belongs to the leaf, not to the app.
+      expect(settingsAppScope('apple', setting, 'on')).toBe('unknown');
+      expect(settingsAppScope('macos-host', setting, 'on')).toBe('unknown');
+    },
+  );
 });
 
 describe('settingsAppNotConsumedRefusal', () => {
