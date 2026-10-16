@@ -42,6 +42,7 @@ import { visitXmlPlistEntries } from './plist-xml.ts';
 import {
   getRunnerDeviceClaimAuthorityProbe,
   getRunnerLeaseOwnerStateDir,
+  runnerRuntimeSlot,
 } from './runner-owner-state.ts';
 import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
 import {
@@ -108,5 +109,6 @@ export const appleRunnerHost: AppleRunnerHost = {
   resolveIosPhysicalDeviceControl,
   visitXmlPlistEntries,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
+  runnerRuntimeSlot,
   hasDeviceClaimAuthority: (device) => getRunnerDeviceClaimAuthorityProbe()?.(device) ?? false,
 };

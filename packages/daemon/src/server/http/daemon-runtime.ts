@@ -102,7 +102,7 @@ import {
   listenNetServer,
   type DaemonServer,
 } from './transport.ts';
-import { prewarmPngWorker, terminatePngWorker } from '@agent-device/capture-kit/png-worker-client';
+import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
@@ -138,6 +138,8 @@ type WritableOutput = {
  * same factory, so the production assembly is the one every runtime test boots.
  */
 export type DaemonRuntimeDeps = Readonly<{
+  /** State the composition's platform modules keep per daemon runtime (the Apple runner's). */
+  runtimeStates: readonly RuntimeStateHandle[];
   ownedProcessRecords: OwnedProcessRecordStore;
   hostDiagnostics: HostDiagnostics;
   ownerLifecycle: PlatformOwnerLifecycle;
@@ -425,7 +427,12 @@ export async function teardownDaemonSessionForShutdown(params: {
   return teardownSucceeded;
 }
 
-type RuntimeContext = Readonly<{ run<T>(fn: () => T): T; dispose(): void }>;
+type RuntimeContext = Readonly<{
+  run<T>(fn: () => T): T;
+  /** Adds state the composition contributed and binds it for the rest of the start. */
+  extend(handles: readonly RuntimeStateHandle[]): void;
+  dispose(): void;
+}>;
 
 /** The per-runtime state of every module that keeps some, in the order it is entered. */
 function createDaemonRuntimeStates(): RuntimeStateHandle[] {
@@ -445,6 +452,12 @@ export async function startDaemonRuntime(
   const states = createDaemonRuntimeStates();
   const runtimeContext: RuntimeContext = {
     run: (fn) => states.reduceRight((next, state) => () => state.run(next), fn)(),
+    extend: (handles) => {
+      for (const handle of handles) {
+        states.push(handle);
+        handle.enter();
+      }
+    },
     dispose: () => {
       for (const state of states) state.dispose();
     },
@@ -500,6 +513,7 @@ async function startDaemonRuntimeOnHost(
     }),
     openWebSessionNames: () => openWebSessionNames(sessionStore),
   });
+  runtimeContext.extend(deps.runtimeStates);
   const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const audioProbeAdmissionLedger = createAudioProbeAdmissionLedger();
   const perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger();
@@ -917,7 +931,7 @@ async function startDaemonRuntimeOnHost(
   // Spawn the PNG worker ahead of the first screenshot request so its
   // cold-start cost is not paid on a user-visible call. Best effort: when it
   // cannot start, PNG processing falls back to the in-process sync path.
-  prewarmPngWorker();
+  const releasePngWorker = retainPngWorker();
 
   const closeOnHost = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
     idleReap.cancel();
@@ -982,7 +996,7 @@ async function startDaemonRuntimeOnHost(
     const stoppedRunners = await applicationLifecycle.finalizeDaemonShutdown();
     // Best effort: stop the PNG worker so an in-flight job cannot delay exit.
     await Promise.race([
-      terminatePngWorker().catch(() => {}),
+      releasePngWorker().catch(() => {}),
       sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
     ]);
     await finishDaemonRegistration({

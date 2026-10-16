@@ -67,6 +67,7 @@ export function createArtifactTrackingRuntimeState(): RuntimeStateHandle {
   const owned = createArtifactTrackingState();
   return {
     run: (fn) => artifactTrackingStorage.run(owned, fn),
+    enter: () => artifactTrackingStorage.enterWith(owned),
     dispose: () => {
       for (const entry of [...owned.artifacts.values(), ...owned.uploads.values()]) {
         clearTimeout(entry.timer);

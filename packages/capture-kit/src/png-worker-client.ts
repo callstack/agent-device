@@ -181,9 +181,23 @@ async function runPngJob<Kind extends PngWorkerJobKind>(
   }
 }
 
-/** Daemon startup hook: spawns the worker before the first screenshot job. */
-export function prewarmPngWorker(): void {
+let pngWorkerHolds = 0;
+
+/**
+ * Daemon startup hook: spawns the worker before the first screenshot job and holds it for the
+ * caller. The worker is shared by every runtime in the process, so it stops when the last holder
+ * lets go; the returned release is idempotent.
+ */
+export function retainPngWorker(): () => Promise<void> {
   obtainWorker();
+  pngWorkerHolds += 1;
+  let released = false;
+  return async () => {
+    if (released) return;
+    released = true;
+    pngWorkerHolds -= 1;
+    if (pngWorkerHolds === 0) await terminatePngWorker();
+  };
 }
 
 /** Stops the worker thread (used by tests and shutdown); later calls respawn it. */

@@ -9,6 +9,8 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 export type RuntimeStateHandle = Readonly<{
   /** Runs `fn` as the runtime that owns this state. */
   run<T>(fn: () => T): T;
+  /** Binds this state for the rest of the current async context, after the runtime is composed. */
+  enter(): void;
   /** Releases what the state holds (timers, handles). */
   dispose(): void;
 }>;
@@ -33,6 +35,7 @@ export function createRequestCancelRuntimeState(): RuntimeStateHandle {
   const owned = createRequestCancelState();
   return {
     run: (fn) => requestCancelStorage.run(owned, fn),
+    enter: () => requestCancelStorage.enterWith(owned),
     dispose: () => {
       for (const controller of owned.requestAbortControllers.values()) controller.abort();
       owned.requestAbortControllers.clear();

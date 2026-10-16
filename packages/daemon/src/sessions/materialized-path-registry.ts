@@ -45,6 +45,7 @@ export function createMaterializedPathRuntimeState(): RuntimeStateHandle {
   const owned = new Map<string, RetainedEntry>();
   return {
     run: (fn) => retainedPathsStorage.run(owned, fn),
+    enter: () => retainedPathsStorage.enterWith(owned),
     dispose: () => {
       for (const entry of owned.values()) clearTimeout(entry.timer);
       owned.clear();

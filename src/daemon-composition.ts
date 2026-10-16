@@ -125,7 +125,11 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
   const { createDaemonPlatformServices } = await import('./platform-runtime-daemon-services.ts');
   const { createClaimRecoveryGateway } = await import('./platform-runtime-claim-recovery.ts');
 
+  const { createAppleRunnerRuntimeState } =
+    await import('@agent-device/platform-apple/runner-owner');
+
   return Object.freeze({
+    runtimeStates: Object.freeze([createAppleRunnerRuntimeState()]),
     ownedProcessRecords,
     hostDiagnostics,
     ownerLifecycle: platformDaemonLifecycleOwners,

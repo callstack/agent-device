@@ -32,7 +32,11 @@ const providerAdmissionState = (): ProviderAdmissionState =>
 /** The admission one daemon runtime owns; the runtime installs its composition's into it. */
 export function createProviderDeviceAdmissionRuntimeState(): RuntimeStateHandle {
   const owned: ProviderAdmissionState = { admission: NO_PROVIDER_DEVICE_ADMISSION };
-  return { run: (fn) => providerAdmissionStorage.run(owned, fn), dispose: () => {} };
+  return {
+    run: (fn) => providerAdmissionStorage.run(owned, fn),
+    enter: () => providerAdmissionStorage.enterWith(owned),
+    dispose: () => {},
+  };
 }
 
 /**

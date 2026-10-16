@@ -41,7 +41,11 @@ const interactorResolutionState = (): InteractorResolutionState =>
 /** The resolution one daemon runtime owns; the runtime installs its composition's into it. */
 export function createInteractorResolutionRuntimeState(): RuntimeStateHandle {
   const owned: InteractorResolutionState = { resolution: NO_INTERACTOR_RESOLUTION };
-  return { run: (fn) => interactorResolutionStorage.run(owned, fn), dispose: () => {} };
+  return {
+    run: (fn) => interactorResolutionStorage.run(owned, fn),
+    enter: () => interactorResolutionStorage.enterWith(owned),
+    dispose: () => {},
+  };
 }
 
 /**

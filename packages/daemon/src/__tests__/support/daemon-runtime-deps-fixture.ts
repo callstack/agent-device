@@ -59,6 +59,7 @@ export function daemonRuntimeDepsFixture(
   return async (input) => {
     const resolved = typeof overrides === 'function' ? overrides(input) : overrides;
     return Object.freeze({
+      runtimeStates: [],
       ownedProcessRecords: createOwnedProcessRecordStore({
         stateDir: input.baseDir,
         sessionsDir: input.sessionsDir,

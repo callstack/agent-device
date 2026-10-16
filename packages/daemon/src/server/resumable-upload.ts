@@ -43,6 +43,7 @@ export function createResumableUploadRuntimeState(): RuntimeStateHandle {
   const owned = createResumableUploadState();
   return {
     run: (fn) => resumableUploadStorage.run(owned, fn),
+    enter: () => resumableUploadStorage.enterWith(owned),
     dispose: () => {
       for (const entry of owned.byId.values()) clearTimeout(entry.timer);
       owned.byId.clear();
