@@ -80,6 +80,49 @@ export function limrunAlertTreeWithoutButtons(): IosTreeNode {
   return { ...root, children: (root.children ?? []).filter((n) => n.role !== 'AXButton') };
 }
 
+/**
+ * The live ATT prompt with every choice degraded out of action: one disabled, one explicitly
+ * unhittable, one label-less and frameless. This is what a capture looks like when the tap was
+ * ignored or the sheet is mid-transition — the dialog is still visibly up, yet nothing on it
+ * can be pressed.
+ */
+export function limrunAlertTreeWithUnpressableButtons(): IosTreeNode {
+  const root = limrunAttAlertTree();
+  return {
+    ...root,
+    children: [
+      ...(root.children ?? []).slice(0, 2),
+      {
+        type: 'Button',
+        role: 'AXButton',
+        AXLabel: 'Allow',
+        pid: root.pid,
+        enabled: false,
+        frame: { x: 57, y: 511.67, width: 288, height: 48 },
+        traits: ['Button'],
+      },
+      {
+        type: 'Button',
+        role: 'AXButton',
+        AXLabel: 'Ask App Not to Track',
+        pid: root.pid,
+        enabled: true,
+        hittable: false,
+        frame: { x: 57, y: 567.67, width: 288, height: 48 },
+        traits: ['Button'],
+      },
+      {
+        type: 'Button',
+        role: 'AXButton',
+        AXLabel: 'Later',
+        pid: root.pid,
+        enabled: true,
+        traits: ['Button'],
+      },
+    ],
+  };
+}
+
 /** An alert whose only choices are ambiguous: no label classifies as accept or dismiss. */
 export function limrunAlertAmbiguousButtonsTree(): IosTreeNode {
   const root = limrunAttAlertTree();
@@ -216,31 +259,51 @@ export function limrunAppAlertDialogTree(): IosTreeNode {
   };
 }
 
-/** SpringBoard's home screen: a blank-label root, but full of launch icons rather than a dialog. */
+/** SpringBoard's home screen: a blank-label root, but full of launch icons rather than a dialog.
+ * Root and icons share SpringBoard's pid, as the live home capture reports it. */
 export function limrunHomeScreenTree(): IosTreeNode {
-  return alertRoot([
-    {
-      type: 'Button',
-      role: 'AXButton',
-      AXLabel: 'Maps',
-      pid: LIMRUN_SPRINGBOARD_PID,
-      enabled: true,
-      frame: { x: 24.33, y: 88, width: 168.33, height: 191 },
-      traits: ['Scrollable', 'UpdatesFrequently', 'LaunchIcon'],
-    },
-    {
-      type: 'Button',
-      role: 'AXButton',
-      AXLabel: 'Calendar',
-      pid: LIMRUN_SPRINGBOARD_PID,
-      enabled: true,
-      frame: { x: 209.67, y: 88, width: 168.33, height: 191 },
-      traits: ['Scrollable', 'UpdatesFrequently', 'LaunchIcon'],
-    },
-  ]);
+  return {
+    ...alertRoot([
+      {
+        type: 'Button',
+        role: 'AXButton',
+        AXLabel: 'Maps',
+        pid: LIMRUN_SPRINGBOARD_PID,
+        enabled: true,
+        frame: { x: 24.33, y: 88, width: 168.33, height: 191 },
+        traits: ['Scrollable', 'UpdatesFrequently', 'LaunchIcon'],
+      },
+      {
+        type: 'Button',
+        role: 'AXButton',
+        AXLabel: 'Calendar',
+        pid: LIMRUN_SPRINGBOARD_PID,
+        enabled: true,
+        frame: { x: 209.67, y: 88, width: 168.33, height: 191 },
+        traits: ['Scrollable', 'UpdatesFrequently', 'LaunchIcon'],
+      },
+    ]),
+    pid: LIMRUN_SPRINGBOARD_PID,
+  };
 }
 
-/** A capture with no alert: the app screen with the ATT alert grafted on as a sibling root. */
+/**
+ * The app screen and the ATT alert as sibling roots — what a capture with a live system alert
+ * over an app looks like. The alert is the actionable one here; the app screen is background.
+ */
 export function limrunAlertOverlayOnAppScreenTree(): IosTreeNode[] {
   return [limrunAppScreenTree(), limrunAttAlertTree()];
+}
+
+/**
+ * Lookalike (not a live capture): the live app dialog of {@link limrunAppAlertDialogTree} with
+ * its root's label blanked, content pids untouched. The captures reject it through process
+ * exclusivity — every live app capture carries foreign-pid status-bar nodes on the app root,
+ * while the system alert root is process-exclusive. The residual the detector honestly cannot
+ * separate is an app dialog under a blanked root in a capture with no foreign-pid node at all;
+ * that is what the label-strict acting legs backstop.
+ */
+export function limrunBlankRootAppDialogLookalikeTree(): IosTreeNode {
+  const dialog = limrunAppAlertDialogTree();
+  return { ...dialog, AXLabel: ' ' };
 }

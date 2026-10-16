@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ALERT_BUTTON_UNDECIDED_REASON } from '@agent-device/contracts/alert-contract';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   limrunAlertTreeWithoutButtons,
   limrunAppAlertDialogTree,
@@ -7,6 +9,12 @@ import {
 } from './alert-detection.fixtures.ts';
 import { createLimrunIosInteractor, type LimrunIosSession } from './ios.ts';
 import type { IosTreeNode } from './snapshot.ts';
+
+// The legs load `./alert.ts` per call (ADR-0019 laziness inside the provider), and that module
+// carries the shared tree-alert driver from platform-android's mechanics facet. Warm it at
+// collection, like `platform-android`'s own alert test does, so the first timed leg measures
+// the legs, not the module graph's first transform.
+await import('./alert.ts');
 
 /**
  * The four legs as the interactor exposes them: observation is one `elementTree()` read per
@@ -111,9 +119,15 @@ describe('acceptAlert', () => {
       },
     ]);
 
-    await expect(interactor.acceptAlert!()).rejects.toThrow(
-      'alert accept found an alert but no button that clearly matches the action',
+    const error = await interactor.acceptAlert!().then(
+      () => undefined,
+      (caught: unknown) => caught,
     );
+    expect(error).toBeInstanceOf(AppError);
+    const refusal = error as AppError;
+    expect(refusal.code).toBe('COMMAND_FAILED');
+    expect(refusal.details?.reason).toBe(ALERT_BUTTON_UNDECIDED_REASON);
+    expect(refusal.details?.dispatched).toBe('no');
     expect(client.tap).not.toHaveBeenCalled();
   });
 });
@@ -133,6 +147,8 @@ describe('dismissAlert', () => {
       action: 'dismiss',
       button: 'Ask App Not to Track',
     });
+    // Exactly one tap, at the denying button: proving the affirmative one was never pressed.
+    expect(client.tap).toHaveBeenCalledTimes(1);
     expect(client.tap).toHaveBeenCalledWith(201, 536);
   });
 

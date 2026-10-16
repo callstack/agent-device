@@ -58,3 +58,21 @@ test('chooseAndroidAlertButton accepts a single neutral button', () => {
 
   assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept')?.label, 'Later');
 });
+
+test('the shared vocabulary classifies iOS variant grants on Android trees too', () => {
+  // One label vocabulary: the same label states the same role on every tree backend, so
+  // `alert accept` can act on the same button on both platforms. Non-button ids keep the
+  // classification on the labels rather than the platform id map.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.app.AlertDialog'),
+    text(1, 'Location access', 'android:id/alertTitle'),
+    button(2, "Don't allow", 'com.example:id/deny', { x: 52, y: 612 }),
+    button(3, 'Allow while using the app', 'com.example:id/grant', { x: 210, y: 612 }),
+  ]);
+
+  assert.equal(
+    chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept')?.label,
+    'Allow while using the app',
+  );
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, "Don't allow");
+});
