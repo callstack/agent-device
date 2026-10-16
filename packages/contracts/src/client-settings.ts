@@ -36,17 +36,30 @@ type StateOnlySettingOptions = {
       : { setting: Name; state: SettingState<Name> });
 }[StateOnlySetting];
 
+/** Switches that change the whole Android device; naming an app is refused with `setting_app_not_consumed`. */
+type DeviceLevelToggleSetting = {
+  [Name in SettingName]: (typeof SETTINGS)[Name] extends {
+    app: 'input';
+    appScope: { mobile: 'device-level' };
+  }
+    ? Name
+    : never;
+}[SettingName];
+
+type DeviceLevelToggleOptions = {
+  [Name in DeviceLevelToggleSetting]: DeviceCommandBaseOptions & {
+    setting: Name;
+    state: SettingState<Name>;
+    app?: string;
+  };
+}[DeviceLevelToggleSetting];
+
 export type SettingsUpdateOptions =
   | StateOnlySettingOptions
+  | DeviceLevelToggleOptions
   | (DeviceCommandBaseOptions & {
       setting: 'clear-app-state';
       state: 'clear';
-      app?: string;
-    })
-  /** Android only. Naming an app is refused with `setting_app_not_consumed`. */
-  | (DeviceCommandBaseOptions & {
-      setting: 'mobile-data';
-      state: 'on' | 'off';
       app?: string;
     })
   /** On Apple simulators `on`/`off` is a location-permission change for `app` (or the session app). */
