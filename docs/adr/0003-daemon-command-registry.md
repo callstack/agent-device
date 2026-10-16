@@ -6,7 +6,7 @@ Accepted
 
 ## Rules at a glance
 
-- Keep public command identity in `src/command-catalog.ts` and public input/output contracts in `src/commands/**`.
+- Keep public command identity in `packages/command-registry/src/catalog.ts` and public input/output contracts in `src/commands/**`.
 - Keep daemon route ownership and request-policy traits in the daemon command registry.
 - Request modules consume named predicates. Handler modules own execution logic without duplicate route coverage tables.
 - The daemon registry must not define public grammar, client options, schemas, help, or platform capability support.
@@ -31,7 +31,7 @@ Duplicate command sets required alignment by convention.
 
 ## Decision
 
-Keep public command identity in `src/command-catalog.ts`.
+Keep public command identity in `packages/command-registry/src/catalog.ts`.
 Keep public input/output contracts in `src/commands/**`.
 
 Add `packages/daemon/src/core/daemon-command-registry.ts` as the daemon-side source of truth for command route ownership and request-policy traits.
@@ -95,7 +95,7 @@ A derived daemon registry is therefore permitted **only if** it preserves all th
 
 1. **Daemon-owned declaration.** A daemon-owned facet under `packages/daemon/src/` declares route and request-policy traits.
    The registration composes that facet.
-   The public command contract in `src/commands/**` or `src/command-catalog.ts` must never contain these traits as inline fields.
+   The public command contract in `src/commands/**` or `packages/command-registry/src/catalog.ts` must never contain these traits as inline fields.
    A registration call may be co-located with public declarations.
    Ownership of daemon policy must remain separate from the public surface.
    See Alternatives, “Keep daemon groups in `src/command-catalog.ts`”.
