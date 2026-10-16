@@ -310,7 +310,6 @@ const MODULE_MOCK_RECEIVERS = new Set(['vi', 'vitest']);
 const MODULE_MOCK_METHODS = new Set([
   'mock',
   'doMock',
-  'mockActual',
   'unmock',
   'doUnmock',
   'importActual',

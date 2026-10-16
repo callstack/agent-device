@@ -116,6 +116,7 @@ test('R85 ignores a provider named only in a comment, a non-literal mock argumen
     `import type { vi as mocks } from 'vitest';\nmocks.mock(${PROVIDER_ENTRY});`,
     `import * as testing from 'vitest';\ntesting.expect.mock(${PROVIDER_ENTRY});`,
     `import { vi as mocks } from 'vitest';\nfunction f(mocks) { mocks.mock(${PROVIDER_ENTRY}); }`,
+    `import { vi as mocks } from 'vitest';\nmocks.mockActual(${PROVIDER_ENTRY});`,
   ]) {
     assert.deepEqual(check(source), [], source);
   }

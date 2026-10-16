@@ -145,6 +145,22 @@ test('an alias call still ignores comments, non-literal modules and non-module m
   );
 });
 
+test('only the module-path methods Vitest exposes count, through every receiver form', () => {
+  assert.deepEqual(
+    specs(
+      "import { vi as mocks } from 'vitest';",
+      "import * as testing from 'vitest';",
+      "mocks.mockActual('a');",
+      "testing.vi.mockActual('b');",
+      "vi.mockActual('c');",
+      "mocks.importActual('d');",
+      "testing.vi.importActual('e');",
+      "vi.importActual('f');",
+    ),
+    ['d', 'e', 'f'],
+  );
+});
+
 test('a Vitest binding made by a dynamic import is not followed', () => {
   assert.deepEqual(
     specs(
