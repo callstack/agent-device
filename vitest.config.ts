@@ -1,7 +1,11 @@
 import { defineConfig } from 'vitest/config';
+import { validationTestReporter } from './scripts/check-affected/test-report.ts';
 import { resolveVitestMaxWorkers } from './scripts/lib/vitest-concurrency.ts';
 import coverageRunStampReporter from './scripts/vitest-coverage-run-stamp-reporter.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
+
+const validationReport = process.env.AGENT_DEVICE_VALIDATION_REPORT;
+delete process.env.AGENT_DEVICE_VALIDATION_REPORT;
 
 // A real per-case spawn is timeout noise under thousands of mutant reruns, so the
 // mutation lane excludes these tests even though the unit lane runs them normally.
@@ -105,7 +109,10 @@ export default defineConfig({
     // Gate reporters for every lane; a `--reporter` flag would replace them, so no lane passes one.
     // The stamp reporter only acts on a lane that ran coverage — see its module.
     reporters: [
-      'default',
+      'dot',
+      validationTestReporter(
+        validationReport ? `${validationReport}.${process.pid}.json` : undefined,
+      ),
       slowTestGateReporter(),
       coverageRunStampReporter(COVERAGE_UNINSTRUMENTED_PROJECTS),
     ],
