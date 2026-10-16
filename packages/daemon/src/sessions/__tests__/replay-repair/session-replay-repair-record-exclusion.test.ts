@@ -439,3 +439,54 @@ test('non-repair authoring recording is unchanged: a read in a fresh `open --sav
   // Recorded normally — no `--record` needed, no repair segment in play.
   expect(session.actions.map((a) => a.command)).toEqual(['get']);
 });
+
+test('an authored snapshot plan step survives replay and close into the healed file', async () => {
+  const ctx = setup('agent-device-repair-authored-snapshot-');
+  const filePath = writeReplayFile(ctx.root, ['open "Demo" --relaunch', 'snapshot -i', 'close']);
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore: ctx.sessionStore,
+    sessionName: ctx.sessionName,
+  });
+  const replay = await runReplayForTest({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName: ctx.sessionName,
+    logPath: ctx.logPath,
+    sessionStore: ctx.sessionStore,
+    invoke,
+  });
+  expect(replay.ok).toBe(true);
+
+  const closed = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: ctx.sessionName,
+      command: 'close',
+      positionals: [],
+      flags: { saveScript: true },
+    },
+    sessionName: ctx.sessionName,
+    logPath: ctx.logPath,
+    sessionStore: ctx.sessionStore,
+    leaseRegistry: ctx.leaseRegistry,
+  });
+  expect(closed.ok).toBe(true);
+
+  const healedPath = path.join(ctx.root, 'flow.healed.ad');
+  const parsed = parseReplayScriptDetailed(fs.readFileSync(healedPath, 'utf8'));
+  expect(parsed.actions.map((action) => action.command)).toEqual(['open', 'snapshot', 'close']);
+  expect(parsed.actions[1]?.flags.snapshotInteractiveOnly).toBe(true);
+
+  const fresh = setup('agent-device-repair-authored-snapshot-fresh-');
+  const freshRun = await runReplayForTest({
+    req: baseReq({ positionals: [healedPath] }),
+    sessionName: fresh.sessionName,
+    logPath: fresh.logPath,
+    sessionStore: fresh.sessionStore,
+    invoke: makeRecordingReplayInvoke({
+      sessionStore: fresh.sessionStore,
+      sessionName: fresh.sessionName,
+    }),
+  });
+  expect(freshRun.ok).toBe(true);
+});
