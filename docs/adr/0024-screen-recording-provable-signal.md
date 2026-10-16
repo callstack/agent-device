@@ -364,13 +364,15 @@ Section 5 currently has these requirements:
 - Uncertain cleanup stays `cleanup-pending`.
 - When finish throws, forced cleanup runs (in `transitions.ts`).
 
-The amendment:
-*Screen recording is a **stop-and-collect** resource.
-It keeps the manifest, the fence on every destructive step, and the completed replay.
-It replaces `reattach` and `cleanup` with the `stop(target)` and `collect` of the backend.
-For this kind, it drops `cleanup-pending` as a phase and drops the admission ledger.
-It records the recorder observation beside the committed export.
-For every durable kind, forced cleanup is no longer inferred from a failed finish.*
+The proposed amendment:
+*Screen recording would be a **stop-and-collect** resource.
+It would keep the manifest, the fence on every destructive step, and the completed replay.
+Backend `stop(target, budget)` and `collect` would replace the `reattach` and `cleanup` facet operations.
+This kind would remove the `cleanup-pending` phase and admission ledger.
+It would record the recorder observation and native-path disposition beside the committed export.
+A manifest would remain archived by fence generation until both are settled.
+For each durable kind, failed finish would no longer imply forced cleanup once its failed-finish test states its retry requirements.
+App-log, audio-probe, and perf-capture would retain the ADR 0019 contract unchanged.*
 
 ### 2.8 Android duration (separate decision)
 
