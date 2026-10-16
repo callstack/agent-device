@@ -159,305 +159,379 @@ The daemon tree owns structural equivalence and candidate publication.
 
 ### 3. Versioned `.ad` target-binding evidence
 
-> **Amendment (#1567): dual-endpoint target evidence.** An action that resolves two elements records
-> one `# agent-device:targets-v1 {"source":{...},"destination":{...}}` annotation instead of a
-> single `target-v1`. Each nested value is a complete `TargetAnnotationV1` under the same identity,
-> normalization, field-size, and verification rules. The wrapper is capped at 8,320 bytes. Replay
-> verifies both selectors and carries two post-resolution guards before dispatch; either endpoint's
-> selector miss, identity mismatch, unverifiable evidence, or dispatch-time guard mismatch refuses
-> the entire action before pointer-down. Unknown future `targets-vN` annotations remain ordinary
-> comments to an older reader, matching the single-target versioning rule.
+> **Amendment (#1567): dual-endpoint target evidence.** An action that resolves two elements records one `targets-v1` annotation instead of `target-v1`.
+> Its form is `# agent-device:targets-v1 {"source":{...},"destination":{...}}`.
+> Each nested value is a complete `TargetAnnotationV1`.
+> The same identity, normalization, field-size, and verification rules apply.
+> The wrapper limit is 8,320 bytes.
+> Before dispatch, replay verifies both selectors and carries two post-resolution guards.
+> Either endpoint can refuse the whole action before pointer-down for these reasons:
+>
+> - Selector miss
+> - Identity mismatch
+> - Unverifiable evidence
+> - Dispatch-time guard mismatch
+>
+> Older readers treat unknown future `targets-vN` annotations as ordinary comments, as with single-target versions.
 
-Recording writes evidence for every action that resolves an element target. The plain-text format is a
-versioned comment immediately before the action it annotates:
+Recording writes evidence for every action that resolves an element target.
+The versioned comment immediately precedes its action:
 
 ```text
 # agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[{"role":"toolbar","label":"Editor"},{"role":"window"}],"sibling":0,"viewportOrder":0,"scrollRegion":{"role":"scrollview","id":"editor-scroll"},"verification":"verified"}
 click @e12 "Save"
 ```
 
-The prefix is ASCII and the payload is one JSON object encoded on one line. JSON supplies all quoting and
-escaping; writers must use canonical `JSON.stringify` field order `id`, `role`, `label`, `ancestry`,
-`sibling`, `viewportOrder`, `scrollRegion`, `rect`, `verification`, and rect order `x`, `y`, `width`,
-`height`. `verification` is `"verified"` or `"unverifiable"`. The payload has **three tiers** with
-different comparison roles:
+The prefix is ASCII.
+The payload is one JSON object on one line.
+JSON supplies all quotation and escape rules.
+Writers must use canonical `JSON.stringify` field order:
 
-- **Identity** (compared exactly): `id` when recorded, else `role` plus normalized `label`, plus the
-  leaf-anchored `ancestry` prefix. `role` is `normalizeType(node.type ?? "")`, exactly the normalized
-  type used by `buildSelectorChainForNode`; it is never the raw optional `node.role`.
-- **Disambiguation signals** (consulted only when several current nodes share the identity): `sibling`
-  (a genuine same-parent child index), then `viewportOrder` scoped to the recorded `scrollRegion`
-  partition — normalized, relative signals, never absolute pixels, with document order as the final
-  deterministic tie-break for every ordering.
-- **Diagnostics** (never compared): optional `rect`, carried only so divergence reports can show where
-  the recorded target was.
+- `id`
+- `role`
+- `label`
+- `ancestry`
+- `sibling`
+- `viewportOrder`
+- `scrollRegion`
+- `rect`
+- `verification`
 
-Absolute geometry is deliberately demoted out of identity: an absolute rect is the least stable component
-of a target's identity — scroll offset, device rotation, dynamic type, iPad/macOS window resizing, and
-ordinary RN layout shifts all move rects between healthy runs — and the audit's identical-rect
-"Prevent Remove" sibling pair proves absolute geometry cannot even separate identical siblings in the
-worst case. No absolute-coordinate tolerance exists in v1: the earlier draft's ±8-unit rect comparison is
-removed rather than tuned, because no measured drift distribution exists to justify any particular
-constant. If a future revision reintroduces an absolute tolerance, it must carry measured evidence.
+Rect field order is `x`, `y`, `width`, `height`.
+`verification` is `"verified"` or `"unverifiable"`.
+The payload has three comparison tiers:
 
-**Normalization.** All strings are Unicode NFC. `label` additionally trims leading/trailing whitespace
-and collapses internal whitespace runs to a single space. Comparison is case-sensitive after
-normalization (a label case change is a real UI change). A string that is empty after normalization is
-omitted by the writer and treated as absent by the comparator. Each string field is at most **256 UTF-8
-bytes** after normalization; the whole payload is at most **4 KiB**; `ancestry` has at most **eight**
-entries; `sibling` and `viewportOrder` are non-negative safe integers. The parser rejects a v1 annotation
-exceeding these bounds with `INVALID_ARGS`.
+- **Identity, compared exactly:** recorded `id`, otherwise `role` plus normalized `label`, together with the leaf-anchored `ancestry` prefix.
+  `role` is `normalizeType(node.type ?? "")`, as `buildSelectorChainForNode` uses.
+  It is never the raw optional `node.role`.
+- **Disambiguation signals, used only for shared identity:** `sibling`, then `viewportOrder` within the recorded `scrollRegion` partition.
+  `sibling` is the actual same-parent child index.
+  These relative signals use no absolute pixels.
+  Document order resolves every ordering tie.
+- **Diagnostics, never compared:** optional `rect` shows the recorded target's location in divergence reports.
 
-**Writer-parser invariant.** The recorder must never emit a payload its own parser rejects. When a
-payload would exceed the 4 KiB ceiling after per-field truncation, the writer reduces it
-deterministically: drop `ancestry` entries one at a time from the **root side** — the same side ancestry
-truncation already drops from — until the payload fits. If it still overflows with only `ancestry[0]`
-(the parent) retained, the writer downgrades the annotation to `verification: "unverifiable"`
-(fail-closed) rather than writing an invalid or silently-lossy script; with the per-field 256-byte caps
-in force, a parent-only payload fits arithmetically, so the downgrade branch is a terminal guarantee,
-not an expected path. The record-time self-check (step 5 below) runs against the reduced tuple, so a
-`verified` claim is always honest for exactly what was written.
+Absolute geometry is excluded from identity because healthy runs change rects.
+Causes include scroll offset, rotation, dynamic type, iPad/macOS window size changes, and ordinary RN layout changes.
+The audited “Prevent Remove” siblings also had identical rects.
+Thus, absolute geometry cannot always distinguish siblings.
+V1 has no absolute-coordinate tolerance.
+The earlier ±8-unit comparison has no measured drift distribution to justify its constant.
+Any future absolute tolerance must include measured evidence.
 
-> **Amendment (#1398, ADR 0017):** action-mode evidence gains a second, independent cause for this same
-> `"unverifiable"` downgrade — a matched node whose label carries an app-rendered echo of a literal the
-> recording session already parameterized. Unlike the size-overflow case, the label is also redacted to
-> its placeholder before the downgrade, so the literal itself never reaches the payload either. Landmark
-> mode (`wait`) does not use this downgrade; it drops the annotation entirely (see the #1349 amendment
-> above). See ADR 0017's session-scoped echo protection amendment for the full mechanism.
+**Normalization.** All strings use Unicode NFC.
+`label` also removes leading/trailing whitespace and replaces each internal whitespace sequence with one space.
+Comparisons are case-sensitive after normalization.
+A label case change is a UI change.
+The writer omits strings that normalize to empty.
+The comparator treats them as absent.
+Each normalized string field has a **256 UTF-8 byte** limit.
+The whole payload has a **4 KiB** limit.
+`ancestry` has at most **eight** entries.
+`sibling` and `viewportOrder` are non-negative safe integers.
+The parser rejects annotations outside these bounds with `INVALID_ARGS`.
 
-**Local identity.** Two nodes share local identity when both carry `id` and the normalized ids are equal;
-or, when the recording carries no `id`, when their normalized roles are equal and their normalized labels
-are equal (label absent on both sides counts as equal; label present on exactly one side is a mismatch).
+**Writer-parser invariant.** The recorder must never emit a payload that its parser rejects.
+If per-field truncation still leaves more than 4 KiB, the writer removes `ancestry` entries from the root side, one at a time.
+This reduction is deterministic and uses the existing ancestry truncation direction.
+If only `ancestry[0]` remains and the payload still exceeds the limit, the writer sets `verification: "unverifiable"`.
+It must not write an invalid or silently lossy script.
+With the 256-byte field limits, a parent-only payload fits arithmetically.
+Thus, this downgrade is a terminal guarantee, not an expected path.
+Step 5's record-time self-check uses the reduced tuple.
+A `verified` claim therefore applies to exactly the written evidence.
+
+> **Amendment (#1398, ADR 0017):** action-mode evidence has another independent cause for the same `"unverifiable"` downgrade.
+> It applies when a matched node's label echoes a literal already parameterized by the recording session.
+> The writer first replaces that literal with its placeholder in the label.
+> The literal therefore never enters the payload.
+> Landmark mode (`wait`) instead drops the annotation, as the #1349 amendment specifies.
+> ADR 0017's session-scoped echo protection amendment defines the full mechanism.
+
+**Local identity.** If both nodes carry `id`, equal normalized ids establish local identity.
+If the recording carries no `id`, normalized roles and labels must match.
+Absent labels on both sides are equal.
+A label on only one side is a mismatch.
 A recorded `id` never matches a node without that id.
 
-> **Amendment (#1269).** An id may serve as identity (and lead the selector chain) only when it uniquely
-> denotes the target in the record-time tree: the writer computes the id's own capture-time match count
-> (independent of ancestry) and, whenever more than one node in the record-time tree carries the recorded
-> id, demotes it — falling back to role+label exactly as an unrecorded id already does. A shared
-> Android framework resource id (`android:id/title`, present on every titled list row) is the measured
-> case, but the rule is capture-time uniqueness, not an `android:id/*` namespace heuristic: a reused RN
-> `FlatList` `testID` hits the same demotion on iOS.
+> **Amendment (#1269).** An id may identify the target and lead its selector chain only if it is unique in the record-time tree.
+> The writer counts matches for the id independently of ancestry.
+> If multiple nodes carry that id, the writer demotes it to role+label, as for an unrecorded id.
+> The measured case is `android:id/title` on every titled list row.
+> The rule uses capture-time uniqueness, not an `android:id/*` namespace heuristic.
+> A reused RN `FlatList` `testID` causes the same demotion on iOS.
 
-> **Amendment (#1280).** A **click/press** whose resolved winner is an *identity-empty* container — no
-> id survives #1269's demotion (absent, or demoted for being non-unique), no label, and no value, all
-> evaluated from the demoted identity view (a raw identifier that did not survive demotion never counts
-> as identity or text) — is **recorded** against its first labeled descendant instead of the container
-> itself, so the recorded selector chain and the `target-v1` tuple both carry a selective role+label
-> identity rather than a bare, tree-wide-shared role. The measured case is Android: a list row's
-> clickable node is a label-less `role="linearlayout"` container whose visible title lives on a child
-> `TextView`. "First labeled descendant" means the first node in document order (this section's
-> canonical total order) within the container's whole subtree whose normalized label is non-empty.
-> `fill` is deliberately excluded: its recorded chain carries `editable=true` constraints a label
-> descendant cannot satisfy, which would save an unreplayable script. The substitution is guarded
-> fail-closed, twice over: (i) it fires only when the subtree contains **no competing interactive node**
-> — none flagged `hittable`, and none whose role the canonical interactive-role classification
-> (`isSemanticTouchTarget`, the same policy hittable-ancestor promotion uses) names as an independently
-> tappable control — a row with a trailing `Switch` or `Checkbox` must not retarget, because a tap at
-> the labeled descendant's center and a tap at the container's center could land on different controls
-> once the descendant, not the container, is what replay taps; and (ii) the selected descendant's rect
-> center must lie **inside the container's rect** — the replay tap point must be provably within the
-> original activation region (missing rects fail closed). A container either guard blocks, or for which
-> no descendant carries a label, is recorded exactly as before this amendment. This is a
-> **recording-only side channel**: the live response — resolved node, selector chain, ref-label,
-> tap point, resolution disclosure, and `targetHittable`/hint — describes the dispatched container
-> end-to-end, and `resolveSelectorChain`/dispatch are unchanged; only the recorded action entry (the
-> `.ad` writer's source) and its `target-v1` evidence consume the retargeted descendant. The rule is
-> platform-agnostic: an RN `FlatList` row (`Cell`) that is label-less with a labeled `Text` child hits
-> the same substitution on iOS.
-
-> **Amendment (#1349): read-only step identity — `wait` landmark verification, `is` coverage, and the
-> per-command verification-phase trait.** Decision 3's evidence and machinery extend to the eligible
-> read-only steps without changing their execution semantics. The annotation format is **unchanged**
-> (`target-v1`, same tuple, same bounds, same writer/parser); what is new is a per-command dispatch of
-> WHEN verification runs, declared on the central `CommandDescriptor` as
-> `targetIdentityVerification: 'pre-dispatch' | 'post-resolution'` and pinned by a completeness test —
-> a new evidence-carrying command must choose its phase explicitly rather than silently entering the
-> generic pre-dispatch path.
+> **Amendment (#1280).** A **click/press** can resolve an identity-empty container.
+> After #1269 demotion, this means no surviving id, no label, and no value.
+> A demoted raw identifier counts as neither identity nor text.
+> Recording substitutes the container's first labeled descendant.
+> Its selector chain and `target-v1` tuple then carry selective role+label identity instead of a shared bare role.
+> The measured Android case is a clickable `role="linearlayout"` row with its title on a child `TextView`.
+> “First labeled descendant” means the first node in document order within the whole subtree with a non-empty normalized label.
+> `fill` is excluded because its recorded `editable=true` constraints cannot match that descendant.
+> Otherwise, the script could not replay.
 >
-> - **`wait <selector>` — covered, `post-resolution`, landmark (existence) semantics.** A wait's
->   landmark may legitimately be absent when its step starts, so the generic pre-action verification
->   (paths 2-6) must never run for it; only path 1 (recorded-`unverifiable`, which consults no screen)
->   refuses up front. The recorded annotation instead travels into the wait's own polling loop
->   (`internal.replayLandmarkGuard`, the same daemon-only channel as `replayTargetGuard`), which
->   strengthens the success condition from "the selector matches" to "a selector match carries the
->   recorded identity" — the identity tier only (local identity + leaf-anchored ancestry prefix). The
->   positional disambiguation signals are deliberately **not** compared: a destination guard proves the
->   landmark exists on the ready screen, not that it kept its list position, and requiring position
->   would produce the inverse false-failure on a legitimately reshuffled-but-correct screen. Polling is
->   preserved fail-open in time and fail-closed at the deadline: a same-selector impostor never aborts
->   the wait (a transient look-alike mid-transition is exactly what a wait exists to wait through); at
->   the deadline, a poll history containing selector matches that never carried the identity surfaces
->   as an `identity-mismatch` divergence (`matchCount` from the last matching poll, observed identity +
->   first ancestry mismatch in `mismatches`) BEFORE the wait reports success, while a selector that
->   never matched at all remains the ordinary wait timeout (`action-failure` — that failure needs a
->   state repair, not an identity repair, and its `repairHint` routing is already correct).
->   A wait poll also rides out a capture that judged the current screen UNREADABLE (the Android
->   helper's content verdicts, `isUnreadableCaptureContentError`; iOS surfaces the same state as a
->   sparse verdict with no matches): live Android validation showed a guard wait replayed right after
->   a navigation press deterministically dies on its first mid-transition capture otherwise. A wait
->   whose screen never became readable rethrows the last capture verdict at the deadline instead of
->   masking it as a generic timeout.
->   Record time writes evidence in a **landmark mode**: the step-5 self-check is identity-set
->   MEMBERSHIP rather than isolation (mirroring what replay will actually verify), and a matched node
->   with no id and no label after #1269 demotion records **no annotation** — a role-only landmark
->   identity is near-vacuous, and an unannotated wait keeps its existing selector-existence semantics
->   instead of failing closed on evidence that never discriminated anything. ADR 0016's destination
->   guard consumes exactly this: a qualifying guard is a selector wait with a `verified` annotation.
->   **Amendment (#1398, ADR 0017):** the same no-annotation outcome now also fires when the matched
->   node's identity carries an app-rendered echo of a literal the recording session already
->   parameterized via `fill --record-as` — a placeholder written into a recorded label could never
->   verify against the live tree's real value at replay time, so the evidence is dropped rather than
->   published unverified. See ADR 0017's session-scoped echo protection amendment for the mechanism.
-> - **`get` — unchanged**; already covered by the pre-dispatch path and the post-resolution guard.
-> - **`is` (all predicates except `exists` and `absent`) — covered, `pre-dispatch`, the `get` pattern end-to-end.**
->   `is` resolves a unique node immediately, so pre-action verification is semantically valid; the
->   resolved node/tree feed record-time evidence, and dispatch threads `replayTargetGuard` into
->   `assertExpectedResolvedTarget` exactly like `get`. The direct-iOS `is`/`wait` fast paths are gated
->   off during recording and guarded replays, mirroring `get`'s existing recording gate.
-> - **Intentionally deferred, with tests proving no annotation is recorded and no identity check runs:**
->   `is exists` (existence assertion with no unique winner; wait-like semantics without the
->   guard-critical role), `is absent` (a strict one-capture absence observation has no resolved
->   winner; it records as an ordinary observation and its `predicate_failed` failure is always an
->   action-failure, never an identity mismatch), `wait absent` (strict zero-candidate polling has no
->   resolved winner; its no-match success carries no `target-v1` or landmark annotation, and a
->   `wait_target_present` deadline is an ordinary action-failure, never an identity mismatch or an
->   ADR 0016 destination guard), every read-only `find` variant (fuzzy-locator resolution has no
->   selector-chain identity token for the classifier, and publication already refuses mutating `find`
->   as non-verifiable), and `wait text`/`wait stable`/duration waits/`wait @ref` (no element target, or
->   a session-local ref that ADR 0016 already refuses to publish; `wait @ref` is rejected rather than
->   converted to a portable selector).
+> Two guards must permit the substitution:
+>
+> 1. The subtree contains **no competing interactive node**.
+>    No node is flagged `hittable`.
+>    No node has an independently tappable role under `isSemanticTouchTarget`, the policy for hittable-ancestor promotion.
+>    A row with a trailing `Switch` or `Checkbox` must not retarget.
+>    The descendant's center and the container's center could activate different controls.
+> 2. The selected descendant's rect center lies **inside the container's rect**.
+>    The replay tap point must remain within the original activation region.
+>    Missing rects prevent substitution.
+>
+> If either guard blocks substitution, recording keeps the container.
+> If no descendant has a label, recording also keeps the container.
+> This is a **recording-only side channel**.
+> The live response continues to describe the dispatched container throughout:
+>
+> - Resolved node
+> - Selector chain
+> - Ref-label
+> - Tap point
+> - Resolution disclosure
+> - `targetHittable`/hint
+>
+> `resolveSelectorChain` and dispatch do not change.
+> Only the recorded action entry and its `target-v1` evidence use the descendant.
+> The rule applies to every platform.
+> An iOS RN `FlatList` row (`Cell`) without a label and with a labeled `Text` child uses the same substitution.
 
-**Ancestry.** The chain is the nearest **K = 8** ancestors of the target, ordered **leaf→root** (nearest
-ancestor first), each entry `{ role, label? }` under the same normalization (`role` may be the empty
-string when the node has no type; `label` is omitted when empty). Truncation drops entries from the
-**root side only** — the nearest ancestors are always kept. Comparison is a **leaf-anchored prefix
-match**: recorded chain R matches observed chain O iff for every index `i < |R|`, `O[i]` exists, the
-roles are equal, and — when `R[i]` carries a label — the labels are equal (a label absent in `R[i]` is
-unconstrained). `|O| < |R|` is a mismatch. An inserted or removed wrapper ancestor therefore changes
-identity by design: structure is part of identity.
+> **Amendment (#1349): read-only step identity — `wait` landmark verification, `is` coverage, and the per-command verification-phase trait.**
+> Decision 3's evidence extends to eligible read-only steps without changes to their execution semantics.
+> The `target-v1` tuple, bounds, writer, and parser do not change.
+> Each command declares when verification runs on the central `CommandDescriptor`:
+> `targetIdentityVerification: 'pre-dispatch' | 'post-resolution'`.
+> A completeness test enforces this declaration.
+> A new evidence-carrying command must select its phase explicitly.
+> It must not silently use generic pre-dispatch verification.
+>
+> **`wait <selector>` uses `post-resolution` landmark existence semantics.**
+> Its landmark can be absent when the step starts.
+> Generic pre-action verification paths 2-6 must never run for it.
+> Only path 1, recorded-`unverifiable` without screen examination, refuses immediately.
+> The annotation instead enters the wait's polling loop through `internal.replayLandmarkGuard`.
+> This uses the same daemon-only channel as `replayTargetGuard`.
+> Success requires a selector match with recorded identity, not merely a selector match.
+> The comparison uses only local identity and the leaf-anchored ancestry prefix.
+> It excludes positional disambiguation signals.
+> A destination guard proves landmark existence on the ready screen, irrespective of list position.
+> Positional comparison could incorrectly reject a valid reordered screen.
+>
+> A same-selector impostor does not abort polling.
+> Transient similar elements can appear during a transition.
+> At the deadline, matching polls without the recorded identity cause `identity-mismatch` before wait success.
+> `matchCount` comes from the last matching poll.
+> `mismatches` includes observed identity and the first ancestry mismatch.
+> If the selector never matches, the ordinary timeout remains `action-failure`.
+> This requires state repair, and its existing `repairHint` routing remains correct.
+>
+> Polling also continues after an unreadable capture.
+> Android reports content verdicts through `isUnreadableCaptureContentError`.
+> iOS reports the same state as a sparse verdict without matches.
+> Live Android validation showed deterministic failure on the first transition capture after a navigation press without this rule.
+> If the screen never becomes readable, the deadline rethrows the last capture verdict instead of a generic timeout.
+>
+> Record-time **landmark mode** changes step 5's self-check from isolation to identity-set membership.
+> This matches replay verification.
+> If #1269 demotion leaves neither id nor label, the writer records **no annotation**.
+> A role-only landmark identity distinguishes too little.
+> The unannotated wait retains selector-existence semantics instead of refusing unverifiable evidence.
+> ADR 0016 uses exactly this definition: a qualifying destination guard is a selector wait with a `verified` annotation.
+> **Amendment (#1398, ADR 0017):** the writer also omits evidence when identity echoes a literal already parameterized through `fill --record-as`.
+> A recorded label placeholder cannot verify against the live literal during replay.
+> The writer drops the evidence instead of publishing it unverified.
+> ADR 0017's session-scoped echo protection amendment defines the mechanism.
+>
+> **`get` remains unchanged.** Pre-dispatch verification and the post-resolution guard already cover it.
+>
+> **`is`, except `exists` and `absent`, uses `pre-dispatch` verification and the complete `get` pattern.**
+> It resolves one unique node immediately, so pre-action verification applies.
+> The resolved node/tree supply record-time evidence.
+> Dispatch passes `replayTargetGuard` to `assertExpectedResolvedTarget`, as for `get`.
+> Recording and guarded replays disable direct-iOS `is`/`wait` fast paths, as the existing `get` recording gate does.
+>
+> **The following coverage remains deferred.** Tests prove no annotation is recorded and no identity check runs:
+>
+> - `is exists` has no unique winner.
+>   It has wait-like existence semantics without the guard-critical role.
+> - `is absent` observes absence in one capture without a resolved winner.
+>   It records an ordinary observation.
+>   Its `predicate_failed` is always `action-failure`, never identity mismatch.
+> - `wait absent` polls for zero candidates without a resolved winner.
+>   No-match success has no `target-v1` or landmark annotation.
+>   A `wait_target_present` deadline is ordinary `action-failure`.
+>   It is never identity mismatch or an ADR 0016 destination guard.
+> - Every read-only `find` variant lacks a selector-chain identity token for classification.
+>   Publication already refuses mutating `find` as non-verifiable.
+> - `wait text`, `wait stable`, duration waits, and `wait @ref` have no element target or use a session-local ref.
+>   ADR 0016 already refuses publication of that ref.
+>   `wait @ref` is rejected instead of converted to a portable selector.
 
-**Record-time write.** Both positional signals are defined over candidate domains that record and
-replay compute identically — never one domain at record time and another at replay. **Document order**
-— a node's pre-order tree-traversal index — is the canonical total order of this contract: every
-enumeration, ordering tie, and candidate listing below resolves by document order, so every comparison
-is total and deterministic.
+**Ancestry.** The chain contains the nearest **K = 8** ancestors in **leaf→root** order.
+Each entry is `{ role, label? }` with the same normalization.
+If the node has no type, `role` may be empty.
+Empty `label` is omitted.
+Truncation removes entries from the **root side only**.
+The nearest ancestors always remain.
+
+Comparison uses a **leaf-anchored prefix match**.
+Recorded chain R matches observed chain O if every index `i < |R|` satisfies these conditions:
+
+- `O[i]` exists.
+- The roles are equal.
+- If `R[i]` has a label, the labels are equal.
+
+An absent recorded label imposes no constraint.
+`|O| < |R|` is a mismatch.
+An inserted or removed wrapper ancestor deliberately changes identity.
+Structure is part of identity.
+
+**Record-time write.** Record and replay compute both positional signals over identical candidate domains.
+**Document order** is the node's pre-order tree-traversal index.
+It is the canonical total order for enumeration, ordering ties, and candidate lists throughout this contract.
+Every comparison is therefore deterministic and total.
 
 1. Resolve the action's winner and compute its identity tuple from the record-time tree.
-2. Compute the record-time identity set: all nodes sharing the winner's local identity with a matching
-   leaf-anchored ancestry prefix.
-3. `sibling` is the winner's zero-based index among its **parent's children** in the tree — a genuine
-   same-parent structural ordinal, independent of scroll regions and cheap to read off the
-   accessibility tree. The parent is already captured as `ancestry[0]` in the leaf-anchored chain, so
-   no additional field is recorded; record and replay compute this ordinal identically by definition.
-4. Partition the identity set by **scroll region**: the partition key is the local identity (`role` +
-   `id`/`label`) of a member's nearest scrollable ancestor, or *none* when it has no scrollable
-   ancestor. `scrollRegion` is the winner's partition key (omitted when *none*). `viewportOrder` is the
-   winner's zero-based ordinal **within its own partition** — not the whole identity set — ordered by
-   rect center top-to-bottom then left-to-right, with equal centers resolved by document order and
-   rect-less members last, in document order. The partition is the ordinal's domain on both sides, so
-   recorded and replayed `viewportOrder` always refer to the same candidate domain.
-5. Run the replay-time verification algorithm below against the record-time tree itself. If it isolates
-   exactly the winner, write `verification: "verified"`; otherwise write `verification: "unverifiable"`.
-   Because both ordinals are computed from the winner over deterministic total orders, this self-check
-   succeeds by construction whenever the capture supplies the needed structural data; `unverifiable` at
-   record time therefore marks a capture anomaly — a signal that could not be computed (e.g. missing
-   parent linkage) — and the branch is kept as a fail-closed safety valve, not an expected path. An
-   unverifiable annotation makes the step an `identity-unverifiable` divergence at replay, before
-   acting — the evidence declares its own limits at record time instead of permitting a silent best
-   guess later.
+2. Compute the record-time identity set.
+   It contains all nodes with the winner's local identity and matching leaf-anchored ancestry prefix.
+3. Compute `sibling` as the winner's zero-based index among its **parent's children**.
+   It is independent of scroll regions and inexpensive to read from the accessibility tree.
+   `ancestry[0]` already records the parent.
+   No additional field is necessary.
+   Record and replay compute this ordinal identically.
+4. Partition the identity set by **scroll region**.
+   The key is the nearest scrollable ancestor's local identity (`role` + `id`/`label`), or *none* without that ancestor.
+   `scrollRegion` is the winner's key and is omitted for *none*.
+   `viewportOrder` is its zero-based ordinal **within its own partition**.
+   Order rect centers top-to-bottom, then left-to-right.
+   Resolve equal centers by document order.
+   Put rect-less members last, in document order.
+   Record and replay use this partition as the ordinal's domain.
+5. Run the replay verification algorithm against the record-time tree.
+   If it isolates exactly the winner, write `verification: "verified"`.
+   Otherwise, write `verification: "unverifiable"`.
+   Both ordinals derive from the winner over deterministic total orders.
+   Thus, the self-check succeeds when capture supplies the required structural data.
+   Record-time `unverifiable` identifies a capture anomaly, such as missing parent linkage.
+   It is a fail-closed safeguard, not an expected path.
+   At replay, it causes `identity-unverifiable` before an action.
+   Evidence declares its limits instead of permitting a silent guess.
 
-A v1 parser accepts known fields in any JSON object order, ignores unknown fields, normalizes known
-strings to NFC, and rejects malformed annotations or invalid known field types with `INVALID_ARGS`. An
-unknown future `target-vN` comment is an ordinary comment to a v1 reader.
+A v1 parser accepts known fields in any JSON object order.
+It ignores unknown fields and normalizes known strings to NFC.
+Malformed annotations or invalid known field types cause `INVALID_ARGS`.
+A v1 reader treats an unknown future `target-vN` comment as an ordinary comment.
 
-The annotation binds only to the next physical action line. A blank line or any intervening line leaves
-it unbound and is rejected as `INVALID_ARGS`; this prevents an edit from silently moving evidence to a
-different target. Parser/writer tests must prove parse-write-parse semantic equality, embedded quotes,
-backslashes, Unicode, and the unbound/malformed cases.
+The annotation binds only to the next physical action line.
+A blank or intervening line leaves it unbound and causes `INVALID_ARGS`.
+This prevents an edit from silently assigning evidence to a different target.
+Parser/writer tests must prove these cases:
 
-Old readers ignore the comment and execute the action unchanged. New readers accept old scripts with no
-annotation and perform no target-binding check for those actions. A writer that reads then rewrites a
-script preserves v1 annotations in canonical form; it must not silently discard them. This is an additive
-`.ad` format change, not merely per-line growth.
+- Parse-write-parse semantic equality
+- Embedded quotes
+- Backslashes
+- Unicode
+- Unbound annotations
+- Malformed annotations
 
-**Replay-time verification.** Every annotated resolved target is checked before its action is sent, by
-this exact classification. `matchCount` is the number of current nodes matching the **recorded selector**
-at replay time — the same match set resolution itself used — with range **0..N**. It is **required on
-every path that performs resolution (paths 2–6 below) and absent on path 1** — the key is omitted per
-the drop-empty-keys convention, never `null` — because path 1 fires before any resolution. No
-diagnostic-only count is computed there: a recorded-unverifiable annotation means there is no
-trustworthy recorded identity to resolve against, so a count would invite misreading and add capture
-cost on a path that by definition cannot verify. Identity verification applies only when
-`matchCount >= 1`.
+Old readers ignore the comment and execute the action unchanged.
+New readers accept unannotated old scripts without target-binding checks for those actions.
+A writer that reads and rewrites a script preserves v1 annotations in canonical form.
+It must not silently discard them.
+This is an additive `.ad` format change, beyond per-line size growth.
 
-1. Recorded `verification` is `"unverifiable"` → **identity-unverifiable** divergence, before any
-   resolution.
-2. `matchCount == 0` → **selector-miss** divergence: the recorded selector no longer matches anything.
-   This class is distinct from an identity mismatch — the repair is a selector repair.
-3. `matchCount >= 1`; the identity set I (matched nodes sharing the recorded local identity with a
-   matching ancestry prefix) is empty → **identity-mismatch** divergence: the selector still matches,
-   but nothing carries the recorded identity.
-4. `|I| == 1` and the resolution winner W is that member → **verified**; the action proceeds. This is
-   the only path that sends the action.
-5. `|I| == 1` and W is a different node → **identity-mismatch** divergence: a unique-but-wrong rebind or
-   a changed ambiguity winner, caught even when resolution was unique.
-6. `|I| > 1` → apply the disambiguation signals in order, each over the SAME candidate domain record
-   time used: (i) **sibling** — the members of I whose zero-based index among their own parent's
-   children equals the recorded `sibling`. Exactly one qualifying member: the evidence denotes it —
-   compare with W as in paths 4/5. Zero or several qualifying members (the same child index can recur
-   under different parents): the signal does not isolate; fall through. (ii) **region-scoped
-   viewportOrder** — restrict I to the partition whose scroll-region key equals the recorded
-   `scrollRegion` (the *none* partition when none was recorded). An empty partition means the recorded
-   scroll region no longer exists: `viewportOrder` is **unavailable** and is never compared across
-   regions; fall through. Otherwise order the partition by rect center top-to-bottom then
-   left-to-right (equal centers by document order; rect-less members last, in document order); if the
-   recorded `viewportOrder` ordinal is in range, the evidence denotes that member — compare with W as
-   in paths 4/5; out of range falls through.
-   If neither signal isolates a member, the step is an **identity-unverifiable** divergence with up to
-   **5** candidates listed in document order — never a silent pick. Document order makes every ordering
-   above total, so a residual tie would require two nodes at identical positions in an identical tree —
-   impossible under pre-order indexing — and even that residual case is identity-unverifiable, not a
-   pick. That refusal is the point of this ADR.
+**Replay-time verification.** Every annotated resolved target uses this exact classification before dispatch.
+`matchCount` counts current nodes matching the **recorded selector**.
+It uses the resolution match set and has range **0..N**.
+Paths 2-6 require it.
+Path 1 omits the key, never sets it to `null`, under the drop-empty-keys convention.
+Path 1 precedes resolution.
+It computes no diagnostic count because the recorded identity is untrustworthy.
+A count could mislead and would add capture cost without verification.
+Identity verification applies only when `matchCount >= 1`.
 
-A field present in the recording but absent on the compared node is a mismatch; `rect` is never compared.
-An old unannotated action remains executable without this check. All three divergence classes are
-target-binding divergences reported before the device action. This is not general outcome verification:
-`--verify` remains post-action change evidence with a different contract.
+1. Recorded `verification` is `"unverifiable"`: return **identity-unverifiable** before resolution.
+2. `matchCount == 0`: return **selector-miss**.
+   The selector matches nothing.
+   This requires selector repair, distinct from identity mismatch.
+3. `matchCount >= 1` and identity set I is empty: return **identity-mismatch**.
+   I contains selector matches with the recorded local identity and matching ancestry prefix.
+   Nothing matched that identity.
+4. `|I| == 1` and resolution winner W is that member: **verified**.
+   The action proceeds.
+   Only this verified result sends the action.
+5. `|I| == 1` and W differs: return **identity-mismatch**.
+   This detects a unique-but-wrong rebind or a changed ambiguity winner, even after unique resolution.
+6. `|I| > 1`: apply these signals in order over their record-time candidate domains:
+   - **sibling:** retain members of I whose index among their own parent's children equals recorded `sibling`.
+     If exactly one remains, compare it with W under paths 4/5.
+     If zero or multiple remain, continue.
+     The same child index can recur under different parents.
+   - **Region-scoped viewportOrder:** restrict I to the recorded `scrollRegion` partition, including *none* when omitted.
+     If empty, the recorded region no longer exists.
+     The signal is unavailable and must never compare across regions.
+     Otherwise, order centers top-to-bottom, then left-to-right.
+     Resolve equal centers by document order.
+     Put rect-less members last in document order.
+     If the recorded ordinal is in range, compare that member with W under paths 4/5.
+     If out of range, continue.
+   If neither signal isolates a member, return **identity-unverifiable**.
+   List at most **5** candidates in document order.
+   Never silently select a candidate.
+   Pre-order indexing prevents two nodes from occupying the same document-order position in one tree.
+   Even a residual tie causes identity-unverifiable.
+   This refusal is the purpose of the ADR.
 
-> **Amendment (#1385).** The capture this verification runs against (`captureDivergenceObservation`) is
-> itself the pre-dispatch gate a step right after `open --relaunch` races: the app can still be
-> launching/mounting when it lands, producing a transient content-quality verdict — `capture-failed`
-> (Android's snapshot helper returns "insufficient foreground app content" while the app is mounting, and
-> the capture path throws) or `sparse-snapshot` (iOS's private-AX fallback under load) — that is not a
-> real divergence, only an unlucky capture. This capture now retries with a bounded backoff (fixed
-> 7-entry delay list, 12s DELAY-ONLY budget — see below) before falling through to `identity-unverifiable`,
-> mirroring the keep-polling semantics `wait`'s recorded-landmark identity verification (#1349) already
-> applies on its own (post-resolution) path. The retry is opt-in per call site (`retryLaunchRace`), not a
-> change to every `captureDivergenceObservation` caller: only the pre-dispatch verification gate in
-> `verifyReplayActionTarget` races a launch this way — the post-failure diagnostic capture
-> (`buildReplayFailureDivergence`) and the post-resolution guard-mismatch capture both follow an
-> already-real failure, where retrying would only delay an already-decided divergence.
+A recorded field absent from the compared node is a mismatch.
+`rect` is never compared.
+Old unannotated actions remain executable without this check.
+All three target-binding divergence classes precede device action.
+This is distinct from general outcome verification.
+`--verify` remains post-action change evidence under its separate contract.
+
+> **Amendment (#1385).** `captureDivergenceObservation` supplies the pre-dispatch verification tree.
+> Immediately after `open --relaunch`, the app can still be in launch or mount operations.
+> A transient `capture-failed` or `sparse-snapshot` verdict can therefore occur without real divergence.
+> Android's helper can throw for insufficient foreground app content during mount.
+> iOS's private-AX fallback can return sparse content under load.
+> This capture retries with bounded backoff before it returns `identity-unverifiable`.
+> The fixed delay list has 7 entries and a 12s **DELAY-ONLY** budget.
+> This corresponds to `wait` landmark verification's existing continued polling (#1349).
 >
-> The retry loop is further gated on the SAME content-quality-vs-mechanism-failure taxonomy #1381 draws
-> for the wait keep-poll loop (`isUnreadableCaptureContentError`): the non-throwing `sparse-snapshot`
-> verdict always retries (it is already a content-quality signal), but a thrown `capture-failed` only
-> retries when the underlying error's `androidSnapshotHelperFailureReason` is one of the three literal
-> codes `rejectAndroidHelperContentUnavailable` (`packages/platform-android/src/snapshot.ts`) attaches to a
-> content-poor/system-window-only rejection — `empty-helper-output`, `system-window-only`,
-> `content-poor-app-window` (mirroring `AndroidHelperContentRecoveryDecision['reason']`,
-> `packages/platform-android/src/snapshot-content-recovery.ts`). This is deliberately narrower than the error's own
-> generic `retriable` flag: Android's adb layer separately marks true mechanism failures retriable too
-> (`connection_dropped`, `device_offline`, `server_version_mismatch` — an unchanged retry of the SAME adb
-> command can succeed there), and a helper artifact permanently missing
-> (`androidSnapshotHelperUnavailableError`) carries neither signal. A mechanism failure therefore still
-> fails on the first attempt rather than spending the retry budget on a foregone conclusion, regardless of
-> what its own `retriable` flag says.
+> Each call site explicitly selects `retryLaunchRace`.
+> Only `verifyReplayActionTarget`'s pre-dispatch gate uses it.
+> `buildReplayFailureDivergence` and the post-resolution guard-mismatch capture follow established failures.
+> They do not retry because retries would only delay the decided divergence.
 >
-> The 12s budget is a DELAY-ONLY bound, anchored at the first capture attempt: it caps how long this loop
-> sleeps between retries, not how long any individual capture attempt itself may run (a capture already
-> carries its own platform-level timeouts this loop does not shorten or re-implement). The fixed-length
-> delay array is a separate, independent bound on attempt COUNT, so a mocked-instant `sleep` in unit tests
-> cannot turn this into a real-time busy-loop.
+> The retry classification matches #1381's content-quality/mechanism distinction in `isUnreadableCaptureContentError`.
+> The non-throwing `sparse-snapshot` verdict always retries because it already identifies content quality.
+> A thrown `capture-failed` retries only for these `androidSnapshotHelperFailureReason` codes:
+>
+> - `empty-helper-output`
+> - `system-window-only`
+> - `content-poor-app-window`
+>
+> `rejectAndroidHelperContentUnavailable` in `packages/platform-android/src/snapshot.ts` attaches those codes to content-poor/system-window-only rejections.
+> They correspond to `AndroidHelperContentRecoveryDecision['reason']` in `packages/platform-android/src/snapshot-content-recovery.ts`.
+> The generic `retriable` flag is insufficient.
+> Android's adb layer also marks mechanism failures retriable:
+>
+> - `connection_dropped`
+> - `device_offline`
+> - `server_version_mismatch`
+>
+> The same unchanged adb command can succeed after those failures.
+> A permanently missing helper artifact (`androidSnapshotHelperUnavailableError`) carries neither signal.
+> Mechanism failures fail on the first attempt, irrespective of their `retriable` flag.
+>
+> The 12s **DELAY-ONLY** budget starts at the first capture attempt.
+> It bounds inter-attempt sleep, not the duration of individual captures.
+> Capture retains its own platform timeouts.
+> This loop neither shortens nor duplicates them.
+> The fixed-length array independently bounds the attempt count.
+> An instant mocked `sleep` therefore cannot cause a real-time busy loop.
 
 ### 4. Divergence wire contract and replay-only resume
 
