@@ -191,9 +191,68 @@ describe('acting budgets', () => {
   it('spends the confirm budget and reports a stuck alert', async () => {
     const client = clientWithTrees([limrunAttAlertTree(), limrunAttAlertTree()]);
 
-    await expect(underFakeTimers(() => handleLimrunIosAlert(client, 'dismiss'))).rejects.toThrow(
-      'alert dismiss did not dismiss the visible alert',
+    const thrown = await underFakeTimers(() => handleLimrunIosAlert(client, 'dismiss')).then(
+      () => undefined,
+      (error: unknown) => error,
     );
+    expect(thrown).toBeInstanceOf(AppError);
+    const failure = thrown as AppError;
+    expect(failure.message).toBe('alert dismiss did not dismiss the visible alert');
+    // Every spent-budget exit of an acting leg branches on this reason, per commands.md.
+    expect(failure.details?.reason).toBe('alert-window-expired');
+    expect(client.tap).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an unconfirmed dismissal when an undecided re-read overrules the last match', async () => {
+    // Confirm probe 1 re-names the pressed alert; probe 2 is alert-shaped yet unresolvable and
+    // stays that way to the end of the budget. The undecided read is the fresher fact, so the
+    // leg may not report the dialog as standing on the older match — it reports the press as
+    // unconfirmed, which is all a spent budget with no settling read may say.
+    const client = clientWithTrees([
+      limrunAttAlertTree(),
+      limrunAttAlertTree(),
+      [limrunAttAlertTree(), limrunAttAlertTree()],
+    ]);
+
+    const thrown = await underFakeTimers(() => handleLimrunIosAlert(client, 'dismiss')).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(thrown).toBeInstanceOf(AppError);
+    const failure = thrown as AppError;
+    expect(failure.message).toBe(
+      'alert dismiss pressed the button but the dismissal could not be confirmed',
+    );
+    expect(failure.details?.reason).toBe('alert-window-expired');
+  });
+
+  it('reports an unconfirmed dismissal when a later capture hangs after one re-named the alert', async () => {
+    // Same alert at confirm probe 1, then a stalled transport the budget cuts off. With the
+    // newest read unanswered, the dialog's state at the budget's end is unknown: the leg must
+    // not claim it is still visible on the older match.
+    const client = {
+      elementTree: vi
+        .fn()
+        .mockResolvedValueOnce(limrunAttAlertTree())
+        .mockResolvedValueOnce(limrunAttAlertTree())
+        .mockImplementationOnce(
+          async () =>
+            new Promise((resolve) => {
+              setTimeout(() => resolve([limrunAppScreenTree()]), 3_000);
+            }),
+        ),
+      tap: vi.fn(async () => {}),
+    } satisfies LimrunIosAlertClient;
+
+    const thrown = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept')).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).message).toBe(
+      'alert accept pressed the button but the dismissal could not be confirmed',
+    );
+    expect((thrown as AppError).details?.reason).toBe('alert-window-expired');
     expect(client.tap).toHaveBeenCalledTimes(1);
   });
 

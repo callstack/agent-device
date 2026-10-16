@@ -182,7 +182,8 @@ test('dismiss fails when the dialog is still visible after the action budget', a
     (error: unknown) =>
       error instanceof Error &&
       error.message === 'alert dismiss did not dismiss the visible alert' &&
-      (error as { code?: string }).code === 'COMMAND_FAILED',
+      (error as { code?: string }).code === 'COMMAND_FAILED' &&
+      (error as { details?: { reason?: unknown } }).details?.reason === 'alert-window-expired',
   );
   assert.equal(runAndroidAdb.mock.calls.length, 1);
 });
