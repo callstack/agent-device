@@ -179,6 +179,13 @@ export type LaunchConfirmation = 'accepted' | 'unanswered';
 /** Which leg left a seen launch confirmation unanswered. Keyed, never inferred from text. */
 export type LaunchConfirmationUnansweredReason = 'alert-unrecognized' | 'url-owner-unresolved';
 
+/**
+ * A launch-confirmation probe step that could not run, so whether a prompt is up is unknown. Not
+ * an outcome of the confirmation itself: the open reports no confirmation for it and the daemon
+ * warns instead, keeping probe failure separate from what a completed probe saw.
+ */
+export type LaunchConfirmationProbeFailure = 'alert-read' | 'runner';
+
 /** What the open reports about a launch confirmation it saw, with its typed outcome paired. */
 export type LaunchConfirmationOutcome =
   | Readonly<{ launchConfirmation: 'accepted' }>
@@ -187,13 +194,19 @@ export type LaunchConfirmationOutcome =
       launchConfirmationReason: LaunchConfirmationUnansweredReason;
     }>;
 
+/** No confirmation reported: either none was seen or the probe could not read one. */
+export type LaunchConfirmationAbsent = Readonly<{
+  launchConfirmation?: undefined;
+  launchConfirmationProbeFailure?: LaunchConfirmationProbeFailure;
+}>;
+
 type OpenApplicationOutcomeBase = Readonly<{
   appBundleId?: string;
   timing: OpenApplicationTiming;
 }>;
 
 export type OpenApplicationOutcome = OpenApplicationOutcomeBase &
-  (LaunchConfirmationOutcome | Readonly<{ launchConfirmation?: undefined }>);
+  (LaunchConfirmationOutcome | LaunchConfirmationAbsent);
 
 /** Applies or clears a platform's native representation of neutral runtime hints. */
 export type RuntimeHintsApplicationInput = Readonly<{
