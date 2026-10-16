@@ -137,6 +137,12 @@ function gatedChildCommand(gate: string): string {
   return `until [ -e ${JSON.stringify(gate)} ]; do i=$((i+1)); [ $i -ge 200 ] && exit 0; sleep 0.05; done`;
 }
 
+// One condition for every POSIX signal case below: dispatch disposition,
+// process-group `kill`, and a real SIGHUP's default action are POSIX semantics,
+// and `exec` refuses to start on a Windows host before claiming anything, so
+// these tests would only time out waiting for the claim there.
+const IS_WINDOWS = process.platform === 'win32';
+
 test('holds the claim with the command label while the child runs and releases it on exit', async () => {
   const dirs = useDirs();
   const observed = path.join(dirs.stateDir, 'child-saw-claim.txt');
@@ -287,82 +293,88 @@ test('a foreign session acquisition is refused while the wrapper holds the devic
   assert.equal(acquired.status, 'acquired');
 });
 
-test('forwards SIGTERM to the child and exits with the signal code after releasing', async () => {
-  const dirs = useDirs();
-  const gotSignal = path.join(dirs.stateDir, 'child-got-term.txt');
-  const grandchildGotSignal = path.join(dirs.stateDir, 'grandchild-got-term.txt');
-  const childStarted = path.join(dirs.stateDir, 'child-started.txt');
-  // An in-place emit reaches every SIGTERM listener in this worker, so pin that
-  // the wrapper starts from the worker's own baseline and returns to it.
-  const sigtermListenersBefore = process.listenerCount('SIGTERM');
-  const running = runExec(
-    [
-      'sh',
-      '-c',
-      // Arms the trap before announcing itself, then reports its own receipt of
-      // the forwarded signal, so the test only signals a child that can catch it.
-      // The background grandchild proves the forward reaches the whole process
-      // group: a build's toolchain, not just its driver, must die with the claim.
-      // Both loops are bounded so a lost forward ends them instead of leaking.
-      `trap 'echo got > ${JSON.stringify(gotSignal)}; exit 0' TERM; echo started > ${JSON.stringify(
-        childStarted,
-      )}; { trap 'echo got > ${JSON.stringify(grandchildGotSignal)}' TERM; j=0; while [ $j -lt 60 ]; do sleep 0.05; j=$((j+1)); done; } & i=0; while [ $i -lt 60 ]; do sleep 0.05; i=$((i+1)); done`,
-    ],
-    dirs,
-  );
-  await running.inventoryReady();
-  await waitFor(() => fs.existsSync(childStarted));
-  assert.equal(claimEntry()?.claim?.session, 'exec:sh');
-  // Same in-place signal pattern as the takeover command's tests. The child
-  // exits 0, so only a forwarded SIGTERM can write the receipt, and only the
-  // wrapper's own signal bookkeeping can report 143 rather than 0. A swallowed
-  // group-kill failure would leave both receipts missing, so their presence
-  // also proves the group signal left this worker.
-  process.emit('SIGTERM');
-  assert.equal(await running.promise, 128 + 15);
-  assert.equal(process.listenerCount('SIGTERM'), sigtermListenersBefore);
-  assert.equal(fs.readFileSync(gotSignal, 'utf8').trim(), 'got');
-  await waitFor(() => fs.existsSync(grandchildGotSignal));
-  assert.equal(fs.readFileSync(grandchildGotSignal, 'utf8').trim(), 'got');
-  assert.equal(storedClaim(dirs.claimsDir), undefined);
-});
-
-test('a real SIGHUP stops the child group and releases the claim before the wrapper exits', async () => {
-  const dirs = useDirs();
-  // Only a real signal exercises the wrapper's own default disposition, so this
-  // runs the wrapper as a real process like the SIGKILL case. Before the
-  // SIGHUP handler existed the wrapper died on its default action, leaving the
-  // claim pointing at a dead pid while the child kept running — so the release
-  // and child-liveness assertions below are the fail-before, not the exit code
-  // (a default-action death also reports failure there).
-  const hupFixture = path.join(import.meta.dirname, 'exec-hup-fixture.ts');
-  const child = runCmdBackground(process.execPath, ['--experimental-strip-types', hupFixture], {
-    cwd: process.cwd(),
-    env: { ...process.env, EXEC_TEST_DIRS: JSON.stringify(dirs) },
-    captureOutput: false,
-    stdio: 'ignore',
-    allowFailure: true,
-  });
-  try {
-    await waitFor(() => claimEntry()?.claim?.session === 'exec:sh');
-    const childPidFile = path.join(dirs.stateDir, 'hup-child.pid');
-    await waitFor(() => fs.existsSync(childPidFile));
-    const childPid = Number(fs.readFileSync(childPidFile, 'utf8'));
-    assert.ok(Number.isInteger(childPid) && childPid > 0);
-
-    child.child.kill('SIGHUP');
-    const exited = await child.wait;
-    // The rule: the wrapper outlives the signal, waits for the child, and the
-    // claim is already gone once its exit is observable.
+test.skipIf(IS_WINDOWS)(
+  'forwards SIGTERM to the child and exits with the signal code after releasing',
+  async () => {
+    const dirs = useDirs();
+    const gotSignal = path.join(dirs.stateDir, 'child-got-term.txt');
+    const grandchildGotSignal = path.join(dirs.stateDir, 'grandchild-got-term.txt');
+    const childStarted = path.join(dirs.stateDir, 'child-started.txt');
+    // An in-place emit reaches every SIGTERM listener in this worker, so pin that
+    // the wrapper starts from the worker's own baseline and returns to it.
+    const sigtermListenersBefore = process.listenerCount('SIGTERM');
+    const running = runExec(
+      [
+        'sh',
+        '-c',
+        // Arms the trap before announcing itself, then reports its own receipt of
+        // the forwarded signal, so the test only signals a child that can catch it.
+        // The background grandchild proves the forward reaches the whole process
+        // group: a build's toolchain, not just its driver, must die with the claim.
+        // Both loops are bounded so a lost forward ends them instead of leaking.
+        `trap 'echo got > ${JSON.stringify(gotSignal)}; exit 0' TERM; echo started > ${JSON.stringify(
+          childStarted,
+        )}; { trap 'echo got > ${JSON.stringify(grandchildGotSignal)}' TERM; j=0; while [ $j -lt 60 ]; do sleep 0.05; j=$((j+1)); done; } & i=0; while [ $i -lt 60 ]; do sleep 0.05; i=$((i+1)); done`,
+      ],
+      dirs,
+    );
+    await running.inventoryReady();
+    await waitFor(() => fs.existsSync(childStarted));
+    assert.equal(claimEntry()?.claim?.session, 'exec:sh');
+    // Same in-place signal pattern as the takeover command's tests. The child
+    // exits 0, so only a forwarded SIGTERM can write the receipt, and only the
+    // wrapper's own signal bookkeeping can report 143 rather than 0. A swallowed
+    // group-kill failure would leave both receipts missing, so their presence
+    // also proves the group signal left this worker.
+    process.emit('SIGTERM');
+    assert.equal(await running.promise, 128 + 15);
+    assert.equal(process.listenerCount('SIGTERM'), sigtermListenersBefore);
+    assert.equal(fs.readFileSync(gotSignal, 'utf8').trim(), 'got');
+    await waitFor(() => fs.existsSync(grandchildGotSignal));
+    assert.equal(fs.readFileSync(grandchildGotSignal, 'utf8').trim(), 'got');
     assert.equal(storedClaim(dirs.claimsDir), undefined);
-    await waitFor(() => !processAlive(childPid));
-    assert.equal(exited.exitCode, 128 + 1);
-  } finally {
-    // The wrapper's child leads its own session, so no test-side group kill can
-    // reach it; the fixture bounds it with `sleep 8` instead.
-    child.child.kill('SIGKILL');
-  }
-});
+  },
+);
+
+test.skipIf(IS_WINDOWS)(
+  'a real SIGHUP stops the child group and releases the claim before the wrapper exits',
+  async () => {
+    const dirs = useDirs();
+    // Only a real signal exercises the wrapper's own default disposition, so this
+    // runs the wrapper as a real process like the SIGKILL case. Before the
+    // SIGHUP handler existed the wrapper died on its default action, leaving the
+    // claim pointing at a dead pid while the child kept running — so the release
+    // and child-liveness assertions below are the fail-before, not the exit code
+    // (a default-action death also reports failure there).
+    const hupFixture = path.join(import.meta.dirname, 'exec-hup-fixture.ts');
+    const child = runCmdBackground(process.execPath, ['--experimental-strip-types', hupFixture], {
+      cwd: process.cwd(),
+      env: { ...process.env, EXEC_TEST_DIRS: JSON.stringify(dirs) },
+      captureOutput: false,
+      stdio: 'ignore',
+      allowFailure: true,
+    });
+    try {
+      await waitFor(() => claimEntry()?.claim?.session === 'exec:sh');
+      const childPidFile = path.join(dirs.stateDir, 'hup-child.pid');
+      await waitFor(() => fs.existsSync(childPidFile));
+      const childPid = Number(fs.readFileSync(childPidFile, 'utf8'));
+      assert.ok(Number.isInteger(childPid) && childPid > 0);
+
+      child.child.kill('SIGHUP');
+      const exited = await child.wait;
+      // The rule: the wrapper outlives the signal, waits for the child, and the
+      // claim is already gone once its exit is observable.
+      assert.equal(storedClaim(dirs.claimsDir), undefined);
+      await waitFor(() => !processAlive(childPid));
+      assert.equal(exited.exitCode, 128 + 1);
+    } finally {
+      // The wrapper's child leads its own session, so no test-side group kill can
+      // reach it; the fixture bounds it with `sleep 8` instead.
+      child.child.kill('SIGKILL');
+    }
+  },
+);
 
 test('refuses to run on a Windows host before touching the device or the claim store', async () => {
   const dirs = useDirs();
@@ -387,38 +399,41 @@ test('refuses to run on a Windows host before touching the device or the claim s
   assert.equal(storedClaim(dirs.claimsDir), undefined);
 });
 
-test('forwards a second signal when the child ignored the first, and keeps the first exit code', async () => {
-  const dirs = useDirs();
-  const gotSignal = path.join(dirs.stateDir, 'child-got-second-term.txt');
-  const childStarted = path.join(dirs.stateDir, 'child-started.txt');
-  const sigintListenersBefore = process.listenerCount('SIGINT');
-  const sigtermListenersBefore = process.listenerCount('SIGTERM');
-  const running = runExec(
-    [
-      'sh',
-      '-c',
-      // Traps INT without exiting, so the first signal is survivable and only
-      // the forwarded second one can end the child.
-      `trap '' INT; trap 'echo got > ${JSON.stringify(gotSignal)}; exit 0' TERM; echo started > ${JSON.stringify(
-        childStarted,
-      )}; i=0; while [ $i -lt 60 ]; do sleep 0.05; i=$((i+1)); done`,
-    ],
-    dirs,
-  );
-  await running.inventoryReady();
-  await waitFor(() => fs.existsSync(childStarted));
-  process.emit('SIGINT');
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  assert.equal(fs.existsSync(gotSignal), false);
-  process.emit('SIGTERM');
-  // The first signal owns the exit code even though the second ended the child.
-  assert.equal(await running.promise, 128 + 2);
-  // Both signals were emitted, so both handlers must be gone again.
-  assert.equal(process.listenerCount('SIGINT'), sigintListenersBefore);
-  assert.equal(process.listenerCount('SIGTERM'), sigtermListenersBefore);
-  assert.equal(fs.readFileSync(gotSignal, 'utf8').trim(), 'got');
-  assert.equal(storedClaim(dirs.claimsDir), undefined);
-});
+test.skipIf(IS_WINDOWS)(
+  'forwards a second signal when the child ignored the first, and keeps the first exit code',
+  async () => {
+    const dirs = useDirs();
+    const gotSignal = path.join(dirs.stateDir, 'child-got-second-term.txt');
+    const childStarted = path.join(dirs.stateDir, 'child-started.txt');
+    const sigintListenersBefore = process.listenerCount('SIGINT');
+    const sigtermListenersBefore = process.listenerCount('SIGTERM');
+    const running = runExec(
+      [
+        'sh',
+        '-c',
+        // Traps INT without exiting, so the first signal is survivable and only
+        // the forwarded second one can end the child.
+        `trap '' INT; trap 'echo got > ${JSON.stringify(gotSignal)}; exit 0' TERM; echo started > ${JSON.stringify(
+          childStarted,
+        )}; i=0; while [ $i -lt 60 ]; do sleep 0.05; i=$((i+1)); done`,
+      ],
+      dirs,
+    );
+    await running.inventoryReady();
+    await waitFor(() => fs.existsSync(childStarted));
+    process.emit('SIGINT');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(fs.existsSync(gotSignal), false);
+    process.emit('SIGTERM');
+    // The first signal owns the exit code even though the second ended the child.
+    assert.equal(await running.promise, 128 + 2);
+    // Both signals were emitted, so both handlers must be gone again.
+    assert.equal(process.listenerCount('SIGINT'), sigintListenersBefore);
+    assert.equal(process.listenerCount('SIGTERM'), sigtermListenersBefore);
+    assert.equal(fs.readFileSync(gotSignal, 'utf8').trim(), 'got');
+    assert.equal(storedClaim(dirs.claimsDir), undefined);
+  },
+);
 
 test('a SIGKILLed wrapper leaves a stale claim the next acquirer reconciles', async () => {
   const dirs = useDirs();
