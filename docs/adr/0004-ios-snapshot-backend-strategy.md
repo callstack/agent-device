@@ -54,7 +54,7 @@ Route eligible local iOS Simulator snapshots through the host AX bridge.
 Present them once through the shared TypeScript engine.
 If bridge acquisition or presentation fails, use one typed XCTest fallback.
 After fallback, disable the bridge for that app generation, except for `preparing` failures and the capture-scoped exception below.
-A `preparing` failure describes the bridge preparation queue, not the app.
+A `preparing` failure describes a bridge preparation that is still running, not the app.
 It sends only that capture to XCTest.
 A new app generation enables it again.
 Physical devices, providers, custom-action captures, and interactions remain on their existing owners.
