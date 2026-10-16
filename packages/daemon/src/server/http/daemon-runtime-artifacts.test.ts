@@ -28,8 +28,6 @@ async function downloadTrackedArtifact(env: Record<string, string>, awaitConsump
         ...env,
       },
     }),
-    exit: () => {},
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
     composeDeps: daemonRuntimeDepsFixture(),
@@ -48,7 +46,7 @@ async function downloadTrackedArtifact(env: Record<string, string>, awaitConsump
     }
     return { status: response.status, body, onDisk: fs.existsSync(artifactPath) };
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
     cleanupDownloadableArtifact(artifactId);
   }
 }

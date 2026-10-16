@@ -42,6 +42,7 @@ test('journals and bounds a hung recoverable lease release before the final drai
     await vi.advanceTimersByTimeAsync(10);
     await expect(drain).resolves.toEqual({
       pending: [lease],
+      unknown: [lease],
       released: [],
     });
   } finally {
@@ -83,7 +84,7 @@ test('final drain joins a release that completes after the lease timeout', async
     const drain = expiredProviderLeaseReleaser.drain(2_000);
 
     await vi.advanceTimersByTimeAsync(500);
-    await expect(drain).resolves.toEqual({ pending: [], released: [lease] });
+    await expect(drain).resolves.toEqual({ pending: [], unknown: [], released: [lease] });
   } finally {
     expiredProviderLeaseReleaser.shutdown();
     vi.useRealTimers();
@@ -129,7 +130,11 @@ test('a hung provider release does not starve another lease during shutdown', as
     expect(leaseRegistry.listActiveLeases()).toEqual([]);
     const drain = expiredProviderLeaseReleaser.drain(2_000);
     await vi.advanceTimersByTimeAsync(2_000);
-    await expect(drain).resolves.toEqual({ pending: [hungLease], released: [releasedLease] });
+    await expect(drain).resolves.toEqual({
+      pending: [hungLease],
+      unknown: [hungLease],
+      released: [releasedLease],
+    });
   } finally {
     expiredProviderLeaseReleaser.shutdown();
     vi.useRealTimers();

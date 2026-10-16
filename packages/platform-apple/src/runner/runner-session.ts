@@ -771,13 +771,15 @@ export async function abortAllIosRunnerSessions(): Promise<void> {
 // The detach decision itself lives in runner-adoption.ts beside the adoption it hands off to
 // (#2681); detached active generations leave the registry. Idle retained generations stay
 // owned until shutdown stops them.
-export async function detachIosRunnerSessionsForShutdown(): Promise<number> {
+export async function detachIosRunnerSessionsForShutdown(): Promise<string[]> {
   return await detachRunnerSessionsForShutdown(runnerSessions, (deviceId) => {
     runnerSessions.delete(deviceId);
   });
 }
 
-export async function stopAllIosRunnerSessions(): Promise<void> {
+/** Stops every remaining runner and names the devices it owned. */
+export async function stopAllIosRunnerSessions(): Promise<string[]> {
+  const owned = [...runnerSessions.keys()];
   // This is the daemon's teardown: the fence spans the whole sweep, not just the abort, so a
   // start that began while the per-session stops ran meets a closed admission at its next gate
   // instead of answering the final prep sweep with another build (#3220).
@@ -791,6 +793,7 @@ export async function stopAllIosRunnerSessions(): Promise<void> {
       }),
     );
     await stopRunnerPrepProcesses();
+    return owned;
   } finally {
     settleFences();
   }

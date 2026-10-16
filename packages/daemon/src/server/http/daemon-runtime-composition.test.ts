@@ -19,7 +19,11 @@ import {
   interactorResolution,
 } from '../../core/interactor-resolution.ts';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
-import { startDaemonRuntime, type DaemonRuntimeDepsInput } from './daemon-runtime.ts';
+import {
+  daemonStartupExitCode,
+  startDaemonRuntime,
+  type DaemonRuntimeDepsInput,
+} from './daemon-runtime.ts';
 
 // The server builds its own store, so capture that instance: the proof is about the store the
 // server hands to the composition callbacks, not one the test fabricates.
@@ -43,7 +47,7 @@ test('daemon startup installs the interactor resolution the composition supplied
   const stateDir = mkdtempForTestSync('agent-device-daemon-interactor-composition-');
   const composed = Object.freeze({ resolve: vi.fn(async () => ({}) as never) });
   const previousResolution = interactorResolution();
-  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | null = null;
   try {
     runtime = await startDaemonRuntime({
       host: createTestHostEnvironment({
@@ -54,8 +58,6 @@ test('daemon startup installs the interactor resolution the composition supplied
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
       }),
-      exit: () => {},
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
       composeDeps: daemonRuntimeDepsFixture({ interactorResolution: composed }),
@@ -66,7 +68,7 @@ test('daemon startup installs the interactor resolution the composition supplied
     await interactorResolution().resolve(IOS_SIMULATOR, {});
     expect(composed.resolve).toHaveBeenCalledOnce();
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
     installInteractorResolution(previousResolution);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
@@ -80,11 +82,8 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
     throw new Error('cleanup failed');
   });
   const otherShutdown = vi.fn(async () => {});
-  const exit = vi.fn();
-  const runtime = await startDaemonRuntime({
+  const refusal = await startDaemonRuntime({
     host: createTestHostEnvironment({ env: { AGENT_DEVICE_STATE_DIR: stateDir } }),
-    exit,
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
     composeDeps: daemonRuntimeDepsFixture({
@@ -97,11 +96,10 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
           }) as unknown as ProviderDeviceRuntime,
       ),
     }),
-  });
-  expect(runtime).toBeNull();
+  }).catch((error: unknown) => error);
+  expect(daemonStartupExitCode(refusal)).toBe(DAEMON_STARTUP_EXIT_CODES.busy);
   expect(shutdown).toHaveBeenCalledOnce();
   expect(otherShutdown).toHaveBeenCalledOnce();
-  expect(exit).toHaveBeenCalledWith(DAEMON_STARTUP_EXIT_CODES.busy);
   await held.owner.finish();
 });
 
@@ -119,8 +117,6 @@ test('the server runs on the host it was given and hands that host to the compos
   const fixtureDeps = daemonRuntimeDepsFixture();
   const runtime = await startDaemonRuntime({
     host,
-    registerProcessHandlers: false,
-    exit: () => {},
     stderr: { write: () => {} },
     stdout: { write: () => {} },
     composeDeps: async (input) => {
@@ -132,7 +128,7 @@ test('the server runs on the host it was given and hands that host to the compos
     assert.equal(composed?.host, host);
     assert.equal(composed?.baseDir, resolveDaemonPaths(stateDir).baseDir);
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
   }
 });
 
@@ -150,10 +146,9 @@ test('the server derives the policy gate and session callbacks and hands them to
     JSON.stringify({ version: 1, capabilities: { deny: ['device-shutdown'] } }),
   );
   const paths = resolveDaemonPaths(stateDir);
-  const exits: number[] = [];
   let composed: DaemonRuntimeDepsInput | undefined;
   const fixtureDeps = daemonRuntimeDepsFixture();
-  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | null = null;
   try {
     runtime = await startDaemonRuntime({
       host: createTestHostEnvironment({
@@ -164,8 +159,6 @@ test('the server derives the policy gate and session callbacks and hands them to
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
       }),
-      exit: (code) => exits.push(code),
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
       composeDeps: async (input) => {
@@ -173,8 +166,6 @@ test('the server derives the policy gate and session callbacks and hands them to
         return await fixtureDeps(input);
       },
     });
-    assert.notEqual(runtime, null, 'the assembly must boot');
-    assert.deepEqual(exits, []);
     assert.ok(composed, 'the server must call the factory');
     // The server resolved the paths and loaded the operator's policy before composing anything.
     assert.equal(composed.baseDir, paths.baseDir);
@@ -206,11 +197,10 @@ test('the server derives the policy gate and session callbacks and hands them to
       outputPath: store.resolveAppLogPath('web-assembly'),
       pidPath: store.resolveAppLogPidPath('web-assembly'),
     });
-    await runtime?.shutdown();
+    await runtime?.close();
     runtime = null;
-    assert.deepEqual(exits, [0]);
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
   }
 });
 
@@ -220,12 +210,9 @@ test('the server derives the policy gate and session callbacks and hands them to
  */
 test('an unreadable policy stops the assembly before the factory is called', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-assembly-bad-policy-');
-  const exits: number[] = [];
-  const stderr: string[] = [];
   let factoryCalls = 0;
-  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
   try {
-    runtime = await startDaemonRuntime({
+    const refusal = await startDaemonRuntime({
       host: createTestHostEnvironment({
         env: {
           ...process.env,
@@ -234,20 +221,17 @@ test('an unreadable policy stops the assembly before the factory is called', asy
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
       }),
-      exit: (code) => exits.push(code),
-      stderr: { write: (chunk) => stderr.push(chunk) },
+      stderr: { write: () => {} },
       stdout: { write: () => {} },
-      registerProcessHandlers: false,
       composeDeps: async (input) => {
         factoryCalls += 1;
         return await daemonRuntimeDepsFixture()(input);
       },
-    });
-    assert.equal(runtime, null);
-    assert.deepEqual(exits, [1]);
+    }).catch((error: unknown) => error);
+    assert.equal(daemonStartupExitCode(refusal), 1);
     assert.equal(factoryCalls, 0, 'no runtime may be built under an unreadable policy');
-    assert.match(stderr.join(''), /Daemon error: .*/);
+    assert.match((refusal as Error).message, /policy/i);
   } finally {
-    await runtime?.shutdown();
+    fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });

@@ -77,7 +77,7 @@ for (const initialSession of ['published', 'draft'] as const) {
       (error: unknown) => ({ error }),
     );
     const stderr: string[] = [];
-    let teardown: Promise<void> | undefined;
+    let teardown: Promise<boolean> | undefined;
     try {
       await captureEntered.promise;
       vi.useFakeTimers();

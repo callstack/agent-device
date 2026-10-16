@@ -25,8 +25,8 @@ export function applicationLifecycleResourceFixture(
 ): ApplicationLifecycleResourceLifecycle {
   return Object.freeze({
     recoverStartupResources: vi.fn(async () => {}),
-    detachForDaemonShutdown: vi.fn(async () => {}),
-    finalizeDaemonShutdown: vi.fn(async () => {}),
+    detachForDaemonShutdown: vi.fn(async (): Promise<readonly string[]> => []),
+    finalizeDaemonShutdown: vi.fn(async (): Promise<readonly string[]> => []),
     ...overrides,
   });
 }

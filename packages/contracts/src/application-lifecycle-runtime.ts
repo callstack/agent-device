@@ -382,8 +382,10 @@ export type AppleApplicationTools = Readonly<{
   applyRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;
   clearRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;
   dismissCloseAlerts(device: DeviceInfo, input: CloseApplicationFinalizationInput): Promise<void>;
-  detachRunnerSessionsForShutdown(): Promise<void>;
-  finalizeRunnerSessionsForShutdown(): Promise<void>;
+  /** The devices whose runner was handed to the next daemon instead of stopped. */
+  detachRunnerSessionsForShutdown(): Promise<readonly string[]>;
+  /** The devices whose runner this daemon stopped. */
+  finalizeRunnerSessionsForShutdown(): Promise<readonly string[]>;
 }>;
 
 /** Lazy Android mechanics used by the Android package's own lifecycle binding. */
@@ -413,6 +415,6 @@ export type AndroidApplicationTools = Readonly<{
 /** Gateway-coordinated durable phases whose concrete mechanics stay package-owned. */
 export type ApplicationLifecycleResourceLifecycle = Readonly<{
   recoverStartupResources(input: Readonly<{ stateDir: string }>): Promise<void>;
-  detachForDaemonShutdown(): Promise<void>;
-  finalizeDaemonShutdown(): Promise<void>;
+  detachForDaemonShutdown(): Promise<readonly string[]>;
+  finalizeDaemonShutdown(): Promise<readonly string[]>;
 }>;

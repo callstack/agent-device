@@ -17,8 +17,8 @@ vi.mock('./platform-runtime.ts', () => ({
   createPlatformRuntimeGateway: () => ({
     applicationLifecycle: {
       recoverStartupResources: async () => {},
-      detachForDaemonShutdown: async () => {},
-      finalizeDaemonShutdown: async () => {},
+      detachForDaemonShutdown: async () => [],
+      finalizeDaemonShutdown: async () => [],
     },
     inspectFacts: async () => {
       throw new Error('unused');

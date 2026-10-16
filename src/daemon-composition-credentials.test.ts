@@ -14,8 +14,8 @@ vi.mock('./platform-runtime.ts', () => ({
   createPlatformRuntimeGateway: () => ({
     applicationLifecycle: {
       recoverStartupResources: async () => {},
-      detachForDaemonShutdown: async () => {},
-      finalizeDaemonShutdown: async () => {},
+      detachForDaemonShutdown: async () => [],
+      finalizeDaemonShutdown: async () => [],
     },
     inspectFacts: async () => {
       throw new Error('unused');
@@ -46,8 +46,6 @@ test('daemon startup compares lease credentials with its own startup environment
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
       },
     }),
-    exit: () => {},
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
     composeDeps: createDaemonRuntimeDeps,
@@ -81,6 +79,6 @@ test('daemon startup compares lease credentials with its own startup environment
     );
     expect(await allocate(daemonEnv)).not.toContain('provider-credentials-changed');
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
   }
 });

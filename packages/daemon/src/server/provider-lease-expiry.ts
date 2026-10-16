@@ -33,7 +33,15 @@ export type ExpiredProviderLeaseReleaser = {
   beginShutdown: () => void;
   release: (lease: DeviceLease) => Promise<void>;
   retryPending: () => Promise<void>;
-  drain: (timeoutMs: number) => Promise<{ pending: DeviceLease[]; released: DeviceLease[] }>;
+  /**
+   * `pending` holds every lease still unreleased; `unknown` is the part of it whose release was
+   * still in flight when the budget ran out, so its outcome is not known.
+   */
+  drain: (timeoutMs: number) => Promise<{
+    pending: DeviceLease[];
+    unknown: DeviceLease[];
+    released: DeviceLease[];
+  }>;
   shutdown: () => void;
 };
 
@@ -206,6 +214,14 @@ export function createExpiredProviderLeaseReleaser(options: {
       await Promise.race([retryPending(), sleep(Math.max(0, timeoutMs))]);
       const result = {
         pending: [...pendingLiveLeases.values(), ...pendingRecoveryLeases.values()],
+        unknown: [
+          ...[...pendingLiveLeases.values()].filter((lease) =>
+            activeReleaseAttempts.has(`live:${lease.leaseId}`),
+          ),
+          ...[...pendingRecoveryLeases.values()].filter((lease) =>
+            activeReleaseAttempts.has(`recovery:${lease.leaseId}`),
+          ),
+        ],
         released: [...shutdownReleasedLeases.values()],
       };
       trackingShutdownReleases = false;

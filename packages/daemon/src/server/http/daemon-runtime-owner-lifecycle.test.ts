@@ -33,8 +33,6 @@ function startDaemon(
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
       },
     }),
-    exit: () => {},
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
     composeDeps: daemonRuntimeDepsFixture({
@@ -70,7 +68,7 @@ test('daemon startup configures its platform owners before it publishes readines
       }),
     ]);
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
   }
 });
 
@@ -94,6 +92,6 @@ test('a platform owner diagnostic about a refused restore is logged and the daem
       }),
     ]);
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
   }
 });

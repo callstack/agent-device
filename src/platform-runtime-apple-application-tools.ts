@@ -114,11 +114,11 @@ export function createAppleApplicationTools(): AppleApplicationTools {
     dismissCloseAlerts: async (device, input) => await dismissMacOsCloseAlerts(device, input),
     detachRunnerSessionsForShutdown: async () => {
       const { detachIosRunnerSessionsForShutdown } = await loadRunnerOperations();
-      await detachIosRunnerSessionsForShutdown();
+      return await detachIosRunnerSessionsForShutdown();
     },
     finalizeRunnerSessionsForShutdown: async () => {
       const { stopAllIosRunnerSessions } = await loadRunnerOperations();
-      await stopAllIosRunnerSessions();
+      return await stopAllIosRunnerSessions();
     },
   });
 }

@@ -78,7 +78,6 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
   const paths = resolveDaemonPaths(stateDir);
   const stdout: string[] = [];
   const stderr: string[] = [];
-  let exitCode: number | undefined;
 
   try {
     const runtime = await startDaemonRuntime({
@@ -90,10 +89,6 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
       }),
-      exit: (code) => {
-        exitCode = code;
-      },
-      registerProcessHandlers: false,
       stderr: { write: (chunk) => stderr.push(chunk) },
       stdout: { write: (chunk) => stdout.push(chunk) },
     });
@@ -111,9 +106,7 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
     assert.ok(fs.existsSync(paths.lockPath), 'daemon lock should be held while runtime is active');
 
     await waitForHttpOk(`http://127.0.0.1:${runtime?.httpPort}/health`, 2_000);
-    await runtime?.shutdown();
-
-    assert.equal(exitCode, 0);
+    await runtime?.close();
     assert.equal(fs.existsSync(paths.infoPath), false);
     assert.equal(fs.existsSync(paths.lockPath), false);
   } finally {
@@ -125,7 +118,6 @@ test('daemon runtime publishes dual transport metadata', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-runtime-dual-');
   const paths = resolveDaemonPaths(stateDir);
   const stdout: string[] = [];
-  let exitCode: number | undefined;
 
   try {
     const runtime = await startDaemonRuntime({
@@ -137,10 +129,6 @@ test('daemon runtime publishes dual transport metadata', async () => {
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'dual',
         },
       }),
-      exit: (code) => {
-        exitCode = code;
-      },
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: (chunk) => stdout.push(chunk) },
     });
@@ -156,9 +144,7 @@ test('daemon runtime publishes dual transport metadata', async () => {
     assert.equal(info.transport, 'dual');
 
     await waitForHttpOk(`http://127.0.0.1:${runtime?.httpPort}/health`, 2_000);
-    await runtime?.shutdown();
-
-    assert.equal(exitCode, 0);
+    await runtime?.close();
     assert.equal(fs.existsSync(paths.infoPath), false);
     assert.equal(fs.existsSync(paths.lockPath), false);
   } finally {
@@ -193,8 +179,6 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
           BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `http://127.0.0.1:${providerPort}/sessions`,
         },
       }),
-      exit: () => {},
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
     });
@@ -226,7 +210,7 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
     assert.deepEqual(body.error?.data?.details, { reason: 'PROVIDER_SESSION_NOT_OWNED' });
     assert.deepEqual(providerRequests, []);
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
     await closeLoopbackServer(providerServer);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
@@ -290,7 +274,6 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
   const claimsDir = mkdtempForTestSync('agent-device-daemon-prune-claims-');
   const paths = resolveDaemonPaths(stateDir);
   const deviceKey = 'local:android:none:prune-log';
-  let exitCode: number | undefined;
 
   try {
     fs.writeFileSync(
@@ -320,10 +303,6 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
           AGENT_DEVICE_CLAIMS_DIR: claimsDir,
         },
       }),
-      exit: (code) => {
-        exitCode = code;
-      },
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
     });
@@ -335,8 +314,7 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
     assert.match(log, /"phase":"device_claim_reconcile"/);
     assert.match(log, /"reconciled":1/);
 
-    await runtime?.shutdown();
-    assert.equal(exitCode, 0);
+    await runtime?.close();
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
     fs.rmSync(claimsDir, { recursive: true, force: true });
@@ -444,8 +422,6 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
           AGENT_DEVICE_CLAIMS_DIR: claimsDir,
         },
       }),
-      exit: () => {},
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
     });
@@ -474,7 +450,7 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
       "the dead owner's orphaned recorder should be terminated by recovery",
     );
   } finally {
-    await runtime?.shutdown().catch(() => {});
+    await runtime?.close().catch(() => {});
     try {
       orphanRecorder.kill('SIGKILL');
     } catch {}
