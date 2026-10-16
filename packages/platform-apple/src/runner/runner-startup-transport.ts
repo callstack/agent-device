@@ -21,6 +21,7 @@ import {
   RUNNER_CACHE_RECOVERY_HINT,
   runnerConnectFailureDetails,
   shouldRetryRunnerConnectError,
+  isSimulatorServiceHubLaunchOutput,
   SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON,
   simulatorServiceHubFailureMessage,
   type RunnerStartupFailureReason,
@@ -41,6 +42,7 @@ export type RunnerConnectionSession = Pick<
   | 'readLogTail'
   | 'device'
   | 'runnerLogPath'
+  | 'state'
 >;
 import {
   runnerSimulatorSetFailureDetails,
@@ -220,6 +222,7 @@ async function attemptRunnerConnection(params: {
 
 async function ensureRunnerAttemptCanStart(params: {
   endpoint: RunnerEndpoint;
+  route: RunnerCommandRoute;
   timeoutMs: number;
   logPath?: string;
   session?: RunnerConnectionSession;
@@ -238,6 +241,25 @@ async function ensureRunnerAttemptCanStart(params: {
       logPath: params.logPath,
     });
   }
+  // A launch whose simulator service this macOS refused never serves a command, and its child stays
+  // alive to the deadline, so without this the request waits out the whole connect budget before
+  // reaching the classifier that names the cause (#3449). Checked on each attempt while the session
+  // has yet to answer: once a runner has answered, its log is no longer evidence about a boot that
+  // demonstrably succeeded. Bounded to the tail an error would quote, read from this generation's
+  // offset, and no child process is spawned for it.
+  const session = params.session;
+  if (session?.state !== 'starting') return;
+  const launchLogOutput = session.readLogTail?.(RUNNER_EARLY_EXIT_LOG_TAIL_BYTES) ?? '';
+  if (!isSimulatorServiceHubLaunchOutput(launchLogOutput)) return;
+  throw buildRunnerConnectError({
+    device: session.device,
+    port: params.endpoint.port,
+    url: params.route.url,
+    logPath: params.logPath,
+    lastError: null,
+    session,
+    launchLogOutput,
+  });
 }
 
 async function tryPrimaryRunnerRoute(params: {
@@ -446,12 +468,15 @@ function buildRunnerConnectError(params: {
   logPath?: string;
   lastError: unknown;
   session?: RunnerConnectionSession;
+  /** The launch tail already read for this decision; read here when it is absent. */
+  launchLogOutput?: string;
 }): AppError {
   const { device, port, url, logPath, lastError, session } = params;
   const message = 'Runner did not accept connection';
   const launchLogCause = resolveRunnerLaunchLogCause({
     message,
-    output: session?.readLogTail?.(RUNNER_EARLY_EXIT_LOG_TAIL_BYTES) ?? '',
+    output:
+      params.launchLogOutput ?? session?.readLogTail?.(RUNNER_EARLY_EXIT_LOG_TAIL_BYTES) ?? '',
     device,
   });
   const error = new AppError('COMMAND_FAILED', launchLogCause?.message ?? message, {

@@ -15,7 +15,11 @@ import {
   shouldRestartRunnerBeforeCommandSend,
   shouldRetryRunnerConnectError,
 } from '../runner-error-classification.ts';
-import { RUNNER_ENDPOINT_FIXTURE, iosSimulator } from './runner-transport.fixtures.ts';
+import {
+  RUNNER_ENDPOINT_FIXTURE,
+  iosSimulator,
+  runnerTransportResponse,
+} from './runner-transport.fixtures.ts';
 import { buildFixtureById } from './runner-startup-failure-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -123,6 +127,104 @@ test('a still-alive xcodebuild whose log carries the bless refusal fails the con
   assert.equal(isRetryableRunnerError(error), false);
   assert.equal(shouldRestartRunnerBeforeCommandSend(error, { command: 'tap' }), false);
   assert.equal(shouldRebuildCachedRunnerArtifact(error), false);
+});
+
+/** A connect budget far longer than the bless refusal needs, so its arrival is a claim about timing. */
+const CONNECT_BUDGET_MS = 5_000;
+
+test('a bless refusal already in the launch log ends the connect loop on its first attempt', async () => {
+  // The reporters' 90 seconds came from spending the whole connect budget on a boot that had already
+  // said why it would never serve a command (#3449). The signature appears in `runner.log` within the
+  // first seconds of the launch, so the loop has to read it and stop.
+  const fetchSpy = vi.fn(async () => {
+    throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8100'), { code: 'ECONNREFUSED' });
+  });
+  vi.stubGlobal('fetch', fetchSpy);
+  const session = sessionWithLaunchLog(BLESS_LOG, null);
+  const startedAt = Date.now();
+
+  const error = await waitForRunner(
+    iosSimulator,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'snapshot' },
+    undefined,
+    CONNECT_BUDGET_MS,
+    session,
+  ).catch((error: unknown) => error as AppError);
+
+  const elapsedMs = Date.now() - startedAt;
+  assert.ok(error instanceof AppError);
+  assert.equal(error.details?.reason, 'simulator_service_hub_unavailable');
+  // No connect attempt is dialed once the boot is known terminal, and the failure arrives with most
+  // of the budget unspent rather than at its deadline.
+  assert.equal(fetchSpy.mock.calls.length, 0);
+  assert.ok(
+    elapsedMs < CONNECT_BUDGET_MS / 2,
+    `expected the failure well before its ${CONNECT_BUDGET_MS}ms deadline, took ${elapsedMs}ms`,
+  );
+});
+
+test('a bless refusal in an older runner generation does not end this launch early', async () => {
+  // The log is append-only across launches, so a bless refusal the previous launch wrote is not
+  // evidence about this one (#2681). The session's tail reader starts at this generation's offset.
+  const runnerLogPath = path.join(mkdtempForTestSync('runner-service-hub-stale-'), 'runner.log');
+  fs.writeFileSync(runnerLogPath, BLESS_LOG);
+  const generationStartOffset = BLESS_LOG.length;
+  fs.appendFileSync(
+    runnerLogPath,
+    '2026-10-15 10:24:41.112 xcodebuild[9:1] [MT] iOSSimulator: waiting for the simulator to boot\n',
+  );
+  const session = {
+    ...sessionWithLaunchLog('', null),
+    runnerLogPath,
+    readLogTail: (maxBytes: number) =>
+      readRunnerLogTail({ logPath: runnerLogPath, startOffset: generationStartOffset }, maxBytes),
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8100'), {
+        code: 'ECONNREFUSED',
+      });
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      waitForRunner(
+        iosSimulator,
+        RUNNER_ENDPOINT_FIXTURE,
+        { command: 'snapshot' },
+        undefined,
+        300,
+        session,
+      ),
+    (error: unknown) => {
+      // The ordinary connect failure, on the ordinary deadline: nothing named this boot.
+      assert.equal((error as AppError).details?.reason, 'IOS_RUNNER_CONNECT_TIMEOUT');
+      return true;
+    },
+  );
+});
+
+test('a runner that already answered is not re-judged by its launch log', async () => {
+  // A bless line written during a boot that did serve commands (an Xcode fixed mid-session, say) must
+  // not refuse a later command on the strength of it.
+  const fetchSpy = vi.fn(async () => runnerTransportResponse());
+  vi.stubGlobal('fetch', fetchSpy);
+  const session = { ...sessionWithLaunchLog(BLESS_LOG, null), state: 'ready' as const };
+
+  const response = await waitForRunner(
+    iosSimulator,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'snapshot' },
+    undefined,
+    300,
+    session,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(fetchSpy.mock.calls.length, 1);
 });
 
 test('a still-alive xcodebuild whose log names no service-hub cause keeps the ordinary connect failure', async () => {

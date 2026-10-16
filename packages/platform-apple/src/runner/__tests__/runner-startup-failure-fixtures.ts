@@ -25,9 +25,11 @@ import { IOS_SIMULATOR } from './device-fixtures.ts';
  * - `invented-shape` — no shipped trigger and no capture. The entry exists to exercise a rule and
  *   makes no claim about wording xcodebuild prints.
  *
- * Until Phase B captures the real runs, every entry is `unobserved` for `xcodeVersion` and carries
- * no `command`: an invocation we did not run is not provenance. Nothing in the classifier reads
- * these fields; they exist so a reason can be traced to an observation instead of to a guess.
+ * The two kinds with no observation behind the invocation — `shipped-sniff-trigger` and
+ * `invented-shape` — are `unobserved` for `xcodeVersion` and carry no `command`: an invocation we did
+ * not run is not provenance. `captured` records both, and `reported-log-excerpt` records the version
+ * its reporter stated and no command. Nothing in the classifier reads these fields; they exist so a
+ * reason can be traced to an observation instead of to a guess.
  *
  * Blocked on the host, not unexamined. One Phase B run on `thymikee-iphone` / Xcode 26.2 settled the
  * shape question these rows were held on — `No profiles for '<id>' were found` arrives as one long

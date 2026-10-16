@@ -209,6 +209,30 @@ export const SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON: RunnerStartupFailureReaso
   'simulator_service_hub_unavailable';
 
 /**
+ * The bless refusal, in the two phrases Xcode writes on one line: the client that failed and the
+ * bless it failed to perform. Declared once because the classifier row reads it and the connect loop
+ * checks the launch tail for it; the two cannot disagree about what a terminal boot looks like. The
+ * loop's check must stay no broader than the row's, or it would order a verdict the row refuses to
+ * prove.
+ */
+const SIMULATOR_SERVICE_HUB_BLESS_MATCH = [
+  'dtservicehubclient',
+  'failed to bless service hub',
+] as const;
+
+/**
+ * Whether runner launch output carries the bless refusal. The connect loop asks this before it pays
+ * for a full startup classification, which resolves a simulator-set cause through a toolchain probe.
+ * Same one-line rule the row applies, over the same text.
+ */
+export function isSimulatorServiceHubLaunchOutput(output: string): boolean {
+  const normalized = output.toLowerCase();
+  return normalized
+    .split('\n')
+    .some((line) => SIMULATOR_SERVICE_HUB_BLESS_MATCH.every((part) => line.includes(part)));
+}
+
+/**
  * Names the cause in the message beside the connect-shaped failure the bless refusal produced. The
  * reason and hint come from {@link classifyRunnerStartupFailure}; this only folds the cause into the
  * sentence the caller reads first.
@@ -441,7 +465,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     // the same line of the launch output; the domain names the client, the complaint names the bless.
     reason: 'simulator_service_hub_bless_refused',
     match: {
-      toolTextLineIncludesAll: ['dtservicehubclient', 'failed to bless service hub'],
+      toolTextLineIncludesAll: SIMULATOR_SERVICE_HUB_BLESS_MATCH,
     },
     verdicts: {},
     buildFailure: {
