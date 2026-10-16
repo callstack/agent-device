@@ -306,7 +306,7 @@ function nearestTextSizeCategory(scale: number): (typeof TEXT_SIZE_CATEGORIES)[n
  * multi-SIM device keeps it per subscription; that read-back is uncovered until a dual-SIM run shows
  * which row to read.
  */
-const MOBILE_DATA_TOGGLE: AndroidGlobalToggle = {
+const MOBILE_DATA_TOGGLE: AndroidGlobalToggle<'mobileData'> = {
   service: 'data',
   row: 'mobile_data',
   label: 'mobile data',

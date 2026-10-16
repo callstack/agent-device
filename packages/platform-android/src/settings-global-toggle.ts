@@ -15,7 +15,7 @@ export type AndroidToggleState = 'enabled' | 'disabled';
  * row. `svc` can exit 0 before the row changes, or without changing it, so the write is confirmed
  * by polling the row until it holds the requested state.
  */
-export type AndroidGlobalToggle = Readonly<{
+export type AndroidGlobalToggle<Key extends string = string> = Readonly<{
   /** The `svc` service name: `svc <service> enable|disable`. */
   service: string;
   /** The `settings global` row the system service persists the switch in. */
@@ -23,7 +23,7 @@ export type AndroidGlobalToggle = Readonly<{
   /** How the toggle is named in failure messages. */
   label: string;
   /** The key the toggle's state is reported under, on success and in failure details. */
-  stateKey: string;
+  stateKey: Key;
   parseRow: (storedValue: string) => AndroidToggleState | undefined;
   notAppliedReason: string;
   unreadableReason: string;
@@ -36,12 +36,12 @@ const GLOBAL_TOGGLE_SETTLE_MS = 2_000;
 const GLOBAL_TOGGLE_READ_TIMEOUT_MS = 1_000;
 
 /** Failures before `svc` runs disclose `dispatched: no`; every failure after it `unknown`. */
-export async function setAndroidGlobalToggle(
+export async function setAndroidGlobalToggle<Key extends string>(
   device: DeviceInfo,
-  toggle: AndroidGlobalToggle,
+  toggle: AndroidGlobalToggle<Key>,
   enabled: boolean,
   signal: AbortSignal | undefined,
-): Promise<Record<string, AndroidToggleState>> {
+): Promise<Record<Key, AndroidToggleState>> {
   if (signal?.aborted) throw discloseDispatch(createRequestCanceledError(), 'no');
   const requested: AndroidToggleState = enabled ? 'enabled' : 'disabled';
   try {
@@ -57,7 +57,8 @@ export async function setAndroidGlobalToggle(
         { deviceId: device.id },
       );
     }
-    return { [toggle.stateKey]: await awaitAndroidGlobalToggle(device, toggle, requested, signal) };
+    const state = await awaitAndroidGlobalToggle(device, toggle, requested, signal);
+    return { [toggle.stateKey]: state } as Record<Key, AndroidToggleState>;
   } catch (error) {
     throw error instanceof AppError ? discloseDispatch(error, 'unknown') : error;
   }
