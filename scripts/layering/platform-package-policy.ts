@@ -430,5 +430,5 @@ export function checkPlatformPackagePolicy(
 }
 
 export function platformPackagePolicySummary(): string {
-  return 'R13 holds six private implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the apple runner and android mechanics facets behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist';
+  return `R13 holds six private implementation-lazy platform packages above capture-kit behind one canonical composition root and its single private provider-composition submodule, with the apple runner and android mechanics facets behind their enumerated seams; deferred or type-only edges are limited to the approved platform-runtime host watchlist and the dynamic-only HarmonyOS, Linux and Web interactor subpaths imported by ${INTERACTOR_COMPOSITION_FILE}`;
 }
