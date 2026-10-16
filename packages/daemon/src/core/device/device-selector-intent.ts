@@ -8,6 +8,39 @@ const LOCKABLE_DEVICE_SCOPE_KEYS: ReadonlyArray<keyof CommandFlags> = [
   'androidDeviceAllowlist',
 ];
 
+/**
+ * Request-scoped lease and provider-discovery context. These say WHO may see which devices
+ * (a lease or a provider client narrows the inventory the resolver can reach), never WHICH
+ * device, so a lane that rebuilds a selector must forward them or resolution silently
+ * widens outside the lease. `device-selector-intent` classifies selectors; this is the one
+ * read that keeps that classification's non-identity discovery keys together.
+ */
+export type LeaseDiscoveryContext = {
+  leaseId?: string;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+};
+
+const LEASE_DISCOVERY_KEYS = [
+  'leaseId',
+  'leaseProvider',
+  'deviceKey',
+  'clientId',
+] as const satisfies ReadonlyArray<keyof LeaseDiscoveryContext & keyof CommandFlags>;
+
+export function leaseDiscoveryContextFromFlags(
+  flags: CommandFlags | undefined,
+): LeaseDiscoveryContext {
+  if (!flags) return {};
+  const context: Record<string, string> = {};
+  for (const key of LEASE_DISCOVERY_KEYS) {
+    const value = flags[key];
+    if (typeof value === 'string' && value.trim().length > 0) context[key] = value;
+  }
+  return context;
+}
+
 export function hasExplicitDeviceSelector(flags: CommandFlags | undefined): boolean {
   return hasExplicitDeviceIdentitySelector({
     deviceName: flags?.device,

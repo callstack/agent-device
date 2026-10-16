@@ -154,6 +154,13 @@ test('appstate --udid on an Apple device without naming a session keeps the plai
     expect(response.error.code).toBe('SESSION_NOT_FOUND');
     expect(response.error.message).toMatch(/iOS appstate requires an active session/i);
     expect(response.error.details?.reason).toBeUndefined();
+    // Resolution-first holds for the plain advice too: the stated UDID is proven before the
+    // refusal, so an implementation that skipped resolving an invalid UDID fails here.
+    expect(resolved).toHaveBeenCalledTimes(1);
+    expect(resolved).toHaveBeenCalledWith(
+      expect.objectContaining({ udid: 'SIM-UDID-B' }),
+      expect.anything(),
+    );
   } finally {
     resolved.mockReset();
   }

@@ -29,7 +29,10 @@ import {
   resolveTargetDevice,
   type ResolveDeviceFlags,
 } from '@agent-device/device-selection/dispatch-resolve';
-import { hasDeviceSelectionInput } from '../../core/device/device-selector-intent.ts';
+import {
+  hasDeviceSelectionInput,
+  leaseDiscoveryContextFromFlags,
+} from '../../core/device/device-selector-intent.ts';
 import { ensureBoundDeviceReady } from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/screen-recording-recovery';
@@ -208,11 +211,12 @@ function namesSessionWithoutTarget(req: DaemonRequest): boolean {
 
 /**
  * Re-resolves the device a durable manifest names: the manifest's family always, its identity flag
- * where the family has one, plus the request's host-scoping selectors — `iosSimulatorDeviceSet`
- * and `androidDeviceAllowlist` say WHERE to look, not which device, so carrying them preserves a
- * recovery scoped to a simulator set or allowlist instead of regressing it to DEVICE_NOT_FOUND.
- * No request device/identity selector reaches here: `assertManifestBelongsToRequest` proves the
- * resolved device against the manifest.
+ * where the family has one, plus the request's host-scoping and lease/discovery selectors —
+ * `iosSimulatorDeviceSet` and `androidDeviceAllowlist` say WHERE to look, the lease fields say WHO
+ * may see the inventory, and none of them states WHICH device. Dropping any of them would resolve
+ * a scoped or leased recording outside the scope or lease it started under. No request
+ * device/identity selector reaches here: `assertManifestBelongsToRequest` proves the resolved
+ * device against the manifest.
  */
 async function resolveManifestDevice(
   params: RecordRuntimeHandlerParams,
@@ -221,6 +225,7 @@ async function resolveManifestDevice(
   const { iosSimulatorDeviceSet, androidDeviceAllowlist } = params.req.flags ?? {};
   const selector: ResolveDeviceFlags = {
     platform: recorded.family,
+    ...leaseDiscoveryContextFromFlags(params.req.flags),
     ...(iosSimulatorDeviceSet === undefined ? {} : { iosSimulatorDeviceSet }),
     ...(androidDeviceAllowlist === undefined ? {} : { androidDeviceAllowlist }),
   };

@@ -20,6 +20,14 @@ const RESTART_RECORDED_DEVICE = {
   name: 'Pixel',
   kind: 'emulator',
 } as const;
+const APPLE_RECORDED_DEVICE = {
+  platform: 'apple',
+  appleOs: 'ios',
+  id: 'IOS-UDID-1',
+  name: 'iPhone 17 Pro',
+  kind: 'simulator',
+  target: 'mobile',
+} as const;
 const FLAGLESS_RECORDED_DEVICE = {
   platform: 'linux',
   id: 'linux',
@@ -31,6 +39,7 @@ const resolveTargetDeviceMock = vi.fn(async (flags: Record<string, string | unde
   if (flags.serial === RESTART_RECORDED_DEVICE.id || flags.udid === RESTART_RECORDED_DEVICE.id) {
     return { ...RESTART_RECORDED_DEVICE };
   }
+  if (flags.udid === APPLE_RECORDED_DEVICE.id) return { ...APPLE_RECORDED_DEVICE };
   if (flags.platform === 'linux') return { ...FLAGLESS_RECORDED_DEVICE };
   throw new AppError('AMBIGUOUS_MATCH', 'Multiple attached devices detected');
 });
@@ -78,8 +87,11 @@ test('record stop recovery after a daemon restart keeps the request host-scoping
     'capture.mp4',
   );
   fs.writeFileSync(outPath, 'mp4');
-  await harness.run(['start', outPath], undefined, { androidDeviceAllowlist: 'emulator-5554' });
-  await harness.run(['stop']);
+  expect(
+    await harness.run(['start', outPath], undefined, { androidDeviceAllowlist: 'emulator-5554' }),
+  ).toMatchObject({ ok: true });
+  expect(await harness.run(['stop'])).toMatchObject({ ok: true });
+  expectDecodedCompletedRecording(harness.sessionStore, harness.sessionName);
   const ref = harness.sessionStore.lookup(harness.sessionName);
   if (!ref) throw new Error('Expected the stopped recording session');
   harness.sessionStore.retire(ref);
@@ -105,6 +117,76 @@ test('record stop recovery after a daemon restart keeps the request host-scoping
   );
 });
 
+test('record stop recovery on an Apple manifest keeps the request simulator-device-set', async () => {
+  // The apple-family twin of the allowlist pin: --ios-simulator-device-set scopes where an Apple
+  // recovery may look, and the identity it re-states is the udid.
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-ios-set-', {
+    platform: 'apple',
+  });
+  const outPath = path.join(
+    mkdtempForTestSync('record-runtime-restart-stop-ios-set-output-'),
+    'capture.mp4',
+  );
+  fs.writeFileSync(outPath, 'mp4');
+  expect(
+    await harness.run(['start', outPath], undefined, { iosSimulatorDeviceSet: '/sets/qa.set' }),
+  ).toMatchObject({ ok: true });
+  expect(await harness.run(['stop'])).toMatchObject({ ok: true });
+  expectDecodedCompletedRecording(harness.sessionStore, harness.sessionName);
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the stopped recording session');
+  harness.sessionStore.retire(ref);
+  resolveTargetDeviceMock.mockClear();
+
+  const recovered = await harness.run(
+    ['stop'],
+    { sessionExplicit: true },
+    {
+      iosSimulatorDeviceSet: '/sets/qa.set',
+    },
+  );
+
+  expect(recovered).toMatchObject({ ok: true, data: { recording: 'stopped', outPath } });
+  expect(resolveTargetDeviceMock).toHaveBeenCalledWith(
+    expect.objectContaining({
+      platform: 'apple',
+      udid: 'IOS-UDID-1',
+      iosSimulatorDeviceSet: '/sets/qa.set',
+    }),
+  );
+});
+
+test('record stop recovery carries the request lease and discovery context', async () => {
+  // Lease fields say WHO may see the inventory, not WHICH device; a recovery that resolved
+  // without them would look outside the lease the recording was started under.
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-lease-');
+  const outPath = path.join(
+    mkdtempForTestSync('record-runtime-restart-stop-lease-output-'),
+    'capture.mp4',
+  );
+  fs.writeFileSync(outPath, 'mp4');
+  const leaseFlags = {
+    leaseId: 'lease-1',
+    leaseProvider: 'proxy',
+    deviceKey: 'android:mobile:emulator-5554',
+    clientId: 'client-1',
+  };
+  expect(await harness.run(['start', outPath], undefined, { ...leaseFlags })).toMatchObject({
+    ok: true,
+  });
+  expect(await harness.run(['stop'])).toMatchObject({ ok: true });
+  expectDecodedCompletedRecording(harness.sessionStore, harness.sessionName);
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the stopped recording session');
+  harness.sessionStore.retire(ref);
+  resolveTargetDeviceMock.mockClear();
+
+  const recovered = await harness.run(['stop'], { sessionExplicit: true }, { ...leaseFlags });
+
+  expect(recovered).toMatchObject({ ok: true, data: { recording: 'stopped', outPath } });
+  expect(resolveTargetDeviceMock).toHaveBeenCalledWith(expect.objectContaining(leaseFlags));
+});
+
 test('record stop recovery for a family without identity flags resolves under the manifest family', async () => {
   // A linux manifest names no identity flag the request could restate. The recovery still must
   // not sweep the host from the request's (empty) flags: it asks for the manifest's family, and
@@ -117,8 +199,9 @@ test('record stop recovery for a family without identity flags resolves under th
     'capture.mp4',
   );
   fs.writeFileSync(outPath, 'mp4');
-  await harness.run(['start', outPath]);
-  await harness.run(['stop']);
+  expect(await harness.run(['start', outPath])).toMatchObject({ ok: true });
+  expect(await harness.run(['stop'])).toMatchObject({ ok: true });
+  expectDecodedCompletedRecording(harness.sessionStore, harness.sessionName);
   const ref = harness.sessionStore.lookup(harness.sessionName);
   if (!ref) throw new Error('Expected the stopped recording session');
   harness.sessionStore.retire(ref);

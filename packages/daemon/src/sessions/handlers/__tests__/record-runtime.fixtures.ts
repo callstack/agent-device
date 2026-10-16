@@ -12,6 +12,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import { deviceIdentity } from '@agent-device/kernel/device';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -38,7 +39,7 @@ export function makeRecordRuntimeHarness(
     sessionName?: string;
     appBundleId?: string;
     recordOnlySession?: boolean;
-    platform?: 'android' | 'linux' | 'vega';
+    platform?: 'android' | 'apple' | 'linux' | 'vega';
     runtime?: RuntimeOptions;
   } = {},
 ) {
@@ -51,7 +52,16 @@ export function makeRecordRuntimeHarness(
         ? { platform: 'linux', id: 'linux', name: 'Linux', kind: 'device', target: 'desktop' }
         : options.platform === 'vega'
           ? { platform: 'vega', id: 'vega', name: 'Vega', kind: 'device', target: 'tv' }
-          : { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
+          : options.platform === 'apple'
+            ? {
+                platform: 'apple',
+                appleOs: 'ios',
+                id: 'IOS-UDID-1',
+                name: 'iPhone 17 Pro',
+                kind: 'simulator',
+                target: 'mobile',
+              }
+            : { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
     ...(options.appBundleId ? { appBundleId: options.appBundleId } : {}),
     ...(options.recordOnlySession ? { recordOnlySession: true } : {}),
     createdAt: 1,
@@ -154,12 +164,9 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
         envelope: createDurableResourceEnvelope({
           resourceKind: 'screen-recording',
           sessionId: input.sessionId,
-          device: {
-            id: session.device.id,
-            family: session.device.platform,
-            kind: session.device.kind,
-            ...(session.device.target === undefined ? {} : { target: session.device.target }),
-          },
+          // Same authoritative identity projection the recording transports build their
+          // envelopes with, so a fixture manifest carries exactly what a real one would.
+          device: deviceIdentity(session.device),
           owner,
           fence: input.fence,
           lifecycle: 'open',
