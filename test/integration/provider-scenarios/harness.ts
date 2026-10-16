@@ -61,6 +61,7 @@ export type ProviderScenarioForwardedRequest = {
   authorization: string | undefined;
   tenantId: string | undefined;
   statusCode: number;
+  upstreamError?: unknown;
 };
 
 type JsonRpcResponseEnvelope = {
@@ -428,15 +429,17 @@ async function handleRecordingUpstreamRequest(
     return;
   }
 
+  let entry: ProviderScenarioForwardedRequest | undefined;
   try {
     const requestBody = await readRequestBody(request);
-    const entry = recordForwardedRequest(request, target.route, requestBody, forwarded);
+    entry = recordForwardedRequest(request, target.route, requestBody, forwarded);
     const upstreamResponse = await forwardToDaemon(upstreamPort, request, target.path, requestBody);
     recordUpstreamResponse(entry, upstreamResponse);
     sendUpstreamResponse(response, upstreamResponse);
   } catch (error) {
+    if (entry) entry.upstreamError = error;
     response.statusCode = 502;
-    response.end(error instanceof Error ? error.message : String(error));
+    response.end('upstream request failed');
   }
 }
 

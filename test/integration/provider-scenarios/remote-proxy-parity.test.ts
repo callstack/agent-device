@@ -396,6 +396,37 @@ test(
 );
 
 test(
+  'recording proxy retains upstream errors without exposing them in the response',
+  async (t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'daemon proxy error handling coverage')) return;
+
+    const world = await createParityWorld();
+    const proxy = await createProviderScenarioProxy(world.daemon, { clientToken: PROXY_TOKEN });
+    try {
+      await world.close();
+      const response = await fetch(`${proxy.baseUrl}/rpc`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${PROXY_TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: '{}',
+      });
+      assert.equal(response.status, 502);
+      assert.equal(await response.text(), 'upstream request failed');
+
+      const upstreamError = proxy.forwarded[0]?.upstreamError;
+      assert.ok(upstreamError instanceof Error);
+      assert.equal((upstreamError as NodeJS.ErrnoException).code, 'ECONNREFUSED');
+    } finally {
+      await proxy.close();
+      await world.close();
+    }
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
   'Provider-backed integration proxy clients contending for one device fail at lease admission',
   async (t) => {
     if (await skipWhenLoopbackUnavailable(t, 'daemon proxy parity coverage')) return;
