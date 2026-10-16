@@ -730,6 +730,12 @@ importers:
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
+      '@types/tar-stream':
+        specifier: ^3.1.4
+        version: 3.1.4
+      tar-stream:
+        specifier: ^3.2.0
+        version: 3.2.0
 
   packages/replay-port:
     dependencies:

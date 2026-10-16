@@ -38,6 +38,8 @@
     }
   },
   "devDependencies": {
-    "@agent-device/test-kit": "workspace:*"
+    "@agent-device/test-kit": "workspace:*",
+    "@types/tar-stream": "^3.1.4",
+    "tar-stream": "^3.2.0"
   }
 }
