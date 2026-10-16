@@ -180,9 +180,10 @@ export type LaunchConfirmation = 'accepted' | 'unanswered';
 export type LaunchConfirmationUnansweredReason = 'alert-unrecognized' | 'url-owner-unresolved';
 
 /**
- * A launch-confirmation probe step that could not run, so whether a prompt is up is unknown. Not
- * an outcome of the confirmation itself: the open reports no confirmation for it and the daemon
- * warns instead, keeping probe failure separate from what a completed probe saw.
+ * A launch-confirmation probe step that failed or whose result could not be verified, so whether a
+ * prompt is up is unknown. Not an outcome of the confirmation itself: the open reports no
+ * confirmation for it and the daemon warns instead, keeping probe failure separate from what a
+ * completed probe saw.
  */
 export type LaunchConfirmationProbeFailure = 'alert-read' | 'alert-accept' | 'runner';
 
