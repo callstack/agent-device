@@ -496,9 +496,10 @@ Identity verification applies only when `matchCount >= 1`.
 5. `|I| == 1` and W differs: return **identity-mismatch**.
    This detects a unique-but-wrong rebind or a changed ambiguity winner, even after unique resolution.
 6. `|I| > 1`: apply these signals in order over their record-time candidate domains:
-   - **sibling:** retain the members of I whose zero-based index among their own parent's children equals the recorded `sibling`.
-     If exactly one remains, compare it with W under paths 4/5.
-     If zero or multiple remain, continue.
+   - **sibling:** find the members of I whose zero-based index among their own parent's children equals the recorded `sibling`.
+     If exactly one member qualifies, compare it with W under paths 4/5.
+     If zero or several members qualify, the signal does not isolate a member.
+     Then continue with the next signal over the same, unchanged set I.
      The same child index can recur under different parents.
    - **Region-scoped viewportOrder:** restrict I to the partition whose scroll-region key equals the recorded `scrollRegion`.
      If `scrollRegion` is omitted, use the *none* partition.
