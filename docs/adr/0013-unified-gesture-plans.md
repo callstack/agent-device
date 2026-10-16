@@ -190,6 +190,8 @@ It is not scheduled for removal (amended 2026-07, issue #1216).
 Its callers include the CLI argv parse, the `.ad` line parse, and the recording path.
 `packages/daemon/src/execution/interaction/internal/interaction-gesture.ts` encodes gesture inputs for recordings.
 `packages/daemon/src/core/session-script-writer.ts` decodes recorded drag endpoints.
+`packages/replay-port/src/daemon-port/target-token.ts` decodes drag endpoints to select the replay target token.
+`packages/daemon/src/core/session-script-active-publication.ts` decodes drag endpoints to validate target evidence before script publication.
 These are current syntax and recording consumers, so nothing is left to migrate off.
 A structured `.ad` gesture payload was rejected.
 It would make recordings unreadable and impossible to search with grep, for no behavioral gain.
