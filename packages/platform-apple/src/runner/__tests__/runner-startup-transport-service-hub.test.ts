@@ -20,7 +20,11 @@ import {
   iosSimulator,
   runnerTransportResponse,
 } from './runner-transport.fixtures.ts';
-import { buildFixtureById } from './runner-startup-failure-fixtures.ts';
+import {
+  CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT,
+  CAPTURED_SCOPED_SIMULATOR,
+  buildFixtureById,
+} from './runner-startup-failure-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 beforeEach(resetAllProcessMemosForTests);
@@ -157,6 +161,52 @@ test('a bless refusal already in the launch log ends the connect loop on its fir
   assert.equal(error.details?.reason, 'simulator_service_hub_unavailable');
   // No connect attempt is dialed once the boot is known terminal, and the failure arrives with most
   // of the budget unspent rather than at its deadline.
+  assert.equal(fetchSpy.mock.calls.length, 0);
+  assert.ok(
+    elapsedMs < CONNECT_BUDGET_MS / 2,
+    `expected the failure well before its ${CONNECT_BUDGET_MS}ms deadline, took ${elapsedMs}ms`,
+  );
+});
+
+test("one tail holding two launch-log causes gets the classifier's own winner, terminal", async () => {
+  // The row order decides, not the loop. A scoped-set launch whose log holds both the bless refusal and
+  // the missing destination reads as `simulator_set_destination_not_found`, the row that comes first.
+  // A pre-check of the loop's own would see the bless, order the stop, and hand back an error whose
+  // reason says otherwise — and the first fix did exactly that, so each remaining attempt re-threw
+  // without dialing until the deadline. One classifier over the tail cannot produce that pair.
+  const fetchSpy = vi.fn(async () => {
+    throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8100'), { code: 'ECONNREFUSED' });
+  });
+  vi.stubGlobal('fetch', fetchSpy);
+  const scopedSimulator = {
+    ...iosSimulator,
+    id: CAPTURED_SCOPED_SIMULATOR.udid,
+    simulatorSetPath: CAPTURED_SCOPED_SIMULATOR.setWithoutUdid,
+  };
+  const session = {
+    ...sessionWithLaunchLog(`${CAPTURED_LAUNCH_DESTINATION_NOT_FOUND_OUTPUT}\n${BLESS_LOG}`, null),
+    device: scopedSimulator,
+    deviceId: scopedSimulator.id,
+  };
+  const startedAt = Date.now();
+
+  const error = await waitForRunner(
+    scopedSimulator,
+    RUNNER_ENDPOINT_FIXTURE,
+    { command: 'snapshot' },
+    undefined,
+    CONNECT_BUDGET_MS,
+    session,
+  ).catch((error: unknown) => error as AppError);
+
+  const elapsedMs = Date.now() - startedAt;
+  assert.ok(error instanceof AppError);
+  // The reason and the message agree because one row produced both, and the verdict beside them is the
+  // terminal one that class shares, so the loop stopped rather than re-throwing at the deadline.
+  assert.equal(error.details?.reason, 'simulator_set_destination_not_found');
+  assert.ok(error.message.includes(CAPTURED_SCOPED_SIMULATOR.setWithoutUdid), error.message);
+  assert.doesNotMatch(error.message, /simulator service/);
+  assert.equal(shouldRetryRunnerConnectError(error), false);
   assert.equal(fetchSpy.mock.calls.length, 0);
   assert.ok(
     elapsedMs < CONNECT_BUDGET_MS / 2,

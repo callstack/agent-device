@@ -283,6 +283,41 @@ test('a refused connection still restarts and rebuilds without the service-hub r
   assert.equal(shouldRebuildCachedRunnerArtifact(refused), true);
 });
 
+test('a scoped-set destination this Xcode cannot resolve is terminal on every recovery axis', () => {
+  // The other cause a launch log names. The set is on the command, so a retry, a restart, or a fresh
+  // build resolves nothing, and the connect loop has to stop on the attempt that reads the log — the
+  // same terminal reading the service-hub cause gets.
+  const destinationFailure = commandFailed('Runner did not accept connection', {
+    reason: 'simulator_set_destination_not_found',
+    runnerConnectFailureReason: 'runner_connect_refused',
+    dispatched: 'no',
+    simulatorSetPath: '/Users/dev/Library/Developer/CoreSimulator/Sets/foo.json',
+  });
+  assert.equal(shouldRetryRunnerConnectError(destinationFailure), false);
+  assert.equal(isRetryableRunnerError(destinationFailure), false);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(destinationFailure, SNAPSHOT), false);
+  assert.equal(shouldRebuildCachedRunnerArtifact(destinationFailure), false);
+  assert.equal(
+    shouldRestartRunnerAfterReadinessPreflight(
+      commandFailed('Runner readiness refused', {
+        reason: 'simulator_set_destination_not_found',
+        runnerReadinessPreflightFailed: true,
+      }),
+    ),
+    false,
+  );
+});
+
+test('the reason in foreign text marks nothing terminal', () => {
+  // The verdict keys on the reason the launch paths publish. A runner response or tool transcript that
+  // merely repeats the words cannot order a failure non-retryable.
+  const echoed = commandFailed(
+    'Runner did not accept connection: simulator_set_destination_not_found',
+    { stderr: 'DTServiceHubClient failed to bless service hub for simulator' },
+  );
+  assert.equal(shouldRetryRunnerConnectError(echoed), true);
+});
+
 test('a device that is busy connecting is a terminal connect verdict', () => {
   assert.equal(
     shouldRetryRunnerConnectError(commandFailed('Device is busy (Connecting to Simulator)')),

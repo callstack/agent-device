@@ -21,9 +21,6 @@ import {
   RUNNER_CACHE_RECOVERY_HINT,
   runnerConnectFailureDetails,
   shouldRetryRunnerConnectError,
-  isSimulatorServiceHubLaunchOutput,
-  SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON,
-  simulatorServiceHubFailureMessage,
   type RunnerStartupFailureReason,
 } from './runner-error-classification.ts';
 import {
@@ -45,8 +42,8 @@ export type RunnerConnectionSession = Pick<
   | 'state'
 >;
 import {
+  runnerLaunchLogClassificationDetails,
   runnerSimulatorSetFailureDetails,
-  simulatorSetDestinationNotFoundMessage,
 } from './runner-device-set.ts';
 import { canFallBackFromUsbmux, postRunnerCommandOverRoute } from './runner-transport.ts';
 
@@ -241,17 +238,19 @@ async function ensureRunnerAttemptCanStart(params: {
       logPath: params.logPath,
     });
   }
-  // A launch whose simulator service this macOS refused never serves a command, and its child stays
-  // alive to the deadline, so without this the request waits out the whole connect budget before
-  // reaching the classifier that names the cause (#3449). Checked on each attempt while the session
-  // has yet to answer: once a runner has answered, its log is no longer evidence about a boot that
-  // demonstrably succeeded. Bounded to the tail an error would quote, read from this generation's
-  // offset, and no child process is spawned for it.
+  // A launch whose log already names a cause the classifier calls terminal will never serve a
+  // command, and its child may stay alive to the deadline, so without this the request waits out the
+  // whole connect budget before reaching the failure that names the cause (#3449). The verdict is the
+  // classifier's over the tail — this adds no matching of its own — and it is acted on only when the
+  // table says a retry cannot help, which is the same predicate the retry loop applies to errors.
+  // Checked while the session has yet to answer: once a runner has answered, its log is no longer
+  // evidence about a boot that demonstrably succeeded. Bounded to the tail an error would quote, read
+  // from this generation's offset, and no child process is spawned for it.
   const session = params.session;
   if (session?.state !== 'starting') return;
   const launchLogOutput = session.readLogTail?.(RUNNER_EARLY_EXIT_LOG_TAIL_BYTES) ?? '';
-  if (!isSimulatorServiceHubLaunchOutput(launchLogOutput)) return;
-  throw buildRunnerConnectError({
+  if (!launchLogOutput) return;
+  const terminalError = buildRunnerConnectError({
     device: session.device,
     port: params.endpoint.port,
     url: params.route.url,
@@ -260,6 +259,7 @@ async function ensureRunnerAttemptCanStart(params: {
     session,
     launchLogOutput,
   });
+  if (!shouldRetryRunnerConnectError(terminalError)) throw terminalError;
 }
 
 async function tryPrimaryRunnerRoute(params: {
@@ -428,37 +428,29 @@ type RunnerLaunchLogCause = Readonly<{
 }>;
 
 /**
- * The cause readable from the launch output when the runner never served a command: a scoped-set
- * destination this Xcode cannot resolve, or a simulator service this macOS refuses to load. One read
- * of the text the failure is about to quote produces the reason, the message and the hint beside it,
- * so the three cannot disagree about which cause this was (#3449). No cause is claimed for anything
- * else the log holds: the boot-failure classification owns those, and a line nobody named stays a
- * connect timeout.
+ * The cause readable from the launch output when the runner never served a command, if any. Which
+ * outputs carry a cause, what it is called, and what the sentence beside it says are all decided by the
+ * classifier's rows: this reads the tail's verdict and folds the row's own words into the message, so
+ * reason, message and hint cannot disagree about which cause this was (#3449). No cause is claimed for
+ * anything no row named: the boot-failure classification owns those.
  */
 function resolveRunnerLaunchLogCause(params: {
   message: string;
   output: string;
   device: DeviceInfo;
 }): RunnerLaunchLogCause | undefined {
-  const simulatorSet = runnerSimulatorSetFailureDetails(params.device);
   const classified = classifyRunnerStartupFailure(
-    new AppError('COMMAND_FAILED', params.message, { stderr: params.output, ...simulatorSet }),
+    new AppError('COMMAND_FAILED', params.message, {
+      stderr: params.output,
+      ...runnerLaunchLogClassificationDetails(params.device),
+    }),
   );
-  if (classified.reason === 'simulator_set_destination_not_found') {
-    return {
-      message: simulatorSetDestinationNotFoundMessage(params.message, params.device, simulatorSet),
-      reason: classified.reason,
-      hint: classified.hint,
-    };
-  }
-  if (classified.reason === SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON) {
-    return {
-      message: simulatorServiceHubFailureMessage(params.message),
-      reason: classified.reason,
-      hint: classified.hint,
-    };
-  }
-  return undefined;
+  if (!classified.messageSuffix) return undefined;
+  return {
+    message: `${params.message}: ${classified.messageSuffix}`,
+    reason: classified.reason,
+    hint: classified.hint,
+  };
 }
 
 function buildRunnerConnectError(params: {
