@@ -128,7 +128,7 @@ export async function composeOpenWithInitialSnapshot(params: {
         // The promised composition IS `snapshot -i`: the CLI maps `-i` to
         // `snapshotInteractiveOnly` (flag-definitions-workflow.ts), which is the
         // key the snapshot runtime reads as `interactiveOnly`.
-        flags: { ...req.flags, snapshotInteractiveOnly: true },
+        flags: { ...req.flags, snapshotInteractiveOnly: true, noRecord: true },
       },
       sessionName: ref.address,
       sessionRef: ref,
