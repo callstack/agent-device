@@ -1,24 +1,32 @@
 # Foldable Apple verification
 
-Read ADR 0025 before changing capture behavior on a multi-panel device. The iOS 27.1 runtime ships
-only with the Xcode that carries it, and `xcode-select` may point at an older one, so pin the
-toolchain per command:
+Before you change capture behavior on a multi-panel device, read ADR 0025.
+The iOS 27.1 runtime comes only with its Xcode. `xcode-select` can select an older Xcode.
+For each command, set the toolchain explicitly:
 `DEVELOPER_DIR=<Xcode-27.1>/Contents/Developer xcrun devicectl device info displays --device <udid>`.
 
-- Panels: that command lists each integrated panel with `backlightState`. Only the lit panel is
-  capturable — a capture of the dark panel exits 0 and writes an all-black PNG.
-- Input routing: verify a fresh control after each pose change. A successful synthesis acknowledgement
-  does not prove a hit. Inspect the runner and simulator `testmanagerd`/BackBoard logs for display
-  identity and delivery; the resolved app window owns gesture coordinates and its target screen.
-- Pose: `agent-device fold closed|half-open|open` sends private HID inside the simulator and reads
-  the hinge back through `devicectl device motion hinge-angle`. Device Hub and host Accessibility
-  permission are not required. Re-snapshot afterwards: refs and coordinates do not survive folds.
-  Verify locally with Device Hub stopped and the simulator booted through `simctl boot`; test all
-  three poses, active panel capture, and an app interaction. Duo coverage remains local until GHA
-  supports the runtime. To inspect the angle independently:
+- Panels: the command lists each integrated panel with `backlightState`. Only the lit panel permits capture.
+  A capture of the dark panel exits 0 and writes an all-black PNG.
+- Input routing: after each pose change, verify a fresh control.
+  A successful synthesis acknowledgement does not prove a hit.
+  Examine the runner and simulator `testmanagerd`/BackBoard logs for display identity and delivery.
+  The resolved app window owns gesture coordinates and its target screen.
+- Pose: `agent-device fold closed|half-open|open` sends private HID inside the simulator.
+  It reads the hinge back through `devicectl device motion hinge-angle`.
+  Device Hub and host Accessibility permission are not required.
+  After a fold, take another snapshot. Folds invalidate refs and coordinates.
+  Verify locally with Device Hub stopped and the simulator booted through `simctl boot`.
+  Test these items:
+  - All three poses.
+  - Capture of the active panel.
+  - An app interaction.
+  Until GHA supports the runtime, Duo coverage remains local.
+  To examine the angle separately, run:
   `DEVELOPER_DIR=<Xcode-27.1>/Contents/Developer xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`.
-- Touch overlays export at the captured track size. The compositor checks its output (size,
-  non-black) against the raw capture; on failure `record stop` keeps the raw file and reports
-  `overlayWarning`. `record start --hide-touches` is only for the fastest raw capture.
-- iOS 27 SDK apps need UIScene lifecycle to launch on iOS 27.0/27.1.
-- The 27.1 beta accepts only the iPhone Duo device type; use another runtime for a non-foldable control.
+- Touch overlays export at the captured track size.
+  The compositor checks its output size and non-black content against the raw capture.
+  If that check fails, `record stop` keeps the raw file. It reports `overlayWarning`.
+  `record start --hide-touches` is only for the fastest raw capture.
+- To launch on iOS 27.0/27.1, iOS 27 SDK apps need UIScene lifecycle.
+- The 27.1 beta accepts only the iPhone Duo device type.
+  For a non-foldable control, use another runtime.
