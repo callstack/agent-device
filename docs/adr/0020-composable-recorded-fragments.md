@@ -548,6 +548,8 @@ The replay engine stops at the failed action before a later root `open`, known p
 
 **Open evidence gap:** this trace proves failure before platform execution for an unknown guard that reaches generic dispatch.
 It does not prove the specified `INVALID_ARGS` format rejection for old readers.
+Admission can resolve a device for lock and provider selection; that resolution reads the device inventory and runs no command.
+This trace does not cover failures during admission.
 A new fragment codec cannot change an old reader's behavior.
 **Maintainer question:** should the old-reader contract accept these existing errors, or retain `INVALID_ARGS` as an unresolved requirement?
 An old reader that gets an unguarded legacy `.ad` retains its existing behavior.
