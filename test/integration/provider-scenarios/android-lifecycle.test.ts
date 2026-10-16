@@ -314,7 +314,7 @@ async function runAndroidSetupAndInstallWorkflow(
   world: AndroidSettingsWorld,
   client: AgentDeviceClient,
 ): Promise<void> {
-  const { daemon, apkPath, aabPath, manifestApkPath, selection, tempRoot } = world;
+  const { daemon, apkPath, aabPath, manifestApkPath, selection } = world;
 
   const devices = await client.devices.list({ platform: 'android' });
   assert.equal(devices.length, 1);
@@ -430,56 +430,33 @@ async function runAndroidSetupAndInstallWorkflow(
   assert.equal(push.action, 'com.example.demo.PUSH');
   assert.equal(push.extrasCount, 3);
 
-  const pushPayloadPath = path.join(tempRoot, 'payload.json');
-  fs.writeFileSync(
-    pushPayloadPath,
-    JSON.stringify({
-      action: 'com.example.demo.FILE_PUSH',
-      extras: { source: 'relative-file' },
-    }),
-    'utf8',
-  );
-  // #3345: a raw request routes to the implicit session of the workspace its `cwd` sits in,
-  // and a claim covers only the session-and-workspace pair that took it. The client calls
-  // above sent no cwd, so the open claimed this process's own workspace (the checkout) at
-  // the `default` address. This push joins that address the way `--session` does and runs
-  // from a directory inside the checkout: the canonical scope root is the worktree root from
-  // either directory, so coverage holds the way it holds for a real CLI owner, and the
-  // relative payload still resolves against `cwd`. A cwd in another workspace would refuse
-  // even under the same session name — that is the copyable-address rule.
+  // #3345: a claim covers a raw request only from its own session AND its own workspace. The
+  // client calls above carried no cwd, so the open claimed this checkout at the `default`
+  // address; these pushes join that address the way `--session` does and run from a directory
+  // inside the checkout, so their relative payloads resolve against `cwd` as a real call's
+  // does. A foreign workspace would refuse even under the same name — the copyable-address rule.
   fs.mkdirSync(path.join(process.cwd(), '.tmp'), { recursive: true });
   const callerWorkspace = fs.mkdtempSync(path.join(process.cwd(), '.tmp', 'push-'));
   try {
-    fs.cpSync(pushPayloadPath, path.join(callerWorkspace, 'payload.json'));
-    const filePush = await daemon.callCommand(
-      'push',
-      ['com.example.demo', './payload.json'],
-      selection,
-      { meta: { cwd: callerWorkspace, sessionExplicit: true } },
-    );
-    assert.equal(filePush.json.result.data.package, 'com.example.demo');
-    assert.equal(filePush.json.result.data.action, 'com.example.demo.FILE_PUSH');
-    assert.equal(filePush.json.result.data.extrasCount, 1);
-
-    const bracePayloadPath = path.join(tempRoot, '{payload}.json');
-    fs.writeFileSync(
-      bracePayloadPath,
-      JSON.stringify({
-        action: 'com.example.demo.BRACE_PUSH',
-        extras: { source: 'brace-file' },
-      }),
-      'utf8',
-    );
-    fs.cpSync(bracePayloadPath, path.join(callerWorkspace, '{payload}.json'));
-    const braceFilePush = await daemon.callCommand(
-      'push',
-      ['com.example.demo', './{payload}.json'],
-      selection,
-      { meta: { cwd: callerWorkspace, sessionExplicit: true } },
-    );
-    assert.equal(braceFilePush.json.result.data.package, 'com.example.demo');
-    assert.equal(braceFilePush.json.result.data.action, 'com.example.demo.BRACE_PUSH');
-    assert.equal(braceFilePush.json.result.data.extrasCount, 1);
+    for (const [payloadFile, action, source] of [
+      ['payload.json', 'com.example.demo.FILE_PUSH', 'relative-file'],
+      ['{payload}.json', 'com.example.demo.BRACE_PUSH', 'brace-file'],
+    ] as const) {
+      fs.writeFileSync(
+        path.join(callerWorkspace, payloadFile),
+        JSON.stringify({ action, extras: { source } }),
+        'utf8',
+      );
+      const pushed = await daemon.callCommand(
+        'push',
+        ['com.example.demo', `./${payloadFile}`],
+        selection,
+        { meta: { cwd: callerWorkspace, sessionExplicit: true } },
+      );
+      assert.equal(pushed.json.result.data.package, 'com.example.demo');
+      assert.equal(pushed.json.result.data.action, action);
+      assert.equal(pushed.json.result.data.extrasCount, 1);
+    }
   } finally {
     fs.rmSync(callerWorkspace, { recursive: true, force: true });
   }

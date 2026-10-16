@@ -20,7 +20,7 @@ function legacyClaim(overrides: Record<string, unknown> = {}): Record<string, un
   };
 }
 
-function currentClaim(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function v2Claim(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     ...legacyClaim(),
     schemaVersion: 2,
@@ -29,24 +29,48 @@ function currentClaim(overrides: Record<string, unknown> = {}): Record<string, u
   };
 }
 
-test('v1 and v2 records decode to the process-owned claim with its process principal intact', () => {
-  for (const raw of [legacyClaim(), currentClaim()]) {
+function currentClaim(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return { ...v2Claim(), schemaVersion: 3, ...overrides };
+}
+
+test('v1, v2, and v3 records decode to the process-owned claim with its process principal intact', () => {
+  for (const raw of [legacyClaim(), v2Claim(), currentClaim()]) {
     const record = decodeStoredDeviceClaim(raw);
     expect(record).not.toBeNull();
     if (!record) throw new Error('expected process-owned');
-    expect(record.schemaVersion).toBe(2);
+    expect(record.schemaVersion).toBe(3);
     expect(record.session).toBe('work');
     expect(record.ownerPid).toBe(4242);
     expect(record.ownerToken).toBe('token');
   }
+});
+
+test('a legacy claim claim-kind comes from the label that encoded it, once at the boundary', () => {
+  // The pre-kind schemas recorded a command-scoped claim only as a `transient:<command>` session.
+  for (const raw of [
+    legacyClaim({ session: 'transient:install' }),
+    v2Claim({ session: 'transient:reinstall' }),
+  ]) {
+    expect(decodeStoredDeviceClaim(raw)?.transientCommand).toBe(
+      raw.session === 'transient:install' ? 'install' : 'reinstall',
+    );
+  }
+  // From v3 the kind is a stored field, not a label pattern: a v3 open session may be named
+  // after a command, and a v3 record without the field is that session's claim.
   expect(
-    decodeStoredDeviceClaim(legacyClaim({ session: 'transient:install' }))?.schemaVersion,
-  ).toBe(2);
+    decodeStoredDeviceClaim(currentClaim({ session: 'transient:install' }))?.transientCommand,
+  ).toBeUndefined();
+  expect(
+    decodeStoredDeviceClaim(currentClaim({ transientCommand: 'install' }))?.transientCommand,
+  ).toBe('install');
+  // A malformed kind fails the record closed instead of guessing a kind.
+  expect(decodeStoredDeviceClaim(currentClaim({ transientCommand: '' }))).toBeNull();
+  expect(decodeStoredDeviceClaim(currentClaim({ transientCommand: 7 }))).toBeNull();
 });
 
 test('a record of an unknown schema version is unreadable', () => {
   // A future-schema record carrying a whole process principal is still not migrated into a claim.
-  for (const schemaVersion of [0, 3, 4]) {
+  for (const schemaVersion of [0, 4, 5]) {
     expect(decodeStoredDeviceClaim(currentClaim({ schemaVersion }))).toBeNull();
   }
   expect(decodeStoredDeviceClaim(null)).toBeNull();

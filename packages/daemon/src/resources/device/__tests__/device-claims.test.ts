@@ -747,7 +747,7 @@ test('an unknown-schema record is never migrated into a claim, reconciled, or re
   const root = useClaimsRoot();
   // A dead process principal: were this record read as a process claim, it would be releasable.
   const record = JSON.stringify({
-    schemaVersion: 3,
+    schemaVersion: 4,
     deviceKey: canonicalLocalDeviceKey(device),
     device: { family: 'android', id: device.id, name: device.name, kind: device.kind },
     session: 'future-owner',

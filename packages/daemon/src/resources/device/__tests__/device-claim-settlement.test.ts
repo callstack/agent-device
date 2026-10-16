@@ -75,7 +75,7 @@ test('preserves and reports a live foreign claim without overwriting it', async 
   });
   assert.equal(first.status, 'acquired');
   const persisted = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
-  assert.equal(persisted.schemaVersion, 2);
+  assert.equal(persisted.schemaVersion, 3);
   assert.deepEqual(persisted.device, {
     id: device.id,
     family: device.platform,

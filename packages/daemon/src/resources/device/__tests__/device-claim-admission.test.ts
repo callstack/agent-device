@@ -167,6 +167,47 @@ test('a claim this daemon holds for another session refuses the command like any
 // request-scoped, so the session comparison alone cannot tell two requests of the same
 // command apart. The one in flight must not be adopted — adopting it hands the second
 // request the first's release token, and its dispose unlinks a claim still in use.
+// A public session name equal to a transient claim's label must not read as that claim's
+// owner: an in-flight command's claim is exclusive even to a request that copies its
+// address, because adopting it hands the intruder the command's release token.
+// Mutation: read the claim kind off the session string instead of the record — the
+// open session named below then stops covering, or the in-flight claim starts covering.
+test('an in-flight transient claim refuses a request named after its label, while a real open session of that name covers', async () => {
+  const { stateDir } = setup();
+  const holder = makeAdmission('transient-exclusive', stateDir, 'install', 'open-a');
+  await holder.admit(ANDROID_EMULATOR, localAndroid);
+  expect(claimedSessions()).toEqual(['transient:install']);
+
+  // The intruder routes to exactly "transient:install" (an explicit `--session` does this)
+  // in the holder's workspace, and asks for a DIFFERENT command so the label is not its own.
+  const intruder = makeAdmission('transient-exclusive', stateDir, 'reinstall', 'transient:install');
+  const error = asAppError(
+    await intruder.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
+  );
+  expect(error.code).toBe('DEVICE_IN_USE');
+  expect(error.details?.reason).toBe('DEVICE_CLAIM_LIVE_OWNER');
+  await intruder[Symbol.asyncDispose]();
+  // The held command still owns the device.
+  expect(claimedSessions()).toEqual(['transient:install']);
+
+  await holder[Symbol.asyncDispose]();
+  expect(inspectDeviceClaims({})).toEqual([]);
+
+  // A genuinely open session may carry that name; its claim is the session kind and covers
+  // its own workspace's command.
+  await acquireDeviceClaim({
+    device: ANDROID_EMULATOR,
+    session: 'transient:install',
+    workspace: '/worktrees/current',
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+  const own = makeAdmission('transient-exclusive', stateDir, 'install', 'transient:install');
+  await own.admit(ANDROID_EMULATOR, localAndroid);
+  await own[Symbol.asyncDispose]();
+  expect(claimedSessions()).toEqual(['transient:install']);
+});
+
 test("another request in flight's transient claim of the same command refuses, and holds nothing", async () => {
   const { stateDir } = setup();
   const held = await acquireDeviceClaim({
@@ -382,7 +423,7 @@ test('an ordinary owner is refused for an unknown-schema claim record, not waved
   const deviceKey = canonicalLocalDeviceKey(ANDROID_EMULATOR);
   const claimPath = deviceClaimFilePath(deviceKey);
   const record = JSON.stringify({
-    schemaVersion: 3,
+    schemaVersion: 4,
     deviceKey,
     device: {
       family: 'android',
@@ -490,6 +531,29 @@ test('the request scope claims only for commands whose descriptor declares trans
 // worktrees, so the owning session's `install` has to keep working while
 // another session's `install` is refused before its handler can reach a device
 // operation.
+// The P1 attack in the shape the CLI sends it: `--session transient:install` is a legal
+// explicit name (the store sanitizes only directory segments), so the router hands admission
+// that exact address. It must not read as the owner of the in-flight command's claim — the
+// claim's kind, not its label, decides — and the refusal must leave the first command holding
+// the device.
+test('the request scope refuses a session addressed by a transient label while a command holds the device', async () => {
+  const { stateDir } = setup();
+  const holder = makeAdmission('transient-exclusive', stateDir, 'install', 'open-a');
+  await holder.admit(ANDROID_EMULATOR, localAndroid);
+
+  const intruder = await bindInRequestSession({
+    command: 'reinstall',
+    stateDir,
+    session: 'transient:install',
+  });
+  expect(intruder.error?.code).toBe('DEVICE_IN_USE');
+  expect(intruder.error?.details?.reason).toBe('DEVICE_CLAIM_LIVE_OWNER');
+  expect(intruder.claims).toEqual(['transient:install']);
+
+  await holder[Symbol.asyncDispose]();
+  expect(inspectDeviceClaims({})).toEqual([]);
+});
+
 test('the request scope admits a transient command only in the session whose claim owns the device', async () => {
   const { stateDir } = setup();
   await acquireDeviceClaim({

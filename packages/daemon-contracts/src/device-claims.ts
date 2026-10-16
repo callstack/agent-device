@@ -29,6 +29,7 @@ import {
 import {
   DEVICE_CLAIM_SCHEMA_VERSION,
   ownershipFromClaim,
+  transientDeviceClaimSession,
   type DeviceClaim,
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
@@ -68,23 +69,14 @@ export type DeviceClaimAcquireResult =
 
 /**
  * A `transient-exclusive` command may find the device already claimed by this daemon.
- * Only the claim of the session the command runs in carries the exclusion the command
- * needs, so that one adds none of its own. Any other claim — another session's, or
- * another command's `transient:<command>` claim this daemon holds in flight — is a
- * foreign live owner (#3345): sessions of one daemon are separate owners of a device.
+ * Only an open session's own claim, taken from the request's workspace, carries the exclusion
+ * the command needs, so that one adds none of its own. Any other claim — another session's, or
+ * any command-scoped claim this daemon holds in flight — is a foreign live owner (#3345):
+ * sessions of one daemon are separate owners of a device.
  */
 export type TransientDeviceClaimResult =
   | DeviceClaimAcquireResult
   | { status: 'covered-by-owned-claim' };
-
-/**
- * The claim `session` recorded for a command-scoped claim. Claim records carry
- * no separate kind discriminant, so the session field is what tells `device
- * status` that the owner is a command in flight rather than an open session.
- */
-function transientDeviceClaimSession(command: string): string {
-  return `transient:${command}`;
-}
 
 export async function acquireDeviceClaim(params: {
   device: DeviceInfo;
@@ -136,7 +128,9 @@ export async function acquireTransientDeviceClaim(params: {
    * Whether the live claim under {@link coveredBySession} was taken by this request's
    * workspace rather than merely recorded under the same session string. Session
    * addresses are copyable (#3345), so session equality alone lets a caller that
-   * pasted another workspace's address act as that workspace's owner.
+   * pasted another workspace's address act as that workspace's owner. Only open
+   * sessions' claims are ever candidates: a claim's `transientCommand` kind, not its
+   * label, decides whether it can cover anything.
    */
   coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
   workspace: string;
@@ -153,14 +147,22 @@ export async function acquireTransientDeviceClaim(params: {
       isClaimOwnedByThisDaemon(existing.claim, params.stateDir, readCurrentOwnerIdentity())
     ) {
       if (
+        existing.claim.transientCommand === undefined &&
         existing.claim.session === params.coveredBySession &&
         params.coveredClaimIsOwnedByRequest(existing.claim)
       ) {
         return { status: 'covered-by-owned-claim' };
       }
-      // A command-scoped claim this daemon holds belongs to the one command in flight,
-      // not to the daemon: adopting it would hand this request the other command's
-      // release token and delete its claim on completion. It is a live owner.
+      // A command-scoped claim belongs to the one request in flight, and the request that holds
+      // it is covered by its release token at the admission layer — never by an address match.
+      // The kind decides this, so a caller that copies the claim's `transient:<command>` label
+      // into `--session` is refused instead of adopting it (#3345).
+      if (existing.claim.transientCommand !== undefined) {
+        return { status: 'conflict', conflict: existing };
+      }
+      // A session literally named this command's label is not this command's claim either:
+      // below, `claimHeldDevice` matches holders by the session string it is handed, and
+      // renewing that claim would hand this request the open session's release token.
       if (existing.claim.session === transientDeviceClaimSession(params.command)) {
         return { status: 'conflict', conflict: existing };
       }
@@ -170,6 +172,7 @@ export async function acquireTransientDeviceClaim(params: {
       deviceKey,
       identity,
       session: transientDeviceClaimSession(params.command),
+      transientCommand: params.command,
       workspace: params.workspace,
       stateDir: params.stateDir,
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
@@ -183,6 +186,8 @@ async function claimHeldDevice(params: {
   deviceKey: string;
   identity: DeviceIdentity;
   session: string;
+  /** The command a `transient-exclusive` acquisition scopes its claim to; absent for sessions. */
+  transientCommand?: string;
   workspace: string;
   stateDir: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
@@ -212,6 +217,7 @@ async function claimHeldDevice(params: {
     ownerToken: crypto.randomUUID(),
     createdAtMs: now,
     updatedAtMs: now,
+    ...(params.transientCommand === undefined ? {} : { transientCommand: params.transientCommand }),
   };
   writeDeviceClaim(claim);
   return {
