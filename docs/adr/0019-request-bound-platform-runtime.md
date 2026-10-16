@@ -702,8 +702,20 @@ Git history retains the completed checkpoint procedures and results.
 
 ### 8. Broader migration was move-dominated and evidence-tiered
 
-The completed checkpoint budgets provide no allowance for future units.
-Each unit must justify exceptional growth individually.
+The checkpoint and recordings budgets paid for machinery that later units reuse.
+They are not a precedent for growth.
+Every post-checkpoint unit still defines its original-baseline cumulative bound and its immediate stack-base delta.
+The default expectation is the inverse of the checkpoint.
+A unit moves existing platform mechanics from root `src/` into platform packages and deletes superseded daemon code.
+Thus the shipped-size delta of the unit trends to zero or negative.
+The review of the unit reports root bytes removed against package bytes added.
+Net growth is exceptional.
+If net growth occurs, the unit names and justifies each contributing addition individually.
+Contract modules stay vocabulary-thin under the existing capture-kit rule.
+Per-unit type inflation is size growth, and review treats it as size growth.
+Raw per-unit parity, planted-red, and size evidence belongs in #1739 and its PRs.
+No unit treats the checkpoint budget as an allowance.
+
 Root re-export shims, a broad barrel, or ambient filesystem/process access would reduce source movement.
 They would violate package closure, the prohibition on compatibility shims, named facets, host injection, and implementation laziness.
 
