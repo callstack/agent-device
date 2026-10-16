@@ -6,7 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { runCmd } from '@agent-device/host-kit/command';
 import { changePlugin, installedPlugins } from '@agent-device/plugins/store';
-import { loadProviderPlugins, withPluginConnection } from '@agent-device/plugins/load';
+import { loadProviderPlugins } from '@agent-device/plugins/load';
 import {
   pluginHome,
   registrationSource,
@@ -79,6 +79,28 @@ test('WebDriver plugins allocate through the shared engine and refuse mismatched
 });
 
 test('a WebDriver plugin supplies connection callbacks and its runtime is released afterwards', async () => {
+  const shutdowns: string[] = [];
+  vi.resetModules();
+  vi.doMock('@agent-device/provider-webdriver/plugin', async (importOriginal) => {
+    const original =
+      await importOriginal<typeof import('@agent-device/provider-webdriver/plugin')>();
+    return {
+      ...original,
+      createCloudWebDriverRuntime: async (
+        ...args: Parameters<typeof original.createCloudWebDriverRuntime>
+      ) => {
+        const runtime = await original.createCloudWebDriverRuntime(...args);
+        const shutdown = runtime.shutdown.bind(runtime);
+        runtime.shutdown = async () => {
+          shutdowns.push(runtime.provider);
+          await shutdown();
+        };
+        return runtime;
+      },
+    };
+  });
+  const { withPluginConnection: withConnection } = await import('@agent-device/plugins/load');
+  const { PROVIDER_PLUGIN_POLICY: policy } = await import('./provider-plugin-policy.ts');
   const { home, env } = pluginHome();
   selectPlugin(
     home,
@@ -91,22 +113,24 @@ test('a WebDriver plugin supplies connection callbacks and its runtime is releas
     ),
   );
   const flags = { json: false, help: false, version: false };
-  const resolved = await withPluginConnection(
+  const resolved = await withConnection(
     'example',
     env,
-    PROVIDER_PLUGIN_POLICY,
+    policy,
     async (connection) => await connection.resolve({ flags, stateDir: home, cwd: home, env }),
   );
   assert.equal(resolved.profile.platform, 'android');
+  assert.deepEqual(shutdowns, ['example']);
   await assert.rejects(
-    withPluginConnection(
+    withConnection(
       'example',
       env,
-      PROVIDER_PLUGIN_POLICY,
+      policy,
       async (connection) => await connection.verify({ flags, env }),
     ),
-    { code: 'COMMAND_FAILED' },
+    { code: 'COMMAND_FAILED', message: 'verification failed' },
   );
+  assert.deepEqual(shutdowns, ['example', 'example']);
 });
 
 test('native plugins load without evaluating the WebDriver runtime, WebDriver plugins do', async () => {
