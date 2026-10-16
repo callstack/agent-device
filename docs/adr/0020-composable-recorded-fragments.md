@@ -69,7 +69,7 @@ Consequently, the design must solve four boundaries together:
    A new reader consumes that guard during preflight.
    An old reader treats the guard as an unknown action.
    The required safety property is failure before platform execution, before a root `open` or any known prefix.
-   The current request path does not prove an `INVALID_ARGS` format rejection; see Annotation compatibility and versioning.
+   An old reader fails with its existing errors, not `INVALID_ARGS`; see Annotation compatibility and versioning.
    Other fragment metadata and references remain reserved comments.
    Thus old readers ignore those annotations, and do not silently flatten the composition.
 7. **Native fragment repair is explicit re-recording.**
@@ -101,7 +101,7 @@ But these invariants are fixed:
   A composed native parent uses the corresponding `composition-v1` guard as its first executable line, before root `open` or any `include`.
   An old reader parses either guard as an unknown action.
   The required safety property is failure before platform execution.
-  The current request path returns session-dependent errors; see Annotation compatibility and versioning for the evidence gap.
+  An old reader returns its existing, session-dependent errors; see Annotation compatibility and versioning.
   The fragment has no `open`, `close`, or hidden launch action.
   The writer always emits the effective `context platform` and `target`.
   A parser rejects a fragment that is missing either constraint.
@@ -546,12 +546,13 @@ These are responses for the guard request, not the outer replay response.
 The replay adapter wraps this dispatch failure as `REPLAY_DIVERGENCE`.
 The replay engine stops at the failed action before a later root `open`, known prefix, or expanded child body.
 
-**Open evidence gap:** this trace proves failure before platform execution for an unknown guard that reaches generic dispatch.
-It does not prove the specified `INVALID_ARGS` format rejection for old readers.
+This trace proves failure before platform execution for an unknown guard that reaches generic dispatch.
 Admission can resolve a device for lock and provider selection; that resolution reads the device inventory and runs no command.
 This trace does not cover failures during admission.
 A new fragment codec cannot change an old reader's behavior.
-**Maintainer question:** should the old-reader contract accept these existing errors, or retain `INVALID_ARGS` as an unresolved requirement?
+Thus the old-reader contract accepts these existing errors: `SESSION_NOT_FOUND`, or `COMMAND_FAILED` with reason `generic-route-runtime-missing`, wrapped as `REPLAY_DIVERGENCE`.
+The contract does not require `INVALID_ARGS` from an old reader.
+A reader that ships with the fragment codec would refuse an unknown or malformed guard with `INVALID_ARGS` during source preflight.
 An old reader that gets an unguarded legacy `.ad` retains its existing behavior.
 This includes the possibility that it executes a known prefix before a later unknown command.
 That legacy case is explicitly outside the v1 composed-artifact acceptance contract, and it is not safety evidence.
