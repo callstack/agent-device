@@ -272,6 +272,7 @@ moving `DaemonRequest` is most of what §1's second cluster needs.
 > PR #3297 moved daemon diagnostics to `src/daemon-contracts/`.
 > PR #3299 moved the runtime assembly pair to `src/command-runtime/`.
 > Package extraction later moved daemon diagnostics to `packages/daemon-contracts/`.
+> Other physical moves remain outstanding, as shown by `scripts/layering/root-module-zones.ts` on 2026-10-16.
 > Ranking the composition roots did not weaken R2: it still rejects a direct `daemon/` ->
 > `commands/` import, and the daemon reaches the command surface through the ranked
 > `command-runtime` zone, which the zone graph now shows instead of hiding. The SDK entries rank
