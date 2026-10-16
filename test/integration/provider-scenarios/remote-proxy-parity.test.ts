@@ -252,14 +252,23 @@ async function withProxiedWorld<T>(
     forwarded: ProviderScenarioForwardedRequest[];
   }) => Promise<T>,
   options: ParityWorldOptions = {},
+  dependencies: {
+    createWorld?: typeof createParityWorld;
+    createProxy?: typeof createProviderScenarioProxy;
+  } = {},
 ): Promise<T> {
-  const world = await createParityWorld(options);
+  let world: ParityWorld | undefined;
   let proxy: Awaited<ReturnType<typeof createProviderScenarioProxy>> | undefined;
   let clientStateDir: string | undefined;
   try {
-    const activeProxy = await createProviderScenarioProxy(world.daemon, {
-      clientToken: PROXY_TOKEN,
-    });
+    const activeWorld = await (dependencies.createWorld ?? createParityWorld)(options);
+    world = activeWorld;
+    const activeProxy = await (dependencies.createProxy ?? createProviderScenarioProxy)(
+      activeWorld.daemon,
+      {
+        clientToken: PROXY_TOKEN,
+      },
+    );
     proxy = activeProxy;
     const proxyBaseUrl = loopbackProxyBaseUrl(activeProxy.port);
     const activeClientStateDir = fs.mkdtempSync(
@@ -283,13 +292,13 @@ async function withProxiedWorld<T>(
         return responseFromClientError(error);
       }
     };
-    return await run({ world, proxied, forwarded: activeProxy.forwarded });
+    return await run({ world: activeWorld, proxied, forwarded: activeProxy.forwarded });
   } finally {
     try {
-      if (proxy) await proxy.close();
+      await proxy?.close();
     } finally {
       try {
-        await world.close();
+        await world?.close();
       } finally {
         if (clientStateDir) fs.rmSync(clientStateDir, { recursive: true, force: true });
       }
@@ -417,16 +426,57 @@ test(
 );
 
 test(
+  'closes the daemon when proxy startup fails',
+  async (t) => {
+    if (await skipWhenLoopbackUnavailable(t, 'daemon proxy startup cleanup coverage')) return;
+
+    let closeCalls = 0;
+    const startupError = new Error('simulated proxy listen failure');
+    await assert.rejects(
+      withProxiedWorld(
+        async () => {
+          throw new Error('the scenario callback must not run after proxy startup fails');
+        },
+        {},
+        {
+          createWorld: async (options) => {
+            const world = await createParityWorld(options);
+            return {
+              ...world,
+              close: async () => {
+                closeCalls += 1;
+                await world.close();
+              },
+            };
+          },
+          createProxy: async () => {
+            throw startupError;
+          },
+        },
+      ),
+      (error) => error === startupError,
+    );
+    assert.equal(closeCalls, 1);
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
   'recording proxy retains upstream errors without exposing them in the response',
   async (t) => {
     if (await skipWhenLoopbackUnavailable(t, 'daemon proxy error handling coverage')) return;
 
-    const world = await createParityWorld();
+    let world: ParityWorld | undefined;
     let proxy: Awaited<ReturnType<typeof createProviderScenarioProxy>> | undefined;
     try {
-      proxy = await createProviderScenarioProxy(world.daemon, { clientToken: PROXY_TOKEN });
-      await world.close();
-      const response = await fetch(`${loopbackProxyBaseUrl(proxy.port)}/rpc`, {
+      const activeWorld = await createParityWorld();
+      world = activeWorld;
+      const activeProxy = await createProviderScenarioProxy(activeWorld.daemon, {
+        clientToken: PROXY_TOKEN,
+      });
+      proxy = activeProxy;
+      await activeWorld.close();
+      const response = await fetch(`${loopbackProxyBaseUrl(activeProxy.port)}/rpc`, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${PROXY_TOKEN}`,
@@ -437,12 +487,12 @@ test(
       assert.equal(response.status, 502);
       assert.equal(await response.text(), 'upstream request failed');
 
-      assert.equal(proxy.forwarded[0]?.upstreamErrorCode, 'ECONNREFUSED');
+      assert.equal(activeProxy.forwarded[0]?.upstreamErrorCode, 'ECONNREFUSED');
     } finally {
       try {
-        if (proxy) await proxy.close();
+        await proxy?.close();
       } finally {
-        await world.close();
+        await world?.close();
       }
     }
   },
