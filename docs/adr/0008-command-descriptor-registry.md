@@ -28,7 +28,7 @@ Completed process history is in git history.
 
 ## Context
 
-Roughly ten manually maintained tables repeat command identity and require alignment by convention:
+Before the descriptor migration, roughly ten manually maintained tables repeated command identity and required alignment by convention:
 
 - `PUBLIC_COMMANDS` in `src/command-catalog.ts`.
 - Per-command metadata and family facets in `src/commands/**`.
@@ -36,7 +36,7 @@ Roughly ten manually maintained tables repeat command identity and require align
 - Daemon command registry in `packages/daemon/src/core/daemon-command-registry.ts` (ADR 0003).
 - Structured-batch allowlist in `src/batch-policy.ts`.
 - MCP exposure sets.
-- Node client interface and implementation in `src/client-types.ts` and `src/client.ts`.
+- Node client interface and implementation in `src/client/client-types.ts` and `src/client.ts`.
 - Generic-dispatch `switch` in `src/core/dispatch.ts`.
 
 The switch's `default: throw` makes a missing or renamed command a runtime error instead of a compile error.
@@ -100,7 +100,8 @@ This design composes with ADR 0003's four invariants and is bound by them:
 
 A plain new command changes approximately 1–2 files.
 Per-platform behavior remains N implementations behind the descriptor's `execute`.
-The descriptor is the prerequisite for typed per-command results in ADR 0010, which deletes the `src/client-types.ts` mirror.
+The descriptor supports typed per-command results in ADR 0010.
+`src/client/client-types.ts` retains the public client interface and some `CommandRequestResult` return types.
 It also supplies the capability facet used by the platform-plugin work in ADR 0009.
 
 During the migration, the import-cycle inversion was the principal risk.
@@ -119,16 +120,18 @@ As of 2026-07, the descriptor registry is live for these surfaces:
 - MCP exposure list.
 - Capability-checked CLI command list.
 - Post-action observation traits.
-- Platform dispatch command set, including the remaining dispatch-only alias `read`.
+- Platform dispatch command set, which then included the dispatch-only alias `read`.
+
+PR #1877 removed `read` when `get` moved to the request-bound device runtime.
+The daemon registry now derives its table from descriptor facets instead of a hand-maintained table (PR #907).
 
 Command-family surface metadata remains under `src/commands/**`, beside CLI grammar and client-backed executors.
 Coherence checks compare it with the descriptor CLI catalog.
 Thus, new surface names cannot differ from the descriptor root.
 
-The remaining deferred work is the public Node-client typed-result narrowing.
-[#1153](https://github.com/callstack/agent-device/issues/1153) tracks this work outside this registry migration.
-Some commands still expose dynamic daemon response payloads or retain closed result contracts in runtime modules.
-Before their client methods can stop returning `CommandRequestResult`, those contracts must move.
+[#1153](https://github.com/callstack/agent-device/issues/1153), the former tracker for public Node-client typed-result narrowing, closed on 2026-07-08.
+Some client methods still return `CommandRequestResult`, including `alert` and `reactNative` in `src/client/client-types.ts`.
+Issue closure does not establish complete result narrowing.
 
 This ADR owns the decision and its constraints.
 The descriptor projections enforce the delivered end state.
