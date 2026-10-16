@@ -20,13 +20,13 @@ No rule moves.
   - Raw specifier sites for R11 and R13.
   Eleven other registry entries read only source ASTs or text.
   One reads only paths.
-- Fix #3293's demonstrated parser gap: nine file pairs with TypeScript `import('x').T` type positions.
+- Fix #3293's demonstrated parser gap: `parseImports` misses TypeScript `import('x').T` type positions (nine file pairs).
   `parseImports` already uses an OXC AST for dynamic imports but regexes for static imports.
   Read both from that AST, including `TSImportType`.
   Preserve symbol and edge-kind semantics.
   Do not add a second extractor.
 - Do not upgrade fallow to 3.x for `boundaries`.
-  Revisit only on a [trigger](#revisit-triggers).
+  Revisit on a [trigger](#revisit-triggers).
 
 ## Measured
 
@@ -54,7 +54,7 @@ The nine extra pairs are `import('./x').T` type positions missed by the custom e
 Both replacement engines correctly detect them.
 
 The umbrella's 3.1.1 cross-check missed 88 dynamic/type-only edges.
-Version 18.5 detects all edges but mislabels 46 pairs:
+Version 18.5 misses none of these edges but mislabels 46 pairs:
 
 - 33 dynamic → type.
 - 8 dynamic+type → type.
@@ -126,7 +126,7 @@ These are medians from five runs after warm-up on a shared host with load averag
 ### Lines deletable
 
 A complete migration would delete the rule and test lines below.
-The resolver and R4/R5/R6 pair helpers remain because `scripts/depgraph/` consumes them.
+The resolver and the R4/R5/R6 pair helpers that `scripts/depgraph/` reads remain with either engine.
 
 | Rule | Code deleted | Lines | depcruise parity | fallow parity |
 | --- | --- | --- | --- | --- |
@@ -149,7 +149,8 @@ The current per-pair count ratchet permits that replacement.
 
 Retain the current engine.
 The evaluated replacements lack sufficient semantic parity and net simplification.
-Graph-based checks share one normalized, replaceable import model.
+Graph-based checks share one normalized import model.
+Its implementation remains replaceable.
 Continue replacement of generic algorithms and compiler-enforceable rules with maintained tools.
 Fix the demonstrated parser gap.
 
@@ -159,7 +160,7 @@ The parity table identifies these correctness blockers:
   It mislabels 46 pairs.
   A same-target `import()` type can hide a lazy `import()`, which causes the R77 miss.
 - **Fallow** lacks a dynamic-import kind.
-  It flags lazy boundaries permitted by R5 and misses R77 `import()`.
+  It flags the lazy seams that R5 permits and misses R77 `import()`.
   Rule packs skip unreachable files and therefore miss an orphan runner module.
 
 Simplification is limited.
@@ -199,7 +200,7 @@ It imports internals from six layering modules:
 - `tracked-sources.ts`
 
 No gate would verify that it still compiles.
-`tsconfig.json` excludes `scripts/layering/`, and fallow ignores it.
+`tsconfig.json` does not include `scripts/layering/`, and fallow ignores it.
 A change that evaluates a revisit trigger follows this sequence:
 
 1. Retrieve the harness from `d9959f510`.
