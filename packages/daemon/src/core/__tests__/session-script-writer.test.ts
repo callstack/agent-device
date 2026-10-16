@@ -863,3 +863,23 @@ test('#1533: an ARMED authoring recording is untouched by the abort gate', () =>
   const { parsed } = writeAndParse(writer, session);
   expect(parsed.actions.map((a) => a.command)).toEqual(['click']);
 });
+
+test.each([undefined, true])(
+  'ordinary authoring strips diagnostic snapshots with effective record=%s',
+  (record) => {
+    const root = mkdtempForTestSync('agent-device-script-writer-authoring-snapshot-');
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+    const session = makeAuthoringSession('default', {
+      actions: [action({ command: 'open', positionals: ['Demo'] })],
+    });
+    recordActionEntry(session, {
+      command: 'snapshot',
+      positionals: [],
+      flags: { record, snapshotInteractiveOnly: true },
+      interactiveObservation: true,
+    });
+
+    const { parsed } = writeAndParse(writer, session);
+    expect(parsed.actions.map((entry) => entry.command)).toEqual(['open']);
+  },
+);

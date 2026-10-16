@@ -312,7 +312,13 @@ function buildOptimizedActions(
   const relevantActions = session.actions.slice(boundary ?? 0);
   const optimized: SessionAction[] = [];
   for (const action of relevantActions) {
-    if (action.command === 'snapshot' && action.publicationIntent === undefined) continue;
+    if (
+      action.command === 'snapshot' &&
+      action.publicationIntent !== 'authored' &&
+      !(repairArmed && action.publicationIntent === 'explicit-record')
+    ) {
+      continue;
+    }
     const optimizedAction = optimizeSelectorChainAction(action);
     if (optimizedAction) {
       optimized.push(optimizedAction);
