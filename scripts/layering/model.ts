@@ -408,8 +408,9 @@ function mockCallMethod(callee: unknown, bindings: VitestBindings): string | und
  *
  * The receiver is the global `vi`/`vitest`, a name a top-level `import { vi as x } from 'vitest'`
  * binds to either, or a member `vi`/`vitest` of a `import * as ns from 'vitest'` namespace. Only
- * those import declarations are resolved, and a recognized name counts everywhere in the file; a
- * value copied through a variable or a dynamic import is not followed.
+ * those import declarations are resolved, and a recognized name counts everywhere in the file. A
+ * value copied through a variable or a destructuring, reached through `globalThis`, `require` or
+ * a dynamic import, or called through `.call`/`.apply` or a comma expression is not followed.
  */
 export function parseModuleMockSpecifiers(source: string): { spec: string; line: number }[] {
   const parsed = parseSync('layering-mocks.ts', source);
