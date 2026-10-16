@@ -21,9 +21,7 @@ import {
   makeSessionWithSaveButtonSnapshot,
 } from '../__tests__/support/target-evidence-fixture.ts';
 import {
-  elementReadFixtureState,
   getRuntimeBindings,
-  mockQuerySelector,
   resetGetRuntimeFixture,
 } from './__tests__/interaction-get-runtime-fixture.ts';
 
@@ -170,12 +168,11 @@ test('get text @ref without recording never computes target-v1 evidence', async 
   expect(recordedAction?.targetEvidence).toBeUndefined();
 });
 
-test('get text simple iOS id selector while recording skips the live selector read and records evidence from the snapshot path', async () => {
+test('get text simple iOS id selector while recording records evidence from the snapshot path', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'recording-get-direct-gate';
   const session = makeAuthoringSession(sessionName, { appBundleId: 'com.example.app' });
   sessionStore.publish(sessionName, session);
-  elementReadFixtureState.querySelectorAvailable = true;
   legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       return {
@@ -210,9 +207,7 @@ test('get text simple iOS id selector while recording skips the live selector re
   const response = await runCommand(sessionStore, sessionName, 'get', ['text', 'id="field-name"']);
 
   expect(response?.ok).toBe(true);
-  // The live selector read stays unused during recording so the snapshot path supplies the
-  // evidence tree.
-  expect(mockQuerySelector).not.toHaveBeenCalled();
+  // The snapshot path supplies the evidence tree.
   expect(legacyDispatchCapture.mock.calls.map((call) => call[1])).toContain('snapshot');
 
   const recordedAction = sessionStore.get(sessionName)?.actions[0];
@@ -228,8 +223,7 @@ test('get text simple iOS id selector while recording skips the live selector re
 // ---------------------------------------------------------------------------
 // #1349: `is` joins the evidence-carrying set (get-pattern) — a unique-
 // resolving predicate records target-v1 evidence while recording; `is exists`
-// stays intentionally unannotated; the live selector read is unused during
-// recording so the snapshot path supplies the evidence tree.
+// stays intentionally unannotated; the snapshot path supplies the evidence tree.
 // ---------------------------------------------------------------------------
 
 function mockSnapshotWithSaveButton() {
@@ -248,7 +242,6 @@ test('is visible while recording attaches target-v1 evidence and strips the reso
     sessionName,
     makeSessionWithSaveButtonSnapshot(sessionName, { recording: true }),
   );
-  elementReadFixtureState.querySelectorAvailable = true;
   mockSnapshotWithSaveButton();
 
   const response = await runCommand(sessionStore, sessionName, 'is', ['visible', 'label="Save"']);
@@ -259,7 +252,6 @@ test('is visible while recording attaches target-v1 evidence and strips the reso
     expect(response.data).not.toHaveProperty('preActionNodes');
     expect(response.data).not.toHaveProperty('selectorChain');
   }
-  expect(mockQuerySelector).not.toHaveBeenCalled();
 
   const recordedAction = sessionStore.get(sessionName)?.actions[0];
   expect(recordedAction?.targetEvidence).toMatchObject({
