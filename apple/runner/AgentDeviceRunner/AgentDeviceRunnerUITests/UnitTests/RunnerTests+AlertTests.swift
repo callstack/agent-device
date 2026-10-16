@@ -50,6 +50,21 @@ extension RunnerTests {
     XCTAssertTrue(alert.buttons.contains { $0.identifier == "agent-device-close-popover" })
   }
 
+  /// `alert dismiss` on the marker window must still name its close button: the marker is the
+  /// app's own decline declaration, so the choice reaches it even though "Close popover" is on
+  /// no list (#3627 left this surface at base behavior).
+  @MainActor
+  func testAlertDismissOnADismissPopupWindowChoosesThePopoverCloseButton() throws {
+    launchCrowdedScreen(extraArguments: ["--agent-device-dismiss-popup-window"])
+    defer { terminateCrowdedScreen() }
+
+    let alert = try XCTUnwrap(
+      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
+    )
+    let button = try XCTUnwrap(chooseAlertButton(alert, action: "dismiss"))
+    XCTAssertEqual(button.identifier, "agent-device-close-popover")
+  }
+
   private func launchCrowdedScreen(extraArguments: [String]) {
     app.launchArguments = ["--agent-device-crowded-screen"] + extraArguments
     app.launch()

@@ -63,11 +63,11 @@ extension RunnerTests {
   @MainActor
   func handleAlert(_ alert: RunnerAlert, action: String, deadline: Date) -> Response {
     if action == "accept" || action == "dismiss" {
-      guard let button = chooseAlertButton(alert.buttons, action: action) else {
+      guard let button = chooseAlertButton(alert, action: action) else {
         // The choice refused before any activation, so this discloses dispatched: no like the
         // runner's other pre-run refusals; naming an affirmative button here is what #3627 is about.
         return Response(ok: false, error: ErrorPayload(
-          code: "ALERT_BUTTON_NOT_FOUND",
+          code: RunnerWireErrorCode.alertButtonNotFound,
           message: "alert \(action) button not found",
           hint: RunnerTests.alertNoButtonActivatedHint
         ))
@@ -257,14 +257,17 @@ extension RunnerTests {
   )
   private static let dismissPopupMarkerText = NSPredicate(format: "SELF MATCHES[c] %@", dismissPopupMarkerPattern)
 
-  private func chooseAlertButton(_ buttons: [XCUIElement], action: String) -> XCUIElement? {
+  // Internal, not private: the dismiss-popup wiring is pinned by
+  // RunnerTests+AlertTests, and the label rule itself by RunnerAlertButtonChoice.
+  func chooseAlertButton(_ alert: RunnerAlert, action: String) -> XCUIElement? {
     guard let index = RunnerAlertButtonChoice.buttonIndex(
-      for: buttons.map(\.label),
-      action: action
+      for: alert.buttons.map(\.label),
+      action: action,
+      popupMarkerSurface: alert.source == .dismissPopup
     ) else {
       return nil
     }
-    return buttons[index]
+    return alert.buttons[index]
   }
 
   private func preferredAlertTitle(_ element: XCUIElement, buttons: [XCUIElement]) -> String {

@@ -56,6 +56,26 @@ extension RunnerTests {
     )
   }
 
+  func testAlertDismissClosesOnlyAPopupMarkerSurfaceThroughItsLastElement() {
+    // The marker is the app's own declaration that the surface closes the popover, so that
+    // surface keeps base's close-by-last-element behavior. No consent prompt can carry it, so
+    // nothing else gains a positional tap.
+    XCTAssertEqual(
+      RunnerAlertButtonChoice.buttonIndex(for: ["Close popover"], action: "dismiss", popupMarkerSurface: true),
+      0
+    )
+    XCTAssertEqual(
+      RunnerAlertButtonChoice.buttonIndex(
+        for: ["Details", "Close popover"], action: "dismiss", popupMarkerSurface: true
+      ),
+      1
+    )
+    XCTAssertNil(
+      RunnerAlertButtonChoice.buttonIndex(for: ["Close popover"], action: "dismiss", popupMarkerSurface: false),
+      "an unlabeled-by-the-list prompt without the marker still refuses"
+    )
+  }
+
   func testAlertDismissRefusesAPromptWhoseEveryButtonIsAffirmative() {
     for labels in [["Allow"], ["Allow", "OK"], ["Yes", "Continue", "Done"]] {
       XCTAssertNil(

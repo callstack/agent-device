@@ -36,11 +36,14 @@ final class RunnerTests: XCTestCase {
   /// `NO_TEXT_INPUT_AT_POINT` refuses a coordinate fill whose point identified no text input.
   /// `TEXT_INPUT_PROBE_UNAVAILABLE` refuses one whose input lookup could not answer on the degraded
   /// channel, so the runner cannot tell whether an input is there.
+  /// `ALERT_BUTTON_NOT_FOUND` is the alert button choice refusing before any activation, so it
+  /// discloses dispatched: no.
   enum RunnerWireErrorCode {
     static let mainThreadTimeout = "MAIN_THREAD_TIMEOUT"
     static let appNotRunning = "APP_NOT_RUNNING"
     static let noTextInputAtPoint = "NO_TEXT_INPUT_AT_POINT"
     static let textInputProbeUnavailable = "TEXT_INPUT_PROBE_UNAVAILABLE"
+    static let alertButtonNotFound = "ALERT_BUTTON_NOT_FOUND"
   }
 
   static let springboardBundleId = "com.apple.springboard"

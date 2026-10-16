@@ -13,10 +13,10 @@ export const ALERT_NOT_FOUND_RUNNER_CODE = 'ALERT_NOT_FOUND';
 export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 
 /**
- * The Apple runner refused an `accept`/`dismiss` because no button on the alert fits the action:
- * `dismiss` found no label on its decline list, and tapping anything else could answer an
- * affirmative (#3627). The refusal is made in the button choice, before any activation, so it
- * discloses `dispatched: no` like the other replies that ran nothing.
+ * The Apple XCUITest runner refused an `accept`/`dismiss` because no button on the alert fits
+ * the action: `dismiss` found no label on its decline list, and tapping anything else could
+ * answer an affirmative (#3627). The refusal is made in the button choice, before any
+ * activation, so it discloses `dispatched: no` like the other replies that ran nothing.
  */
 export const ALERT_BUTTON_NOT_FOUND_RUNNER_CODE = 'ALERT_BUTTON_NOT_FOUND';
 
