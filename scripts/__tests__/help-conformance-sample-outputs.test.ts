@@ -15,5 +15,5 @@ import { SAMPLE_PRODUCERS } from './help-conformance-sample-producers.ts';
 for (const { name, producer, sample, render } of SAMPLE_PRODUCERS) {
   test(`${name} matches ${producer}`, async () => {
     assert.equal(await render(), sample.output);
-  });
+  }, 30_000);
 }

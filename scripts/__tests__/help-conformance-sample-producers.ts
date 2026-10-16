@@ -1,5 +1,3 @@
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
 import { withCapturedStderrAsync } from '../../src/__tests__/test-utils/stream-capture.ts';
 import {
@@ -34,10 +32,7 @@ import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
 import { printHumanError } from '../../src/commands/output/error.ts';
 import { formatSnapshotText } from '../../src/commands/output/snapshot.ts';
-
-const daemonErrorSampleDriver = fileURLToPath(
-  new URL('../../packages/daemon/test/help-conformance/sample-producers.ts', import.meta.url),
-);
+import { captureHelpConformanceErrorRoutes } from '../../test/integration/provider-scenarios/help-conformance-error-routes.ts';
 
 // The production renderer behind each captured sample in
 // scripts/help-conformance-sample-outputs.mjs, as data rather than as one test
@@ -105,11 +100,12 @@ function assertErrorResponse(
   if (!response || response.ok) throw new Error(`${what} must be an error response`);
 }
 
-const DAEMON_ERROR_SAMPLE_RESPONSES = JSON.parse(
-  execFileSync(process.execPath, ['--experimental-strip-types', daemonErrorSampleDriver], {
-    encoding: 'utf8',
-  }),
-);
+let daemonErrorSampleResponses: ReturnType<typeof captureHelpConformanceErrorRoutes> | undefined;
+
+function getDaemonErrorSampleResponses() {
+  daemonErrorSampleResponses ??= captureHelpConformanceErrorRoutes();
+  return daemonErrorSampleResponses;
+}
 
 export const SAMPLE_PRODUCERS: SampleProducer[] = [
   {
@@ -366,7 +362,8 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     producer: 'the session-open by-session conflict producer',
     sample: DEVICE_IN_USE_SAMPLE,
     render: async () => {
-      const response = DAEMON_ERROR_SAMPLE_RESPONSES.deviceInUse;
+      const responses = await getDaemonErrorSampleResponses();
+      const response = responses.deviceInUse;
       assertErrorResponse(response, 'the by-session conflict');
       return await renderErrorResponse(response);
     },
@@ -376,7 +373,8 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     producer: 'the enforced device-claim conflict producer',
     sample: DEVICE_CLAIM_IN_USE_SAMPLE,
     render: async () => {
-      const response = DAEMON_ERROR_SAMPLE_RESPONSES.deviceClaimInUse;
+      const responses = await getDaemonErrorSampleResponses();
+      const response = responses.deviceClaimInUse;
       assertErrorResponse(response, 'the enforced device-claim conflict');
       return await renderErrorResponse(response);
     },
@@ -386,7 +384,8 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     producer: 'the ADR 0014 stale-ref admission producer',
     sample: STALE_REF_SAMPLE,
     render: async () => {
-      const response = DAEMON_ERROR_SAMPLE_RESPONSES.staleRef;
+      const responses = await getDaemonErrorSampleResponses();
+      const response = responses.staleRef;
       assertErrorResponse(response, 'a superseded pin');
       return await renderErrorResponse(response);
     },
@@ -396,7 +395,8 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
     producer: 'the find ambiguous-match error producer',
     sample: AMBIGUOUS_MATCH_SAMPLE,
     render: async () => {
-      const response = DAEMON_ERROR_SAMPLE_RESPONSES.ambiguousMatch;
+      const responses = await getDaemonErrorSampleResponses();
+      const response = responses.ambiguousMatch;
       assertErrorResponse(response, 'an ambiguous find');
       return await renderErrorResponse(response);
     },

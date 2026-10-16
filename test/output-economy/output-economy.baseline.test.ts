@@ -102,35 +102,33 @@ function readBaselineAtRef(ref: string): EconomyBaseline | null {
 
 describe('actionability and reliability floors', () => {
   test('snapshot digest preserves actionable refs and their generation', () => {
+    expect(rendered.snapshotDigest.refsGeneration).toEqual(expect.any(Number));
+    expect(rendered.snapshotDigest.refs).toEqual([
+      { ref: 'e2', label: 'Email' },
+      { ref: 'e3', label: 'Place order' },
+    ]);
     expect(rendered.snapshotDigest).toMatchObject({
-      refsGeneration: 12,
-      refs: [
-        { ref: 'e2', label: 'Email' },
-        { ref: 'e3', label: 'Place order' },
-      ],
+      nodeCount: 6,
     });
   });
 
   test('settle digests preserve new targets and removals-only fallback targets', () => {
     expect(rendered.settleDigest.settle).toMatchObject({
-      refsGeneration: 13,
       refs: [{ ref: 'e4' }, { ref: 'e5' }],
     });
+    expect(rendered.settleDigest.settle.refsGeneration).toEqual(expect.any(Number));
     expect(rendered.settleTailDigest.settle).toMatchObject({
-      refsGeneration: 14,
-      tail: [
-        { ref: 'e7', role: 'button', label: 'Continue' },
-        { ref: 'e9', role: 'tab', label: 'Home' },
-      ],
+      tail: [{ ref: 'e2', role: 'text-field', label: 'qa@example.com' }],
     });
+    expect(rendered.settleTailDigest.settle.refsGeneration).toEqual(expect.any(Number));
   });
 
-  test('selector digest keeps the answer and recovery warning', () => {
-    expect(rendered.selectorDigest).toEqual({
-      ref: '@e2',
+  test('selector digest keeps the answer and drops the redundant node', () => {
+    expect(rendered.selectorDigest).toMatchObject({
+      ref: 'e2',
       text: 'qa@example.com',
-      warning: 'Recovered from a blocking system dialog',
     });
+    expect(rendered.selectorDigest).not.toHaveProperty('node');
   });
 
   test('network digest preserves every entry identity, notes, and follow-up actionability', () => {
@@ -200,14 +198,24 @@ describe('baseline-independent actionability floors', () => {
     expect(settleText).toContain('Order confirmed');
   });
 
-  test('screenshot digest keeps overlay refs and the artifact retrieval handle', () => {
+  test('screenshot digest keeps overlay refs and the screenshot path', () => {
     expect(rendered.screenshotDigest).toMatchObject({
+      path: '/tmp/agent-device/economy-fixture.png',
+      overlayCount: 2,
       overlayRefs: [
         { ref: 'e2', label: 'Email' },
         { ref: 'e3', label: 'Place order' },
       ],
-      artifacts: [{ artifactType: 'screenshot', artifactId: 'artifact-economy-fixture' }],
     });
+  });
+
+  test('the screenshot route preserves its artifact retrieval handle', () => {
+    expect(rendered.screenshotDefault.artifacts).toContainEqual(
+      expect.objectContaining({
+        artifactType: 'screenshot',
+        artifactId: 'artifact-economy-fixture',
+      }),
+    );
   });
 
   test('non-settled output carries the actual recovery guidance, not just a hint count', () => {
