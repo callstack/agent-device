@@ -68,6 +68,27 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     allowedFlags: ['stale'],
     supportedFlags: ['platform', 'device', 'udid', 'serial'],
   },
+  exec: {
+    text: {
+      summary: 'Run a command while holding the device claim',
+      description:
+        'Hold the host-local exclusive device claim for the selected local device for the whole lifetime of an external command, so a build that installs or reinstalls through the platform tools directly (expo run:ios, xcodebuild, adb install) is fenced against agent-device sessions on that device. Refuses to start while another session or wrapper holds the claim, forwards SIGINT/SIGTERM to the command, exits with its exit code, and releases the claim on every exit path. A killed wrapper leaves a claim every later acquirer reconciles as stale. Claims cover local devices of every platform family, never provider-leased cloud devices.',
+    },
+    usageOverride:
+      'exec [--platform <platform>] [--device <name>] [--udid <udid>] [--serial <serial>] -- <command> [args…]',
+    listUsageOverride: 'exec -- <command>',
+    positionalArgs: ['command', 'args?'],
+    allowsExtraPositionals: true,
+    supportedFlags: [
+      'platform',
+      'target',
+      'device',
+      'udid',
+      'serial',
+      'iosSimulatorDeviceSet',
+      'stateDir',
+    ],
+  },
   connect: {
     text: {
       summary: 'Configure remote or provider state',

@@ -182,6 +182,25 @@ To free a device:
   claim, and reports the release in `warnings`. `device release --stale` never checks for a
   reboot, so it keeps refusing a claim whose owner is live.
 
+## Run an external command on a claimed device
+
+A build you run yourself (`expo run:ios --device <udid>`, `xcodebuild`, `adb install`) installs
+directly and doesn't take a device claim, so a parallel `agent-device` session can open that device
+while the build runs. Wrap the command in `exec` to hold the claim for its whole lifetime:
+
+```bash
+agent-device exec --platform ios --udid <udid> -- expo run:ios --device <udid>
+```
+
+The claim is held by the `exec` process itself, not by a daemon, so it lasts exactly as long as your
+command: while `exec` runs, another workspace's `open`, `boot`, or `install` on that device fails with
+`DEVICE_IN_USE` naming the holder, and succeeds again once `exec` exits. `exec` refuses to start the
+same way while another session holds the device. `exec` exits with your command's exit code,
+forwards Ctrl+C to it, and releases the claim on every exit path. If `exec` is killed outright, its
+claim shows up in `agent-device device status --stale` as a claim whose owner exited, and the next
+`open` or `exec` on that device clears it. See
+[Commands](/docs/commands#run-a-build-or-external-command-under-a-device-claim) for the flags.
+
 ## Notes
 
 - `open <app>` in an existing session switches the active app and updates the session's bundle id.

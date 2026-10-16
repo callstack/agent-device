@@ -1693,6 +1693,22 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
+    name: 'exec',
+    // #3263: the wrapper takes its own host-global claim through the shared
+    // claim store, owns it on this CLI process's identity, and releases it on
+    // every exit path. No daemon request ever binds a device for it.
+    deviceClaimPolicy: 'wrapper-exclusive',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/exec.ts'] as const } : {}),
+    catalog: { group: 'local-cli' },
+    recordsSessionAction: false,
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+    // Device selection resolves the selector through the local device inventory;
+    // the wrapped command, not this process, touches the device.
+    platformExecution: { kind: 'inventory', use: inventoryUse },
+  },
+  {
     name: 'metro',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/metro/index.ts'] as const } : {}),

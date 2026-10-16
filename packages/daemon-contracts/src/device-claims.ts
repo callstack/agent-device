@@ -10,6 +10,7 @@ import {
 } from '@agent-device/kernel/device';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import { ownerIdentityMatches, readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 
 import {
@@ -30,6 +31,7 @@ import {
   DEVICE_CLAIM_SCHEMA_VERSION,
   ownershipFromClaim,
   type DeviceClaim,
+  type DeviceClaimOwnerKind,
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
 import {
@@ -84,6 +86,18 @@ function transientDeviceClaimSession(command: string): string {
   return `transient:${command}`;
 }
 
+/**
+ * The claim `session` recorded for an `exec` wrapper claim. As with a transient
+ * claim, the session field is what tells `device status` the owner is a command
+ * in flight; the `exec` prefix names the wrapper that holds it for the whole
+ * lifetime of its child process. The command is a raw argv token and this label
+ * is echoed into `device status` and conflict messages, so it is sanitized the
+ * way session names are before being recorded.
+ */
+function wrapperDeviceClaimSession(command: string): string {
+  return `exec:${safeSessionName(command)}`;
+}
+
 export async function acquireDeviceClaim(params: {
   device: DeviceInfo;
   session: string;
@@ -101,6 +115,35 @@ export async function acquireDeviceClaim(params: {
   return await withDeviceClaimLock(
     deviceKey,
     async () => await claimHeldDevice({ ...params, deviceKey, identity }),
+  );
+}
+
+/**
+ * #3263: the claim an `exec` wrapper takes on its own process identity for the
+ * lifetime of a child command. Same host-global exclusion as a session claim,
+ * recorded with `ownerKind: 'wrapper'` so the daemon-supersession proof never
+ * reads a `daemon.json` against a CLI process, and with the wrapped command in
+ * the session label so `device status` names who holds the device.
+ */
+export async function acquireWrapperDeviceClaim(params: {
+  device: DeviceInfo;
+  command: string;
+  workspace: string;
+  stateDir: string;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+}): Promise<DeviceClaimAcquireResult> {
+  const identity = deviceClaimIdentity(params.device);
+  const deviceKey = canonicalLocalDeviceKey(identity);
+  return await withDeviceClaimLock(
+    deviceKey,
+    async () =>
+      await claimHeldDevice({
+        ...params,
+        deviceKey,
+        identity,
+        session: wrapperDeviceClaimSession(params.command),
+        ownerKind: 'wrapper',
+      }),
   );
 }
 
@@ -153,6 +196,7 @@ async function claimHeldDevice(params: {
   stateDir: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   observeDeviceBoot?: DeviceBootObservationService;
+  ownerKind?: DeviceClaimOwnerKind;
 }): Promise<DeviceClaimAcquireResult> {
   const { deviceKey, identity } = params;
   const owner = readCurrentOwnerIdentity();
@@ -178,6 +222,7 @@ async function claimHeldDevice(params: {
     ownerToken: crypto.randomUUID(),
     createdAtMs: now,
     updatedAtMs: now,
+    ...(params.ownerKind ? { ownerKind: params.ownerKind } : {}),
   };
   writeDeviceClaim(claim);
   return {

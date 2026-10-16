@@ -12,6 +12,16 @@ import { canonicalLocalDeviceKey } from './device-claim-paths.ts';
 export const DEVICE_CLAIM_SCHEMA_VERSION = 2;
 
 /**
+ * Which process role the claim's principal is. Absent means a daemon-served
+ * session or transient command claim, which is every record written before the
+ * `exec` claim wrapper (#3263) existed. `wrapper` names a plain CLI process that
+ * claims a device on its own behalf for the lifetime of a child process it runs;
+ * it is not a daemon and no registration in its state dir can ever name it, so
+ * the daemon-supersession proof must not be read against its record.
+ */
+export type DeviceClaimOwnerKind = 'wrapper';
+
+/**
  * A claim owned by one process: the session or the sessionless command that took it. Its principal
  * is `ownerPid`/`ownerStartTime`/`ownerToken`, which is what every clearing surface matches on.
  */
@@ -29,6 +39,8 @@ export type DeviceClaim = {
   updatedAtMs: number;
   /** Set by `abandonDeviceClaim`; absent while the claim still holds the device for its owner. */
   abandonedAtMs?: number;
+  /** Set for claims held by an `exec` wrapper process; absent for daemon-served claims. */
+  ownerKind?: DeviceClaimOwnerKind;
 };
 
 /**
@@ -122,12 +134,18 @@ function decodeClaimLocation(
 
 function decodeClaimOwner(
   raw: Record<string, unknown>,
-): Pick<DeviceClaim, 'ownerPid' | 'ownerStartTime' | 'ownerToken'> | null {
-  const { ownerPid, ownerStartTime } = raw;
+): Pick<DeviceClaim, 'ownerPid' | 'ownerStartTime' | 'ownerToken' | 'ownerKind'> | null {
+  const { ownerPid, ownerStartTime, ownerKind } = raw;
   const ownerToken = readNonEmptyString(raw.ownerToken);
   if (!isPositiveInteger(ownerPid) || !ownerToken) return null;
   if (ownerStartTime !== null && !isNonEmptyString(ownerStartTime)) return null;
-  return { ownerPid, ownerStartTime, ownerToken };
+  if (ownerKind !== undefined && ownerKind !== 'wrapper') return null;
+  return {
+    ownerPid,
+    ownerStartTime,
+    ownerToken,
+    ...(ownerKind === 'wrapper' ? { ownerKind } : {}),
+  };
 }
 
 function decodeClaimTimestamps(

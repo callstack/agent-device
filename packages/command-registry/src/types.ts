@@ -94,6 +94,11 @@ export type CommandTimeoutPolicy = {
  *                            in `finally`. Enforced at the request scope's
  *                            device binding, so it is available only to ADR 0019
  *                            `device-runtime` commands.
+ *  - `wrapper-exclusive`   — `exec` (#3263); a local CLI claim wrapper that
+ *                            acquires one exclusive claim on its own process
+ *                            identity, runs a child command, and releases on
+ *                            every exit path. Never binds a daemon device
+ *                            binding, so the request-scope gate never reads it.
  *  - `acquire-session`     — `open`; acquires the session claim before platform
  *                            preparation or mutation.
  *  - `release-session`     — `close`; releases the session claim only after
@@ -104,6 +109,7 @@ export type DeviceClaimPolicy =
   | 'observe'
   | 'require-owner'
   | 'transient-exclusive'
+  | 'wrapper-exclusive'
   | 'acquire-session'
   | 'release-session';
 
