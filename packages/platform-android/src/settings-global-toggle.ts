@@ -32,6 +32,8 @@ export type AndroidGlobalToggle = Readonly<{
 }>;
 
 const GLOBAL_TOGGLE_SETTLE_MS = 2_000;
+/** Each read has its own budget, so the sample taken once the settle window has run out can still answer. */
+const GLOBAL_TOGGLE_READ_TIMEOUT_MS = 1_000;
 
 /** Failures before `svc` runs disclose `dispatched: no`; every failure after it `unknown`. */
 export async function setAndroidGlobalToggle(
@@ -73,7 +75,7 @@ async function awaitAndroidGlobalToggle(
       const result = await runAndroidShell(device, ['settings', 'get', 'global', toggle.row], {
         allowFailure: true,
         signal,
-        timeoutMs: Math.max(1, deadline.remainingMs()),
+        timeoutMs: GLOBAL_TOGGLE_READ_TIMEOUT_MS,
       });
       if (result.exitCode !== 0) {
         throw androidAdbResultError(`Failed to read Android ${toggle.label} state`, result, {
