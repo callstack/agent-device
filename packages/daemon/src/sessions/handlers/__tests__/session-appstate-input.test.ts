@@ -242,6 +242,7 @@ test('appstate with explicit missing session returns SESSION_NOT_FOUND', async (
     expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
     expect(response.error.details?.session).toBe('sim');
     expect(response.error.details?.dispatched).toBe('no');
+    expect(mockResolveTargetDevice).not.toHaveBeenCalled();
   }
 });
 
