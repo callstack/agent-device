@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted. Amended after local iOS Simulator acquisition moved to the host AX bridge while the
-public surface remained two modes: regular interactive snapshots and raw diagnostic snapshots.
+Accepted.
+
+Completed process history is in git history.
 
 The Apple platform runtime owns acquisition routing and its generation-scoped XCTest fallback.
 Host-side iOS validation, semantic presentation, and publication are owned by
@@ -210,8 +211,7 @@ runner does not mute ends `testCommand` as soon as the main-thread block that re
 whatever `continueAfterFailure` says, so the runner died after (or during) every hostile snapshot
 and the per-bundle penalty and depth memory died with it. The runner now mutes AX-server rejections
 in both XCTest fetch wordings, and every bounded main-thread dispatch that outlives its slice counts
-as occupying the main thread (the tree XPC and the system-modal probe previously kept a second count
-of their own), so a viewport read that grinds makes the plan skip the sweep instead of queueing it.
+as occupying the main thread, so a viewport read that grinds makes the plan skip the sweep instead of queueing it.
 
 ## Recovery conformance and depth hints
 
@@ -245,9 +245,7 @@ construct `RawAXNode`, `SnapshotPresentation` alone constructs `PresentedNode`, 
 accept only presented nodes. Its second behavior-preserving step makes every capture-plan backend
 return `SnapshotAcquisition` and routes the exhaustive backend switch through one
 `SnapshotPresentation.present` call. `PresentationOptions` is the stable request-policy input to
-that boundary. Until the remaining migration steps move interpretation into the boundary, acquisition
-still reads those options and raw nodes intentionally carry the derived fields produced by the
-existing backends.
+that boundary.
 
 The first semantic migration layer makes regular eligibility backend-neutral inside
 `SnapshotPresentation`: the top-level viewport carrier survives, and every other node needs an
@@ -315,9 +313,7 @@ root clip to violate, and a node whose actionability depends on containment has 
 wire, as on the host bridge; disabled or degenerate nodes stay declared `false`. A rectangle becomes a
 `Box` only through the initializer that checks it, and the shared guard refuses `CGRect.infinite` by
 identity — its components and its extents are all finite, so no comparison would have caught the
-value a failed read leaves behind. The two twins were not twins before #2908 landed: the Swift guard
-already refused that value by identity, while the TypeScript one accepted it and both accepted finite
-components whose right or bottom edge overflowed. Both now refuse both shapes, and every box either
+value a failed read leaves behind. Both now refuse both shapes, and every box either
 guard accepted and is neither of those two shapes is still classified the same way. The runner route's
 host evidence comes from the payload's root nodes (`resolveIosViewportEvidenceFromRoots` in
 `packages/capture-kit/src/ios-snapshot-acquisition.ts`). `contracts/fixtures/snapshot-actionability-policy.json`
