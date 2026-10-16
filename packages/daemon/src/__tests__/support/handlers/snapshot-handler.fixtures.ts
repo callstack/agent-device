@@ -98,7 +98,8 @@ export function snapshotRequest(
 
 /**
  * The suite's snapshot runtime counts device binds.
- * ADR 0019 §9 permits one execution bind and a second, capture-only bind for `--settle`.
+ * ADR 0019 §9 permits one execution bind.
+ * If the action use has no capture, `--settle` may acquire a second, capture-only bind.
  */
 export function countingSnapshotRuntime(): Readonly<{
   inspectFacts: InspectDeviceRuntimeFacts;
