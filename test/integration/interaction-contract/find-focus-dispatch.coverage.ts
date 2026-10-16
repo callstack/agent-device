@@ -8,8 +8,6 @@ export const FIND_FOCUS_DISPATCH_COVERAGE = definePathCoverage('find-focus-dispa
     'find-focus-dispatch keyboardOcclusion: a focus match behind the visible keyboard is refused with tap_keyboard_occludes_target',
     'find-focus-dispatch keyboardOcclusion: the same match above the keyboard band focuses',
   ],
-  nonHittable:
-    'find-focus-dispatch nonHittable: a non-hittable match focuses its promoted hittable ancestor',
   responseConstruction:
     'find-focus-dispatch responseConstruction: find focus returns the shared point-focus payload',
   errorTaxonomy:

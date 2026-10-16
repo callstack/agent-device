@@ -106,24 +106,6 @@ test(
 );
 
 test(
-  scenario('nonHittable'),
-  async () => {
-    // The match is a non-hittable label inside a hittable row: the `findAct` row's promotion retargets
-    // the dispatch to the row, so the focus lands at the row's center rather than the label's.
-    await withIosContractDaemon(
-      [runnerSnapshotEntry(nonHittableRowTree()), runnerTapEntry({})],
-      async (daemon) => {
-        const data = assertRpcOk(
-          await daemon.callCommand('find', ['label', 'Notifications', 'focus']),
-        );
-        assert.deepEqual({ x: data.x, y: data.y }, { x: 200, y: 200 });
-      },
-    );
-  },
-  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
-);
-
-test(
   scenario('responseConstruction'),
   async () => {
     await withIosContractDaemon(
@@ -201,27 +183,6 @@ function twinFormTree(): unknown[] {
       label: 'Form',
       rect: { x: 240, y: 200, width: 120, height: 44 },
       hittable: true,
-    },
-  ];
-}
-
-function nonHittableRowTree(): unknown[] {
-  return [
-    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Cell',
-      rect: { x: 40, y: 160, width: 320, height: 80 },
-      hittable: true,
-    },
-    {
-      index: 2,
-      parentIndex: 1,
-      type: 'StaticText',
-      label: 'Notifications',
-      rect: { x: 60, y: 180, width: 160, height: 30 },
-      hittable: false,
     },
   ];
 }

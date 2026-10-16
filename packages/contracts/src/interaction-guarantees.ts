@@ -581,12 +581,14 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
           'gap: the seam aims `centerOfRect` of the resolved node rather than the parent-owned point `resolveInteractionTouchPoint` chooses, so a match whose center is tiled by an independently interactive descendant activates that descendant instead of failing closed — and the keyboard guard above measures the same center the tap uses, which is the point actually dispatched but not the point the acting paths would aim.',
         trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
-      // Promotion is the enforcement the guarantee names; the annotation half is not this seam's,
-      // because its payload is the focus runtime's point response and never the interaction result
-      // that carries `targetHittable`/`hint` (see `responseIdentity` below).
+      // The guarantee is promotion AND annotation. This seam runs only the first half, so the
+      // cell cannot claim `runtime` for the whole guarantee (the same shape `native-ref` classifies
+      // the other way round, annotation without promotion).
       nonHittable: {
-        kind: 'runtime',
-        via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
+        kind: 'waived',
+        reason:
+          "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's center (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       // One construction site per dispatch kind, both shared with the plain commands: the focus
       // payload is `executeFocusPoint`'s (the same owner `focus <x> <y>` reaches), and `type`'s
@@ -598,7 +600,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       responseIdentity: {
         kind: 'waived',
         reason:
-          "Intentional: the payload is the point-dispatch result, so no refLabel/selectorChain is echoed. Mutating find's `data.ref` is pre-action diagnostic identity that ADR 0014 keeps unpinnable (no `refsGeneration`), and the seam never enters the ref/selector response builder that mints the identity fields.",
+          "Intentional: the payload is the focus (or text) dispatch result, which omits `refLabel`, `selectorChain`, and `data.ref` entirely — this route issues no pinnable or diagnostic response identity, since ADR 0014 keeps mutating find's pre-action ref diagnostic-only (no `refsGeneration`) and the seam never enters the ref/selector response builder that mints the identity fields.",
       },
       verifyEvidence: {
         kind: 'inapplicable',
