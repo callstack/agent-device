@@ -137,6 +137,14 @@ function launchConfirmationReport(
   }
 }
 
+/** What the caller's `open` output says when the confirmation probe itself could not run. */
+function launchConfirmationProbeFailureWarning(): string {
+  return (
+    'agent-device could not read whether iOS is asking to confirm the launch URL, so the launch ' +
+    'URL may still be held by a prompt. Check with `alert get` before retrying.'
+  );
+}
+
 /** What the caller's `open` output says when the launch confirmation it saw stayed unanswered. */
 function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnansweredReason): string {
   if (reason === 'url-owner-unresolved') {
@@ -348,6 +356,9 @@ export async function completeOpenCommand(params: {
       openResult,
       launchConfirmationUnansweredWarning(outcome.launchConfirmationReason),
     );
+  }
+  if (outcome.launchConfirmation === undefined && outcome.launchConfirmationProbeFailure) {
+    appendResponseWarning(openResult, launchConfirmationProbeFailureWarning());
   }
   const nextRef = publishOpenSession({
     req,
