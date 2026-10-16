@@ -2,7 +2,7 @@ import { beforeEach, vi } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { appleRunnerTestHost } from '../test-host.ts';
-import { XCODE_SELECT_LINK_PATH } from '../runner-toolchain-probe.ts';
+import { XCODE_SELECT_LINK_PATH } from '../apple-runner-platform.ts';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
 export const STUBBED_APPLE_TOOLCHAIN = {

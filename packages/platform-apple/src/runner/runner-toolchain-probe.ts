@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+  XCODE_SELECT_LINK_PATH,
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
 } from './apple-runner-platform.ts';
@@ -43,12 +44,6 @@ const TOOLCHAIN_FINGERPRINT_BUDGET_MS = 45_000;
  */
 const XCODE_SELECT_PROBE_TIMEOUT_MS = 2_000;
 
-/**
- * The symlink `xcode-select -s` writes and `xcode-select -p` reads back. Reading it directly answers
- * which developer dir the host selects, without a subprocess, and the cache needs that answer on
- * every hit and not only on a miss. Named so a suite can script the host's selection.
- */
-export const XCODE_SELECT_LINK_PATH = '/var/db/xcode_select_link';
 const TOOLCHAIN_PROBE_MAX_BUFFER = 128 * 1024;
 const TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH = 200;
 const TOOLCHAIN_PROBE_HINT =
