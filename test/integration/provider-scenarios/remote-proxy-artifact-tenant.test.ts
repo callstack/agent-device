@@ -84,9 +84,9 @@ test('Provider-backed integration authenticated proxy sends every admitted RPC m
   const observed: Array<{
     method: string;
     params: Record<string, unknown>;
+    authorization: string | undefined;
   }> = [];
   const upstream = http.createServer(async (request, response) => {
-    assert.equal(request.headers.authorization, 'Bearer upstream-token');
     if (request.method !== 'POST' || request.url !== '/rpc') {
       response.statusCode = 404;
       response.end('not found');
@@ -99,7 +99,7 @@ test('Provider-backed integration authenticated proxy sends every admitted RPC m
       method: string;
       params: Record<string, unknown>;
     };
-    observed.push(payload);
+    observed.push({ ...payload, authorization: request.headers.authorization });
     response.setHeader('content-type', 'application/json');
     response.end(
       JSON.stringify({ jsonrpc: '2.0', id: payload.id, result: { ok: true, data: {} } }),
@@ -143,6 +143,7 @@ test('Provider-backed integration authenticated proxy sends every admitted RPC m
     for (const [method, params] of admitted) {
       const response = await call(method, params);
       assert.equal(response.status, 200, method);
+      assert.equal(observed.at(-1)?.authorization, 'Bearer upstream-token', method);
       assert.equal(observed.at(-1)?.params.tenantId, 'alice', method);
       assert.equal(
         (observed.at(-1)?.params.meta as Record<string, unknown> | undefined)?.tenantId,

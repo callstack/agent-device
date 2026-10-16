@@ -47,14 +47,19 @@ test('Provider-backed integration local proxy serves a plain-session diagnostics
   if (await skipWhenLoopbackUnavailable(t, 'local proxy request diagnostics coverage')) return;
 
   const stateDir = mkdtempForTestSync('agent-device-proxy-request-diagnostics-');
+  const upstreamRequests: Array<{
+    method: string | undefined;
+    url: string | undefined;
+    authorization: string | undefined;
+    tenant: string | string[] | undefined;
+  }> = [];
   const upstream = http.createServer((request, response) => {
-    assert.equal(request.method, 'GET');
-    assert.equal(
-      request.url,
-      `/sessions/${encodeURIComponent(PLAIN_SESSION)}/requests/${REQUEST_ID}/diagnostics`,
-    );
-    assert.equal(request.headers.authorization, `Bearer ${UPSTREAM_TOKEN}`);
-    assert.equal(request.headers['x-agent-device-tenant'], TENANT);
+    upstreamRequests.push({
+      method: request.method,
+      url: request.url,
+      authorization: request.headers.authorization,
+      tenant: request.headers['x-agent-device-tenant'],
+    });
     response.statusCode = 200;
     response.end(RECORD);
   });
@@ -75,6 +80,12 @@ test('Provider-backed integration local proxy serves a plain-session diagnostics
     assert.equal(throughProxy.logPathUnavailable, undefined, 'the proxy must serve the record');
     assert.notEqual(throughProxy.logPath, undefined);
     assert.equal(fs.readFileSync(throughProxy.logPath!, 'utf8'), RECORD);
+    assert.deepEqual(upstreamRequests[0], {
+      method: 'GET',
+      url: `/sessions/${encodeURIComponent(PLAIN_SESSION)}/requests/${REQUEST_ID}/diagnostics`,
+      authorization: `Bearer ${UPSTREAM_TOKEN}`,
+      tenant: TENANT,
+    });
 
     // Parity: the client on the daemon host localizes byte-identical content.
     const direct = await localizeRemoteDaemonError(remoteError(), {
