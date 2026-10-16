@@ -1469,6 +1469,7 @@ The 2026-08-07 structural-equivalence-or-reject amendment supersedes that policy
   ADR 0011 classified runtime-selector `disambiguation` as `{ kind: 'runtime', via: '...selectors-resolve.ts#resolveSelectorChain' }` (`packages/contracts/src/interaction-guarantees.ts:176-179`).
   This proved consistent heuristic execution, not disclosure.
   The acceptance-time design did not reconsider that default.
+  The structural-equivalence rationale in Consequences explains why blanket rejection remains unsuitable.
 - **(f) Issue #1037 / PR #1040 provided partial precedent.** Apple Maps uniquely matched `text="Anthropic - Headquarters"` to a 30x30 pin instead of a recents row.
   `describeNonHittableTarget` exposed `targetHittable:false` and a hint (`resolution.ts:259-268`).
   It disclosed but did not prevent the incorrect tap.
