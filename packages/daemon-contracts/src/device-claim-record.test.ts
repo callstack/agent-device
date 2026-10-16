@@ -42,28 +42,38 @@ test('v1, v2, and v3 records decode to the process-owned claim with its process 
     expect(record.session).toBe('work');
     expect(record.ownerPid).toBe(4242);
     expect(record.ownerToken).toBe('token');
+    expect(record.transientCommand).toBeUndefined();
   }
 });
 
-test('a legacy claim claim-kind comes from the label that encoded it, once at the boundary', () => {
-  // The pre-kind schemas recorded a command-scoped claim only as a `transient:<command>` session.
+// Released v1/v2 recorded a command-scoped claim and an open session *named* `transient:<command>`
+// as the same record — no stored field separates them, so the kind of a legacy claim is not a
+// fact the decoder can read. Both decode kindless, which is safe by construction, not by guess:
+// the kind is consulted only for claims `isClaimOwnedByThisDaemon` accepts (same stateDir, pid,
+// and process start time), and a live process reads and writes only v3 records, whose kind is a
+// stored field. No in-flight command's claim is ever a legacy record; the original #3345 bypass
+// needs a current-process claim, which carries its kind.
+test('a legacy claim with a command-label session decodes kindless, not as a guessed command claim', () => {
   for (const raw of [
     legacyClaim({ session: 'transient:install' }),
-    v2Claim({ session: 'transient:reinstall' }),
+    v2Claim({ session: 'transient:install' }),
   ]) {
-    expect(decodeStoredDeviceClaim(raw)?.transientCommand).toBe(
-      raw.session === 'transient:install' ? 'install' : 'reinstall',
-    );
+    const record = decodeStoredDeviceClaim(raw);
+    expect(record?.transientCommand).toBeUndefined();
+    expect(record?.session).toBe('transient:install');
   }
-  // From v3 the kind is a stored field, not a label pattern: a v3 open session may be named
-  // after a command, and a v3 record without the field is that session's claim.
+});
+
+// The kind is a stored field from v3 on. A v3 open session may be named after a command, and a
+// v3 record without the field is exactly that session's claim; a malformed kind fails the record
+// closed instead of guessing.
+test('a v3 claim kind comes only from its stored field', () => {
   expect(
     decodeStoredDeviceClaim(currentClaim({ session: 'transient:install' }))?.transientCommand,
   ).toBeUndefined();
   expect(
     decodeStoredDeviceClaim(currentClaim({ transientCommand: 'install' }))?.transientCommand,
   ).toBe('install');
-  // A malformed kind fails the record closed instead of guessing a kind.
   expect(decodeStoredDeviceClaim(currentClaim({ transientCommand: '' }))).toBeNull();
   expect(decodeStoredDeviceClaim(currentClaim({ transientCommand: 7 }))).toBeNull();
 });

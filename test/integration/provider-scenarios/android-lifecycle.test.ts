@@ -430,11 +430,12 @@ async function runAndroidSetupAndInstallWorkflow(
   assert.equal(push.action, 'com.example.demo.PUSH');
   assert.equal(push.extrasCount, 3);
 
-  // #3345: a claim covers a raw request only from its own session AND its own workspace. The
-  // client calls above carried no cwd, so the open claimed this checkout at the `default`
-  // address; these pushes join that address the way `--session` does and run from a directory
-  // inside the checkout, so their relative payloads resolve against `cwd` as a real call's
-  // does. A foreign workspace would refuse even under the same name — the copyable-address rule.
+  // #3345: coverage pairs the routed session with the workspace a claim records. The client
+  // calls above sent no cwd, so their open claim records the daemon-side fallback workspace —
+  // this checkout — at the routed `default` address. These pushes state their provenance
+  // explicitly: sessionExplicit joins that address, and their cwd — a checkout child directory,
+  // chosen so the relative payloads resolve against it — canonicalizes to that recorded
+  // workspace. A foreign cwd refuses even under the same session name: the copyable-address rule.
   fs.mkdirSync(path.join(process.cwd(), '.tmp'), { recursive: true });
   const callerWorkspace = fs.mkdtempSync(path.join(process.cwd(), '.tmp', 'push-'));
   try {

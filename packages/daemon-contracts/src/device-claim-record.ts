@@ -31,8 +31,9 @@ export type DeviceClaim = {
    * Set when a `transient-exclusive` command took the claim: the command it is scoped to. This is
    * the claim-kind discriminant (#3345) — a command-scoped claim is never an open session's claim,
    * even when its `session` label reads `transient:<command>` and a caller copies that label into
-   * `--session`. Absent means an open session owns it. Legacy records carry no field and get their
-   * kind from the label that encoded it, once, in `decodeStoredDeviceClaim`.
+   * `--session`. Absent means an open session owns it, including every legacy record: a v1/v2
+   * record cannot prove which it was, and no kind decision is ever taken on one (see
+   * {@link decodeStoredDeviceClaim}).
    */
   transientCommand?: string;
   /** Set by `abandonDeviceClaim`; absent while the claim still holds the device for its owner. */
@@ -60,11 +61,22 @@ export function ownershipFromClaim(claim: DeviceClaim): DeviceClaimSessionOwners
   };
 }
 
+/**
+ * Legacy (v1/v2) records decode kindless — as open-session claims — because they cannot state a
+ * kind: released v1/v2 recorded a command-scoped claim and an open session *named*
+ * `transient:<command>` identically, so the label is no proof of kind. Decoding kindless is safe
+ * by construction, not by guess: every consumer of a claim's kind first requires
+ * `isClaimOwnedByThisDaemon` (same stateDir, pid, and process start time), and a current process
+ * writes only v3 records whose kind is stored — a legacy record can only be one this process
+ * could not have written, so its owner identity is proven not to match. Recovery for a legacy
+ * record needs nothing special: the recording process still holds its token, and any other owner
+ * is settled or conflicted by the principal-based paths, none of which reads a kind.
+ */
 export function decodeStoredDeviceClaim(value: unknown): DeviceClaim | null {
   if (!isRecord(value)) return null;
   if (value.schemaVersion === DEVICE_CLAIM_SCHEMA_VERSION) return decodeCurrentClaim(value);
-  if (value.schemaVersion === 2) return stampLegacyClaimKind(decodeClaimBody(value));
-  if (value.schemaVersion === 1) return stampLegacyClaimKind(migrateLegacyClaim(value));
+  if (value.schemaVersion === 2) return decodeClaimBody(value);
+  if (value.schemaVersion === 1) return migrateLegacyClaim(value);
   return null;
 }
 
@@ -146,22 +158,6 @@ export function transientDeviceClaimSession(command: string): string {
 }
 
 const TRANSIENT_CLAIM_LABEL_PREFIX = 'transient:';
-
-/**
- * The command a legacy claim's `session` label encodes a command-scoped claim for, or undefined
- * for an open-session label. Records written before the kind field existed encoded it only in
- * that label, so translating it here — once, at the legacy boundary — is what lets every current
- * claim's kind be a stored field: reading the label at decision points is exactly the #3345 bug
- * where a caller could copy `transient:<command>` into `--session` and read as that claim's owner.
- */
-function stampLegacyClaimKind(claim: DecodedClaimBody | null): DeviceClaim | null {
-  if (!claim) return null;
-  if (!claim.session.startsWith(TRANSIENT_CLAIM_LABEL_PREFIX)) return claim;
-  const transientCommand = claim.session.slice(TRANSIENT_CLAIM_LABEL_PREFIX.length);
-  // A bare `transient:` label was never a command claim: command names are non-empty, so such a
-  // claim could only have been an open session with that literal name.
-  return transientCommand === '' ? claim : { ...claim, transientCommand };
-}
 
 function decodeClaimLocation(
   raw: Record<string, unknown>,

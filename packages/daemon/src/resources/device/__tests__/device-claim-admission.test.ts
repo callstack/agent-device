@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { localRuntimeOwner, providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { asAppError, type AppError } from '@agent-device/kernel/errors';
+import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
@@ -206,6 +207,87 @@ test('an in-flight transient claim refuses a request named after its label, whil
   await own.admit(ANDROID_EMULATOR, localAndroid);
   await own[Symbol.asyncDispose]();
   expect(claimedSessions()).toEqual(['transient:install']);
+});
+
+// The label-guard branch in acquireTransientDeviceClaim: the open session's claim below is
+// named exactly this command's label, and a DIFFERENT session's `install` builds the same
+// label as its own claim session. Without the guard, resolveExistingClaim's raw string match
+// would hand that request the open session's release token (a renew-adopt), and disposing it
+// would delete a claim it never took. Mutation: drop the guard — the foreign session acquires,
+// and its dispose unlinks the open session's claim.
+test("an open session named after a command's label is not renew-adopted by that command's requests", async () => {
+  const { stateDir } = setup();
+  const open = await acquireDeviceClaim({
+    device: ANDROID_EMULATOR,
+    session: 'transient:install',
+    workspace: '/worktrees/current',
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+  expect(open.status).toBe('acquired');
+  if (open.status !== 'acquired') return;
+
+  const foreign = makeAdmission('transient-exclusive', stateDir, 'install', 'other-session');
+  const error = asAppError(
+    await foreign.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
+  );
+  expect(error.code).toBe('DEVICE_IN_USE');
+  await foreign[Symbol.asyncDispose]();
+
+  // The open session's claim survived, with its original token: nothing was adopted.
+  const held = inspectDeviceClaims({})[0]?.claim;
+  expect(held?.ownerToken).toBe(open.ownership.ownerToken);
+  expect(await abandonDeviceClaim(open.ownership)).toBe('abandoned');
+});
+
+// The safety argument for kindless legacy decoding, pinned rather than commented. A record that
+// predates the kind field decodes as an open-session claim, and that is only reachable at a kind
+// decision through `isClaimOwnedByThisDaemon` — same stateDir, pid, AND process start time —
+// which a live process's command claims can never be, because a live process writes v3 kinds.
+// This forges that window (the only way in) and pins what a kindless claim may and may not do:
+// it behaves exactly as a colon-named open session's claim, never as a command claim an in-flight
+// request can adopt or have adopted from it.
+test('a kindless legacy record under this process identity reads as the named session, never as a command claim', async () => {
+  const { stateDir, claimsDir } = setup();
+  fs.mkdirSync(claimsDir, { recursive: true });
+  const identity = readCurrentOwnerIdentity();
+  fs.writeFileSync(
+    deviceClaimFilePath(canonicalLocalDeviceKey(ANDROID_EMULATOR)),
+    JSON.stringify({
+      schemaVersion: 2,
+      deviceKey: canonicalLocalDeviceKey(ANDROID_EMULATOR),
+      device: {
+        family: 'android',
+        id: ANDROID_EMULATOR.id,
+        name: ANDROID_EMULATOR.name,
+        kind: ANDROID_EMULATOR.kind,
+      },
+      session: 'transient:install',
+      workspace: '/worktrees/current',
+      stateDir,
+      ownerPid: identity.pid,
+      ownerStartTime: identity.startTime,
+      ownerToken: 'legacy-token',
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }),
+  );
+
+  // Another session's `install` must not adopt or renew it: the label guard refuses outright.
+  const foreign = makeAdmission('transient-exclusive', stateDir, 'install', 'other-session');
+  const error = asAppError(
+    await foreign.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
+  );
+  expect(error.code).toBe('DEVICE_IN_USE');
+  await foreign[Symbol.asyncDispose]();
+  expect(inspectDeviceClaims({})[0]?.claim?.ownerToken).toBe('legacy-token');
+
+  // Addressed as the name itself from the claim's workspace, it covers like the v3 colon-named
+  // session's claim does — the schema version alone decides nothing about the kind.
+  const named = makeAdmission('transient-exclusive', stateDir, 'install', 'transient:install');
+  await named.admit(ANDROID_EMULATOR, localAndroid);
+  await named[Symbol.asyncDispose]();
+  expect(inspectDeviceClaims({})[0]?.claim?.ownerToken).toBe('legacy-token');
 });
 
 test("another request in flight's transient claim of the same command refuses, and holds nothing", async () => {
