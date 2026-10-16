@@ -12,7 +12,7 @@ Accepted
 - Request modules consume named predicates from the registry. They do not recreate command string sets.
 - Handler modules own execution logic only. They do not export duplicate coverage tables to prove route membership.
 - The daemon registry must not define CLI grammar, Node.js client options, MCP schemas, user-facing help, or platform capability support.
-- Preserve all four invariants in the 2026-06 update. The CLI explanation has the known invariant-3 gap described below.
+- Preserve all four invariants in the 2026-06 update. Types do not fully enforce invariants 3 and 4, as described below.
 
 ## Context
 
@@ -93,7 +93,8 @@ It derives these surfaces from that site:
 - Daemon registry.
 
 Its purpose is to remove the drift between these tables.
-Types and registry tests enforce the declarations and projections.
+Registry tests pin the derived tables.
+Types do not fully enforce invariants 3 and 4.
 
 **This ADR's decision remains accepted.**
 Its boundary concerns ownership and the predicate interface, not the physical file that contains a trait.
@@ -129,3 +130,9 @@ The daemon registry tests pin route and request-policy decisions.
 `src/cli/command-explain.ts` reads that facet and displays daemon routes and request-policy traits.
 Thus, types do not enforce invariant 3 for this CLI projection.
 The invariant remains required; this ADR records the gap without changing runtime behavior.
+
+**Known invariant-4 gap.** `CommandDescriptorBase.daemon` is optional in `packages/command-registry/src/types.ts`.
+In `DaemonCommandDescriptor`, every trait except `command` and `route` is optional.
+If a command has no daemon descriptor, `getDaemonCommandRoute` returns `generic`.
+Thus, types do not require every daemon trait at the registration site.
+Invariant 4 remains required; this ADR records the gap without changing runtime behavior.
