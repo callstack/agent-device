@@ -54,9 +54,8 @@ export async function handleLimrunIosAlert(
     timeoutMs: options?.timeoutMs,
     ...(options?.signal ? { signal: options.signal } : {}),
     // The Limrun WebSocket client exposes no abort on `elementTree`/`tap`, so the seam signal
-    // cannot cancel its transport. The driver still enforces the window around this seam: a
-    // capture that lands after its window closed is refused rather than consumed, and no press
-    // dispatches once the window has closed.
+    // cannot cancel its transport; the shared driver's window guards are what keep this
+    // backend's late answers unconsumed and its presses inside the window.
     capture: () => client.elementTree(),
     findCandidate: (tree): TreeAlertObservation<LimrunAlertCandidate> =>
       readLimrunAlertCapture(tree as Parameters<typeof readLimrunAlertCapture>[0]),

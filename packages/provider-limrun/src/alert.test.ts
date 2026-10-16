@@ -52,8 +52,10 @@ describe('wait budget', () => {
     await expect(
       underFakeTimers(() => handleLimrunIosAlert(client, 'wait', { timeoutMs: 5_000 })),
     ).rejects.toThrow('alert wait timed out');
-    // One poll per interval over the whole window: never fewer (gave up early) nor real seconds.
-    expect(client.elementTree).toHaveBeenCalledTimes(1 + Math.ceil(5_000 / 300));
+    // One poll per interval over the whole window: never fewer (gave up early) nor real
+    // seconds. The probe the sleep lands exactly on the deadline captures nothing — a closed
+    // window answers for itself — so the count is the intervals, not intervals-plus-one.
+    expect(client.elementTree).toHaveBeenCalledTimes(Math.ceil(5_000 / 300));
   });
 
   it('treats a malformed window as the bounded default rather than an unbound loop', async () => {
@@ -64,7 +66,64 @@ describe('wait budget', () => {
     ).rejects.toThrow('alert wait timed out');
     // The fallback is the contract default, spent on the driven clock — this returned, so the
     // loop had a bound, which a NaN comparison would not have given it.
-    expect(client.elementTree).toHaveBeenCalledTimes(1 + Math.ceil(10_000 / 300));
+    expect(client.elementTree).toHaveBeenCalledTimes(Math.ceil(10_000 / 300));
+  });
+
+  it('reads a finite budget past the timer ceiling as the bounded default, never a misfire', async () => {
+    // 2^32 reaches `AbortSignal.timeout` as a RangeError and 2^31 as a 1 ms timer; both must
+    // arrive here as the contract default, spent on the driven clock.
+    for (const oversized of [2 ** 31, 2 ** 32]) {
+      const client = clientWithTrees([limrunAppScreenTree()]);
+      await expect(
+        underFakeTimers(() => handleLimrunIosAlert(client, 'wait', { timeoutMs: oversized })),
+      ).rejects.toThrow('alert wait timed out');
+      expect(client.elementTree).toHaveBeenCalledTimes(Math.ceil(10_000 / 300));
+    }
+  });
+
+  it('never consumes a second capture that starts after the window closed', async () => {
+    // The closing-probe bug: a poll the sleep lands past the deadline must not even capture —
+    // its answer, alert or absence, is a late verdict the deadline already closed.
+    const client = {
+      elementTree: vi
+        .fn()
+        .mockResolvedValueOnce([limrunAppScreenTree()])
+        // Were this answer ever consumed, `wait` would report the alert instead of timing out.
+        .mockResolvedValueOnce([limrunAttAlertTree()]),
+      tap: vi.fn(async () => {}),
+    } satisfies LimrunIosAlertClient;
+
+    await expect(
+      underFakeTimers(() => handleLimrunIosAlert(client, 'wait', { timeoutMs: 300 })),
+    ).rejects.toThrow('alert wait timed out');
+    expect(client.elementTree).toHaveBeenCalledTimes(1);
+  });
+
+  it('never presses on a candidate that resolves after the action window closed', async () => {
+    // A bounded capture stalling past its 2s lookup budget lands after the deadline. Consuming
+    // it would press an alert the window never resolved inside itself.
+    const client = {
+      elementTree: vi
+        .fn()
+        .mockResolvedValueOnce([limrunAppScreenTree()])
+        .mockImplementationOnce(
+          async () =>
+            new Promise((resolve) => {
+              setTimeout(() => resolve([limrunAttAlertTree()]), 3_000);
+            }),
+        ),
+      tap: vi.fn(async () => {}),
+    } satisfies LimrunIosAlertClient;
+
+    const thrown = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept')).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(client.tap).not.toHaveBeenCalled();
+    expect(thrown).toBeInstanceOf(AppError);
+    const failure = thrown as AppError;
+    expect(failure.details?.reason).toBe('alert-window-expired');
+    expect(failure.details?.dispatched).toBe('no');
   });
 
   it('surfaces a failed capture as itself, never as a timeout', async () => {

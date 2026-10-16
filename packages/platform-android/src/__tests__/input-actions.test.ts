@@ -4,12 +4,14 @@ import {
   backAndroid,
   homeAndroid,
   longPressAndroid,
+  pressAndroid,
   pressAndroidEnter,
   pressAndroidTvRemote,
   probeAndroidDisplayRotation,
   scrollAndroid,
   setAndroidOrientation,
 } from '../input-actions.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
@@ -367,6 +369,41 @@ test('pressAndroidEnter presses the ENTER keyevent', async () => {
     async ({ calls, device }) => {
       await pressAndroidEnter(device);
       assert.deepEqual(calls, [['shell', 'input', 'keyevent', 'ENTER']]);
+    },
+  );
+});
+
+test('pressAndroid surfaces a failed tap as a typed dispatch error, not a false success', async () => {
+  // The device route raises the failed `adb shell input tap` as its own AppError; the input
+  // seam must hand that through with dispatch evidence, never as a tap that happened.
+  await withFakeAdb(
+    (args) =>
+      args[1] === 'input'
+        ? { stdout: '', stderr: 'INJECT_EVENTS security exception', exitCode: 1 }
+        : undefined,
+    async ({ device }) => {
+      await assert.rejects(pressAndroid(device, 100, 200), (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.dispatched, 'unknown');
+        assert.equal(error.details?.exitCode, 1);
+        return true;
+      });
+    },
+  );
+});
+
+test('pressAndroid dispatches no failure suppression even when one is smuggled past the type', async () => {
+  // The option type is the interface; an untyped caller cannot widen it back. The tap still
+  // fails typed: `allowFailure` never reaches the transport.
+  await withFakeAdb(
+    (args) =>
+      args[1] === 'input' ? { stdout: '', stderr: 'adb: device offline', exitCode: 1 } : undefined,
+    async ({ device }) => {
+      await assert.rejects(
+        pressAndroid(device, 100, 200, { allowFailure: true } as { signal?: AbortSignal }),
+        (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+      );
     },
   );
 });

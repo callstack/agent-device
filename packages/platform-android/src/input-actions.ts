@@ -25,19 +25,29 @@ import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/error
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidShell } from './adb.ts';
-import type { AndroidAdbExecutorOptions } from './adb-transport.ts';
 import { androidAdbResultError, discloseAdbInputDispatch } from './adb-failure.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
+
+/**
+ * What a caller may steer on a dispatched input command: cancellation only. The wider executor
+ * options stay out on purpose — `allowFailure` would let a dispatch claim success over a failed
+ * adb command, which no input dispatch may do.
+ */
+export type AndroidInputDispatchOptions = Readonly<{ signal?: AbortSignal }>;
 
 export async function pressAndroid(
   device: DeviceInfo,
   x: number,
   y: number,
-  executorOptions?: AndroidAdbExecutorOptions,
+  options?: AndroidInputDispatchOptions,
 ): Promise<void> {
   try {
-    await runAndroidShell(device, ['input', 'tap', x, y], executorOptions);
+    // Picked field by field so no runtime caller can smuggle `allowFailure: true` past the type.
+    await runAndroidShell(device, ['input', 'tap', x, y], {
+      allowFailure: false,
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
   } catch (error) {
     throw discloseAdbInputDispatch(error);
   }
@@ -48,11 +58,11 @@ export async function doubleTapAndroid(
   device: DeviceInfo,
   x: number,
   y: number,
-  executorOptions?: AndroidAdbExecutorOptions,
+  options?: AndroidInputDispatchOptions,
 ): Promise<void> {
-  await pressAndroid(device, x, y, executorOptions);
+  await pressAndroid(device, x, y, options);
   try {
-    await pressAndroid(device, x, y, executorOptions);
+    await pressAndroid(device, x, y, options);
   } catch (error) {
     throw discloseDispatchAfterSteps(error, 1);
   }
@@ -70,9 +80,13 @@ export async function pressAndroidTvRemote(
 
 export async function backAndroid(
   device: DeviceInfo,
-  executorOptions?: AndroidAdbExecutorOptions,
+  options?: AndroidInputDispatchOptions,
 ): Promise<void> {
-  await runAndroidShell(device, ['input', 'keyevent', '4'], executorOptions);
+  await runAndroidShell(
+    device,
+    ['input', 'keyevent', '4'],
+    options?.signal ? { signal: options.signal } : undefined,
+  );
 }
 
 export async function homeAndroid(device: DeviceInfo): Promise<void> {
