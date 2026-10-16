@@ -67,8 +67,9 @@ Consequently, the design must solve four boundaries together:
    The entry guard and element actions reuse ADR 0012's `target-v1`/`targets-v1` annotations and verification.
    Every v1 native fragment and composed parent starts with a required first-executable format guard (`fragment-v1` or `composition-v1`).
    A new reader consumes that guard during preflight.
-   An old reader treats the guard as an unknown action and rejects it before dispatch.
-   Thus the old reader cannot execute a root `open` or a known prefix before it reaches `include`.
+   An old reader treats the guard as an unknown action.
+   The required safety property is failure before platform execution, before a root `open` or any known prefix.
+   The current request path does not prove an `INVALID_ARGS` format rejection; see Annotation compatibility and versioning.
    Other fragment metadata and references remain reserved comments.
    Thus old readers ignore those annotations, and do not silently flatten the composition.
 7. **Native fragment repair is explicit re-recording.**
@@ -99,8 +100,8 @@ But these invariants are fixed:
   It is a format envelope, not a `SessionAction`, and it has no device side effect.
   A composed native parent uses the corresponding `composition-v1` guard as its first executable line, before root `open` or any `include`.
   An old reader parses either guard as an unknown action.
-  The generic-dispatch owner would reject the unknown guard before platform execution.
-  The fragment codec must prove the required `INVALID_ARGS` format rejection through that path.
+  The required safety property is failure before platform execution.
+  The current request path returns session-dependent errors; see Annotation compatibility and versioning for the evidence gap.
   The fragment has no `open`, `close`, or hidden launch action.
   The writer always emits the effective `context platform` and `target`.
   A parser rejects a fragment that is missing either constraint.
@@ -526,23 +527,38 @@ No error projection is allowed to collapse a fragment failure to a parent global
 The first entry `wait` and every element-targeting action continue to carry the existing `target-v1`/`targets-v1` evidence.
 That evidence keeps its size limits, canonical field order, and fail-closed `verification` behavior.
 Readers that do not know the reference annotation ignore that comment.
-Readers that do not know the executable guard reject the artifact at its format boundary.
+Readers that do not know the executable guard must fail before platform execution.
 
 The new reader consumes the native guard during source preflight.
 An old reader can get either a v1 fragment or a composed parent.
 It parses the guard as an ordinary action.
-The current generic-dispatch owner is `resolveGenericRuntimeExecution` in `packages/daemon/src/execution/generic-runtime-execution.ts`.
-Its default returns `COMMAND_FAILED` with reason `generic-route-runtime-missing` before platform execution.
-The proposed fragment codec must establish the required `INVALID_ARGS` format rejection before any platform handler runs.
-Then the old reader would not execute a root `open`, a known prefix, or an expanded child body.
+The current parser is `parseReplayScriptLine` in `packages/ad-script/src/internal/script.ts`.
+It accepts an unknown command name without format validation.
+The replay engine dispatches that action through `invokeReplayAction` in `packages/replay-port/src/daemon-port/session-replay-action-runtime.ts`.
+An unknown command has no `replayScopedAction` trait, so `createReplayScopedActionInvoker` uses the full request path.
+`getDaemonCommandRoute` selects `generic`, and `runRequestHandlerChain` returns no handler response.
+
+After request admission succeeds, `dispatchGenericForLockedScope` in `packages/daemon/src/server/request-router.ts` checks the session first.
+If no session exists, it returns `SESSION_NOT_FOUND` through `noActiveSessionError`.
+If a session exists, it calls `resolveGenericRuntimeExecution` in `packages/daemon/src/execution/generic-runtime-execution.ts`.
+For an unknown guard, that resolver returns `COMMAND_FAILED` with reason `generic-route-runtime-missing` before platform execution.
+These are responses for the guard request, not the outer replay response.
+The replay adapter wraps this dispatch failure as `REPLAY_DIVERGENCE`.
+The replay engine stops at the failed action before a later root `open`, known prefix, or expanded child body.
+
+**Open evidence gap:** this trace proves failure before platform execution for an unknown guard that reaches generic dispatch.
+It does not prove the specified `INVALID_ARGS` format rejection for old readers.
+A new fragment codec cannot change an old reader's behavior.
+**Maintainer question:** should the old-reader contract accept these existing errors, or retain `INVALID_ARGS` as an unresolved requirement?
 An old reader that gets an unguarded legacy `.ad` retains its existing behavior.
 This includes the possibility that it executes a known prefix before a later unknown command.
 That legacy case is explicitly outside the v1 composed-artifact acceptance contract, and it is not safety evidence.
 The new reader rejects a fragment supplied as a top-level replay artifact with `fragment_composition_required`.
 Unknown future reference comments remain ordinary comments to an older reader.
-An unknown future executable guard fails before device work.
+An unknown future executable guard has the same required safety property.
 
-The current generic-dispatch evidence is `packages/daemon/src/execution/__tests__/generic-route-runtime-completeness.test.ts`.
+`packages/daemon/src/execution/__tests__/generic-route-runtime-completeness.test.ts` verifies the resolver's unknown-command branch.
+It does not exercise the full replay path or the missing-session branch.
 Its unknown-command test proves the routing-gap response, not the proposed fragment format contract.
 The fragment codec implementation must add planted-red tests with these properties:
 
