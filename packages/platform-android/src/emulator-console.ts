@@ -15,8 +15,8 @@ export type EmulatorConsoleReply = Readonly<{
 /**
  * Runs one emulator console command (`adb emu <command…>`). adb exits 0 whether the console answers
  * `OK` or `KO: <reason>`, so a refusal comes back in the reply for the caller to classify with its
- * own reason; only a failed adb exit throws. A failure names the first two command words, never the
- * caller's operands.
+ * own reason; only a failed adb exit throws. A non-zero exit names the first two command words,
+ * never the caller's operands.
  */
 export async function runEmulatorConsole(
   device: DeviceInfo,

@@ -28,7 +28,7 @@ test.each([
   [{ action: 'sms', number: '5551234', text: 'hello' }, ['emu', 'sms', 'send', '5551234', 'hello']],
 ] as const)('sends %o to the emulator console as %o', async (input, args) => {
   const { signal } = new AbortController();
-  await sendAndroidTelephonyEvent(ANDROID_EMULATOR, input, { signal });
+  await sendAndroidTelephonyEvent(ANDROID_EMULATOR, input, signal);
   expect(mockAdb).toHaveBeenCalledExactlyOnceWith(
     ANDROID_EMULATOR,
     args,
@@ -38,16 +38,24 @@ test.each([
 
 test('passes SMS text with spaces, quotes, and shell metacharacters as one argument', async () => {
   const text = `Don't "pause" $HOME; echo $(id) & *`;
-  await sendAndroidTelephonyEvent(ANDROID_EMULATOR, { action: 'sms', number: '5551234', text });
+  await sendAndroidTelephonyEvent(
+    ANDROID_EMULATOR,
+    { action: 'sms', number: '5551234', text },
+    new AbortController().signal,
+  );
   expect(sentArgs()).toEqual(['emu', 'sms', 'send', '5551234', text]);
 });
 
 test('escapes backslashes and line breaks for the console instead of ending its command line', async () => {
-  await sendAndroidTelephonyEvent(ANDROID_EMULATOR, {
-    action: 'sms',
-    number: '5551234',
-    text: 'line one\nC:\\path\\n',
-  });
+  await sendAndroidTelephonyEvent(
+    ANDROID_EMULATOR,
+    {
+      action: 'sms',
+      number: '5551234',
+      text: 'line one\nC:\\path\\n',
+    },
+    new AbortController().signal,
+  );
   expect(sentArgs()).toEqual(['emu', 'sms', 'send', '5551234', String.raw`line one\nC:\\path\\n`]);
 });
 
@@ -56,10 +64,14 @@ test.each([
   ['KO\n', {}],
 ])('reports the console reply %j as telephony-console-refused', async (stdout, extra) => {
   mockAdb.mockResolvedValueOnce(answer(stdout));
-  const refusal = sendAndroidTelephonyEvent(ANDROID_EMULATOR, {
-    action: 'accept',
-    number: '5551234',
-  });
+  const refusal = sendAndroidTelephonyEvent(
+    ANDROID_EMULATOR,
+    {
+      action: 'accept',
+      number: '5551234',
+    },
+    new AbortController().signal,
+  );
   await expect(refusal).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: {

@@ -32,7 +32,7 @@ export function createAndroidTelephonyOperations(params: {
   return whenAdmitted(androidTelephonyFacts(device).sendTelephonyEvent, () => ({
     sendTelephonyEvent: async (input: TelephonyEventInput) => {
       signal.throwIfAborted();
-      await sendAndroidTelephonyEvent(device, input, { signal });
+      await sendAndroidTelephonyEvent(device, input, signal);
     },
   }));
 }

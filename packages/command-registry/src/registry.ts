@@ -1523,12 +1523,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // Admission is the owner's `sendTelephonyEvent` fact. The event goes to the emulator console
     // rather than the screen, so no blocking-dialog guard applies; the call screen or message
     // notification it raises can still cover the app, so refs may be invalidated.
-    recordsSessionAction: true,
-    recordingEffect: 'mutates-app',
-    deviceClaimPolicy: 'require-owner',
-    daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: true,
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
+    daemon: { ...GENERIC_MUTATING_COMMAND_TRAITS.daemon, androidBlockingDialogGuard: false },
     platformExecution: { kind: 'device-runtime', uses: [telephonyRuntimeUse] },
   },
   {

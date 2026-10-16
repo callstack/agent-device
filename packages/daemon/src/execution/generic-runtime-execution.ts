@@ -104,8 +104,7 @@ export async function resolveGenericRuntimeExecution(
         bindDevice: params.bindDevice,
       });
     case 'telephony': {
-      // Deferred like screenshot's leaf, so the daemon's startup closure stays at its merge-base
-      // size (scripts/__tests__/eager-closure-budgets.ts).
+      // Deferred to keep the daemon's eager closure within scripts/__tests__/eager-closure-budgets.ts.
       const { resolveBoundTelephonyRuntime } = await import('./telephony-runtime.ts');
       return await resolveBoundTelephonyRuntime({
         device: params.session.device,

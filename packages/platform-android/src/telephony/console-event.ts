@@ -11,9 +11,9 @@ const CONSOLE_REFUSED_HINT =
 export async function sendAndroidTelephonyEvent(
   device: DeviceInfo,
   input: TelephonyEventInput,
-  options: { signal?: AbortSignal } = {},
+  signal: AbortSignal,
 ): Promise<void> {
-  const reply = await runEmulatorConsole(device, consoleCommand(input), options.signal);
+  const reply = await runEmulatorConsole(device, consoleCommand(input), signal);
   if (reply.refusal !== undefined) {
     throw new AppError('COMMAND_FAILED', `The emulator console refused telephony ${input.action}`, {
       deviceId: device.id,

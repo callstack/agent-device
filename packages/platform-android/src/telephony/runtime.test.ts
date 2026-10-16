@@ -19,7 +19,7 @@ test('the emulator operation sends the event with the bound request signal', asy
 
   const input = { action: 'sms', number: '5551234', text: 'hello' } as const;
   await operations.sendTelephonyEvent?.(input);
-  expect(mockSend).toHaveBeenCalledExactlyOnceWith(ANDROID_EMULATOR, input, { signal });
+  expect(mockSend).toHaveBeenCalledExactlyOnceWith(ANDROID_EMULATOR, input, signal);
 });
 
 test('an aborted scope never reaches the emulator console', async () => {

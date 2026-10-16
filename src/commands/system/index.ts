@@ -661,9 +661,9 @@ const tvRemoteCommandFacet = defineCommandFacet({
 const telephonyCommandFacet = defineCommandFacet({
   name: TELEPHONY_COMMAND_NAME,
   text: {
-    summary: 'Simulate an incoming call or SMS on an Android emulator',
+    summary: 'Simulate an incoming call or SMS on a local adb-driven Android emulator',
     cliDetail:
-      'Android emulators only, through the emulator console. Quote the SMS text, or pass it as the remaining words. Re-snapshot after the event: the call screen or notification can cover the app.',
+      'Local adb-driven Android emulators only, through the emulator console; WebDriver (Appium) and Limrun sessions refuse it. Quote the SMS text, or pass it as the remaining words. Re-snapshot after the event: the call screen or notification can cover the app.',
   },
   metadata: telephonyCommandMetadata,
   run: (client, input) => client.command.telephony(input),

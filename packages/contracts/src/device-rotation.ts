@@ -208,9 +208,8 @@ export function parseFoldKeyframesJson(value: string): readonly FoldKeyframe[] {
 }
 
 // ---- Telephony -------------------------------------------------------------------------------
-// Lives beside the rotation and hinge vocabulary for the same eager-closure reason: the CLI and
-// the session journal already evaluate this module, and a module of its own would join the
-// eager closure of every entry that reads one (scripts/__tests__/eager-closure-budgets.ts).
+// The CLI and session journal load this module eagerly; a separate telephony module would grow
+// their eager closures past scripts/__tests__/eager-closure-budgets.ts.
 
 /**
  * The telephony events an emulator can be asked to simulate: an incoming voice call (`call`),
