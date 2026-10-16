@@ -4,7 +4,11 @@ import { runAndroidShell } from './adb.ts';
 import { androidAdbResultError } from './adb-failure.ts';
 import { readAndroidSdkInt } from './device-sdk-int.ts';
 import { androidFeatureListDeclares } from './inventory-parsers.ts';
-import { setAndroidGlobalToggle, type AndroidGlobalToggle } from './settings-global-toggle.ts';
+import {
+  setAndroidGlobalToggle,
+  type AndroidGlobalToggle,
+  type AndroidToggleState,
+} from './settings-global-toggle.ts';
 
 const NO_BLUETOOTH_ADAPTER_REASON = 'android_bluetooth_adapter_missing';
 const BLUETOOTH_COMMAND_UNAVAILABLE_REASON = 'android_bluetooth_command_unavailable';
@@ -22,7 +26,7 @@ const SVC_BLUETOOTH_MIN_SDK = 27;
  * The Bluetooth manager persists `bluetooth_on`: 1 while the adapter is on, and 0, or 2 when
  * airplane mode turned it off. `svc bluetooth` exits 0 when the adapter refuses the change.
  */
-const BLUETOOTH_TOGGLE: AndroidGlobalToggle = {
+const BLUETOOTH_TOGGLE: AndroidGlobalToggle<'bluetooth'> = {
   service: 'bluetooth',
   row: 'bluetooth_on',
   label: 'Bluetooth',
@@ -43,7 +47,7 @@ export async function setAndroidBluetooth(
   device: DeviceInfo,
   enabled: boolean,
   signal: AbortSignal | undefined,
-): Promise<Record<string, unknown>> {
+): Promise<{ bluetooth: AndroidToggleState }> {
   try {
     await requireAndroidSvcBluetooth(device, signal);
   } catch (error) {

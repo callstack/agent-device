@@ -6,7 +6,7 @@ import { underFakeTimers } from './test-utils/fake-timers.ts';
 
 const READ = 'shell settings get global example_on';
 
-const TOGGLE: AndroidGlobalToggle = {
+const TOGGLE: AndroidGlobalToggle<'example'> = {
   service: 'example',
   row: 'example_on',
   label: 'example',
