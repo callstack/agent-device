@@ -1,5 +1,5 @@
 import type {
-  LaunchConfirmationUnansweredReason,
+  LaunchConfirmationOutcome,
   OpenApplicationInput,
   OpenApplicationOutcome,
   OpenApplicationRunnerDemand,
@@ -29,28 +29,16 @@ const POST_OPEN_SETTLE_MS = 300;
  */
 const LAUNCH_CONFIRMATION_ROUNDS = 2;
 
-/**
- * What the open reports about a launch confirmation it saw: the answer it gave, or the typed
- * reason a prompt it must not answer stayed on screen. A failed accept never reports here; that
- * open fails with its own reason.
- */
-export type ReportedLaunchConfirmation =
-  | Readonly<{ launchConfirmation: 'accepted' }>
-  | Readonly<{
-      launchConfirmation: 'unanswered';
-      launchConfirmationReason: LaunchConfirmationUnansweredReason;
-    }>;
-
 type HeldLaunchOutcome = Readonly<{
   observed: LaunchObservation | undefined;
-  report?: ReportedLaunchConfirmation;
+  report?: LaunchConfirmationOutcome;
   /** The launch has no process, or its recognized confirmation remains visible. */
   unanswered: boolean;
 }>;
 
 type HeldLaunchRound = Readonly<{
   observed: LaunchObservation | undefined;
-  report?: ReportedLaunchConfirmation;
+  report?: LaunchConfirmationOutcome;
   /** Whether an accept has run or been attempted; only an accept can change what the bridge sees. */
   acceptAttempted: boolean;
   confirmationStillPresent: boolean;
@@ -148,12 +136,12 @@ export async function settleAppleOpen(
     redispatchLaunchUrl?: () => Promise<void>;
   }>,
   timing: MutableOpenTiming,
-): Promise<ReportedLaunchConfirmation | undefined> {
+): Promise<LaunchConfirmationOutcome | undefined> {
   const startedAtMs = Date.now();
   const observe = async () =>
     await observeLaunchedApp(binding, input, localIosSimulator, launch.observation);
   let observed = await observe();
-  let report: ReportedLaunchConfirmation | undefined;
+  let report: LaunchConfirmationOutcome | undefined;
   const answer = launch.answerConfirmation;
   const held =
     answer && observed?.observation !== 'observable'
@@ -267,7 +255,7 @@ async function answerConfirmationOnce(
  */
 function reportForAttempt(
   attempt: LaunchConfirmationAttempt,
-): ReportedLaunchConfirmation | undefined {
+): LaunchConfirmationOutcome | undefined {
   if (attempt.outcome === 'accepted') return { launchConfirmation: 'accepted' };
   if (attempt.outcome !== 'unanswered') return undefined;
   if (attempt.reason === 'alert-unrecognized' || attempt.reason === 'url-owner-unresolved') {

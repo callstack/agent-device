@@ -758,19 +758,24 @@ test('a prompt open read but did not recognize reports the unanswered confirmati
 
   const outcome = await lifecycle.openApplication(launchUrlInput());
 
-  expect(outcome.launchConfirmation).toBe('unanswered');
-  expect(outcome.launchConfirmationReason).toBe('alert-unrecognized');
+  expect(outcome).toMatchObject({
+    launchConfirmation: 'unanswered',
+    launchConfirmationReason: 'alert-unrecognized',
+  });
   expect(interactor.acceptAlert).not.toHaveBeenCalled();
 });
 
 test('a prompt whose URL owner stays unresolved reports the unanswered confirmation', async () => {
-  urlOwner.resolve = async () => undefined;
-  const { lifecycle, interactor } = launchUrlSimulator(async () => CONFIRMATION, [UNOBSERVABLE]);
+  const { lifecycle, interactor } = launchUrlSimulator(async () => CONFIRMATION, [UNOBSERVABLE], {
+    owner: async () => undefined,
+  });
 
   const outcome = await lifecycle.openApplication(launchUrlInput());
 
-  expect(outcome.launchConfirmation).toBe('unanswered');
-  expect(outcome.launchConfirmationReason).toBe('url-owner-unresolved');
+  expect(outcome).toMatchObject({
+    launchConfirmation: 'unanswered',
+    launchConfirmationReason: 'url-owner-unresolved',
+  });
   expect(interactor.acceptAlert).not.toHaveBeenCalled();
 });
 

@@ -14,7 +14,9 @@ import {
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type {
+  LaunchConfirmationOutcome,
   LaunchConfirmationUnansweredReason,
+  OpenApplicationOutcome,
   OpenApplicationTiming,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -117,13 +119,35 @@ function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim): string {
   );
 }
 
+/** The answered launch confirmation the outcome carries, as the response reports it. */
+function launchConfirmationReport(
+  outcome: OpenApplicationOutcome,
+): LaunchConfirmationOutcome | undefined {
+  switch (outcome.launchConfirmation) {
+    case 'accepted':
+      return { launchConfirmation: 'accepted' };
+    case 'unanswered':
+      return {
+        launchConfirmation: 'unanswered',
+        launchConfirmationReason: outcome.launchConfirmationReason,
+      };
+    default:
+      return undefined;
+  }
+}
+
 /** What the caller's `open` output says when the launch confirmation it saw stayed unanswered. */
-function launchConfirmationUnansweredWarning(
-  reason: LaunchConfirmationUnansweredReason | undefined,
-): string {
+function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnansweredReason): string {
+  if (reason === 'url-owner-unresolved') {
+    return (
+      'iOS is still holding the launch confirmation and no single installed app owns the launch ' +
+      "URL's scheme, so this launch URL has not reached the app. Answer it with `alert accept`."
+    );
+  }
   return (
-    `iOS is still holding the launch confirmation (${reason ?? 'unrecognized'}), so this launch ` +
-    'URL has not reached the app. Answer it with `alert accept`.'
+    'iOS shows an alert this open did not recognize (alert-unrecognized), so it left the launch ' +
+    'URL unconfirmed. Inspect the current alert with `alert get` before answering it with ' +
+    '`alert accept`.'
   );
 }
 
@@ -311,8 +335,7 @@ export async function completeOpenCommand(params: {
     runtimeHintCount: countConfiguredRuntimeHints,
     sessionReused: existingSession !== undefined,
     selection: preparedSelection,
-    launchConfirmation: outcome.launchConfirmation,
-    launchConfirmationReason: outcome.launchConfirmationReason,
+    launchConfirmation: launchConfirmationReport(outcome),
   });
   if (tookOverDeviceClaim) {
     appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim));
