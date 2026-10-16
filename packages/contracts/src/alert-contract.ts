@@ -22,6 +22,16 @@ export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
  */
 export const ALERT_BUTTON_NOT_FOUND_RUNNER_CODE = 'ALERT_BUTTON_NOT_FOUND';
 
+/**
+ * The acting leg's window closed after the alert resolved but before the press could be sent.
+ * Typed so a caller can tell "the sheet was there and we refused to press late" from absence or
+ * an unresolvable capture — the press was never dispatched.
+ */
+export const ALERT_WINDOW_EXPIRED_REASON = 'alert-window-expired';
+
+/** What an `alert get` capture resolved to, typed so clients switch on states, not messages. */
+export type AlertStatusKind = 'visible' | 'none' | 'undecided';
+
 export type AlertButtonRole = 'accept' | 'dismiss' | 'neutral';
 
 /**
