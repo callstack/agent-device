@@ -7,17 +7,21 @@ Reference trace for the entry-to-platform hop counts in ADR 0019 and the couplin
 ## Rules at a glance
 
 - Count each distinct production `.ts` file once on the main path, including both endpoints.
-- Exclude type-only files, side-calls, response-only files, and untraced forks from hop counts.
+- Exclude type-only imports, files that supply only types, side-calls, response-only files, and untraced forks from hop counts.
 - Trace the snapshot runner fallback with an existing runner session.
 - Assign exactly one role to each file.
 - Apply the deletion test to each pass-through/translation hop.
 - Treat 38/29 and the ≤14 target as superseded.
-  Only the proven removable `commands/runtime-types.ts` hop is endorsed for combination.
+  The audit endorses only the collapse of the proven removable `commands/runtime-types.ts` hop.
+  Any further target requires a decision to fold cross-cutting request-scope wrappers.
 
 This trace supports the "Entry-to-platform hop count" paragraph in
 [0019-request-bound-platform-runtime.md](./0019-request-bound-platform-runtime.md#end-state-proposed-2026-09-02-maintainer-decision-pending).
 That paragraph cited 38 hops for `press`/Android and 29 for `snapshot`/iOS without an ordered route, definition, or linked artifact.
 This file supplies all three.
+
+This revision replaces the superseded 23/24 tables recorded at `132ffe1da`.
+It keeps the counting definition stable so the numbers remain comparable.
 
 ## Counting definition
 
@@ -46,21 +50,21 @@ This file supplies all three.
   The cold-start lease, xctestrun build through xcodebuild, and process launch form a separate fork.
 - **Per-file role:** assign exactly one role:
   - **policy:** decides admission, limits, retry, or routes and can refuse or redirect a request.
-  - **orchestration:** coordinates calls, binds/runs a runtime, or assembles the object graph needed by later hops.
+  - **orchestration:** coordinates multiple calls, binds/runs a runtime, or assembles the object graph needed by later hops.
   - **translation:** maps values/shapes without issuing the platform call, such as argv construction, wire encoding, or target resolution.
-  - **adapter:** encapsulates an external subprocess, socket, or fetch boundary.
+  - **adapter:** encapsulates an external system boundary, for example a subprocess, a socket, or a fetch.
     The terminal adapter issues the platform call.
   - **pass-through:** delegates to exactly one next call on the path without a branch or transformation.
     Examples include lazy-load indirection, a one-line re-export/delegate, and a scope wrapper.
 - **Deletion test:** apply this test to each pass-through/translation hop.
-  Can the caller or callee absorb the handoff without loss of admission, budget, isolation, a declared ADR boundary, or testability?
+  Can the caller, the callee, or both inline the handoff of the hop without loss of admission, budget, isolation, a declared boundary named in an ADR, or a testability seam?
   The test evaluates the hop, not the file.
-  REMOVABLE identifies a hop that can combine with another, not a file for deletion.
+  A REMOVABLE hop is a collapse candidate, not a file to delete.
 - **Method:** use this sequence:
   1. Read the file.
   2. Find the exported entry function that the caller reaches.
   3. Follow its first call that continues toward the platform call.
-  4. Record the file and function that hands control to the next hop.
+  4. Record the file and the one function that hands control to the next hop.
 - **Commit measured at:** `27a97ee619`, re-traced for #2278.
   It supersedes the `132ffe1da` tables.
 
@@ -179,7 +183,7 @@ The route branches at `packages/platform-apple/src/snapshot-route.ts` through `r
 The in-simulator AX bridge is primary.
 The XCTest runner is fallback under any of these conditions:
 
-- The target is ineligible.
+- The capture is ineligible.
 - AX acquisition fails.
 - Single-flight target discovery has not settled within this capture's `TARGET_DISCOVERY_WAIT_MS` wait in `snapshot-target.ts`.
 
@@ -191,8 +195,8 @@ The union contains 66 distinct files.
 
 Idle-reap reset, auth comparison, cancellation, and Android freshness guard/clear are side-calls on the prefix.
 They execute beside the continuation and do not count as hops.
-`packages/daemon/src/core/session-snapshot-freshness.ts` reads the guard and clears it after capture.
-It has no effect on iOS.
+`packages/daemon/src/core/session-snapshot-freshness.ts` reads the guard, and after capture it clears the guard.
+The clear has no effect on iOS.
 
 ### Shared prefix (entry → fork)
 
@@ -209,7 +213,7 @@ It has no effect on iOS.
 | 9 | `packages/daemon/src/sessions/request-handler-chain.ts` | `runRequestHandlerChain` routes `snapshot` to `runSnapshotHandler` | orchestration | KEEP — command routing |
 | 10 | `packages/daemon/src/sessions/handlers/snapshot.ts` | `handleSnapshotCommands` routes the plain arm | policy | KEEP — snapshot command routing |
 | 11 | `packages/daemon/src/sessions/snapshot-runtime.ts` | `dispatchSnapshotViaRuntime` → `params.execute` | pass-through | KEEP — snapshot execute seam (route tests pin it) |
-| 12 | `packages/daemon/src/sessions/snapshot-command-runtime.ts` | resolves the bound capture; connects session/backend; runs the op | orchestration | KEEP — capture composition + recording |
+| 12 | `packages/daemon/src/sessions/snapshot-command-runtime.ts` | resolves the bound capture; wires session/backend; runs the op | orchestration | KEEP — capture wiring + recording |
 | 13 | `packages/daemon/src/core/deferred-interaction-outcome.ts` | `resolveDeferredInteractionOutcome` before a fresh capture | policy | KEEP — pending-outcome settlement (may short-circuit) |
 | 14 | `packages/daemon/src/core/snapshot-capture.ts` | `resolveSnapshotScope` + the capture attempt | orchestration | KEEP — capture attempt + scope resolution |
 | 15 | `packages/daemon/src/core/snapshot-session.ts` | `resolveSessionDevice` for the capture | translation | KEEP — snapshot session/device resolution |
@@ -221,11 +225,11 @@ It has no effect on iOS.
 | 21 | `src/platform-runtime-operation-host.ts` | `createPlatformRuntimeHost` assembles the host | orchestration | KEEP — host composition |
 | 22 | `packages/platform-apple/src/index.ts` | `loadRuntime` pairs the plugin with the runtime module | pass-through | KEEP — declared ADR §2 `loadRuntime` boundary |
 | 23 | `packages/platform-apple/src/runtime.ts` | `bind` → `bindAppleSnapshotRuntime` | orchestration | KEEP — Apple runtime owner |
-| 24 | `packages/platform-apple/src/runtime-snapshot.ts` | `bindAppleSnapshotRuntime` connects the AX and fallback closures | orchestration | KEEP — AX/runner composition (tests pin it) |
+| 24 | `packages/platform-apple/src/runtime-snapshot.ts` | `bindAppleSnapshotRuntime` wires the AX and fallback closures | orchestration | KEEP — AX/runner wiring (tests pin it) |
 | 25 | `packages/platform-apple/src/snapshot-route.ts` | `createAppleSnapshotRoute`; `isEligible` + circuit breaker | policy | KEEP — AX/runner route + breaker (the fork) |
 | 26 | `src/runtime.ts` | `createAgentDevice`: the bound runtime object | orchestration | KEEP — agent device facade |
 | 27 | `src/commands/index.ts` | `bindCommands` binds the command catalog | orchestration | KEEP — command catalog boundary |
-| 28 | `src/commands/runtime-types.ts` | `bindRuntimeCommands` wraps the runtime into closures | pass-through | REMOVABLE — thin closure wrapper; commands own the behavior |
+| 28 | `src/commands/runtime-types.ts` | `bindRuntimeCommands` wraps the runtime into closures | pass-through | REMOVABLE — thin closure wrapper; depth lives in the commands |
 | 29 | `src/commands/capture/runtime/snapshot.ts` | `snapshotCommand`: parses input, calls `runtime.backend.captureSnapshot` | orchestration | KEEP — capture command implementation |
 | 30 | `packages/contracts/src/snapshot-runtime.ts` | the `captureSnapshot` op → AX route or interactor fallback | pass-through | KEEP — cross-layer contract seam (ownership refusal + signal join) |
 
@@ -280,7 +284,7 @@ The file counts once.
 
 **Admission fan-out (not hops).**
 The Apple owner's per-request `inspectFacts` in `packages/platform-apple/src/runtime.ts` calls the same 23 builders listed for Android.
-They are side-calls of admission under `packages/contracts/src/*-runtime.ts`.
+The builders are in `packages/contracts/src/*-runtime.ts`. They are side-calls of the admission step.
 
 **Response path (not hops).** These 22 files execute only after the platform call:
 
@@ -339,7 +343,8 @@ They are side-calls of admission under `packages/contracts/src/*-runtime.ts`.
 
 The plan sheet suggested façade PRs #2178, #2222, and #2232 as a possible explanation.
 All merged before `e624ef9d3f`, the commit cited for the ADR's 38/29 measurement.
-Thus, they cannot explain a difference from that measurement.
+Thus, they cannot explain why that count is higher than this one.
+They were already in effect when 38/29 was recorded.
 
 This trace measures 41 hops for `press`/Android and 47/49 per arm for `snapshot`/iOS.
 The ADR supplies no ordered chain, command/artifact, or definition for 38/29.
@@ -370,7 +375,7 @@ Four groups explain the growth:
    This includes `src/runtime.ts`, `src/commands/**`, and `interaction-runtime.ts`.
 3. **adb host split and claim gate:** press rows 23 and 39–41.
    The additions are `device-claim-admission.ts`, `adb-provider-scope.ts`, `adb-failure.ts`, and named-root terminal `platform-runtime-android-adb-host.ts`.
-   Package `adb.ts` now supplies a pass-through executor boundary.
+   Package `adb.ts` is now a pass-through executor seam.
 4. **Snapshot dual arms:** the in-simulator AX bridge became primary and the XCTest runner became fallback.
    Arm A adds `snapshot-source/*`, target/process/simctl resolution, and host-kit process adapters.
    Arm B adds runner protocol depth through `runner-command-traits`, `runner-contract`, `runner-recycle-ledger`, and `runner-startup-transport`.
@@ -378,24 +383,25 @@ Four groups explain the growth:
 
 ## The ≤14 target
 
-The traced HEAD applies the earlier deletion logic: combine every pass-through hop without retained depth.
+This section re-derives the target at HEAD with the collapse rule that the earlier revision applied: fold every pass-through hop without kept depth.
 
 - **`press`/Android: no longer plausible.**
   The fixed request spine, rows 1–9, already contains nine files.
-  Each preserves diagnostics attribution, inventory/resolution context, execution scope, provider scope, or a declared boundary.
-  All other pass-through hops preserve declared boundaries, interactor resolution, adb execution, or typed failure classification.
-  A ≤14 target requires removal of 27 files with cross-cutting daemon responsibilities or necessary bindings.
+  Each of them passes the deletion test with kept depth (diagnostics attribution, inventory/resolution context, execution scope, or provider scope), or is a declared boundary.
+  Every remaining pass-through hop keeps depth: declared boundaries, the interactor resolution seam, the adb executor seam, and typed failure classification.
+  A ≤14 target would require removal of 27 files with cross-cutting daemon responsibilities or necessary bindings.
   They are not unnecessary press-specific layers.
 - **`snapshot`/iOS: not reachable.**
   The shared prefix contains 30 files.
-  The primary arm adds 16 non-terminal AX-bridge hops for binary cache, session lock, wire codec, and deadlines.
-  The fallback runner protocol requires retry, contract, recycle ledger, and readiness layers.
+  The primary arm adds 16 non-terminal hops of the AX-bridge protocol (binary cache, session lock, wire codec, deadline budgets).
+  The runner protocol of the fallback arm (retry, contract, recycle ledger, readiness) remains load-bearing.
   Only shared row 28, `commands/runtime-types`, is REMOVABLE.
-  Combining this thin closure wrapper changes 47/49 to 46/48.
+  The collapse of this thin closure wrapper changes 47/49 to 46/48.
 
 **Verdict: the ≤14 target is superseded.**
 At `27a97ee619`, the audited routes contain 41 hops for `press`/Android and 47/49 per arm for `snapshot`/iOS.
 Only one distinct hop is proven removable across both routes: `commands/runtime-types.ts`.
 The audit endorses only this reduction.
-A further target requires a decision to combine cross-cutting request-scope wrappers outside this route's ownership.
+Any further target requires a decision to fold cross-cutting request-scope wrappers.
+That decision is outside this route's ownership.
 Treat 14 as a historical discussion reference, not a derived number.
