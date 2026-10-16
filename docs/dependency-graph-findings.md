@@ -268,7 +268,11 @@ moving `DaemonRequest` is most of what §1's second cluster needs.
 > `bin.ts`, `cli.ts` and `daemon.ts`, and R80 asserts that the zone graph of static value imports is
 > acyclic. That reduces `(root)` in the logical graph only: the modules still live directly under
 > `src/`, and the declaration is a bridge whose rows go as groups move into zone folders or
-> packages. The physical moves remain outstanding, starting with #3294. Ranking the composition roots did not weaken R2: it still rejects a direct `daemon/` ->
+> packages. Correction (2026-10-16): #3294 and #3281 are closed.
+> PR #3297 moved daemon diagnostics to `src/daemon-contracts/`.
+> PR #3299 moved the runtime assembly pair to `src/command-runtime/`.
+> Package extraction later moved daemon diagnostics to `packages/daemon-contracts/`.
+> Ranking the composition roots did not weaken R2: it still rejects a direct `daemon/` ->
 > `commands/` import, and the daemon reaches the command surface through the ranked
 > `command-runtime` zone, which the zone graph now shows instead of hiding. The SDK entries rank
 > above `daemon-client`, because the typed client they publish reaches the daemon through it.
