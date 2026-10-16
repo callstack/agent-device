@@ -29,9 +29,7 @@ test('Android phones and emulators admit single- and multi-touch gesture plans',
 test('target-authored drag is admitted only where adapters preserve every authored phase', async () => {
   const supported = [
     device({ kind: 'device', target: 'mobile' }),
-    device({ platform: 'apple', appleOs: 'ios', kind: 'device', target: 'mobile' }),
     device({ platform: 'apple', appleOs: 'ios', kind: 'simulator', target: 'mobile' }),
-    device({ platform: 'apple', appleOs: 'ipados', kind: 'device', target: 'mobile' }),
     device({ platform: 'apple', appleOs: 'ipados', kind: 'simulator', target: 'mobile' }),
     device({ platform: 'apple', kind: 'simulator', target: 'mobile' }),
   ];

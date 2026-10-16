@@ -841,6 +841,25 @@ test('runtime snapshot warns when its tree was read on a surface still moving af
   assert.deepEqual(result.warnings, [formatPostGestureOutcomeWarning(outcome)]);
 });
 
+test('runtime snapshot warns when a gesture produced no visible change', async () => {
+  const outcome: PostGestureOutcome = {
+    kind: 'no-effect',
+    gesture: { action: 'scroll', positionals: ['up'] },
+  };
+  const device = createSnapshotOnlyDevice({
+    snapshot: {
+      ...makeSnapshotState([{ index: 0, depth: 0, type: 'Window', label: 'Home' }], {
+        backend: 'xctest',
+      }),
+      postGestureOutcome: outcome,
+    },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.deepEqual(result.warnings, [formatPostGestureOutcomeWarning(outcome)]);
+});
+
 // The box a capture's rects are measured in is public output (#3182) for the same reason the
 // keyboard band is: `snapshot --json` is how a caller learns the surface to scale against, and a
 // producer that measured no box has to leave the key off rather than claim a screen it never read.

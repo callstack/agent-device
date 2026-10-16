@@ -138,8 +138,9 @@ test('a snapshot after a scroll that moved nothing warns and stamps the no-effec
     await vi.advanceTimersByTimeAsync(100);
     await new Promise((resolve) => realSetTimeout(resolve, 1));
   }
-  await pending;
+  const response = await pending;
 
+  expect(response.ok).toBe(true);
   expect(input.sessionStore.get(input.sessionName)?.snapshot?.postGestureOutcome).toEqual(outcome);
 });
 

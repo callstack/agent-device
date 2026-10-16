@@ -77,33 +77,35 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
     limrunTestDependencies,
   );
   rootPorts.providerComposition.mockResolvedValue({ runtimes: [limrun], platformModules: [] });
-  const runtime = await startDaemonRuntime({
-    composeDeps: createDaemonRuntimeDeps,
-    env: {
-      ...process.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_test/api',
-      LIM_ANDROID_INSTANCE_TOKEN: 'lim-test-token',
-      LIM_ANDROID_INSTANCE_ADB_URL: 'https://region.limrun.example/v1/android_test/adb',
-    },
-    exit: () => {},
-    registerProcessHandlers: false,
-    stderr: { write: () => {} },
-    stdout: { write: () => {} },
-  });
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | undefined;
 
   try {
-    if (!runtime?.httpPort) throw new Error('HTTP daemon runtime did not start');
+    runtime = await startDaemonRuntime({
+      composeDeps: createDaemonRuntimeDeps,
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_test/api',
+        LIM_ANDROID_INSTANCE_TOKEN: 'lim-test-token',
+        LIM_ANDROID_INSTANCE_ADB_URL: 'https://region.limrun.example/v1/android_test/adb',
+      },
+      exit: () => {},
+      registerProcessHandlers: false,
+      stderr: { write: () => {} },
+      stdout: { write: () => {} },
+    });
+    const activeRuntime = runtime;
+    if (!activeRuntime?.httpPort) throw new Error('HTTP daemon runtime did not start');
     limrunIo.listAssets.mockClear();
     limrunIo.createAndroidInstance.mockClear();
 
     const callRpc = async (payload: Record<string, unknown>) => {
-      const response = await fetch(`http://127.0.0.1:${runtime.httpPort}/rpc`, {
+      const response = await fetch(`http://127.0.0.1:${activeRuntime.httpPort}/rpc`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${runtime.token}`,
+          authorization: `Bearer ${activeRuntime.token}`,
           'content-type': 'application/json',
           [DAEMON_HTTP_NETWORK_ACCESS_HEADER]: DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
         },
@@ -147,7 +149,8 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
   } finally {
     await runtime?.shutdown();
     await limrun.shutdown();
-    assert.equal(rootPorts.applicationLifecycle.finalizeDaemonShutdown.mock.calls.length, 1);
     fs.rmSync(paths.baseDir, { recursive: true, force: true });
+    if (runtime)
+      assert.equal(rootPorts.applicationLifecycle.finalizeDaemonShutdown.mock.calls.length, 1);
   }
 });
