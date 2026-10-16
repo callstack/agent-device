@@ -109,6 +109,13 @@ const hasRunnerConnectFailureReason =
   (details) =>
     details.runnerConnectFailureReason === reason;
 /**
+ * The terminal verdict of a runner launch whose simulator service this macOS refused to load. It keys
+ * on the reason the launch paths publish, never on the bless sentence they quote, so foreign text
+ * carrying Xcode's own wording cannot, on its own, mark a failure terminal.
+ */
+const hasSimulatorServiceHubFailure: RunnerErrorDetailsMatch = (details) =>
+  details.reason === SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON;
+/**
  * The preflight marks whatever it was waiting on when it stopped, and one of the things it waits on
  * is a caller that stopped waiting. A canceled request is not a wedged runner: the restart this
  * marker authorises would boot a runner for a command nobody is going to send again. Every abort in
@@ -179,6 +186,7 @@ export const RUNNER_STARTUP_FAILURE_REASONS = [
   'signing_provisioning_profile_missing',
   'signing_unspecified',
   'devtools_security_developer_mode_disabled',
+  'simulator_service_hub_unavailable',
   'simulator_set_destination_not_found',
   ...RUNNER_DEVICE_READINESS_FAILURE_REASONS,
   'build_failed_unclassified',
@@ -189,6 +197,25 @@ export type RunnerStartupFailureReason = (typeof RUNNER_STARTUP_FAILURE_REASONS)
 /** The device-readiness subset, typed from the one list above. */
 export type RunnerDeviceReadinessFailureReason =
   (typeof RUNNER_DEVICE_READINESS_FAILURE_REASONS)[number];
+
+/**
+ * The reason for a simulator runner launch whose service hub the host macOS refused to load. macOS
+ * gates `DTServiceHub` behind a version-restriction entitlement, so an Xcode older than the macOS it
+ * runs on cannot bless the simulator service at all: every launch fails the same way until the host
+ * selects an Xcode that supports its macOS. AMFI's refusal is visible only as the bless line in the
+ * launch output, which is why the row keys on that phrase and why no host-side preflight exists.
+ */
+export const SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON: RunnerStartupFailureReason =
+  'simulator_service_hub_unavailable';
+
+/**
+ * Names the cause in the message beside the connect-shaped failure the bless refusal produced. The
+ * reason and hint come from {@link classifyRunnerStartupFailure}; this only folds the cause into the
+ * sentence the caller reads first.
+ */
+export function simulatorServiceHubFailureMessage(message: string): string {
+  return `${message}: this Xcode cannot start its simulator service on this macOS`;
+}
 
 /**
  * The reason a startup failure carries when no rule proves a cause. Its hint is deliberately the
@@ -283,6 +310,19 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
       details: hasRunnerConnectFailureReason('xcodebuild_exited_early'),
     },
     verdicts: { retryable: false, connectRetry: false, artifactSuspect: false },
+  },
+  {
+    // A boot whose simulator service the host refused is not cured by wiping derived data, and no
+    // restart or resend can make AMFI load a binary this macOS rejects.
+    reason: 'simulator_service_hub_unavailable',
+    match: { code: 'COMMAND_FAILED', details: hasSimulatorServiceHubFailure },
+    verdicts: {
+      retryable: false,
+      connectRetry: false,
+      restartBeforeSend: false,
+      restartAfterReadinessPreflight: false,
+      artifactSuspect: false,
+    },
   },
   {
     // A device still mid-attachment is not a runner we can talk to yet, and waiting on
@@ -391,6 +431,22 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     buildFailure: {
       reason: 'simulator_set_destination_not_found',
       hint: 'Check that the simulator still exists in the --ios-simulator-device-set this error names (`xcrun simctl --set <set> list devices`). If it does, the Xcode this error names no longer honors -DVTSimulatorSetLocation, so use a simulator in the default set.',
+    },
+  },
+  {
+    // macOS validates Xcode's `DTServiceHub` against a version-restriction entitlement and refuses a
+    // build older than itself (AMFI: "disallowed without correct
+    // com.apple.private.amfi.version-restriction entitlement version"), so no launch of this Xcode's
+    // simulator service can succeed on this host. Both phrases are Xcode's own sentence and meet on
+    // the same line of the launch output; the domain names the client, the complaint names the bless.
+    reason: 'simulator_service_hub_bless_refused',
+    match: {
+      toolTextLineIncludesAll: ['dtservicehubclient', 'failed to bless service hub'],
+    },
+    verdicts: {},
+    buildFailure: {
+      reason: SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON,
+      hint: 'This Xcode cannot start its simulator service on this macOS: macOS refuses to load its DTServiceHub. Select an Xcode that supports this macOS on the daemon host (`xcode-select -s /Applications/Xcode.app`, or DEVELOPER_DIR=/Applications/Xcode.app for the daemon process), then retry. Updating Xcode is the fix; restarting the runner or clearing derived data cannot change it.',
     },
   },
   {

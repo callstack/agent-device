@@ -250,6 +250,39 @@ test('only a runner that never accepted a connection indicts the cached artifact
   assert.equal(shouldRebuildCachedRunnerArtifact(commandFailed('fetch failed')), false);
 });
 
+test('a simulator service this macOS refuses to load is terminal on every recovery axis', () => {
+  // The reason the launch paths publish is the whole fact: this Xcode fails every launch on this
+  // macOS, so no restart, resend, replay, or clean rebuild may be ordered for it (#3449).
+  const blessRefusal = commandFailed('Runner did not accept connection', {
+    reason: 'simulator_service_hub_unavailable',
+    runnerConnectFailureReason: 'runner_connect_refused',
+    dispatched: 'no',
+  });
+  assert.equal(shouldRetryRunnerConnectError(blessRefusal), false);
+  assert.equal(isRetryableRunnerError(blessRefusal), false);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(blessRefusal, SNAPSHOT), false);
+  assert.equal(shouldRebuildCachedRunnerArtifact(blessRefusal), false);
+  // The preflight's restart marker cannot outvote it either: the preflight would boot the same
+  // runner that just failed to load its service hub.
+  assert.equal(
+    shouldRestartRunnerAfterReadinessPreflight(
+      commandFailed('Runner readiness refused', {
+        reason: 'simulator_service_hub_unavailable',
+        runnerReadinessPreflightFailed: true,
+      }),
+    ),
+    false,
+  );
+});
+
+test('a refused connection still restarts and rebuilds without the service-hub reason', () => {
+  // The closest negative: the same connect-shaped failure a host with a supported Xcode produces.
+  const refused = unwrittenConnectRefusal();
+  assert.equal(shouldRetryRunnerConnectError(refused), true);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(refused, TAP), true);
+  assert.equal(shouldRebuildCachedRunnerArtifact(refused), true);
+});
+
 test('a device that is busy connecting is a terminal connect verdict', () => {
   assert.equal(
     shouldRetryRunnerConnectError(commandFailed('Device is busy (Connecting to Simulator)')),
