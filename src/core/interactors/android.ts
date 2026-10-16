@@ -60,9 +60,8 @@ export function createAndroidInteractor(
       const capture = await snapshotAndroid(device, {
         includeHiddenContentHints: false,
         signal: seam.signal,
-        // Alert probes must share the session's warm helper like every other app-backed read:
-        // a command-scope alert probe cold-starts the helper past the window that bounds it,
-        // so every re-poll and the post-press confirm would abort before the device answers.
+        // App-backed sessions keep the snapshot helper warm; a command-scoped probe would
+        // force-stop and cold-restart it inside the window that bounds the probe.
         helperSessionScope,
       });
       return buildSnapshotState(androidSnapshotPublicationInput(capture), undefined).nodes;
