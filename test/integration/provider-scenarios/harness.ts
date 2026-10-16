@@ -9,6 +9,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
 import type { AgentDeviceClient } from '../../../src/client/client-types.ts';
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
+import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import {
   startDaemonRuntime,
   type ComposeDaemonRuntimeDeps,
@@ -134,6 +135,7 @@ export async function createProviderScenarioHarness(
   } = deps;
   if (leaseTtlMs !== undefined) env.AGENT_DEVICE_LEASE_TTL_MS = String(leaseTtlMs);
 
+  let scopedAppleToolProvider: AppleToolProvider | undefined;
   const composeDeps: ComposeDaemonRuntimeDeps = async (input) => {
     const rootDeps = await createDaemonRuntimeDeps(input);
     const configuredRuntimes =
@@ -164,6 +166,12 @@ export async function createProviderScenarioHarness(
     const deviceInventoryGateways = deviceInventorySource
       ? createTestDeviceInventoryGateways({ provider: deviceInventorySource })
       : createTestDeviceInventoryGatewaysFromProvider(deviceInventoryProvider);
+    const trackedAppleToolProvider = appleToolProvider
+      ? (context: Parameters<NonNullable<PlatformProviderResolvers['appleToolProvider']>>[0]) => {
+          scopedAppleToolProvider = appleToolProvider(context);
+          return scopedAppleToolProvider;
+        }
+      : undefined;
     const requestPlatformProviders =
       configuredRequestPlatformProviders ??
       createRequestPlatformProviders({
@@ -171,7 +179,7 @@ export async function createProviderScenarioHarness(
           androidAdbProvider,
           appleRunnerProvider,
           appleRunnerScreenRecordingTransport,
-          appleToolProvider,
+          appleToolProvider: trackedAppleToolProvider,
           linuxToolProvider,
           vegaToolProvider,
           webProvider,
@@ -281,7 +289,13 @@ export async function createProviderScenarioHarness(
     close: async () => {
       if (closed) return;
       closed = true;
-      await runtime?.shutdown();
+      if (scopedAppleToolProvider) {
+        const { withAppleToolProvider } =
+          await import('@agent-device/platform-apple/tool-provider');
+        await withAppleToolProvider(scopedAppleToolProvider, async () => await runtime?.shutdown());
+      } else {
+        await runtime?.shutdown();
+      }
       await removeProviderScenarioTempDir(testRoot);
     },
   };

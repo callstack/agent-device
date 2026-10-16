@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
+import type { AppleRunnerScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-runner-transport.ts';
 import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR, PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
@@ -342,10 +343,23 @@ function permissiveRecording(): AppleSimulatorScreenRecordingTransport {
   };
 }
 
+function unavailableRunnerRecording(): AppleRunnerScreenRecordingTransport {
+  return {
+    authority: 'local-lease',
+    available: false,
+    start: async () => {
+      throw new Error('Apple runner recording is unavailable in this fake provider');
+    },
+    inspect: async () => 'missing',
+    stop: async () => {},
+  };
+}
+
 async function createWorldDaemon(world: World): Promise<ProviderScenarioHarness> {
   const device = world === 'ios' ? PROVIDER_SCENARIO_IOS_SIMULATOR : PROVIDER_SCENARIO_MACOS;
   return await createProviderScenarioHarness({
     appleRunnerProvider: () => permissiveRunner(),
+    appleRunnerScreenRecordingTransport: () => unavailableRunnerRecording(),
     appleToolProvider: () => permissiveTool(world).provider,
     appleSimulatorScreenRecordingTransport: () => permissiveRecording(),
     deviceInventoryProvider: async () => [device],
