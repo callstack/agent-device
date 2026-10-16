@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import fs from 'node:fs';
@@ -34,7 +35,7 @@ function startTrace(
   if (session.trace) return errorResponse('INVALID_ARGS', 'trace already in progress');
   const outPath = expandSessionPath(
     req.positionals?.[1] ?? sessionStore.defaultTracePath(session),
-    process.cwd(),
+    commandHostEnvironment().cwd,
   );
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.appendFileSync(outPath, '');
@@ -77,7 +78,7 @@ function stopTrace(
 
 function relocateTraceOutput(currentPath: string, requestedPath: string | undefined): string {
   if (!requestedPath) return currentPath;
-  const resolved = expandSessionPath(requestedPath, process.cwd());
+  const resolved = expandSessionPath(requestedPath, commandHostEnvironment().cwd);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   if (fs.existsSync(currentPath)) fs.renameSync(currentPath, resolved);
   else fs.appendFileSync(resolved, '');

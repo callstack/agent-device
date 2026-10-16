@@ -126,15 +126,11 @@ export async function withCommandHost<T>(
   scope: CommandHostScope,
   fn: () => Promise<T>,
 ): Promise<T> {
-  return await commandHostScope.run(scope, fn);
-}
-
-/**
- * Binds `scope` for the rest of the current async context, for a process root that has no single
- * callback to wrap. Prefer {@link withCommandHost}.
- */
-export function enterCommandHost(scope: CommandHostScope): void {
-  commandHostScope.enterWith(scope);
+  // A nested scope of the same host that names no request env keeps the enclosing request's.
+  const enclosing = commandHostScope.getStore();
+  const requestEnv =
+    scope.requestEnv ?? (enclosing?.host === scope.host ? enclosing.requestEnv : undefined);
+  return await commandHostScope.run({ host: scope.host, requestEnv }, fn);
 }
 
 /**
@@ -330,7 +326,7 @@ export async function whichCmd(cmd: string, env: EnvMap): Promise<boolean> {
     return isExecutablePath(candidate);
   }
 
-  const pathValue = env.PATH;
+  const pathValue = readPathVariable(env, 'PATH');
   if (!pathValue) return false;
   const pathExtensions = resolvePathExtensions(env);
   for (const directory of pathValue.split(path.delimiter)) {
@@ -847,9 +843,16 @@ function normalizeExecutableLookup(cmd: string): string | null {
   return BARE_COMMAND_RE.test(candidate) ? candidate : null;
 }
 
+/** Windows names an environment variable in any case; a captured copy no longer folds it. */
+function readPathVariable(env: EnvMap, name: 'PATH' | 'PATHEXT'): string | undefined {
+  if (process.platform !== 'win32') return env[name];
+  const key = Object.keys(env).find((candidate) => candidate.toUpperCase() === name);
+  return key === undefined ? undefined : env[key];
+}
+
 function resolvePathExtensions(env: EnvMap): string[] {
   if (process.platform !== 'win32') return [''];
-  const rawPathExt = env.PATHEXT;
+  const rawPathExt = readPathVariable(env, 'PATHEXT');
   if (!rawPathExt) return WINDOWS_PATH_EXTENSIONS;
   const extensions = rawPathExt
     .split(';')

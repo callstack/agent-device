@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
@@ -71,7 +72,10 @@ export function createDaemonShutdownClaimLedger(): DaemonShutdownClaimLedger {
     releaseClaim: async (session) => {
       if (!session.deviceClaim) return;
       try {
-        outcomes.set(session.name, await clearDeviceClaim(session.deviceClaim, process.env));
+        outcomes.set(
+          session.name,
+          await clearDeviceClaim(session.deviceClaim, commandHostEnvironment().env),
+        );
       } catch (error) {
         outcomes.set(session.name, CLEAR_UNRECORDED);
         emitDiagnostic({

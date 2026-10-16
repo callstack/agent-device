@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import crypto from 'node:crypto';
 import type { MetroBridgeScope } from '@agent-device/contracts/remote';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -74,11 +75,13 @@ export async function materializeRemoteConnectionForCommand(options: {
     return { flags, runtime: options.runtime };
   }
 
-  const stateDir = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() }).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, {
+    cwd: commandHostEnvironment().cwd,
+  }).baseDir;
   const remoteConfig = resolveRemoteConfigProfile({
     configPath: flags.remoteConfig,
-    cwd: process.cwd(),
-    env: process.env,
+    cwd: commandHostEnvironment().cwd,
+    env: commandHostEnvironment().env,
   });
   const profileFlags = profileToCliFlags(remoteConfig.profile);
   const mergedFlags = {

@@ -184,7 +184,7 @@ test('pid escalation returns immediately for an empty pid set', async () => {
 test('captureHostEnvironment copies the environment and reads the working directory once', () => {
   const source = {
     env: { HOME: '/home/a', EMPTY: undefined } as Record<string, string | undefined>,
-    cwd: () => '/work',
+    cwd: vi.fn(() => '/work'),
   };
   const host = captureHostEnvironment(source);
 
@@ -193,4 +193,5 @@ test('captureHostEnvironment copies the environment and reads the working direct
 
   assert.deepEqual(host, { env: { HOME: '/home/a', EMPTY: undefined }, cwd: '/work' });
   assert.notEqual(host.env, source.env);
+  assert.equal(source.cwd.mock.calls.length, 1);
 });

@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { resolveDeviceReadinessRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -98,7 +99,7 @@ export async function handleBootCommand(
 
   const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
     flags.androidDeviceAllowlist,
-    process.env,
+    commandHostEnvironment().env,
   );
   const androidSerialAllowlist = resolvedAndroidSerialAllowlist
     ? [...resolvedAndroidSerialAllowlist].sort()

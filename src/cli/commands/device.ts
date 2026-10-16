@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import {
@@ -25,7 +26,7 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }
       udid: flags.udid,
       serial: flags.serial,
     },
-    process.env,
+    commandHostEnvironment().env,
   );
   const staleClaims = inspectedClaims.filter((claim) =>
     deviceClaimRequiresStaleInspection(claim.classification),
@@ -76,7 +77,7 @@ async function runDeviceRelease(flags: CliFlags): Promise<boolean> {
       udid: flags.udid,
       serial: flags.serial,
     },
-    process.env,
+    commandHostEnvironment().env,
   );
   const data = {
     released: outcomes.filter((outcome) => outcome.status === 'released').map(serializeOutcome),

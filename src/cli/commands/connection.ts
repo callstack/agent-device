@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type {
   CloudArtifact,
   CloudProviderSessionResult,
@@ -53,7 +54,9 @@ import {
 } from './connection-presentation.ts';
 
 export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
-  const stateDir = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() }).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, {
+    cwd: commandHostEnvironment().cwd,
+  }).baseDir;
   const provider = readConnectProvider(positionals);
   assertConnectProviderUsage(provider, flags);
   const resolved = await resolveConnectProviderProfile({ provider, flags, stateDir });
@@ -275,8 +278,8 @@ async function cleanupForcedPreviousConnection(
   return await releasePreviousLease(client, previous, {
     nextDaemonBaseUrl: next.daemon?.baseUrl,
     ambientDaemonAuthToken: flags.daemonAuthToken,
-    cwd: process.cwd(),
-    env: process.env,
+    cwd: commandHostEnvironment().cwd,
+    env: commandHostEnvironment().env,
   });
 }
 
@@ -285,8 +288,8 @@ function readRemoteConfigConnectionMetadata(
 ): RemoteConnectionRequestMetadata | undefined {
   const profile = resolveRemoteConfigProfile({
     configPath: remoteConfigPath,
-    cwd: process.cwd(),
-    env: process.env,
+    cwd: commandHostEnvironment().cwd,
+    env: commandHostEnvironment().env,
   }).profile;
   return buildRemoteConnectionRequestMetadata(profile);
 }
@@ -417,7 +420,9 @@ function readRequestedConnectionState(flags: CliFlags): {
   state: RemoteConnectionState | null;
 } {
   const session = flags.session ?? 'default';
-  const stateDir = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() }).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, {
+    cwd: commandHostEnvironment().cwd,
+  }).baseDir;
   return {
     session,
     stateDir,
@@ -535,8 +540,8 @@ function remoteConfigHasMetroSettings(remoteConfigPath: string): boolean {
   try {
     const remoteConfig = resolveRemoteConfigProfile({
       configPath: remoteConfigPath,
-      cwd: process.cwd(),
-      env: process.env,
+      cwd: commandHostEnvironment().cwd,
+      env: commandHostEnvironment().env,
     });
     const profile = remoteConfig.profile;
     return Boolean(

@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { resolveSessionRunnerLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
@@ -169,7 +170,7 @@ async function devicesInventoryResponse(req: DaemonRequest): Promise<DaemonRespo
 
 function blockingClaimOwnersByDevice(): Map<string, { session: string; workspace: string }> {
   const owners = new Map<string, { session: string; workspace: string }>();
-  for (const entry of inspectDeviceClaims({}, process.env)) {
+  for (const entry of inspectDeviceClaims({}, commandHostEnvironment().env)) {
     const claim = entry.claim;
     if (!claim || deviceClaimOwnerCannotRelease(entry.classification)) continue;
     owners.set(claim.deviceKey, {
@@ -220,12 +221,15 @@ function inventoryIosSimulatorSetPath(
     requestedSetPath: configuredPath,
     platform,
     target,
-    env: process.env,
+    env: commandHostEnvironment().env,
   });
 }
 
 function inventoryAndroidSerialAllowlist(configuredAllowlist: string | undefined) {
-  const allowlist = resolveAndroidSerialAllowlist(configuredAllowlist, process.env);
+  const allowlist = resolveAndroidSerialAllowlist(
+    configuredAllowlist,
+    commandHostEnvironment().env,
+  );
   return allowlist ? Array.from(allowlist).sort() : undefined;
 }
 
@@ -363,7 +367,7 @@ async function handleAppsInventory(params: {
 
   const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
     req.flags?.androidDeviceAllowlist,
-    process.env,
+    commandHostEnvironment().env,
   );
   const runtimeResolution = await resolveAppsRuntime({
     device,

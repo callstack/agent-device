@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
@@ -276,7 +277,7 @@ async function resolveDoctorAppInventory(params: {
   );
   const androidSerialAllowlist = resolveAndroidSerialAllowlist(
     req.flags?.androidDeviceAllowlist,
-    process.env,
+    commandHostEnvironment().env,
   );
   const readyDevice = await ensureAppsRuntimeReady(runtime, {
     serial: req.flags?.serial,

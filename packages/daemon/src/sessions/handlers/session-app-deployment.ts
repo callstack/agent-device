@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
@@ -74,7 +75,7 @@ export async function handleAppDeploymentCommand(params: {
   try {
     const appPath = uploadedArtifactId
       ? prepareUploadedArtifact(uploadedArtifactId, req.meta?.tenantId)
-      : expandSessionPath(target.appPathInput, process.cwd());
+      : expandSessionPath(target.appPathInput, commandHostEnvironment().cwd);
     if (!fs.existsSync(appPath)) {
       return errorResponse('INVALID_ARGS', `App binary not found: ${appPath}`);
     }
@@ -300,7 +301,8 @@ function resolvePushPayload(payloadArg: string, cwd?: string): string {
   const resolved = resolvePayloadInput(payloadArg, {
     subject: 'Push payload',
     cwd,
-    expandPath: (value, currentCwd) => expandSessionPath(value, currentCwd ?? process.cwd()),
+    expandPath: (value, currentCwd) =>
+      expandSessionPath(value, currentCwd ?? commandHostEnvironment().cwd),
   });
   return resolved.kind === 'file' ? resolved.path : resolved.text;
 }

@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
@@ -91,7 +92,7 @@ export async function endLeasedSession(
       data: { reason, leaseId, session: session.name, error: errorMessage(error) },
     });
   });
-  await clearDeviceClaim(session.deviceClaim, process.env).catch((error) => {
+  await clearDeviceClaim(session.deviceClaim, commandHostEnvironment().env).catch((error) => {
     emitDiagnostic({
       level: 'warn',
       phase: 'leased_session_end_device_claim_clear_failed',

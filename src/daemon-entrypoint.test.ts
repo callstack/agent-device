@@ -290,10 +290,6 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
   const claimsDir = mkdtempForTestSync('agent-device-daemon-prune-claims-');
   const paths = resolveDaemonPaths(stateDir);
   const deviceKey = 'local:android:none:prune-log';
-  // resolveDeviceClaimRoot reads process.env directly, not the env passed to
-  // startDaemonRuntime, so the store has to be redirected on the process.
-  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
-  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
   let exitCode: number | undefined;
 
   try {
@@ -342,8 +338,6 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
     await runtime?.shutdown();
     assert.equal(exitCode, 0);
   } finally {
-    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
-    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(stateDir, { recursive: true, force: true });
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
@@ -359,8 +353,6 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
   const claimsDir = mkdtempForTestSync('agent-device-daemon-sweep-claims-');
   const deviceId = 'sweep-scope-udid';
   const deviceKey = `local:apple:ios:${deviceId}`;
-  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
-  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
 
   const sessionStoreFor = (stateDir: string) => {
     const paths = resolveDaemonPaths(stateDir);
@@ -486,8 +478,6 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
     try {
       orphanRecorder.kill('SIGKILL');
     } catch {}
-    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
-    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(daemonStateDir, { recursive: true, force: true });
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
     fs.rmSync(claimsDir, { recursive: true, force: true });

@@ -145,6 +145,6 @@ export type EnvMap = Record<string, string | undefined>;
  * directory. An entry point captures it once; everything below receives it.
  */
 export type HostEnvironment = Readonly<{
-  env: EnvMap;
+  env: Readonly<EnvMap>;
   cwd: string;
 }>;

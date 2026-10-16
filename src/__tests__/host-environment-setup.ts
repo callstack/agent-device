@@ -1,20 +1,23 @@
-import { beforeAll, beforeEach } from 'vitest';
+import { aroundEach } from 'vitest';
 
 // Code that has no host of its own reads the enclosing command host, and production roots open
-// one. A unit test is its own root, and many assign `process.env` directly, so each test gets the
-// live process environment as its host. The module loads after the test file's own imports, so
-// a suite that mocks `node:child_process` still sees its mock.
-let enterCommandHost: typeof import('@agent-device/host-kit/command').enterCommandHost | undefined;
-
-beforeAll(async () => {
-  const command = await import('@agent-device/host-kit/command');
+// one. A unit test is its own root, and many assign `process.env` directly, so each test runs as
+// a host whose environment is the live process environment. The module loads inside the hook, so
+// it is the instance the test's own imports see, and a suite that mocks `node:child_process` or
+// replaces the module wholesale still gets its mock.
+aroundEach(async (runTest) => {
+  let withCommandHost: typeof import('@agent-device/host-kit/command').withCommandHost | undefined;
   try {
-    enterCommandHost = command.enterCommandHost;
+    ({ withCommandHost } = await import('@agent-device/host-kit/command'));
   } catch {
-    // A suite that replaces the module wholesale has no scope to enter.
+    // A suite that replaces the module wholesale has no scope to bind.
   }
-});
-
-beforeEach(() => {
-  enterCommandHost?.({ host: { env: process.env, cwd: process.cwd() }, requestEnv: undefined });
+  if (!withCommandHost) {
+    await runTest();
+    return;
+  }
+  await withCommandHost(
+    { host: { env: process.env, cwd: process.cwd() }, requestEnv: undefined },
+    async () => await runTest(),
+  );
 });

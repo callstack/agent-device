@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   clearDeviceClaim,
@@ -546,7 +547,7 @@ async function clearExpiredClaim(
 ): Promise<DeviceClaimClearOutcome | typeof CLAIM_CLEAR_FAILED> {
   if (!ownership) return 'absent';
   try {
-    return await clearDeviceClaim(ownership, process.env);
+    return await clearDeviceClaim(ownership, commandHostEnvironment().env);
   } catch (error) {
     emitDiagnostic({
       level: 'warn',

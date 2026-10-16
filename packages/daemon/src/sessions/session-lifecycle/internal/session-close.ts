@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -351,7 +352,7 @@ async function runCloseTeardownAndRelease(params: {
       });
     }
   } else {
-    await clearDeviceClaim(session.deviceClaim, process.env);
+    await clearDeviceClaim(session.deviceClaim, commandHostEnvironment().env);
   }
   sessionStore.retire(ref);
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;

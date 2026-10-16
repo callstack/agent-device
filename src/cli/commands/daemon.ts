@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   readDaemonStopIdentity,
@@ -17,7 +18,7 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }
   if (subcommand !== 'stop' || positionals.length !== 1) {
     throw new AppError('INVALID_ARGS', 'daemon accepts only: stop');
   }
-  const paths = resolveDaemonPaths(flags.stateDir, { cwd: process.cwd() });
+  const paths = resolveDaemonPaths(flags.stateDir, { cwd: commandHostEnvironment().cwd });
   const identity = readDaemonStopIdentity(paths.infoPath);
   const stopped = await stopDaemon({ paths });
   const report = stopped.mode === 'graceful' ? readDaemonShutdownReport(paths.baseDir) : null;

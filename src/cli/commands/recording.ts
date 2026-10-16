@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { RecordingContactSheetCommandResult } from '../../commands/recording/runtime/contact-sheet.ts';
@@ -18,10 +19,12 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
   }
 
   const recordingPath = resolveUserPath(readRequiredPositional(positionals[1]), {
-    cwd: process.cwd(),
+    cwd: commandHostEnvironment().cwd,
   });
   const outputPath =
-    typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: process.cwd() }) : undefined;
+    typeof flags.out === 'string'
+      ? resolveUserPath(flags.out, { cwd: commandHostEnvironment().cwd })
+      : undefined;
 
   // Lazy: createAgentDevice pulls in the client-side command runtime, which only this action needs.
   const [{ createAgentDevice }, { createLocalArtifactAdapter }] = await Promise.all([

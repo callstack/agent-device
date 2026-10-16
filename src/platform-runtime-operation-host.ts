@@ -15,7 +15,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
-import { runCmd, whichCmd } from '@agent-device/host-kit/command';
+import { runCmd, whichCmd, commandHostEnvironment } from '@agent-device/host-kit/command';
 import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
 import { createManagedAppLogProcesses } from './platform-runtime-app-log-process.ts';
@@ -65,12 +65,12 @@ export function createPlatformRuntimeHost(options: {
   const appleTools = createAppleToolHost();
   const commands = Object.freeze({
     which: async (executable: string) =>
-      (await whichCmd(executable, process.env)) ? executable : undefined,
+      (await whichCmd(executable, commandHostEnvironment().env)) ? executable : undefined,
     run: async (request: HostCommandRequest, signal?: AbortSignal) => {
       const result = await runCmd(request.executable, guardedHostCommandArgv(request), {
         allowFailure: request.allowFailure,
         cwd: request.cwd,
-        env: request.env ? { ...process.env, ...request.env } : undefined,
+        env: request.env ? { ...commandHostEnvironment().env, ...request.env } : undefined,
         signal,
         timeoutMs: request.timeoutMs,
       });

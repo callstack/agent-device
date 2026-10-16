@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import {
   resolveSessionRequestLogPath,
   resolveSessionRunnerLogPath,
@@ -148,7 +149,7 @@ export async function renewOpenSessionClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
 ): Promise<DaemonResponse | undefined> {
   if (!ownership) return undefined;
-  const renewal = await renewDeviceClaim(ownership, process.env);
+  const renewal = await renewDeviceClaim(ownership, commandHostEnvironment().env);
   if (renewal.status === 'renewed') return undefined;
   if (renewal.conflict) return buildDeviceClaimConflictError(device, renewal.conflict);
   return errorResponse(
@@ -428,9 +429,9 @@ async function acquireDeviceClaimForOwner(params: {
       return await acquireDeviceClaim({
         device,
         session: sessionName,
-        workspace: req.meta?.cwd ?? process.cwd(),
+        workspace: req.meta?.cwd ?? commandHostEnvironment().cwd,
         stateDir: sessionStore.resolveDaemonStateDir(),
-        env: process.env,
+        env: commandHostEnvironment().env,
         reconcileOrphanedDeviceClaim,
         observeDeviceBoot: platformServices.deviceBootObservation,
       });
@@ -565,11 +566,11 @@ async function rollbackNewSessionClaim(params: {
   const { ownership, effects, sessionName, sessionStore } = params;
   if (!ownership) return;
   if (!effects.mayHaveStarted) {
-    await clearDeviceClaim(ownership, process.env);
+    await clearDeviceClaim(ownership, commandHostEnvironment().env);
     return;
   }
   if (sessionStore.get(sessionName)?.deviceClaim?.ownerToken === ownership.ownerToken) return;
-  const outcome = await abandonDeviceClaim(ownership, process.env);
+  const outcome = await abandonDeviceClaim(ownership, commandHostEnvironment().env);
   emitDiagnostic({
     level: 'warn',
     phase: 'device_claim_open_effects_unconfirmed',

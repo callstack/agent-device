@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
@@ -37,7 +38,7 @@ async function handleReplayExportCommand({
     throw new AppError('INVALID_ARGS', 'replay export requires an input path.');
   }
 
-  const sourcePath = resolveUserPath(inputPath, { cwd: process.cwd() });
+  const sourcePath = resolveUserPath(inputPath, { cwd: commandHostEnvironment().cwd });
   const script = fs.readFileSync(sourcePath, 'utf8');
   const parsed = parseReplayScriptDetailed(script);
   // `replay export` exports to Maestro, so the conversion goes through that backend's registry
@@ -51,7 +52,9 @@ async function handleReplayExportCommand({
     metadata: readReplayScriptMetadata(script),
   });
   const outputPath =
-    typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: process.cwd() }) : undefined;
+    typeof flags.out === 'string'
+      ? resolveUserPath(flags.out, { cwd: commandHostEnvironment().cwd })
+      : undefined;
   if (outputPath) {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     fs.writeFileSync(outputPath, result.yaml);

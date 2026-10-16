@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../commands/output/diff.ts';
 import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
@@ -51,9 +52,11 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     throw new AppError('INVALID_ARGS', 'diff screenshot requires --baseline <path>');
   }
 
-  const baselinePath = resolveUserPath(baselineRaw, { cwd: process.cwd() });
+  const baselinePath = resolveUserPath(baselineRaw, { cwd: commandHostEnvironment().cwd });
   const outputPath =
-    typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: process.cwd() }) : undefined;
+    typeof flags.out === 'string'
+      ? resolveUserPath(flags.out, { cwd: commandHostEnvironment().cwd })
+      : undefined;
   const currentRaw = positionals[1];
   if (positionals.length > 2) {
     throw new AppError(
@@ -82,7 +85,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     session: flags.session,
     baseline: { kind: 'path', path: baselinePath },
     current: currentRaw
-      ? { kind: 'path', path: resolveUserPath(currentRaw, { cwd: process.cwd() }) }
+      ? { kind: 'path', path: resolveUserPath(currentRaw, { cwd: commandHostEnvironment().cwd }) }
       : { kind: 'live' },
     ...(outputPath ? { out: { kind: 'path', path: outputPath } } : {}),
     threshold: parseCliThreshold(flags.threshold),

@@ -1,12 +1,7 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  resolveFileOverridePath,
-  runCmd,
-  whichCmd,
-  commandHostEnvironment,
-} from '@agent-device/host-kit/command';
+import { resolveFileOverridePath, runCmd, whichCmd } from '@agent-device/host-kit/command';
 import { waitForAndroidBoot } from './emulator-lifecycle.ts';
 import { installAndroidAdbPackage, resolveAndroidAdbProvider } from './adb-executor.ts';
 import { withAndroidAppResolutionCacheInvalidated } from './app-deployment-resolution.ts';
@@ -35,7 +30,7 @@ async function resolveBundletoolInvocation(
     return cachedBundletoolInvocation.invocation;
   }
 
-  if (await whichCmd('bundletool', commandHostEnvironment().env)) {
+  if (await whichCmd('bundletool', environment)) {
     const invocation = { cmd: 'bundletool', prefixArgs: [] } as const;
     cachedBundletoolInvocation = { key: cacheKey, invocation };
     return invocation;

@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
 import {
@@ -12,7 +13,7 @@ import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-adm
 import { appleSessionRequiredRefusal } from './session-appstate-apple-session.ts';
 
 function sortedAndroidSerialAllowlist(value: string | undefined): string[] | undefined {
-  const allowlist = resolveAndroidSerialAllowlist(value, process.env);
+  const allowlist = resolveAndroidSerialAllowlist(value, commandHostEnvironment().env);
   return allowlist ? [...allowlist].sort() : undefined;
 }
 
