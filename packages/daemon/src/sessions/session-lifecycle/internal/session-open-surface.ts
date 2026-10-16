@@ -66,10 +66,7 @@ export function buildOpenResult(params: {
   if (appBundleId) result.appBundleId = appBundleId;
   if (startup) result.startup = startup;
   if (timing) result.timing = timing;
-  if (launchConfirmation) {
-    result.launchConfirmation = launchConfirmation;
-    if (launchConfirmationReason) result.launchConfirmationReason = launchConfirmationReason;
-  }
+  Object.assign(result, launchConfirmationResponseData(launchConfirmation, launchConfirmationReason));
   if (runtime && runtimeHintCount(runtime) > 0) result.runtime = runtime;
   if (device) {
     result.platform = publicPlatformString(device);
@@ -88,6 +85,18 @@ export function buildOpenResult(params: {
   return {
     ...result,
     ...successText(`Opened: ${appName ?? appBundleId ?? sessionName}`),
+  };
+}
+
+/** The answered launch confirmation and, when it stayed unanswered, the leg that outran it. */
+function launchConfirmationResponseData(
+  launchConfirmation: LaunchConfirmation | undefined,
+  launchConfirmationReason: LaunchConfirmationUnansweredReason | undefined,
+): Record<string, unknown> {
+  if (!launchConfirmation) return {};
+  return {
+    launchConfirmation,
+    ...(launchConfirmationReason ? { launchConfirmationReason } : {}),
   };
 }
 
