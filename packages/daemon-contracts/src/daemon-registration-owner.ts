@@ -26,6 +26,7 @@ import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
   resolveDaemonPaths,
+  type DaemonCapability,
   type DaemonPaths,
   type DaemonServerMode,
 } from './daemon-resolution.ts';
@@ -51,6 +52,8 @@ export type DaemonRegistrationFields = Readonly<{
   codeOrigin: DaemonCodeOrigin;
   codeSignature: string;
   policyDigest?: string;
+  /** What this daemon can do beyond the base RPC contract; absent from daemons that predate it. */
+  capabilities?: readonly DaemonCapability[];
 }>;
 type DaemonRegistrationRemoval =
   | Readonly<{ state: 'removed' }>

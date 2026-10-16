@@ -13,7 +13,9 @@ export type { DaemonServerMode, DaemonTransportPreference };
  * daemon both read this subset — the client to find or launch a daemon, the daemon to bind one —
  * so it sits at the process root rather than under `packages/daemon/src/`, where a client would have to
  * reach daemon internals to resolve an address. `packages/daemon/src/core/config.ts` adds the request-scoping
- * rules that only the daemon applies on top of this.
+ * rules that only the daemon applies on top of this. What a daemon publishes about itself
+ * (`capabilities`) and the one request that asks it to leave (`quiesce`) belong here for the same
+ * reason: the client addresses a daemon with them and the daemon answers by them.
  */
 
 export type DaemonPaths = {
@@ -93,4 +95,54 @@ export function resolveDaemonTransportPreference(
   if (normalized === 'http') return 'http';
   if (normalized === 'dual') return 'auto';
   return 'auto';
+}
+
+// The quiesce request is how a client asks an idle daemon to leave so a compatible one can take
+// its state directory. The client and the daemon share this vocabulary, so neither owns it.
+
+/** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
+export const DAEMON_CAPABILITIES = ['quiesce'] as const;
+export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
+
+export const DAEMON_QUIESCE_COMMAND = 'daemon_quiesce';
+
+/** The reason a daemon gives every request it refuses once it has begun to leave. */
+export const DAEMON_SHUTTING_DOWN_REASON = 'daemon_shutting_down';
+
+export const DAEMON_QUIESCE_REASONS = {
+  busy: 'daemon-busy',
+  instanceMismatch: 'daemon-instance-mismatch',
+} as const;
+
+/** The daemon instance a quiesce request is addressed to; any other instance refuses it. */
+export type DaemonQuiesceFence = Readonly<{
+  pid: number;
+  /** Null when the daemon could not prove its start time, as its `daemon.json` records. */
+  processStartTime: string | null;
+}>;
+
+/**
+ * What a daemon holds. It leaves a quiesce request only when all four counts are zero and it is
+ * not still starting up, because before that it has no drain path to run.
+ */
+export type DaemonQuiesceCensus = Readonly<{
+  /** True from process start until the daemon can drain. */
+  startingUp: boolean;
+  inFlightRequests: number;
+  sessions: number;
+  repairSessions: number;
+  leases: number;
+}>;
+
+export function readDaemonQuiesceFence(input: unknown): DaemonQuiesceFence | undefined {
+  if (typeof input !== 'object' || input === null) return undefined;
+  const { pid, processStartTime } = input as Record<string, unknown>;
+  if (!Number.isInteger(pid)) return undefined;
+  if (processStartTime !== null && typeof processStartTime !== 'string') return undefined;
+  return { pid: pid as number, processStartTime };
+}
+
+export function readDaemonCapabilities(value: unknown): readonly DaemonCapability[] {
+  if (!Array.isArray(value)) return [];
+  return DAEMON_CAPABILITIES.filter((capability) => value.includes(capability));
 }

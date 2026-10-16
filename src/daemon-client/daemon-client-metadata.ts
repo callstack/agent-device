@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import { isProcessPid } from '@agent-device/host-kit/process';
 
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
-
 import {
+  readDaemonCapabilities,
   resolveDaemonPaths,
+  type DaemonCapability,
   type DaemonPaths,
   type DaemonServerMode,
 } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -21,6 +22,8 @@ export type DaemonInfo = {
   processStartTime?: string;
   /** ADR 0029: digest of the daemon policy the daemon enforces; absent when it has none. */
   policyDigest?: string;
+  /** Absent from daemons that predate capabilities, which therefore have none. */
+  capabilities?: readonly DaemonCapability[];
   baseUrl?: string;
   remoteInstanceId?: string;
   remoteUpstreamInstanceId?: string;
@@ -49,6 +52,7 @@ export function readDaemonInfo(infoPath: string): DaemonInfo | null {
     codeSignature: readOptionalString(parsed.codeSignature),
     processStartTime: readOptionalString(parsed.processStartTime),
     policyDigest: readOptionalString(parsed.policyDigest),
+    capabilities: readDaemonCapabilities(parsed.capabilities),
   };
 }
 
