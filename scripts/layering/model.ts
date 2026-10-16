@@ -10,7 +10,6 @@ import {
   nodeList,
   propertyName,
   visitAst,
-  visitAstScoped,
   type AstNode,
 } from './layering-ast.ts';
 import { declaredRootModuleZone } from './root-module-zones.ts';
@@ -370,19 +369,12 @@ function vitestImportBindings(program: unknown): VitestBindings {
   return { apis, namespaces };
 }
 
-/**
- * The global names `vi` and `vitest` always count. An imported alias or namespace counts only
- * while no enclosing scope redeclares its local name.
- */
-function isMockApiReceiver(
-  node: unknown,
-  bindings: VitestBindings,
-  shadowed: ReadonlySet<string>,
-): boolean {
+/** The global names `vi` and `vitest`, and the local names a `vitest` import binds to them. */
+function isMockApiReceiver(node: unknown, bindings: VitestBindings): boolean {
   const receiver = unwrapExpression(node);
   if (receiver?.type === 'Identifier') {
     const name = receiver.name as string;
-    return MODULE_MOCK_RECEIVERS.has(name) || (bindings.apis.has(name) && !shadowed.has(name));
+    return MODULE_MOCK_RECEIVERS.has(name) || bindings.apis.has(name);
   }
   if (receiver?.type !== 'MemberExpression') return false;
   const owner = unwrapExpression(receiver.object);
@@ -390,20 +382,15 @@ function isMockApiReceiver(
   return (
     owner?.type === 'Identifier' &&
     bindings.namespaces.has(owner.name as string) &&
-    !shadowed.has(owner.name as string) &&
     key !== undefined &&
     MODULE_MOCK_RECEIVERS.has(key)
   );
 }
 
-function mockCallMethod(
-  callee: unknown,
-  bindings: VitestBindings,
-  shadowed: ReadonlySet<string>,
-): string | undefined {
+function mockCallMethod(callee: unknown, bindings: VitestBindings): string | undefined {
   const member = unwrapExpression(callee);
   if (member?.type !== 'MemberExpression') return undefined;
-  if (!isMockApiReceiver(member.object, bindings, shadowed)) return undefined;
+  if (!isMockApiReceiver(member.object, bindings)) return undefined;
   const method = memberKey(member);
   return method !== undefined && MODULE_MOCK_METHODS.has(method) ? method : undefined;
 }
@@ -418,7 +405,8 @@ function mockCallMethod(
  * The receiver is the global `vi`/`vitest`, a name a top-level `import { vi as x } from 'vitest'`
  * binds to either, or a member `vi`/`vitest` of a `import * as ns from 'vitest'` namespace. Only
  * those import declarations are resolved: a value copied through a variable or a dynamic import
- * is not followed.
+ * is not followed, and a local that redeclares an alias's name still counts as the alias, so the
+ * walk can only over-report.
  */
 export function parseModuleMockSpecifiers(source: string): { spec: string; line: number }[] {
   const parsed = parseSync('layering-mocks.ts', source);
@@ -429,9 +417,9 @@ export function parseModuleMockSpecifiers(source: string): { spec: string; line:
   }
   const bindings = vitestImportBindings(parsed.program);
   const sites: { spec: string; line: number }[] = [];
-  visitAstScoped(parsed.program, new Set(), (node, shadowed) => {
+  visitAst(parsed.program, (node) => {
     if (node.type !== 'CallExpression') return;
-    if (mockCallMethod(node.callee, bindings, shadowed) === undefined) return;
+    if (mockCallMethod(node.callee, bindings) === undefined) return;
     const args = node.arguments;
     const spec = Array.isArray(args) ? literalSpecifier(args[0]) : undefined;
     if (spec !== undefined) {

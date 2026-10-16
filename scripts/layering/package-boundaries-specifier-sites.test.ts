@@ -73,7 +73,6 @@ test('specifier sites skip alias calls on other modules, other exports and type-
         "fromOther.mock('a');",
         "notMock.mock('b');",
         "typeOnly.mock('c');",
-        "function shadow(notMock) { notMock.mock('d'); }",
       ].join('\n'),
     ),
     ['1:not-vitest', '2:vitest', '3:vitest'],
