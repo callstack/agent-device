@@ -164,15 +164,38 @@ export function readScrollSurfaceBaseline(
 function freezeScrollSurfaceBaseline(session: SessionState): ScrollMovementPlan {
   const baseline = readScrollSurfaceBaseline(session.snapshot);
   if (!baseline) return { kind: 'unobservable', reason: 'stored-surface-unusable' };
-  if (refFrameState(session) !== 'active') {
-    return { kind: 'unobservable', reason: 'stored-surface-not-current' };
-  }
-  if (isPostGestureStabilizationPending(session)) {
-    // A gesture nobody has read yet may still be moving this tree, which would bill its motion to
-    // the scroll being dispatched now.
-    return { kind: 'unobservable', reason: 'prior-gesture-unsettled' };
-  }
+  const staleness = storedSurfaceStaleness(session);
+  if (staleness) return { kind: 'unobservable', reason: staleness };
   return { kind: 'observe', baseline };
+}
+
+function storedSurfaceStaleness(
+  session: SessionState,
+): Exclude<ScrollSurfaceBaselineAbsence, 'stored-surface-unusable'> | undefined {
+  if (refFrameState(session) !== 'active') return 'stored-surface-not-current';
+  // A gesture nobody has read yet may still be moving this tree, which would bill its motion to
+  // the scroll being dispatched now.
+  if (isPostGestureStabilizationPending(session)) return 'prior-gesture-unsettled';
+  return undefined;
+}
+
+/**
+ * The scroll container a directional swipe should stay inside (#2714), read before the gesture off
+ * the same current tree a movement claim would compare against, through the edge verdict's own
+ * selection. A tree that may no longer be the screen names no container, and neither does a
+ * horizontal scroll, which the vertical-only edge analyzer cannot place, nor a platform that moves
+ * content without a synthesized swipe.
+ */
+export async function readScrollTargetContainer(
+  device: DeviceInfo,
+  session: SessionState,
+  direction: ScrollDirection,
+): Promise<Rect | undefined> {
+  if (!isMobilePlatform(device)) return undefined;
+  const edge = verticalEdgeFor(direction);
+  const nodes = session.snapshot?.nodes;
+  if (!edge || !nodes || nodes.length === 0 || storedSurfaceStaleness(session)) return undefined;
+  return (await readScrollEdgeState(nodes, edge)).containerRect;
 }
 
 /**

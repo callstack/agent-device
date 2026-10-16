@@ -47,6 +47,7 @@ import {
 import {
   observeScrollMovement,
   planScrollMovement,
+  readScrollTargetContainer,
   reportScrollMovementNotApplicable,
   reportScrollMovementUnobserved,
   type ScrollMovementPlan,
@@ -145,10 +146,23 @@ export async function resolveBoundScrollRuntime(
         flags: params.flags,
         session: params.session,
       });
+      const containerRect = await readScrollTargetContainer(
+        params.device,
+        params.session,
+        target.direction,
+      );
+      const directionOptions =
+        containerRect === undefined ? options : { ...options, containerRect };
       return await resolveBoundGenericRuntime(
         { ...admission, use: plan.use },
         async (runtime, dispatchContext) =>
-          await executeDirectionScroll(runtime, target, options, dispatchContext, movementPlan),
+          await executeDirectionScroll(
+            runtime,
+            target,
+            directionOptions,
+            dispatchContext,
+            movementPlan,
+          ),
       );
     }
     case 'edge': {

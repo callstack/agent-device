@@ -49,6 +49,12 @@ export type ScrollGestureOptions = {
   pixels?: number;
   referenceWidth: number;
   referenceHeight: number;
+  /**
+   * The scroll container the swipe is meant for, in the reference frame's own zero-origin space.
+   * Both endpoints stay inside its intersection with the padded frame (#2714): a span that already
+   * fits is unchanged, one that leaves it is moved in, and one longer than it is shortened.
+   */
+  container?: Rect;
 };
 
 export type ScrollGesturePlan = {
@@ -60,7 +66,10 @@ export type ScrollGesturePlan = {
   referenceWidth: number;
   referenceHeight: number;
   amount?: number;
+  /** The span dispatched, which is less than `requestedPixels` when the container shortened it. */
   pixels: number;
+  /** Present only when the container shortened the swipe: the span the padded frame would carry. */
+  requestedPixels?: number;
 };
 
 export type SwipePresetGesturePlan = {
@@ -125,16 +134,65 @@ export function buildScrollGesturePlan(options: ScrollGestureOptions): ScrollGes
     pixels: travelPixels,
   });
 
-  switch (direction) {
-    case 'up':
-      return buildPlan(centerX, centerY - halfTravel, centerX, centerY + halfTravel);
-    case 'down':
-      return buildPlan(centerX, centerY + halfTravel, centerX, centerY - halfTravel);
-    case 'left':
-      return buildPlan(centerX - halfTravel, centerY, centerX + halfTravel, centerY);
-    case 'right':
-      return buildPlan(centerX + halfTravel, centerY, centerX - halfTravel, centerY);
-  }
+  const vertical = direction === 'up' || direction === 'down';
+  const unclamped = {
+    axisStart: (vertical ? centerY : centerX) - halfTravel,
+    axisEnd: (vertical ? centerY : centerX) + halfTravel,
+    cross: vertical ? centerX : centerY,
+  };
+  const lane = options.container
+    ? keepSwipeInContainer(unclamped, options.container, vertical, {
+        min: edgePadding,
+        max: axisLength - edgePadding,
+      })
+    : unclamped;
+  const shortened = lane.axisEnd - lane.axisStart < unclamped.axisEnd - unclamped.axisStart;
+  const plan = buildPlan(
+    vertical ? lane.cross : lane.axisStart,
+    vertical ? lane.axisStart : lane.cross,
+    vertical ? lane.cross : lane.axisEnd,
+    vertical ? lane.axisEnd : lane.cross,
+  );
+  const placed = shortened
+    ? { ...plan, pixels: lane.axisEnd - lane.axisStart, requestedPixels: travelPixels }
+    : plan;
+  // `up`/`left` drag from the low end toward the high end; `down`/`right` drag the other way.
+  return direction === 'up' || direction === 'left'
+    ? placed
+    : { ...placed, x1: placed.x2, y1: placed.y2, x2: placed.x1, y2: placed.y1 };
+}
+
+type SwipeLane = { axisStart: number; axisEnd: number; cross: number };
+
+/**
+ * Moves a centred swipe lane inside the container's intersection with the padded axis, shortening
+ * it only when the intersection is shorter than the lane. A container wholly inside the padding
+ * leaves nothing to swipe in, so the lane stays as the padded frame planned it.
+ */
+function keepSwipeInContainer(
+  lane: SwipeLane,
+  container: Rect,
+  vertical: boolean,
+  padded: { min: number; max: number },
+): SwipeLane {
+  const containerMin = vertical ? container.y : container.x;
+  const containerSize = vertical ? container.height : container.width;
+  const bandMin = Math.max(padded.min, Math.round(containerMin));
+  const bandMax = Math.min(padded.max, Math.round(containerMin + containerSize));
+  if (bandMax <= bandMin) return lane;
+
+  const crossMin = vertical ? container.x : container.y;
+  const crossSize = vertical ? container.width : container.height;
+  const cross =
+    lane.cross >= crossMin && lane.cross <= crossMin + crossSize
+      ? lane.cross
+      : Math.round(crossMin + crossSize / 2);
+
+  const length = lane.axisEnd - lane.axisStart;
+  if (length >= bandMax - bandMin) return { axisStart: bandMin, axisEnd: bandMax, cross };
+  const shift =
+    lane.axisStart < bandMin ? bandMin - lane.axisStart : Math.min(0, bandMax - lane.axisEnd);
+  return { axisStart: lane.axisStart + shift, axisEnd: lane.axisEnd + shift, cross };
 }
 
 /**
