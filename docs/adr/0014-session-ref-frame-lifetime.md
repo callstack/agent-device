@@ -2,64 +2,72 @@
 
 ## Status
 
-Accepted. Enforcement applies across all platforms.
-
-Completed process history is in git history.
+Accepted.
+This decision is implemented and enforced on `main` across all platforms.
 
 Fresh live evidence exercised every production seam except Android blocking-dialog recovery.
-That seam has an accepted evidence gap because no deterministic procedure can raise the system dialog on demand.
-Fixture regressions fix the expected transition and abort behavior in `android-system-dialog-ref-frame.test.ts` and `interaction-touch-android-readiness.test.ts`.
+Android blocking-dialog recovery shipped as a documented, accepted gap, because no deterministic repro exists to raise the system dialog on demand.
+Fixture regressions pin the transition and abort logic of that seam: `android-system-dialog-ref-frame.test.ts` and `interaction-touch-android-readiness.test.ts`.
+
+The staged migration plan is in the git history of this file.
+PR #1241 was an earlier compatible transitional fix, not this architecture migration.
 
 ## Rules at a glance
 
+This section is a normative summary.
 [Decision](#decision) contains the binding contracts and edge cases.
-`CONTEXT.md` defines ref-frame vocabulary.
+The ref-frame vocabulary is promoted into `CONTEXT.md`.
 
-- A session owns at most one **ref frame**, separate from its latest operational observation, `session.snapshot`.
-  The frame holds an epoch exposed as `refsGeneration`, immutable source tree, `active`/`expired` state, and `all` or bounded issuance scope.
-  It is one value on `SessionState`.
-  Transitions replace it whole and never edit it in place.
-  Nominal `#`-private fields prevent construction, edits, or derivation outside `packages/daemon/src/core/ref-frame.ts`.
-  The field-owner gate covers unchanged whole-frame moves, including field clearance and assignment from another session.
+- A session owns at most one **ref frame**.
+  The ref frame is the authorization namespace for mutation refs.
+  It is separate from the latest operational observation (`session.snapshot`).
+  The frame holds an epoch exposed as `refsGeneration`, an immutable source tree, an `active`/`expired` state, and an `all` or bounded issuance scope.
+  The frame is one value on `SessionState`.
+  A transition replaces the frame whole and never edits it in place.
+  The frame type is nominal (`#`-private fields).
+  Thus, no module outside `packages/daemon/src/core/ref-frame.ts` can construct a frame, edit a frame, or derive a frame from an existing frame.
+  The type cannot judge a whole frame that moves unchanged, for example when code clears the field or assigns the frame of another session.
+  The field-owner gate still covers these moves.
 - A complete snapshot activates an `all` frame.
-  `find`, settled diffs, and replay divergence screens activate bounded partial frames that supersede the prior frame.
+  `find`, settled diffs, and replay divergence screens activate a bounded partial frame that supersedes the prior frame.
   Internal read-only captures never activate, reindex, or expire a frame.
-- Every mutating leaf expires the frame after pre-action guards, immediately before the device operation.
-  No success-only rollback occurs.
-  Post-dispatch failure leaves the frame expired.
+- Every mutating leaf expires the frame at the side-effect seam: after all pre-action guards, immediately before the device operation.
+  There is no success-only rollback.
+  A post-dispatch failure still leaves the frame expired.
 - Mutation admission requires an active frame whose epoch and issuance scope authorize the ref.
-  Typed rejection reasons have this order:
+  Rejections carry typed reasons in this order:
   1. `ref_frame_expired`.
   2. `ref_generation_mismatch`.
   3. `plain_ref_requires_complete_frame`.
   4. `ref_not_issued`.
-- Read-only refs remain fail-open with structured staleness warnings only while retained frame evidence can resolve them.
-  Missing evidence fails instead of resolving against a newer observation by positional coincidence.
-- Every daemon command declares `RefFrameEffect` (`preserve` | `may-invalidate` | `delegated`) in its descriptor daemon facet.
-  A completeness gate enforces registry classification.
+- Read-only ref consumers stay fail-open with a structured staleness warning only while the frame retains the evidence of the ref.
+  Missing evidence fails, instead of resolving by positional coincidence against a newer observation.
+- Every daemon command declares a `RefFrameEffect` (`preserve` | `may-invalidate` | `delegated`) in its descriptor daemon facet.
+  A completeness gate covers the registry classification.
 
 ## Context
 
 Snapshot refs such as `@e12` are positional names inside one accessibility-tree namespace.
-They are inexpensive and effective within that namespace.
-They do not identify an element across navigation, layout changes, or captures with different positional order.
-A generation pin such as `@e12~s42` identifies the issuing namespace.
-It does not stabilize the element.
+They are cheap and effective within that namespace.
+But they do not identify an element across navigation, layout changes, or another capture whose positional order is different.
+A generation pin such as `@e12~s42` identifies the namespace that issued the ref.
+The pin does not make the element stable.
 
-The session model combines two distinct concepts in `session.snapshot`:
+The current session model mixes two different concepts in `session.snapshot`:
 
-1. The latest operational observation for selector matches, verification, settled observations, Android freshness, overlays, and diagnostics.
-2. The caller-authorized tree whose refs may authorize later mutations.
+1. The latest operational observation that selector matching, verification, settling, Android freshness, overlays, and diagnostics use.
+2. The caller-authorized tree whose refs a later mutation may use.
 
-This combination causes failures in both directions.
-A mutation can change the device without another capture, so old positional refs appear current.
-An internal read-only capture can replace `session.snapshot` and invalidate refs despite no caller mutation.
-Partial `find` results, settled diffs, and replay divergence screens can clear the coarse stale marker for a whole tree after exposing few refs.
+This mix causes failures in both directions.
+A mutation can change the device without another tree capture, so the old positional refs appear current.
+Conversely, an internal read-only capture can replace `session.snapshot` and invalidate refs, even though the caller performed no mutation.
+Partial outputs, such as `find`, settled diffs, and replay divergence screens, can then clear the coarse stale marker for the whole replacement tree.
+They can do this even though they exposed only a few refs.
 
 Issue [#1239](https://github.com/callstack/agent-device/issues/1239) and PR [#1241](https://github.com/callstack/agent-device/pull/1241) demonstrate the first failure on iOS.
-`snapshot -> press @e1 -> press @e2` can dispatch both presses if the first press takes no internal capture.
-The second ref uses pre-action coordinates even if the first press navigated.
-A false successful tap on a new screen is worse than an explicit stale-ref failure.
+`snapshot -> press @e1 -> press @e2` can dispatch both presses when the first press performs no internal capture.
+The second ref is resolved against pre-action coordinates, even if the first press navigated.
+A false successful tap on the new screen is worse than a clear stale-ref failure.
 
 The lifetime contract must meet these requirements:
 
@@ -70,39 +78,42 @@ The lifetime contract must meet these requirements:
 
 ## Decision
 
-The terms below define the implemented model and appear in `CONTEXT.md`.
-The coarse `snapshotRefsStale` marker is removed.
-Read-only ref staleness derives from frame state.
-A plain ref warns after frame expiry.
-Read-only captures do not mark refs stale because they do not expire the frame.
+The terms that this section introduces are now the implemented model.
+The ref-frame vocabulary is promoted into `CONTEXT.md`.
+The superseded coarse `snapshotRefsStale` marker is removed.
+Read-only ref staleness now derives from the frame state:
+
+- A plain ref warns after the frame expires.
+- A read-only capture no longer marks refs stale, because it does not expire the frame.
 
 ### Ref frames are separate from operational observations
 
 A session owns at most one **ref frame**.
-This authorization namespace for mutation refs contains:
+The frame is the authorization namespace for mutation refs.
+It contains:
 
-- A seeded monotonic **ref-frame epoch**, exposed as `refsGeneration` and accepted through `~s<n>`.
-- The immutable source tree required to resolve and guard issued refs.
-- State `active` or `expired`.
-- Issuance scope `all` or a bounded set of issued ref bodies.
+- A seeded, monotonic **ref-frame epoch**. The existing `refsGeneration` field exposes the epoch. The existing `~s<n>` input suffix accepts it.
+- The immutable source tree that is necessary to resolve and guard the refs that the frame issued.
+- A state of `active` or `expired`.
+- An issuance scope of `all` or a bounded set of issued ref bodies.
 
-Operational captures update the latest observation for selectors and diagnostics.
+Operational captures update the latest observation that selector and diagnostic machinery use.
 They do not silently replace, reactivate, or reindex the authorized ref frame.
-The implementation may share immutable tree objects between observation and frame.
-It must not combine their lifetimes through mutable session-state aliases.
+The implementation may share immutable tree objects between the observation and the frame.
+But it must not make their lifetimes the same through aliases of mutable session state.
 
 Only one frame is retained.
-A new active frame supersedes the previous frame and advances the epoch.
-No historical generation-to-tree cache is introduced.
-Complete and partial frames retain the immutable source tree.
-Interaction guards and replay identity can depend on ancestors, siblings, overlays, and viewport context outside emitted nodes.
-The issuance set bounds partial authority, not the evidence tree.
-If frame and observation originate from the same capture, they share immutable capture data.
+Activation of a new frame supersedes the previous frame and advances the epoch.
+Historical generation-to-tree caches are not introduced.
+Complete and partial frames retain the immutable source tree, because interaction guards and replay identity can depend on context outside the emitted subset.
+This context includes ancestors, siblings, overlays, and the viewport.
+The issuance set bounds partial authority; the evidence tree does not.
+When the frame and the latest observation originate from the same capture, they share immutable capture data.
 Neither transition deep-copies the tree.
 
 The existing `snapshotGeneration` implementation evolves behind one ref-frame module.
-Its former companion `snapshotRefsStale` is removed.
-For wire compatibility, public `refsGeneration` and `@e12~s42` grammar remain unchanged.
+The `snapshotRefsStale` marker that it originally paired with is now removed.
+For wire compatibility, the public name `refsGeneration` and the `@e12~s42` grammar remain unchanged.
 
 ### Frame transitions
 
@@ -116,27 +127,28 @@ For wire compatibility, public `refsGeneration` and `@e12~s42` grammar remain un
 | Sparse, failed, or unusable capture | None | Unchanged | Unchanged |
 | Session reopen | New random-seeded lifetime | Rejected until publication | Old lifetime rejected probabilistically as today |
 
-Complete activation normally accompanies a result that exposes the stored frame's complete ref namespace.
-This includes interactive or intentionally scoped snapshots.
+A complete activation normally accompanies a command result that exposes the complete ref namespace for the stored frame.
+This includes an interactive or intentionally scoped snapshot.
 An intentionally scoped snapshot replaces authorization with exactly its returned namespace.
-It neither authorizes matching ref bodies outside the scope nor retains the old `all` scope.
+It neither authorizes matching ref bodies outside that scope nor retains the old `all` scope.
 
-Before a frame-activating capture uses an `@ref` scope, it must admit that ref against the active frame.
+A frame-activating capture scoped by `@ref` must first admit that scope ref against the current active frame.
 Scoped output reindexes refs.
-To preserve repeated scoped snapshots, the session retains one bounded **scope lineage** for consecutive read-only repetitions of that exact scope.
-The lineage stores the admitted semantic scope as label/selector chain.
-It stores neither the old positional tree nor mutation authority.
-Repeated `snapshot -s @ref` may use lineage only if the immediately preceding frame publication was the same scoped capture.
-These events clear lineage:
+To preserve the existing contract for repeated scoped snapshots after this reindex, the session retains one bounded **scope lineage**.
+The lineage is for consecutive read-only repetitions of that exact scope.
+The lineage stores the admitted semantic scope (label/selector chain).
+It does not store the old positional tree or mutation authority.
+A repeated `snapshot -s @ref` may resolve through that lineage only when the immediately preceding frame publication was the same scoped capture.
+Each of these events clears the lineage:
 
 - The first device-side effect.
-- Unrelated frame publication.
+- An unrelated frame publication.
 - Another scope.
 
-Arbitrary stale or unissued scope refs fail closed.
-They cannot use lineage or authorize another subtree.
-Empty, sparse, failed, or unusable repetitions preserve the last useful frame and still-consecutive lineage.
-Selector-scoped captures retain normal selector rules.
+An arbitrary stale or unissued scope ref still fails closed.
+It cannot borrow lineage or authorize a different subtree.
+Empty, sparse, failed, or unusable repeated captures preserve the last useful frame and its still-consecutive lineage.
+Selector-scoped captures follow their normal selector rules.
 
 These outputs are partial external publications:
 
@@ -146,15 +158,17 @@ These outputs are partial external publications:
 - Settled diffs/tails.
 - Replay divergence screens.
 
-They activate partial frames only if the caller or orchestrated workflow sees at least one ref and its epoch.
-An empty partial result does not supersede useful authority.
-Partial publication intentionally supersedes the prior frame.
-This avoids unbounded generation-specific trees and makes authority explicit.
-Only refs named in that response can authorize mutations, with the response-level epoch.
+They activate a partial frame only when at least one ref and its epoch are visible to the caller or orchestrated workflow.
+An empty partial result does not supersede useful existing authority.
 
-An explicit non-diff complete snapshot leaf may activate a frame inside replay or batch before the outer orchestrator returns.
-This remains true if the outer response later omits or digests the tree.
-This execution-local exception preserves deterministic `snapshot -> @ref` scripts.
+Publication of a partial frame intentionally supersedes the prior frame.
+This avoids retention of an unbounded set of generation-specific trees.
+It also makes the limited authority of the partial frame explicit.
+Only refs named in that partial response can be used for mutation, and only with their response-level epoch.
+
+An explicit, non-diff complete snapshot leaf may activate a frame inside replay or batch before the outer orchestrator returns.
+This is true even when the outer response level later elides or digests that tree.
+This execution-local activation is a deliberate compatibility exception for deterministic `snapshot -> @ref` scripts.
 It authorizes only predeclared later bare-ref steps.
 It does not:
 
@@ -163,39 +177,39 @@ It does not:
 - Add general result interpolation.
 
 Internally injected, cached, freshness, and recovery captures never receive this exception.
-Nested non-empty partial publication may supersede scope.
-However, batch and replay have no dynamic generation binding for a later step to consume it.
+A nested non-empty partial publication may supersede scope.
+But batch and replay have no dynamic generation binding with which a later step could consume it.
 
 ### Mutation admission and read behavior
 
-A ref mutation is admitted only if all conditions hold:
+A ref-targeting mutation is admitted only when all of these conditions hold:
 
 1. The frame is active.
-2. A pin names the current epoch, or a plain ref targets a complete `all` frame.
-3. The ref body belongs to the issuance scope.
+2. A pinned ref carries the current epoch, or a plain ref is used against a complete `all` frame.
+3. The ref body belongs to the issuance scope of the frame.
 4. Normal target guards and replay target-binding verification pass.
 
-Resolution uses the authorized frame, never positional coincidence in a newer operational observation.
+The target is resolved against the authorized frame, never against a newer operational observation by positional coincidence.
 Android freshness captures may verify current identity or provide comparison evidence.
-They must not redefine the node authorized by an already-admitted `@eN`.
+But they must not redefine which node an already-admitted `@eN` authorizes.
 
-Read-only ref consumers remain fail-open with structured staleness warnings only if retained frame evidence can resolve the ref.
+Read-only ref consumers remain fail-open with a structured staleness warning only when the retained frame contains the evidence necessary to resolve that ref.
 A stale read is observable and recoverable.
-A stale mutation can affect the wrong element.
-Missing evidence fails instead of using positional coincidence in a newer observation.
-Reads never reactivate frames or give unissued refs mutation authority.
+A stale mutation can act on the wrong element.
+Missing frame evidence fails, instead of falling through to a newer operational observation by positional coincidence.
+Reads never reactivate a frame or convert an unissued ref into mutation authority.
 
 Rejected mutations use the existing error system.
-Admission evaluates typed reasons in this order:
+Admission evaluates failures in this order, and each failure has a typed reason:
 
 1. `ref_frame_expired`: a side effect invalidated the current frame.
 2. `ref_generation_mismatch`: a pin names another epoch.
 3. `plain_ref_requires_complete_frame`: a plain ref targets a partial frame.
-4. `ref_not_issued`: a pin is outside a partial frame's issuance set.
+4. `ref_not_issued`: a pinned ref is outside the issuance set of a partial frame.
 
-These reasons distinguish a need for complete snapshot capture from a need for an emitted pinned ref.
-Each failure includes `details.ref`, `details.reason`, `details.currentGeneration`, and frame scope.
-Pinned inputs also include `details.mintedGeneration`.
+With the typed reasons, callers can distinguish "capture a complete snapshot" from "use the emitted pinned ref".
+Each failure includes `details.ref`, `details.reason`, `details.currentGeneration`, and the frame scope.
+When the input is pinned, the failure also includes `details.mintedGeneration`.
 For example:
 
 ```text
@@ -209,11 +223,11 @@ hint: Capture a fresh interactive snapshot or use a stable selector.
 ```
 
 The daemon cannot truthfully report `mintedGeneration` for a plain ref.
-If lifetime expiry caused failure, error messages must not claim that an existing ref was missing or lacked bounds.
+When the actual failure is lifetime expiration, error messages must not claim that a found ref was missing or lacked bounds.
 
 ### Expiration occurs at the side-effect seam
 
-Expiry occurs after all pre-action guards pass, including:
+Expiration occurs after these and all other pre-action guards pass:
 
 - Syntax.
 - Capability.
@@ -224,45 +238,47 @@ Expiry occurs after all pre-action guards pass, including:
 - Visibility.
 - Bounds.
 
-It occurs immediately before the first operation that may change device-visible element identity.
-Before awaiting that operation, persist the in-memory transition.
+Expiration occurs immediately before the first operation that may change device-visible element identity.
+Before you await that operation, persist the in-memory transition.
 
-Pre-seam failure preserves the frame.
-After the seam, success, timeout, cancellation, connection loss, and ambiguous platform errors all leave it expired.
-The device may already have acted.
-The seam also clears scoped-snapshot lineage.
-No success-only rollback occurs.
+Failure before this seam preserves the frame.
+After the seam is crossed, success, timeout, cancellation, connection loss, and ambiguous platform errors all leave the frame expired, because the device may already have acted.
+A crossing of the seam also clears scoped-snapshot lineage.
+There is no success-only rollback.
 
-This rule covers every execution shape:
+This rule applies to every execution shape:
 
 - Runtime ref/selector/coordinate paths expire before `tap`, `fill`, `longPress`, text input, or gesture execution.
-- Native web ref paths perform ref preflight, then expire before `clickRef` or `fillRef`.
-- Direct iOS selector paths consume no ref but expire existing frames before the fused runner resolve-and-act request.
-- Platform-generic, app lifecycle, keyboard, alert, settings, and provider actions expire at their actual leaf side-effect seam.
-  They do not expire at generic admission.
-- Existing-session `open`/relaunch expires that session's frame before first close/launch dispatch.
-  Post-dispatch failure or timeout leaves it expired.
-  Successful `close` deletes the session, with no frame to restore.
-- After an error, fallback or retry may proceed only if the error proves no prior side effect.
+- Native web ref paths run their existing ref preflight first, and then expire before `clickRef` or `fillRef`.
+- Direct iOS selector paths consume no ref, but they expire any existing frame before the fused runner resolve-and-act request.
+- Platform-generic, app lifecycle, keyboard, alert, settings, and provider actions expire at their actual leaf side-effect seam, not at generic request admission.
+- `open`/relaunch against an existing session expires the frame of that session before the first close/launch dispatch.
+  A failure or timeout after dispatch leaves the frame expired.
+  A successful `close` deletes the session, and thus retains no frame to restore.
+- After an error, a fallback or retry may proceed only when the error proves no prior side effect.
   Ambiguous post-dispatch errors neither restore the frame nor authorize an automatic second action.
-- Android blocking-dialog recovery mutates the device.
-  Before recovery tap/relaunch, it must cross the same idempotent seam, even during apparent readiness work.
-  If recovery mutates before a requested ref action dispatches, that action aborts with `ref_frame_expired`.
-  It cannot continue against the recovered UI.
-  Selector and coordinate actions may re-resolve and continue under existing policies.
+- Android blocking-dialog recovery is itself device-mutating.
+  Its recovery tap/relaunch must cross the same idempotent seam before it acts, even when apparent readiness work invokes the recovery.
+  If recovery mutates before a requested ref action dispatches, that ref action aborts with `ref_frame_expired`.
+  The ref action cannot continue against the recovered UI.
+  Selector and coordinate actions may re-resolve and continue under their existing policies.
 
-The seam intentionally belongs inside leaf execution.
-Router-entry expiry would reject the current command's ref, invalidate ordinary validation failures, and mishandle multiplexed or orchestrating commands.
+The seam is deliberately inside leaf execution.
+Expiration at router entry would cause these problems:
 
-Some operations combine final status/target checks and mutation in one request.
-Examples include direct iOS selectors and current native alert or keyboard actions.
-Until a lower-level “will act” callback exists, fused-request dispatch is the conservative seam.
-Later `not found`, `already hidden`, timeout, or no-alert results do not restore the frame.
-A separate definitive read-only status request preserves the frame if it proves no mutation request was dispatched.
+- It would reject the ref that the current command needs.
+- It would invalidate on ordinary validation failures.
+- It would mishandle multiplexed and orchestrating commands.
+
+Some platform operations fuse their final status/target check and their mutation in one request.
+Examples are direct iOS selectors and current native alert or keyboard actions.
+Until a lower-level "will act" callback exists, the dispatch of that fused request is the conservative seam.
+A later `not found`, `already hidden`, timeout, or no-alert result is post-seam and does not restore the frame.
+A command with a separate, definitive read-only status request preserves the frame when that status proves that no mutation request was dispatched.
 
 ### Command effects are daemon-owned and completely classified
 
-The command descriptor's daemon facet declares request policy:
+The daemon facet of the command descriptor declares a request policy:
 
 ```ts
 type RefFrameEffect = 'preserve' | 'may-invalidate' | 'delegated';
@@ -272,77 +288,84 @@ type DaemonRefFrameEffect = RefFrameEffect | ((request: DaemonRequest) => RefFra
 
 The daemon registry exposes a named resolver.
 Every daemon command is classified.
-Classification checks honesty/completeness, not transitions.
-`may-invalidate` means some successful path can cross a device side effect.
-Only after that path is selected does the leaf call the ref-frame module.
-Request-sensitive commands use a focused resolver instead of one classification for all subcommands.
+But the classification is an honesty/completeness guard, not the transition site.
+`may-invalidate` means that some successful path can cross a device side effect.
+The leaf implementation still calls the ref-frame module only when that path is selected.
+Request-sensitive commands use a focused resolver, instead of a pretense that all subcommands behave alike.
 
 The registry is the exhaustive source of truth.
-This non-exhaustive table guides representative classifications.
-It must not become a second prose registry:
+The table below is non-exhaustive guidance for the classification of representative actions.
+The table must not become a second prose registry:
 
 | Effect | Commands/actions |
 | --- | --- |
 | `may-invalidate` | press, click, fill, longpress, type, focus, scroll, swipe, gesture, back, home, `tv-remote`, orientation, open/relaunch, trigger/push delivery, settings changes, install/reinstall, React Native overlay dismissal, and lifecycle operations that can replace the visible surface |
-| Conditional resolver | keyboard status preserves; dismiss/return/input invalidate. Alert get/wait preserve; accept/dismiss invalidate. Find reads preserve; click/fill/focus/type delegate to leaf mutation. |
+| Conditional resolver | keyboard status preserves while dismiss/return/input invalidate; alert get/wait preserve while accept/dismiss invalidate; find reads preserve while click/fill/focus/type delegate to their leaf mutation |
 | `delegated` | batch, replay, and test/suite orchestrators; each nested leaf owns its transition |
-| `preserve` | snapshots and other observation, assertion, screenshot, recording, trace, logs, events, network inspection, performance, inventory, capability, lease, and transport-management operations, unless a selected subaction directly manipulates the visible surface |
+| `preserve` | snapshots and other observation, assertion, screenshot, recording, trace, logs, events, network inspection, performance, inventory, capability, lease, and transport-management operations unless a selected subaction directly manipulates the visible surface |
 
-Clipboard reads and writes preserve the frame because pasteboard state alone does not change element identity.
-A later paste/type action invalidates independently.
+Clipboard reads and writes preserve the frame, because pasteboard state alone does not change element identity.
+A later paste/type action is independently invalidating.
 
-Generic routes have no exception.
-`back`, `home`, `orientation`, `scroll`, `tv-remote`, and `app-switcher` must cross the transition in the generic daemon leaf when they act.
-The completeness gate covers every daemon-projected command, including generic fallbacks.
+Generic routing is not an exception to the policy.
+`back`, `home`, `orientation`, `scroll`, `tv-remote`, and `app-switcher` all reach the generic daemon leaf.
+When they act, they must cross the same transition there.
+The completeness gate covers every command projected to the daemon, including generic fallbacks.
 Thus, a missing facet cannot hide an unclassified mutation.
-Mutations from unrelated external tools remain outside this session guarantee.
+Mutations that unrelated external tools perform remain outside this session guarantee.
 
-Runner-side classification does not define this policy.
-Apple runner traits govern retry eligibility, launch policy, and recorded-failure conversion at a lower wire-command boundary.
-The TypeScript `readOnly` trait controls:
+This policy is not derived from the runner-side classification.
+Apple runner command traits govern retry eligibility, launch policy, and the recorded-failure conversion at a lower wire-command seam.
+The TypeScript `readOnly` trait is itself an input to several daemon decisions:
 
 - Read-only resend.
 - Session-invalidation skip.
 - Transport error classification.
 - Readiness preflight.
 
-`refFrameEffect` governs daemon session authorization, including commands outside the Apple runner.
+`refFrameEffect` governs daemon session authorization, and it includes commands that never reach the Apple runner.
 Narrow consistency tests may cover direct mappings.
-Blanket parity would combine distinct concepts.
+But blanket parity would couple different concepts.
 
 The existing per-session request lock serializes frame admission and transitions.
 The frame is shared session state, not per-client or per-lease history.
-Generation pins identify rejected epochs and reasons precisely.
-They neither reserve frames nor prevent another caller's mutation from expiring them.
+Generation pins make the rejected epoch and reason precise.
+They do not reserve a frame, and they do not prevent the mutation of another caller from expiring it.
 No second ref-specific mutex is introduced.
 
 ### Batch, replay, recording, and repeated actions
 
-Batch and replay invoke sequential steps through ordinary daemon dispatch and declare `delegated`.
-Outer command start never expires a frame.
-Frame state passes naturally between leaves:
+Batch and replay invoke their steps sequentially through ordinary daemon dispatch, and they are `delegated`.
+They never expire a frame merely because the outer command began.
+Frame state naturally carries between leaf steps:
 
 - `snapshot -> press @e1 -> press @e2` executes the first press and rejects the second.
-- `snapshot -> press @e1 -> press @e1 -> press @e2` stops on the second press, before `@e2`.
+- `snapshot -> press @e1 -> press @e1 -> press @e2` also stops on the second press, before `@e2`.
 - `snapshot -> press @e1 -> snapshot -> press @e2` is admitted.
 - Selector-only and coordinate-only batches retain their request-round-trip advantage.
-- Stale-ref failure stops batch under existing policy.
-  It preserves `step`, `command`, `executed`, `total`, `partialResults`, diagnostics, and `details.reason`.
+- A stale-ref failure stops batch through its existing policy.
+  The failure preserves `step`, `command`, `executed`, `total`, `partialResults`, diagnostic fields, and `details.reason`.
 
-Batch gains no nested MCP pin traversal, intermediate-result interpolation, unsafe ref-stability override, or second static lifecycle interpreter.
-Normal leaf dispatch is the sole enforcement path.
+Batch does not gain any of these:
+
+- Nested MCP pin traversal.
+- Intermediate-result interpolation.
+- An unsafe "assume stable refs" override.
+- A second static lifecycle interpreter.
+
+Normal leaf dispatch is the single enforcement path.
 
 Recorded `.ad` scripts remain selector-first.
-The recorder converts successfully resolved refs to selector chains.
-It refuses to persist unresolved session-bound bare refs.
-Generation suffixes remain runtime evidence and are removed from durable recordings because seeded epochs are not portable across sessions.
-Legacy handwritten `.ad` scripts that mutate several bare refs from one snapshot become intentionally incompatible.
-They must capture between mutations or use selectors.
-Replay target-binding verification finishes before the seam.
-Identity divergence preserves the frame.
-Post-dispatch action failure leaves it expired.
+The recorder continues to convert successfully resolved refs to selector chains.
+It refuses to persist an unresolved session-bound bare ref.
+Generation suffixes remain runtime evidence.
+They are stripped from durable recordings, because seeded epochs are not portable across sessions.
+Legacy hand-written `.ad` scripts that mutate through several bare refs from one snapshot become intentionally incompatible.
+These scripts must capture between mutations or use selectors.
+Replay target-binding verification completes before the side-effect seam.
+Identity divergence preserves the frame, while an action failure after dispatch leaves it expired.
 
-These repetitions form one logical command:
+Each of these is one logical command:
 
 - `press --count`.
 - Double-tap.
@@ -351,174 +374,176 @@ These repetitions form one logical command:
 - `swipe --count`.
 - Platform sequence chunks.
 
-They resolve or plan once and expire once before the first repetition.
-Every repetition executes the original physical point/plan.
-They neither re-resolve the target nor reactivate the frame between repetitions.
-Later repetition or chunk failure leaves the frame expired.
-This preserves explicit repeated physical actions while preventing frame reuse by later commands.
+Each one resolves or plans once, expires once before the first repetition, and executes the original physical point/plan for every repetition.
+It does not re-resolve the target or reactivate the frame between repetitions.
+Failure in any later repetition or chunk leaves the frame expired.
+This preserves the explicit repeated-physical-interaction contract, and it prevents later commands from reuse of the frame.
 
 ### Partial issuance and MCP
 
-`find`, settled diffs/tails, and replay divergence screens publish only returned refs.
-They must not mark the whole frame as issued.
+`find`, settled diffs/tails, and replay divergence screens publish only the refs that they actually return.
+They must not call a whole-frame "refs issued" marker.
 
 Read-only `find` may partially publish its returned ref.
-Mutating `find` returns its acted ref only as diagnostic pre-action identity.
-It must omit `refsGeneration`.
-It must not publish or activate a frame.
-It cannot validate that ref after the nested action.
+A mutating `find` returns the acted ref only as diagnostic pre-action identity:
 
-The MCP executor retains per-ref pins by state-directory/session scope.
-Issuance must distinguish the selected `find` action instead of command name alone.
-Read-only `find` with `refsGeneration` merges its partial pin.
-Mutating `find` without `refsGeneration` is explicitly non-issuing and leaves remembered pins unchanged.
-It must not enter a generic missing-generation branch that clears the session's pin scope.
-The executor must carry sufficient normalized command/action context for this distinction.
-Mutation does not clear remembered pins.
-The old epoch lets the daemon return a precise stale rejection.
-MCP neither traverses nested batch input refs nor learns refs from nested batch results.
-Both remain explicit non-goals.
+- It must omit `refsGeneration`.
+- It must not publish or activate a frame.
+- It cannot make that ref valid after the nested action.
 
-Response-level `refsGeneration` retains authority without repeated per-node bytes.
-Snapshot nodes never gain generation bytes.
-Every reusable partial CLI text ref must render as ready-to-copy `@eN~s<refsGeneration>`.
-JSON and Node.js retain plain ref bodies with one response-level generation.
-Before mutation, callers must pair them.
-MCP may render plain refs because it stores and forwards pins internally.
-Complete snapshot trees remain plain to preserve the token budget.
-A mutating `find` diagnostic ref never renders or stores as pinned because it has no `refsGeneration`.
+The MCP executor continues to store per-ref pins by state-directory/session scope.
+Issuance handling must distinguish the selected `find` action.
+It must not infer issuance from the command name alone.
+A read-only `find` with `refsGeneration` merges its partial pin.
+A mutating `find` without `refsGeneration` is explicitly non-issuing, and it leaves every remembered pin unchanged.
+It must not enter a generic missing-generation branch that clears the pin scope of the session.
+The executor must carry sufficient normalized command/action context to make that distinction.
+Remembered pins are not cleared on mutation.
+The daemon produces a precise stale rejection from the remembered old epoch that the executor sends.
+MCP currently does not traverse refs nested inside batch inputs, and it does not learn refs from nested batch results.
+This remains an explicit non-goal.
+
+The response-level `refsGeneration` field remains the token-economical authority.
+Snapshot nodes never gain per-node generation bytes.
+Every reusable ref in a partial CLI text result must render in the ready-to-copy `@eN~s<refsGeneration>` form.
+JSON and Node.js responses retain plain ref bodies plus one response-level generation.
+Before a mutation, callers must pair them.
+MCP may render a plain ref, because it stores and forwards the pin internally.
+Complete snapshot trees remain plain to protect the token budget.
+A mutating `find` diagnostic ref is never rendered or stored as pinned, because it carries no `refsGeneration`.
 
 ## Performance and compatibility
 
-Expiry is O(1): one monotonic epoch transition and bounded in-memory state.
+Expiration is O(1): one monotonic epoch transition and bounded in-memory state.
 It adds no capture, platform request, daemon round trip, or per-node output.
-At most one authorized frame and one latest operational observation remain retained.
-They share immutable capture objects without deep copies.
-The model never caches unbounded full-tree history.
+The model retains at most one authorized frame and one latest operational observation.
+These share immutable capture objects, not deep copies.
+The model never caches an unbounded history of full trees.
 Existing capture size limits remain the bound.
-Memory pressure must not silently expire or replace frames.
-Otherwise, deterministic admission would depend on the environment.
+Memory pressure must not silently expire or swap a frame, because that would make deterministic admission depend on the environment.
 
-The intentional cost affects workflows.
-Several ref mutations may require explicit observations between them.
-Callers can avoid unnecessary captures through:
+The real cost is at the workflow level, and it is intentional.
+A ref-oriented sequence that performs several mutations may need an explicit observation between them.
+Callers can avoid unnecessary captures with:
 
 - Selectors.
 - Direct selector fast paths.
-- A pinned emitted ref from settled partial output.
-- `--count` for repeated physical actions at one target.
+- A settled partial result whose emitted ref is pinned.
+- `--count` for a repeated physical action at one resolved target.
 
-The daemon never auto-captures only to renew refs.
+The daemon never captures automatically for the sole purpose of a ref renewal.
 
-Older clients remain wire-parse-compatible.
-Command grammar, `refsGeneration`, and `~s<n>` remain unchanged.
-Structured error details are additive, so ADR 0006 requires no protocol increment.
-Behavioral compatibility is incomplete:
+Older clients remain wire-parse-compatible:
 
-- Unsafe plain-ref mutation chains now fail.
-- Fused commands can expire frames despite eventual no-op results.
-  Examples include already-hidden `keyboard dismiss` and alert actions with no alert.
-- Read-only refs without retained evidence fail instead of warning and resolving by positional coincidence in newer observations.
+- Command grammar, `refsGeneration`, and `~s<n>` remain unchanged.
+- Structured error details are additive.
+
+Thus, ADR 0006 requires no protocol bump.
+But older clients are not fully compatible in behavior:
+
+- Unsafe plain-ref mutation chains newly fail.
+- A fused command can also expire the frame when its eventual result is a no-op.
+  Examples are `keyboard dismiss` that reports an already hidden keyboard, and an alert action that reports no alert.
+- Read-only refs that lack retained frame evidence newly fail, instead of a warning and a resolution by positional coincidence against a newer observation.
 
 These changes require CLI/help, changelog, `.ad` migration, and batch guidance.
 
-This contract composes with existing ADRs:
+This decision composes with existing ADRs as follows:
 
-- ADR 0003/0008: daemon-owned effect policy composes in the descriptor daemon facet and projects only through the daemon registry.
-- ADR 0004: capture plans and sparse-quality rules remain unchanged, with no added capture.
-- ADR 0005: runner liveness/preflight remains independent of ref authorization.
-- ADR 0006/0010: no RPC increment; typed `details.reason` and actionable hints follow the error contract.
-- ADR 0007: frames use the existing session/request lock, outside client/lease-local state.
-- ADR 0009: Apple, Android, Linux, and web share one target model with projected public platform output.
-- ADR 0011: lifetime spans session sequences instead of another element-guarantee cell.
+- ADR 0003/0008: daemon-owned effect policy is composed in the descriptor daemon facet and projected only through the daemon registry.
+- ADR 0004: capture plans and sparse-quality rules are unchanged, and no capture is added.
+- ADR 0005: runner liveness/preflight state remains independent from session ref authorization.
+- ADR 0006/0010: there is no RPC bump; typed `details.reason` and actionable hints follow the error contract.
+- ADR 0007: the frame is session-scoped under the existing session/request lock, not client-local or lease-local.
+- ADR 0009: one target model applies to Apple, Android, Linux, and web, while public platform output remains projected.
+- ADR 0011: lifetime is a sibling session-sequence invariant, not another path-by-element-guarantee cell.
   Every mutating path still crosses the shared seam.
-- ADR 0012: durable target identity retains selectors/evidence; divergence refs issue bounded partial authority.
+- ADR 0012: durable target identity remains selector/evidence based, and divergence refs become honest partial issuance.
 - ADR 0013: coordinate gestures expire frames but remain outside the element guarantee matrix.
 
 ## Consequences
 
-- Stale refs cannot silently mutate a different element after navigation.
-  Typed failure requires a fresh observation or selector.
-- Multiple logical ref mutations require captures between them, issued settled refs, selectors, or one repeated-action command such as `--count`.
-  Legacy handwritten `.ad` scripts that reuse bare refs from one snapshot must change.
-- Conservative fused requests may consume authority even if the platform reports no required action.
-  This prioritizes prevention of wrong-screen actions over ref preservation after ambiguous dispatch.
-- Reads without retained evidence fail instead of using positional coincidence in newer trees.
-  Reads with retained evidence preserve structured warnings.
-- Consecutive scoped snapshots retain admitted semantic scope.
-  Mutation, unrelated publication, or another scope clears lineage.
-- Bounded session-memory bookkeeping adds no automatic capture, platform call, round trip, or per-node response bytes.
+- A stale ref cannot silently mutate a different element after navigation.
+  The caller receives a typed failure and must choose a fresh observation or a selector.
+- Ref-oriented workflows that perform multiple logical mutations must capture again between the mutations, consume an honestly issued settled ref, use selectors, or use one repeated-action command such as `--count`.
+  Legacy hand-written `.ad` scripts that reuse several bare refs from one snapshot must change.
+- Conservative fused requests may consume ref authority even when the platform later reports that no action was necessary.
+  This favors the avoidance of a wrong-screen action over the preservation of refs after an ambiguous dispatch.
+- A read without retained evidence fails, instead of resolving the same positional ref body in a newer tree.
+  Reads with retained evidence keep the structured warning behavior.
+- Consecutive repeated scoped snapshots retain their admitted semantic scope.
+  Any mutation, unrelated publication, or different scope breaks that lineage.
+- The implementation pays for bounded bookkeeping in session memory.
+  But it adds no automatic capture, platform call, round trip, or per-node response bytes.
 
 ## Required evidence
 
-Completion requires contract and provider tests that prove:
+The implementation is not complete until contract and provider tests prove all of these:
 
-1. After an unobserved first mutation, bare and pinned second mutations reject.
+1. After an unobserved first mutation, a bare and a pinned second mutation reject.
 2. Definitive pre-seam validation, target, and replay-identity failures preserve the frame.
-3. Timeout, cancellation, connection loss, and other post-seam failures leave it expired.
-4. Every listed path crosses the same seam: runtime ref/selector/coordinate, native ref, direct selector, provider-backed interaction, and provider-backed lifecycle/generic paths.
-5. Android freshness cannot retarget admitted refs by positional coincidence.
-6. Read-only operational captures do not replace authorized frames.
-7. Partial publication admits only emitted pinned refs and reports each typed failure.
-   It cannot authorize unrelated plain refs.
-   CLI text pins every reusable partial ref.
-   JSON and Node.js retain response-level representation.
-8. Complete publication admits its plain namespace.
-   Sparse/unusable captures do not.
-9. Mutating `find` omits `refsGeneration` and never pins or activates its pre-action ref as post-action state.
-   After MCP remembers a snapshot pin and performs mutating `find`, later ref input still forwards the old pin.
-   The daemon rejects it as stale.
-10. Batch and replay delegate per step and retain failure/partial-result contracts.
-    They permit `snapshot -> @ref` with an intermediate digest without exposed pins or dynamic bindings.
-11. Recorded scripts contain selectors instead of portable generation claims.
+3. Timeout, cancellation, connection loss, and other post-seam failures leave the frame expired.
+4. These paths cross the same seam: runtime ref/selector/coordinate, native ref, direct selector, provider-backed interaction, and provider-backed lifecycle/generic paths.
+5. Android freshness cannot retarget an admitted ref through positional coincidence.
+6. Read-only operational captures do not replace the authorized frame.
+7. Partial publication admits only emitted pinned refs, reports each typed admission failure, and cannot bless unrelated plain refs.
+   CLI text renders every reusable partial ref with its pin, while JSON and Node.js retain the response-level representation.
+8. Complete publication admits its plain namespace, while sparse/unusable captures do not.
+9. Mutating `find` omits `refsGeneration` and never pins or activates its pre-action ref as current post-action state.
+   An MCP sequence that first remembers a snapshot pin and then performs mutating `find` still forwards the remembered old pin on a later ref input.
+   Thus, the daemon rejects that pin as stale.
+10. Batch and replay delegate per step and retain their existing failure/partial-result contracts.
+    They allow `snapshot -> @ref` with an intermediate digest, without exposed pins or dynamic bindings.
+11. Recorded scripts contain selectors, not portable generation claims.
 12. Press/swipe series and Apple chunks resolve and expire exactly once.
-13. Android dialog recovery expires before its first side effect.
-    After recovery mutates, it aborts an outstanding ref action.
-14. Consecutive `snapshot -s @ref` calls resolve the same admitted semantic scope after ref reindex.
-    Mutation, unrelated publication, or another scope clears lineage.
-    Arbitrary stale refs cannot use it.
-    Empty/unusable repetitions preserve the last useful frame and still-consecutive lineage.
-15. Fused keyboard/alert and split status/action requests follow their conservative seams, including already-hidden and no-alert outcomes.
-16. Failed or timed-out existing-session open/relaunch leaves the old frame expired after dispatch.
-17. Read-only refs with retained stale evidence return structured warnings.
-    Missing evidence fails without positional fallback to newer observations.
-18. A large-tree fixture proves that frame/observation separation adds no deep copy.
-    It records bounded peak retained nodes/bytes.
+13. Android dialog recovery expires before its first recovery side effect.
+    After recovery mutates, the recovery aborts an outstanding ref action.
+14. Consecutive repeated `snapshot -s @ref` calls resolve the same admitted semantic scope after scoped output reindexes refs.
+    A mutation, an unrelated publication, or a different scope breaks the lineage.
+    An arbitrary stale ref cannot use the lineage.
+    Empty/unusable repetition preserves the last useful frame and the still-consecutive lineage.
+15. Fused keyboard/alert requests and split status/action paths follow their documented conservative seams, including already-hidden and no-alert outcomes.
+16. A failed or timed-out existing-session open/relaunch leaves the old frame expired after dispatch.
+17. A read-only ref with retained stale evidence returns the structured warning.
+    Missing frame evidence fails, without a fall-through to a newer observation by positional coincidence.
+18. A large-tree fixture proves that frame/observation separation introduces no deep copy.
+    The fixture records the bounded peak of retained nodes/bytes.
 19. Enforcement and error shapes are consistent across supported platforms.
 
-Performance regression tests prove that admission, expiry, and frame/observation separation add no implicit capture or provider/platform call.
-Device benchmarks are required only if tests or live evidence reveal regression.
-No path may claim success until a test proves execution of the relevant direct/native/runtime/provider branch.
+Performance regression tests prove that admission, expiration, and frame/observation separation add no implicit capture or provider/platform call.
+Device benchmarks are required only if those tests or live evidence reveal a regression.
+No path may claim success until a test proves that the relevant direct/native/runtime/provider branch actually executed.
 
-Before platform enforcement, fresh-build live evidence must exercise every affected supported production seam:
+Before enforcement is enabled for a platform, fresh-build live evidence must exercise every supported production seam affected on that platform:
 
-- Apple runtime-ref and direct/native paths where available.
+- Apple runtime-ref and direct/native paths, where available.
 - Android helper freshness and recovery.
 - Generic/lifecycle mutation.
-- At least one real provider-backed interaction and lifecycle operation.
+- At least one real provider-backed interaction plus lifecycle operation.
 
-Every run must prove:
+Each run must prove all of these:
 
 1. A fresh ref succeeds.
-2. A second mutation with the stale ref rejects before dispatch.
+2. A second mutation with the stale ref is rejected before dispatch.
 3. A fresh observation restores usability.
 
-Unexercised seams remain disabled or explicit release blockers.
-Fixture tests and registry claims are necessary but do not replace live evidence.
+A seam that is not exercised remains disabled or is recorded as an explicit release blocker.
+Fixture-backed tests and registry claims are necessary, but they do not substitute for this live evidence.
 
 ## Alternatives considered
 
-- **Stable refs across trees.** Rejected because positional snapshots have no durable cross-tree identity.
+- **Stable refs across trees.** Rejected because positional accessibility snapshots have no durable cross-tree identity.
   Semantic IDs are neither universal nor unique.
-- **Expire only after successful mutation.** Rejected because the device may act before timeout or transport failure.
-- **Use one snapshot for observation and authorization.** Rejected because internal read-only captures can reindex or invalidate caller refs.
-- **Automatically capture after every mutation.** Rejected because it adds the dominant platform cost and can fail or return sparse output.
-  It hides lifetime instead of defining it.
-- **Retain every generation's full tree.** Rejected as unbounded memory unnecessary for one current frame.
-- **Immediately add per-ref history.** Rejected until evidence requires concurrent generations.
-  One bounded current frame and issuance scope suffice.
-- **Derive policy from runner traits.** Rejected because runner traits classify wire commands for remaining app work.
-  Daemon ref authorization classifies their effects on the frame.
-- **Add batch interpolation or unsafe ref-stability overrides.** Rejected as new orchestration interfaces that bypass the safety rule.
-- **Put lifetime in ADR 0011's element path matrix.** Rejected because lifetime spans commands, time, non-element invalidators, and orchestrators.
-  The matrix retains per-path element guarantees.
+- **Expire only after successful mutation.** Rejected because a timeout or transport failure may occur after the device acted.
+- **Keep one snapshot for observation and authorization.** Rejected because read-only internal captures can reindex or invalidate caller refs.
+- **Automatically capture after every mutation.** Rejected because it adds the dominant platform cost, and it can itself fail or be sparse.
+  It also hides lifetime, instead of defining it.
+- **Retain every generation's full tree.** Rejected because it uses unbounded session memory.
+  It is also unnecessary for a single-current-frame contract.
+- **Add a per-ref historical ledger immediately.** Rejected until evidence requires concurrent generation support.
+  One bounded current frame plus issuance scope is sufficient.
+- **Derive the policy from the runner's command traits.** Rejected because those traits classify a wire command for what the runner may still do about its app.
+  Daemon ref authorization classifies a command for what the command did to the frame.
+- **Add batch interpolation or an unsafe ref-stability override.** Rejected as a new orchestration interface that bypasses the same safety rule.
+- **Force lifetime into ADR 0011's element path matrix.** Rejected because ref lifetime spans commands, time, non-element invalidators, and orchestrators.
+  The matrix remains the enforcement record for per-path element guarantees.
