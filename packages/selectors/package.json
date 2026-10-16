@@ -40,6 +40,10 @@
       "types": "./src/absence-observation-resolution.ts",
       "default": "./src/absence-observation-resolution.ts"
     },
+    "./interaction-action": {
+      "types": "./src/interaction-action.ts",
+      "default": "./src/interaction-action.ts"
+    },
     "./interaction-error": {
       "types": "./src/interaction-error.ts",
       "default": "./src/interaction-error.ts"
@@ -55,6 +59,10 @@
     "./interaction-touch-point": {
       "types": "./src/interaction-touch-point.ts",
       "default": "./src/interaction-touch-point.ts"
+    },
+    "./keyboard-occlusion": {
+      "types": "./src/keyboard-occlusion.ts",
+      "default": "./src/keyboard-occlusion.ts"
     },
     "./press-retarget": {
       "types": "./src/press-retarget.ts",

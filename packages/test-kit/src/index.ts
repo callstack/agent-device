@@ -63,6 +63,11 @@ export {
   UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
 } from './interaction-targeting.fixtures.ts';
 export {
+  KEYBOARD_COVERED_BAND_RECT,
+  KEYBOARD_COVERED_TAB_BAR_RECT,
+  keyboardCoveredTabBarSnapshot,
+} from './keyboard-occlusion.fixtures.ts';
+export {
   closeLoopbackServer,
   listenOnLoopback,
   type LoopbackServer,

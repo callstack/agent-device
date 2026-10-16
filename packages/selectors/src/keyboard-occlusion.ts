@@ -13,8 +13,7 @@ import {
   TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
   type KeyboardSurface,
 } from '@agent-device/contracts/tap-keyboard-occlusion';
-import { interactionVerb } from './interaction-verb.ts';
-import type { InteractionAction } from './interaction-resolution-request.ts';
+import { interactionVerb, type InteractionAction } from './interaction-action.ts';
 
 /**
  * The keyboard guard every acting path runs against the tree it already holds.
@@ -24,6 +23,10 @@ import type { InteractionAction } from './interaction-resolution-request.ts';
  * beside the off-screen guard rather than inside any one command keeps the fast path honest: the
  * native-ref preflight enters through the same door as selector and `@ref` resolution, so a backend
  * that "succeeds" cannot do so on a target the shared rule would refuse (ADR 0011).
+ *
+ * The rule sits below the command surface and the daemon's dispatch seams because both zones call
+ * it: the interaction leaf through `runInteractionPipelineStages`, and mutating `find focus`/`type`,
+ * which dispatch a point themselves instead of re-entering that leaf (#2622).
  */
 
 /**

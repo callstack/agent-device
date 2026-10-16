@@ -14,10 +14,8 @@ import {
   type ActionSelectorResolution,
 } from './selector-action-resolution.ts';
 import { selectorNotFoundFailure } from './selector-read-shared.ts';
-import type {
-  InteractionAction,
-  ResolveInteractionTargetParams,
-} from './interaction-resolution-request.ts';
+import type { InteractionAction } from '@agent-device/selectors/interaction-action';
+import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 
 export type SelectorResolutionAttempt = {
   capture: InteractionSnapshot;

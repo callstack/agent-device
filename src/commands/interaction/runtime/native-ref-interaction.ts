@@ -16,7 +16,7 @@ import type {
 } from '@agent-device/contracts/backend';
 import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult } from '../../runtime-types.ts';
-import type { InteractionAction } from './interaction-resolution-request.ts';
+import type { InteractionAction } from '@agent-device/selectors/interaction-action';
 import { tryResolveRefNode } from './ref-target-resolution.ts';
 import { EXACT_REF_RESOLUTION, describeNonHittableTarget } from './resolution-disclosure.ts';
 import {
