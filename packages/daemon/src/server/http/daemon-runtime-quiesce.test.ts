@@ -3,27 +3,11 @@ import net from 'node:net';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
-  DAEMON_QUIESCE_COMMAND,
+  buildDaemonQuiesceRequest,
   resolveDaemonPaths,
-  type DaemonQuiesceFence,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-
-function buildDaemonQuiesceRequest(params: {
-  token: string;
-  fence: DaemonQuiesceFence;
-  requestId: string;
-}) {
-  return {
-    token: params.token,
-    session: 'default',
-    command: DAEMON_QUIESCE_COMMAND,
-    positionals: [],
-    input: { pid: params.fence.pid, processStartTime: params.fence.processStartTime },
-    meta: { requestId: params.requestId },
-  };
-}
 
 // A quiesce is the daemon's own answer to "may I leave?", so these tests boot the real runtime and
 // ask over its real socket: the census, the closing of admission and the drain are one flow.

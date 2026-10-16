@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
 import {
-  ensureDaemon,
+  ensureManagedDaemon,
   resolveClientSettings,
 } from '../../daemon-client/daemon-client-lifecycle.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -41,7 +41,7 @@ async function startProxy(flags: CliFlags): Promise<ProxyStartup> {
       daemonServerMode: 'http',
     },
   });
-  const daemon = await ensureDaemon(settings);
+  const daemon = await ensureManagedDaemon(settings);
   const upstreamBaseUrl = resolveLocalDaemonBaseUrl(daemon.info.httpPort);
   const token = resolveProxyClientToken(flags);
   const server = createDaemonProxyServer({

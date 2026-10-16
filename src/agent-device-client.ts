@@ -16,6 +16,7 @@ import type {
   CaptureScreenshotResult,
   CaptureSnapshotOptions,
   CaptureSnapshotResult,
+  DaemonLifecycle,
   DragOptions,
   FlingOptions,
   MaterializationReleaseOptions,
@@ -84,6 +85,8 @@ export function createAgentDeviceClient(
   deps: { transport?: AgentDeviceDaemonTransport } = {},
 ): AgentDeviceClient {
   const transport = deps.transport ?? sendToDaemon;
+  // A typo in a JSON or JS config must not fall through to the default and manage a daemon.
+  readDaemonLifecycle(config.daemonLifecycle);
 
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the
@@ -120,7 +123,11 @@ export function createAgentDeviceClient(
     // mark the request canceled.
     const response = await cancellation.guard(
       async () =>
-        await transport(request, { authToken: merged.daemonAuthToken, signal: merged.signal }),
+        await transport(request, {
+          authToken: merged.daemonAuthToken,
+          signal: merged.signal,
+          daemonLifecycle: merged.daemonLifecycle,
+        }),
     );
     if (!response.ok) {
       throwDaemonError(response.error);
@@ -583,6 +590,13 @@ function optionalSnapshotResponseFields(
     // so callers can pin refs (`@e12~s<refsGeneration>`) before a mutation.
     ...(typeof data.refsGeneration === 'number' ? { refsGeneration: data.refsGeneration } : {}),
   };
+}
+
+function readDaemonLifecycle(value: unknown): DaemonLifecycle | undefined {
+  if (value === undefined || value === 'attach' || value === 'managed') return value;
+  throw new AppError('INVALID_ARGS', "daemonLifecycle must be 'attach' or 'managed'.", {
+    daemonLifecycle: value,
+  });
 }
 
 function mergeClientOptions(

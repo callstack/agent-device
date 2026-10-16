@@ -1,6 +1,6 @@
 // #3420: the proxy command's startup path — daemon-backed upstream resolution, client-token
 // sourcing, and real loopback binding — is pinned through the command handler itself. The
-// process-spawn seam (`ensureDaemon`) and the output sink are mocked at the module boundary the
+// process-spawn seam (`ensureManagedDaemon`) and the output sink are mocked at the module boundary the
 // command consumes; the proxy server and its listen are the real ones.
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -14,7 +14,7 @@ import {
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 const mocks = vi.hoisted(() => ({
-  ensureDaemon: vi.fn(),
+  ensureManagedDaemon: vi.fn(),
   writeCommandOutput: vi.fn(async (..._args: unknown[]) => undefined),
   createdServers: [] as http.Server[],
   listenArgs: [] as { port: number; host: string }[],
@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../daemon-client/daemon-client-lifecycle.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../daemon-client/daemon-client-lifecycle.ts')>()),
-  ensureDaemon: mocks.ensureDaemon,
+  ensureManagedDaemon: mocks.ensureManagedDaemon,
 }));
 vi.mock('@agent-device/proxy', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/proxy')>();
@@ -96,11 +96,11 @@ test('proxy rejects positional arguments', async () => {
     }),
     (error: { code?: string }) => error.code === 'INVALID_ARGS',
   );
-  assert.equal(mocks.ensureDaemon.mock.calls.length, 0);
+  assert.equal(mocks.ensureManagedDaemon.mock.calls.length, 0);
 });
 
 test('proxy refuses to start when the local daemon has no HTTP endpoint', async () => {
-  mocks.ensureDaemon.mockResolvedValue({
+  mocks.ensureManagedDaemon.mockResolvedValue({
     info: { token: 'daemon-secret', pid: 4242 },
     startedByClient: false,
   });
@@ -120,7 +120,7 @@ test('proxy refuses to start when the local daemon has no HTTP endpoint', async 
 test('proxy binds a loopback listener and reports the supplied client token', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const stateDir = mkdtempForTestSync('agent-device-proxy-start-');
-  mocks.ensureDaemon.mockResolvedValue({
+  mocks.ensureManagedDaemon.mockResolvedValue({
     info: { httpPort: 54321, token: 'daemon-secret', pid: 4242 },
     startedByClient: false,
   });
@@ -148,14 +148,14 @@ test('proxy binds a loopback listener and reports the supplied client token', as
   assert.match(startupCard, /Proxy listening at/);
   assert.ok(startupCard.includes(proxyBaseUrl));
   // The daemon the proxy fronts is the local one of the resolved state dir, never a remote URL.
-  const settings = mocks.ensureDaemon.mock.calls[0]![0];
+  const settings = mocks.ensureManagedDaemon.mock.calls[0]![0];
   assert.equal(settings.paths.baseDir, resolveDaemonPaths(stateDir).baseDir);
   assert.equal(settings.remoteBaseUrl, undefined);
 });
 
 test('proxy honors proxy host and port flags and mints a token when none is supplied', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
-  mocks.ensureDaemon.mockResolvedValue({
+  mocks.ensureManagedDaemon.mockResolvedValue({
     info: { httpPort: 54322, token: 'daemon-secret', pid: 4242 },
     startedByClient: false,
   });

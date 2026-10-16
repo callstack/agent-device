@@ -30,8 +30,9 @@ export async function sendToDaemon(
   req: Omit<DaemonRequest, 'token'>,
   options: DaemonTransportOptions = {},
 ): Promise<DaemonResponse> {
-  const { resolveClientSettings, ensureDaemon, attachSessionAddressHints } =
+  const { resolveClientSettings, attachSessionAddressHints } =
     await import('./daemon-client-lifecycle.ts');
+  const { connectToDaemon } = await import('./daemon-client-attach.ts');
   const requestId = req.meta?.requestId ?? createRequestId();
   const debug = Boolean(req.meta?.debug || req.flags?.verbose);
   // A few internal callers build DaemonRequest directly instead of using the
@@ -45,6 +46,7 @@ export async function sendToDaemon(
   const settings = resolveClientSettings(
     requestWithoutAuthFlag,
     options.authToken ?? flagAuthToken,
+    options.daemonLifecycle,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
@@ -55,10 +57,14 @@ export async function sendToDaemon(
   const cancellation = createRequestGuard({ signal: options.signal, requestId });
   cancellation.refuseIfAborted();
   const daemon = await cancellation.guard(async () => {
-    return await withDiagnosticTimer('daemon_startup', async () => await ensureDaemon(settings), {
-      requestId,
-      session: req.session,
-    });
+    return await withDiagnosticTimer(
+      'daemon_startup',
+      async () => await connectToDaemon(settings),
+      {
+        requestId,
+        session: req.session,
+      },
+    );
   });
   const info = daemon.info;
   const preparedRemoteRequest = await cancellation.guard(
@@ -103,7 +109,12 @@ export async function sendToDaemon(
             settings.transportPreference,
             settings.paths,
             requestTimeoutMs,
-            { onProgress: options.onProgress, signal: options.signal },
+            {
+              onProgress: options.onProgress,
+              signal: options.signal,
+              timeoutRecovery:
+                settings.daemonLifecycle === 'attach' ? 'none' : 'retire-unresponsive',
+            },
           ),
         { requestId, command: req.command },
       );

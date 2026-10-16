@@ -580,6 +580,8 @@ describe('buildUploadLeaseHeartbeat', () => {
   const settings = {
     paths: resolveDaemonPaths('/tmp/agent-device-upload-lease'),
     transportPreference: 'socket' as const,
+    daemonLifecycle: 'managed' as const,
+    retireIncompatibleContender: true,
     serverMode: 'socket' as const,
   };
 

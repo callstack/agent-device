@@ -5,6 +5,7 @@ import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonServerMode, DaemonTransportPreference } from '@agent-device/kernel/contracts';
 export type { DaemonServerMode, DaemonTransportPreference };
 
@@ -134,6 +135,22 @@ export type DaemonQuiesceCensus = Readonly<{
   leases: number;
 }>;
 
+export function buildDaemonQuiesceRequest(params: {
+  token: string;
+  fence: DaemonQuiesceFence;
+  requestId: string;
+}): DaemonWireRequest {
+  const { token, fence, requestId } = params;
+  return {
+    token,
+    session: 'default',
+    command: DAEMON_QUIESCE_COMMAND,
+    positionals: [],
+    input: { pid: fence.pid, processStartTime: fence.processStartTime },
+    meta: { requestId },
+  };
+}
+
 export function readDaemonQuiesceFence(input: unknown): DaemonQuiesceFence | undefined {
   if (typeof input !== 'object' || input === null) return undefined;
   const { pid, processStartTime } = input as Record<string, unknown>;
@@ -145,4 +162,24 @@ export function readDaemonQuiesceFence(input: unknown): DaemonQuiesceFence | und
 export function readDaemonCapabilities(value: unknown): readonly DaemonCapability[] {
   if (!Array.isArray(value)) return [];
   return DAEMON_CAPABILITIES.filter((capability) => value.includes(capability));
+}
+
+export function readDaemonQuiesceCensus(details: unknown): DaemonQuiesceCensus | undefined {
+  if (typeof details !== 'object' || details === null) return undefined;
+  const { startingUp, inFlightRequests, sessions, repairSessions, leases } = details as Record<
+    string,
+    unknown
+  >;
+  if (startingUp !== undefined && typeof startingUp !== 'boolean') return undefined;
+  const counts = [inFlightRequests, sessions, repairSessions, leases];
+  if (!counts.every((count) => Number.isSafeInteger(count) && (count as number) >= 0)) {
+    return undefined;
+  }
+  return {
+    startingUp: startingUp === true,
+    inFlightRequests: inFlightRequests as number,
+    sessions: sessions as number,
+    repairSessions: repairSessions as number,
+    leases: leases as number,
+  };
 }

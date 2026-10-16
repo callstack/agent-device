@@ -27,7 +27,10 @@ import {
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
 } from './test-utils/registered-daemon-fixture.ts';
-import { ensureDaemon, resolveClientSettings } from '../daemon-client/daemon-client-lifecycle.ts';
+import {
+  ensureManagedDaemon,
+  resolveClientSettings,
+} from '../daemon-client/daemon-client-lifecycle.ts';
 import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -791,7 +794,7 @@ test('cutover refuses an already-running legacy daemon before signaling or chang
     assert.ok(disposition, 'a new daemon must refuse an occupied legacy file');
     assert.equal(disposition.exitCode, DAEMON_STARTUP_EXIT_CODES.unproven);
     await assert.rejects(
-      ensureDaemon(
+      ensureManagedDaemon(
         resolveClientSettings({
           session: 'default',
           command: 'devices',
