@@ -320,7 +320,7 @@ export default defineConfig({
         'src/bin.ts',
         'src/client/client-types.ts',
         'src/core/interactor-types.ts',
-        'src/remote/remote-config.ts',
+        'packages/remote/src/remote-config.ts',
       ],
     },
   },
