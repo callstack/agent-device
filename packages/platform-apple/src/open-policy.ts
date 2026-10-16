@@ -230,8 +230,9 @@ async function answerConfirmationOnce(
   const acceptAttempted = round.acceptAttempted || acceptWasAttempted(attempt);
   const report = reportForAttempt(attempt) ?? round.report;
   if (!acceptAttempted) {
-    // Only an accept changes the device, so a read that found no prompt, an unrecognized prompt or
-    // an unresolved URL owner leaves the launch as the verdict before it already described it.
+    // Only an accept changes the device, so a read that found no prompt, an unrecognized prompt, an
+    // unresolved URL owner or a failed URL-owner lookup leaves the launch as the verdict before it
+    // already described it.
     return {
       observed: round.observed,
       report,
@@ -249,14 +250,18 @@ async function answerConfirmationOnce(
 
 /**
  * The answer one attempt settles the open with. A prompt the answer recognized but must not act on
- * stays on the device, so the report names it; an `alert-still-present` attempt belongs to the
- * failed-accept path that fails the open outright, and an unreadable or absent read proves no
- * prompt is up.
+ * stays on the screen, and the report names it with its typed reason, as does a URL-owner lookup
+ * that failed: either way the caller has a prompt to answer. An `alert-still-present` attempt
+ * belongs to the failed-accept path that fails the open outright. An unreadable read or runner step
+ * reports nothing: the prompt state is unknown and the launch is unchanged.
  */
 function reportForAttempt(
   attempt: LaunchConfirmationAttempt,
 ): LaunchConfirmationOutcome | undefined {
   if (attempt.outcome === 'accepted') return { launchConfirmation: 'accepted' };
+  if (attempt.outcome === 'unreadable' && attempt.step === 'url-owner') {
+    return { launchConfirmation: 'unanswered', launchConfirmationReason: 'url-owner-unresolved' };
+  }
   if (attempt.outcome !== 'unanswered') return undefined;
   if (attempt.reason === 'alert-unrecognized' || attempt.reason === 'url-owner-unresolved') {
     return { launchConfirmation: 'unanswered', launchConfirmationReason: attempt.reason };

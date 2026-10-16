@@ -92,26 +92,7 @@ test('apps.open resolves an open response that names no host device or paths', a
 
 test('apps.open reports an answered launch confirmation only when the daemon answered one', async () => {
   let launchConfirmation: unknown = 'accepted';
-  const setup = createTransport(async (req) => {
-    if (req.command === 'open') {
-      return {
-        ok: true,
-        data: { session: 'qa', appBundleId: 'com.example.app', launchConfirmation },
-      };
-    }
-    throw new Error(`Unexpected command: ${req.command}`);
-  });
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  const answered = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
-  launchConfirmation = undefined;
-  const noConfirmation = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
-
-  assert.equal(answered.launchConfirmation, 'accepted');
-  assert.equal('launchConfirmation' in noConfirmation, false);
-});
-
-test('apps.open reports an unanswered launch confirmation with its typed reason', async () => {
+  let strayReason: unknown = undefined;
   const setup = createTransport(async (req) => {
     if (req.command === 'open') {
       return {
@@ -119,9 +100,8 @@ test('apps.open reports an unanswered launch confirmation with its typed reason'
         data: {
           session: 'qa',
           appBundleId: 'com.example.app',
-          warnings: ['iOS is still holding the launch confirmation (alert-unrecognized)'],
-          launchConfirmation: 'unanswered',
-          launchConfirmationReason: 'alert-unrecognized',
+          launchConfirmation,
+          ...(strayReason === undefined ? {} : { launchConfirmationReason: strayReason }),
         },
       };
     }
@@ -129,13 +109,56 @@ test('apps.open reports an unanswered launch confirmation with its typed reason'
   });
   const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
 
-  const result = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+  const answered = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+  strayReason = 'url-owner-unresolved';
+  const acceptedWithStrayReason = await client.apps.open({
+    app: 'com.example.app',
+    platform: 'ios',
+  });
+  launchConfirmation = undefined;
+  strayReason = undefined;
+  const noConfirmation = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
 
-  assert.equal(result.launchConfirmation, 'unanswered');
-  assert.equal(result.launchConfirmationReason, 'alert-unrecognized');
-  assert.deepEqual(result.warnings, [
-    'iOS is still holding the launch confirmation (alert-unrecognized)',
-  ]);
+  assert.equal(answered.launchConfirmation, 'accepted');
+  assert.equal('launchConfirmationReason' in acceptedWithStrayReason, false);
+  assert.equal('launchConfirmation' in noConfirmation, false);
+});
+
+test('apps.open reports an unanswered launch confirmation with its typed reason', async () => {
+  const cases = [
+    {
+      reason: 'alert-unrecognized',
+      warning: 'iOS shows an alert this open did not recognize (alert-unrecognized)',
+    },
+    {
+      reason: 'url-owner-unresolved',
+      warning: 'the installed app that owns the launch URL\u2019s scheme could not be resolved',
+    },
+  ] as const;
+  for (const { reason, warning } of cases) {
+    const setup = createTransport(async (req) => {
+      if (req.command === 'open') {
+        return {
+          ok: true,
+          data: {
+            session: 'qa',
+            appBundleId: 'com.example.app',
+            warnings: [warning],
+            launchConfirmation: 'unanswered',
+            launchConfirmationReason: reason,
+          },
+        };
+      }
+      throw new Error(`Unexpected command: ${req.command}`);
+    });
+    const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+    const result = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+
+    assert.equal(result.launchConfirmation, 'unanswered');
+    assert.equal(result.launchConfirmationReason, reason);
+    assert.deepEqual(result.warnings, [warning]);
+  }
 });
 
 test('apps.open drops an unrecognized launch confirmation outcome instead of guessing', async () => {

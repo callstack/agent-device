@@ -386,7 +386,8 @@ export function normalizeOpenForegroundComposition(data: Record<string, unknown>
 /**
  * The launch confirmation an open response reports, keyed on the typed outcome. An `unanswered`
  * outcome without a recognized reason stays `unanswered` with no reason rather than being dropped:
- * the prompt is on the device either way.
+ * the prompt is on the device either way. The reason is read only for `unanswered`; an `accepted`
+ * outcome never carries one.
  */
 export function normalizeLaunchConfirmation(data: Record<string, unknown>): {
   launchConfirmation?: LaunchConfirmation;
@@ -394,7 +395,10 @@ export function normalizeLaunchConfirmation(data: Record<string, unknown>): {
 } {
   const outcome = readLaunchConfirmationOutcome(data.launchConfirmation);
   if (!outcome) return {};
-  const reason = readLaunchConfirmationReason(data.launchConfirmationReason);
+  const reason =
+    outcome === 'unanswered'
+      ? readLaunchConfirmationReason(data.launchConfirmationReason)
+      : undefined;
   return reason
     ? { launchConfirmation: outcome, launchConfirmationReason: reason }
     : { launchConfirmation: outcome };

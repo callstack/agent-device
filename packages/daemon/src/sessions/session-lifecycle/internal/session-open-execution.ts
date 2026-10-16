@@ -140,8 +140,9 @@ function launchConfirmationReport(
 function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnansweredReason): string {
   if (reason === 'url-owner-unresolved') {
     return (
-      'iOS is still holding the launch confirmation and no single installed app owns the launch ' +
-      "URL's scheme, so this launch URL has not reached the app. Answer it with `alert accept`."
+      'iOS is still holding the launch confirmation and the installed app that owns the launch ' +
+      "URL's scheme could not be resolved, so this launch URL has not reached the app. Answer it " +
+      'with `alert accept`.'
     );
   }
   return (

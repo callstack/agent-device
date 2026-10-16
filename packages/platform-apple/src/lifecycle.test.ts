@@ -731,15 +731,6 @@ test.each([
     },
     ['release', `open ${LAUNCH_URL}`, 'observe unobservable'],
   ],
-  [
-    'the URL owner lookup rejects',
-    {
-      owner: async () => {
-        throw SPAWN_TIMEOUT;
-      },
-    },
-    ['release', `open ${LAUNCH_URL}`, 'observe unobservable', 'alert wait'],
-  ],
 ])('an unobservable launch where %s returns the open as it was', async (_case, legs, expected) => {
   const { lifecycle, events } = launchUrlSimulator(async () => CONFIRMATION, [UNOBSERVABLE], legs);
 
@@ -748,6 +739,22 @@ test.each([
   expect(outcome.launchConfirmation).toBeUndefined();
   expect(outcome.timing.postOpenObservation).toBe('unobservable');
   expect(events).toEqual(expected);
+});
+
+test('a prompt whose URL owner lookup fails reports the unanswered confirmation', async () => {
+  const { lifecycle, interactor } = launchUrlSimulator(async () => CONFIRMATION, [UNOBSERVABLE], {
+    owner: async () => {
+      throw SPAWN_TIMEOUT;
+    },
+  });
+
+  const outcome = await lifecycle.openApplication(launchUrlInput());
+
+  expect(outcome).toMatchObject({
+    launchConfirmation: 'unanswered',
+    launchConfirmationReason: 'url-owner-unresolved',
+  });
+  expect(interactor.acceptAlert).not.toHaveBeenCalled();
 });
 
 test('a prompt open read but did not recognize reports the unanswered confirmation', async () => {
