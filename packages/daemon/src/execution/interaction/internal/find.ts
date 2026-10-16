@@ -13,6 +13,8 @@ import {
 import { runNodePipelineStages } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { coveredInteractionDetails } from '@agent-device/selectors/interaction-error';
+import { assertTapTargetClearOfVisibleKeyboard } from '@agent-device/selectors/keyboard-occlusion';
+import { normalizeError } from '@agent-device/kernel/errors';
 import {
   centerOfRect,
   type SnapshotAddressableNode,
@@ -394,6 +396,20 @@ async function dispatchFocusForFindMatch(
   const coords = match.resolvedNode.rect ? centerOfRect(match.resolvedNode.rect) : null;
   if (!coords) {
     return errorResponse('COMMAND_FAILED', 'matched element has no bounds');
+  }
+  // The same keyboard decision the acting paths run (#2589/#2622): this seam dispatches the point
+  // itself instead of re-entering the interaction leaf, so the guard has to run here.
+  try {
+    assertTapTargetClearOfVisibleKeyboard({
+      nodes: match.tree.nodes,
+      node: match.resolvedNode,
+      action: 'focus',
+      label: `Ref ${match.ref}`,
+      ...(match.keyboard ? { keyboard: match.keyboard } : {}),
+      tapPoint: coords,
+    });
+  } catch (error) {
+    return { ok: false, error: normalizeError(error) };
   }
   // ADR 0014 side-effect seam: mutating find focus/type dispatch the device
   // command directly (they do not re-enter the interaction leaf), so expire the

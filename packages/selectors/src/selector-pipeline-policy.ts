@@ -181,7 +181,13 @@ export const SELECTOR_PIPELINE_POLICIES = {
     resolution: SELECTOR_RESOLUTION_POLICIES.readList,
     occlusion: 'ignore',
   },
-  /** Mutating `find` (#1625). */
+  /**
+   * Mutating `find` (#1625). `offscreen: 'ignore'` is deliberate for the ranking (`preferOnscreen
+   * Matches` prefers an on-screen twin rather than refusing an off-screen one), and each action then
+   * decides what to do with the winner: click/fill hand it to the acting leaf, while focus/type
+   * dispatch a point themselves, which is why ADR 0011 classifies this row's stages per action on
+   * the `find-focus-dispatch` path rather than reusing an acting row's cells.
+   */
   findAct: {
     resolution: SELECTOR_RESOLUTION_POLICIES.findAct,
     occlusion: 'refuse',
