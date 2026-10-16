@@ -25,6 +25,7 @@ vi.mock('@agent-device/plugins/load', () => ({
   withPluginConnection: async (
     _provider: string,
     env: NodeJS.ProcessEnv,
+    _policy: unknown,
     runConnection: (connection: PluginConnection) => Promise<unknown>,
   ) => {
     const registration = testMuPlugin(createPluginHost(env, undefined));

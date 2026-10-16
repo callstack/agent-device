@@ -7,8 +7,7 @@
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
-    "@agent-device/kernel": "workspace:*",
-    "@agent-device/provider-webdriver": "workspace:*"
+    "@agent-device/kernel": "workspace:*"
   },
   "exports": {
     "./connection": {
@@ -22,10 +21,6 @@
     "./load": {
       "types": "./src/load.ts",
       "default": "./src/load.ts"
-    },
-    "./manifest": {
-      "types": "./src/manifest.ts",
-      "default": "./src/manifest.ts"
     },
     "./store": {
       "types": "./src/store.ts",

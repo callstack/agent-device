@@ -595,9 +595,6 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
-      '@agent-device/provider-webdriver':
-        specifier: workspace:*
-        version: link:../provider-webdriver
     devDependencies:
       '@agent-device/test-kit':
         specifier: workspace:*

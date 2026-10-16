@@ -4,7 +4,7 @@ import {
   pluginConnectionCapabilities,
   pluginConnectionNames,
 } from '@agent-device/plugins/connection';
-import { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '@agent-device/plugins/manifest';
+import { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../provider-plugin-policy.ts';
 
 export type BuiltinConnectProvider = (typeof BUILTIN_CONNECT_PROVIDERS)[number];
 export type ConnectProvider = BuiltinConnectProvider | (string & {});

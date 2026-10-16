@@ -1,16 +1,34 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { RESERVED_PLUGIN_PROVIDERS } from '@agent-device/plugins/manifest';
+import { RESERVED_PLUGIN_PROVIDERS } from '../provider-plugin-policy.ts';
 import {
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
   createDefaultProviderRuntimeComposition,
   createDaemonProviderRuntimeComposition,
 } from '../provider-device-runtimes.ts';
-import { pluginHome, registrationSource, selectPlugin } from '@agent-device/test-kit';
+import {
+  pluginHome,
+  registrationSource,
+  selectPlugin,
+  webDriverPluginSource,
+} from '@agent-device/test-kit';
 
 test('daemon composition registers installed provider runtimes and their lazy platform modules', async () => {
   const { home, env } = pluginHome();
   selectPlugin(home, 'example', 'example', registrationSource('example'));
+  const composition = await createDaemonProviderRuntimeComposition(env);
+  const plugin = composition.runtimes.find((runtime) => runtime.provider === 'example');
+  assert.ok(plugin);
+  assert.equal(
+    composition.platformModules.find(({ runtime }) => runtime === plugin)?.module.owner.provider,
+    'example',
+  );
+  await Promise.all(composition.runtimes.map((runtime) => runtime.shutdown()));
+});
+
+test('daemon composition registers a WebDriver plugin through the shared runtime', async () => {
+  const { home, env } = pluginHome();
+  selectPlugin(home, 'example', 'example', webDriverPluginSource('example'));
   const composition = await createDaemonProviderRuntimeComposition(env);
   const plugin = composition.runtimes.find((runtime) => runtime.provider === 'example');
   assert.ok(plugin);
