@@ -78,7 +78,15 @@ export async function executeValidationCommand(
 }
 
 function reportFailureTail(logPath: string, report: (line: string) => void): void {
-  report(fs.readFileSync(logPath, 'utf8').slice(-8000).split('\n').slice(-35).join('\n'));
+  report(
+    fs
+      .readFileSync(logPath, 'utf8')
+      .slice(-8000)
+      .split('\n')
+      .slice(-35)
+      .map((line) => line.slice(0, 400))
+      .join('\n'),
+  );
 }
 
 function collectTestReports(result: CheckResult, directory: string, reportPrefix: string): void {

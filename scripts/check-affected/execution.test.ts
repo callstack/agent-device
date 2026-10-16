@@ -19,6 +19,10 @@ test('execution JSON contains exact checkout, command, failure exit, and bounded
     assert.equal(result.receipt.final?.head, sha);
     assert.equal(result.receipt.results[0]?.exitCode, 7);
     assert.ok(result.stderr.length < 10000);
+    assert.ok(
+      result.stderr.split('\n').every((line) => line.length <= 512),
+      'failure excerpt lines stay bounded',
+    );
     assert.ok(fs.readFileSync(result.receipt.results[0]!.logPath!, 'utf8').length > 20000);
   } finally {
     fs.rmSync(cwd, { recursive: true, force: true });
