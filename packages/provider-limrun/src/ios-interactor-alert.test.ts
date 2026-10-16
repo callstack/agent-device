@@ -121,7 +121,7 @@ describe('acceptAlert', () => {
 
     const error = await interactor.acceptAlert!().then(
       () => undefined,
-      (caught: unknown) => caught,
+      (error: unknown) => error,
     );
     expect(error).toBeInstanceOf(AppError);
     const refusal = error as AppError;
