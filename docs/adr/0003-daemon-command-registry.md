@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Amended 2026-10-16: invariants 3 and 4 now describe the shipped derivation (#906, #907).
 
 ## Rules at a glance
 
@@ -12,7 +12,9 @@ Accepted
 - Request modules consume named predicates from the registry. They do not recreate command string sets.
 - Handler modules own execution logic only. They do not export duplicate coverage tables to prove route membership.
 - The daemon registry must not define CLI grammar, Node.js client options, MCP schemas, user-facing help, or platform capability support.
-- Preserve all four invariants in the 2026-06 update. Types do not fully enforce invariants 3 and 4, as described below.
+- Preserve all four invariants in the 2026-06 update.
+- Do not derive a public contract from daemon traits. A diagnostic display, such as `command explain`, may read them.
+- A command without a `daemon` facet uses the `generic` route with default request policy.
 
 ## Context
 
@@ -94,7 +96,6 @@ It derives these surfaces from that site:
 
 Its purpose is to remove the drift between these tables.
 Registry tests pin the derived tables.
-Types do not fully enforce invariants 3 and 4.
 
 **This ADR's decision remains accepted.**
 Its boundary concerns ownership and the predicate interface, not the physical file that contains a trait.
@@ -112,11 +113,11 @@ A derived daemon registry is therefore permitted **only if** it preserves all th
 2. **Predicate interface unchanged.** Consumers continue to use named predicates such as `getDaemonCommandRoute`, `isLeaseAdmissionExempt`, and `shouldLockSessionExecution`.
    Only the daemon registry exposes these predicates.
    Derivation changes table construction, not table access.
-3. **No leakage into public projections.** Types must prevent the catalog/CLI/MCP/help/capability projections from reading daemon-only traits.
-   The daemon registry must still not define CLI grammar, Node.js options, MCP schemas, user-facing help, or capability support.
-4. **One declaration per concern, enforced by types.** At the single registration site, a missing or duplicate daemon trait must cause a compile error.
-   This replaces alignment by convention.
-   This structural improvement justifies derivation instead of a separate hand-authored table.
+3. **No daemon traits in public contracts.** CLI grammar, Node.js client options, MCP schemas, user-facing help, and capability support must not derive from daemon-only traits.
+   A diagnostic display may read the `daemon` facet. `command explain` in `src/cli/command-explain.ts` displays routes and request-policy traits this way.
+4. **One declaration per command.** Each command has at most one `daemon` facet, at its registration in the descriptor registry.
+   No second table declares the same traits. This replaces alignment by convention, and it justifies derivation instead of a separate hand-authored table.
+   A command without a `daemon` facet uses the `generic` route with default request policy. The daemon registry tests pin the derived table.
 
 A single flat public descriptor that exposes daemon fields in public views is **not** permitted.
 This would combine daemon policy with a public command registry, which this ADR rejects.
@@ -126,13 +127,6 @@ PR #906 introduced the descriptor and proved parity.
 PR #907 made the derivation live and deleted the hand-authored table.
 The daemon registry tests pin route and request-policy decisions.
 
-**Known invariant-3 gap.** The descriptor type exposes its `daemon` facet to public projection code.
-`src/cli/command-explain.ts` reads that facet and displays daemon routes and request-policy traits.
-Thus, types do not enforce invariant 3 for this CLI projection.
-The invariant remains required; this ADR records the gap without changing runtime behavior.
-
-**Known invariant-4 gap.** `CommandDescriptorBase.daemon` is optional in `packages/command-registry/src/types.ts`.
-In `DaemonCommandDescriptor`, every trait except `command` and `route` is optional.
-If a command has no daemon descriptor, `getDaemonCommandRoute` returns `generic`.
-Thus, types do not require every daemon trait at the registration site.
-Invariant 4 remains required; this ADR records the gap without changing runtime behavior.
+**Amendment 2026-10-16.** The 2026-06 text required types to stop every public projection from reading daemon traits, and required a compile error for a missing daemon trait.
+The shipped derivation does neither: `CommandDescriptorBase.daemon` is optional (`packages/command-registry/src/types.ts`), and a command without a facet gets the `generic` route.
+Invariants 3 and 4 now state the property that matters and that the code holds: no public contract derives from daemon traits, and no second table declares them.
