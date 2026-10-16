@@ -91,6 +91,19 @@ test('serializeOpenResult carries an answered launch confirmation', () => {
   assert.equal(data.launchConfirmation, 'accepted');
 });
 
+test('serializeOpenResult carries an unanswered launch confirmation with its reason', () => {
+  const data = serializeOpenResult({
+    session: 'qa',
+    appBundleId: 'com.example.app',
+    launchConfirmation: 'unanswered',
+    launchConfirmationReason: 'alert-unrecognized',
+    identifiers: { session: 'qa', appId: 'com.example.app', appBundleId: 'com.example.app' },
+  });
+
+  assert.equal(data.launchConfirmation, 'unanswered');
+  assert.equal(data.launchConfirmationReason, 'alert-unrecognized');
+});
+
 test('serializeInstallFromSourceResult uses install-family package naming', () => {
   const data = serializeInstallFromSourceResult({
     launchTarget: 'com.example.demo',

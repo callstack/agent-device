@@ -3,8 +3,8 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
+  LaunchConfirmationOutcome,
   OpenApplicationInput,
-  OpenApplicationOutcome,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   mkdtempForTestSync,
@@ -102,7 +102,7 @@ async function openRelaunch(params: {
   positionals?: string[];
   flags?: Record<string, unknown>;
   onOpenApplication?: (input: OpenApplicationInput) => Promise<void> | void;
-  openOutcome?: Partial<OpenApplicationOutcome>;
+  openOutcome?: LaunchConfirmationOutcome;
 }) {
   const opened: OpenApplicationInput[] = [];
   const boundDevices: DeviceInfo[] = [];
@@ -257,7 +257,7 @@ test('open reports an unanswered launch confirmation and appends its warning to 
     openOutcome: {
       launchConfirmation: 'unanswered',
       launchConfirmationReason: 'alert-unrecognized',
-    },
+    } as LaunchConfirmationOutcome,
   });
 
   expect(response?.ok).toBe(true);
