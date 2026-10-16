@@ -23,7 +23,7 @@
     "packages/proxy/src/index.ts",
     "packages/proxy/tsdown.config.ts",
     "src/bin.ts",
-    "src/client/companion-tunnel.ts",
+    "packages/react-native/src/companion/companion-tunnel.ts",
     "src/daemon.ts",
     "packages/capture-kit/src/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",

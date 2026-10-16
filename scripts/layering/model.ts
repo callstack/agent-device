@@ -65,7 +65,6 @@ const TARGET_DAG_RANK = new Map([
   ['mcp', 3],
   ['client', 4],
   ['daemon-server', 4],
-  ['metro', 4],
   ['platform-runtime', 4],
   ['remote', 4],
   ['plugins', 4],
@@ -113,6 +112,7 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'provider-limrun',
   'provider-testmu',
   'proxy',
+  'react-native',
   'xml',
 ]);
 

@@ -109,7 +109,7 @@ export default defineConfig({
     finders: 'src/sdk/finders.ts',
     'ai-sdk': 'src/ai-sdk/index.ts',
     'internal/bin': 'src/bin.ts',
-    'internal/companion-tunnel': 'src/client/companion-tunnel.ts',
+    'internal/companion-tunnel': 'packages/react-native/src/companion/companion-tunnel.ts',
     'internal/daemon': 'src/daemon.ts',
     'internal/run-script-http-child': 'packages/maestro/src/daemon-port/run-script-http-child.ts',
     'internal/png-worker': 'packages/capture-kit/src/png-worker.ts',

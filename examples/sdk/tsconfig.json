@@ -56,6 +56,7 @@
     { "path": "../../packages/provider-webdriver" },
     { "path": "../../packages/provision-kit" },
     { "path": "../../packages/proxy" },
+    { "path": "../../packages/react-native" },
     { "path": "../../packages/replay-port" },
     { "path": "../../packages/replay-test" },
     { "path": "../../packages/selectors" },

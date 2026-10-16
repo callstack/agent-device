@@ -309,6 +309,7 @@
     "@agent-device/provider-webdriver": "workspace:*",
     "@agent-device/provision-kit": "workspace:*",
     "@agent-device/proxy": "workspace:*",
+    "@agent-device/react-native": "workspace:*",
     "@agent-device/replay-port": "workspace:*",
     "@agent-device/replay-test": "workspace:*",
     "@agent-device/selectors": "workspace:*",
