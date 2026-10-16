@@ -2,13 +2,11 @@
 
 ## Status
 
-Accepted; implemented and enforced on `main` across all platforms. Fresh live evidence exercised
+Accepted. Enforcement applies across all platforms. Fresh live evidence exercised
 every production seam except Android blocking-dialog recovery, which shipped as a documented,
 accepted gap: no deterministic repro exists to raise the system dialog on demand, and the seam's
 transition and abort logic are pinned by fixture regressions
-(`android-system-dialog-ref-frame.test.ts`, `interaction-touch-android-readiness.test.ts`). The
-staged migration plan lives in this file's git history; PR #1241 was an earlier compatible
-transitional fix, not this architecture migration.
+(`android-system-dialog-ref-frame.test.ts`, `interaction-touch-android-readiness.test.ts`). Completed process history is in git history.
 
 ## Rules at a glance
 
