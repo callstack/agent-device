@@ -43,10 +43,7 @@ export type SettingsUpdateOptions =
       state: 'clear';
       app?: string;
     })
-  /**
-   * Mobile data on adb-backed Android targets through `svc data`, reporting the stored `mobileData` state. Every other
-   * target refuses it, and naming an app is refused with `setting_app_not_consumed`.
-   */
+  /** Android only. Naming an app is refused with `setting_app_not_consumed`. */
   | (DeviceCommandBaseOptions & {
       setting: 'mobile-data';
       state: 'on' | 'off';

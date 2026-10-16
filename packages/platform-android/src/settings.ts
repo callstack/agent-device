@@ -13,8 +13,6 @@ import {
   parseSettingState,
   parseTextSizeCategory,
   resolveSettingsApp,
-  MOBILE_DATA_NOT_APPLIED_REASON,
-  MOBILE_DATA_UNREADABLE_REASON,
   SETTINGS_APP_NOT_PACKAGE_REASON,
   textSizeSettingPayload,
   type ReadSettingResult,
@@ -299,6 +297,8 @@ type AndroidMobileData = 'enabled' | 'disabled';
 /** `svc data` can return before the telephony service stores the switch, so the read-back polls. */
 const MOBILE_DATA_SETTLE_MS = 2000;
 const MOBILE_DATA_SAMPLE_INTERVAL_MS = 100;
+const MOBILE_DATA_NOT_APPLIED_REASON = 'mobile-data-not-applied';
+const MOBILE_DATA_UNREADABLE_REASON = 'mobile-data-unreadable';
 
 /**
  * Reads back only the global `mobile_data` row, where a single-SIM device stores the switch. A

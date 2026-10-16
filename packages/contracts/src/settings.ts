@@ -157,12 +157,6 @@ export function settingsAppNotConsumedRefusal(
   };
 }
 
-/** `details.reason` of a mobile-data switch whose last stored read is the opposite state. */
-export const MOBILE_DATA_NOT_APPLIED_REASON = 'mobile-data-not-applied';
-
-/** `details.reason` of a mobile-data switch whose last stored read is neither `0` nor `1`. */
-export const MOBILE_DATA_UNREADABLE_REASON = 'mobile-data-unreadable';
-
 const SETTINGS_APP_NOT_INSTALLED_HINT =
   'Run apps --all for the exact bundle id or package name, or install the app, then retry with that id in --app.';
 
