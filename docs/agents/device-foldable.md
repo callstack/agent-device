@@ -19,8 +19,8 @@ To list the panels, run `xcrun devicectl device info displays --device <udid>`.
   - Capture of the active panel.
   - An app interaction.
   Until GHA supports the runtime, Duo coverage remains local.
-  To examine the angle separately, run:
-  `xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`.
+  devicectl 651.13.5 has no `device motion`. There, `fold` reports `fold-pose-dispatched-unverified`.
+  To examine the pose, compare the lit panel from the panel list.
 - Touch overlays export at the captured track size.
   The compositor checks its output size and non-black content against the raw capture.
   If that check fails, `record stop` keeps the raw file. It reports `overlayWarning`.
