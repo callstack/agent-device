@@ -3,9 +3,10 @@
 ## Status
 
 Proposed (2026-09-23).
-This ADR proposes one authoritative vocabulary declaration instead of coordinated type, table, and runtime-owner edits for each capability family.
-It decides no default behavior and weakens no ADR 0019 rule.
-Ship only after the measurement below proves reduced edit scope.
+This ADR proposes to invert one vocabulary.
+Then a new capability family needs a single declaration, not a coordinated edit across a type, a table, and every runtime owner.
+It decides **no** defaulting behavior, and it does not weaken any ADR 0019 rule.
+Ship only after the measurement below shows that the fan-out actually decreases.
 
 ## Why now, and what the numbers said
 
@@ -15,8 +16,8 @@ One combination recurred four times.
 Each change propagated one capability through every runtime owner: `action-button`, `fold`, or preferred text size.
 
 Within `@agent-device/contracts`, `platform-runtime-unavailable.ts` changed 9 times but had only 6 importers.
-It was the most frequently changed file despite few imports.
-This pattern indicates declaration coordination costs, not frequent behavior changes.
+It was the most-changed file in the repository that almost nothing imports.
+This pattern shows a declaration site that pays a coordination cost, not a behavioral hotspot.
 
 ## What is actually duplicated
 
@@ -37,9 +38,9 @@ A runtime row table would own the values and derive the type.
 
 The repository already uses this inversion in `interactor-operation-catalog.ts`.
 `INTERACTOR_OPERATIONS` replaced three declarations: a name tuple, local binder map, and provider binder map.
-The binding axis now has one authority per operation.
+The binding axis has one source.
 The facts axis does not.
-The proposal should follow this existing design.
+The proposal should copy this existing design and not invent a new one.
 
 ## Rules at a glance
 
@@ -51,19 +52,19 @@ This ADR proposes these rules:
   Derivation may enumerate cells.
   It must not derive an owner's answer for a cell.
 - There is no cross-family default denial set.
-  A missing owner declaration is a bug, never an unsupported result.
+  If an owner does not state a cell, that omission is a bug, not an unsupported result.
 - Lifecycle retains separate authority.
-  `platform-runtime-unavailable.ts` exists "for provider ownership gaps" and assigns no lifecycle semantics.
-  The proposed table must preserve that boundary.
+  `platform-runtime-unavailable.ts` exists "for provider ownership gaps" and never assigns lifecycle semantics.
+  Lifecycle stays out of the table.
 
 ## Explicitly not proposed
 
 This proposal excludes these changes:
 
 - **Inherited default-deny baseline.** ADR 0019 requires exhaustive per-shape facts and forbids platform-package cross-family defaults.
-  Thus, an owner's explicit enumeration of about 35 cells remains intentional, such as `packages/platform-linux/src/runtime.ts`.
-  Removal requires an ADR that explicitly supersedes both rules with rationale.
-  A table must not change them implicitly.
+  Thus, the current enumeration of about 35 cells in an owner, such as `packages/platform-linux/src/runtime.ts`, is intentional.
+  Removal needs an ADR that supersedes those two rules on the merits.
+  A table that quietly reimplements them is not sufficient.
 - **Vocabulary outside `@agent-device/contracts`.** It already occupies the lowest ranked zone.
   The `depgraph` README's 42→48 example applies.
   Moving vocabulary downward worsened the gate because its imports pointed upward.
@@ -71,12 +72,14 @@ This proposal excludes these changes:
 
 ## Measurement required before acceptance
 
-This proposal aims to reduce the recurring eight-package edit scope.
-Before any inversion is introduced, measure a real family:
+This ADR exists to stop an eight-package fan-out.
+Before you introduce any inversion, measure a real family.
+Do not argue from the shape alone:
 
 1. Select the next capability family.
    Introduce only the single-source cell vocabulary, items 2-3 above.
-2. Compare affected-file counts with the four recurring eight-package baseline commits.
+2. Report the change in files touched for that family.
+   Compare it with the recorded baseline of the four recurring eight-package commits.
 3. Report eager-closure differences for each entry surface.
 
 `scripts/__tests__/eager-closure-budgets.ts` has no growth-approval mechanism.
@@ -88,6 +91,7 @@ Before any inversion is introduced, measure a real family:
 
 A row table is a **new eager value**.
 It must satisfy all three conditions to pass.
-Otherwise, the gate remains failed and this ADR should be withdrawn without an exception.
-If edit scope does not visibly decrease, reject this ADR and retain both authored lists.
-A compile-checked duplicate is an acceptable final design.
+If it does not satisfy them, the gate stays red.
+In that case, this ADR should be withdrawn, and it should not get an exception.
+If the fan-out does not visibly decrease, close this ADR as rejected and retain both authored lists.
+A compile-checked duplicate is a legitimate resting state.
