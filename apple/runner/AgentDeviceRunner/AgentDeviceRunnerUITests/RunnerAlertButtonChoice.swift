@@ -3,14 +3,14 @@ import Foundation
 /// Which of an alert's buttons an `accept` or `dismiss` activates, decided on the button labels
 /// alone, so the rule is checkable without a screen.
 ///
-/// `dismiss` never answers a button `isAcceptButton` recognizes. iOS words the App Tracking
-/// Transparency prompt's decline in every language differently, so no decline list carries it,
-/// and a fallback to the last button answered "Allow" while reporting `dismissed` (#3627). With
-/// no known decline label, the only candidate that could decline is a label the accept list does
-/// not claim — but iOS localizes the affirmative too, so a fully localized prompt leaves every
-/// label unclaimed and no candidate is identifiable. So `dismiss` takes a fallback only when
-/// exactly one button is unclaimed; when more than one is, or every button reads affirmative,
-/// there is no decline to name and the command fails without a tap.
+/// `dismiss` activates only a button `isDismissButton` recognizes. Any label-based guess at an
+/// unrecognized decline can only ever land on a button the accept rule does not recognize either
+/// — iOS localizes the App Tracking Transparency prompt's "Allow", consent copy is open-ended,
+/// and no list closes either set — and answering such a button while reporting `dismissed` is
+/// exactly the failure #3627 reports. So an unrecognized decline is refused with
+/// `ALERT_BUTTON_NOT_FOUND` and no tap rather than guessed at. Unknown wording stays reachable:
+/// `alert get` shows the labels, and `snapshot` + `press @ref` names the button instead of
+/// inferring it.
 enum RunnerAlertButtonChoice {
   static func buttonIndex(for labels: [String], action: String) -> Int? {
     if action == "accept" {
@@ -20,28 +20,14 @@ enum RunnerAlertButtonChoice {
       // A lone button is the only way out of the prompt, so accept takes it unless it declines.
       return labels.count == 1 && !isDismissButton(labels[0]) ? 0 : nil
     }
-    if let decline = labels.firstIndex(where: { isDismissButton($0) }) {
-      return decline
-    }
-    let unclaimed = labels.enumerated().filter { !isAcceptButton($0.element) }
-    return unclaimed.count == 1 ? unclaimed.first?.offset : nil
+    return labels.firstIndex(where: { isDismissButton($0) })
   }
 
   static func isAcceptButton(_ label: String) -> Bool {
     let normalized = normalize(label)
     return [
       "ok",
-      "accept",
-      "agree",
-      "i agree",
-      "got it",
-      "i understand",
       "allow",
-      "allow all",
-      "allow all requests",
-      "allow tracking",
-      "start tracking",
-      "use app",
       "yes",
       "continue",
       "done",

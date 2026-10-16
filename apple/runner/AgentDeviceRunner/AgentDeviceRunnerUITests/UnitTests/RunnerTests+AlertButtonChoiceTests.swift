@@ -6,18 +6,6 @@ extension RunnerTests {
     XCTAssertTrue(RunnerAlertButtonChoice.isAcceptButton("Open"))
   }
 
-  func testAlertDismissRefusesPlainAffirmativeLabelsOutsideTheOriginalList() {
-    // The sole-unclaimed fallback may only ever reach a label `isAcceptButton` does not read as
-    // affirmative, so consent copy that plainly reads affirmative must be claimed here too —
-    // otherwise dismissing a one-button "Accept" prompt would activate it (#3627).
-    for labels in [["Accept"], ["I Agree"], ["Got it"], ["Allow Tracking"], ["Use App"]] {
-      XCTAssertNil(
-        RunnerAlertButtonChoice.buttonIndex(for: labels, action: "dismiss"),
-        "dismiss must fail without a tap rather than consent through \(labels)"
-      )
-    }
-  }
-
   func testAlertDismissPicksTheTrackingPromptDeclineLabel() {
     // The App Tracking Transparency prompt, as iOS words it in English (#3627).
     XCTAssertEqual(
@@ -28,34 +16,37 @@ extension RunnerTests {
       RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track", "Allow"], action: "accept"),
       1
     )
-    // The list entry alone decides this shape: with only "Ask App Not to Track" claimed as a
-    // decline, both labels would otherwise be unclaimed and the choice must refuse.
+    // The list entry alone decides this shape: without it neither label is a recognized decline
+    // and the choice must refuse rather than guess.
     XCTAssertEqual(
       RunnerAlertButtonChoice.buttonIndex(for: ["Ask App Not to Track", "Learn More"], action: "dismiss"),
       0
     )
   }
 
-  func testAlertDismissKeepsAnUnrecognizedDeclineLabelInsteadOfReachingAnAffirmativeOne() {
-    // Copy the accept list cannot claim: it is the sole unclaimed label, the only candidate that
-    // could decline, so it wins over the trailing "Allow".
-    XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Keep my activity private", "Allow"], action: "dismiss"),
-      0
-    )
-    XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["More info", "Allow", "OK"], action: "dismiss"),
-      0
-    )
-    XCTAssertEqual(
-      RunnerAlertButtonChoice.buttonIndex(for: ["Not this time", "Allow Tracking"], action: "dismiss"),
-      0
-    )
+  func testAlertDismissRefusesUnrecognizedDeclineCopyInsteadOfGuessing() {
+    // No fallback position is safe: every label-based guess at an unknown decline can land on a
+    // localized or reworded affirmative, which is the #3627 failure. Unknown wording is reached
+    // by `alert get` plus `snapshot`/`press`, which name the button instead of inferring it.
+    for labels in [
+      ["Keep my activity private", "Allow"],
+      ["Not this time", "Allow Tracking"],
+      ["More info", "Allow", "OK"],
+      ["Accept all", "OK"],
+      ["Agree to Terms", "OK"],
+      ["I accept", "OK"],
+      ["Accept terms", "Continue"]
+    ] {
+      XCTAssertNil(
+        RunnerAlertButtonChoice.buttonIndex(for: labels, action: "dismiss"),
+        "dismiss must fail without a tap rather than guess through \(labels)"
+      )
+    }
   }
 
   func testAlertDismissRefusesAPromptWhoseLabelsNeitherListRecognizes() {
-    // A fully localized prompt: iOS localizes the affirmative too, so no label is claimed by
-    // either list, no position identifies the decline, and a guess could authorize (#3627).
+    // A fully localized prompt: iOS localizes both buttons, so no label is claimed by either
+    // list, no position identifies the decline, and a guess could authorize (#3627).
     XCTAssertNil(
       RunnerAlertButtonChoice.buttonIndex(
         for: ["Demander à l’app de ne pas suivre", "Autoriser le suivi"],
@@ -74,11 +65,15 @@ extension RunnerTests {
     }
   }
 
-  /// A known decline label wins ahead of any unclaimed label, and accept takes the label its own
-  /// list claims even when a decline is present.
+  /// The known-decline branches stay exact: a listed decline resolves by position first, and
+  /// accept takes the label its own list claims even when a decline is present.
   func testAlertDismissStillPicksTheKnownCancelLabelAndAcceptStillTakesOK() {
     XCTAssertEqual(
       RunnerAlertButtonChoice.buttonIndex(for: ["Cancel", "OK"], action: "dismiss"),
+      0
+    )
+    XCTAssertEqual(
+      RunnerAlertButtonChoice.buttonIndex(for: ["Don’t Allow", "Allow"], action: "dismiss"),
       0
     )
     XCTAssertEqual(
@@ -134,8 +129,8 @@ extension RunnerTests {
     XCTAssertEqual(app.staticTexts["agent-device-alert-decline-answer"].label, "Declined")
   }
 
-  /// A prompt whose every button the accept rule claims has no decline to name: `dismiss` must
-  /// refuse with the typed code and tap nothing, and the canary proves the prompt stayed
+  /// A prompt carrying no button the decline list recognizes has no decline to name: `dismiss`
+  /// must refuse with the typed code and tap nothing, and the canary proves the prompt stayed
   /// unanswered (#3627).
   @MainActor
   func testAlertDismissRefusesAnAffirmativeOnlyPromptWithoutActivatingIt() throws {
