@@ -517,9 +517,19 @@ async function confirmTreeAlertDismissed<
       signal,
     }));
   } catch (error) {
-    // The newest probe never answered, so no capture of this phase can claim where the dialog
-    // stands at the budget's end — even one that saw the alert a poll earlier.
+    // The final probe's capture never answered within the budget. That does not erase the
+    // captures that did: the still-visible failure rides the latest completed observation, so a
+    // dialog re-named by a read that landed before the hang is still reported as visible. Only
+    // when no completed post-press read named it — the 2482e24 Android smoke case, where the
+    // confirm phase never got one answer — may the leg say the press went unconfirmed.
     if (isAlertWindowExpired(error)) {
+      if (lastCaptureNamesAlert) {
+        throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
+          alert: dismissed,
+          reason: ALERT_WINDOW_EXPIRED_REASON,
+          hint: 'The alert button was pressed but the dialog was visible on the last check that answered. Inspect alert get --json, then press the visible button by label/ref or retry.',
+        });
+      }
       throw new AppError(
         'COMMAND_FAILED',
         `alert ${action} pressed the button but the dismissal could not be confirmed`,
@@ -537,7 +547,7 @@ async function confirmTreeAlertDismissed<
     throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
       alert: dismissed,
       reason: ALERT_WINDOW_EXPIRED_REASON,
-      hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
+      hint: 'The alert button was pressed but the dialog was visible on the last check that answered. Inspect alert get --json, then press the visible button by label/ref or retry.',
     });
   }
   throw new AppError(
