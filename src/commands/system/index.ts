@@ -676,7 +676,7 @@ const telephonyCommandFacet = defineCommandFacet({
   text: {
     summary: 'Simulate an incoming call or SMS on an Android emulator over adb',
     cliDetail:
-      'Android emulators reached through adb only, including an ADB provider that forwards adb emu; WebDriver (Appium) and Limrun sessions refuse it. Quote the SMS text, or pass it as the remaining words. Re-snapshot after the event: the call screen or notification can cover the app.',
+      'Android emulators through the local adb executor; WebDriver (Appium) and Limrun sessions refuse it. Quote the SMS text, or pass it as the remaining words. Re-snapshot after the event: the call screen or notification can cover the app.',
   },
   metadata: telephonyCommandMetadata,
   run: (client, input) => client.command.telephony(input),
