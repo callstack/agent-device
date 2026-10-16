@@ -5,7 +5,7 @@ import { test } from 'vitest';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { DAEMON_COMMAND_DESCRIPTORS, resolveRefFrameEffect } from '../daemon-command-registry.ts';
 
-// ADR 0014 migration step 2: the ref-frame-effect classification is an
+// ADR 0014, "Command effects are daemon-owned and completely classified": the classification is an
 // honesty/completeness guard. Every command that reaches a session-owning daemon
 // leaf must classify how it relates to the authorized ref frame, so a device
 // mutation cannot be added on a path that silently leaves stale refs admissible.
@@ -48,7 +48,7 @@ test('every public command is classified or explicitly non-daemon', () => {
   }
 });
 
-test('app-switcher no longer bypasses classification (ADR 0014 escape hatch)', () => {
+test('app-switcher classifies its device mutation (ADR 0014 command effects)', () => {
   // app-switcher reaches the generic daemon leaf and mutates the device. Before
   // ADR 0014 it had no daemon facet and relied on the registry's generic
   // fallback, so it could not be classified. It must now resolve to a concrete

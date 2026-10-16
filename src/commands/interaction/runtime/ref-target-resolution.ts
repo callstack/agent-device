@@ -46,7 +46,7 @@ type RefResolution = {
   /** The keyboard band the capture of `tree.nodes` measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
   /**
-   * Which tree `resolved.node` was read from, as the reconciliation decided it (ADR 0014 step 5).
+   * Which tree `resolved.node` was read from, as the reconciliation decided it (ADR 0014, "Mutation admission and read behavior").
    * Absent for a caller-carried node (#1654), which no reconciliation of this module chose.
    */
   adoptedFrom?: RefObservationSource;
@@ -180,7 +180,7 @@ async function resolveSnapshotForRef(
 }
 
 /**
- * ADR 0014 step 5: decouple Android freshness from ref authorization. The frame
+ * ADR 0014, "Mutation admission and read behavior": separate Android freshness from ref authorization. The frame
  * tree names WHICH node `@eN` authorizes. When a freshness (or other read-only)
  * capture has advanced the operational observation past the frame, adopt the
  * observation's node — its fresh on-screen coordinates — ONLY when its local

@@ -3,7 +3,7 @@
  *
  * Every dispatch path an interaction command can take must classify EVERY
  * guarantee: enforced by shared runtime code, enforced runner-side (with a
- * parity table once ADR 0011 phase 3 lands), delegated to another path,
+ * parity table under ADR 0011, Layer 2), delegated to another path,
  * inapplicable by construction, or explicitly waived with a reason.
  *
  * This registry plus its gate test is an HONESTY/COMPLETENESS gate, not a

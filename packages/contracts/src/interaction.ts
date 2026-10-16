@@ -160,7 +160,7 @@ export type SurfaceScopedNodes = {
   presentedSurface?: PresentedSurface;
 };
 
-/** Which tree a resolved `@ref`'s node was read from (ADR 0014 step 5). */
+/** Which tree a resolved `@ref`'s node was read from (ADR 0014, "Mutation admission and read behavior"). */
 export type RefObservationSource = 'observation' | 'authorized-frame';
 
 export type ResolvedInteractionTarget =
@@ -182,7 +182,7 @@ export type ResolvedInteractionTarget =
       recordingTarget?: RecordingTargetOverride;
       preAction?: SurfaceScopedNodes;
       /**
-       * ADR 0014 step 5: which tree the dispatched node was read from, reported by the
+       * ADR 0014, "Mutation admission and read behavior": the source tree of the dispatched node, reported by the
        * reconciliation that chose it. `'observation'` means the session's newest capture, so the
        * node's rect is a position that capture measured; `'authorized-frame'` means the older tree
        * the ref was authorized against, whose rect says nothing about where the target sits now.

@@ -1594,16 +1594,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'appSwitcher' },
     frameworkTier: 'extended',
-    // R56 retires this command's capability bucket, its `dispatch` leaf, and its HarmonyOS
-    // overlay membership together: admission is the owner's `appSwitcher` fact, and the only
-    // execution is that one bound operation (ADR 0019 §9).
+    // R56 removed the legacy `dispatch` leaf, capability bucket, and HarmonyOS overlay membership.
+    // The daemon route remains `generic`; admission and execution use the owner's bound
+    // `appSwitcher` operation (ADR 0019 §9).
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
-    // ADR 0014: app-switcher previously reached the generic daemon leaf via the
-    // registry's generic fallback with no daemon facet, so it could not be
-    // classified. Add the facet (route unchanged) so its device mutation is
-    // covered by the completeness gate; this is the escape hatch the ADR calls
-    // out, not a new specialized route.
+    // ADR 0014, "Command effects are daemon-owned and completely classified":
+    // The `daemon` facet classifies this command's device mutation for the completeness gate.
+    // The route remains `generic`.
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
