@@ -521,7 +521,6 @@ test('classifyZone separates the ranked spine from intentionally-unranked zones'
   assert.equal(classifyZone('(root)'), 'ranked');
   assert.equal(classifyZone('platform-runtime'), 'ranked');
   assert.equal(classifyZone('mcp'), 'ranked');
-  assert.equal(classifyZone('screenshot-diff'), 'ranked');
   // A zone that is neither ranked nor listed peripheral must be flagged, never
   // silently treated as back-edge-free.
   assert.equal(classifyZone('not-a-real-zone'), 'unclassified');
