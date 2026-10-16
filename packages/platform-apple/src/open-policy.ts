@@ -1,5 +1,5 @@
 import type {
-  LaunchConfirmation,
+  LaunchConfirmationUnansweredReason,
   OpenApplicationInput,
   OpenApplicationOutcome,
   OpenApplicationRunnerDemand,
@@ -29,16 +29,28 @@ const POST_OPEN_SETTLE_MS = 300;
  */
 const LAUNCH_CONFIRMATION_ROUNDS = 2;
 
+/**
+ * What the open reports about a launch confirmation it saw: the answer it gave, or the typed
+ * reason a prompt it must not answer stayed on screen. A failed accept never reports here; that
+ * open fails with its own reason.
+ */
+export type ReportedLaunchConfirmation =
+  | Readonly<{ launchConfirmation: 'accepted' }>
+  | Readonly<{
+      launchConfirmation: 'unanswered';
+      launchConfirmationReason: LaunchConfirmationUnansweredReason;
+    }>;
+
 type HeldLaunchOutcome = Readonly<{
   observed: LaunchObservation | undefined;
-  launchConfirmation?: LaunchConfirmation;
+  report?: ReportedLaunchConfirmation;
   /** The launch has no process, or its recognized confirmation remains visible. */
   unanswered: boolean;
 }>;
 
 type HeldLaunchRound = Readonly<{
   observed: LaunchObservation | undefined;
-  launchConfirmation?: LaunchConfirmation;
+  report?: ReportedLaunchConfirmation;
   /** Whether an accept has run or been attempted; only an accept can change what the bridge sees. */
   acceptAttempted: boolean;
   confirmationStillPresent: boolean;
@@ -119,9 +131,11 @@ export function releaseSpeculativeRunner(
  * held URL, and the URL is handed over again and read once more. A launch still proven not running
  * afterwards fails the open with `launch_confirmation_unanswered` rather than returning green to a
  * session whose every later command then fails `app is not running`. A recognized prompt still
- * visible after a failed accept also fails the open, even if the app is running. A missing or
- * unrecognized prompt, or an unresolved URL owner, leaves the launch unchanged. An unresolved owner
- * spends both the 3-second presentation window and the bounded URL-owner lookup.
+ * visible after a failed accept also fails the open, even if the app is running. A missing prompt
+ * leaves the launch unchanged; an unrecognized prompt or an unresolved URL owner leaves it
+ * unchanged and reports `launchConfirmation: 'unanswered'` with its typed reason, because the
+ * prompt is on the screen the caller still has to answer. An unresolved owner spends both the
+ * 3-second presentation window and the bounded URL-owner lookup.
  */
 export async function settleAppleOpen(
   host: Pick<PlatformRuntimeHost, 'clock'>,
@@ -134,12 +148,12 @@ export async function settleAppleOpen(
     redispatchLaunchUrl?: () => Promise<void>;
   }>,
   timing: MutableOpenTiming,
-): Promise<LaunchConfirmation | undefined> {
+): Promise<ReportedLaunchConfirmation | undefined> {
   const startedAtMs = Date.now();
   const observe = async () =>
     await observeLaunchedApp(binding, input, localIosSimulator, launch.observation);
   let observed = await observe();
-  let launchConfirmation: LaunchConfirmation | undefined;
+  let report: ReportedLaunchConfirmation | undefined;
   const answer = launch.answerConfirmation;
   const held =
     answer && observed?.observation !== 'observable'
@@ -147,7 +161,7 @@ export async function settleAppleOpen(
       : undefined;
   if (held) {
     timing.runnerDemand = 'required';
-    launchConfirmation = held.launchConfirmation;
+    report = held.report;
     observed = held.observed;
     if (held.unanswered) {
       throw new AppError(
@@ -171,7 +185,7 @@ export async function settleAppleOpen(
     }
   }
   timing.postOpenSettleDurationMs = Math.max(0, Date.now() - startedAtMs);
-  return launchConfirmation;
+  return report;
 }
 
 /**
@@ -212,7 +226,7 @@ async function answerHeldLaunch(
   }
   return {
     observed: round.observed,
-    launchConfirmation: round.launchConfirmation,
+    report: round.report,
     unanswered: acceptLeftTheUrlInFlight(round) || round.confirmationStillPresent,
   };
 }
@@ -226,24 +240,40 @@ async function answerConfirmationOnce(
   const confirmationStillPresent =
     attempt.outcome === 'unanswered' && attempt.reason === 'alert-still-present';
   const acceptAttempted = round.acceptAttempted || acceptWasAttempted(attempt);
-  const launchConfirmation =
-    attempt.outcome === 'accepted' ? ('accepted' as const) : round.launchConfirmation;
+  const report = reportForAttempt(attempt) ?? round.report;
   if (!acceptAttempted) {
     // Only an accept changes the device, so a read that found no prompt, an unrecognized prompt or
     // an unresolved URL owner leaves the launch as the verdict before it already described it.
     return {
       observed: round.observed,
-      launchConfirmation,
+      report,
       acceptAttempted,
       confirmationStillPresent,
     };
   }
   return {
     observed: await observe(),
-    launchConfirmation,
+    report,
     acceptAttempted,
     confirmationStillPresent,
   };
+}
+
+/**
+ * The answer one attempt settles the open with. A prompt the answer recognized but must not act on
+ * stays on the device, so the report names it; an `alert-still-present` attempt belongs to the
+ * failed-accept path that fails the open outright, and an unreadable or absent read proves no
+ * prompt is up.
+ */
+function reportForAttempt(
+  attempt: LaunchConfirmationAttempt,
+): ReportedLaunchConfirmation | undefined {
+  if (attempt.outcome === 'accepted') return { launchConfirmation: 'accepted' };
+  if (attempt.outcome !== 'unanswered') return undefined;
+  if (attempt.reason === 'alert-unrecognized' || attempt.reason === 'url-owner-unresolved') {
+    return { launchConfirmation: 'unanswered', launchConfirmationReason: attempt.reason };
+  }
+  return undefined;
 }
 
 /**

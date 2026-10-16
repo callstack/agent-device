@@ -270,20 +270,21 @@ extension RunnerTests {
     return alert.buttons[index]
   }
 
+  /// The alert's own title: the first non-empty static text inside the alert that is neither a
+  /// button nor alert chrome, then the alert element's own label. An alert presents its copy as
+  /// static text, so this never reads a labelled element that is not copy. A resolution root on an
+  /// older iOS can carry host chrome whose accessibility label is not the alert's title (a
+  /// SpringBoard sheet over the Home Screen includes the page readout), and a walk over every
+  /// descendant reports that label instead of the title.
   private func preferredAlertTitle(_ element: XCUIElement, buttons: [XCUIElement]) -> String {
     let buttonLabels = Set(buttons.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
-    let descendants = element.descendants(matching: .any).allElementsBoundByIndex
-    for descendant in descendants {
-      let text = descendant.label.trimmingCharacters(in: .whitespacesAndNewlines)
-      if text.isEmpty ||
-        isGenericAlertLabel(text) ||
-        buttonLabels.contains(text.lowercased()) ||
-        descendant.elementType == .navigationBar ||
-        actionableTypes.contains(descendant.elementType)
-      {
+    let texts = safeElementsQuery { element.staticTexts.allElementsBoundByIndex }
+    for text in texts {
+      let label = text.label.trimmingCharacters(in: .whitespacesAndNewlines)
+      if label.isEmpty || isGenericAlertLabel(label) || buttonLabels.contains(label.lowercased()) {
         continue
       }
-      return text
+      return label
     }
     let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
     return label.isEmpty || isGenericAlertLabel(label) ? "Alert" : label

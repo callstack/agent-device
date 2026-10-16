@@ -14,7 +14,10 @@ import {
 } from '@agent-device/device-selection/device-selection-resolver';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import type { OpenApplicationTiming } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  LaunchConfirmationUnansweredReason,
+  OpenApplicationTiming,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -112,6 +115,16 @@ function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim): string {
   return (
     `Took the device from session "${tookOver.session}" in workspace "${tookOver.workspace}": ` +
     'that device rebooted after its claim was taken, so its app and runner were already gone.'
+  );
+}
+
+/** What the caller's `open` output says when the launch confirmation it saw stayed unanswered. */
+function launchConfirmationUnansweredWarning(
+  reason: LaunchConfirmationUnansweredReason | undefined,
+): string {
+  return (
+    `iOS is still holding the launch confirmation (${reason ?? 'unrecognized'}), so this launch ` +
+    'URL has not reached the app. Answer it with `alert accept`.'
   );
 }
 
@@ -301,9 +314,16 @@ export async function completeOpenCommand(params: {
     sessionReused: existingSession !== undefined,
     selection: preparedSelection,
     launchConfirmation: outcome.launchConfirmation,
+    launchConfirmationReason: outcome.launchConfirmationReason,
   });
   if (tookOverDeviceClaim) {
     appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim));
+  }
+  if (outcome.launchConfirmation === 'unanswered') {
+    appendResponseWarning(
+      openResult,
+      launchConfirmationUnansweredWarning(outcome.launchConfirmationReason),
+    );
   }
   const nextRef = publishOpenSession({
     req,

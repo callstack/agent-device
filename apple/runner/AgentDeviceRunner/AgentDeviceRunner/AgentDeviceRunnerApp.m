@@ -852,6 +852,21 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     }
   }
 
+  // The shape a SpringBoard confirmation root carries on an older iOS: the window's own title
+  // text plus host chrome whose accessibility label is not copy (the Home Screen page readout),
+  // placed first so a walk over every descendant reads it before the title.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-title-page-chrome"]) {
+    label.isAccessibilityElement = NO;
+    UIView *pageChrome = [[UIView alloc] initWithFrame:CGRectMake(140, 300, 100, 20)];
+    pageChrome.isAccessibilityElement = YES;
+    pageChrome.accessibilityLabel = @"0 pages";
+    [self.view addSubview:pageChrome];
+    UILabel *popupTitle = [[UILabel alloc] initWithFrame:CGRectMake(80, 340, 240, 24)];
+    popupTitle.text = @"Relaunch to continue";
+    popupTitle.accessibilityIdentifier = @"agent-device-alert-title";
+    [self.view addSubview:popupTitle];
+  }
+
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-crowded-screen"]) {
     for (NSUInteger row = 0; row < 500; row++) {
       UILabel *rowLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 60 + (row % 30) * 24, 400, 16)];

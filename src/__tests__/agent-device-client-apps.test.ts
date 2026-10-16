@@ -105,10 +105,60 @@ test('apps.open reports an answered launch confirmation only when the daemon ans
 
   const answered = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
   launchConfirmation = undefined;
-  const unanswered = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+  const noConfirmation = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
 
   assert.equal(answered.launchConfirmation, 'accepted');
-  assert.equal('launchConfirmation' in unanswered, false);
+  assert.equal('launchConfirmation' in noConfirmation, false);
+});
+
+test('apps.open reports an unanswered launch confirmation with its typed reason', async () => {
+  const setup = createTransport(async (req) => {
+    if (req.command === 'open') {
+      return {
+        ok: true,
+        data: {
+          session: 'qa',
+          appBundleId: 'com.example.app',
+          warnings: ['iOS is still holding the launch confirmation (alert-unrecognized)'],
+          launchConfirmation: 'unanswered',
+          launchConfirmationReason: 'alert-unrecognized',
+        },
+      };
+    }
+    throw new Error(`Unexpected command: ${req.command}`);
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+
+  assert.equal(result.launchConfirmation, 'unanswered');
+  assert.equal(result.launchConfirmationReason, 'alert-unrecognized');
+  assert.deepEqual(result.warnings, [
+    'iOS is still holding the launch confirmation (alert-unrecognized)',
+  ]);
+});
+
+test('apps.open drops an unrecognized launch confirmation outcome instead of guessing', async () => {
+  const setup = createTransport(async (req) => {
+    if (req.command === 'open') {
+      return {
+        ok: true,
+        data: {
+          session: 'qa',
+          appBundleId: 'com.example.app',
+          launchConfirmation: 'maybe',
+          launchConfirmationReason: 'alert-unrecognized',
+        },
+      };
+    }
+    throw new Error(`Unexpected command: ${req.command}`);
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+
+  assert.equal('launchConfirmation' in result, false);
+  assert.equal('launchConfirmationReason' in result, false);
 });
 
 test('apps.open preserves the full initialSnapshotError shape through client normalization', async () => {
