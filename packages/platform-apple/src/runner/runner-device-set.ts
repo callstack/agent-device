@@ -43,13 +43,12 @@ export function runnerSimulatorSetFailureDetails(
 }
 
 /**
- * The classification inputs one device's launch hands `classifyRunnerStartupFailure`. Besides the
- * scoped set and the Xcode this process already read, it carries the simulator the launch was built
- * for, which the row that reports a missing destination names in its own sentence.
+ * Supplies the classification details for one device's launch to `classifyRunnerStartupFailure`.
+ * Besides the scoped set and the Xcode version this process already read, it carries the simulator ID
+ * needed to describe a missing destination.
  *
- * An input, not a published shape: callers spread it into the error they classify and publish only
- * {@link runnerSimulatorSetFailureDetails} beside their failure. The simulator is in the sentence that
- * sentence builds, so the row is the only reader of `simulatorUdid`.
+ * This is an input shape, not a published shape: callers spread it into the error they classify and
+ * publish only {@link runnerSimulatorSetFailureDetails} beside their failure.
  */
 export function runnerLaunchLogClassificationDetails(
   device: DeviceInfo,
