@@ -56,33 +56,9 @@
       "types": "./src/core/context.ts",
       "default": "./src/core/context.ts"
     },
-    "./testing/daemon-command-registry": {
-      "types": "./src/core/daemon-command-registry.ts",
-      "default": "./src/core/daemon-command-registry.ts"
-    },
-    "./testing/device/device-claim-conflict": {
-      "types": "./src/resources/device/device-claim-conflict.ts",
-      "default": "./src/resources/device/device-claim-conflict.ts"
-    },
-    "./testing/handlers/session-app-deployment": {
-      "types": "./src/sessions/handlers/session-app-deployment.ts",
-      "default": "./src/sessions/handlers/session-app-deployment.ts"
-    },
     "./testing/interaction/index": {
       "types": "./src/execution/interaction/index.ts",
       "default": "./src/execution/interaction/index.ts"
-    },
-    "./testing/interaction/internal/interaction-touch-response": {
-      "types": "./src/execution/interaction/internal/interaction-touch-response.ts",
-      "default": "./src/execution/interaction/internal/interaction-touch-response.ts"
-    },
-    "./testing/interactor-resolution": {
-      "types": "./src/core/interactor-resolution.ts",
-      "default": "./src/core/interactor-resolution.ts"
-    },
-    "./testing/ios-app-session-hint": {
-      "types": "./src/core/ios-app-session-hint.ts",
-      "default": "./src/core/ios-app-session-hint.ts"
     },
     "./testing/lease-registry": {
       "types": "./src/resources/lease-registry.ts",
@@ -100,41 +76,17 @@
       "types": "./src/core/ref-frame.ts",
       "default": "./src/core/ref-frame.ts"
     },
-    "./testing/request-binding": {
-      "types": "./src/server/request-binding.ts",
-      "default": "./src/server/request-binding.ts"
-    },
     "./testing/request-dispatch-ledger": {
       "types": "./src/core/request-dispatch-ledger.ts",
       "default": "./src/core/request-dispatch-ledger.ts"
-    },
-    "./testing/request-execution-scope": {
-      "types": "./src/server/request-execution-scope.ts",
-      "default": "./src/server/request-execution-scope.ts"
     },
     "./testing/request-finalization": {
       "types": "./src/server/request-finalization.ts",
       "default": "./src/server/request-finalization.ts"
     },
-    "./testing/request-router": {
-      "types": "./src/server/request-router.ts",
-      "default": "./src/server/request-router.ts"
-    },
     "./testing/request-runtime-binding": {
       "types": "./src/core/request-runtime-binding.ts",
       "default": "./src/core/request-runtime-binding.ts"
-    },
-    "./testing/response-views": {
-      "types": "./src/server/response-views.ts",
-      "default": "./src/server/response-views.ts"
-    },
-    "./testing/scroll-until": {
-      "types": "./src/execution/scroll-until.ts",
-      "default": "./src/execution/scroll-until.ts"
-    },
-    "./testing/selector-match-errors": {
-      "types": "./src/execution/selector-match-errors.ts",
-      "default": "./src/execution/selector-match-errors.ts"
     },
     "./testing/server/http-server": {
       "types": "./src/server/http/http-server.ts",
@@ -143,14 +95,6 @@
     "./testing/session-action-recorder": {
       "types": "./src/core/session-action-recorder.ts",
       "default": "./src/core/session-action-recorder.ts"
-    },
-    "./testing/session-observability/__tests__/*": {
-      "types": "./src/sessions/session-observability/__tests__/*.ts",
-      "default": "./src/sessions/session-observability/__tests__/*.ts"
-    },
-    "./testing/session-recovery-hints": {
-      "types": "./src/core/session-recovery-hints.ts",
-      "default": "./src/core/session-recovery-hints.ts"
     },
     "./testing/session-snapshot": {
       "types": "./src/execution/session-snapshot.ts",
@@ -163,10 +107,6 @@
     "./testing/session-store": {
       "types": "./src/core/session-store.ts",
       "default": "./src/core/session-store.ts"
-    },
-    "./testing/web-session-names": {
-      "types": "./src/sessions/web-session-names.ts",
-      "default": "./src/sessions/web-session-names.ts"
     }
   }
 }

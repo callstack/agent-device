@@ -366,7 +366,7 @@ jobs:
         with: { gate: integration-node }
 
       - name: Run seeded concurrency torture lane (fast PR sweep)
-        # #1416's nightly torture lane lives under test/integration/nightly/, out
+        # #1416's nightly torture lane lives under packages/daemon/test/nightly/, out
         # of the test:integration:node glob, so this is a *deliberate* fast PR
         # sweep (TORTURE_RUNS default 128 seeds, ~sub-second) — not an accidental
         # glob inclusion. The Concurrency Torture Nightly workflow sweeps a much
