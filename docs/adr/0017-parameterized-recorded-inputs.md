@@ -116,7 +116,7 @@ Safe authoring emits one complete placeholder token.
 
 The boundary above protects only the request/recording path of the originating fill itself.
 After [#1349](https://github.com/callstack/agent-device/issues/1349), a later read-only action records `target-v1` identity evidence and a result payload independently.
-These read-only actions are the landmark-mode evidence of `wait`, `is`, and `get`.
+These read-only actions are `wait` with landmark-mode evidence, `is`, and `get`.
 That capture comes from whatever the app renders at that later step.
 The capture has no memory of the literal of an earlier fill.
 Thus, an app-rendered echo of the literal can re-enter session state and publication through a completely different, unparameterized action.
