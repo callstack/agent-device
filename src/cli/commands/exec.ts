@@ -52,6 +52,20 @@ export async function runExecCommand(
       'exec requires a command after `--`, e.g. agent-device exec --platform ios --udid <UDID> -- expo run:ios --device <UDID>.',
     );
   }
+  // Signal forwarding reaches the child's process group, which Windows does
+  // not model, and claims are host-global over the local devices of POSIX
+  // hosts only. Refuse the whole command up front rather than run a wrapper
+  // whose fence a stuck build could silently outlive.
+  if (process.platform === 'win32') {
+    throw new AppError(
+      'UNSUPPORTED_PLATFORM',
+      'exec holds and forwards POSIX process-group signals and supports macOS and Linux hosts only.',
+      {
+        reason: 'unsupported-host-platform',
+        hostPlatform: process.platform,
+      },
+    );
+  }
   const termination = attachSignalForwarding();
   try {
     const device = await resolveExecDevice(options.flags);
@@ -172,8 +186,10 @@ function attachSignalForwarding(): SignalForwarding {
   let signal: NodeJS.Signals | null = null;
   let child: { pid?: number } | undefined;
   const forward = (received: NodeJS.Signals) => {
-    if (signal) return;
-    signal = received;
+    // The first signal owns the exit code; every received signal still reaches
+    // the group, so a child that traps or ignores one signal stays stoppable
+    // by the next.
+    if (!signal) signal = received;
     if (child?.pid !== undefined) signalProcessGroupBestEffort(child.pid, received);
   };
   const onSigint = () => forward('SIGINT');

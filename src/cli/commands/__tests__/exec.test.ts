@@ -317,6 +317,59 @@ test('forwards SIGTERM to the child and exits with the signal code after releasi
   assert.equal(storedClaim(dirs.claimsDir), undefined);
 });
 
+test('refuses to run on a Windows host before touching the device or the claim store', async () => {
+  const dirs = useDirs();
+  const originalPlatform = process.platform;
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+  try {
+    await assert.rejects(runExec(['true'], dirs).promise, (error: unknown) => {
+      const appError = error as { code?: string; details?: { reason?: string } };
+      return (
+        appError.code === 'UNSUPPORTED_PLATFORM' &&
+        appError.details?.reason === 'unsupported-host-platform'
+      );
+    });
+  } finally {
+    Object.defineProperty(process, 'platform', {
+      value: originalPlatform,
+      configurable: true,
+    });
+  }
+  // The refusal throws before device resolution or claim acquisition: nothing
+  // was written to the claim store.
+  assert.equal(storedClaim(dirs.claimsDir), undefined);
+});
+
+test('forwards a second signal when the child ignored the first, and keeps the first exit code', async () => {
+  const dirs = useDirs();
+  const gotSignal = path.join(dirs.stateDir, 'child-got-second-term.txt');
+  const childStarted = path.join(dirs.stateDir, 'child-started.txt');
+  const sigtermListenersBefore = process.listenerCount('SIGTERM');
+  const running = runExec(
+    [
+      'sh',
+      '-c',
+      // Traps INT without exiting, so the first signal is survivable and only
+      // the forwarded second one can end the child.
+      `trap '' INT; trap 'echo got > ${JSON.stringify(gotSignal)}; exit 0' TERM; echo started > ${JSON.stringify(
+        childStarted,
+      )}; i=0; while [ $i -lt 60 ]; do sleep 0.05; i=$((i+1)); done`,
+    ],
+    dirs,
+  );
+  await running.inventoryReady();
+  await waitFor(() => fs.existsSync(childStarted));
+  process.emit('SIGINT');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(fs.existsSync(gotSignal), false);
+  process.emit('SIGTERM');
+  // The first signal owns the exit code even though the second ended the child.
+  assert.equal(await running.promise, 128 + 2);
+  assert.equal(process.listenerCount('SIGTERM'), sigtermListenersBefore);
+  assert.equal(fs.readFileSync(gotSignal, 'utf8').trim(), 'got');
+  assert.equal(storedClaim(dirs.claimsDir), undefined);
+});
+
 test('a SIGKILLed wrapper leaves a stale claim the next acquirer reconciles', async () => {
   const dirs = useDirs();
   // Spawn a real wrapper process through the CLI entry with a stubbed

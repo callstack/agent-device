@@ -213,10 +213,16 @@ agent-device exec --platform android --serial emulator-5554 -- adb install app-d
 - While `exec` runs, another workspace's `open`, `boot`, or `install` on that device fails with
   `DEVICE_IN_USE` and names the holder (`session exec:<command>`); it works again once `exec` exits.
   `exec` itself refuses to start with the same error while another session or `exec` holds the device.
+  One exception, shared with every other claim: if the device reboots while `exec` holds the claim,
+  the reboot already ended the build, so `open` settles the holder's durable resources, takes the
+  claim, and reports the release in `warnings`.
 - The command's exit code is `exec`'s exit code. Ctrl+C (or `SIGTERM`) is forwarded to the command
-  before `exec` exits, and the claim is released on every exit path. A killed `exec` leaves a claim
-  that `device status` reports as stale and the next `open` or `exec` reconciles.
-- Claims exist only for local devices: `exec` refuses targets on a cloud provider lease.
+  and its whole process group before `exec` exits, and `exec` attempts to release the claim on every
+  exit path; a release that fails or can't attribute the record prints to stderr and leaves a claim
+  that `device release --stale` reports. A killed `exec` leaves a claim that the next `open` or `exec`
+  reconciles once its owner process is proven dead.
+- Claims exist only for local devices: `exec` refuses targets on a cloud provider lease. `exec` runs
+  on macOS and Linux hosts only; it refuses to start on Windows.
 - `exec` doesn't boot the device or launch your app; it only selects the device, holds the claim, and
   runs the command. Boot the device first, or let the build boot it while no session holds the claim.
 
