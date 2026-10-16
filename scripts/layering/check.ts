@@ -161,6 +161,7 @@ import { sourceExecutionCompatibilityViolations } from './source-execution-polic
 import { sessionResourceOwnershipViolations } from './session-resource-ownership.ts';
 import { applicationLifecycleOwnershipViolations } from './application-lifecycle-policy.ts';
 import { iosSnapshotEngineOwnershipViolations } from './ios-snapshot-engine-policy.ts';
+import { checkPluginFrameworkIndependence } from './plugin-framework-independence.ts';
 import { providerSnapshotPresentationViolations } from './provider-snapshot-presentation-policy.ts';
 import { snapshotAssemblyPresentationViolations } from './snapshot-assembly-presentation-policy.ts';
 import { RETIRED_PATH_RULES, retiredPathRuleViolations } from './retired-paths-policy.ts';
@@ -539,6 +540,7 @@ export const LAYERING_RULE_IDS = [
   'session-authority-overlay',
   'daemon-layers',
   'package-export-surface',
+  'plugin-framework-independence',
   'test-colocation',
 ] as const;
 
@@ -620,6 +622,11 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     ),
     ...checkTestKitIsolation(readTrackedPackageManifests(repoRoot), context.allTypeScriptSources),
   ],
+  'plugin-framework-independence': (context) =>
+    checkPluginFrameworkIndependence(
+      readTrackedPackageManifests(repoRoot),
+      context.allTypeScriptSources,
+    ),
   'test-colocation': (context) =>
     checkTestColocation(context.ratchets.unmatchedTests, context.reference.unmatchedTests),
 };
