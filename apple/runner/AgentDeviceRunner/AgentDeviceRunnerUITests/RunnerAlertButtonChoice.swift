@@ -8,9 +8,7 @@ import Foundation
 /// — iOS localizes the App Tracking Transparency prompt's "Allow", consent copy is open-ended,
 /// and no list closes either set — and answering such a button while reporting `dismissed` is
 /// exactly the failure #3627 reports. So an unrecognized decline is refused with
-/// `ALERT_BUTTON_NOT_FOUND` and no tap rather than guessed at. Unknown wording stays reachable:
-/// `alert get` shows the labels, and `snapshot` + `press @ref` names the button instead of
-/// inferring it.
+/// `ALERT_BUTTON_NOT_FOUND` and no tap rather than guessed at.
 ///
 /// The one recognized decline outside the list is a dismiss-popup surface itself: its native
 /// accessibility marker is the app's own declaration that the surface closes the popover, so

@@ -65,7 +65,7 @@ extension RunnerTests {
     if action == "accept" || action == "dismiss" {
       guard let button = chooseAlertButton(alert, action: action) else {
         // The choice refused before any activation, so this discloses dispatched: no like the
-        // runner's other pre-run refusals; naming an affirmative button here is what #3627 is about.
+        // runner's other pre-run refusals.
         return Response(ok: false, error: ErrorPayload(
           code: RunnerWireErrorCode.alertButtonNotFound,
           message: "alert \(action) button not found",

@@ -393,11 +393,10 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   [self presentViewController:alert animated:NO completion:nil];
 }
 
-// The App Tracking Transparency prompt's button order, which is what `alert dismiss` got wrong:
-// the affirmative button is last, so a fallback to it answers "Allow" (#3627). The answer label
-// says which button the app really took, so a test does not trust the command's own report.
-// `--agent-device-alert-affirmative-only` shows the same alert with no decline button at all,
-// where `dismiss` must refuse without activating anything.
+// Mirrors the App Tracking Transparency prompt's real button order: the affirmative button is
+// last (#3627). The answer label records which button the app actually took, so a test asserts
+// the app's answer instead of the command's own report. `--agent-device-alert-affirmative-only`
+// shows the same alert with no decline button at all.
 - (void)presentAlertDeclineChoiceFixture {
   BOOL affirmativeOnly =
       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"];
