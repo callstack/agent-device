@@ -40,12 +40,8 @@ async function observeText<Runtime extends SelectorWaitRuntime>(
   text: string,
 ): Promise<boolean> {
   if (runtime.backend.findText) {
-    try {
-      const native = await runtime.backend.findText(backendContext(runtime, options), text);
-      if (native.found) return true;
-    } catch (error) {
-      if (options.signal?.aborted || runtime.signal?.aborted) throw error;
-    }
+    const native = await runtime.backend.findText(backendContext(runtime, options), text);
+    if (native.found) return true;
   }
   return await snapshotContainsText(operations, runtime, options, text);
 }

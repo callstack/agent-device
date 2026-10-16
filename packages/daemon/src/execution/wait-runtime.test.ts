@@ -342,6 +342,28 @@ test('a text wait returns a native owner hit without capturing a snapshot', asyn
   expect(harness.captureSnapshot).not.toHaveBeenCalled();
 });
 
+test('native text failure cannot hide a canonical capture failure', async () => {
+  const harness = waitRuntimeHarness({ findText: available });
+  harness.findText.mockRejectedValueOnce(new Error('native observation failed'));
+  harness.captureSnapshot.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'canonical capture failed', {
+      reason: 'capture_failed',
+    }),
+  );
+
+  const { response } = await runWait(['text', 'Ready'], harness);
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error).toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'canonical capture failed',
+    details: { reason: 'capture_failed' },
+  });
+  expect(harness.findText).toHaveBeenCalledTimes(1);
+  expect(harness.captureSnapshot).toHaveBeenCalledTimes(1);
+});
+
 test('a selector wait binds the capture use once and polls through the bound operation', async () => {
   const harness = waitRuntimeHarness();
 
