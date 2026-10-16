@@ -308,10 +308,6 @@
       "types": "./src/sessions/session-runtime.ts",
       "default": "./src/sessions/session-runtime.ts"
     },
-    "./testing/session-script-writer": {
-      "types": "./src/core/session-script-writer.ts",
-      "default": "./src/core/session-script-writer.ts"
-    },
     "./testing/session-snapshot": {
       "types": "./src/execution/session-snapshot.ts",
       "default": "./src/execution/session-snapshot.ts"

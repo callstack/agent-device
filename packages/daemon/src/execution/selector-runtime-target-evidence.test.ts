@@ -1,5 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonGetResult, DaemonIsResult } from '@agent-device/contracts/daemon-command-surface';
+import type {
+  DaemonGetResult,
+  DaemonIsResult,
+} from '@agent-device/contracts/daemon-command-surface';
 import { buildSelectorChainForNode } from '@agent-device/selectors';
 import { legacyDispatchCapture } from '../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, beforeEach } from 'vitest';

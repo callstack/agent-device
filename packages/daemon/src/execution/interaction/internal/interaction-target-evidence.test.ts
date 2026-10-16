@@ -9,7 +9,7 @@ import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { makeAuthoringSession } from '../../../__tests__/support/session-factories.ts';
 import { SessionScriptWriter } from '../../../core/session-script-writer.ts';
 import type { SessionState } from '../../../core/session-state.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { installLegacyCaptureInteractorResolution } from '../../../__tests__/support/legacy-capture-interactor-resolution.ts';
 import { captureAndStoreSnapshot } from '../../../__tests__/support/command-surface-override-fake.ts';
 import {
@@ -159,7 +159,10 @@ const containerPressSurface = touchForwardingCreateCommandSurface({
           preAction: { nodes },
           recordingTarget: {
             node: nodes[2]!,
-            selectorChain: ['role="textview" label="Connected devices"', 'label="Connected devices"'],
+            selectorChain: [
+              'role="textview" label="Connected devices"',
+              'label="Connected devices"',
+            ],
             refLabel: 'Connected devices',
           },
         };
