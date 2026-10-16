@@ -55,8 +55,12 @@ export function createAndroidInteractor(
   const helperSessionScope = androidHelperSessionScope(runnerContext?.appBundleId);
   const alertOptions = (timeoutMs?: number) => ({
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
-    captureNodes: async () => {
-      const capture = await snapshotAndroid(device, { includeHiddenContentHints: false });
+    ...(runnerContext?.signal ? { signal: runnerContext.signal } : {}),
+    captureNodes: async (seam: { signal: AbortSignal }) => {
+      const capture = await snapshotAndroid(device, {
+        includeHiddenContentHints: false,
+        signal: seam.signal,
+      });
       return buildSnapshotState(androidSnapshotPublicationInput(capture), undefined).nodes;
     },
   });

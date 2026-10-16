@@ -43,6 +43,7 @@ describe('readAlert', () => {
     const result = await interactor.readAlert!();
 
     expect(result.kind).toBe('alertStatus');
+    expect(result.status).toBe('visible');
     expect(result.alert).toMatchObject({
       platform: 'ios',
       source: 'permission',
@@ -57,17 +58,21 @@ describe('readAlert', () => {
 
     expect(result.kind).toBe('alertStatus');
     expect(result.alert).toBeNull();
+    expect(result.status).toBe('none');
   });
 });
 
 describe('awaitAlert', () => {
   it('returns as soon as a capture shows the alert', async () => {
-    const { interactor } = sessionWithTrees([limrunAttAlertTree(), limrunAttAlertTree()]);
+    // The fixture serves the same alert on every read, so the read count is the assertion that
+    // proves this leg returns on the FIRST capture rather than polling past it.
+    const { interactor, client } = sessionWithTrees([limrunAttAlertTree(), limrunAttAlertTree()]);
 
     const result = await interactor.awaitAlert!({ timeoutMs: 5_000 });
 
     expect(result.kind).toBe('alertWait');
     expect(result.alert).toMatchObject({ buttons: ['Ask App Not to Track', 'Allow'] });
+    expect(client.elementTree).toHaveBeenCalledTimes(1);
   });
 });
 

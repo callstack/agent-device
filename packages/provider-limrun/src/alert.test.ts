@@ -77,6 +77,37 @@ describe('wait budget', () => {
 
     await expect(handleLimrunIosAlert(client, 'wait')).rejects.toThrow('websocket closed');
   });
+
+  it('refuses a confirm capture that outruns its window and reports the stuck alert', async () => {
+    // The Limrun WebSocket client cannot abort an in-flight `elementTree`, so a stalled capture
+    // can outlive the confirm budget. The driver must not consume that late answer: the press
+    // already landed, the capture proves nothing, and the honest terminal answer is the
+    // stuck-alert failure on the typed window reason.
+    const client = {
+      elementTree: vi
+        .fn()
+        .mockResolvedValueOnce([limrunAttAlertTree()]) // read-first probe resolves the alert
+        // The confirm probe stalls 3s on the driven clock — past its 2s budget — and would
+        // answer "gone" if its late result were trusted.
+        .mockImplementationOnce(
+          async () =>
+            new Promise((resolve) => {
+              setTimeout(() => resolve([limrunAppScreenTree()]), 3_000);
+            }),
+        ),
+      tap: vi.fn(async () => {}),
+    } satisfies LimrunIosAlertClient;
+
+    const thrown = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept')).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(client.tap).toHaveBeenCalledTimes(1);
+    expect(thrown).toBeInstanceOf(AppError);
+    const failure = thrown as AppError;
+    expect(failure.message).toBe('alert accept did not dismiss the visible alert');
+    expect(failure.details?.reason).toBe('alert-window-expired');
+  });
 });
 
 describe('get on an undecided capture', () => {
@@ -86,6 +117,9 @@ describe('get on an undecided capture', () => {
     const result = await handleLimrunIosAlert(client, 'get');
 
     expect(result.kind === 'alertStatus' && result.alert).toBeNull();
+    // The states are typed on the result, not just in the message: `undecided` and `none`
+    // arrive with the same null alert and must stay switchable apart.
+    expect(result.kind === 'alertStatus' && result.status).toBe('undecided');
     expect(result.kind === 'alertStatus' && result.message).toBe(
       'Cannot decide the alert: the capture is alert-shaped but unresolvable',
     );
@@ -104,7 +138,6 @@ describe('acting budgets', () => {
 
   it('refuses an ambiguous alert without tapping, on a typed reason', async () => {
     const client = clientWithTrees([limrunAlertAmbiguousButtonsTree()]);
-
     const thrown = await handleLimrunIosAlert(client, 'accept').then(
       () => undefined,
       (error: unknown) => error,

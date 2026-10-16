@@ -32,10 +32,16 @@ export type LimrunIosAlertResult = TreeAlertResult<LimrunAlertInfo, 'ios'>;
 
 export type LimrunIosAlertAction = 'get' | 'wait' | 'accept' | 'dismiss';
 
+export type LimrunIosAlertOptions = Readonly<{
+  timeoutMs?: number;
+  /** The daemon request's cancellation, refused at (never canceled inside) the transport. */
+  signal?: AbortSignal;
+}>;
+
 export async function handleLimrunIosAlert(
   client: LimrunIosAlertClient,
   action: LimrunIosAlertAction,
-  options?: Readonly<{ timeoutMs?: number }>,
+  options?: LimrunIosAlertOptions,
 ): Promise<LimrunIosAlertResult> {
   const driver: TreeAlertDriver<
     Awaited<ReturnType<LimrunIosClient['elementTree']>>,
@@ -46,6 +52,11 @@ export async function handleLimrunIosAlert(
   > = {
     platform: 'ios',
     timeoutMs: options?.timeoutMs,
+    ...(options?.signal ? { signal: options.signal } : {}),
+    // The Limrun WebSocket client exposes no abort on `elementTree`/`tap`, so the seam signal
+    // cannot cancel its transport. The driver still enforces the window around this seam: a
+    // capture that lands after its window closed is refused rather than consumed, and no press
+    // dispatches once the window has closed.
     capture: () => client.elementTree(),
     findCandidate: (tree): TreeAlertObservation<LimrunAlertCandidate> =>
       readLimrunAlertCapture(tree as Parameters<typeof readLimrunAlertCapture>[0]),

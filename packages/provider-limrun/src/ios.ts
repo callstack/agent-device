@@ -413,24 +413,27 @@ class LimrunIosInteractor implements Interactor {
    * that separates a system alert from the app's own dialog. Loaded on the alert path like the
    * other seam modules to keep this provider's declared import-time closure budget.
    */
-  async readAlert(): Promise<Record<string, unknown>> {
+  async readAlert(options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
     const { handleLimrunIosAlert } = await import('./alert.ts');
-    return await handleLimrunIosAlert(this.session.client, 'get');
+    return await handleLimrunIosAlert(this.session.client, 'get', options);
   }
 
-  async awaitAlert(options?: { timeoutMs?: number }): Promise<Record<string, unknown>> {
+  async awaitAlert(options?: {
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  }): Promise<Record<string, unknown>> {
     const { handleLimrunIosAlert } = await import('./alert.ts');
     return await handleLimrunIosAlert(this.session.client, 'wait', options);
   }
 
-  async acceptAlert(): Promise<Record<string, unknown>> {
+  async acceptAlert(options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
     const { handleLimrunIosAlert } = await import('./alert.ts');
-    return await handleLimrunIosAlert(this.session.client, 'accept');
+    return await handleLimrunIosAlert(this.session.client, 'accept', options);
   }
 
-  async dismissAlert(): Promise<Record<string, unknown>> {
+  async dismissAlert(options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
     const { handleLimrunIosAlert } = await import('./alert.ts');
-    return await handleLimrunIosAlert(this.session.client, 'dismiss');
+    return await handleLimrunIosAlert(this.session.client, 'dismiss', options);
   }
 }
 

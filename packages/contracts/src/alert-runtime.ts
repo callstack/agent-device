@@ -94,11 +94,15 @@ async function resolveAlertInteractor(
   });
 }
 
-function alertInteractorOptions(input: AlertRuntimeInput): AlertInteractorOptions {
+function alertInteractorOptions(
+  input: AlertRuntimeInput,
+  signal: AbortSignal | undefined,
+): AlertInteractorOptions {
   return {
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     ...(input.appBundleId === undefined ? {} : { appBundleId: input.appBundleId }),
     ...(input.surface === undefined ? {} : { surface: input.surface }),
+    ...(signal ? { signal } : {}),
   };
 }
 
@@ -124,7 +128,7 @@ export function bindAlertLeg<Leg extends AlertLeg>(
       // held at its merge-base size (`eager-closure-budgets`); a static edge would grow it.
       const { requireInteractorMethod } = await import('./interactor-operation-binding.ts');
       const method = requireInteractorMethod(interactor[leg], ALERT_LEG_LABELS[leg]);
-      return await method.call(interactor, alertInteractorOptions(input));
+      return await method.call(interactor, alertInteractorOptions(input, signal));
     },
   }) as Readonly<Record<Leg, (input: AlertRuntimeInput) => Promise<Record<string, unknown>>>>;
 }

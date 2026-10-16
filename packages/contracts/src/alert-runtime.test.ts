@@ -58,6 +58,9 @@ test('each local leg forwards the window and the session target to its own owner
     timeoutMs: 37,
     appBundleId: 'com.example.app',
     surface: 'app',
+    // The request's cancellation rides along: owners whose transport cannot abort a call (the
+    // Limrun tree legs) still refuse to consume a capture once the request is canceled.
+    signal,
   };
   expect(legs.readAlert).toHaveBeenCalledWith(expectedOptions);
   expect(legs.awaitAlert).toHaveBeenCalledWith(expectedOptions);
@@ -76,12 +79,13 @@ test('an absent target field never reaches the owner as an explicit undefined', 
   const readAlert = vi.fn(async (_options?: AlertInteractorOptions) => ({}));
   const resolveInteractor = async () => ({ readAlert }) as unknown as Interactor;
   const source = localInteractorSource({ device, resolveInteractor });
-  const operations = bindAlertLeg('readAlert', new AbortController().signal, source);
+  const signal = new AbortController().signal;
+  const operations = bindAlertLeg('readAlert', signal, source);
 
   await operations.readAlert({ surface: 'frontmost-app' });
 
-  expect(readAlert).toHaveBeenCalledWith({ surface: 'frontmost-app' });
-  expect(Object.keys(readAlert.mock.calls[0]?.[0] ?? {})).toEqual(['surface']);
+  expect(readAlert).toHaveBeenCalledWith({ surface: 'frontmost-app', signal });
+  expect(Object.keys(readAlert.mock.calls[0]?.[0] ?? {})).toEqual(['surface', 'signal']);
 });
 
 // Facts admitted the leg, so an interactor without it is an ownership bug the caller must see

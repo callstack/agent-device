@@ -25,23 +25,34 @@ import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/error
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidShell } from './adb.ts';
+import type { AndroidAdbExecutorOptions } from './adb-transport.ts';
 import { androidAdbResultError, discloseAdbInputDispatch } from './adb-failure.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
-export async function pressAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
+export async function pressAndroid(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  executorOptions?: AndroidAdbExecutorOptions,
+): Promise<void> {
   try {
-    await runAndroidShell(device, ['input', 'tap', x, y]);
+    await runAndroidShell(device, ['input', 'tap', x, y], executorOptions);
   } catch (error) {
     throw discloseAdbInputDispatch(error);
   }
 }
 
 /** Two `input tap` sends; a failure of the second follows a tap that already landed. */
-export async function doubleTapAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
-  await pressAndroid(device, x, y);
+export async function doubleTapAndroid(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  executorOptions?: AndroidAdbExecutorOptions,
+): Promise<void> {
+  await pressAndroid(device, x, y, executorOptions);
   try {
-    await pressAndroid(device, x, y);
+    await pressAndroid(device, x, y, executorOptions);
   } catch (error) {
     throw discloseDispatchAfterSteps(error, 1);
   }
@@ -57,8 +68,11 @@ export async function pressAndroidTvRemote(
   await runAndroidShell(device, ['input', ...keyeventArgs, keyevent]);
 }
 
-export async function backAndroid(device: DeviceInfo): Promise<void> {
-  await runAndroidShell(device, ['input', 'keyevent', '4']);
+export async function backAndroid(
+  device: DeviceInfo,
+  executorOptions?: AndroidAdbExecutorOptions,
+): Promise<void> {
+  await runAndroidShell(device, ['input', 'keyevent', '4'], executorOptions);
 }
 
 export async function homeAndroid(device: DeviceInfo): Promise<void> {

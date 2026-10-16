@@ -8,11 +8,13 @@ import {
   type AlertPlatform,
   ALERT_NOT_FOUND_REASON,
   ALERT_POLL_INTERVAL_MS,
+  ALERT_WINDOW_EXPIRED_REASON,
+  type AlertStatusKind,
   DEFAULT_ALERT_TIMEOUT_MS,
 } from '@agent-device/contracts/alert-contract';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { sleep } from '@agent-device/host-kit/retry';
+import { type DeadlineClock, Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { successText } from '@agent-device/kernel/success-text';
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -57,13 +59,17 @@ export type TreeAlertCandidate<
   buttons: TButton[];
 }>;
 
-export type TreeAlertSleep = (milliseconds: number) => Promise<void>;
-
 /**
  * The seams one tree-based backend owns. `timeoutMs` bounds `wait`; the acting legs ride the
- * contract action budget. The sleep seam exists so tests advance polls on a driven clock
- * (`docs/agents/testing.md`) instead of production time.
+ * contract action budget. Poll sleeps ride the shared `pollUntilSettled` deadline primitive, so
+ * tests drive the clock (`docs/agents/testing.md`) rather than the driver owning a timer seam.
+ * `capture` and `press` receive the live cancellation signal for their attempt — the caller's
+ * request signal joined with the loop's remaining window — so a backend whose transport can be
+ * canceled stops in-flight work, and every backend refuses to consume a capture or dispatch a
+ * press once the signal has fired. A transport that cannot cancel still gains both refusals.
  */
+export type TreeAlertSeam = Readonly<{ signal: AbortSignal }>;
+
 export type TreeAlertDriver<
   TCapture,
   TAlert extends AlertInfo & { buttons: string[] },
@@ -73,11 +79,18 @@ export type TreeAlertDriver<
 > = Readonly<{
   platform: TPlatform;
   timeoutMs?: number;
-  sleep?: TreeAlertSleep;
-  capture: () => Promise<TCapture>;
+  /** The daemon request's cancellation, when the caller rides one; joined into every seam call. */
+  signal?: AbortSignal;
+  /**
+   * One capture, offered the leg's live signal. A backend whose transport can abort (Android's
+   * adb executor kills the child) hands it down; a backend whose transport cannot (Limrun's
+   * WebSocket client) ignores it, and the driver's window guard is what keeps its late captures
+   * unconsumed.
+   */
+  capture: (seam: TreeAlertSeam) => Promise<TCapture>;
   findCandidate: (capture: TCapture) => TreeAlertObservation<TCandidate>;
   choose: (candidate: TCandidate, action: 'accept' | 'dismiss') => TreeAlertPress<TButton> | null;
-  press: (choice: TreeAlertPress<TButton>) => Promise<void>;
+  press: (choice: TreeAlertPress<TButton>, seam: TreeAlertSeam) => Promise<void>;
 }>;
 
 /** The records the daemon composes CLI and SDK output around, identical across tree backends. */
@@ -90,6 +103,8 @@ export type TreeAlertResult<
       platform: TPlatform;
       action: 'get';
       alert: TAlert | null;
+      /** Typed absence vs. an unresolvable capture, so clients switch on states, not messages. */
+      status: AlertStatusKind;
       message?: string;
     }
   | {
@@ -122,6 +137,13 @@ const ALERT_NOT_FOUND_HINT =
  * both predecessor loops took their first immediate observation before any waiting, and one
  * immediate observation is the honest answer shape for a zero-length `wait` window too. A
  * malformed `timeoutMs` is the bounded default, never a loop whose bound is never reached.
+ *
+ * Every budget also bounds the work inside it: each polling leg carries a window signal that
+ * expires with its deadline and a request signal from the caller, and both reach the seams.
+ * Captures then stop in-flight transport work wherever the backend's transport can cancel (the
+ * Android legs hand the signal to the adb executor, which kills the child); backends whose
+ * transport cannot cancel — Limrun's WebSocket client exposes no abort — still never consume a
+ * capture that lands after its window closed, and no press is dispatched past the window.
  */
 export async function runTreeAlertAction<
   TCapture,
@@ -133,15 +155,23 @@ export async function runTreeAlertAction<
   action: AlertAction,
   driver: TreeAlertDriver<TCapture, TAlert, TButton, TCandidate, TPlatform>,
 ): Promise<TreeAlertResult<TAlert, TPlatform>> {
-  const nap = driver.sleep ?? sleep;
-  const observe: TreeAlertObserver<TCandidate> = async () =>
-    driver.findCandidate(await driver.capture());
   if (action === 'get') {
+    // One immediate observation with no window to expire: only the caller's cancellation binds it.
+    const observe = treeAlertObserver(driver, undefined);
     return buildTreeAlertStatusResponse(driver.platform, await observe());
   }
   if (action === 'wait') {
     const start = Date.now();
-    const polled = await pollTreeAlert(observe, alertWindowMs(driver.timeoutMs), nap);
+    const window = treeAlertWindow(alertWindowMs(driver.timeoutMs), driver.signal);
+    const observe = treeAlertObserver(driver, window);
+    let polled: TreeAlertObservation<TCandidate>;
+    try {
+      polled = await pollTreeAlert(observe, window, driver.signal);
+    } catch (error) {
+      // A capture the window cut off is, for `wait`, exactly what the window closing means.
+      if (isAlertWindowExpired(error)) throw new AppError('COMMAND_FAILED', 'alert wait timed out');
+      throw error;
+    }
     if (polled.kind !== 'alert') {
       // Both a quiet capture and one that stayed alert-shaped yet unresolvable mean no
       // actionable alert ever resolved within the window; the timeout phrasing is the honest
@@ -157,8 +187,119 @@ export async function runTreeAlertAction<
       ...successText('Alert visible'),
     };
   }
-  return await actOnTreeAlert(action, driver, observe, nap);
+  return await actOnTreeAlert(action, driver);
 }
+
+/** What the observer reads of a driver: the two seams it runs and the signal it joins. */
+type ObserverDriver<TCapture, TCandidate> = Readonly<{
+  signal?: AbortSignal;
+  capture: (seam: TreeAlertSeam) => Promise<TCapture>;
+  findCandidate: (capture: TCapture) => TreeAlertObservation<TCandidate>;
+}>;
+
+/**
+ * One observation of the backend's capture, bound by the driver's window. `window` is the leg's
+ * deadline clock plus the joined signal (this window's expiry, the caller's cancellation) the
+ * seams carry. Android hands that signal to the adb executor, which kills the child process, so
+ * a capture in flight when the window closes is actually stopped; Limrun's WebSocket client
+ * exposes no abort, so the post-await check here is what keeps that backend honest — a capture
+ * that lands once its window has closed proves nothing, is refused on the typed window reason,
+ * and is never consumed. A probe that starts once the window is already spent is the polling
+ * loop's own closing observation: it answers normally and the loop ends on its deadline. What
+ * may never happen is consuming a spent-window observation as actionable, which the press-time
+ * window check in `actOnTreeAlert` enforces. The first observation of a leg rides only the
+ * caller's cancellation: the read-first contract promises one immediate honest answer even when
+ * the window is already spent, and a probe that starts inside the window cannot have outrun a
+ * deadline it has not reached yet — its own landing decides, not a race with the clock.
+ */
+type TreeAlertWindow = Readonly<{ deadline: DeadlineClock; signal: AbortSignal }>;
+
+/**
+ * One leg's window: a deadline clock the driver polls against and the joined signal (this
+ * window's expiry, the caller's cancellation) the seams carry. The clock and signal start on
+ * the same line, so an expired clock and an aborted signal agree on everything but the
+ * millisecond.
+ */
+function treeAlertWindow(
+  timeoutMs: number,
+  callerSignal: AbortSignal | undefined,
+): TreeAlertWindow {
+  return {
+    deadline: Deadline.fromTimeoutMs(timeoutMs),
+    signal: AbortSignal.any([
+      AbortSignal.timeout(timeoutMs),
+      ...(callerSignal ? [callerSignal] : []),
+    ]),
+  };
+}
+
+function treeAlertObserver<TCapture, TCandidate>(
+  driver: ObserverDriver<TCapture, TCandidate>,
+  window: TreeAlertWindow | undefined,
+): TreeAlertObserver<TCandidate> {
+  return async () => {
+    if (driver.signal?.aborted) throw createRequestCanceledError();
+    // A window already spent at probe start is the polling loop's own closing observation: it
+    // answers normally (the read-first contract keeps one immediate honest answer even for a
+    // spent window) and the loop ends on its deadline. A probe that starts inside the window is
+    // guarded: its seam can be canceled, and its landing is checked against the clock.
+    const guarded = window !== undefined && !window.deadline.isExpired();
+    const capture = await captureAlertState(
+      driver,
+      guarded ? window.signal : (driver.signal ?? neverSignal),
+    );
+    if (guarded && window.deadline.isExpired() && !driver.signal?.aborted) {
+      throw alertWindowExpiredError('no');
+    }
+    return driver.findCandidate(capture);
+  };
+}
+
+/**
+ * One seam capture. Inside its window the seam signal can cut the transport mid-flight; a
+ * capture refused by its own window signal is exactly the outrunning capture, and reports the
+ * typed cause. The caller's own cancellation always surfaces as the shared cancellation error.
+ */
+async function captureAlertState<TCapture>(
+  driver: ObserverDriver<TCapture, unknown>,
+  seamSignal: AbortSignal,
+): Promise<TCapture> {
+  try {
+    return await driver.capture({ signal: seamSignal });
+  } catch (error) {
+    if (driver.signal?.aborted) throw createRequestCanceledError();
+    if (seamSignal.aborted) throw alertWindowExpiredError('no');
+    throw error;
+  }
+}
+
+/**
+ * The failure one seam call took when its signal cut it off: the caller canceled, or the leg's
+ * window closed mid-capture. `dispatched` stays 'no' for pre-press legs; the confirm leg, which
+ * runs after a press already landed, maps it to its own stuck-alert failure instead.
+ */
+function alertSeamInterrupted(canceled: boolean): AppError {
+  if (canceled) throw createRequestCanceledError();
+  return alertWindowExpiredError('no');
+}
+
+function alertWindowExpiredError(dispatched: 'no'): AppError {
+  return new AppError('COMMAND_FAILED', 'alert window expired before the action could complete', {
+    reason: ALERT_WINDOW_EXPIRED_REASON,
+    dispatched,
+    hint: 'The capture outran the alert budget; nothing was pressed. Retry alert get to see the current state.',
+  });
+}
+
+function isAlertWindowExpired(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    (error.details as { reason?: unknown } | undefined)?.reason === ALERT_WINDOW_EXPIRED_REASON
+  );
+}
+
+/** The seam signal for a leg with no window and no caller cancellation: nothing can cancel it. */
+const neverSignal = new AbortController().signal;
 
 function alertWindowMs(timeoutMs: number | undefined): number {
   return typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs >= 0
@@ -167,27 +308,29 @@ function alertWindowMs(timeoutMs: number | undefined): number {
 }
 
 /**
- * Polls for an actionable candidate within the budget. The terminal answer distinguishes a
- * window that stayed quiet (`none`) from one that stayed alert-shaped yet unresolvable
- * (`undecided`): a degraded sheet that never resolved is not an absence, and callers must not
- * report the two alike.
+ * Polls for an actionable candidate within the budget, on the same deadline primitive the
+ * daemon's other polling loops ride. The terminal answer distinguishes a window that stayed
+ * quiet (`none`) from one that stayed alert-shaped yet unresolvable (`undecided`): a degraded
+ * sheet that never resolved is not an absence, and callers must not report the two alike.
  */
 async function pollTreeAlert<TCandidate>(
   observe: TreeAlertObserver<TCandidate>,
-  timeoutMs: number,
-  nap: TreeAlertSleep,
+  window: TreeAlertWindow,
+  signal?: AbortSignal,
 ): Promise<TreeAlertObservation<TCandidate>> {
-  const start = Date.now();
   let sawUndecided = false;
-  for (;;) {
-    const observation = await observe();
-    if (observation.kind === 'alert') return observation;
-    if (observation.kind === 'undecided') sawUndecided = true;
-    if (Date.now() - start >= timeoutMs) {
-      return sawUndecided ? { kind: 'undecided' } : { kind: 'none' };
-    }
-    await nap(ALERT_POLL_INTERVAL_MS);
-  }
+  const { settled, value } = await pollUntilSettled({
+    probe: observe,
+    settled: (observation) => {
+      if (observation.kind === 'undecided') sawUndecided = true;
+      return observation.kind === 'alert';
+    },
+    deadline: window.deadline,
+    intervalMs: ALERT_POLL_INTERVAL_MS,
+    signal,
+  });
+  if (settled) return value;
+  return sawUndecided ? { kind: 'undecided' } : { kind: 'none' };
 }
 
 /**
@@ -205,10 +348,26 @@ async function actOnTreeAlert<
 >(
   action: 'accept' | 'dismiss',
   driver: TreeAlertDriver<TCapture, TAlert, TButton, TCandidate, TPlatform>,
-  observe: TreeAlertObserver<TCandidate>,
-  nap: TreeAlertSleep,
 ): Promise<TreeAlertResult<TAlert, TPlatform>> {
-  const polled = await pollTreeAlert(observe, ALERT_ACTION_RETRY_MS, nap);
+  const lookupWindow = treeAlertWindow(ALERT_ACTION_RETRY_MS, driver.signal);
+  const observe = treeAlertObserver(driver, lookupWindow);
+  let polled: TreeAlertObservation<TCandidate>;
+  try {
+    polled = await pollTreeAlert(observe, lookupWindow, driver.signal);
+  } catch (error) {
+    if (isAlertWindowExpired(error)) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `alert ${action} refused: the action budget closed before an alert resolved`,
+        {
+          reason: ALERT_WINDOW_EXPIRED_REASON,
+          dispatched: 'no',
+          hint: 'Nothing was pressed. Retry alert get to see the current state.',
+        },
+      );
+    }
+    throw error;
+  }
   if (polled.kind === 'undecided') {
     throw new AppError(
       'COMMAND_FAILED',
@@ -241,8 +400,42 @@ async function actOnTreeAlert<
       },
     );
   }
-  await driver.press(choice);
-  await confirmTreeAlertDismissed(observe, candidate.alert, action, nap);
+  // The press rides the lookup's remaining window and the caller's cancellation: a press whose
+  // window closed before it went out has not pressed anything, and says so on a typed `no`.
+  const pressSignal = lookupWindow.signal;
+  if (pressSignal.aborted) throw alertSeamInterrupted(driver.signal?.aborted === true);
+  try {
+    await driver.press(choice, { signal: pressSignal });
+  } catch (error) {
+    // A press cut off mid-flight cannot report what the device already received: the tap may
+    // or may not have been dispatched. That uncertainty is typed, never a clean 'no'.
+    if (pressSignal.aborted) {
+      if (driver.signal?.aborted) throw createRequestCanceledError();
+      throw new AppError(
+        'COMMAND_FAILED',
+        `alert ${action} was cut off while pressing; the press may or may not have landed`,
+        {
+          reason: ALERT_WINDOW_EXPIRED_REASON,
+          dispatched: 'unknown',
+          alert: candidate.alert,
+          hint: 'Inspect alert get --json before retrying: the dialog may already be gone.',
+        },
+      );
+    }
+    throw error;
+  }
+  // The confirm window is its own budget: it only starts once the press has been dispatched,
+  // and it must not consume the lookup's already-spent window. A capture this phase cuts off
+  // lands after a press, so its failure keeps the stuck-alert phrasing, never "nothing was
+  // pressed" — the confirm observer maps its window expiry onto that failure below.
+  const confirmWindow = treeAlertWindow(ALERT_ACTION_RETRY_MS, driver.signal);
+  await confirmTreeAlertDismissed(
+    treeAlertObserver(driver, confirmWindow),
+    confirmWindow,
+    candidate.alert,
+    action,
+    driver.signal,
+  );
   return {
     kind: 'alertHandled',
     platform: driver.platform,
@@ -269,25 +462,40 @@ async function confirmTreeAlertDismissed<
   TCandidate extends TreeAlertCandidate<TAlert, TreeAlertButton>,
 >(
   observe: TreeAlertObserver<TCandidate>,
+  window: TreeAlertWindow,
   dismissed: TAlert,
   action: 'accept' | 'dismiss',
-  nap: TreeAlertSleep,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const start = Date.now();
-  for (;;) {
-    const observation = await observe();
-    if (observation.kind === 'none') return;
-    if (observation.kind === 'alert' && !sameTreeAlert(observation.candidate.alert, dismissed)) {
-      return;
-    }
-    if (Date.now() - start >= ALERT_ACTION_RETRY_MS) {
+  let settled: boolean;
+  try {
+    ({ settled } = await pollUntilSettled({
+      probe: observe,
+      settled: (observation) =>
+        observation.kind === 'none' ||
+        (observation.kind === 'alert' && !sameTreeAlert(observation.candidate.alert, dismissed)),
+      deadline: window.deadline,
+      intervalMs: ALERT_POLL_INTERVAL_MS,
+      signal,
+    }));
+  } catch (error) {
+    // A confirmation capture this phase cuts off says the same thing a budget spent without
+    // confirmation says — and it says it after a press landed, so the stuck-alert phrasing is
+    // the honest one here; the typed reason keeps the two causes distinguishable.
+    if (isAlertWindowExpired(error)) {
       throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
         alert: dismissed,
+        reason: ALERT_WINDOW_EXPIRED_REASON,
         hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
       });
     }
-    await nap(ALERT_POLL_INTERVAL_MS);
+    throw error;
   }
+  if (settled) return;
+  throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
+    alert: dismissed,
+    hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
+  });
 }
 
 /** Alert identity across a dismissal re-check: the same title and the same button row, in order. */
@@ -312,6 +520,12 @@ function buildTreeAlertStatusResponse<
     platform,
     action: 'get',
     alert: observation.kind === 'alert' ? observation.candidate.alert : null,
+    status:
+      observation.kind === 'alert'
+        ? 'visible'
+        : observation.kind === 'undecided'
+          ? 'undecided'
+          : 'none',
     ...(observation.kind === 'alert'
       ? successText('Alert visible')
       : observation.kind === 'undecided'
@@ -324,7 +538,9 @@ function buildTreeAlertStatusResponse<
 
 type AndroidAlertOptions = {
   timeoutMs?: number;
-  captureNodes: () => Promise<RawSnapshotNode[]>;
+  /** The daemon request's cancellation; the driver joins it into every capture and press. */
+  signal?: AbortSignal;
+  captureNodes: (seam: TreeAlertSeam) => Promise<RawSnapshotNode[]>;
 };
 
 export type AndroidAlertResult = TreeAlertResult<AndroidAlertInfo, 'android'>;
@@ -343,8 +559,9 @@ export async function handleAndroidAlert(
   >(action, {
     platform: 'android',
     timeoutMs: options.timeoutMs,
-    capture: () =>
-      withDiagnosticTimer('snapshot_capture', options.captureNodes, {
+    ...(options.signal ? { signal: options.signal } : {}),
+    capture: (seam) =>
+      withDiagnosticTimer('snapshot_capture', () => options.captureNodes(seam), {
         backend: 'android',
         purpose: 'alert',
       }),
@@ -361,12 +578,14 @@ export async function handleAndroidAlert(
       // key means. The refusal message and typed reason come from the driver, not from here.
       return act === 'dismiss' ? { kind: 'fallback', label: 'Back' } : null;
     },
-    press: async (choice) => {
+    press: async (choice, seam) => {
+      // The adb executor kills the child on abort, so the press transport itself stops with the
+      // leg's signal; whether a canceled tap still reached the device stays typed upstream.
       if (choice.kind === 'press') {
-        await pressAndroid(device, choice.button.x, choice.button.y);
+        await pressAndroid(device, choice.button.x, choice.button.y, { signal: seam.signal });
         return;
       }
-      await backAndroid(device);
+      await backAndroid(device, { signal: seam.signal });
     },
   });
 }
