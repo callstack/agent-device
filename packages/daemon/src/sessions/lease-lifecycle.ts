@@ -91,7 +91,7 @@ export async function endLeasedSession(
       data: { reason, leaseId, session: session.name, error: errorMessage(error) },
     });
   });
-  await clearDeviceClaim(session.deviceClaim).catch((error) => {
+  await clearDeviceClaim(session.deviceClaim, process.env).catch((error) => {
     emitDiagnostic({
       level: 'warn',
       phase: 'leased_session_end_device_claim_clear_failed',

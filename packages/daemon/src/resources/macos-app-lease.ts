@@ -5,7 +5,7 @@ import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { readMacOsAppBackend } from '@agent-device/contracts/session';
 import { runCmd } from '@agent-device/host-kit/command';
-import { isProcessAlive, readHostEnvironmentVariable } from '@agent-device/host-kit/process';
+import { isProcessAlive } from '@agent-device/host-kit/process';
 import { isMacOs } from '@agent-device/kernel/device';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { isAppLeaseAllowed } from '../core/daemon-command-registry.ts';
@@ -257,7 +257,7 @@ function assertOpensLeasedApp(key: MacOsAppLeaseKey, positionals: readonly strin
  * every action inside the session app.
  */
 function assertNativeBackend(): void {
-  if (readMacOsAppBackend(readHostEnvironmentVariable) === 'native') return;
+  if (readMacOsAppBackend((name) => process.env[name]) === 'native') return;
   throw macOsAppLeaseDenied(
     'backend',
     'A macos-app lease needs the native macOS app backend (AGENT_DEVICE_MACOS_APP_BACKEND=native).',

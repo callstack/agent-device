@@ -37,7 +37,7 @@ async function handleReplayExportCommand({
     throw new AppError('INVALID_ARGS', 'replay export requires an input path.');
   }
 
-  const sourcePath = resolveUserPath(inputPath);
+  const sourcePath = resolveUserPath(inputPath, { cwd: process.cwd() });
   const script = fs.readFileSync(sourcePath, 'utf8');
   const parsed = parseReplayScriptDetailed(script);
   // `replay export` exports to Maestro, so the conversion goes through that backend's registry
@@ -50,7 +50,8 @@ async function handleReplayExportCommand({
     actionLines: parsed.actionLines,
     metadata: readReplayScriptMetadata(script),
   });
-  const outputPath = typeof flags.out === 'string' ? resolveUserPath(flags.out) : undefined;
+  const outputPath =
+    typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: process.cwd() }) : undefined;
   if (outputPath) {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     fs.writeFileSync(outputPath, result.yaml);

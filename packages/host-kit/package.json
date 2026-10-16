@@ -52,6 +52,10 @@
       "types": "./src/file.ts",
       "default": "./src/file.ts"
     },
+    "./host-environment": {
+      "types": "./src/host-environment.ts",
+      "default": "./src/host-environment.ts"
+    },
     "./host-file": {
       "types": "./src/host-file.ts",
       "default": "./src/host-file.ts"

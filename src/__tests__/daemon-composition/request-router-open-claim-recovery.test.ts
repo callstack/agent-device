@@ -92,7 +92,7 @@ import {
   makeIosDevice,
   openRequest,
 } from '@agent-device/daemon/testing/__tests__/request-router-open-harness';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
@@ -101,6 +101,7 @@ const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
 function createOpenHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
   return createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -249,7 +250,9 @@ test('open reconciles a foreign dead owner through that owner state dir, never t
     expect(fs.existsSync(path.join(foreignSessionDir, 'owned-processes.json'))).toBe(false);
     expect(fs.readFileSync(liveRecordPath, 'utf8')).toBe(liveRecordBefore);
     expect(isProcessAlive(orphan.marker.pid)).toBe(false);
-    expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.session).toBe('takeover');
+    expect(inspectDeviceClaims({ udid: device.id }, process.env)[0]?.claim?.session).toBe(
+      'takeover',
+    );
   } finally {
     try {
       orphan.child.kill('SIGKILL');

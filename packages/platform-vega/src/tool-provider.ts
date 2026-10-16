@@ -93,7 +93,7 @@ let cachedVegaCliExecutable: string | undefined;
 
 async function resolveVegaCliExecutable(): Promise<string | undefined> {
   if (cachedVegaCliExecutable) return cachedVegaCliExecutable;
-  if (await whichCmd('vega')) {
+  if (await whichCmd('vega', process.env)) {
     cachedVegaCliExecutable = 'vega';
     return cachedVegaCliExecutable;
   }

@@ -12,7 +12,7 @@ import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-adm
 import { appleSessionRequiredRefusal } from './session-appstate-apple-session.ts';
 
 function sortedAndroidSerialAllowlist(value: string | undefined): string[] | undefined {
-  const allowlist = resolveAndroidSerialAllowlist(value);
+  const allowlist = resolveAndroidSerialAllowlist(value, process.env);
   return allowlist ? [...allowlist].sort() : undefined;
 }
 

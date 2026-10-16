@@ -14,12 +14,13 @@ import { buildIdleExpiryTombstone } from '../session-idle-expiry.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 function makeHandler(prefix: string) {
   const sessionStore = makeSessionStore(prefix);
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

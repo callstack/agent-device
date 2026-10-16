@@ -14,6 +14,7 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import {
   mkdtempForTestSync,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
@@ -46,6 +47,7 @@ test('fresh default-device recording starts serialize before durable admission',
   const runtime = makeRecordingGateway(firstStartBlocked);
   const sessionStore = makeSessionStore('request-router-record-runtime-lock-');
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 'token',
@@ -97,6 +99,7 @@ test.each([
     });
     const bind = vi.fn(async (request) => await gateway.bind(request));
     const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
       createCommandSurface: testCreateCommandSurface,
       logPath: '/tmp/daemon.log',
       token: 'token',

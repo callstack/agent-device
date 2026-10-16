@@ -32,7 +32,11 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
   };
 });
 
-import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  IOS_SIMULATOR,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
@@ -73,6 +77,7 @@ test('replay runs active-session actions inside the parent request provider scop
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -112,6 +117,7 @@ test('replay routes session-changing actions through the full request path', asy
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -148,6 +154,7 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
   const sessionStore = makeSessionStore('agent-device-replay-open-scope-');
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -215,6 +222,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
   });
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

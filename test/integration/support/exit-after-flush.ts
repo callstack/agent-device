@@ -14,7 +14,7 @@ if (cliPayloadMarker) {
 } else if (process.argv.includes('--success')) {
   const { runCliProcess } = await import('../../../src/cli/process-entry.ts');
   const { printJson } = await import('../../../src/commands/output/json.ts');
-  await runCliProcess([], async () => ({
+  await runCliProcess([], { env: process.env, cwd: process.cwd() }, async () => ({
     runCli: async () => {
       printJson({ success: true, data: { payload: `${'x'.repeat(256_000)}${PAYLOAD_MARKER}` } });
     },

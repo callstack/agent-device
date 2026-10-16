@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   stopDaemonProcess,
   waitForDaemonExit,
@@ -246,6 +247,8 @@ export function launchDaemonProcess(
     paths: DaemonPaths;
     args: string[];
     serverMode: DaemonServerMode;
+    /** The environment the daemon process starts with, before the state dir and mode overrides. */
+    env: EnvMap;
     ownedStateDir?: OwnedReplayStateDir;
   }>,
 ): DaemonStartupLaunch {
@@ -259,7 +262,7 @@ export function launchDaemonProcess(
   try {
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
       env: {
-        ...process.env,
+        ...input.env,
         AGENT_DEVICE_STATE_DIR: input.paths.baseDir,
         AGENT_DEVICE_DAEMON_SERVER_MODE: input.serverMode,
       },

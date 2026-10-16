@@ -8,6 +8,9 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { withCommandHost } from '@agent-device/host-kit/command';
+import { captureHostEnvironment } from '@agent-device/host-kit/host-environment';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
@@ -105,14 +108,25 @@ const REMOTE_MATERIALIZATION_DEFERRED_COMMANDS = new Set([
   'takeover',
 ]);
 
-export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): Promise<void> {
+export async function runCli(
+  argv: string[],
+  deps: CliDeps = DEFAULT_CLI_DEPS,
+  host: HostEnvironment = captureHostEnvironment(process),
+): Promise<void> {
+  await withCommandHost(
+    { host, requestEnv: undefined },
+    async () => await runCliOnHost(argv, deps, host),
+  );
+}
+
+async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment): Promise<void> {
   const requestId = createRequestId();
   const version = readVersion();
   const debugEnabled = isDebugRequested(argv);
   const jsonRequested = argv.includes('--json');
   // Best-effort session guess used only for pre-parse diagnostics scope.
   // After parse succeeds, request dispatch uses parsed flags/session resolution.
-  const sessionGuess = guessSessionFromArgv(argv) ?? process.env.AGENT_DEVICE_SESSION ?? 'default';
+  const sessionGuess = guessSessionFromArgv(argv) ?? host.env.AGENT_DEVICE_SESSION ?? 'default';
 
   await withDiagnosticsScope(
     {
@@ -123,12 +137,14 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
     },
     async () => {
       const { parsed, command, positionals } = await parseCliInputOrExit(argv, {
+        host,
         version,
         jsonRequested,
         debugEnabled,
       });
       const debugOutputEnabled = isParsedDebugRequested(command, parsed.providedFlags);
       const ctx = await resolveRunContextOrExit(parsed, {
+        host,
         command,
         positionals,
         requestId,
@@ -164,8 +180,8 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
             await runAgentCdpCommand(positionals, {
               flags: ctx.effectiveFlags,
               runtime: ctx.resolvedRuntime,
-              cwd: process.cwd(),
-              env: process.env,
+              cwd: host.cwd,
+              env: host.env,
             }),
           );
           return;
@@ -174,6 +190,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
         const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
         const commandProgress = createCommandProgressState();
         const client = createAgentDeviceClient(buildClientConfig(ctx), {
+          host: ctx.host,
           transport: createCliDaemonTransport({
             command,
             flags: ctx.effectiveFlags,
@@ -204,11 +221,16 @@ type ParsedCliInput = {
 
 async function parseCliInputOrExit(
   argv: string[],
-  options: { version: string; jsonRequested: boolean; debugEnabled: boolean },
+  options: {
+    host: HostEnvironment;
+    version: string;
+    jsonRequested: boolean;
+    debugEnabled: boolean;
+  },
 ): Promise<ParsedCliInput> {
   let parsed: ReturnType<typeof resolveCliOptions>;
   try {
-    parsed = resolveCliOptions(argv, { cwd: process.cwd(), env: process.env });
+    parsed = resolveCliOptions(argv, { cwd: options.host.cwd, env: options.host.env });
   } catch (error) {
     emitDiagnostic({
       level: 'error',
@@ -269,6 +291,7 @@ async function parseCliInputOrExit(
 }
 
 type CliRunContext = {
+  host: HostEnvironment;
   command: string;
   positionals: string[];
   requestId: string;
@@ -291,7 +314,13 @@ type CliRunContext = {
 
 async function resolveRunContextOrExit(
   parsed: ReturnType<typeof resolveCliOptions>,
-  base: { command: string; positionals: string[]; requestId: string; debugOutputEnabled: boolean },
+  base: {
+    host: HostEnvironment;
+    command: string;
+    positionals: string[];
+    requestId: string;
+    debugOutputEnabled: boolean;
+  },
 ): Promise<CliRunContext> {
   const explicitFlagKeys = new Set(parsed.providedFlags.map((entry) => entry.key));
   try {
@@ -307,9 +336,13 @@ async function resolveRunContextOrExit(
           configuredPlatform: parsed.flags.platform,
           configuredSession: parsed.flags.session,
         });
-    const daemonPaths = resolveDaemonPaths(flags.stateDir);
+    const daemonPaths = resolveDaemonPaths(flags.stateDir, {
+      env: base.host.env,
+      cwd: base.host.cwd,
+    });
     const sessionName = flags.session ?? 'default';
     const connectionDefaults = resolveActiveConnectionDefaults({
+      host: base.host,
       command: base.command,
       explicitFlagKeys,
       stateDir: daemonPaths.baseDir,
@@ -370,13 +403,14 @@ async function resolveRemoteContext(ctx: CliRunContext, deps: CliDeps): Promise<
       command: ctx.command,
       flags: ctx.effectiveFlags,
       stateDir: ctx.daemonPaths.baseDir,
-      env: process.env,
+      env: ctx.host.env,
     });
     ctx.effectiveFlags = authResolution.flags;
   }
 
   if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
     const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
+      host: ctx.host,
       transport: createClientDaemonTransport(deps.sendToDaemon),
     });
     const { materializeRemoteConnectionForCommand } =
@@ -451,7 +485,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     runtime: ctx.resolvedRuntime,
     lockPolicy: ctx.binding.lockPolicy,
     lockPlatform: ctx.binding.defaultPlatform,
-    cwd: process.cwd(),
+    cwd: ctx.host.cwd,
     debug: ctx.debugOutputEnabled,
     cost: currentFlags.cost,
     responseLevel: currentFlags.responseLevel,
@@ -684,6 +718,7 @@ function isDaemonStartupFailure(error: AppError): boolean {
 }
 
 function resolveActiveConnectionDefaults(options: {
+  host: HostEnvironment;
   command: string;
   explicitFlagKeys: Set<FlagKey>;
   stateDir: string;
@@ -708,8 +743,8 @@ function resolveActiveConnectionDefaults(options: {
     stateDir: options.stateDir,
     session: options.session,
     remoteConfig: options.remoteConfig,
-    cwd: process.cwd(),
-    env: process.env,
+    cwd: options.host.cwd,
+    env: options.host.env,
     allowActiveFallback:
       !options.explicitFlagKeys.has('session') &&
       (!options.remoteConfig || options.command === 'disconnect' || !options.hasResolvedSession),

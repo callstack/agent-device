@@ -69,7 +69,7 @@ test('a caller naming a policy refuses a running daemon that enforces a differen
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'DAEMON_POLICY_MISMATCH');
         assert.equal(error.details?.daemonPolicyDigest, otherDigest);
-        assert.equal(error.details?.expectedPolicyDigest, loadDaemonPolicy()?.digest);
+        assert.equal(error.details?.expectedPolicyDigest, loadDaemonPolicy(process.env)?.digest);
         return true;
       },
     );
@@ -153,7 +153,9 @@ async function startReusableDaemon(options: {
         codeSignature: currentDaemonCodeSignature(),
         processStartTime: readProcessStartTime(process.pid) ?? undefined,
         policyDigest:
-          options.policyDigest === 'matching' ? loadDaemonPolicy()?.digest : options.policyDigest,
+          options.policyDigest === 'matching'
+            ? loadDaemonPolicy(process.env)?.digest
+            : options.policyDigest,
       })}\n`,
     );
   if (options.publish === 'on-spawn') {

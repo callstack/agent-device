@@ -1,3 +1,4 @@
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   resolveSessionRequestLog,
   resolveSessionRunnerLogPath,
@@ -117,6 +118,8 @@ const gatewayMissing = async (): Promise<never> => {
 };
 
 export type RequestExecutionScope = AsyncDisposable & {
+  /** The environment and working directory of the daemon serving this request. */
+  host: HostEnvironment;
   req: DaemonRequest;
   command: string;
   sessionName: string;
@@ -165,6 +168,7 @@ type LockedRequestScopeResult =
   | { type: 'response'; response: DaemonResponse };
 
 export async function createRequestExecutionScope(params: {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
@@ -256,9 +260,10 @@ export async function createRequestExecutionScope(params: {
     });
     const dispatchLedger = requestDispatchLedger(scopedReq);
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
+      env: params.host.env,
       command,
       dispatchLedger,
-      workspace: scopedReq.meta?.cwd ?? process.cwd(),
+      workspace: scopedReq.meta?.cwd ?? params.host.cwd,
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
@@ -267,6 +272,7 @@ export async function createRequestExecutionScope(params: {
     });
 
     const scope: RequestExecutionScope = {
+      host: params.host,
       req: scopedReq,
       command,
       sessionName,
@@ -390,6 +396,7 @@ export async function createRequestExecutionScope(params: {
  * stays out of the claim store.
  */
 function createRequestDeviceAccess(params: {
+  env: EnvMap;
   command: string;
   dispatchLedger: RequestDispatchLedger;
   workspace: string;
@@ -411,6 +418,7 @@ function createRequestDeviceAccess(params: {
     command: params.command,
     workspace: params.workspace,
     stateDir: params.stateDir,
+    env: params.env,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
       scope: platformRequestScope,
       composeGateway: params.claimRecoveryGateway,

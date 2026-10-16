@@ -74,7 +74,7 @@ export async function handleAppDeploymentCommand(params: {
   try {
     const appPath = uploadedArtifactId
       ? prepareUploadedArtifact(uploadedArtifactId, req.meta?.tenantId)
-      : expandSessionPath(target.appPathInput);
+      : expandSessionPath(target.appPathInput, process.cwd());
     if (!fs.existsSync(appPath)) {
       return errorResponse('INVALID_ARGS', `App binary not found: ${appPath}`);
     }
@@ -300,7 +300,7 @@ function resolvePushPayload(payloadArg: string, cwd?: string): string {
   const resolved = resolvePayloadInput(payloadArg, {
     subject: 'Push payload',
     cwd,
-    expandPath: (value, currentCwd) => expandSessionPath(value, currentCwd),
+    expandPath: (value, currentCwd) => expandSessionPath(value, currentCwd ?? process.cwd()),
   });
   return resolved.kind === 'file' ? resolved.path : resolved.text;
 }

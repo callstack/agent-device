@@ -32,6 +32,7 @@ async function publishLeasedSession(
     lease: { leaseId, tenantId: 'tenant-a', runId: 'run-1' },
   });
   const acquired = await acquireDeviceClaim({
+    env: process.env,
     device: session.device,
     session: name,
     workspace: stateDir,

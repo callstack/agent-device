@@ -75,15 +75,18 @@ import {
 } from '@agent-device/kernel/record';
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { captureHostEnvironment } from '@agent-device/host-kit/host-environment';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
 import { createRequestGuard } from './daemon-client/daemon-client-transport.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
-  deps: { transport?: AgentDeviceDaemonTransport } = {},
+  deps: { transport?: AgentDeviceDaemonTransport; host?: HostEnvironment } = {},
 ): AgentDeviceClient {
   const transport = deps.transport ?? sendToDaemon;
+  const host = deps.host ?? captureHostEnvironment(process);
 
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the
@@ -209,7 +212,10 @@ export function createAgentDeviceClient(
       // Pure local resolution; mirrors how the daemon client picks its state dir.
       stateDir: async (options = {}) => {
         const merged = mergeClientOptions(config, options);
-        return resolveDaemonPaths(merged.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir;
+        return resolveDaemonPaths(merged.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR, {
+          env: host.env,
+          cwd: host.cwd,
+        }).baseDir;
       },
       close: async (options = {}) => {
         const session = resolveRequestSession(options);

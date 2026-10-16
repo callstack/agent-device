@@ -546,7 +546,7 @@ async function clearExpiredClaim(
 ): Promise<DeviceClaimClearOutcome | typeof CLAIM_CLEAR_FAILED> {
   if (!ownership) return 'absent';
   try {
-    return await clearDeviceClaim(ownership);
+    return await clearDeviceClaim(ownership, process.env);
   } catch (error) {
     emitDiagnostic({
       level: 'warn',

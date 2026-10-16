@@ -1,4 +1,8 @@
-import { ANDROID_EMULATOR, deviceClaimFilePath } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  deviceClaimFilePath,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import {
   daemonPlatformServicesFixture,
@@ -30,6 +34,7 @@ const localAndroid = localRuntimeOwner('android');
 
 function makeAdmission(policy: DeviceClaimPolicy, stateDir: string, command = 'made-up-command') {
   return createDeviceClaimAdmission({
+    env: process.env,
     policy,
     command,
     workspace: '/worktrees/current',
@@ -39,7 +44,7 @@ function makeAdmission(policy: DeviceClaimPolicy, stateDir: string, command = 'm
 }
 
 function claimedSessions(): (string | undefined)[] {
-  return inspectDeviceClaims({}).map((entry) => entry.claim?.session);
+  return inspectDeviceClaims({}, process.env).map((entry) => entry.claim?.session);
 }
 
 // Enforcement is a pure function of the declared policy, not of a command name:
@@ -64,7 +69,7 @@ test.for(POLICY_CLAIMS)(
     expect(claimedSessions()).toEqual(held);
 
     await admission[Symbol.asyncDispose]();
-    expect(inspectDeviceClaims({})).toEqual([]);
+    expect(inspectDeviceClaims({}, process.env)).toEqual([]);
     // A claim-free policy never even creates the store.
     if (held.length === 0) expect(fs.existsSync(claimsDir)).toBe(false);
   },
@@ -75,6 +80,7 @@ test('a foreign live claim refuses the command before it can reach device operat
   const ownerStateDir = path.join(root, 'foreign');
   fs.mkdirSync(ownerStateDir, { recursive: true });
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'owner-session',
     workspace: '/worktrees/foreign',
@@ -102,6 +108,7 @@ test('a foreign live claim refuses the command before it can reach device operat
 test('a claim already held by this daemon covers the command instead of colliding with it', async () => {
   const { stateDir } = setup();
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'open-session',
     workspace: '/worktrees/current',
@@ -120,6 +127,7 @@ test('a claim already held by this daemon covers the command instead of collidin
 test("an abandoned claim becomes this command's own transient claim and is released", async () => {
   const { stateDir } = setup();
   const aborted = await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'aborted-open',
     workspace: '/worktrees/current',
@@ -128,7 +136,7 @@ test("an abandoned claim becomes this command's own transient claim and is relea
   });
   expect(aborted.status).toBe('acquired');
   if (aborted.status !== 'acquired') return;
-  expect(await abandonDeviceClaim(aborted.ownership)).toBe('abandoned');
+  expect(await abandonDeviceClaim(aborted.ownership, process.env)).toBe('abandoned');
 
   const admission = makeAdmission('transient-exclusive', stateDir, 'install');
   await admission.admit(ANDROID_EMULATOR, localAndroid);
@@ -136,7 +144,7 @@ test("an abandoned claim becomes this command's own transient claim and is relea
   // Coverage would have left the abandoned record owning the device with nothing to release it.
   expect(claimedSessions()).toEqual(['transient:install']);
   await admission[Symbol.asyncDispose]();
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
 test('a provider-owned device takes no host-local claim', async () => {
@@ -205,6 +213,7 @@ test('the none policy still reaches no device state at all', async () => {
   const ownerStateDir = path.join(root, 'foreign');
   fs.mkdirSync(ownerStateDir, { recursive: true });
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'owner-session',
     workspace: '/worktrees/foreign',
@@ -223,6 +232,7 @@ test('the none policy still reaches no device state at all', async () => {
 /** Claims visible while one command holds a device binding from the real request scope. */
 async function claimsWhileBound(command: string, stateDir: string) {
   const scope = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: { token: 't', session: 'default', command, positionals: [], flags: {} },
@@ -252,5 +262,5 @@ test('the request scope claims only for commands whose descriptor declares trans
   // Same binding call, same device: the difference is the descriptor policy.
   expect(await claimsWhileBound('shutdown', stateDir)).toEqual(['transient:shutdown']);
   expect(await claimsWhileBound('snapshot', stateDir)).toEqual([]);
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });

@@ -24,6 +24,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   waitForHttpOk,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 
 type DaemonInfoFile = {
@@ -82,11 +83,13 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
   try {
     const runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
       exit: (code) => {
         exitCode = code;
       },
@@ -127,11 +130,13 @@ test('daemon runtime publishes dual transport metadata', async () => {
   try {
     const runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'dual',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'dual',
+        },
+      }),
       exit: (code) => {
         exitCode = code;
       },
@@ -178,14 +183,16 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
   try {
     runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        BROWSERSTACK_USERNAME: 'user',
-        BROWSERSTACK_ACCESS_KEY: 'key',
-        BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `http://127.0.0.1:${providerPort}/sessions`,
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          BROWSERSTACK_USERNAME: 'user',
+          BROWSERSTACK_ACCESS_KEY: 'key',
+          BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `http://127.0.0.1:${providerPort}/sessions`,
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },
@@ -309,12 +316,14 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
 
     const runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        AGENT_DEVICE_CLAIMS_DIR: claimsDir,
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_CLAIMS_DIR: claimsDir,
+        },
+      }),
       exit: (code) => {
         exitCode = code;
       },
@@ -435,12 +444,14 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
 
     runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: daemonStateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        AGENT_DEVICE_CLAIMS_DIR: claimsDir,
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: daemonStateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_CLAIMS_DIR: claimsDir,
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },

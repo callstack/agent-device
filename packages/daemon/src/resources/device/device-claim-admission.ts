@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -37,6 +38,7 @@ export function createDeviceClaimAdmission(params: {
   command: string;
   workspace: string;
   stateDir: string;
+  env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }): DeviceClaimAdmission {
   // The caller admits once per device binding, so this only has to remember what
@@ -55,6 +57,7 @@ export function createDeviceClaimAdmission(params: {
       command: params.command,
       workspace: params.workspace,
       stateDir: params.stateDir,
+      env: params.env,
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
     });
     if (result.status === 'conflict') throw deviceClaimConflictError(device, result.conflict);
@@ -73,7 +76,7 @@ export function createDeviceClaimAdmission(params: {
     [Symbol.asyncDispose]: async () => {
       for (const ownership of acquired.splice(0)) {
         try {
-          await clearDeviceClaim(ownership);
+          await clearDeviceClaim(ownership, params.env);
         } catch (error) {
           emitDiagnostic({
             level: 'error',

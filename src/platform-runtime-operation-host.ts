@@ -64,7 +64,8 @@ export function createPlatformRuntimeHost(options: {
   const localProcessTransport = Object.freeze({ mode: 'local' as const, start: processes.start });
   const appleTools = createAppleToolHost();
   const commands = Object.freeze({
-    which: async (executable: string) => ((await whichCmd(executable)) ? executable : undefined),
+    which: async (executable: string) =>
+      (await whichCmd(executable, process.env)) ? executable : undefined,
     run: async (request: HostCommandRequest, signal?: AbortSignal) => {
       const result = await runCmd(request.executable, guardedHostCommandArgv(request), {
         allowFailure: request.allowFailure,

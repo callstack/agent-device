@@ -36,7 +36,11 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-import { ANDROID_DEVICE, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  ANDROID_DEVICE,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { replayScriptSourceBundleFor } from '../test-utils/replay-script-source.fixtures.ts';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
@@ -62,6 +66,7 @@ async function runAndroidFlowReplay(session: string, flags: Record<string, unkno
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'open com.example.demo\n');
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

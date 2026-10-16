@@ -71,7 +71,7 @@ export function createDaemonShutdownClaimLedger(): DaemonShutdownClaimLedger {
     releaseClaim: async (session) => {
       if (!session.deviceClaim) return;
       try {
-        outcomes.set(session.name, await clearDeviceClaim(session.deviceClaim));
+        outcomes.set(session.name, await clearDeviceClaim(session.deviceClaim, process.env));
       } catch (error) {
         outcomes.set(session.name, CLEAR_UNRECORDED);
         emitDiagnostic({

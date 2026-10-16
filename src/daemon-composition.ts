@@ -75,7 +75,7 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
   input,
 ): Promise<DaemonRuntimeDeps> => {
   const {
-    env,
+    host: { env },
     baseDir,
     sessionsDir,
     assertShutdownAllowed,

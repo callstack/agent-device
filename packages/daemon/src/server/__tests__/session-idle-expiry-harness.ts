@@ -118,6 +118,7 @@ export function createIdleExpiryHarness(): Readonly<{
     sessionWithLiveClaim: async (fixture, name = 'default') => {
       const { stateDir } = fixture.claims;
       const acquired = await acquireDeviceClaim({
+        env: process.env,
         device: IOS_SIMULATOR,
         session: name,
         workspace: stateDir,

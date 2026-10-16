@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import {
   cleanupDownloadableArtifact,
@@ -19,13 +19,15 @@ async function downloadTrackedArtifact(env: Record<string, string>, awaitConsump
     fileName: 'runtime-artifact.txt',
   });
   const runtime = await startDaemonRuntime({
-    env: {
-      ...process.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      ...env,
-    },
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        ...env,
+      },
+    }),
     exit: () => {},
     registerProcessHandlers: false,
     stderr: { write: () => {} },

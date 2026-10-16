@@ -36,7 +36,7 @@ import {
   PRE_DISPATCH_REFUSAL_REASONS,
   retriableForErrorCode,
 } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 const mockLifecycleEffect = vi.mocked(dispatchApplicationLifecycleEffect);
 
@@ -65,6 +65,7 @@ function makeHandler(sessionStore = makeSessionStore('agent-device-router-typed-
   return {
     sessionStore,
     handler: createRequestHandler({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',

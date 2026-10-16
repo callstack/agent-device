@@ -7,7 +7,6 @@ import {
   writeHostTextFileSync,
 } from '@agent-device/host-kit/host-file';
 import {
-  hostEnvironment,
   hostNodeExecutablePath,
   hostNodeVersion,
   hostPlatform,
@@ -35,7 +34,7 @@ export async function installManagedAgentBrowserPackage(params: {
     '--no-save',
     params.packageSpec,
   ]);
-  await runCmd(npm.command, npm.args, { env: hostEnvironment(), timeoutMs: params.timeoutMs });
+  await runCmd(npm.command, npm.args, { env: process.env, timeoutMs: params.timeoutMs });
 }
 
 export function writeManagedAgentBrowserManifest(params: {
@@ -66,7 +65,7 @@ export function writeManagedAgentBrowserManifest(params: {
  */
 function npmCommand(args: string[]): { command: string; args: string[] } {
   if (hostPlatform() !== 'win32') return { command: 'npm', args };
-  const npmCliScript = resolveWindowsNpmCliScript(hostEnvironment());
+  const npmCliScript = resolveWindowsNpmCliScript(process.env);
   if (!npmCliScript) {
     throw new AppError('TOOL_MISSING', 'npm not found in PATH', {
       nodeExecPath: hostNodeExecutablePath(),

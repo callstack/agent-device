@@ -166,6 +166,7 @@ export async function createProviderScenarioHarness(
         })
       : unavailableDeviceRuntimeGateway);
   const requestHandler = createRequestHandler({
+    host: { env: process.env, cwd: process.cwd() },
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(os.tmpdir(), 'agent-device-provider-scenario-daemon.log'),
     token: PROVIDER_SCENARIO_TOKEN,

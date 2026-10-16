@@ -3,7 +3,6 @@ import { uniqueStrings } from '@agent-device/kernel/collections';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { hostFileStatSync, readHostDirectorySync } from '@agent-device/host-kit/host-file';
 import {
-  hostEnvironment,
   type OwnedProcessRecordStore,
   reapOwnedProcessRecordsAtStartup,
 } from '@agent-device/host-kit/process';
@@ -63,7 +62,7 @@ export async function cleanupManagedAgentBrowserOrphans(
     return skippedCleanupResult('open-web-session', { openWebSessionNames });
   }
 
-  const idleTimeoutMs = resolveAgentBrowserIdleTimeoutMs(hostEnvironment());
+  const idleTimeoutMs = resolveAgentBrowserIdleTimeoutMs(process.env);
   const latestActivityMs = readLatestManagedBrowserActivityMs(status);
   if (latestActivityMs !== undefined && Date.now() - latestActivityMs < idleTimeoutMs) {
     return skippedCleanupResult('recent-browser-activity', { idleTimeoutMs, latestActivityMs });

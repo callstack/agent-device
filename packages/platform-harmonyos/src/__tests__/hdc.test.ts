@@ -7,13 +7,8 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
 });
-vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
-  return { ...actual, hostEnvironment: vi.fn() };
-});
 
 import { runCmd } from '@agent-device/host-kit/command';
-import { hostEnvironment } from '@agent-device/host-kit/process';
 import {
   DEFAULT_HARMONY_HDC_TIMEOUT_MS,
   ensureHarmonyToolchainPathConfigured,
@@ -143,10 +138,10 @@ test('ensureHarmonyToolchainPathConfigured creates PATH and dedupes a root alrea
 
 test('ensureHarmonyToolchainPathConfigured defaults to the host environment', async () => {
   const toolchains = await seedDirectToolchain(mkdtempForTestSync('agent-device-hdc-host-'));
-  const hostEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin', HDC_SDK_PATH: toolchains };
-  vi.mocked(hostEnvironment).mockReturnValue(hostEnv);
+  vi.stubEnv('PATH', '/usr/bin');
+  vi.stubEnv('HDC_SDK_PATH', toolchains);
 
   await ensureHarmonyToolchainPathConfigured();
 
-  assert.equal(hostEnv.PATH, [toolchains, '/usr/bin'].join(path.delimiter));
+  assert.equal(process.env.PATH, [toolchains, '/usr/bin'].join(path.delimiter));
 });

@@ -10,6 +10,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { limrunTestDependencies } from '../../platform-runtime-gateway.fixtures.ts';
@@ -53,6 +54,7 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
   const token = 'limrun-http-test-token';
   const leaseRegistry = new LeaseRegistry();
   const handleRequest = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(
       mkdtempForTestSync('agent-device-limrun-http-access'),

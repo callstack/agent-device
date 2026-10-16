@@ -18,12 +18,15 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }
     throw new AppError('INVALID_ARGS', 'device accepts only: status, release');
   }
   if (positionals[0] === 'release') return await runDeviceRelease(flags);
-  const inspectedClaims = inspectDeviceClaims({
-    platform: flags.platform,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-  });
+  const inspectedClaims = inspectDeviceClaims(
+    {
+      platform: flags.platform,
+      device: flags.device,
+      udid: flags.udid,
+      serial: flags.serial,
+    },
+    process.env,
+  );
   const staleClaims = inspectedClaims.filter((claim) =>
     deviceClaimRequiresStaleInspection(claim.classification),
   );
@@ -66,12 +69,15 @@ async function runDeviceRelease(flags: CliFlags): Promise<boolean> {
     );
   }
   const { runStaleDeviceClaimRelease } = await import('../../platform-runtime-claim-recovery.ts');
-  const outcomes = await runStaleDeviceClaimRelease({
-    platform: flags.platform,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-  });
+  const outcomes = await runStaleDeviceClaimRelease(
+    {
+      platform: flags.platform,
+      device: flags.device,
+      udid: flags.udid,
+      serial: flags.serial,
+    },
+    process.env,
+  );
   const data = {
     released: outcomes.filter((outcome) => outcome.status === 'released').map(serializeOutcome),
     retained: outcomes.filter((outcome) => outcome.status === 'retained').map(serializeOutcome),

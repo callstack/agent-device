@@ -169,7 +169,7 @@ async function devicesInventoryResponse(req: DaemonRequest): Promise<DaemonRespo
 
 function blockingClaimOwnersByDevice(): Map<string, { session: string; workspace: string }> {
   const owners = new Map<string, { session: string; workspace: string }>();
-  for (const entry of inspectDeviceClaims({})) {
+  for (const entry of inspectDeviceClaims({}, process.env)) {
     const claim = entry.claim;
     if (!claim || deviceClaimOwnerCannotRelease(entry.classification)) continue;
     owners.set(claim.deviceKey, {
@@ -220,11 +220,12 @@ function inventoryIosSimulatorSetPath(
     requestedSetPath: configuredPath,
     platform,
     target,
+    env: process.env,
   });
 }
 
 function inventoryAndroidSerialAllowlist(configuredAllowlist: string | undefined) {
-  const allowlist = resolveAndroidSerialAllowlist(configuredAllowlist);
+  const allowlist = resolveAndroidSerialAllowlist(configuredAllowlist, process.env);
   return allowlist ? Array.from(allowlist).sort() : undefined;
 }
 
@@ -362,6 +363,7 @@ async function handleAppsInventory(params: {
 
   const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
     req.flags?.androidDeviceAllowlist,
+    process.env,
   );
   const runtimeResolution = await resolveAppsRuntime({
     device,

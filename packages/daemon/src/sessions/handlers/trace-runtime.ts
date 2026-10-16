@@ -32,7 +32,10 @@ function startTrace(
 ): DaemonResponse {
   const session = sessionStore.requireCurrent(ref);
   if (session.trace) return errorResponse('INVALID_ARGS', 'trace already in progress');
-  const outPath = expandSessionPath(req.positionals?.[1] ?? sessionStore.defaultTracePath(session));
+  const outPath = expandSessionPath(
+    req.positionals?.[1] ?? sessionStore.defaultTracePath(session),
+    process.cwd(),
+  );
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.appendFileSync(outPath, '');
   session.trace = { outPath, startedAt: Date.now() };
@@ -74,7 +77,7 @@ function stopTrace(
 
 function relocateTraceOutput(currentPath: string, requestedPath: string | undefined): string {
   if (!requestedPath) return currentPath;
-  const resolved = expandSessionPath(requestedPath);
+  const resolved = expandSessionPath(requestedPath, process.cwd());
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   if (fs.existsSync(currentPath)) fs.renameSync(currentPath, resolved);
   else fs.appendFileSync(resolved, '');

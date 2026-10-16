@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   type AppleOS,
   type DeviceIdentity,
@@ -24,14 +25,14 @@ function formatLocalDeviceKey(
   return `local:${platform}:${appleOs ?? 'none'}:${id}`;
 }
 
-export function resolveDeviceClaimRoot(): string {
-  const override = process.env.AGENT_DEVICE_CLAIMS_DIR?.trim();
+export function resolveDeviceClaimRoot(env: EnvMap): string {
+  const override = env.AGENT_DEVICE_CLAIMS_DIR?.trim();
   return override
     ? path.resolve(override)
     : path.join(os.homedir(), '.agent-device', 'device-claims');
 }
 
-export function resolveDeviceClaimPath(deviceKey: string): string {
+export function resolveDeviceClaimPath(deviceKey: string, env: EnvMap): string {
   const hash = crypto.createHash('sha256').update(deviceKey).digest('hex');
-  return path.join(resolveDeviceClaimRoot(), `${hash}.json`);
+  return path.join(resolveDeviceClaimRoot(env), `${hash}.json`);
 }

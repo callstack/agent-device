@@ -38,7 +38,7 @@ vi.mock('../request-execution-scope.ts', async (importOriginal) => {
 import { SessionStore } from '../../core/session-store.ts';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -54,13 +54,15 @@ test('an expired lease ends its session without any further request', async () =
   try {
     const runtime = await startDaemonRuntime({
       composeDeps: daemonRuntimeDepsFixture(),
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-        AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },
@@ -96,12 +98,14 @@ test('shutdown cancels and drains lease ends before it tears sessions down', asy
   try {
     const runtime = await startDaemonRuntime({
       composeDeps: daemonRuntimeDepsFixture(),
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },

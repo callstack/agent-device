@@ -42,20 +42,8 @@ type HostProcessRunCommand = (
   options: ExecOptions,
 ) => Promise<ExecResult>;
 
-export function hostEnvironment(): NodeJS.ProcessEnv {
-  return process.env;
-}
-
-export function readHostEnvironmentVariable(name: string): string | undefined {
-  return hostEnvironment()[name];
-}
-
 export function writeHostStderr(value: string): void {
   process.stderr.write(value);
-}
-
-export function hostCurrentWorkingDirectory(): string {
-  return process.cwd();
 }
 
 export function hostNodeExecutablePath(): string {

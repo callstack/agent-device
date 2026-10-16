@@ -98,6 +98,7 @@ export async function handleBootCommand(
 
   const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
     flags.androidDeviceAllowlist,
+    process.env,
   );
   const androidSerialAllowlist = resolvedAndroidSerialAllowlist
     ? [...resolvedAndroidSerialAllowlist].sort()

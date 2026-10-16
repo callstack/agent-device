@@ -1,3 +1,4 @@
+import type { EnvMap } from './source-value.ts';
 function normalizeNonEmpty(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
@@ -20,7 +21,7 @@ export function parseSerialAllowlist(value: string): Set<string> {
 
 export function resolveAndroidSerialAllowlist(
   flagValue: string | undefined,
-  env: NodeJS.ProcessEnv = process.env,
+  env: EnvMap,
 ): ReadonlySet<string> | undefined {
   const configured =
     normalizeNonEmpty(flagValue) ?? normalizeNonEmpty(env.AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST);

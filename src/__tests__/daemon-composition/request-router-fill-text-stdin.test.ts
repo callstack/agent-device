@@ -18,7 +18,11 @@ import {
   makeAuthoringSession,
   makeSession,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  WEB_DESKTOP_DEVICE,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 import { replayScriptSourceBundleFor } from '../test-utils/replay-script-source.fixtures.ts';
 import {
@@ -65,6 +69,7 @@ function sendToWebSession(
   };
   const dir = mkdtempForTestSync('agent-device-router-fill-text-stdin-runtime-');
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(dir, 'daemon.log'),
     token: 'test-token',

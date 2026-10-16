@@ -148,7 +148,7 @@ export async function renewOpenSessionClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
 ): Promise<DaemonResponse | undefined> {
   if (!ownership) return undefined;
-  const renewal = await renewDeviceClaim(ownership);
+  const renewal = await renewDeviceClaim(ownership, process.env);
   if (renewal.status === 'renewed') return undefined;
   if (renewal.conflict) return buildDeviceClaimConflictError(device, renewal.conflict);
   return errorResponse(
@@ -430,6 +430,7 @@ async function acquireDeviceClaimForOwner(params: {
         session: sessionName,
         workspace: req.meta?.cwd ?? process.cwd(),
         stateDir: sessionStore.resolveDaemonStateDir(),
+        env: process.env,
         reconcileOrphanedDeviceClaim,
         observeDeviceBoot: platformServices.deviceBootObservation,
       });
@@ -564,11 +565,11 @@ async function rollbackNewSessionClaim(params: {
   const { ownership, effects, sessionName, sessionStore } = params;
   if (!ownership) return;
   if (!effects.mayHaveStarted) {
-    await clearDeviceClaim(ownership);
+    await clearDeviceClaim(ownership, process.env);
     return;
   }
   if (sessionStore.get(sessionName)?.deviceClaim?.ownerToken === ownership.ownerToken) return;
-  const outcome = await abandonDeviceClaim(ownership);
+  const outcome = await abandonDeviceClaim(ownership, process.env);
   emitDiagnostic({
     level: 'warn',
     phase: 'device_claim_open_effects_unconfirmed',

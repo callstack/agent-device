@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { expect, test } from 'vitest';
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
@@ -41,6 +42,7 @@ function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => Andro
     }),
   });
   return createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 'token',

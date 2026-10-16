@@ -36,6 +36,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
@@ -75,6 +76,7 @@ function setup(): Harness {
   const session = makeIosSession(SESSION);
   sessionStore.publish(SESSION, session);
   const handleRequest = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(root, 'daemon.log'),
     token: TOKEN,

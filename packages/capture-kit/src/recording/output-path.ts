@@ -27,7 +27,7 @@ export type RecordingOutputPaths = Readonly<{
 export function resolveRecordingOutputPaths(params: {
   requestedPath?: string;
   platform: Platform;
-  cwd?: string;
+  cwd: string;
 }): RecordingOutputPaths {
   const requestedPath =
     params.requestedPath === undefined

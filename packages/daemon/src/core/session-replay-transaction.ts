@@ -62,7 +62,7 @@ export function armRepairStep(
   const state = publicationState(session);
   const explicitPath =
     typeof params.saveScript === 'string'
-      ? expandSessionPath(params.saveScript)
+      ? expandSessionPath(params.saveScript, process.cwd())
       : state.kind === 'repair'
         ? undefined
         : params.healedSiblingPath;

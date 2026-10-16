@@ -30,6 +30,7 @@ function claimRecord(session: SessionState, name: string) {
 async function claimedSession(name: string): Promise<SessionState & { stateDir: string }> {
   const { stateDir } = setup();
   const acquired = await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: name,
     workspace: stateDir,
@@ -60,7 +61,7 @@ test('a claim cleared after clean teardown is reported released', async () => {
     superseded: [],
     unattributable: [],
   });
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
 test('a claim left behind by a failed teardown is reported orphaned', async () => {
@@ -72,7 +73,9 @@ test('a claim left behind by a failed teardown is reported orphaned', async () =
 
   expect(ledger.claims.released).toEqual([]);
   expect(ledger.claims.orphaned).toEqual([claimRecord(session, 'stuck')]);
-  expect(inspectDeviceClaims({}).map((entry) => entry.claim?.session)).toEqual(['stuck']);
+  expect(inspectDeviceClaims({}, process.env).map((entry) => entry.claim?.session)).toEqual([
+    'stuck',
+  ]);
 });
 
 test('a claim replaced by a successor owner is reported superseded, never released', async () => {
@@ -84,6 +87,7 @@ test('a claim replaced by a successor owner is reported superseded, never releas
   // deliberately leaves it alone, so "the call resolved" cannot mean "released".
   fs.rmSync(deviceClaimFilePath(deviceKey));
   const successor = await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'successor',
     workspace: '/worktrees/successor',
@@ -100,7 +104,9 @@ test('a claim replaced by a successor owner is reported superseded, never releas
   expect(ledger.claims.orphaned).toEqual([]);
   expect(ledger.claims.superseded).toEqual([claimRecord(session, 'replaced')]);
   // The successor keeps its device: teardown must never delete a foreign claim.
-  expect(inspectDeviceClaims({}).map((entry) => entry.claim?.session)).toEqual(['successor']);
+  expect(inspectDeviceClaims({}, process.env).map((entry) => entry.claim?.session)).toEqual([
+    'successor',
+  ]);
 });
 
 test('an undecodable record is reported unattributable, never orphaned or superseded', async () => {

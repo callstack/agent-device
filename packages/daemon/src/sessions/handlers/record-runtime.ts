@@ -227,12 +227,17 @@ function resolveRecordingStartPaths(req: DaemonRequest, platform: Platform): Rec
       ...resolveRecordingOutputPaths({
         requestedPath: buildRemoteTempArtifactPath('recording', extension),
         platform,
+        cwd: process.cwd(),
       }),
       clientOutputPath: appendRecordingExtensionWhenMissing(clientOutputPath, extension),
     };
   }
   return {
-    ...resolveRecordingOutputPaths({ requestedPath, platform, cwd: req.meta?.cwd }),
+    ...resolveRecordingOutputPaths({
+      requestedPath,
+      platform,
+      cwd: req.meta?.cwd ?? process.cwd(),
+    }),
     ...(clientOutputPath === undefined ? {} : { clientOutputPath }),
   };
 }

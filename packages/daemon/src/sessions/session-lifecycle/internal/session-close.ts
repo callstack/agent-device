@@ -351,7 +351,7 @@ async function runCloseTeardownAndRelease(params: {
       });
     }
   } else {
-    await clearDeviceClaim(session.deviceClaim);
+    await clearDeviceClaim(session.deviceClaim, process.env);
   }
   sessionStore.retire(ref);
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;

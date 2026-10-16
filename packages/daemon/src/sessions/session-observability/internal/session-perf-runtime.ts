@@ -143,7 +143,7 @@ async function executeAdmittedPerfPlan(
         appId: session.appBundleId,
         kind: plan.request.kind,
         outPath: plan.request.outPath
-          ? expandSessionPath(plan.request.outPath, params.req.meta?.cwd)
+          ? expandSessionPath(plan.request.outPath, params.req.meta?.cwd ?? process.cwd())
           : undefined,
         artifactsDir: path.join(
           params.sessionStore.ensureSessionDir(params.sessionName),
@@ -176,7 +176,7 @@ async function executeAdmittedPerfPlan(
       const data = await runtime.operations.perfProfileReport({
         appId: session.appBundleId,
         kind: plan.request.kind,
-        tracePath: expandSessionPath(tracePath, params.req.meta?.cwd),
+        tracePath: expandSessionPath(tracePath, params.req.meta?.cwd ?? process.cwd()),
         outPath,
         template: plan.request.template ?? (last?.kind === 'xctrace' ? last.template : undefined),
         profile: last,
@@ -262,7 +262,9 @@ async function stopPerfCapture(
   const mismatchMessage = perfCaptureStopMismatch(snapshot, request);
   if (mismatchMessage) return errorResponse('INVALID_ARGS', mismatchMessage);
   if (request.outPath) {
-    capture.handle.setOutputPath(expandSessionPath(request.outPath, params.req.meta?.cwd));
+    capture.handle.setOutputPath(
+      expandSessionPath(request.outPath, params.req.meta?.cwd ?? process.cwd()),
+    );
   }
   const completion = await finishLivePerfCapture({
     intent: 'capture',
@@ -393,7 +395,7 @@ function resolveNativeOutPath(
   requestedPath: string | undefined,
   fallbackFileName: string,
 ): string {
-  if (requestedPath) return expandSessionPath(requestedPath, params.req.meta?.cwd);
+  if (requestedPath) return expandSessionPath(requestedPath, params.req.meta?.cwd ?? process.cwd());
   return path.join(
     params.sessionStore.ensureSessionDir(params.sessionName),
     `${timestampToken()}-${fallbackFileName}`,

@@ -77,7 +77,7 @@ import {
   openRequest,
   storedClaimUpdatedAt,
 } from './request-router-open-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -93,6 +93,7 @@ function createOpenHandler(
   > = {},
 ) {
   return createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -150,7 +151,7 @@ test('open returns and creates the session state directory', async () => {
     await sessionStore.flushEvents('session-a');
     expect(fs.existsSync(String(response.data?.eventLogPath))).toBe(true);
   }
-  expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.stateDir).toBe(
+  expect(inspectDeviceClaims({ udid: device.id }, process.env)[0]?.claim?.stateDir).toBe(
     sessionStore.resolveDaemonStateDir(),
   );
 });
@@ -680,7 +681,9 @@ test('an open that booted the device keeps the device against a foreign open', a
     expect(foreign.ok).toBe(false);
     if (foreign.ok) return;
     expect(foreign.error.code).toBe('DEVICE_IN_USE');
-    expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.session).toBe('boot-owner');
+    expect(inspectDeviceClaims({ udid: device.id }, process.env)[0]?.claim?.session).toBe(
+      'boot-owner',
+    );
   } finally {
     if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;

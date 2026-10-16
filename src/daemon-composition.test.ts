@@ -1,7 +1,11 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
-import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  IOS_SIMULATOR,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { setActiveProviderDeviceRuntimes } from './provider-device-runtime.ts';
 
@@ -40,7 +44,7 @@ test('the composed interactor resolution resolves the interactor of the provider
   const baseDir = mkdtempForTestSync('agent-device-daemon-composition-interactor-');
   const providerInteractor = { snapshot: async () => ({ nodes: [] }) } as unknown as Interactor;
   const deps = await createDaemonRuntimeDeps({
-    env: { ...process.env, AGENT_DEVICE_STATE_DIR: baseDir },
+    host: createTestHostEnvironment({ env: { ...process.env, AGENT_DEVICE_STATE_DIR: baseDir } }),
     baseDir,
     sessionsDir: `${baseDir}/sessions`,
     assertShutdownAllowed: undefined,

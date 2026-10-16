@@ -283,7 +283,7 @@ test('recovery is composed per claim from the stale owner state dir, never the c
     process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
 
     const composedFor: string[] = [];
-    const outcomes = await runStaleDeviceClaimRelease({}, (stateDir) => {
+    const outcomes = await runStaleDeviceClaimRelease({}, process.env, (stateDir) => {
       composedFor.push(stateDir);
       return {
         reconcile: async (claim) => {

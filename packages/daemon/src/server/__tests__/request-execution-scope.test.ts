@@ -21,7 +21,7 @@ import {
 } from '../request-execution-scope.ts';
 import { resolveSessionScope } from '../../sessions/session-routing.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { handleSessionCloseCommands } from '../../sessions/session-lifecycle/index.ts';
 
@@ -44,6 +44,7 @@ test('createRequestExecutionScope applies tenant scoping and locked lease admiss
   });
 
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({
       session: 'default',
       command: 'snapshot',
@@ -75,6 +76,7 @@ test('createRequestExecutionScope is the single defaulting authority for the app
   const leaseRegistry = new LeaseRegistry();
 
   const defaulted = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'apps' }),
     sessionStore,
     leaseRegistry,
@@ -82,6 +84,7 @@ test('createRequestExecutionScope is the single defaulting authority for the app
   expect(defaulted.req.flags?.appsFilter).toBe('user-installed');
 
   const overridden = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'apps', flags: { appsFilter: 'all' } }),
     sessionStore,
     leaseRegistry,
@@ -89,6 +92,7 @@ test('createRequestExecutionScope is the single defaulting authority for the app
   expect(overridden.req.flags?.appsFilter).toBe('all');
 
   const untouched = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -105,6 +109,7 @@ test('createRequestExecutionScope resolves session-scoped request and runner log
     { command: 'snapshot', requestId: 'request-logs-1', logPath: LOG_PATH },
     async () =>
       await createTestRequestScope({
+        host: createTestHostEnvironment(),
         req: makeRequest({ meta: { cwd, requestId: 'request-logs-1' } }),
         sessionStore,
         leaseRegistry: new LeaseRegistry(),
@@ -126,6 +131,7 @@ test('a relative session name is rejected before any session artifact path is wr
   await withDiagnosticsScope({ command: 'snapshot', requestId, logPath: LOG_PATH }, async () => {
     await expect(
       createTestRequestScope({
+        host: createTestHostEnvironment(),
         req: makeRequest({ session: '..', meta: { requestId } }),
         sessionStore,
         leaseRegistry: new LeaseRegistry(),
@@ -150,6 +156,7 @@ test('request diagnostics flush into the effective session request log', async (
     { command: 'snapshot', requestId: 'request-diag-1', logPath: LOG_PATH },
     async () => {
       const scope = await createTestRequestScope({
+        host: createTestHostEnvironment(),
         req: makeRequest({ meta: { cwd, requestId: 'request-diag-1' } }),
         sessionStore,
         leaseRegistry: new LeaseRegistry(),
@@ -167,6 +174,7 @@ test('request diagnostics flush into the effective session request log', async (
 
 test('runLocked rejects tenant requests without an active lease', async () => {
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({
       session: 'default',
       command: 'snapshot',
@@ -213,6 +221,7 @@ test('leased session admission uses stored lease metadata and heartbeats', async
   now = 2_000;
 
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -255,11 +264,13 @@ test('leased session heartbeat is serialized with the request execution lock', a
   );
 
   const first = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'click' }),
     sessionStore,
     leaseRegistry,
   });
   const second = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'click' }),
     sessionStore,
     leaseRegistry,
@@ -297,11 +308,13 @@ test('a later external command cannot interleave with replay observation finaliz
   sessionStore.publish('default', makeIosSession('default'));
   const leaseRegistry = new LeaseRegistry();
   const replay = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'replay' }),
     sessionStore,
     leaseRegistry,
   });
   const laterSnapshot = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -338,6 +351,7 @@ test('a fresh replay keeps its session lock after a nested open binds the device
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
   const replay = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'replay' }),
     sessionStore,
     leaseRegistry,
@@ -359,6 +373,7 @@ test('a fresh replay keeps its session lock after a nested open binds the device
   await sessionOpenedPromise;
 
   const laterSnapshot = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -393,6 +408,7 @@ test('leased session rejects mismatched lease id before dispatch', async () => {
   );
 
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot', meta: { leaseId: '1'.repeat(32) } }),
     sessionStore,
     leaseRegistry,
@@ -427,6 +443,7 @@ test.each([
   );
 
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot', meta }),
     sessionStore,
     leaseRegistry,
@@ -442,6 +459,7 @@ test('local unleased session admission still succeeds', async () => {
   sessionStore.publish('default', makeIosSession('default'));
 
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -454,6 +472,7 @@ test('local unleased session ignores stale lease id without tenant scope', async
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   sessionStore.publish('default', makeIosSession('default'));
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({
       command: 'snapshot',
       meta: { leaseId: '1'.repeat(32) },
@@ -488,6 +507,7 @@ test('provider lease admission succeeds without a device key', async () => {
   );
 
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -524,6 +544,7 @@ test('an admitted request that outlives the lease TTL keeps its lease and sessio
   );
 
   const slow = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -533,6 +554,7 @@ test('an admitted request that outlives the lease TTL keeps its lease and sessio
   expect(await slow.runLocked(async () => (now = 1_011))).toBe(1_011);
 
   const next = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'screenshot' }),
     sessionStore,
     leaseRegistry,
@@ -564,11 +586,13 @@ test('expired leased session cleanup waits for the request execution lock', asyn
     }),
   );
   const first = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'click', meta: { requestId } }),
     sessionStore,
     leaseRegistry,
   });
   const second = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'click' }),
     sessionStore,
     leaseRegistry,
@@ -614,6 +638,7 @@ test('tenant lease rejection flushes diagnostics into the effective session requ
 
   await withDiagnosticsScope({ command: 'snapshot', requestId, logPath: LOG_PATH }, async () => {
     const scope = await createTestRequestScope({
+      host: createTestHostEnvironment(),
       req: makeRequest({
         session: 'default',
         command: 'snapshot',
@@ -644,6 +669,7 @@ test('prepareLockedRequestScope preserves existing-session selector validation',
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   sessionStore.publish('default', makeAndroidSession('default'));
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({
       command: 'snapshot',
       flags: {
@@ -675,6 +701,7 @@ test('prepareLockedRequestScope blocks commands for invalidated recordings befor
   });
   sessionStore.publish('default', session);
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -703,6 +730,7 @@ test('prepareLockedRequestScope passes the session runner log path into handler 
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   sessionStore.publish('default', makeIosSession('default'));
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -731,6 +759,7 @@ test('prepareLockedRequestScope streams ordinary diagnostics into the active tra
     }),
   );
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -752,6 +781,7 @@ test('prepareLockedRequestScope streams ordinary diagnostics into the active tra
 test('runLocked rejects a canceled request before executing work', async () => {
   const requestId = 'request-scope-canceled-before-lock';
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ meta: { requestId } }),
     sessionStore: makeSessionStore('agent-device-request-scope-'),
     leaseRegistry: new LeaseRegistry(),
@@ -771,11 +801,13 @@ test('runLocked rejects a request canceled while waiting for its execution lock'
   sessionStore.publish('default', makeIosSession('default'));
   const leaseRegistry = new LeaseRegistry();
   const first = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'click' }),
     sessionStore,
     leaseRegistry,
   });
   const second = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command: 'click', meta: { requestId } }),
     sessionStore,
     leaseRegistry,
@@ -810,6 +842,7 @@ test('router: deferred tenant connect with no daemon session closes as SESSION_N
   const release = vi.fn(async () => ({}));
 
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({
       session: 'default',
       command: 'close',
@@ -848,6 +881,7 @@ test('router: deferred tenant connect still refuses an app-target close before d
   const leaseRegistry = new LeaseRegistry();
 
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({
       session: 'default',
       command: 'close',
@@ -873,6 +907,7 @@ test('router: an existing lease-less session under tenant isolation still refuse
   const leaseRegistry = new LeaseRegistry();
 
   const scope = await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({
       session: 'default',
       command: 'close',
@@ -930,6 +965,7 @@ async function createScopeAcrossTwoImplicitWorkspaceSessions(command: string) {
     makeAndroidSession('default', { sessionScope: { kind: 'cwd', id: scope.id } }),
   );
   return await createTestRequestScope({
+    host: createTestHostEnvironment(),
     req: makeRequest({ command, meta: { cwd: root, requestId: `ambiguity-${command}` } }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

@@ -1,3 +1,4 @@
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   createOwnerScopedDeviceClaimReconciler,
   createRecoveryPlatformScope,
@@ -35,10 +36,12 @@ export const createClaimRecoveryGateway: ClaimRecoveryGatewayFactory = (input) =
  */
 export async function runStaleDeviceClaimRelease(
   selectors: DeviceClaimSelectors,
+  env: EnvMap,
   composeRecovery?: OwnerScopedClaimRecoveryComposer,
 ): Promise<DeviceClaimStaleReleaseOutcome[]> {
   return await releaseProvenStaleDeviceClaims({
     selectors,
+    env,
     reconcile: createOwnerScopedDeviceClaimReconciler({
       scope: createRecoveryPlatformScope(),
       composeGateway: createClaimRecoveryGateway,

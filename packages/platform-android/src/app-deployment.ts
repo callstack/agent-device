@@ -30,7 +30,7 @@ async function resolveBundletoolInvocation(
     return cachedBundletoolInvocation.invocation;
   }
 
-  if (await whichCmd('bundletool')) {
+  if (await whichCmd('bundletool', process.env)) {
     const invocation = { cmd: 'bundletool', prefixArgs: [] } as const;
     cachedBundletoolInvocation = { key: cacheKey, invocation };
     return invocation;

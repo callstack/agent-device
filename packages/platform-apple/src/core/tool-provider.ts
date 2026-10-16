@@ -76,7 +76,7 @@ const localAppleToolProvider: AppleToolProvider = {
     runCmd,
     async (plistPath) => await readPlistJsonWithCommand(runCmd, plistPath),
   ),
-  whichCommand: whichCmd,
+  whichCommand: async (cmd) => await whichCmd(cmd, process.env),
 };
 
 const appleToolProviderScope = createScopedProvider<AppleToolProvider>(

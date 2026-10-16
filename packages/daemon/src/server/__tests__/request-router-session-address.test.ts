@@ -33,7 +33,7 @@ import { awaitFixtureReadiness } from '../../__tests__/support/application-lifec
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 /**
  * The production route for the #2031/#1394 defect: a request without `--session` resolves the
@@ -63,6 +63,7 @@ function makeIosDevice(id: string): DeviceInfo {
 
 function createHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
   return createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

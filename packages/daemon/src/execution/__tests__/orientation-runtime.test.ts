@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
@@ -205,6 +206,7 @@ test('request router joins orientation admission to execution and ref invalidati
   activateCompleteRefFrame(session);
   sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 't',

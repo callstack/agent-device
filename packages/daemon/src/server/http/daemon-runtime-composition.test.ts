@@ -8,7 +8,12 @@ import {
   tryAcquireDaemonRegistration,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { IOS_SIMULATOR, mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
+import {
+  IOS_SIMULATOR,
+  mkdtempForTestSync,
+  WEB_DESKTOP_DEVICE,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import {
   installInteractorResolution,
   interactorResolution,
@@ -41,12 +46,14 @@ test('daemon startup installs the interactor resolution the composition supplied
   let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
   try {
     runtime = await startDaemonRuntime({
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },
@@ -75,7 +82,7 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
   const otherShutdown = vi.fn(async () => {});
   const exit = vi.fn();
   const runtime = await startDaemonRuntime({
-    env: { AGENT_DEVICE_STATE_DIR: stateDir },
+    host: createTestHostEnvironment({ env: { AGENT_DEVICE_STATE_DIR: stateDir } }),
     exit,
     registerProcessHandlers: false,
     stderr: { write: () => {} },
@@ -118,12 +125,14 @@ test('the server derives the policy gate and session callbacks and hands them to
   let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
   try {
     runtime = await startDaemonRuntime({
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_POLICY: policyPath,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_POLICY: policyPath,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
       exit: (code) => exits.push(code),
       registerProcessHandlers: false,
       stderr: { write: () => {} },
@@ -186,12 +195,14 @@ test('an unreadable policy stops the assembly before the factory is called', asy
   let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
   try {
     runtime = await startDaemonRuntime({
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_POLICY: path.join(stateDir, 'missing-policy.json'),
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_POLICY: path.join(stateDir, 'missing-policy.json'),
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
       exit: (code) => exits.push(code),
       stderr: { write: (chunk) => stderr.push(chunk) },
       stdout: { write: () => {} },

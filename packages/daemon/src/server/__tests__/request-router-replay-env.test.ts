@@ -5,7 +5,7 @@ import { expect, test } from 'vitest';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { replayScriptSourceBundleFor } from '../../__tests__/support/replay-script-source-fixture.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
@@ -14,6 +14,7 @@ function createHarness() {
   return {
     root,
     handler: createRequestHandler({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       logPath: path.join(root, 'daemon.log'),
       token: 'test-token',

@@ -274,7 +274,10 @@ async function resolveDoctorAppInventory(params: {
     device,
     appsRuntimeUse,
   );
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(req.flags?.androidDeviceAllowlist);
+  const androidSerialAllowlist = resolveAndroidSerialAllowlist(
+    req.flags?.androidDeviceAllowlist,
+    process.env,
+  );
   const readyDevice = await ensureAppsRuntimeReady(runtime, {
     serial: req.flags?.serial,
     androidSerialAllowlist: androidSerialAllowlist ? [...androidSerialAllowlist].sort() : undefined,

@@ -15,11 +15,7 @@ import {
   renameHostPath,
   writeHostTextFile,
 } from '@agent-device/host-kit/host-file';
-import {
-  hostPlatform,
-  readHostEnvironmentVariable,
-  writeHostStderr,
-} from '@agent-device/host-kit/process';
+import { hostPlatform, writeHostStderr } from '@agent-device/host-kit/process';
 import {
   resolveExecutableOverridePath,
   runCmdBackground,
@@ -120,7 +116,7 @@ const MACOS_GHOST_CURSOR_ENV = 'AGENT_DEVICE_MACOS_GHOST_CURSOR';
  */
 function appendGhostCursorArg(args: string[], surface: SessionSurface | undefined): void {
   if (surface !== 'app') return;
-  if (readHostEnvironmentVariable(MACOS_GHOST_CURSOR_ENV)?.trim() === '0') return;
+  if (process.env[MACOS_GHOST_CURSOR_ENV]?.trim() === '0') return;
   args.push('--ghost-cursor');
 }
 
@@ -235,7 +231,7 @@ async function readInstalledMacOsHelperFingerprint(): Promise<string | null> {
 
 async function ensureMacOsHelperBinary(): Promise<string> {
   const configuredPath = await resolveExecutableOverridePath(
-    readHostEnvironmentVariable(MACOS_HELPER_ENV_PATH),
+    process.env[MACOS_HELPER_ENV_PATH],
     MACOS_HELPER_ENV_PATH,
   );
   if (configuredPath) {
@@ -274,7 +270,7 @@ async function ensureMacOsHelperBinary(): Promise<string> {
 }
 
 async function resolveMacOsHelperCommandPath(): Promise<string> {
-  const configuredPath = readHostEnvironmentVariable(MACOS_HELPER_ENV_PATH)?.trim();
+  const configuredPath = process.env[MACOS_HELPER_ENV_PATH]?.trim();
   if (configuredPath) {
     const resolvedPath = await resolveExecutableOverridePath(configuredPath, MACOS_HELPER_ENV_PATH);
     if (resolvedPath) return resolvedPath;

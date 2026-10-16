@@ -457,12 +457,24 @@ test('private retirement closes startup admission, joins the actual child and ne
   const ownedStateDir = createOwnedReplayStateDir();
   const paths = ownedStateDir.paths;
   const args = registeredDaemonFixtureArgs(paths, fields);
-  const launch = launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir });
+  const launch = launchDaemonProcess({
+    env: process.env,
+    paths,
+    args,
+    serverMode: 'socket',
+    ownedStateDir,
+  });
   let contender: ReturnType<typeof launchDaemonProcess> | undefined;
   try {
     assert.ok(launch.startTime);
     await waitForFixtureFile(paths.infoPath);
-    contender = launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir });
+    contender = launchDaemonProcess({
+      env: process.env,
+      paths,
+      args,
+      serverMode: 'socket',
+      ownedStateDir,
+    });
     assert.equal((await contender.exited).exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
     const input = {
       paths,
@@ -472,7 +484,8 @@ test('private retirement closes startup admission, joins the actual child and ne
     };
     const pending = stopAndRetireDaemon(input);
     assert.throws(
-      () => launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir }),
+      () =>
+        launchDaemonProcess({ env: process.env, paths, args, serverMode: 'socket', ownedStateDir }),
       (error: { details?: { reason?: string } }) =>
         error.details?.reason === 'daemon_startup_admission_closed',
     );
@@ -499,11 +512,18 @@ test('private retirement retains the directory while an earlier actual startup c
     entry,
     `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(ready)}, 'ready'); setInterval(() => {}, 1000);`,
   );
-  const first = launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir });
+  const first = launchDaemonProcess({
+    env: process.env,
+    paths,
+    args,
+    serverMode: 'socket',
+    ownedStateDir,
+  });
   let second: ReturnType<typeof launchDaemonProcess> | undefined;
   try {
     await waitForFixtureFile(ready);
     second = launchDaemonProcess({
+      env: process.env,
       paths,
       args: registeredDaemonFixtureArgs(paths, fields),
       serverMode: 'socket',
@@ -549,7 +569,13 @@ for (const [failure, reason, expectedSignals] of privateStartupFailures) {
       failure === 'missing-birth'
         ? vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null)
         : undefined;
-    const launch = launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir });
+    const launch = launchDaemonProcess({
+      env: process.env,
+      paths,
+      args,
+      serverMode: 'socket',
+      ownedStateDir,
+    });
     birthProbe?.mockRestore();
     let actualStartTime: string | null = null;
     let exitTimer: ReturnType<typeof setTimeout> | undefined;
@@ -637,6 +663,7 @@ test('private startup completion stays bounded without published birth proof and
   const paths = ownedStateDir.paths;
   const birthProbe = vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null);
   const launch = launchDaemonProcess({
+    env: process.env,
     paths,
     args: registeredDaemonFixtureArgs(paths, fields),
     serverMode: 'socket',
@@ -660,7 +687,14 @@ test('private startup completion stays bounded without published birth proof and
       startupJoinTimeoutMs: 0,
     });
     assert.throws(
-      () => launchDaemonProcess({ paths, args: [], serverMode: 'socket', ownedStateDir }),
+      () =>
+        launchDaemonProcess({
+          env: process.env,
+          paths,
+          args: [],
+          serverMode: 'socket',
+          ownedStateDir,
+        }),
       (error: { details?: { reason?: string } }) =>
         error.details?.reason === 'daemon_startup_admission_closed',
     );
@@ -707,6 +741,7 @@ for (const contents of [
     const evidencePath = `${sessionDir}/repair-tombstone.json`;
     fs.writeFileSync(evidencePath, contents);
     const launch = launchDaemonProcess({
+      env: process.env,
       paths,
       args: registeredDaemonFixtureArgs(paths, fields),
       serverMode: 'socket',
@@ -912,6 +947,7 @@ test.for(['different pid', 'different birth', 'joined child'] as const)(
     const paths = ownedStateDir.paths;
     const probe = vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null);
     const launch = launchDaemonProcess({
+      env: process.env,
       paths,
       args: registeredDaemonFixtureArgs(paths, fields),
       serverMode: 'socket',

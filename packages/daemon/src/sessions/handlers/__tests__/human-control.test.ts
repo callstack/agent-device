@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import {
   daemonPlatformServicesFixture,
@@ -35,6 +36,7 @@ test('lease-owner takeover uses the production admission gate, preserves the ses
   assert.equal(release.ok, true);
   assert.deepEqual(registry.listHumanControlHolds({ kind: 'host' }), []);
   const scope = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: humanControlRequest(lease, 'click', []),
@@ -89,6 +91,7 @@ test('a fresh-session mutation without an advisory device lock still drains befo
   const { registry, lease, sessionStore } = createHumanControlHarness();
   const req = { ...humanControlRequest(lease, 'click', []), session: 'fresh-session' };
   const scope = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     req,
     sessionStore,
     leaseRegistry: registry,
@@ -111,6 +114,7 @@ test('a fresh-session mutation without an advisory device lock still drains befo
   await Promise.resolve();
   assert.equal(active, false);
   const later = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: { ...req, session: 'another-fresh-session' },
@@ -131,6 +135,7 @@ test('a nested mutation is stopped when takeover begins during its parent reques
   const { registry, lease, sessionStore } = createHumanControlHarness();
   const req = humanControlRequest(lease, 'replay', []);
   const scope = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     req,
     sessionStore,
     leaseRegistry: registry,
@@ -143,6 +148,7 @@ test('a nested mutation is stopped when takeover begins during its parent reques
       scope: HUMAN_CONTROL_SCOPE,
     });
     const nested = await createRequestExecutionScope({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       req: humanControlRequest(lease, 'click', []),

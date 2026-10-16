@@ -5,7 +5,13 @@ test('preserves platform-specific default recording extensions', () => {
   const defaults = resolveRecordingOutputPaths({ platform: 'web', cwd: '/workspace' });
   expect(defaults.requestedPath).toMatch(/^\.\/recording-\d+\.webm$/);
   expect(defaults.outputPath).toMatch(/^\/workspace\/recording-\d+\.webm$/);
-  expect(resolveRecordingOutputPaths({ requestedPath: '/tmp/capture', platform: 'web' })).toEqual({
+  expect(
+    resolveRecordingOutputPaths({
+      cwd: process.cwd(),
+      requestedPath: '/tmp/capture',
+      platform: 'web',
+    }),
+  ).toEqual({
     requestedPath: '/tmp/capture.webm',
     outputPath: '/tmp/capture.webm',
   });
@@ -24,6 +30,7 @@ test('keeps display paths distinct from expanded native output paths', () => {
   });
 
   const homePaths = resolveRecordingOutputPaths({
+    cwd: process.cwd(),
     requestedPath: '~/capture.mp4',
     platform: 'android',
   });

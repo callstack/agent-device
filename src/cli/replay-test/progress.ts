@@ -6,7 +6,10 @@ import type {
   ReplayTestResult,
   ReplayTestStep,
 } from './reporters/types.ts';
-import { formatCliStatusMarker } from '@agent-device/host-kit/status-markers';
+import {
+  formatCliStatusMarker,
+  shouldColorStatusMarkers,
+} from '@agent-device/host-kit/status-markers';
 import { formatDurationSeconds } from './duration-format.ts';
 import { colorize, supportsColor } from '../../commands/output/color.ts';
 
@@ -236,12 +239,14 @@ function formatReplayTestProgressName(event: ReplayTestResult | ReplayTestStep):
 }
 
 function formatReplayTestProgressStatusLabel(event: ReplayTestResult): string {
+  const useColor = shouldColorStatusMarkers(process.env, Boolean(process.stderr.isTTY));
   if (event.status === 'pass') {
     return formatCliStatusMarker('pass', {
+      useColor,
       passFormat: event.attempt && event.attempt > 1 ? 'yellow' : 'green',
     });
   }
-  return formatCliStatusMarker(event.status === 'fail' ? 'fail' : 'skip');
+  return formatCliStatusMarker(event.status === 'fail' ? 'fail' : 'skip', { useColor });
 }
 
 function colorizeProgressMarker(text: string, format: Parameters<typeof colorize>[1]): string {

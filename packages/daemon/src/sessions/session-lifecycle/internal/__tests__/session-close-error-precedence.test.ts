@@ -48,6 +48,7 @@ test('a failed platform close retains the device claim and reports it', async ()
       booted: true,
     };
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: sessionName,
       workspace: process.cwd(),
@@ -105,7 +106,7 @@ test('a failed platform close retains the device claim and reports it', async ()
     expect(sessionStore.get(sessionName)).toBeUndefined();
 
     // The claim itself was NOT cleared: it is still live, still naming the deleted session.
-    const claimState = inspectDeviceClaims({ serial: device.id })[0];
+    const claimState = inspectDeviceClaims({ serial: device.id }, process.env)[0];
     expect(claimState?.classification).toBe('live');
     expect(claimState?.claim?.session).toBe(sessionName);
 
@@ -150,6 +151,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
       booted: true,
     };
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: sessionName,
       workspace: process.cwd(),
@@ -222,7 +224,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
     });
     expect(sessionStore.get(sessionName)).toBeUndefined();
 
-    const claimState = inspectDeviceClaims({ serial: device.id })[0];
+    const claimState = inspectDeviceClaims({ serial: device.id }, process.env)[0];
     expect(claimState?.classification).toBe('live');
     expect(claimState?.claim?.session).toBe(sessionName);
 
@@ -260,6 +262,7 @@ test('a successful close clears the device claim', async () => {
       booted: true,
     };
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: sessionName,
       workspace: process.cwd(),
@@ -296,7 +299,7 @@ test('a successful close clears the device claim', async () => {
 
     expect(response?.ok).toBe(true);
     expect(sessionStore.get(sessionName)).toBeUndefined();
-    expect(inspectDeviceClaims({ serial: device.id })).toEqual([]);
+    expect(inspectDeviceClaims({ serial: device.id }, process.env)).toEqual([]);
   } finally {
     if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
