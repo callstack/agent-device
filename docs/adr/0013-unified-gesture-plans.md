@@ -4,6 +4,8 @@
 
 Accepted
 
+Completed process history is in git history.
+
 ## Context
 
 Gesture intent was previously interpreted at several private boundaries: command aliases produced
@@ -143,8 +145,8 @@ should compose transport/device bindings with the shared platform adapter rather
 the interaction runtime.
 
 That `.ad` codec is the script format's own syntax, not a compatibility shim, and is not scheduled
-for removal (amended 2026-07, issue #1216). Its only remaining callers are the CLI argv parse and
-the `.ad` line parse — both the current public syntax — so there is nothing left to migrate off.
+for removal. Its callers are the CLI argv parse and
+the `.ad` line parse — both the current public syntax.
 A structured `.ad` gesture payload was rejected: it would make recordings unreadable and ungreppable
 for no behavioral gain.
 
