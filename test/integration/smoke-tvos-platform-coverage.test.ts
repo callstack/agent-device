@@ -5,7 +5,10 @@ import test from 'node:test';
 
 import { TVOS_SIMULATOR } from '@agent-device/test-kit';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { assertCoverageClassificationSummaryWiredToManifest } from './support/coverage-classification.ts';
+import {
+  assertCoverageClassificationSummaryWiredToManifest,
+  assertCoverageGapRowsAreOwned,
+} from './support/coverage-classification.ts';
 import { createPlatformRuntimeGateway } from '../../src/platform-runtime.ts';
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
 import {
@@ -21,6 +24,7 @@ const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
 test('tvOS coverage exhaustively classifies the public catalog', () => {
   assert.deepEqual(Object.keys(TVOS_PLATFORM_COVERAGE).sort(), publicCommands);
+  assertCoverageGapRowsAreOwned('tvOS', TVOS_PLATFORM_COVERAGE);
 
   for (const command of publicCommands) {
     const entry = TVOS_PLATFORM_COVERAGE[command];
@@ -28,13 +32,6 @@ test('tvOS coverage exhaustively classifies the public catalog', () => {
     if (entry.level === 'live' || entry.level === 'command-contract') {
       assert.ok(entry.owner.path.trim().length > 0, `${command} needs an evidence path`);
       assert.ok(entry.owner.test.trim().length > 0, `${command} needs named evidence`);
-    }
-    if (entry.level === 'known-gap') {
-      assert.equal(
-        entry.trackingIssue,
-        TVOS_COVERAGE_GAP_ISSUE,
-        `${command} has the wrong gap issue`,
-      );
     }
   }
 });

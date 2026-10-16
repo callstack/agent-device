@@ -7,10 +7,10 @@ import { mkdtempForTest } from '@agent-device/test-kit';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   assertCoverageClassificationSummaryWiredToManifest,
+  assertCoverageGapRowsAreOwned,
   assertLiveCoverageMatchesEvidence,
 } from './support/coverage-classification.ts';
 import {
-  WEB_COVERAGE_GAP_ISSUE,
   WEB_PLATFORM_COVERAGE,
   WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
   WEB_SMOKE_EVIDENCE,
@@ -23,6 +23,7 @@ const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
 test('web coverage exhaustively classifies the public catalog', () => {
   assert.deepEqual(Object.keys(WEB_PLATFORM_COVERAGE).sort(), publicCommands);
+  assertCoverageGapRowsAreOwned('web', WEB_PLATFORM_COVERAGE);
 
   for (const command of publicCommands) {
     const entry = WEB_PLATFORM_COVERAGE[command];
@@ -30,13 +31,6 @@ test('web coverage exhaustively classifies the public catalog', () => {
     if (entry.level === 'live' || entry.level === 'command-contract') {
       assert.ok(entry.owner.path.trim().length > 0, `${command} needs an evidence path`);
       assert.ok(entry.owner.test.trim().length > 0, `${command} needs named evidence`);
-    }
-    if (entry.level === 'known-gap') {
-      assert.equal(
-        entry.trackingIssue,
-        WEB_COVERAGE_GAP_ISSUE,
-        `${command} has the wrong gap issue`,
-      );
     }
   }
 });
@@ -78,21 +72,21 @@ test('web contract claims name existing executable evidence', () => {
 });
 
 // #1900 closed 14 of the 15 known-gap rows this manifest originally carried (see the comment
-// above `WEB_PLATFORM_COVERAGE`); `test` stays a known gap because its only candidate evidence
-// proves the command CANNOT be targeted at web, not that it works. This is the planted-red proof
-// that no other row can silently regress back to 'known-gap', and that `test`'s stays pinned to
-// the one tracking issue.
-test('web known gaps use one grouped tracking issue', () => {
-  const gapIssues = new Set(
-    Object.values(WEB_PLATFORM_COVERAGE)
-      .filter((entry) => entry.level === 'known-gap')
-      .map((entry) => entry.trackingIssue),
-  );
+// above `WEB_PLATFORM_COVERAGE`), and the rule keeps `test` the only gap row left: the web entry
+// type has no `known-gap` variant, so a row that regresses to owed work without an owning issue
+// fails to compile. This pins that `test` is the one accepted limitation and its reason survives.
+test('web accepted gap is exactly the structurally excluded test command', () => {
   const gapCommands = Object.entries(WEB_PLATFORM_COVERAGE)
-    .filter(([, entry]) => entry.level === 'known-gap')
+    .filter(([, entry]) => entry.level === 'accepted-gap')
     .map(([command]) => command);
   assert.deepEqual(gapCommands, ['test']);
-  assert.deepEqual([...gapIssues], [WEB_COVERAGE_GAP_ISSUE]);
+  const testEntry = WEB_PLATFORM_COVERAGE.test;
+  assert.equal(testEntry.level, 'accepted-gap');
+  assert.match(
+    testEntry.level === 'accepted-gap' ? testEntry.reason : '',
+    /ReplayTestPlatform/,
+    'the accepted web test row must name the structural exclusion as its reason',
+  );
 });
 
 test('web coverage report persists the manifest rollup and live command list', async () => {

@@ -8,6 +8,7 @@ import { mkdtempForTest } from '@agent-device/test-kit';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   assertCoverageClassificationSummaryWiredToManifest,
+  assertCoverageGapRowsAreOwned,
   assertLiveCoverageMatchesEvidence,
 } from './support/coverage-classification.ts';
 import type { MacOsLiveScenario } from './macos-e2e/live-scenarios.ts';
@@ -24,16 +25,12 @@ const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
 test('macOS coverage exhaustively classifies the public catalog', () => {
   assert.deepEqual(Object.keys(MACOS_PLATFORM_COVERAGE).sort(), publicCommands);
+  assertCoverageGapRowsAreOwned('macOS', MACOS_PLATFORM_COVERAGE);
 
   for (const command of publicCommands) {
     const entry = MACOS_PLATFORM_COVERAGE[command];
     assert.ok(entry.assertion.trim().length > 0, `${command} needs an observable assertion`);
-    if (entry.level === 'known-gap') {
-      assert.equal(
-        entry.trackingIssue,
-        MACOS_COVERAGE_GAP_ISSUE,
-        `${command} has the wrong gap issue`,
-      );
+    if (entry.level === 'known-gap' || entry.level === 'accepted-gap') {
       continue;
     }
     assert.ok(entry.owner.path.trim().length > 0, `${command} needs an evidence path`);
@@ -93,7 +90,9 @@ test('macOS live claims reference commands in existing executable scenarios', ()
 
 test('macOS non-live evidence owners name existing executable repository evidence', () => {
   for (const [command, entry] of Object.entries(MACOS_PLATFORM_COVERAGE)) {
-    if (entry.level === 'live' || entry.level === 'known-gap') continue;
+    if (entry.level === 'live' || entry.level === 'known-gap' || entry.level === 'accepted-gap') {
+      continue;
+    }
     const evidencePath = path.resolve(entry.owner.path);
     assert.equal(fs.existsSync(evidencePath), true, `${command} owner does not exist`);
     assert.equal(

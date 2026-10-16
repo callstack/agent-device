@@ -5,9 +5,11 @@ import test from 'node:test';
 
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { assertCoverageClassificationSummaryWiredToManifest } from './support/coverage-classification.ts';
 import {
-  LINUX_COVERAGE_GAP_ISSUE,
+  assertCoverageClassificationSummaryWiredToManifest,
+  assertCoverageGapRowsAreOwned,
+} from './support/coverage-classification.ts';
+import {
   LINUX_COMMAND_EVIDENCE,
   LINUX_PLATFORM_COVERAGE,
   LINUX_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
@@ -24,6 +26,7 @@ const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
 test('Linux coverage exhaustively classifies the public catalog', () => {
   assert.deepEqual(Object.keys(LINUX_PLATFORM_COVERAGE).sort(), publicCommands);
+  assertCoverageGapRowsAreOwned('Linux', LINUX_PLATFORM_COVERAGE);
 
   for (const command of publicCommands) {
     const entry = LINUX_PLATFORM_COVERAGE[command];
@@ -31,13 +34,6 @@ test('Linux coverage exhaustively classifies the public catalog', () => {
     if (entry.level === 'live' || entry.level === 'command-contract') {
       assert.ok(entry.owner.path.trim().length > 0, `${command} needs an evidence path`);
       assert.ok(entry.owner.test.trim().length > 0, `${command} needs named evidence`);
-    }
-    if (entry.level === 'known-gap') {
-      assert.equal(
-        entry.trackingIssue,
-        LINUX_COVERAGE_GAP_ISSUE,
-        `${command} has the wrong Linux gap issue`,
-      );
     }
   }
 });
@@ -117,11 +113,20 @@ test('Linux contract claims name existing executable evidence', () => {
   }
 });
 
-test('Linux known gaps use one grouped tracking issue', () => {
-  const gapIssues = new Set(
-    Object.values(LINUX_PLATFORM_COVERAGE)
-      .filter((entry) => entry.level === 'known-gap')
-      .map((entry) => entry.trackingIssue),
-  );
-  assert.deepEqual([...gapIssues], [LINUX_COVERAGE_GAP_ISSUE]);
+test('Linux accepted gaps name the permanent Linux limitation behind each row', () => {
+  const acceptedCommands = Object.entries(LINUX_PLATFORM_COVERAGE)
+    .filter(([, entry]) => entry.level === 'accepted-gap')
+    .map(([command]) => command)
+    .sort();
+  assert.deepEqual(acceptedCommands, [
+    'artifacts',
+    'install',
+    'install-from-source',
+    'logs',
+    'push',
+    'record',
+    'reinstall',
+    'shutdown',
+    'trace',
+  ]);
 });

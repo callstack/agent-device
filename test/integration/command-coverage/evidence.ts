@@ -12,11 +12,10 @@ export type RepositoryEvidence = {
 
 const C = PUBLIC_COMMANDS;
 
-// Tracking issues for the known-gap rows each platform still carries.
+// The tracking issues that own the `known-gap` rows each platform still carries. An
+// accepted-gap row states a `reason` instead of citing one of these.
 export const MACOS_COVERAGE_GAP_ISSUE = 1916;
 export const TVOS_COVERAGE_GAP_ISSUE = 1914;
-export const WEB_COVERAGE_GAP_ISSUE = 1900;
-export const LINUX_COVERAGE_GAP_ISSUE = 1915;
 
 // Android contract evidence that only the coverage declarations cite. Evidence shared with a
 // production test module keeps living next to that module and is imported by declarations.ts.
