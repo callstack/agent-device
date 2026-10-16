@@ -269,3 +269,37 @@ test('sharded suite progress carries each device and shard-scoped session', asyn
   expect(starts.map((event) => event.deviceId)).toEqual(['emulator-5554', 'emulator-5556']);
   expect(starts.map((event) => event.deviceName)).toEqual(['Pixel 8', 'Pixel 8 Pro']);
 });
+
+test('a terminal replay failure reports its message and hint without retrying', async () => {
+  const root = mkdtempForTestSync('agent-device-session-test-terminal-failure-');
+  const testPath = path.join(root, '01-terminal-failure.ad');
+  fs.writeFileSync(testPath, 'context platform=android\nopen "Demo"\n');
+  let attempts = 0;
+
+  const { events, data } = await runSuite({
+    root,
+    requestId: 'terminal-failure',
+    invoke: async () => {
+      attempts += 1;
+      return {
+        ok: false,
+        error: {
+          code: 'ASSERTION_FAILED',
+          message: 'the final assertion failed',
+          hint: 'try replay --from 01-terminal-failure.ad',
+        },
+      };
+    },
+  });
+
+  expect(attempts).toBe(1);
+  expect(data.failed).toBe(1);
+  const [failure] = replayEvents(events).filter((event) => event.status === 'fail');
+  expect(failure).toMatchObject({
+    attempt: 1,
+    maxAttempts: 1,
+    message: 'Replay failed at step 1 (open "Demo"): the final assertion failed',
+    hint: 'try replay --from 01-terminal-failure.ad',
+  });
+  expect(failure?.retrying).toBeUndefined();
+});
