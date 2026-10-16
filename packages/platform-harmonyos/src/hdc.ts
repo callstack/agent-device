@@ -10,6 +10,7 @@ import {
   runCmd,
   type ExecOptions,
   type ExecResult,
+  commandHostEnvironment,
 } from '@agent-device/host-kit/command';
 
 export type HarmonyHdcOptions = Pick<
@@ -49,7 +50,7 @@ export async function runHarmonyShell(
  * Honor the documented roots so the daemon sees the same HDC binary as a shell.
  */
 export async function ensureHarmonyToolchainPathConfigured(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
 ): Promise<void> {
   const toolchainRoots = [
     env.HDC_SDK_PATH,

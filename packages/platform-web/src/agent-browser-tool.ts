@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
+import { runCmd, type ExecResult, commandHostEnvironment } from '@agent-device/host-kit/command';
 import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import {
   createHostDirectoryLinkSync,
@@ -124,7 +124,8 @@ export async function doctorManagedAgentBrowser(options: {
 export function getManagedAgentBrowserStatus(options: {
   stateDir?: string;
 }): AgentBrowserToolStatus {
-  const stateDir = options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR ?? defaultStateDir();
+  const stateDir =
+    options.stateDir ?? commandHostEnvironment().env.AGENT_DEVICE_STATE_DIR ?? defaultStateDir();
   const { installDir, homeDir, runtimeHomeDir, socketDir } = managedInstallPaths(
     stateDir,
     MANAGED_AGENT_BROWSER_VERSION,
@@ -160,7 +161,7 @@ async function spawnManagedAgentBrowser(
   if (!status.entryScript) throw missingManagedToolError(status);
   return await runCmd(hostNodeExecutablePath(), [status.entryScript, ...args], {
     allowFailure: options.allowFailure,
-    env: managedAgentBrowserEnv(status, process.env),
+    env: managedAgentBrowserEnv(status, commandHostEnvironment().env),
     timeoutMs: options.timeoutMs,
     signal: options.signal,
     stdin: options.stdin,
@@ -287,7 +288,10 @@ function assertWebNodeSupported(nodeMajor: number): void {
 }
 
 function defaultStateDir(): string {
-  return path.join(process.env.HOME ?? process.cwd(), '.agent-device');
+  return path.join(
+    commandHostEnvironment().env.HOME ?? commandHostEnvironment().cwd,
+    '.agent-device',
+  );
 }
 
 export function mapManagedAgentBrowserError(error: unknown): AppError {

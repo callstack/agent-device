@@ -75,7 +75,7 @@ import {
 } from '@agent-device/kernel/record';
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
-import { captureHostEnvironment } from '@agent-device/host-kit/host-environment';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';

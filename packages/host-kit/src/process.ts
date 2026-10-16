@@ -1,4 +1,6 @@
 export {
+  captureHostEnvironment,
+  type HostEnvironmentSource,
   type ConfirmedProcessStop,
   confirmedProcessStopDetails,
   type ConfirmedProcessStopDetails,

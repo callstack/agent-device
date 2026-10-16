@@ -129,6 +129,28 @@ export async function withCommandHost<T>(
   return await commandHostScope.run(scope, fn);
 }
 
+/**
+ * Binds `scope` for the rest of the current async context, for a process root that has no single
+ * callback to wrap. Prefer {@link withCommandHost}.
+ */
+export function enterCommandHost(scope: CommandHostScope): void {
+  commandHostScope.enterWith(scope);
+}
+
+/**
+ * The host of the enclosing {@link withCommandHost} scope, for code that has no host of its own.
+ * Outside a scope there is no host to answer with, so it refuses rather than guess.
+ */
+export function commandHostEnvironment(): HostEnvironment {
+  const scope = commandHostScope.getStore();
+  if (!scope) {
+    throw new AppError('COMMAND_FAILED', 'No host environment is bound to this command.', {
+      reason: 'host_environment_unscoped',
+    });
+  }
+  return scope.host;
+}
+
 /** Effective toolchain selection; an explicitly empty request value selects `xcode-select`. */
 export function commandDeveloperDir(): string | undefined {
   const scope = commandHostScope.getStore();

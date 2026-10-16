@@ -1,6 +1,6 @@
 import { asAppError } from '@agent-device/kernel/errors';
 import { startDaemonRuntime } from '@agent-device/daemon';
-import { captureHostEnvironment } from '@agent-device/host-kit/host-environment';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 
 // The root's composition enters as a factory behind a function-scoped `await import`: the server
 // calls it before it acquires the registration, so startup order is unchanged, and the eager

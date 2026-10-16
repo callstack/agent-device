@@ -1,5 +1,7 @@
 export {
   coerceExecResult,
+  enterCommandHost,
+  commandHostEnvironment,
   commandDeveloperDir,
   type CommandExecutorOverride,
   type ExecBackgroundOptions,

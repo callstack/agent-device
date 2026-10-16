@@ -9,7 +9,7 @@ import {
 } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { withCommandHost } from '@agent-device/host-kit/command';
-import { captureHostEnvironment } from '@agent-device/host-kit/host-environment';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';

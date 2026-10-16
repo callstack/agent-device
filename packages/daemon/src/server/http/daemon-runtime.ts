@@ -854,7 +854,7 @@ async function startDaemonRuntimeOnHost(
   // cannot start, PNG processing falls back to the in-process sync path.
   prewarmPngWorker();
 
-  const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
+  const shutdownOnHost = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
     leaseSessionEnd.cancel();
@@ -931,6 +931,13 @@ async function startDaemonRuntimeOnHost(
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
     exit(shutdownOptions.exitCode ?? 0);
   };
+
+  // Signal handlers and external callers run outside the startup scope, so shutdown re-enters it.
+  const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) =>
+    await withCommandHost(
+      { host, requestEnv: undefined },
+      async () => await shutdownOnHost(shutdownOptions),
+    );
 
   if (options.registerProcessHandlers !== false) {
     process.on('SIGINT', () => {

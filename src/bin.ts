@@ -1,4 +1,5 @@
-import { captureHostEnvironment } from '@agent-device/host-kit/host-environment';
+import { withCommandHost } from '@agent-device/host-kit/command';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { runEntry } from './cli/entry.ts';
 
 declare const __AGENT_DEVICE_VERSION__: string;
@@ -13,7 +14,16 @@ runEntry(
       const { runCliProcess } = await import('./cli/process-entry.ts');
       return { runCliProcess: (argv) => runCliProcess(argv, host) };
     },
-    mcp: () => import('./mcp/server.ts'),
+    mcp: async () => {
+      const { runAgentDeviceMcpServer } = await import('./mcp/server.ts');
+      return {
+        runAgentDeviceMcpServer: async () =>
+          await withCommandHost(
+            { host, requestEnv: undefined },
+            async () => await runAgentDeviceMcpServer(),
+          ),
+      };
+    },
     version: () => import('@agent-device/host-kit/version'),
     processExit: () => import('./cli/process-exit.ts'),
   },

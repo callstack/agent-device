@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 /**
  * Shared Linux environment detection — display server and input tool.
  *
@@ -12,7 +13,7 @@ export type DisplayServer = 'wayland' | 'x11';
 export type InputTool = 'xdotool' | 'ydotool';
 
 function detectDisplayServer(): DisplayServer {
-  const environment = process.env;
+  const environment = commandHostEnvironment().env;
   if (environment['WAYLAND_DISPLAY']) return 'wayland';
   if (environment['XDG_SESSION_TYPE'] === 'wayland') return 'wayland';
   return 'x11';
