@@ -4,6 +4,8 @@
 
 Accepted
 
+Completed process history is in git history.
+
 ## Rules at a glance
 
 - Keep public command identity in `packages/command-registry/src/catalog.ts` and public input/output contracts in `src/commands/**`.
@@ -112,5 +114,3 @@ A single flat public descriptor that exposes daemon fields in public views is **
 This would combine daemon policy with a public command registry, which this ADR rejects.
 Compose facets owned by their domains.
 Derive the registry from those facets.
-Until registry tests verify the implemented derivation, the manually authored `packages/daemon/src/core/daemon-command-registry.ts` remains the source of truth.
-The operating rule in `AGENTS.md` remains unchanged until then.
