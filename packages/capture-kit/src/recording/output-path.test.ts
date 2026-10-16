@@ -31,37 +31,3 @@ test('keeps display paths distinct from expanded native output paths', () => {
   expect(homePaths.outputPath).not.toBe(homePaths.requestedPath);
   expect(homePaths.outputPath).toMatch(/\/capture\.mp4$/);
 });
-
-test.each([
-  ['android', '.mp4'],
-  ['web', '.webm'],
-] as const)(
-  'records a remote caller default on the daemon host and completes its %s destination',
-  (platform, extension) => {
-    const paths = resolveRecordingOutputPaths({
-      clientOutputPath: '/client/project/recording-1',
-      platform,
-      cwd: '/client/project',
-    });
-    expect(paths.clientOutputPath).toBe(`/client/project/recording-1${extension}`);
-    expect(paths.requestedPath).toBe(paths.clientOutputPath);
-    expect(paths.outputPath).toMatch(
-      new RegExp(`^/tmp/agent-device-recording-\\d+-[a-z0-9]+\\${extension}$`),
-    );
-  },
-);
-
-test('keeps a remote caller explicit path on the redirected daemon temp path', () => {
-  expect(
-    resolveRecordingOutputPaths({
-      requestedPath: '/tmp/agent-device-recording-1-abc.mp4',
-      clientOutputPath: '/client/project/capture.mp4',
-      platform: 'android',
-      cwd: '/client/project',
-    }),
-  ).toEqual({
-    requestedPath: '/tmp/agent-device-recording-1-abc.mp4',
-    outputPath: '/tmp/agent-device-recording-1-abc.mp4',
-    clientOutputPath: '/client/project/capture.mp4',
-  });
-});

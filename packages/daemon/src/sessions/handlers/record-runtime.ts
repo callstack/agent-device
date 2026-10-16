@@ -18,6 +18,7 @@ import {
 } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import type { Platform } from '@agent-device/kernel/device';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ensureBoundDeviceReady } from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
@@ -47,9 +48,12 @@ import {
   readRecordingScope,
 } from './record-runtime-request.ts';
 import {
+  appendRecordingExtensionWhenMissing,
   type RecordingOutputPaths,
+  recordingExtensionForPlatform,
   resolveRecordingOutputPaths,
 } from '@agent-device/capture-kit/recording-output-path';
+import { buildRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import {
   buildRecordingStartResponse,
   buildRecordingStartedAction,
@@ -206,12 +210,30 @@ function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: Sess
       resourcePath,
       device: session.device,
     }),
-    outputPaths: resolveRecordingOutputPaths({
-      requestedPath: params.req.positionals?.[1],
-      clientOutputPath: params.req.meta?.clientArtifactPaths?.outPath,
-      platform: session.device.platform,
-      cwd: params.req.meta?.cwd,
-    }),
+    outputPaths: resolveRecordingStartPaths(params.req, session.device.platform),
+  };
+}
+
+type RecordingStartPaths = RecordingOutputPaths & Readonly<{ clientOutputPath?: string }>;
+
+function resolveRecordingStartPaths(req: DaemonRequest, platform: Platform): RecordingStartPaths {
+  const requestedPath = req.positionals?.[1];
+  const clientOutputPath = req.meta?.clientArtifactPaths?.outPath;
+  if (requestedPath === undefined && clientOutputPath !== undefined) {
+    // A remote caller that names no path cannot know the session platform's extension, so it sends
+    // its local destination without one; its cwd does not exist on this host.
+    const extension = recordingExtensionForPlatform(platform);
+    return {
+      ...resolveRecordingOutputPaths({
+        requestedPath: buildRemoteTempArtifactPath('recording', extension),
+        platform,
+      }),
+      clientOutputPath: appendRecordingExtensionWhenMissing(clientOutputPath, extension),
+    };
+  }
+  return {
+    ...resolveRecordingOutputPaths({ requestedPath, platform, cwd: req.meta?.cwd }),
+    ...(clientOutputPath === undefined ? {} : { clientOutputPath }),
   };
 }
 
@@ -220,7 +242,7 @@ function screenRecordingStartInput(
   session: SessionState,
   prepared: ReturnType<typeof prepareRecordingRequest>,
   fence: ScreenRecordingStartInput['fence'],
-  outputPaths: RecordingOutputPaths,
+  outputPaths: RecordingStartPaths,
 ): ScreenRecordingStartInput {
   return {
     sessionId: params.sessionName,
