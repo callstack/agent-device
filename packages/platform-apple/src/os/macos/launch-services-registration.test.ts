@@ -47,7 +47,8 @@ type Stub = Partial<ExecResult> | Error;
  * The host tools one bundle open reads — `lsappinfo`, `ps`, `plutil`, and `open` itself — answered
  * per call through the one executor seam the probe runs end to end, with every call and the budget
  * it was given recorded in order. An `Error` answer throws, the way a missing tool throws at the
- * real seam. The `ps` answer is the current process table.
+ * real seam. `ps` answers with the current process table unless the responder overrides it, so a
+ * test can make the scan throw, fail, or time out like any other read.
  */
 function fakeMacHost(respond: (call: RecordedCall, index: number) => Stub = () => ({})): {
   runCommand: AppleToolCommandExecutor;
@@ -58,12 +59,10 @@ function fakeMacHost(respond: (call: RecordedCall, index: number) => Stub = () =
   const runCommand: AppleToolCommandExecutor = async (cmd, args, options) => {
     const call = { cmd, args, timeoutMs: options?.timeoutMs };
     const index = calls.push(call) - 1;
-    if (cmd === PROCESS_TABLE_TOOL) {
-      return { stdout: processTable.stdout, stderr: '', exitCode: 0 };
-    }
     const answer = respond(call, index);
     if (answer instanceof Error) throw answer;
-    return { stdout: '', stderr: '', exitCode: 0, ...answer };
+    const fallback = cmd === PROCESS_TABLE_TOOL ? { stdout: processTable.stdout } : {};
+    return { stdout: '', stderr: '', exitCode: 0, ...fallback, ...answer };
   };
   return {
     runCommand,
@@ -345,6 +344,87 @@ test('openBundle treats a failing first registration read as an instance to atta
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
     { cmd: 'open', args: ['-b', BUNDLE_ID] },
   ]);
+  expect(mockSleep).not.toHaveBeenCalled();
+});
+
+test('openBundle opens unchanged when the process-table read cannot run', async () => {
+  runningCopies();
+  const { runCommand, calls, transcript } = fakeMacHost((call) =>
+    // The scan now runs through the provider's executor, so like every other probe read it can
+    // fail outright. A ps that cannot spawn must end the probe, not be read as an empty table.
+    call.cmd === PROCESS_TABLE_TOOL
+      ? new AppError('TOOL_MISSING', 'Required macOS tool not found: ps')
+      : {},
+  );
+
+  await openBundle(runCommand);
+
+  expect(transcript()).toEqual([
+    { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
+    { cmd: 'open', args: ['-b', BUNDLE_ID] },
+  ]);
+  expect(calls.at(-1)).toEqual({ cmd: 'open', args: ['-b', BUNDLE_ID] });
+  expect(mockEmitDiagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({
+      level: 'warn',
+      phase: 'macos_launch_services_registration_probe_failed',
+      data: expect.objectContaining({ bundleId: BUNDLE_ID, reason: 'TOOL_MISSING' }),
+    }),
+  );
+  expect(mockSleep).not.toHaveBeenCalled();
+});
+
+test('openBundle leaves the wait alone when the process-table read is killed at its budget', async () => {
+  runningCopies();
+  const { runCommand, transcript } = fakeMacHost((call) =>
+    // The exec seam rejects a command it killed at its own timeoutMs. The probe shares one budget
+    // across reads, so a scan killed mid-probe says nothing about what runs: no candidates, no
+    // wait, and the open proceeds exactly as it did before the probe existed.
+    call.cmd === PROCESS_TABLE_TOOL
+      ? new AppError('COMMAND_FAILED', 'ps timed out after 2000ms', { timeoutMs: 2_000 })
+      : {},
+  );
+
+  await openBundle(runCommand);
+
+  expect(transcript()).toEqual([
+    { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
+    { cmd: 'open', args: ['-b', BUNDLE_ID] },
+  ]);
+  expect(mockEmitDiagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({
+      level: 'warn',
+      phase: 'macos_launch_services_registration_probe_failed',
+      data: expect.objectContaining({ bundleId: BUNDLE_ID, reason: 'COMMAND_FAILED' }),
+    }),
+  );
+  expect(mockSleep).not.toHaveBeenCalled();
+});
+
+test('openBundle treats a failed process-table exit as an unreadable table, not as no processes', async () => {
+  runningCopies();
+  const { runCommand, transcript } = fakeMacHost((call) =>
+    call.cmd === PROCESS_TABLE_TOOL ? { exitCode: 1, stderr: 'ps: operation not permitted' } : {},
+  );
+
+  await openBundle(runCommand);
+
+  // `listHostProcesses` answers a non-zero exit with no rows, which the probe reads the same way as
+  // an empty answer: the read failed, and inferring "nothing runs" from it would skip the wait.
+  expect(transcript()).toEqual([
+    { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
+    { cmd: 'open', args: ['-b', BUNDLE_ID] },
+  ]);
+  expect(mockEmitDiagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({
+      level: 'warn',
+      phase: 'macos_launch_services_process_table_unreadable',
+      data: { bundleId: BUNDLE_ID },
+    }),
+  );
   expect(mockSleep).not.toHaveBeenCalled();
 });
 
