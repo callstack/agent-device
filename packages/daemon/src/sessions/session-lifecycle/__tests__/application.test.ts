@@ -14,22 +14,28 @@ vi.mock('@agent-device/device-selection/device-inventory-context', async (import
   return { ...actual, listDeviceInventory: vi.fn(async () => []) };
 });
 
-vi.mock('../index.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../index.ts')>();
+vi.mock('../internal/session-close.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../internal/session-close.ts')>();
+  return { ...actual, handleSessionCloseCommands: vi.fn(actual.handleSessionCloseCommands) };
+});
+
+vi.mock('../internal/inventory.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../internal/inventory.ts')>();
   return {
     ...actual,
-    handleSessionCloseCommands: vi.fn(actual.handleSessionCloseCommands),
     handleSessionInventoryCommands: vi.fn(actual.handleSessionInventoryCommands),
-    handleSessionOpenCommands: vi.fn(actual.handleSessionOpenCommands),
   };
 });
 
+vi.mock('../internal/session-open.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../internal/session-open.ts')>();
+  return { ...actual, handleSessionOpenCommands: vi.fn(actual.handleSessionOpenCommands) };
+});
+
 import { handleSessionCommands } from '../../handlers/session.ts';
-import {
-  handleSessionCloseCommands,
-  handleSessionInventoryCommands,
-  handleSessionOpenCommands,
-} from '../index.ts';
+import { handleSessionCloseCommands } from '../internal/session-close.ts';
+import { handleSessionInventoryCommands } from '../internal/inventory.ts';
+import { handleSessionOpenCommands } from '../internal/session-open.ts';
 
 const mockHandleSessionCloseCommands = vi.mocked(handleSessionCloseCommands);
 const mockHandleSessionInventoryCommands = vi.mocked(handleSessionInventoryCommands);
@@ -102,7 +108,7 @@ test('inventory commands retain their route responses and typed failures', async
   }
 });
 
-test('open routes only its lifecycle input through the public facade', async () => {
+test('open routes only its lifecycle input through its owner', async () => {
   const expected: DaemonResponse = { ok: true, data: { session: 'default' } };
   mockHandleSessionOpenCommands.mockImplementationOnce(async () => expected);
 
@@ -129,7 +135,7 @@ test('open routes only its lifecycle input through the public facade', async () 
   });
 });
 
-test('close routes only its lifecycle input through the public facade', async () => {
+test('close routes only its lifecycle input through its owner', async () => {
   const expected: DaemonResponse = { ok: true, data: { session: 'default' } };
   mockHandleSessionCloseCommands.mockImplementationOnce(async () => expected);
 

@@ -51,10 +51,8 @@ import {
 } from '@agent-device/daemon-contracts/device-claims';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { SessionStore } from '../../../core/session-store.ts';
-import {
-  handleSessionCloseCommands as handleProductionCloseCommand,
-  handleSessionOpenCommands as handleProductionOpenCommand,
-} from '../../session-lifecycle/index.ts';
+import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/internal/session-close.ts';
+import { handleSessionOpenCommands as handleProductionOpenCommand } from '../../session-lifecycle/internal/session-open.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/support/session-factories.ts';
 import { AppError } from '@agent-device/kernel/errors';

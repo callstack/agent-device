@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { makeAndroidSession } from '../../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
-import { handleSessionObservabilityCommands } from '../../index.ts';
+import { handleSessionObservabilityCommands } from '../session-observability.ts';
 import {
   createNetworkRuntime,
   emptyAppLogResult,

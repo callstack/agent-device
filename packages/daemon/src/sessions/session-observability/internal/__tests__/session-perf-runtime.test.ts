@@ -25,7 +25,7 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../../core/request-runtime-binding.ts';
-import { handleSessionObservabilityCommands } from '../../index.ts';
+import { handleSessionObservabilityCommands } from '../session-observability.ts';
 
 const available = Object.freeze({ available: true as const });
 const unavailable = Object.freeze({

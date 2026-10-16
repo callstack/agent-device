@@ -252,7 +252,8 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     if (
       targetModule &&
       sourceModule !== targetModule &&
-      isInsideInternalTree(edge.target, targetModule.roots)
+      isInsideInternalTree(edge.target, targetModule.roots) &&
+      !targetModule.facades?.some(({ root }) => edge.target === root)
     ) {
       violations.push({
         rule: 'R10 daemon-modularity',

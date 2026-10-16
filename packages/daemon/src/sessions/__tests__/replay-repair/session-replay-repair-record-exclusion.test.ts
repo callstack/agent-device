@@ -45,7 +45,7 @@ vi.mock('../../../core/snapshot-interactor-capture.ts', () => ({
 import fs from 'node:fs';
 import path from 'node:path';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
-import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/index.ts';
+import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/internal/session-close.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor-capture.ts';

@@ -21,27 +21,33 @@ export type LogicalModulePolicy = Readonly<{
    */
   forbiddenTargetShapes?: readonly ((file: string) => boolean)[];
   internalForbiddenTargetShapes?: readonly ((file: string) => boolean)[];
-  facade?: FacadeDeclaration;
+  facades?: readonly FacadeDeclaration[];
 }>;
 
-const DAEMON_SESSION_LIFECYCLE_FACADE = {
-  root: 'packages/daemon/src/sessions/session-lifecycle/index.ts',
-  exports: [
-    'SessionCloseCommandInput',
-    'SessionInventoryCommandInput',
-    'SessionOpenCommandInput',
-    'handleSessionCloseCommands',
-    'handleSessionInventoryCommands',
-    'handleSessionOpenCommands',
-  ],
-} as const;
+const DAEMON_SESSION_LIFECYCLE_FACADES = [
+  {
+    root: 'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
+    exports: ['SessionCloseCommandInput', 'handleSessionCloseCommands'],
+  },
+  {
+    root: 'packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts',
+    exports: ['SessionInventoryCommandInput', 'handleSessionInventoryCommands'],
+  },
+  {
+    root: 'packages/daemon/src/sessions/session-lifecycle/internal/session-open.ts',
+    exports: ['SessionOpenCommandInput', 'handleSessionOpenCommands'],
+  },
+] as const;
 
-const DAEMON_SESSION_OBSERVABILITY_FACADE = {
-  root: 'packages/daemon/src/sessions/session-observability/index.ts',
-  exports: ['SessionObservabilityCommandInput', 'handleSessionObservabilityCommands'],
-} as const;
+const DAEMON_SESSION_OBSERVABILITY_FACADES = [
+  {
+    root: 'packages/daemon/src/sessions/session-observability/internal/session-observability.ts',
+    exports: ['SessionObservabilityCommandInput', 'handleSessionObservabilityCommands'],
+  },
+] as const;
 
 export const SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS = [
+  'packages/daemon/src/sessions/session-lifecycle/index.ts',
   'packages/daemon/src/handlers/session-device-utils.ts',
   'packages/daemon/src/handlers/session-runtime-admission.ts',
   'packages/daemon/src/handlers/session-open.ts',
@@ -99,6 +105,7 @@ const DAEMON_INTERACTION_FACADE = {
 } as const;
 
 export const SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS = [
+  'packages/daemon/src/sessions/session-observability/index.ts',
   'packages/daemon/src/handlers/session-observability.ts',
   'packages/daemon/src/handlers/session-perf-runtime.ts',
   'packages/daemon/src/handlers/session-network.ts',
@@ -164,27 +171,27 @@ export const LOGICAL_MODULE_POLICIES = [
     roots: ['packages/daemon/src/sessions/session-lifecycle/'],
     forbiddenTargetRoots: [],
     forbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
-    facade: DAEMON_SESSION_LIFECYCLE_FACADE,
+    facades: DAEMON_SESSION_LIFECYCLE_FACADES,
   },
   {
     name: 'daemon-interaction',
     roots: ['packages/daemon/src/execution/interaction/'],
     forbiddenTargetRoots: [],
     internalForbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
-    facade: DAEMON_INTERACTION_FACADE,
+    facades: [DAEMON_INTERACTION_FACADE],
   },
   {
     name: 'daemon-session-observability',
     roots: ['packages/daemon/src/sessions/session-observability/'],
     forbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
-    facade: DAEMON_SESSION_OBSERVABILITY_FACADE,
+    facades: DAEMON_SESSION_OBSERVABILITY_FACADES,
   },
 ] as const satisfies readonly LogicalModulePolicy[];
 
 export const ARCHITECTURE_OWNERSHIP = {
   logicalModules: LOGICAL_MODULE_POLICIES,
   facades: LOGICAL_MODULE_POLICIES.flatMap((module) =>
-    module.facade ? [{ name: module.name, ...module.facade }] : [],
+    (module.facades ?? []).map((facade) => ({ name: module.name, ...facade })),
   ),
   vocabulary: [
     {

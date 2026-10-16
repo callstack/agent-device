@@ -23,7 +23,7 @@ import { resolveSessionScope } from '../../sessions/session-routing.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
-import { handleSessionCloseCommands } from '../../sessions/session-lifecycle/index.ts';
+import { handleSessionCloseCommands } from '../../sessions/session-lifecycle/internal/session-close.ts';
 
 const TEST_ROOT = mkdtempForTestSync('agent-device-request-execution-scope-');
 const LOG_PATH = path.join(TEST_ROOT, 'diagnostics.log');
