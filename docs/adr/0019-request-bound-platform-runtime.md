@@ -13,8 +13,9 @@ It extends `host` beyond diagnostics to host-scoped platform work through a narr
 Host diagnostics, daemon-owner resource cleanup, and managed host tooling share this execution category because none binds a request-scoped device runtime.
 Their domain services remain separate and do not form a generic host grab bag.
 
-An amendment proposed on 2026-09-23 accompanies the web press-shape refusal.
-It states in section 3 that a modifier on an admitted operation is not a second operation and therefore has no fact cell.
+The amendment of 2026-09-23 accompanies the web press-shape refusal (#2806 and #2808).
+Its rule is in force.
+It states in section 2 that a modifier on an admitted operation is not a second operation and therefore has no fact cell.
 A per-shape refusal on the owning leaf mechanic rests on that statement.
 Without that statement, the next contributor can reasonably reach for a per-shape fact key.
 The operation-facts mapped type cannot express such a key.
@@ -147,6 +148,7 @@ They may not import these items:
 
 R13 covers static, type-only, dynamic, and re-export edges.
 Package-owned tests may import their own public façade.
+Root `src/__tests__/` owns shared install-source tests, including `install-source.test.ts` and `cli-install-from-source.test.ts`.
 Contracts may depend on kernel vocabulary.
 Contracts never depend on concrete platform packages or daemon implementation types.
 
