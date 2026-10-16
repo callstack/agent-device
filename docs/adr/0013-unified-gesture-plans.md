@@ -187,12 +187,14 @@ Providers should compose transport/device bindings with the shared platform adap
 
 That `.ad` codec is the script format's own syntax, not a compatibility shim.
 It is not scheduled for removal (amended 2026-07, issue #1216).
-Its only remaining callers are the CLI argv parse and the `.ad` line parse.
-Both are the current public syntax, so nothing is left to migrate off.
+Its callers include the CLI argv parse, the `.ad` line parse, and the recording path.
+`packages/daemon/src/execution/interaction/internal/interaction-gesture.ts` encodes gesture inputs for recordings.
+`packages/daemon/src/core/session-script-writer.ts` decodes recorded drag endpoints.
+These are current syntax and recording consumers, so nothing is left to migrate off.
 A structured `.ad` gesture payload was rejected.
 It would make recordings unreadable and impossible to search with grep, for no behavioral gain.
 
-One table, `PUBLIC_GESTURE_SYNTAX`, defines argument arity for both callers.
+One table, `PUBLIC_GESTURE_SYNTAX`, defines argument arity for both parsers.
 Thus, a form removed from the CLI is removed from `.ad` in the same edit.
 If a `.ad` script still carries a removed positional, the script fails when it is parsed.
 This failure occurs before the replay executes any device action.
