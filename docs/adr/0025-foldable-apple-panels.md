@@ -13,20 +13,20 @@ An iPhone Duo has Apple's **outer display** and **inner display**.
 It lights one panel at a time according to device pose.
 This ADR separates two facts: **which panel a capture must name** and **what pose the device is in**.
 An official host API answers the first question.
-Only inference answers the second question from panel information.
+Only inference answers the second question.
 
 ## Rules at a glance
 
 | Situation | Behavior |
 | --- | --- |
-| Any iOS simulator capture | First resolve the CoreDevice display table. Capture the panel that the system lights. |
+| Any iOS simulator capture | First resolve the CoreDevice display table. Capture the panel that the system currently lights. |
 | More than one integrated panel | Pass `--display=<panel name>` on every `simctl io screenshot`. Never use the implicit default. |
 | Zero or multiple lit panels | Name the `primary` panel. Emit `apple_display_capture_ambiguous`. Report pose as `unknown`. |
 | One integrated panel | Preserve pre-panel behavior exactly: no display flag, no pose, unchanged scale probe. |
 | Density normalization | Use the captured panel's `pointScale`. For runner fallback, use that capture's reported pixels-per-point. |
-| Pose report | From panel power, report only `closed`, `fully-open`, or `unknown`. `fold` reads the hinge angle for exact pose. |
-| Pose request | `agent-device fold <closed\|half-open\|open>` sends private simulator HID. Read CoreDevice hinge angles until agreement. For `half-open`, require two consecutive readings that agree. Otherwise, refuse the pose. |
-| A moving hinge reaches `half-open` | Refuse with `fold-pose-unsettled` and the observed and previous angles. An angle category does not prove a held pose. |
+| Pose report | From panel power alone, report only `closed`, `fully-open`, or `unknown`, never a narrower pose. `fold` reports the exact pose because it reads the hinge angle. |
+| Pose request | `agent-device fold <closed\|half-open\|open>` sends private HID inside the simulator. Then it reads the hinge angle back from CoreDevice until the angle agrees. For `half-open`, two consecutive readings must agree. If the readings never agree, refuse the pose. |
+| The hinge reaches `half-open` but keeps moving | Refuse with `fold-pose-unsettled` and the observed and previous angles. An angle inside the open interval is an observed category, not a pose that the hinge holds. |
 | External display | It is not a panel. It creates neither multi-screen classification nor a pose. |
 | CoreDevice cannot answer | Return unresolved inventory. Preserve single-panel capture. An absent host feature is not a capture failure. |
 
@@ -62,7 +62,7 @@ It is the only reader of CoreDevice display information.
   It is the outer display because it remains lit when the device closes.
   The complete model uses `primary` and the lit count.
   The inventory assigns no `outer`/`inner` labels because no caller consumes them.
-  Decisions use `primary` and panel power.
+  Every decision uses `primary` and panel power.
   Array order or geometry would create another authority that could silently invert identity.
   If the primary panel is also largest, `primary` still decides.
   Emit `apple_display_primary_geometry_conflict`; do not silently replace identity with a geometry rule.
@@ -102,8 +102,9 @@ It exits 0 with a valid black PNG, which downstream consumers trust.
 | `screenshot` on iPhone 17 | 402x874 @1x, mean luma 104.9 | unchanged |
 
 This explains reports that the tool "picks the wrong screen" on iPhone Duo.
+It was never a selection problem.
 Only the lit panel is capturable.
-The fix names that panel; it requires no screen-selection flag.
+Thus, the name of the lit panel is the whole fix, and a screen-selection flag is not warranted.
 
 `SIMULATOR_MAINSCREEN_SCALE` also refers to one fixed panel.
 A capture can use the other panel.
@@ -135,7 +136,7 @@ SpringBoard owns the home-screen window.
 Thus, a session without an app, or with a stopped app, can still resolve a window's display.
 The result always names a display occupied by a window.
 It never defaults to `XCUIScreen.main`, which is dark on a Duo when the app uses the inner panel.
-Only failure to resolve either window causes a typed, fail-closed capture refusal.
+A capture fails closed with a typed reason only when neither window resolves.
 The query uses both `exists` and frame evidence to refuse an app without a window.
 Such an app returns `(0,0 0x0)` from `frame` without an exception.
 Geometry alone cannot prove that no window exists.
@@ -179,12 +180,12 @@ Each row captures content; main-screen capture of the unlit panel returns black.
 
 ## Amendment: headless simulator HID replaces Device Hub (2026-09-22)
 
-The guest HID experiment supersedes the Device Hub pose decision and private-API rejection below.
-Git history retains the obsolete UI discovery/sidebar process and its evidence gaps.
+The guest HID experiment supersedes the Device Hub pose decision and its private-API rejection.
+Git history retains that rejection, the obsolete UI discovery/sidebar process, and its evidence gaps.
 `fold` runs a small Objective-C helper through `simctl spawn <udid>`.
 It requires neither Device Hub nor host Accessibility.
 After a cold boot, `open` shows the standalone Simulator app.
-It has no Device Hub option.
+`open` has no Device Hub option.
 
 The helper uses IOCFSerialize for `{provider: "com.apple.Virtualization.VirtualMachines", source:
 "hinge-slider-control", type: "range", value: angle}`.
@@ -214,7 +215,7 @@ Preparation and final verification occur outside motion time.
 Cancellation sends SIGTERM to simctl, followed by bounded SIGKILL escalation, so simctl can terminate the guest helper.
 Abrupt simctl termination can orphan the animation.
 Live cancellation at two seconds removed the guest process.
-Its 67.9° angle remained unchanged beyond the five-second deadline.
+The hinge angle stayed at 67.9° beyond the five-second deadline.
 Cancellation performs no automatic reset.
 Final custom angles require readback within 0.5° and the existing interior stability check.
 Category agreement alone is insufficient.
@@ -231,6 +232,7 @@ Measured presets are Closed 0°, Book 130°, and Open 180°.
 `--session-timeout` does not stop the stream.
 Each read therefore uses devicectl's own `--timeout`, whose minimum accepted value is 5 seconds.
 The sample printed before timeout is the reading.
+This read path was checked on the shipping 27.1 toolchain.
 
 `closed` and `open` are hinge end stops.
 One read at the stop proves the pose.
@@ -251,8 +253,8 @@ The leaf fact refuses physical devices and every non-iPhone simulator OS.
 
 ## Amendment: an observed half-open angle is not a settled pose (issue #2730)
 
-The former rule reported `half-open` after four reads inside that category, even without agreement.
-It assumed a refusal could not name the requested pose.
+The former rule also reported `half-open` when the four-read budget ended while the hinge still read `half-open`.
+The reason was that a refusal was not allowed to name the requested pose.
 This confuses an observed category with a completed pose change.
 A hinge crosses the half-open interval on every movement between end stops.
 Four readings inside the interval without agreement describe motion, not a held Book preset.
@@ -276,7 +278,7 @@ The message says the hinge was observed half-open but did not settle.
 It never claims failure to reach half-open, which the observation disproves.
 `fold-pose-unverified` remains the reason when the budget ends at another pose.
 It classifies only the final sample.
-A hinge that passes through half-open and ends at an end stop did not reach the requested final pose.
+A hinge that passes through `half-open` and ends at an end stop is refused as unverified, because its final pose is not the requested pose.
 Attempt count, per-read timeout, cancellation, and open/closed end-stop rules remain unchanged.
 An unsettled fold still consumes four hinge streams.
 
@@ -310,14 +312,14 @@ The shipping-toolchain investigation recorded these candidate results:
 | `devicectl` | `device info displays` reports panel state only |
 | `Xcode.app` frameworks | No hinge reference in `Xcode.app/Contents/{SharedFrameworks,Frameworks}`, Device Hub control is therefore not a hinge API shipped inside Xcode. |
 
-Two incomplete searches limit the evidence:
+Two searches came back empty, not negative. This ADR records them as limits, not as refuted claims:
 
 - The investigation did not enumerate the simulator guest runtime for a host-reachable control channel.
   Symbol searches found private SpringBoard `SBDisplayToolService`, `com.apple.springboard.sbdisplay.service`, and these methods:
   - `setPrimary:displayUUID:`
   - `setBacklightState:displayUUID:`
   - `replayHingeSamplesWithOptions:path:`
-  They also found `SBContinuousFoldController` and `com.apple.springboard.fold`.
+  They also found `SBContinuousFoldController` and a `com.apple.springboard.fold` notification.
   No client, launch path, or invocation from this host was found.
   This is an **unproven private lead**, not an adopted mechanism or proof of possible pose control.
 - Device Hub's control could reside in a private framework outside `Xcode.app`.
@@ -470,7 +472,7 @@ The app remained unchanged between the reference and runner captures.
 Thus, luma differences reflect sources rather than content changes.
 Mean luma uses a 48x48 resample.
 CoreDevice `displayId` supplies identity, and decoded-pixel comparison supplies agreement.
-No claim depends on luma alone.
+No claim here depends on luma.
 PNG headers supply captured dimensions in native panel geometry.
 Capture orientation presents some images turned.
 
@@ -546,7 +548,7 @@ The app window and controls report landscape coordinates, 951x669.
 The iOS capture viewport and synthesized gesture reference frame therefore use the resolved app window.
 Normalization against the application frame rotates an already-oriented window.
 Inversion of that normalization alone does not produce native digitizer coordinates.
-The measured inner-panel button in `contracts/fixtures/window-coordinate-space.json` maps window (476,226) to native digitizer (226,475).
+The measured inner-panel button row in `contracts/fixtures/window-coordinate-space.json` maps window (476,226) to native digitizer (226,475).
 
 Synthesized gesture records use `initWithName:displayID:interfaceOrientation:` and the resolved window's `screen.displayID`.
 The window frame read must precede its screen read.
@@ -572,7 +574,7 @@ The silent misses investigated here came from default outer-display routes and i
   Each records its observation in `runner.log`.
   Keyboard settling was observed once on a lit panel behind a `returnKeyType="done"` field:
   `AGENT_DEVICE_RUNNER_KEYBOARD_STABILITY samples=3 captured=3 settled=yes`.
-  Navigation fallback was observed once as the no-change control (#2741):
+  Navigation fallback was observed once on a lit panel as the no-change control (#2741):
   `AGENT_DEVICE_RUNNER_IN_APP_BACK_VISUAL_VERIFICATION ... changed=no`.
   Neither was observed during a pose change.
   Screen recording was never observed.
@@ -593,10 +595,14 @@ The silent misses investigated here came from default outer-display routes and i
   The former rule would have reported pose.
   All observed runs settled within budget.
   No slower simulator was observed, so the budget remains unchanged rather than increasing for an unobserved case.
+- **Physical foldables.**
+  The leaf fact refuses a physical device.
+  The hinge stream was never exercised on a physical device.
 
 ## Android emulators (amendment, 2026-10-10)
 
-The same `fold` command sets foldable Android emulator poses and preserves the distinction between pose control and verification.
+The same `fold` command poses a foldable Android emulator.
+It keeps the two facts of this ADR separate in the same way: which panel a capture must name and what pose the device is in.
 There is no host display authority.
 Emulator-console `posture <id>` sets the hinge sensor to the profile's angle:
 
@@ -611,7 +617,7 @@ All observed Android profiles use 90° for half-open; Duo uses 130°.
 A fold to the cover display can show keyguard.
 Emulator images do not honor Android's "continue using apps on fold" setting.
 `fold` dismisses keyguard so later captures show the app instead of the lock screen.
-A profile without these device states has no hinge.
+A profile that lists none of these device states has no hinge.
 It is refused as `single-panel-device`, the same typed reason as a single-panel simulator.
 Keyframes and panel geometry remain Apple-only.
 The emulator console supports only fixed postures.
