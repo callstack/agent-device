@@ -535,211 +535,268 @@ This is distinct from general outcome verification.
 
 ### 4. Divergence wire contract and replay-only resume
 
-**Divergence is a structured error, not success data.** The daemon returns `ok:false` with code
-`REPLAY_DIVERGENCE` and a `details.divergence` object for both an action failure and a target-binding
-mismatch. The object has version `1` and contains `kind`, `step` (`index`, `source.path`, `source.line`),
-`action`, `cause`, `screen`, `suggestions`, `resume`, `repairHint`, and, for binding failures,
-`targetBinding` (`classification`, `matchCount`, `recorded`, `observed`, `mismatches`, `candidates`).
-`kind` is one of
-`action-failure`, `selector-miss`, `identity-mismatch`, or `identity-unverifiable` — the latter three are
-decision 3's target-binding classes, and `targetBinding.classification` always equals the top-level
-`kind`. `targetBinding.matchCount` follows decision 3's presence rule exactly: present (0..N) for
-`selector-miss`, `identity-mismatch`, and an `identity-unverifiable` reached through resolution (path 6);
-absent — key omitted, never `null` — when `identity-unverifiable` arose from a recorded-unverifiable
-annotation (path 1), which fires before any resolution.
-`step.index` is the 1-based executable-plan ordinal, not a source
-line. Its source location is diagnostic only. A Maestro parser must preserve the original file and line
-through includes so that source location is actionable.
+**Divergence is a structured error.** Both action failure and target-binding mismatch return `ok:false`, code `REPLAY_DIVERGENCE`, and `details.divergence`.
+The version `1` object contains these fields:
 
-`repairHint` is a **single bounded enum value** — exactly one of `record-and-heal`, `state-repair`,
-`caution`, or `manual` (never a list; a fixed, closed set), present on every divergence. The daemon
-computes it (decision 6, R3) and it is always defined for every divergence — defaulting to `manual` when
-no safer routing can be proven — so a consuming caller never sees it absent or null. It is a small fixed
-token that costs no meaningful bytes, so it is carried at every response level, including compact
-(`--level digest`), and must survive all four projections intact — daemon text summary, JSON, Node
-client `AppError`, and MCP `structuredContent`. Decision 6 defines its computation and meaning; this
-contract only guarantees it is transported.
+- `kind`
+- `step` (`index`, `source.path`, `source.line`)
+- `action`
+- `cause`
+- `screen`
+- `suggestions`
+- `resume`
+- `repairHint`
+- For binding failures, `targetBinding` (`classification`, `matchCount`, `recorded`, `observed`, `mismatches`, `candidates`)
 
-`screen` is discriminated. `{ state: "available", refsGeneration, refs, truncated }` is a fresh,
-healthy snapshot digest and the only form that issues actionable refs. `{ state: "unavailable", reason,
-hint }` is returned when capture fails or is sparse; it has no refs or generation and must not fall back to
-the old session tree. Screen-capture failure never replaces or masks the original replay cause.
+`kind` is `action-failure`, `selector-miss`, `identity-mismatch`, or `identity-unverifiable`.
+The last three are decision 3's target-binding classes.
+`targetBinding.classification` always equals top-level `kind`.
+Decision 3 determines `targetBinding.matchCount` presence:
 
-> **Amendment (#1264): `screen`'s capture scope and ref selection.** `refs` is a filtered, ranked digest
-> of the exact same tree a plain `snapshot` would return at that moment. Two guarantees back the invariant:
+- Present, with range 0..N, for `selector-miss` and `identity-mismatch`
+- Present for resolution-derived `identity-unverifiable` (path 6)
+- Omitted, never `null`, for recorded-unverifiable evidence before resolution (path 1)
+
+`step.index` is the 1-based executable-plan ordinal.
+The source location is diagnostic only.
+A Maestro parser must preserve original files and lines through includes so the caller can use the location.
+
+`repairHint` is one bounded enum value from a fixed closed set:
+
+- `record-and-heal`
+- `state-repair`
+- `caution`
+- `manual`
+
+It is never a list.
+The daemon computes it under decision 6, R3.
+Every divergence includes it, with `manual` when no safer route is proven.
+It is never absent or null.
+Its small fixed size permits inclusion at every response level, including `--level digest`.
+It must survive these four projections unchanged:
+
+- Daemon text summary
+- JSON
+- Node client `AppError`
+- MCP `structuredContent`
+
+Decision 6 defines its meaning and computation.
+This section defines transport.
+
+`screen` has two discriminated forms.
+`{ state: "available", refsGeneration, refs, truncated }` is a fresh healthy snapshot digest.
+Only this form issues actionable refs.
+`{ state: "unavailable", reason, hint }` indicates failed or sparse capture.
+It has no refs or generation and must not reuse the old session tree.
+Capture failure never replaces or conceals the original replay cause.
+
+> **Amendment (#1264): `screen`'s capture scope and ref selection.**
+> `refs` is a filtered, ranked digest of the tree that plain `snapshot` would return at that moment.
+> Two guarantees establish this invariant.
 >
-> 1. **Capture scope.** The capture underneath `screen` runs through the **same `captureSnapshot` wrapper**
->    the plain `snapshot` command's backend calls — not a parallel single-shot dispatch — so it inherits
->    `snapshot`'s full-window scope (Android: the snapshot-helper route, with the existing graceful
->    app-scoped fallback only when the helper is unavailable; iOS: the bounded system-modal probe path;
->    macOS/Linux: their surface-scoped branches) AND its Android freshness / post-action retry policy. A
->    divergence must not consume a first stale or app-scoped dump while a plain `snapshot` retries to the
->    fresh full-window tree — that would make the divergence staler or narrower than `snapshot`, violating
->    the invariant. The divergence capture's flags are a **clean, fixed policy** (full-window, non-raw,
->    default depth), NOT the failed action's flags: a failed `snapshot --raw`/scoped/`-d` action must never
->    narrow or reshape the diagnostic tree below what a plain `snapshot` shows, so `snapshotRaw` /
->    `snapshotScope` / `snapshotDepth` are dropped; only the interactive-only policy (full for non-rect
->    `get`/`is`/`wait` reads, interactive otherwise) is carried. The chrome filter (#1233/#1256,
->    `collectSettleChromeRefs`) and the meaningful-target filter (label/id or `hittable`) are layered ON TOP
->    of that full capture as **filters**, not as a separate, narrower scoping — a filter may drop a node the
->    full capture contains, but the capture itself must never omit content `snapshot` would show.
-> 2. **Ref selection within the cap.** The `screen.refs` cap is a **byte bound**, not a "first N in document
->    order" policy. A separate-window overlay enumerates AFTER the app window's nodes, so a document-order
->    slice truncates a fully-captured overlay away (its dismiss target sits past the cap) — reporting a
->    healthy-looking app even though the capture holds the covering window. So `refs` is RANKED before it is
->    capped: foreign-window (non-app-`bundleId`) hittable nodes — the dismiss targets for whatever covers
->    the app — are promoted ahead of app content, with document order otherwise preserved (stable within
->    each tier). And when a system overlay MASS-COVERS the app so every app node is annotated `covered`,
->    those covered nodes are surfaced rather than emitting an empty `refs`: a report whose capture holds
->    meaningful nodes but whose `refs` is empty is broken by construction.
+> **1. Capture scope.** The capture uses the same `captureSnapshot` wrapper as the plain command's backend.
+> It does not use a parallel single-shot dispatch.
+> It inherits full-window scope:
 >
-> This is a hard invariant: **an agent must never see a healthier `screen` in a divergence report than a
-> plain `snapshot` would show it.** Concretely, a separate-window system overlay covering the app at the
-> moment of capture — a held volume dialog, a persistent quick-settings shade, a permission dialog — must
-> appear in `screen.refs` (its actionable/hittable/labeled nodes surviving the filters AND the cap) exactly
-> as `snapshot` would present it. `repairHint` (decision 6) and `suggestions` (decision 1) consume the FULL
-> captured node list, not the capped `refs` slice, so hint routing is computed over the same full,
-> correctly-scoped capture and is never routed as if the app underneath a covering overlay were healthy.
+> - Android uses the snapshot-helper route.
+>   The existing graceful app-scoped fallback applies only when the helper is unavailable.
+> - iOS uses the bounded system-modal probe path.
+> - macOS/Linux use their surface-scoped branches.
+>
+> It also inherits Android freshness and post-action retries.
+> Divergence must not use a first stale or app-scoped dump when plain `snapshot` retries for fresh full-window content.
+> Diagnostic flags use a fixed full-window, non-raw, default-depth policy.
+> They do not inherit the failed action's `snapshotRaw`, `snapshotScope`, or `snapshotDepth`.
+> Thus, failed raw, scoped, or `-d` snapshots cannot reduce diagnostic scope.
+> Only interactive-only policy is carried:
+> non-rect `get`/`is`/`wait` reads use full content; other actions use interactive content.
+> Chrome filtering (#1233/#1256, `collectSettleChromeRefs`) and meaningful-target filtering apply after full capture.
+> Meaningful targets have label/id or `hittable`.
+> These filters can remove captured nodes.
+> The capture itself must never omit content that plain `snapshot` would show.
+>
+> **2. Ref selection within the cap.** `screen.refs` has a byte bound, not a first-N document-order policy.
+> Separate-window overlays enumerate after app-window nodes.
+> A document-order slice could therefore omit the overlay's dismiss target and falsely imply healthy app state.
+> Before the cap applies, ranking promotes foreign-window hittable nodes ahead of app content.
+> A foreign window has a non-app `bundleId`.
+> These nodes include controls that dismiss the covering window.
+> Each tier otherwise preserves document order.
+> If a system overlay marks every app node `covered`, the report shows those covered nodes instead of empty `refs`.
+> Meaningful captured nodes must not produce an empty ref report.
+>
+> An agent must never see a healthier divergence `screen` than plain `snapshot` would show.
+> A covering separate-window system overlay must survive both filters and the cap through its actionable/hittable/labeled nodes.
+> Examples include a held volume dialog, persistent quick-settings shade, or permission dialog.
+> `repairHint` and `suggestions` use the **full captured node list**, never the capped `refs` slice.
+> Their routing must not treat an app beneath an overlay as healthy.
 
-Response levels bound the entire serialized UTF-8 `details.divergence` object, not merely its arrays:
-compact (`--level digest`) is at most **8 KiB**, default at most **24 KiB**, and full at most **64 KiB**.
-Compact carries at most **8** screen refs and no suggestion entries — it carries `suggestionCount` (the
-number of suggestions available at default/full) so a caller knows whether a re-fetch at a higher level
-has material; default and full carry at most **20** screen refs and **5** suggestions ranked per
-decision 1's total order. These counts are absolute, including error payloads. Individual
-labels, ids, selectors, source paths, mismatch values, cause messages, and hints are UTF-8 truncated to
-**256 bytes**; an action summary has no positional array, and arbitrary nested cause details are never
-serialized. Maestro failure provenance renders resolved diagnostic identifiers, including targets and
-`runFlow` paths, so the report names what the runtime actually attempted instead of emitting an unresolved
-`${VAR}` or synthetic `<var:VAR>` token. Text-entry payloads remain semantic secrets: `inputText` progress,
-failure messages, suggestions, and overflow artifacts never serialize the entered text. Injected replay
-values are not registered as global sensitive literals: a short ordinary value such as `2` or `on` would
-otherwise corrupt unrelated timestamps, paths, and typed error fields throughout the request log.
-Text-entry values are registered at the actual dispatch boundary before platform work, independently of
-the user-facing failure projection. Users must not place secrets in selectors, links, filenames, or other
-diagnostic identifiers that are expected to appear in failure output.
+Response limits apply to the entire serialized UTF-8 `details.divergence` object:
 
-Native `.ad` replay retains its categorical `<var:NAME>` replacement in human-readable divergence
-messages, hints, and bounded diagnostic fields. That existing fail-closed policy is intentionally
-separate from Maestro compatibility output; semantically masked positionals and daemon-owned
-machine-readable fields and paths are never substring-rewritten. The report sets truncation/redaction
-markers for every omission.
+| Response level | Byte ceiling | Screen refs | Suggestions |
+| --- | --- | --- | --- |
+| Compact (`--level digest`) | 8 KiB | At most 8 | No entries; `suggestionCount` |
+| Default | 24 KiB | At most 20 | At most 5 |
+| Full | 64 KiB | At most 20 | At most 5 |
 
-When the bounded form would omit material, the daemon writes the same redacted, bounded-per-field detail
-to a session-scoped divergence artifact and returns its path plus `overflow: { omittedBytes, artifactPath
-}`. If that artifact cannot be written, it returns `artifactUnavailable: true` and preserves the original
-error. No raw snapshot tree or unredacted input is written to the artifact.
+`suggestionCount` counts entries available at default/full level.
+It tells callers whether a higher-level fetch has more material.
+Default/full suggestions follow decision 1's total order.
+Counts are absolute, including error payloads.
+The following individual values are UTF-8 truncated to **256 bytes**:
 
-The same daemon error is preserved end to end. The Node client rejects with `AppError` retaining
-`details.divergence`. CLI exits nonzero; text renders a compact report and JSON includes the complete
-structured error. The MCP tool returns `isError: true`, exposes the object as `structuredContent`, and
-renders the same compact text summary. MCP treats this error as a ref-issuing result: it merges and pins
-every `screen` ref with `refsGeneration` before returning it, including on the error path. CLI and direct
-client callers receive the unpinned refs and generation already present in the daemon error. No caller
-gets a text-only divergence that loses its repair data.
+- Labels
+- Ids
+- Selectors
+- Source paths
+- Mismatch values
+- Cause messages
+- Hints
 
-> **ADR 0014 amendment (accepted, implemented):** replay divergence `screen.refs` is now a partial ref
-> publication — it activates a bounded partial ref frame authorizing exactly the divergence screen's refs
-> (`markSessionPartialRefsIssued`). MCP auto-pins those refs; CLI text renders `@eN~s<refsGeneration>`;
-> JSON and Node.js callers pair each plain ref with the response-level generation before mutation. Because
-> the frame is partial, a mutation through a divergence ref requires the pinned form; a plain ref there
-> reports `plain_ref_requires_complete_frame`.
+An action summary has no positional array.
+Arbitrary nested cause details are never serialized.
+Maestro failure provenance uses resolved diagnostic identifiers, including targets and `runFlow` paths.
+It names the attempted runtime operation instead of unresolved `${VAR}` or synthetic `<var:VAR>` tokens.
 
-`--from N` is a `replay`-only flag. `test` must reject it as `INVALID_ARGS`; test shares replay execution
-but must remain a full, deterministic suite run. `N` is a 1-based index into the fully expanded
-executable plan and must be in range. It is never a YAML line number, fractional source-step number, or a
-repeat iteration label. Static includes, platform conditions, and fixed-count repeats expand before
-indexing, so repeated source lines are distinguished by their plan index.
+Text-entry payloads remain semantic secrets.
+`inputText` progress, failure messages, suggestions, and overflow artifacts never serialize entered text.
+Injected replay values are not global sensitive literals.
+Otherwise, ordinary short values such as `2` or `on` could corrupt timestamps, paths, and typed log fields.
+The actual text-entry dispatch boundary registers values before platform work, independently of the failure projection.
+Users must not put secrets in selectors, links, filenames, or other diagnostic identifiers expected in failure output.
+
+Native `.ad` replay retains categorical `<var:NAME>` replacement in human-readable divergence messages, hints, and bounded diagnostic fields.
+This existing fail-closed policy remains separate from Maestro compatibility output.
+Semantically masked positionals and daemon-owned machine-readable fields and paths never receive substring replacements.
+The report marks every truncation, redaction, and omission.
+
+If bounded output omits material, the daemon writes the same redacted, per-field-bounded detail to a session-scoped divergence artifact.
+It returns the path and `overflow: { omittedBytes, artifactPath }`.
+If the write fails, it returns `artifactUnavailable: true` and preserves the original error.
+The artifact contains no raw snapshot tree or unredacted input.
+
+All surfaces preserve the daemon error.
+The Node client rejects with `AppError` and retains `details.divergence`.
+CLI exits nonzero.
+Text shows a compact report; JSON includes the complete structured error.
+MCP returns `isError: true`, the object in `structuredContent`, and the same compact text summary.
+MCP treats divergence as a ref-issuing result, including on the error path.
+Before return, it merges and pins every `screen` ref with `refsGeneration`.
+CLI and direct clients receive the daemon error's unpinned refs and generation.
+No surface may reduce divergence to text and discard repair data.
+
+> **ADR 0014 amendment (accepted, implemented):** divergence `screen.refs` issues a bounded partial ref frame.
+> `markSessionPartialRefsIssued` authorizes exactly those refs.
+> MCP pins them automatically.
+> CLI text renders `@eN~s<refsGeneration>`.
+> JSON and Node.js callers pair each plain ref with the response-level generation before mutation.
+> A mutation through this partial frame requires a pinned ref.
+> A plain ref returns `plain_ref_requires_complete_frame`.
+
+`--from N` belongs only to `replay`.
+`test` must reject it with `INVALID_ARGS` because a suite run must remain full and deterministic.
+`N` is an in-range 1-based index into the fully expanded executable plan.
+It is not a YAML line, fractional source-step number, or repeat iteration label.
+Static includes, platform conditions, and fixed-count repeats expand before indexing.
+Repeated source lines therefore have distinct plan indices.
 
 Every divergence includes `resume: { allowed, from, reason?, planDigest, alternateFrom?, repairSessionHeld? }`.
-`from` is not merely the failed step's ordinal — it is the ordinal the caller should actually pass to
-`--from`, computed from the same `repairHint` carried alongside it (decision 6, R2/R3): for `record-and-heal`,
-`from` is the failed step's index **+ 1** (the agent performs that step manually before resuming, so
-resuming AT it would re-diverge on the exact step just completed); for every other hint (`state-repair`,
-`caution`, `manual`), `from` equals the failed step's index unchanged. For the SINGLE-path hints
-(`record-and-heal`, `state-repair`) `from` is the whole continuation, and a JSON/MCP-first caller that
-blindly resumes at `resume.from` reads the identical command the text guidance renders — never a stale `from`
-that loops the caller back onto the step it just repaired. The DUAL-path hints (`caution`, `manual`) are the
-exception: `from` (`N`) carries only their app-state-fix continuation, and a second ordinal — the optional
-`alternateFrom` (`N + 1`, below) — carries the record-and-heal-shaped alternate, so the structured caller
-reads BOTH fields to match the text guidance rather than `resume.from` alone.
+`repairHint` determines `from` under decision 6, R2/R3:
 
-`alternateFrom` is an **additive optional** ordinal (#1262) that makes the `caution`/`manual` dual-path
-structured-caller-legible, not text-only. Those two hints have TWO legitimate repairs the daemon cannot
-disambiguate at divergence time: an app-state fix (`--no-record`, then re-run the unchanged step at `from` =
-`N`), and a record-and-heal-shaped correction (perform the diverged step's intent as a recorded action, then
-resume PAST it at `N + 1`). `from` carries the first; `alternateFrom` carries the second (`N + 1`), present
-**only when a `--from N + 1` request for this divergence would actually be accepted** — the daemon computes
-it as `evaluateReplayResumePreflight({ from: N + 1, actions }).allowed`, which additionally requires the
-diverged step `N` itself to be skip-safe (so it is absent when `N` is a `runScript` outputEnv producer or
-sits inside runtime control flow, where `--from N + 1` would be refused). Because that preflight's checked
-range is a strict superset of `from`'s, `alternateFrom` present implies `allowed: true` — it never
-contradicts the primary. Absent for `record-and-heal` (its `from` already IS the `N + 1` continuation) and
-`state-repair` (no recorded-action alternate). The `repairHint` text guidance renders the `N + 1` command
-**iff `alternateFrom` is present**, never re-deriving resumability client-side, so the text surface and the
-structured wire advertise the identical next command — closing both the text-vs-structured disagreement a
-client-side re-derivation would reintroduce and the parity gap where a structured caller saw only `from`.
+- For `record-and-heal`, `from` is the failed index **N + 1**.
+  The agent performs step N manually before resume.
+- For `state-repair`, `caution`, and `manual`, `from` remains **N**.
 
-If the resume ordinal equals `actions.length + 1` (the diverged step was the plan's LAST step), that is a
-legal EMPTY-TAIL resume, not an error: there is nothing left to replay, so the resumed run executes zero
-device actions and falls straight through to the normal end-of-plan completion path, correctly flipping an
-armed repair transaction COMPLETE (decision 6, R7's `close` commit gate). Rejecting this ordinal outright
-would force the agent to `close` an INCOMPLETE transaction instead, which aborts and discards the corrective
-action it just recorded. This one-past-the-end ordinal is authorized ONLY for the EXACT session and target
-that produced it — the daemon stamps a per-session watermark (`expectedFrom`, the recorded action count at
-divergence time) when a `record-and-heal` divergence reports `allowed: true` (its own `from` is already
-`N + 1`), and — per #1262 — also for a `caution`/`manual` LAST-step divergence whose `alternateFrom` (`N + 1`)
-is preflight-safe (their `from` stays `N`, so the watermark tracks the alternate's `N + 1` empty-tail
-ordinal). Because the watermark can only be stamped on a live session, an empty-tail `alternateFrom` is
-withheld entirely when no session exists (a one-step `open` failure, or a session closed mid-replay) —
-otherwise the daemon would advertise a `--from N + 1` it must then reject. A later `--from` request is
-accepted at `actions.length + 1` only when it matches that watermark AND the session's action count has
-grown since (proof the corrective press was actually recorded) — never a blanket "one past the end is fine"
-for any session or repair kind, which would let an unrelated or blind resume silently skip the plan's
-unresolved final step and commit an incomplete repair. The same watermark match, independent of whether the
-resume ordinal lands one past the end or still inside the plan, also gates every OTHER `record-and-heal`
-continuation: resuming at the reported `from` with the action count unchanged is rejected as proof the
-corrective press never happened, rather than silently resuming past the unrepaired step.
-`planDigest` is SHA-256 over
-the canonical fully expanded plan, including each action's command, normalized inputs, control shape,
-platform-conditioned expansion, and source provenance. Concretely "normalized inputs" bind each action's
-positionals/flags, its execution-affecting `runtime` hints, and its `target-v1` identity annotation
-(decision 3 — verification consumes it pre-action, so a changed annotation is execution-affecting); and
-"platform-conditioned expansion" binds the EFFECTIVE resolved `platform`/`target` the run invokes with (CLI
-flag over script metadata), never the raw script metadata, so a digest computed for one target is not
-reusable against another. Deliberately EXCLUDED are native `.ad` `${VAR}` VALUES: substitution happens
-after planning, so changing only late-bound values keeps the same digest. Maestro environment substitution
-instead happens during compatibility parsing and can change action inputs, includes, or control expansion,
-so it can change the digest. A resume requires both `--from N` and
-`--plan-digest <planDigest>` from the report. The daemon rebuilds the current plan and rejects
-`INVALID_ARGS` before any action when its digest differs, so edits or parse-time expansion cannot silently
-retarget ordinal N. `allowed: false` explains why no resume is safe; its digest
-is still diagnostic, not an authorization to bypass preflight.
+For single-path hints (`record-and-heal`, `state-repair`), `from` describes the complete continuation.
+JSON/MCP callers therefore receive the same next command as text callers.
+For dual-path hints (`caution`, `manual`), `from` describes only app-state repair.
+Their optional `alternateFrom` describes recorded correction.
+Structured callers read both fields to obtain both text alternatives.
 
-`allowed` conveys **plan-resumability only** — whether ordinal `from` can be safely resumed against a
-matching plan — and is emitted for EVERY divergence; it says nothing about whether a session is still
-alive to resume against. Session lifetime is a **distinct** signal: `repairSessionHeld: true` is set on
-any divergence whose session carries an **active repair transaction** — one opened by a `--save-script`
-replay and **persisted on the session** until commit/abort (decision 6, R7). It therefore keys off the
-persisted transaction state, not the current request's flags, so a `--from` continuation that does NOT
-repeat `--save-script` still reports `repairSessionHeld: true`. Only that flag promises the diverging
-daemon/session is being kept live and addressable for the in-flight repair. Decision 6's R7 keys its
-lifetime guarantee off `repairSessionHeld`, never off `allowed` — a plain (non-armed) replay may report
-`allowed: true` for plan-resumability yet tear its session down normally, so a consumer must not read
-`allowed: true` as "the session is still there."
+`alternateFrom` is an additive optional ordinal (#1262).
+For `caution`/`manual`, the daemon cannot yet distinguish these repairs:
 
-Resume does not reconstruct execution state. For `N > 1`, preflight must reject with `INVALID_ARGS` when
-any skipped action can produce `outputEnv` values, or when the skipped range or resume target is inside
-runtime control flow (conditional, retry, or dynamic repeat). The only variables available after a resume
-are explicit script/header, CLI, and shell inputs; if the planner cannot prove that, it rejects rather
-than invoking with an incomplete scope. The daemon also never infers app state: the caller must put the
-app into the required state before resuming. This conservative rule is intentionally the first release
-scope; deterministic state reconstruction is deferred until it can be specified and tested separately.
+- App-state fix: use `--no-record`, then repeat unchanged step N at `from`.
+- Recorded correction: perform step N's intent as a recorded action, then continue at N + 1.
 
-The loop is therefore: run, read the divergence, repair app state, then replay with the reported plan
-digest and index (or the next index after completing the failed action manually). Editing a script requires
-a fresh full replay that produces a new digest. Help documents that protocol and its resume rejections.
-Successful text replay prints one line with replayed count and wall time; `--json` remains structured.
+`alternateFrom` carries N + 1 only if that request passes `evaluateReplayResumePreflight({ from: N + 1, actions }).allowed`.
+Step N must itself be safe to skip.
+A `runScript` `outputEnv` producer or runtime control flow therefore prevents this alternate.
+The alternate preflight examines a strict superset of the primary range.
+Thus, `alternateFrom` implies `allowed: true`.
+`record-and-heal` omits it because `from` already carries N + 1.
+`state-repair` omits it because it has no recorded-action alternate.
+Text renders the N + 1 command **if and only if `alternateFrom` exists**.
+Clients never recompute resumability.
+Text and structured output therefore advertise identical commands.
+
+`actions.length + 1` is a legal **empty-tail resume** for a repaired final step.
+It executes zero device actions and follows normal end-of-plan completion.
+An armed transaction becomes `COMPLETE`, which permits its later `close` commit.
+Otherwise, `close` would abort the incomplete transaction and discard the correction.
+
+This ordinal requires authorization from the exact session and target that produced it.
+The daemon stamps a per-session watermark with `expectedFrom` and the recorded action count at divergence:
+
+- For `record-and-heal` with `allowed: true`, the reported `from` is already N + 1.
+- For a preflight-safe `caution`/`manual` final-step alternate (#1262), the watermark uses `alternateFrom` N + 1.
+  The primary `from` remains N.
+
+Only a live session can receive this watermark.
+Without one, an empty-tail `alternateFrom` is omitted.
+Examples include a one-step `open` failure or a session closed during replay.
+A later empty-tail resume must match the watermark and show growth in the session's action count.
+That growth proves a corrective action was recorded.
+It prevents unrelated or blind resumes from skipping the unresolved last step and committing an incomplete repair.
+Every other `record-and-heal` continuation uses the same watermark and count-growth guard, including ordinals inside the plan.
+If the count is unchanged, resume refuses to skip the unrepaired step.
+
+`planDigest` is SHA-256 over the canonical fully expanded plan.
+It includes command, normalized inputs, control shape, platform-conditioned expansion, and source provenance.
+Normalized inputs include positionals/flags, execution-affecting `runtime` hints, and `target-v1` identity evidence.
+Identity evidence affects pre-action execution and must therefore affect the digest.
+Platform-conditioned expansion uses the **effective resolved `platform`/`target`**.
+CLI flags override script metadata.
+A digest for one target is not reusable for another.
+Native `.ad` `${VAR}` **values are excluded** because substitution follows planning.
+Changes only to late-bound values retain the digest.
+Maestro substitutes environment values during compatibility parsing.
+Those values can change action inputs, includes, or control expansion and therefore the digest.
+
+Resume requires both `--from N` and `--plan-digest <planDigest>` from the report.
+The daemon rebuilds the current plan.
+If the digest differs, it returns `INVALID_ARGS` before any action.
+Edits or parse-time expansion cannot silently change ordinal N's target.
+`allowed: false` explains why resume is unsafe.
+Its digest remains diagnostic and cannot bypass preflight.
+
+`allowed` describes **plan resumability only**.
+Every divergence emits it.
+It says nothing about session lifetime.
+The separate `repairSessionHeld: true` signal identifies an active repair transaction persisted on the session.
+A `--save-script` replay opens it; commit or abort ends it (decision 6, R7).
+A continuation without `--save-script` still reports it because persisted state determines this field.
+Only this signal promises a live addressable daemon/session for repair.
+R7's lifetime guarantee never uses `allowed`.
+A non-armed replay can report `allowed: true` and then terminate its session normally.
+
+Resume reconstructs no execution state.
+For `N > 1`, preflight must reject with `INVALID_ARGS` under either condition:
+
+- A skipped action can produce `outputEnv` values.
+- The skipped range or resume target is inside runtime conditional, retry, or dynamic-repeat control flow.
+
+After resume, only explicit script/header, CLI, and shell inputs supply variables.
+If the planner cannot prove that scope, it rejects the request.
+The daemon never infers app state.
+Before resume, the caller must establish the required app state.
+This conservative first-release scope defers deterministic state reconstruction until a separate specification and tests exist.
+
+The caller runs replay, reads divergence, repairs state or performs the failed action, and resumes with the reported digest and ordinal.
+An edited script requires a fresh full replay and a new digest.
+Help documents this protocol and resume rejections.
+Successful text replay prints one line with replayed count and wall time.
+`--json` remains structured.
 
 ### 5. Mandatory validation
 
