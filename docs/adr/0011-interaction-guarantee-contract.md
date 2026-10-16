@@ -6,63 +6,67 @@ Accepted
 
 Completed process history is in git history.
 
+## Rules at a glance
+
+- Classify every dispatch-path × guarantee cell in the typed registry.
+- Link each gap waiver to a tracking issue. Keep command-scoped claims within the path's command set.
+- Give each TypeScript rule one shared implementation. Prove runner-side equivalents through golden fixtures.
+- Prove every non-waived cell through a tagged contract scenario.
+- Delegation-on-error does not prove success-path parity.
+- Before native-ref execution, apply shared guards to the stored node.
+- Never resend an Apple mutation that may have run.
+- Distinct mutating selector subtrees fail with `AMBIGUOUS_MATCH`, except for the stated compatibility path.
+- Keep synthesized coordinate gesture policy separate from element-targeting guarantees.
+
 ## Context
 
-Interaction commands (`press`/`click`/`fill`/`longpress`, and by extension the
-read/wait surfaces built on the same resolution machinery) reach the device
-through several dispatch paths, each of which chose its latency-vs-semantics
-trade-offs independently:
+Interaction commands reach the device through several dispatch paths.
+These commands include `press`/`click`/`fill`/`longpress` and related read/wait surfaces that share resolution machinery.
+Each path independently selected its latency and semantic compromises:
 
 | Path | What it is | Why it exists |
 | --- | --- | --- |
 | `runtime-selector` | daemon tree capture → `resolveSelectorChain` → guards → coordinate tap | full semantics |
 | `runtime-ref` | session snapshot → ref lookup → guards → coordinate tap | full semantics |
 | `target-drag` | independently resolve source + destination → guards → one pointer plan | dual-endpoint drag semantics |
-| `direct-ios-selector` | selector sent to the XCTest runner, which queries and taps natively | saves a full snapshot round trip |
-| `native-ref` | `backend.tapTarget`/`fillTarget` for `click @ref` / `fill @ref` | saves resolution round trips |
-| `coordinate` | raw x/y tap | escape hatch; semantics intentionally minimal |
-| replay/maestro variants | `allowNonHittableCoordinateFallback`, replay-heal | third-party compat |
+| `direct-ios-selector` | selector sent to the XCTest runner for native query and tap | avoids a full snapshot round trip |
+| `native-ref` | `backend.tapTarget`/`fillTarget` for `click @ref` / `fill @ref` | avoids resolution round trips |
+| `coordinate` | raw x/y tap | explicit minimal semantics |
+| replay/maestro variants | `allowNonHittableCoordinateFallback`, replay-heal | third-party compatibility |
 
-Over one week of fixes, every interaction bug we shipped or caught was the same
-shape — a guarantee enforced on one path and silently absent on a sibling:
+During one week, every shipped or detected interaction bug had the same cause.
+One path enforced a guarantee that another path silently omitted:
 
-- off-screen refusal existed for `@ref` targets but not selector targets, and
-  not in the runner's native tap (Bluesky closed drawer: `Tapped (-161, 265)`
-  reported as success; fixed in #1075);
-- `--verify` evidence attached on `press @ref` but was dropped by
-  `fill @ref`'s hand-built response branch (#1064 review);
-- adb failure classification enriched thrown errors but not
-  `allowFailure`-result errors, and wrapped `exec` but not semantic provider
-  methods (#1067 review);
-- the user's wait budget bounded prepare/replay/snapshot request envelopes but
-  not `wait` itself, and `wait` sat on the daemon-reset timeout path while
-  `snapshot` — same failure mode — preserved the daemon (#1075).
+- Offscreen refusal covered `@ref` targets but omitted selector targets and native runner taps.
+  A closed Bluesky drawer reported success as `Tapped (-161, 265)` (#1075).
+- `press @ref` attached `--verify` evidence.
+  The manually constructed response for `fill @ref` omitted it (#1064 review).
+- adb failure classification enriched thrown errors but omitted errors from `allowFailure` results.
+  It wrapped `exec` but omitted semantic provider methods (#1067 review).
+- The user's wait budget bounded prepare/replay/snapshot envelopes but omitted `wait` itself.
+  A `wait` timeout reset the daemon, while the same failure in `snapshot` preserved it (#1075).
 
-The guarantees themselves are small and well-implemented. What is missing is
-any structure that *knows the full set of paths and the full set of
-guarantees* and can therefore notice an unfilled cell. Reviews catch cells
-only when a reviewer happens to hold both axes in their head; dogfooding
-catches them one production incident at a time.
+The guarantees are small and well implemented.
+The missing structure enumerates every path and every guarantee to detect an unclassified cell.
+Reviews otherwise depend on simultaneous knowledge of both axes.
+Live use detects the gaps only after incidents.
 
 ## Decision
 
-Make the path × guarantee matrix a first-class, machine-checked artifact, with
-three enforcement layers. Types enforce **completeness** of declarations,
-shared implementations prevent **drift**, and generated test coverage enforces
-**truth**.
+Make the path × guarantee matrix a machine-checked artifact with three enforcement layers.
+Types enforce declaration **completeness**.
+Shared implementations prevent **drift**.
+Generated test coverage enforces **truth**.
 
 ### Layer 1 — Declare: the matrix as a typed registry with a gate
 
-Layer 1 is an **honesty/completeness gate, not a truth gate**: it proves that
-every path has declared a stance on every guarantee and that the referenced
-implementations exist. It does not prove the declared behavior — behavioral
-parity only starts once the fixture tables (Layer 2) and contract scenarios
-(Layer 3) land. Landing Layer 1 alone still changes the failure mode: an
-unwatched cell becomes impossible; an unproven cell is at least a visible,
-owned claim.
+Layer 1 proves **honesty/completeness**, not behavior.
+It proves that every path declares a position on every guarantee and that referenced implementations exist.
+Behavioral parity additionally requires Layer 2 fixture tables and Layer 3 contract scenarios.
+Layer 1 alone prevents an undeclared cell.
+An unproven cell remains a visible claim with an owner.
 
-`packages/contracts/src/interaction-guarantees.ts` declares both axes and requires
-every cell to be classified:
+`packages/contracts/src/interaction-guarantees.ts` declares both axes and requires classification of every cell:
 
 ```ts
 export const INTERACTION_GUARANTEES = [
@@ -77,19 +81,21 @@ export const INTERACTION_GUARANTEES = [
 ] as const;
 ```
 
-Cells may be **command-scoped** via `appliesTo` when a guarantee only exists
-for a subset of the path's commands — e.g. `verifyEvidence` applies to
-`press`/`click`/`fill` but not `longpress`, and claiming it path-wide would
-overstate coverage. The gate rejects `appliesTo` entries naming commands the
-path does not dispatch, and rejects redundant full-coverage lists.
+When a guarantee applies to only some path commands, cells may use command-scoped `appliesTo`.
+For example, `verifyEvidence` applies to `press`/`click`/`fill`, but not `longpress`.
+A path-wide claim would overstate coverage.
+The gate rejects commands outside the path and redundant lists that cover all path commands.
 
-`responseConstruction` and `responseIdentity` are deliberately separate: "use
-one shared construction site" and "which identity fields this path can
-provide" have different closure strategies (the former is a single Layer-2
-refactor; the latter is per-path capability work). `errorTaxonomy` is expected
-to split the same way later — stable codes/fallback classification vs rich
-selector diagnostics and hints — because direct runner paths can close codes
-long before full diagnostics.
+`responseConstruction` and `responseIdentity` remain separate.
+A shared construction site and available identity fields need different completion strategies.
+The former requires one Layer-2 refactor.
+The latter requires per-path capability work.
+`errorTaxonomy` is expected to split similarly later:
+
+- Stable codes and fallback classification.
+- Rich selector diagnostics and hints.
+
+Direct runner paths can implement codes before full diagnostics.
 
 ```ts
 
@@ -109,171 +115,167 @@ export const INTERACTION_DISPATCH_PATHS: Record<
 > = { /* every path, every cell */ };
 ```
 
-Because `guarantees` is a `Record` over the guarantee union, **tsc fails** the
-moment someone adds a guarantee without classifying it for every path, or adds
-a path without classifying every guarantee. A unit gate
-(`interaction-guarantees.test.ts`) additionally checks that:
+`guarantees` is a `Record` over the guarantee union.
+Thus, **tsc fails** if a new guarantee lacks classification for every path or a new path lacks any guarantee classification.
+The unit gate `interaction-guarantees.test.ts` also verifies:
 
-- every `via` string resolves to a real exported symbol (declarations cannot
-  rot into fiction);
-- every `parityTable` names an existing fixture file;
-- every `waived` reason is non-empty, and every `gap:` waiver carries a
-  `trackingIssue` — waivers must be owned, not merely visible. One umbrella
-  tracking issue with sub-issues split off as work is scheduled is
-  sufficient; the gate enforces the link, not the granularity.
+- Every `via` string resolves to a real exported symbol.
+- Every `parityTable` names an existing fixture file.
+- Every `waived` reason is non-empty.
+- Every `gap:` waiver has a `trackingIssue`.
 
-This is the same "make the gap declare itself" pattern already proven in this
-repo by `scripts/integration-progress-model.ts` (which caught the unclassified
-`--verify` flag on #1064) and the cross-command apple-leak guard from the
-platform consolidation (ADR 0009).
+Waivers require ownership as well as visibility.
+One umbrella issue is sufficient, with sub-issues added when work is scheduled.
+The gate enforces the link, not issue granularity.
+
+The repository already uses this explicit-gap pattern in `scripts/integration-progress-model.ts` and ADR 0009's cross-command apple-leak guard.
+The progress model detected the unclassified `--verify` flag on #1064.
 
 ### Layer 2 — Share: one implementation per rule, on both sides of the wire
 
-Each guarantee has exactly one home that all TS paths import (most already
-exist after #1075: `isNodeVisibleOnScreen`, `accumulateDisambiguationCandidate`,
-`isSnapshotNodeInteractionBlocked`, `describeResolvedNode`,
-`interactionResultExtra`, `reconcileNonHittableHintWithEvidence`). The
-registry's `via` fields point at them; fallow's duplication gate keeps
-re-implementations from creeping back.
+Each guarantee has exactly one owner imported by every TypeScript path.
+Existing owners include:
 
-Rules that must run **runner-side** (the direct iOS path cannot see the daemon
-tree) get pure-function Swift twins operating on plain geometry — no
-`XCUIElement` — e.g. `TapPointPolicy.isAllowed(elementFrame:windowFrame:)`.
-Parity is enforced by **golden fixture tables**: JSON files under
-`contracts/fixtures/` consumed by three test suites —
+- `isNodeVisibleOnScreen`.
+- `accumulateDisambiguationCandidate`.
+- `isSnapshotNodeInteractionBlocked`.
+- `describeResolvedNode`.
+- `interactionResultExtra`.
+- `reconcileNonHittableHintWithEvidence`.
 
-1. vitest asserts the TS rule over the table;
-2. the runner's Swift unit tests (already compiled in CI by "Swift Runner Unit
-   Compile") assert the Swift twin over the same table;
-3. the provider harness's fake runner derives its behavior from the same
-   table, so integration scenarios exercise the real contract rather than a
-   hand-written approximation.
+The registry's `via` fields identify them.
+Fallow's duplication gate prevents new duplicate implementations.
 
-Drift between TS and Swift then turns CI red on whichever side changed,
-without needing a simulator.
+Rules that must execute runner-side use pure-function Swift equivalents over plain geometry, without `XCUIElement`.
+The direct iOS path cannot see the daemon tree.
+`TapPointPolicy.isAllowed(elementFrame:windowFrame:)` is one example.
+**Golden fixture tables** under `contracts/fixtures/` enforce parity through three consumers:
 
-`contracts/fixtures/dispatch-disclosure.json` is the table for
-`AppErrorDetails.dispatched` on interaction failures: one row per producer
-event, each with the value it must leave. The field has two values: `no` (the
-operation never reached the device, or the command is a read, so a resend is
-safe) and `unknown` (it may have landed, so observe before resending). Only a
-producer that refuses before dispatch (target resolution, admission, a runner
-pre-send refusal) may say `no`; no producer can prove execution on its failure
-path, so there is no third value.
+1. Vitest asserts the TypeScript rule against the table.
+2. Runner Swift unit tests assert the Swift equivalent against the same table.
+   CI already compiles them through "Swift Runner Unit Compile".
+3. The provider harness's fake runner derives its behavior from the table.
+   Integration scenarios therefore exercise the real contract instead of a manual approximation.
 
-Each request owns one dispatch ledger. Every bound runtime operation declares
-its effect once, in `RUNTIME_OPERATION_EFFECTS`, a record over the runtime
-operation keys, so an operation cannot bind without one. The request binding
-records each `mutates` operation in the request's ledger when its send
-returns, so no bound runtime operation sends a mutation outside the ledger.
-Android ANR and blocking-dialog recovery is outside the ledger: its
-`AndroidObservationAdapter.tap` and `openApp` calls reach the device without a
-record. A nested request (a
-batch step, a replay action, a delegated `find` click or fill) records into a
-ledger of its own and moves its sends into its parent's.
+A TypeScript or Swift difference fails CI on the changed side without a simulator.
 
-The request router discloses around every routed command. Once the ledger
-holds a sent mutation, a failure is `unknown` with the sent count in
-`details.dispatchedSteps`, whatever produced it and whatever the command
-declares: a wrong `no` makes a consumer resend an action that already ran,
-while a wrong `unknown` only costs an observation. Before that, the registry's
-`recordingEffect` decides. For `'mutates-app'` the router keeps a producer's
-value and fills `unknown` for a failure no producer classified. For
-`'observes-app'` it sets `no` over any producer value. A command with no
-declared effect passes through.
+`contracts/fixtures/dispatch-disclosure.json` defines `AppErrorDetails.dispatched` on interaction failures.
+Each producer event has one row with its required value:
 
-`no` for a read means that a resend repeats no app-visible action. The
-registry declares `record`, `trace`, and `perf` as `'observes-app'`, although
-their recorder and profiler controls reach the device: no registry trait
-separates a pure read from a device control, and those controls are declared
-`repeatable` at the operation level, because the device refuses or ignores a
-repeat. A producer that runs several device inputs inside one bound operation
-(an Android double tap, an iOS press series) counts them in
-`details.dispatchedSteps` itself, because the ledger sees one operation.
+- `no`: the operation never reached the device, or the command is a read, so a resend is safe.
+- `unknown`: the operation may have reached the device, so observe before resend.
 
-Each row names its driver file by id prefix, and that file drives the real
-producer.
+Only pre-dispatch refusals from target resolution, admission, or runner pre-send checks may report `no` for an operation.
+No producer can prove execution on its failure path, so no third value exists.
 
-The Apple runner does not resend a mutating command whose first send may have
-run: a restart resends only a command the first attempt provably did not write,
-or a read-only one. A mutation whose reply stays lost (the runner dies
-mid-command, or status recovery finds neither a retained result nor a runner
-answer) fails with `reason: runner_reply_lost` and `dispatched: unknown` (rows
-`ios-runner.transport.written-then-lost`,
-`ios-runner.status.completed-without-retained-reply`,
-`ios-runner.status.accepted`, `ios-runner.status.started`,
-`ios-runner.status.notAccepted`, `ios-runner.status.probe-failed`, and
-`ios-runner.status.unavailable`). The `ios-runner.status.failed*` rows carry the
-runner's own answer instead. A read keeps its transport error and is resent.
+Each request owns one dispatch ledger.
+Every bound runtime operation declares its effect once in `RUNTIME_OPERATION_EFFECTS`, a record over runtime operation keys.
+An operation cannot bind without an effect.
+When a send returns, the request binding records each `mutates` operation in that request's ledger.
+Thus, no bound runtime operation sends an unrecorded mutation.
+Android ANR and blocking-dialog recovery remain outside the ledger.
+Their `AndroidObservationAdapter.tap` and `openApp` calls reach the device without a record.
+A nested request has its own ledger and transfers its sends to its parent's ledger.
+Examples include batch steps, replay actions, and delegated `find` clicks or fills.
 
-Remaining gaps: a failure before the router's locked scope (session
-resolution, lock acquisition, lease and daemon-policy admission) never reaches
-the disclosure and carries no `dispatched`. It sends nothing, but a consumer
-must read the absent field as `unknown`.
+The request router adds disclosure around every routed command.
+After a sent mutation enters the ledger, any failure reports `unknown` and the sent count in `details.dispatchedSteps`.
+This overrides both producer output and command declarations.
+An incorrect `no` could cause a consumer to repeat an action that ran.
+An incorrect `unknown` costs only an observation.
+Before any sent mutation, registry `recordingEffect` controls disclosure:
 
-`runBatch` reports `no` only when every executed step is a command declared
-`observes-app` (a read); any other executed step, including one with no
-declared `recordingEffect`, makes the batch failure `unknown` for every caller,
-including one that supplies its own `invoke`.
+- For `'mutates-app'`, preserve the producer's value.
+  If no producer classified the failure, supply `unknown`.
+- For `'observes-app'`, set `no` over any producer value.
+- Without a declared effect, preserve the response unchanged.
 
-For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
-construction site for interaction response payloads (this deletes the class of
-bug where `fill @ref` rebuilt its response by hand and dropped `evidence`). A
-small guard test — repo-precedented — fails if an interaction handler contains
-a hand-rolled `responseData = {` literal.
+For reads, `no` means a resend repeats no app-visible action.
+The registry declares `record`, `trace`, and `perf` as `'observes-app'`, although recorder/profiler controls reach the device.
+No registry trait separates pure reads from device controls.
+Those operations are `repeatable` because the device refuses or ignores a repeat.
+If one bound operation performs several inputs, its producer counts them in `details.dispatchedSteps` because the ledger sees only one operation.
+Examples include an Android double tap and an iOS press series.
+
+Each fixture row's id prefix identifies its driver file.
+That file exercises the real producer.
+
+The Apple runner does not resend a mutation whose first send may have run.
+After restart, it resends only a read-only command or a command that the first attempt provably did not write.
+If a mutation's reply remains lost, failure carries `reason: runner_reply_lost` and `dispatched: unknown`.
+This applies if the runner dies mid-command or status recovery finds neither a retained result nor a runner answer.
+The fixture rows are:
+
+- `ios-runner.transport.written-then-lost`.
+- `ios-runner.status.completed-without-retained-reply`.
+- `ios-runner.status.accepted`.
+- `ios-runner.status.started`.
+- `ios-runner.status.notAccepted`.
+- `ios-runner.status.probe-failed`.
+- `ios-runner.status.unavailable`.
+
+The `ios-runner.status.failed*` rows instead carry the runner's own answer.
+A read retains its transport error and is resent.
+
+An evidence gap remains before the router's locked scope.
+Failures in session resolution, lock acquisition, lease admission, or daemon-policy admission never reach disclosure and carry no `dispatched`.
+They send nothing, but consumers must interpret absence as `unknown`.
+
+`runBatch` reports `no` only if every executed step declares `observes-app`.
+Any other executed step makes the batch failure `unknown`, including steps without `recordingEffect`.
+This applies to every caller, including callers with their own `invoke`.
+
+For `responseFields`, `buildInteractionResponseData(...)` becomes the only construction site for interaction response payloads.
+This prevents manual branches such as `fill @ref` from omitting `evidence`.
+A small guard test follows repository precedent.
+It fails if an interaction handler contains a manual `responseData = {` literal.
 
 ### Layer 3 — Prove: a contract suite generated from the registry
 
-`test/integration/interaction-contract/` holds table-driven scenarios: fixture
-tree × command × forced path. The fixture trees are the real shapes that found
-this week's bugs, kept permanently:
+`test/integration/interaction-contract/` contains table-driven scenarios: fixture tree × command × forced path.
+Permanent fixture trees preserve the real failure shapes:
 
-- closed drawer (all candidates off-screen) → `offscreen_selector`/`offscreen_ref`;
-- stale or unknown `@ref` (errorTaxonomy) → `ref_not_found` beside the stale-ref hint; a listed
-  `@ref` whose node has no usable centre (missing, non-finite, or negative bounds), or a selector
-  target without one → `target_bounds_invalid`; a listed `@ref` with no label to wait on or scope
-  by → `ref_unlabeled`;
-- drawer item + visible twin (ambiguous on/off-screen) → visible candidate wins;
-- edge-grazing container (0.07 px viewport overlap, center off-screen) → still refused;
-- covered node → occlusion refusal;
-- non-hittable target ± `--verify` → hint present / suppressed by evidence;
-- stripped-root tree (no Application/Window) → safe-default visibility.
+- Closed drawer with all candidates offscreen → `offscreen_selector`/`offscreen_ref`.
+- Stale or unknown `@ref` → `ref_not_found` with the stale-ref hint.
+- Listed `@ref` or selector target without a usable center → `target_bounds_invalid`.
+  Bounds can be missing, non-finite, or negative.
+- Listed `@ref` without a label for wait or scope → `ref_unlabeled`.
+- Drawer item and visible twin → visible candidate wins despite on/offscreen ambiguity.
+- Container with 0.07 px viewport overlap and offscreen center → refusal.
+- Covered node → occlusion refusal.
+- Non-hittable target with or without `--verify` → hint present or suppressed by evidence.
+- Stripped-root tree without Application/Window → safe-default visibility.
 
-Path forcing is explicit (`AGENT_DEVICE_FORCE_INTERACTION_PATH=runtime|direct|native-ref`,
-test-only) so cases stay stable when path-selection heuristics change.
-
-The gate closes the loop: it walks the Layer-1 registry and fails when any
-non-waived cell has no contract case tagged for it. Coverage of the matrix is
-therefore by construction, not by reviewer memory.
+Tests force paths explicitly with `AGENT_DEVICE_FORCE_INTERACTION_PATH=runtime|direct|native-ref`.
+This test-only control keeps cases stable when path selection heuristics change.
+The gate traverses the Layer-1 registry.
+It fails if a non-waived cell has no tagged contract case.
+Thus, construction enforces matrix coverage without reviewer memory.
 
 ### Closing the gaps: a hybrid strategy, not one answer
 
-The acknowledged gaps close by different mechanisms depending on what the
-guarantee needs:
+Different guarantees require different mechanisms to close acknowledged gaps:
 
-- **Runner-side parity for cheap geometry-local rules** (offscreen /
-  tappable-frame on the direct iOS path). These are pure frame math, provable
-  with golden tables, and keep the fast path fast.
-- **Delegation-on-error for semantic and rich-runtime cases**
-  (`ELEMENT_OFFSCREEN`, `AMBIGUOUS_MATCH`, `ELEMENT_NOT_FOUND`, non-hittable
-  refusal): the fast path fails cheaply, and the runtime path supplies
-  disambiguation and full diagnostics only when needed. **Delegation-on-error
-  is not success-path parity**: it cannot catch the case where XCTest finds
-  one hittable candidate that runtime rules would refuse or rank differently.
-  Those cells stay `gap:` waivers until parity tables or contract scenarios
-  prove the success path too.
-- **A shared runtime preflight for the native-ref path**: the ref came from a
-  daemon snapshot, so the node is already in hand — check offscreen /
-  occlusion / non-hittable against it *before* calling
-  `tapTarget`/`fillTarget`. A backend fast path can silently "succeed", so
-  delegation-on-error would never trigger there.
+- **Runner-side parity for low-cost geometry-local rules.** Direct iOS offscreen/tappable-frame rules use pure geometry proven by golden tables.
+  They preserve the fast path's latency.
+- **Delegation-on-error for semantic and rich-runtime cases.** These include `ELEMENT_OFFSCREEN`, `AMBIGUOUS_MATCH`, `ELEMENT_NOT_FOUND`, and non-hittable refusal.
+  The fast path fails at low cost.
+  The runtime path supplies disambiguation and full diagnostics only when required.
+  **Delegation-on-error does not prove success-path parity.**
+  XCTest may find one hittable candidate that runtime rules would refuse or rank differently.
+  Those cells retain `gap:` waivers until parity tables or contract scenarios also prove success-path behavior.
+- **Shared runtime preflight for native-ref.** The daemon snapshot already contains the ref's node.
+  Before `tapTarget`/`fillTarget`, examine offscreen, occlusion, and non-hittable conditions against that node.
+  A backend fast path can silently succeed, so delegation-on-error would never run.
 
 ### Timeout policy joins the descriptor registry
 
-The `wait` timeout bug existed because request-envelope budgets and
-on-timeout daemon policy lived in two hand-maintained lists in the client
-(`isExplicitTimeoutCommand`, `shouldResetDaemonAfterRequestTimeout`). Both are
-replaced by declarations on the command descriptors (ADR 0008 registry):
+Two manually maintained client lists caused the `wait` timeout defect:
+
+- `isExplicitTimeoutCommand` controlled request-envelope budgets.
+- `shouldResetDaemonAfterRequestTimeout` controlled timeout daemon policy.
+
+Command descriptors in ADR 0008 replace both lists with declarations:
 
 ```ts
 timeoutPolicy: {
@@ -282,155 +284,163 @@ timeoutPolicy: {
 }
 ```
 
-with a completeness gate over all public commands. Read-only polling commands
-declare `preserve-daemon`; the client derives the envelope from the declared
-budget source instead of special-casing command names. Since #1105 the
-capture-resolving interaction commands (`click`, `fill`, `longpress`, `press`,
-`type`, `get`, `is`) also declare `preserve-daemon`: their dominant timeout
-mode is the same blocked accessibility capture as `snapshot`, and resetting
-the daemon there destroyed every healthy app session the daemon owned.
+A completeness gate covers every public command.
+Read-only polling commands declare `preserve-daemon`.
+The client derives the envelope from the declared budget source instead of command-name exceptions.
+Capture-resolving interactions also declare `preserve-daemon` (#1105):
+
+- `click`.
+- `fill`.
+- `longpress`.
+- `press`.
+- `type`.
+- `get`.
+- `is`.
+
+Like `snapshot`, their dominant timeout cause is blocked accessibility capture.
+A daemon reset would destroy every healthy app session it owns.
 
 ## Consequences
 
-- Adding a dispatch path or a guarantee becomes a *forced* whole-matrix
-  decision: tsc will not compile an unclassified cell, and the gate will not
-  pass an untested one. Silent erosion is structurally impossible; explicit
-  waivers remain possible but visible and linkable to issues.
-- Fast paths keep their latency wins. Their divergence is priced and
-  documented instead of discovered on-device.
-- The Swift/TS split stops being a parity blind spot: golden tables are the
-  single source of truth for cross-language rules, and the fake runner stops
-  being a second, drifting implementation.
-- Initial cost is mostly classification honesty: the first registry will
-  contain `waived('gap: ...')` cells (e.g. the maestro non-hittable fallback
-  intentionally waives `offscreen`), which is the point — the debt becomes a
-  diffable list instead of folklore.
-- The registry doubles as documentation input for help/skill output ("what
-  press guarantees"), which matters for small-model agents that only read the
-  contract, never the code.
+- A new path or guarantee requires a whole-matrix decision.
+  tsc rejects unclassified cells, and the gate rejects untested cells.
+  Silent loss is structurally impossible.
+  Explicit waivers remain possible, visible, and linked to issues.
+- Fast paths retain latency benefits with documented differences and costs.
+- Golden tables become the single source of truth for cross-language rules.
+  The fake runner no longer provides a second implementation that can diverge.
+- Initial classification includes `waived('gap: ...')` cells.
+  For example, the maestro non-hittable fallback intentionally waives `offscreen`.
+  The debt becomes a reviewable list instead of undocumented knowledge.
+- The registry also supplies documentation input for help/skill output, such as the guarantees of press.
+  This matters for small-model agents that read contracts without code.
 
 ### 2026-08-07 amendment: mutating ambiguity fails fast
 
-Element-14 realized the matrix's previously owned success-path gap: four exact
-`Team Standup` matches in distinct accessibility subtrees reached ordinary
-runtime selector resolution, whose visible/depth/area ranking silently chose a
-different semantic target. Mutating selectors no longer use geometry to choose
-among distinct subtrees.
+Element-14 demonstrated the owned success-path gap with four exact `Team Standup` matches in distinct accessibility subtrees.
+Ordinary runtime selector resolution silently selected a different semantic target through visible/depth/area ranks.
+Mutating selectors no longer use geometry to select between distinct subtrees.
 
-The replacement contract is structural. Multiple matches collapse only when
-all matches form one ancestor–descendant chain and every member resolves to the
-same actionable node. Otherwise the mutation fails with `AMBIGUOUS_MATCH`, a
-bounded list of snapshot candidate lines, and a partial ref frame generation so
-the caller can retry one listed candidate immediately. On the direct XCTest path
-this applies to mutating dispatches only: they count all raw exact matches before
-hittability can select a winner and delegate multiple matches to the runtime
-classifier. Reads (`querySelector`, and so `get`/`is`/`wait`) keep the prior rule
-— prefer the single hittable match, ambiguous only when hittable matches compete
-— because a read has no side effect to guard and failing it closed would turn a
-decorative duplicate into an error. Maestro's explicit expected-point /
-non-hittable compatibility path remains intentionally separate.
+The replacement contract is structural.
+Multiple matches collapse only if all form one ancestor–descendant chain and every member resolves to the same actionable node.
+Otherwise, mutation fails with `AMBIGUOUS_MATCH`.
+It returns bounded snapshot candidate lines and a partial ref frame generation for immediate retry with one listed candidate.
+On direct XCTest paths, this applies only to mutating dispatches.
+They count all raw exact matches before hittability can select a candidate.
+Multiple matches delegate to the runtime classifier.
+Reads through `querySelector`, and thus the original `get`/`is`/`wait` paths, retain the prior rule:
+
+- Prefer the single hittable match.
+- Report ambiguity only if hittable matches compete.
+
+Reads have no side effect to protect.
+A closed failure would turn a decorative duplicate into an error.
+The amendment below updates which paths still use `querySelector`.
+Maestro's explicit expected-point/non-hittable compatibility path remains intentionally separate.
 
 ### 2026-09-11 amendment: one collapse for one control, at both doors
 
-Two clauses of the amendment above went stale as the read paths moved, and the
-structural rule never reached the read door.
+Two earlier clauses became stale after read paths changed.
+The structural rule also needed to apply to reads:
 
-- `querySelector` no longer backs `get`/`is`/`wait`. Those reads resolve against a
-  capture, through the `readUnique`/`readAny`/`readText` rows of
-  `packages/selectors/src/selector-pipeline.ts`, so the runner's hittable-preference
-  rule governs only the direct XCTest paths that still query it: the direct-iOS
-  touch fast path and the off-screen target probe.
-- A control reported through its own accessibility wrapper answers a selector
-  twice. A regular iOS snapshot omits unverified hittability, so the ladder that
-  relates a wrapper to its control cannot fire, and #2482 collapsed that chain for
-  mutating resolution only: `is visible` and `get attrs` refused the same screen
-  as ambiguous while `press` tapped it. The collapse now sits beside the
-  classification that asks for it (`resolveUnverifiedWrapperControl`) and applies
-  where a refusal was the answer: the uniqueness rows — `is <predicate>`,
-  `get attrs`, `screenshot --crop-on` — resolve the control instead of reporting
-  no match. A row that resolves before any refusal is untouched by it, and a
-  wrapper chain always resolves before one: depth separates a wrapper from its
-  control, so `get text` ranks onto the control and `wait`/`is exists` answer from
-  the document-order head without asking which element was meant. A candidate set
-  the rule does not recognize as one control — a cell and the button inside it, or
-  matches in distinct subtrees — still refuses.
-- Replay verifies a recorded target by resolving its recorded selector again under
-  the same row's refusal rules, so the screen dispatch had resolved read as an
-  identity mismatch on the step's first replay. Verification names the collapsed
-  control too, which is the node dispatch acted on and the node the recorded
-  identity carries.
+- `querySelector` no longer serves `get`/`is`/`wait`.
+  These reads resolve a capture through `readUnique`/`readAny`/`readText` in `packages/selectors/src/selector-pipeline.ts`.
+  The runner's hittable-preference rule therefore governs only remaining direct XCTest queries: direct-iOS touch fast path and offscreen target probe.
+- A control's accessibility wrapper can make one selector match twice.
+  Regular iOS snapshots omit unverified hittability, so the wrapper-to-control relation cannot use that evidence.
+  A mutation-only collapse (#2482) let `press` succeed while `is visible` and `get attrs` reported ambiguity on the same screen.
+  `resolveUnverifiedWrapperControl` now places collapse beside its classification.
+  Uniqueness rows that otherwise refuse resolve the control:
+  - `is <predicate>`.
+  - `get attrs`.
+  - `screenshot --crop-on`.
+  Rows that resolve before refusal remain unchanged.
+  A wrapper chain always resolves before refusal on those rows.
+  Depth makes `get text` rank the control above its wrapper.
+  `wait`/`is exists` use the first document-order match without requiring unique identity.
+  Candidate sets outside the one-control rule still refuse.
+  Examples include a cell with its internal button and matches in distinct subtrees.
+- Replay verifies recorded targets by resolving their selectors under the same row's refusal rules.
+  Without equivalent collapse, the first replay could report identity mismatch for a target dispatch had resolved.
+  Verification therefore names the collapsed control, matching both dispatch and recorded identity.
 
 ### Synthesized iOS gesture policy
 
-Synthesized iOS gestures (`scroll`, synthesized coordinate `tap`, synthesized
-`drag`, and synthesized `sequence` tap/drag steps) are intentionally not folded
-into the element dispatch-path matrix above. They do not resolve selectors or
-refs, so claiming the element-targeting guarantees would be misleading. Their
-AX-health, keyboard-probe, frame-source, activation-preflight, and
-XCTest-coordinate fallback rules stay runner-local in
-`RunnerTests+SynthesizedGesturePolicy.swift`. That Swift policy is the source of
-truth because the current table has only three behaviors:
+Synthesized iOS gestures intentionally remain outside the element dispatch-path matrix:
 
-- coordinate synthesized tap, standalone, as a `sequence` step, or as the
-  in-app `back` top-leading tap, never probes keyboards and may use the
-  coordinate fallback;
-- default iOS scroll probes keyboards only after AX is known healthy and must
-  not fall back to `XCUICoordinate`;
-- synthesized one-contact `gesture` plans may still use the coordinate fallback
-  before AX health is known, but stop using it once a snapshot stamps AX
-  unavailable.
+- `scroll`.
+- Synthesized coordinate `tap`.
+- Synthesized `drag`.
+- Synthesized `sequence` tap/drag steps.
 
-The non-obvious parts are covered by gated XCTest policy tests instead of a
-cross-language mirror. A future sibling registry should only be introduced once
-gesture policy grows beyond this small runner-local table or needs host-side
-tooling to consume it directly. Synthesized coordinate contexts use screenshot
-dimensions as their only frame source; cheaper frame sources such as
-`app.frame`, windows, accessibility frames, or native screen bounds are
-intentionally excluded because they can diverge from full-screen screenshot
-coordinates on affected simulators.
+They resolve neither selectors nor refs.
+Element-targeting guarantee claims would therefore mislead.
+`RunnerTests+SynthesizedGesturePolicy.swift` retains runner-local rules for AX health, keyboard probes, frame sources, activation preflight, and XCTest-coordinate fallback.
+This Swift policy is authoritative because the current table has only three behaviors:
 
-Target-authored `gesture drag` is classified as the `target-drag` path above because it resolves two
-elements and therefore inherits the element guarantees and ADR 0012 identity requirements for both.
+- Synthesized coordinate taps never probe keyboards and may use coordinate fallback.
+  This includes standalone taps, `sequence` steps, and the in-app `back` top-leading tap.
+- Default iOS scroll probes keyboards only after known AX health.
+  It must not fall back to `XCUICoordinate`.
+- Synthesized one-contact `gesture` plans may use coordinate fallback before known AX health.
+  After a snapshot reports unavailable AX, they stop using it.
+
+Gated XCTest policy tests cover the less obvious cases instead of a cross-language duplicate.
+A sibling registry should be introduced only under either condition:
+
+- Gesture policy grows beyond this small runner-local table.
+- Host-side tools need to consume it directly.
+
+Synthesized coordinate contexts use screenshot dimensions as their only frame source.
+They intentionally exclude cheaper sources such as:
+
+- `app.frame`.
+- Windows.
+- Accessibility frames.
+- Native screen bounds.
+
+Those sources can differ from full-screen screenshot coordinates on affected simulators.
+
+Target-authored `gesture drag` uses the `target-drag` path because it resolves two elements.
+It inherits element guarantees and ADR 0012 identity requirements for both endpoints.
 Coordinate-authored drag remains outside this matrix.
 
-Two-contact pan/pinch/rotate/transform planning is now owned by the typed
-gesture-plan contract in [ADR 0013](0013-unified-gesture-plans.md). It remains a
-sibling of this element-targeting matrix: coordinate gestures do not acquire
-selector/ref guarantees merely because their native executor uses XCTest.
+[ADR 0013](0013-unified-gesture-plans.md) owns two-contact pan/pinch/rotate/transform plans.
+That contract remains separate from this element-targeting matrix.
+A coordinate gesture does not acquire selector/ref guarantees because its native executor uses XCTest.
 
 ## Alternatives considered
 
-- **Delete the fast paths** (single resolution spine): unacceptable — the
-  direct iOS path saves a full snapshot round trip per interaction and the
-  ref fast path is the backbone of replay throughput. The problem is not that
-  fast paths exist; it is that their trade-offs were implicit.
-- **Typestate/branded types** ("cannot construct a response without proof the
-  guards ran"): cannot reach across the wire into Swift, and the proof tokens
-  go viral through every signature for marginal gain over the
-  registry-plus-gate split. Types are used where they are strongest —
-  completeness of the declaration — and tests where they are strongest —
-  truth of the declaration.
-- **More integration tests without the registry**: this is the status quo
-  plus effort. Without the matrix as code, nothing forces a new path to
-  acquire the existing suite, which is exactly how this week's bugs happened.
+- **Delete fast paths and use one resolution path.** Unacceptable.
+  Direct iOS avoids a full snapshot round trip per interaction.
+  The ref fast path is central to replay throughput.
+  Their implicit compromises require explicit contracts.
+- **Use typestate/branded proof types.** Proof that response guards ran cannot cross the wire into Swift.
+  Proof tokens would spread through every signature for little additional benefit over the registry and gate.
+  Types enforce declaration completeness, while tests prove declared behavior.
+- **Add integration tests without a registry.** This retains the existing failure mode with more effort.
+  Without a coded matrix, no mechanism requires a new path to acquire the existing suite.
 
 ### Optional observation before an iOS coordinate tap
 
-A coordinate tap must not depend on a preceding XCTest snapshot failure. Its
-optional text-input lookup may establish a concrete identity for a later bare
-`type`; an absent or unavailable lookup establishes no typing witness. A runner
-snapshot penalty can skip this work, but is only a performance optimization.
+A coordinate tap must not depend on a preceding XCTest snapshot failure.
+Its optional text-input lookup may establish concrete identity for a later bare `type`.
+An absent or unavailable lookup establishes no typing witness.
+A runner snapshot penalty can skip this work, but only as a performance optimization.
 
-The lookup owns a thread-bound issue scope in the runner recorder and returns a
-typed result. Any recorded issue, including one otherwise handled by AX suppression,
-discards partial candidates. The scope excludes gesture dispatch and required
-text-entry reads. Those failures retain the existing mutation-outcome rules.
+The lookup owns a thread-bound issue scope in the runner recorder and returns a typed result.
+Any recorded issue discards partial candidates, including an issue otherwise handled by AX suppression.
+The scope excludes gesture dispatch and required text-entry reads.
+Those failures retain existing mutation-outcome rules.
 
-The iOS PR lane exercises a fresh runner with an unavailable probe, a suppressed
-AX issue with a matching candidate, healthy coordinate tap followed by typing,
-and failures outside the optional observation scope. These tests must not seed a
-snapshot penalty to make the first tap safe.
+The iOS PR lane exercises:
 
-The recorder consumes optional-read issues before forwarding to XCTest. XCTest's
-expected-failure API must not own this scope: in a long-lived command test it can
-complete the enclosing test even when the command response succeeds.
+- A fresh runner with an unavailable probe.
+- A suppressed AX issue with a matching candidate.
+- A healthy coordinate tap followed by typing.
+- Failures outside the optional observation scope.
+
+These tests must not seed a snapshot penalty to make the first tap safe.
+Before the recorder forwards optional-read issues to XCTest, it consumes them.
+XCTest's expected-failure API must not own this scope.
+In a long-lived command test, it can complete the enclosing test even if the command response succeeds.
