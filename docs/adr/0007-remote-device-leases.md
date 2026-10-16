@@ -4,218 +4,284 @@
 
 Accepted
 
+## Rules at a glance
+
+- Allocate device leases lazily after device, backend, and provider resolution.
+- Keep lease mutation and request execution under the same daemon request lock.
+- Generated connection profiles must strip daemon and Metro bearer tokens.
+- A session cannot outlive its lease. Teardown clears its device claim even if the device does not answer.
+- Report request-ended leases once on the outermost response. Clients must not release them again.
+- Wanted admitted work preserves its lease. Canceled work neither defers expiry nor renews it.
+- Before admission, protect long client phases with lease heartbeats under the lease's existing window.
+- Human-control holds fence mutations through registry-owned admission and drain behavior.
+- Only host administrators allocate and release `macos-app` leases. Confine each admitted request to the leased app.
+
 ## Context
 
-Remote daemon users need a clear ownership boundary before commands reach a
-platform runner or helper. Shared proxy and hosted providers need ownership to
-include the selected device and connection provider, not only tenant/run.
+Remote daemon users need a clear ownership boundary before commands reach a platform runner or helper.
+Shared proxies and hosted providers need ownership to include the selected device and connection provider, in addition to tenant/run.
 
-Runner and helper processes already have backend-specific mutual exclusion. That
-guard protects platform tooling, not remote client ownership, so surfacing those
-errors directly makes device contention harder to recover from.
+Runner and helper processes already have backend-specific mutual exclusion.
+This guard protects platform tools, not remote client ownership.
+Direct exposure of those errors makes device contention harder to resolve.
 
 ## Decision
 
-A remote device lease is logical ownership of one selected device by one
-remote client for a connection provider such as `proxy`, cloud, or `limrun`.
+A remote device lease is logical ownership of one selected device by one remote client for a connection provider.
+Examples include `proxy`, cloud, and `limrun`.
 
-`connect` establishes connection profile and client identity. Lease allocation
-is lazy and happens when a device, backend, and provider are known.
+`connect` establishes the connection profile and client identity.
+Lease allocation is lazy.
+It occurs after device, backend, and provider resolution.
 
-A runner/process lease is a backend helper guard and is not a user/client
-ownership boundary. It stays below daemon device leases and should not be
-weakened or replaced by them.
+A runner/process lease guards a backend helper.
+It does not define user/client ownership.
+It remains below daemon device leases and should not be weakened or replaced by them.
 
-`open` is the natural point to acquire a device lease because target resolution
-and session creation meet there. Commands after `open` must refresh the lease;
-no activity for five minutes should make the device available again.
+`open` is the natural place to acquire a device lease because target resolution and session creation meet there.
+After `open`, commands must refresh the lease.
+After five minutes without activity, the device should become available again.
 
-Lease admission, heartbeat, stored session lease refresh, and request execution
-must run under the same daemon request lock. Scope resolution may happen before
-the lock, but lease ownership mutation must not.
+These operations must use the same daemon request lock:
 
-Generated connection profiles are non-secret. They may persist routing and
-lease metadata, but must strip daemon and Metro bearer tokens. Tokens are
-supplied in-memory for the current command or through environment/CLI token
-paths.
+- Lease admission.
+- Heartbeat.
+- Stored session lease refresh.
+- Request execution.
 
-The proxy process is expected to be long-lived and self-serve. Recovery from a
-stale or expired device lease should not require restarting the proxy.
+Scope resolution may occur before the lock.
+Lease ownership mutation must not.
 
-A caller that owns a lease's lifetime, allocating it and releasing it itself,
-can allocate with `retainOnClose`. Session `close` then leaves that lease and
-its provider device in place, and only `leases.release`, expiry, or daemon
-shutdown ends it. The default is unchanged so the CLI's proxy sharing still
-frees devices on `close`. The allocated lease reports `retainOnClose: true`
-only when the daemon honored it, and only the lease's own client can turn it
-on for a lease the run already holds. An unexpired `retainOnClose` lease keeps
-an idle daemon alive; other leases, including human-control holds, do not. A
-retained lease the caller stops heartbeating expires after its `ttlMs`, and idle
-reap then shuts the daemon down within one more idle window.
+Generated connection profiles are non-secret.
+They may persist route and lease metadata, but must strip daemon and Metro bearer tokens.
+Tokens are supplied in memory for the current command or through environment/CLI token paths.
 
-A session cannot outlive the lease it was opened under. When the lease is
-released (tenant `lease_release` or host `DELETE /admin/leases/<lease-id>`) or
-expires, the daemon tears the session down under its execution locks and clears
-its device claim, even when the device no longer answers. The daemon sweeps for
-expired leases every second, so expiry does not wait for a later request;
-in-flight work and human-control holds still keep a lease from expiring. Once
-daemon shutdown begins, no new lease-end teardown starts, and shutdown waits for
-any that already started before it tears sessions down itself.
+The proxy process is expected to remain active for self-service use.
+Recovery from stale or expired device leases should not require a proxy restart.
 
-The daemon ends a session's lease when a request closes that session, unless the lease was
-allocated with `retainOnClose`. The reply to that request reports each lease it ended once, at
-response level, as `endedLeases: [{ leaseId, outcome: 'released' }]`: in `data` on success, in
-`error.details` on failure, including a close that failed after the release. This holds for every
-request that can close a session: `close`, a `batch` close step, a `replay` or `test` script's
-`close`, and the session cleanup `test` runs after each script. Nested requests record on the
-outermost request's ledger, so a step reply never repeats it. A close that finds its lease already
-inactive reports it as ended. A client never sends a release after such a request. A client that
-stores the lease id forgets it when the reply names it, and a gateway that relays the reply reads
-the lease end from it. Close and lease-end teardown take the same execution locks, so whichever
-runs second finds the session gone: a close after a lease end has no session and ends no lease, and
-a client that still stores that lease id finds it inactive on its next heartbeat and allocates a
-new lease under a fresh id.
+A caller that allocates and releases a lease itself can allocate with `retainOnClose`.
+Session `close` then retains that lease and its provider device.
+Only `leases.release`, expiry, or daemon shutdown ends it.
+The default remains unchanged, so CLI proxy sharing still frees devices on `close`.
+The allocated lease reports `retainOnClose: true` only if the daemon honored it.
+Only the lease's own client can enable it for a lease already held by the run.
+An unexpired `retainOnClose` lease keeps an idle daemon alive.
+Other leases, including human-control holds, do not.
+If the caller stops heartbeats, a retained lease expires after its `ttlMs`.
+Idle reap then stops the daemon within one more idle window.
+
+A session cannot outlive the lease under which it opened.
+On release or expiry, the daemon tears the session down under its execution locks and clears its device claim.
+This applies even when the device no longer answers.
+Release can use tenant `lease_release` or host `DELETE /admin/leases/<lease-id>`.
+The daemon examines expired leases every second.
+Thus, expiry does not require a later request.
+In-flight work and human-control holds still prevent lease expiry.
+After daemon shutdown starts, no new lease-end teardown starts.
+Shutdown waits for already-started teardown before it tears sessions down itself.
+
+When a request closes a session, the daemon ends its lease unless it was allocated with `retainOnClose`.
+The response reports each lease ended by that request once, at response level:
+`endedLeases: [{ leaseId, outcome: 'released' }]`.
+Success reports it in `data`.
+Failure reports it in `error.details`, including when close fails after release.
+This applies to every request that can close a session:
+
+- `close`.
+- A `batch` close step.
+- `close` in a `replay` or `test` script.
+- Session cleanup after each `test` script.
+
+Nested requests record on the outermost request's ledger.
+Step replies never repeat that record.
+If close finds its lease already inactive, it reports the lease as ended.
+A client never sends a release after such a request.
+If a client stores the lease id, it forgets that id when the reply names it.
+A gateway that relays the reply reads the lease end from it.
+
+Close and lease-end teardown use the same execution locks.
+Whichever runs second finds the session gone.
+Thus, close after lease end has no session and ends no lease.
+If a client still stores the id, its next heartbeat finds an inactive lease.
+It allocates a new lease with a fresh id.
 
 ## Consequences
 
-Device contention can fail before platform execution with an explicit
-device-lease error that includes the backend, provider, selected device key, and
-owning lease expiry.
+Device contention can fail before platform execution with an explicit device-lease error.
+The error includes backend, provider, selected device key, and owning lease expiry.
 
-Backend-only leases remain valid for older remote clients, while provider-aware
-clients get device-level contention and clearer recovery.
+Backend-only leases remain valid for older remote clients.
+Provider-aware clients receive device-level contention and clearer recovery.
 
 ## Admitted request work
 
-A lease renews when a request is admitted and never again while that request runs, so an admitted
-command slower than the inactivity TTL used to expire the lease that was paying for its own device
-and tear the session down underneath the client still waiting for its result. Admitted work
-therefore preserves its lease the way a human-control hold does: while the request is still wanted
-it defers expiry, and finishing while still wanted renews the lease for its existing inactivity TTL
-from the moment the work ended. A request whose client hung up preserves nothing — it neither defers
-expiry past that cancellation nor renews the lease when it finally lands — so a handler that ignores
-its cancellation cannot hold a rented device open.
+Admission renews a lease once.
+The request does not renew it again during execution.
+Without preservation, a command longer than its inactivity TTL could expire its own device lease and lose its session before response.
+Admitted work therefore preserves its lease like a human-control hold.
+While the request remains wanted, it defers expiry.
+If work finishes while still wanted, it renews the existing inactivity TTL from completion time.
+After client disconnect, the request preserves nothing.
+It neither defers expiry beyond cancellation nor renews the lease when work eventually finishes.
+Thus, a handler that ignores cancellation cannot retain a rented device.
 
-Which leases this reaches depends on the inactivity TTL the client asked for: the daemon default is
-one minute, while a cloud WebDriver connection profile asks for ten. A single command that runs
-longer than its own lease is therefore ordinary on the default and only reachable through a profile
-on the longer one.
+The client's requested inactivity TTL determines which commands need preservation.
+The daemon default is one minute.
+A cloud WebDriver connection profile requests ten minutes.
+A single command longer than its lease is therefore ordinary with the default.
+The longer window requires a profile.
 
 ## Provider allocation
 
-Allocation is admitted work too. The registry records a lease before a hosted provider creates the
-session behind it, and creating that session can take longer than the lease's inactivity TTL, so a
-lease timed from its record was already expired, or nearly so, when its client first received it, and
-the paid session it pointed at was orphaned. The allocation therefore holds a work pass while the
-provider allocates: the lease cannot expire underneath it, and a successful allocation still wanted by
-its requester starts the inactivity TTL from the moment allocation completed. A requester that hung up
-preserves nothing, and its allocation is released as before.
+Allocation is also admitted work.
+The registry records a lease before a hosted provider creates its session.
+Session creation can exceed the lease's inactivity TTL.
+Without preservation, the client could receive an expired or nearly expired lease and leave a paid session orphaned.
+Allocation therefore holds a work pass while the provider allocates.
+The lease cannot expire during that work.
+If successful allocation remains wanted, the inactivity TTL starts at completion.
+A disconnected requester preserves nothing, and its allocation is released as before.
 
 ## Client-side work that precedes admission
 
-Protecting admitted work covers nothing that happens before a request is admitted. Installing an
-artifact uploads it from the caller while the request that will consume it has not been admitted yet,
-so an upload slower than the lease's inactivity window expired the lease paying for the device the
-bytes were going to (#2946). The caller therefore beats the lease over the ordinary transport for as
-long as that phase runs, naming the lease scope exactly as the command named it and no payload of its
-own. An install names no window, so its beats renew for the window the lease already carries; a
-caller that did name one keeps renewing on it. Resolving an absent window to the registry default
-instead — which is what a heartbeat used to do — quietly shortened every lease allocated above that
-default, which is the other half of why the upload could not survive. Request admission had its own
-copy of that mistake: it named a proxy-specific default for every admitted request, so a lease
-allocated longer than the default lost its window on the next command. Admission renews on the lease's
-window too; the window a lease carries is the one its client named when it allocated.
+Admitted-work preservation does not cover earlier client work.
+Artifact install uploads bytes before admission of the request that consumes them.
+Without client protection, an upload longer than the inactivity window could expire the device lease (#2946).
+The caller therefore sends lease heartbeats over the ordinary transport throughout that phase.
+It names exactly the command's lease scope and supplies no payload of its own.
+An install specifies no window, so its heartbeats renew the lease's existing window.
+If a caller specifies a window, it continues to renew that window.
 
-The first beat is fired when the phase starts, not one cadence in, because a beat is what proves the
-lease the upload is spending time on is still alive — a lease shorter than any fixed cadence would
-otherwise lapse before anything renewed it. A lease already gone is caught early, but not before the
-phase begins: hashing, the preflight, and the start of the stream can all run while the first beat is
-still outstanding, so what the first beat buys is that the loss is learned during the upload rather
-than after it. Each beat answers with the window it just renewed, and the loop arms its successor when
-the beat starts rather than when it settles, so a beat that never answers is abandoned on schedule
-instead of taking the schedule with it. A phase that settles does not wait on a beat still in flight.
+Resolving an absent window to the registry default would shorten every lease allocated above that default.
+Admission previously had the same defect through a proxy-specific default on each request.
+Admission therefore also renews the existing lease window.
+The lease retains the window named by its client at allocation.
 
-Cadence and budget are deliberately two numbers. A beat is armed every third of the window, but it is
-allowed the whole window to answer in. Budgeting a beat at its cadence instead would give a heartbeat
-that needs more than a third of a window for its round trip — a tunneled proxy, an uplink the upload
-itself is saturating — no way to answer at all, and every beat would re-time-out on exactly the slow
-links the beat exists to protect. The window, not the cadence, is the interval in which being alive
-still matters, so it is also the longest a beat's answer is worth waiting for.
+The first heartbeat starts with the phase, without a cadence delay.
+It proves that the lease used by the upload remains alive.
+Otherwise, a lease shorter than a fixed cadence could expire before renewal.
+An already-lost lease is detected early, but not before phase start.
+Hashing, preflight, and initial stream work can run while the first heartbeat remains outstanding.
+Thus, loss becomes known during upload instead of afterward.
+Each heartbeat reports the window it renewed.
+The loop schedules its successor when the heartbeat starts, not when it completes.
+A heartbeat without an answer is therefore abandoned on schedule without stopping the schedule.
+A completed phase does not wait for an in-flight heartbeat.
 
-That ceiling is the shorter of the window and the heartbeat's own request policy, currently ninety
-seconds. A ten-minute lease therefore gives a beat ninety seconds rather than the full window, which
-costs nothing the beat exists to buy: the daemon renews the lease when it handles the request, before
-it answers, so a round trip abandoned at the cap has still extended the lease if the request ever
-landed — and if it never landed, a transport that has stopped carrying traffic is not served by holding
-the socket open for the rest of a window measured in minutes. What the cap refuses is exactly that
-idle hold. It binds only on windows longer than the policy, and on those the beat already has the
-longest answer deadline any lease gets; shorter windows are bounded by their own window, as above.
+Cadence and budget intentionally differ.
+A heartbeat starts every third of the window but may use the whole window for its answer.
+A cadence-sized budget would always reject round trips longer than one third of the window.
+This includes tunneled proxies and uplinks saturated by the upload.
+Those slow links are exactly where heartbeat protection is needed.
+The window defines how long continued liveness matters.
+It therefore also defines the maximum useful wait for an answer.
 
-A beat is a fresh request each time, never the protected request rewritten: a request identity is
-what a timed-out beat is canceled under, and beats must not inherit each other's cancellation. A beat
-that finds the lease gone, or finds that this request can never renew it — its scope is missing or
-belongs to another lease, or the daemon rejects the scope and window the beat itself was built with,
-which no successor will ask differently — ends the phase with that error and cancels the upload rather
-than finishing bytes against a device nobody owns or a lease that will stop renewing. A beat that fails
-for any other reason is reported and survived, because a later beat covers one lost request — including
-one that was abandoned at its budget rather than answered, which is what makes that promise hold for a
-stalled round trip and not only for one that fails fast.
+The actual ceiling is the shorter of the window and the heartbeat's request policy, currently ninety seconds.
+Thus, a ten-minute lease permits a ninety-second answer budget.
+The daemon renews the lease when it handles the request, before its answer.
+A round trip abandoned at the cap has still extended the lease if the request reached the daemon.
+If it never arrived, retaining a socket for the rest of a multi-minute window does not restore transport.
+The cap refuses that idle wait.
+It applies only to windows longer than the policy.
+Those heartbeats already receive the longest answer deadline available to a lease.
+Shorter windows use their own window as the bound.
+
+Each heartbeat is a fresh request, never a rewritten protected request.
+Request identity controls cancellation of a timed-out heartbeat.
+Heartbeats must not inherit each other's cancellation.
+A heartbeat ends the phase with its error and cancels upload if it finds:
+
+- A lost lease.
+- A missing scope.
+- A scope owned by another lease.
+- A daemon refusal of the heartbeat's own scope and window that an identical successor cannot correct.
+
+This prevents completed uploads for unowned devices or leases that cannot renew.
+Any other heartbeat failure is reported without stopping the phase.
+A later heartbeat can recover from one lost request.
+This includes a request abandoned at its budget, so recovery applies to stalled round trips as well as immediate failures.
 
 ## Human control
 
-Human-control holds coexist with an open remote session. They belong to `LeaseRegistry` and use
-the same backend/provider/device contention key as device-aware leases. Hold heartbeat, expiry,
-lease preservation, and release refresh are one registry-owned lifecycle. Releasing or expiring the
-last hold gives the lease its existing inactivity TTL again; expiry uses the hold's expiry instant.
+Human-control holds coexist with an open remote session.
+`LeaseRegistry` owns them.
+They use the same backend/provider/device contention key as device-aware leases.
+The registry owns one lifecycle for hold heartbeat, expiry, lease preservation, and release refresh.
+Release or expiry of the last hold restores the lease's existing inactivity TTL.
+For expiry, renewal uses the hold's expiry instant.
 
-Tenant hold operations are ordinary daemon RPCs admitted through `request-admission.ts`. Their
-device comes only from the admitted lease. Host administration is a distinct loopback capability
-authenticated with the daemon token, never a tenant credential; tenants cannot modify host holds.
+Tenant hold operations are ordinary daemon RPCs admitted through `request-admission.ts`.
+Only the admitted lease supplies their device.
+Host administration is a distinct loopback capability authenticated with the daemon token, never a tenant credential.
+Tenants cannot modify host holds.
 
-Mutation admission derives from existing recording effects, observation-class inventory, and
-observability semantics. Takeover and lease heartbeats are exempt from the mutation fence, not from
-their ownership checks. Unknown effects are treated as mutations. A pending activation fences new
-mutations and drains those already admitted before reporting active; advisory execution locks alone
-do not establish this guarantee for fresh sessions.
+Mutation admission derives from existing recording effects, observation-class inventory, and observability semantics.
+Takeover and lease heartbeats are exempt from the mutation fence, but retain ownership checks.
+Unknown effects are mutations.
+A pending activation fences new mutations.
+Before it reports active, it drains mutations already admitted.
+Advisory execution locks alone do not establish this guarantee for fresh sessions.
 
-Activation follows the calling RPC or host HTTP request's cancellation signal. A disconnect while
-draining removes only that request's pending hold, leaving successor and unrelated holds intact;
-canceling activation does not cancel the mutations being drained. Completed holds use their TTL or
-explicit release lifecycle.
+Activation follows the calling RPC or host HTTP request's cancellation signal.
+If disconnect occurs during drain, only that request's pending hold is removed.
+Successor and unrelated holds remain intact.
+Canceled activation does not cancel mutations under drain.
+Completed holds use their TTL or explicit release lifecycle.
 
-Holds and ordinary proxy leases are in-memory and do not survive daemon restart. Controllers must
-reconnect and re-establish them; no persisted hold store is used. Local takeover is deferred: a
-future host-global human-control fence must coexist with the local session's device claim, not
-acquire it exclusively.
+Holds and ordinary proxy leases remain in memory and do not survive daemon restart.
+Controllers must reconnect and establish them again.
+No persisted hold store exists.
+Local takeover is deferred.
+A future host-global human-control fence must coexist with the local session's device claim instead of acquiring it exclusively.
 
 ## macOS app leases
 
-A lease on the macOS host would rent the whole desktop, so the macOS platform rents one app instead.
-A `macos-app` lease's device key is a bundle id, optionally pinned to one process
-(`<bundleId>` or `<bundleId>@<pid>`). The scope would be self-chosen if a tenant could name it, so
-only a host administrator allocates one, over the loopback `/admin/leases` route that uses the daemon
-token like host holds; tenant `lease_allocate` refuses the backend. The host picks the lease id, a
-repeated PUT renews it, and a PUT naming another scope for an existing id is refused rather than
-rewritten. Heartbeat, expiry, and the loss on daemon restart are those of any lease, except that a
-tenant heartbeat or request cannot renew it for longer than the window of the host's last PUT, and
-a tenant cannot release it: `lease_release` is refused with `MACOS_APP_LEASE_HOST_OWNED`. The lease
-ends by the host's `DELETE /admin/leases/<lease-id>`, by expiry, by the loss on daemon restart, or
-when a session it holds closes and the host set `retainOnClose` to false.
+A lease on the macOS host would rent the whole desktop.
+The macOS platform therefore rents one app instead.
+A `macos-app` lease uses a bundle id as its device key, optionally pinned to one process: `<bundleId>` or `<bundleId>@<pid>`.
+If tenants could name this scope, they would choose their own confinement.
+Thus, only a host administrator allocates these leases through loopback `/admin/leases` with the daemon token, as for host holds.
+Tenant `lease_allocate` refuses this backend.
+The host selects the lease id.
+A repeated PUT renews it.
+If a PUT names another scope for an existing id, it is refused instead of changing scope.
 
-Request admission confines every request admitted under the lease, so `batch` steps and `replay`
-actions are confined when they re-enter it: an allow list of commands, the ones whose command
-registry descriptor declares `appLease: 'allowed'` (later commands are refused, and of the commands
-lease admission otherwise exempts only `lease_heartbeat` and `lease_release` declare it),
-`open` and `close` of the leased bundle only, the `app` surface only, window-only screenshots, no
-input that names a host path or launches beside the app, and an existing session that is the leased
-app for every request but `open` and the `batch` envelope, so a
-request naming no session cannot fall back to the host Mac. `open` requires the native app backend (ADR 0031), because XCTest
-posts screen events that can land outside the app's window. A pid-pinned lease is checked against the
-running process before each admitted request. A session opened under the lease holds its app, not
-the Mac: it takes no host device claim, and other app-leased sessions on the same Mac do not conflict
-with it, so one daemon serves several leased apps beside the host's own sessions.
+Heartbeat, expiry, and restart loss follow ordinary lease behavior, with two exceptions:
 
-These rules bind a request that names the lease or runs in its session. A daemon policy
-`leases.require` (ADR 0029) refuses requests that name no lease. The proxy token is one credential
-for every client, so a host serving several clients through one proxy authenticates each client and
-sets its tenant, session isolation, and lease on every request it forwards.
+- A tenant heartbeat or request cannot renew beyond the window of the host's last PUT.
+- A tenant cannot release the lease. `lease_release` returns `MACOS_APP_LEASE_HOST_OWNED`.
+
+The lease ends through:
+
+- Host `DELETE /admin/leases/<lease-id>`.
+- Expiry.
+- Daemon restart.
+- Close of a session it holds, if the host set `retainOnClose` to false.
+
+Request admission confines every admitted request under the lease.
+This includes `batch` steps and `replay` actions when they enter admission again.
+Confinement requires:
+
+- Commands whose registry descriptor declares `appLease: 'allowed'`.
+  Later commands are refused.
+  Among commands otherwise exempt from lease admission, only `lease_heartbeat` and `lease_release` declare it.
+- `open` and `close` limited to the leased bundle.
+- Only the `app` surface.
+- Only window screenshots.
+- No input that names a host path or launches beside the app.
+- An existing session for the leased app on every request except `open` and the `batch` envelope.
+
+Thus, a request without a session cannot fall back to the host Mac.
+`open` requires the native app backend from ADR 0031.
+XCTest posts screen events that can reach outside the app window.
+Before each admitted request, a pid-pinned lease is verified against the running process.
+A session under the lease holds its app, not the Mac.
+It takes no host device claim.
+Other app-leased sessions on the same Mac do not conflict with it.
+Thus, one daemon serves several leased apps beside the host's own sessions.
+
+These rules bind a request that names the lease or runs in its session.
+Daemon policy `leases.require` in ADR 0029 refuses requests without a lease.
+The proxy token is one credential shared by every client.
+A host that serves several clients through one proxy therefore authenticates each client.
+It sets tenant, session isolation, and lease on every forwarded request.
