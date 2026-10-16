@@ -74,9 +74,9 @@ test('buildReplayFailureDivergence dedupes suggestions using the strongest basis
   expect(divergence.suggestions[0]?.basis).toBe('id');
 });
 
-test.each([true, false])(
+test.each(['region', 'absent', 'none', 'unverifiable'] as const)(
   'suggestions rank identity, recorded region, then document order (evidence: %s)',
-  async (recorded) => {
+  async (evidence) => {
     const root = mkdtempForTestSync('agent-device-replay-suggest-region-');
     const sessionStore = new SessionStore(path.join(root, 'sessions'));
     sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
@@ -97,6 +97,7 @@ test.each([true, false])(
         { index: 3, depth: 0, type: 'ScrollView', identifier: 'recorded' },
         button(4, 3, 'First'),
         button(5, 3, 'Second'),
+        { ...button(6, 0, 'Outside'), parentIndex: undefined, depth: 0 },
       ],
       truncated: false,
       backend: 'xctest',
@@ -106,8 +107,10 @@ test.each([true, false])(
       command: 'click',
       positionals: ['label="Other"'],
       flags: {},
-      result: { selectorChain: ['label="Second"', 'label="First"', 'id="strong"'] },
-      ...(recorded
+      result: {
+        selectorChain: ['label="Second"', 'label="First"', 'id="strong"', 'label="Outside"'],
+      },
+      ...(evidence !== 'absent'
         ? {
             targetEvidence: {
               role: 'button',
@@ -115,8 +118,11 @@ test.each([true, false])(
               ancestry: [],
               sibling: 0,
               viewportOrder: 0,
-              scrollRegion: { role: 'scrollview', id: 'recorded' },
-              verification: 'verified' as const,
+              ...(evidence === 'region'
+                ? { scrollRegion: { role: 'scrollview', id: 'recorded' } }
+                : {}),
+              verification:
+                evidence === 'unverifiable' ? ('unverifiable' as const) : ('verified' as const),
             },
           }
         : {}),
@@ -134,7 +140,11 @@ test.each([true, false])(
       planDigest: 'test-plan-digest',
     });
     expect(divergence.suggestions.map(({ label }) => label)).toEqual(
-      recorded ? ['Strong', 'First', 'Second', 'Other'] : ['Strong', 'Other', 'First', 'Second'],
+      evidence === 'region'
+        ? ['Strong', 'First', 'Second', 'Other', 'Outside']
+        : evidence === 'none'
+          ? ['Strong', 'Outside', 'Other', 'First', 'Second']
+          : ['Strong', 'Other', 'First', 'Second', 'Outside'],
     );
   },
 );

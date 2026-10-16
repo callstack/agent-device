@@ -34,7 +34,7 @@ export function rankAndDedupeReplaySuggestions<
     }
   }
   const sameRegion = new Set<number>();
-  if (context.targetEvidence) {
+  if (context.targetEvidence?.verification === 'verified') {
     const byIndex = buildIndexMap(context.nodes);
     for (const nodeIndex of byNode.keys()) {
       const node = byIndex.get(nodeIndex);
