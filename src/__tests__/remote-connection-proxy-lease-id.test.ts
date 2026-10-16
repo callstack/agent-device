@@ -9,8 +9,8 @@ import {
   seedConnectionState,
 } from './remote-connection.fixtures.ts';
 
-vi.mock('@agent-device/react-native/metro', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/react-native/metro')>()),
+vi.mock('@agent-device/react-native', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/react-native')>()),
   stopMetroTunnel: vi.fn(),
 }));
 

@@ -29,7 +29,7 @@ import {
 } from '@agent-device/host-kit/process';
 
 import { ensureMetroCompanion, stopMetroCompanion } from './client-metro-companion.ts';
-import { METRO_COMPANION_RUN_ARG } from '../companion/client-companion-tunnel-contract.ts';
+import { METRO_COMPANION_RUN_ARG } from './client-companion-tunnel-contract.ts';
 
 const TEST_BRIDGE_SCOPE = {
   tenantId: 'tenant-1',

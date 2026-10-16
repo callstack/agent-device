@@ -1,8 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import {
-  runReactDevtools,
-  type ReactDevtoolsCommandOptions,
-} from '@agent-device/react-native/react-devtools';
+import { runReactDevtools, type ReactDevtoolsCommandOptions } from '@agent-device/react-native';
 import { writeCliOutput } from './shared.ts';
 
 export async function runReactDevtoolsCommand(

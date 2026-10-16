@@ -1,7 +1,3 @@
-import { stopMetroCompanion } from './client-metro-companion.ts';
-
-export type { MetroBridgeDescriptor } from './metro-types.ts';
-
 export type MetroTunnelPingMessage = {
   type: 'ping';
   timestamp: number;
@@ -78,13 +74,3 @@ export type MetroTunnelResponseMessage =
   | MetroTunnelWebSocketOpenResultMessage
   | MetroTunnelWebSocketFrameMessage
   | MetroTunnelWebSocketCloseMessage;
-
-export type StopMetroTunnelOptions = {
-  projectRoot: string;
-  profileKey?: string;
-  consumerKey?: string;
-};
-
-export async function stopMetroTunnel(options: StopMetroTunnelOptions): Promise<void> {
-  await stopMetroCompanion(options);
-}

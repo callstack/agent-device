@@ -35,7 +35,7 @@ import { isLikelyStaleSnapshotDrop } from '@agent-device/capture-kit/snapshot-fr
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
-import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
+import { formatReactNativeOverlayWarning } from '@agent-device/capture-kit/react-native-overlay';
 import { now } from '../../runtime-common.ts';
 import { iosSnapshotTruncationEvidence } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type {

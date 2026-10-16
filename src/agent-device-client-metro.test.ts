@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,14 +6,17 @@ import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
 import path from 'node:path';
 import { createAgentDeviceClient } from './agent-device-client.ts';
-import { readMetroSessionHints } from '@agent-device/react-native/session';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
+  readMetroSessionFixture,
   closeLoopbackServer,
   mkdtempForTestSync,
   writeFakeMetroNpx,
   findFreeMetroPort,
   stopTestMetroProcess,
+  listenOnLoopback,
+  skipWhenLoopbackUnavailable,
+  writeMetroSessionFixture,
 } from '@agent-device/test-kit';
 
 const TEST_TOKEN = 'agent-device-proxy-test-token';
@@ -157,7 +160,7 @@ test('client prepare retains local control and valid proxy runtimes when one dev
     assert.equal(written.androidRuntime.metroHost, 'bridge.example.test');
     assert.equal(written.androidRuntime.platform, 'android');
     assert.equal(written.runtimeFilePath, runtimeFilePath);
-    assert.deepEqual(readMetroSessionHints({ stateDir: tempRoot, session: 'bridge' }), {
+    assert.deepEqual(readMetroSessionFixture({ stateDir: tempRoot, session: 'bridge' }), {
       controlBaseUrl: `http://127.0.0.1:${metroPort}/`,
       deviceBaseUrls: ['https://runtime-1.metro.agent-device.dev/'],
     });
@@ -218,7 +221,7 @@ test('metro reload targets the dev server bound by metro prepare in the same ses
     });
     pid = prepared.pid;
 
-    const storedHints = readMetroSessionHints({
+    const storedHints = readMetroSessionFixture({
       stateDir: resolveDaemonPaths(stateDir).baseDir,
       session: 'metro-session-hints',
     });
@@ -237,7 +240,7 @@ test('metro reload targets the dev server bound by metro prepare in the same ses
     // flagless reload resolves to the Metro default instead of silently hitting the stale port.
     await client.sessions.close();
     assert.equal(
-      readMetroSessionHints({
+      readMetroSessionFixture({
         stateDir: resolveDaemonPaths(stateDir).baseDir,
         session: 'metro-session-hints',
       }),
@@ -319,7 +322,7 @@ test('metro prepare keeps a public Expo address separate from the local reload a
       `https://127.0.0.1:${metroPort}${publicBasePath}/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&minify=false`,
     );
 
-    const storedHints = readMetroSessionHints({
+    const storedHints = readMetroSessionFixture({
       stateDir: resolveDaemonPaths(stateDir).baseDir,
       session: 'metro-expo-session',
     });
@@ -332,4 +335,44 @@ test('metro prepare keeps a public Expo address separate from the local reload a
     await stopTestMetroProcess(pid);
     rmSync(tempRoot, { recursive: true, force: true });
   }
+});
+
+describe('SDK open Metro session binding', () => {
+  test.for([false, true])(
+    'config defaults replace a stale binding only on a fresh open (reused=%s)',
+    async (sessionReused, t) => {
+      if (await skipWhenLoopbackUnavailable(t)) return;
+      const stateDir = mkdtempForTestSync('agent-device-metro-open-');
+      const previous = createServer((_req, res) => res.end('PREVIOUS'));
+      const current = createServer((_req, res) => res.end('CURRENT'));
+      try {
+        const previousPort = await listenOnLoopback(previous);
+        const currentPort = await listenOnLoopback(current);
+        writeMetroSessionFixture({
+          stateDir,
+          session: 'proj-a',
+          hints: {
+            controlBaseUrl: `http://127.0.0.1:${previousPort}/`,
+          },
+        });
+        const client = createAgentDeviceClient(
+          {
+            stateDir,
+            session: 'proj-a',
+            runtime: { metroHost: '127.0.0.1', metroPort: currentPort },
+          },
+          { transport: async () => ({ ok: true, data: { sessionReused } }) },
+        );
+        await client.apps.open({ app: 'MyApp' });
+        const result = await client.metro.reload();
+        expect(result.reloadUrl).toBe(
+          `http://127.0.0.1:${sessionReused ? previousPort : currentPort}/reload`,
+        );
+        expect(result.body).toBe(sessionReused ? 'PREVIOUS' : 'CURRENT');
+      } finally {
+        await closeLoopbackServer(previous);
+        await closeLoopbackServer(current);
+      }
+    },
+  );
 });

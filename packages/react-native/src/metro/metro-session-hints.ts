@@ -14,7 +14,7 @@ export type MetroSessionHints = {
 
 export type MetroSessionScope = { stateDir: string; session: string };
 
-type MetroSessionOptions = { stateDir?: string; session: string };
+export type MetroSessionOptions = { stateDir?: string; session: string };
 
 function resolveMetroSessionScope(options: MetroSessionOptions): MetroSessionScope {
   return {
@@ -142,13 +142,15 @@ export function recordPreparedMetroSession(
   } catch {}
 }
 
+export type MetroSessionOpenInput = {
+  runtime: SessionRuntimeHints | undefined;
+  explicitRuntime: boolean;
+  sessionReused: boolean;
+};
+
 export function recordOpenedMetroSession(
   options: MetroSessionOptions,
-  input: {
-    runtime: SessionRuntimeHints | undefined;
-    explicitRuntime: boolean;
-    sessionReused: boolean;
-  },
+  input: MetroSessionOpenInput,
 ): void {
   try {
     const scope = resolveMetroSessionScope(options);

@@ -1,9 +1,7 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, writeMetroSessionFixture } from '@agent-device/test-kit';
 import { runReactDevtoolsCommand } from './react-devtools.ts';
 
 afterEach(() => {
@@ -26,14 +24,6 @@ function harness() {
   return { run, options, stateDir: options.stateDir, requested };
 }
 
-function bindSession(stateDir: string, controlBaseUrl: string) {
-  fs.mkdirSync(path.join(stateDir, 'metro-sessions'), { recursive: true });
-  fs.writeFileSync(
-    path.join(stateDir, 'metro-sessions', 'qa.json'),
-    JSON.stringify({ controlBaseUrl }),
-  );
-}
-
 test('explicit dev-server flags override the session binding', async () => {
   const { run, requested } = harness();
   await assert.rejects(run('start', '--metro-port', '8082'), /No React Native runtime/);
@@ -42,11 +32,11 @@ test('explicit dev-server flags override the session binding', async () => {
 
 test('the session Metro binding picks the dev server', async () => {
   const { run, requested, stateDir } = harness();
-  fs.mkdirSync(path.join(stateDir, 'metro-sessions'), { recursive: true });
-  fs.writeFileSync(
-    path.join(stateDir, 'metro-sessions', 'qa.json'),
-    JSON.stringify({ controlBaseUrl: 'http://127.0.0.1:19000/' }),
-  );
+  writeMetroSessionFixture({
+    stateDir,
+    session: 'qa',
+    hints: { controlBaseUrl: 'http://127.0.0.1:19000/' },
+  });
   await assert.rejects(run('start'), /No React Native runtime/);
   assert.deepEqual(requested, ['http://127.0.0.1:19000/json/list']);
 });
@@ -64,7 +54,11 @@ test('a remote bridge without a Metro binding stays on the local dev server, not
 
 test('a host flag on its own keeps the port of the session binding', async () => {
   const { run, requested, stateDir } = harness();
-  bindSession(stateDir, 'http://127.0.0.1:19000/');
+  writeMetroSessionFixture({
+    stateDir,
+    session: 'qa',
+    hints: { controlBaseUrl: 'http://127.0.0.1:19000/' },
+  });
   await assert.rejects(run('start', '--metro-host', '10.0.2.2'), /No React Native runtime/);
   assert.deepEqual(requested, ['http://10.0.2.2:19000/json/list']);
 });

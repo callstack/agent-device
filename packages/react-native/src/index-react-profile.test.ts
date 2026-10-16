@@ -3,9 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { InspectorSession } from './metro-inspector.ts';
-import { commandHarness, TARGET } from './react-devtools-command.fixtures.ts';
-import { FakeAppRuntime, MEMO_TYPE, encodeOperations } from './react-devtools-runtime.fixtures.ts';
+import { InspectorSession } from './react-devtools/metro-inspector.ts';
+import { commandHarness, TARGET } from './react-devtools/react-devtools-command.fixtures.ts';
+import {
+  FakeAppRuntime,
+  MEMO_TYPE,
+  encodeOperations,
+} from './react-devtools/react-devtools-runtime.fixtures.ts';
 
 const harness = (app?: FakeAppRuntime, targets?: unknown[]) =>
   commandHarness(['profile'], app, targets);

@@ -20,7 +20,7 @@ import {
   type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
-import { ensureMetroCompanion } from './client-metro-companion.ts';
+import { ensureMetroCompanion } from '../companion/client-metro-companion.ts';
 import type {
   MetroBridgeDescriptor,
   MetroBridgeResult,

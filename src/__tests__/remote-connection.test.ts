@@ -16,8 +16,8 @@ import {
   writeReplacedProfiles,
 } from './remote-connection.fixtures.ts';
 
-vi.mock('@agent-device/react-native/metro', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/react-native/metro')>()),
+vi.mock('@agent-device/react-native', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/react-native')>()),
   stopMetroTunnel: vi.fn(),
 }));
 
@@ -33,7 +33,7 @@ import {
   CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
   PROXY_REMOTE_LEASE_TTL_MS,
 } from '../cli/commands/connection-runtime.ts';
-import { stopMetroTunnel } from '@agent-device/react-native/metro';
+import { stopMetroTunnel } from '@agent-device/react-native';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   hashRemoteConfigFile,

@@ -60,13 +60,14 @@ import {
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { sendToDaemon } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { prepareMetroRuntime, reloadMetro } from '@agent-device/react-native/metro';
 import {
+  prepareMetroRuntime,
+  reloadMetro,
   clearMetroSessionHintsQuietly,
   recordPreparedMetroSession,
   recordOpenedMetroSession,
   readMetroSessionRuntime,
-} from '@agent-device/react-native/session';
+} from '@agent-device/react-native';
 import {
   asOptionalRecord,
   readPresentedSurfaceFact,
@@ -221,7 +222,7 @@ export function createAgentDeviceClient(
           };
         } finally {
           // Close is teardown intent: drop the dev-server binding even if the daemon call fails.
-          clearMetroSessionHintsQuietly({ ...mergeClientOptions(config, options), session });
+          await clearMetroSessionHintsQuietly({ ...mergeClientOptions(config, options), session });
         }
       },
       saveScript: async (
@@ -276,7 +277,7 @@ export function createAgentDeviceClient(
       open: async (options: AppOpenOptions) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('open', options);
-        recordOpenedMetroSession(
+        await recordOpenedMetroSession(
           { ...mergeClientOptions(config, options), session },
           {
             explicitRuntime: options.runtime !== undefined,
@@ -364,7 +365,7 @@ export function createAgentDeviceClient(
           runtimeFilePath: options.runtimeFilePath,
           logPath: options.logPath,
         });
-        recordPreparedMetroSession(
+        await recordPreparedMetroSession(
           { ...config, session: resolveSessionName(config.session) },
           result,
         );
@@ -374,8 +375,10 @@ export function createAgentDeviceClient(
         await reloadMetro({
           ...options,
           runtime:
-            readMetroSessionRuntime({ ...config, session: resolveSessionName(config.session) }) ??
-            config.runtime,
+            (await readMetroSessionRuntime({
+              ...config,
+              session: resolveSessionName(config.session),
+            })) ?? config.runtime,
         }),
     },
     capture: {

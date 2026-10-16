@@ -8,4 +8,4 @@ export {
   type MetroBridgeDescriptor,
   type MetroTunnelRequestMessage,
   type MetroTunnelResponseMessage,
-} from '@agent-device/react-native/metro';
+} from '@agent-device/react-native';

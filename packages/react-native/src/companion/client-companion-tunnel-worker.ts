@@ -21,7 +21,7 @@ import {
 import type {
   MetroTunnelRequestMessage as MetroCompanionRequest,
   MetroTunnelResponseMessage,
-} from '../metro/metro.ts';
+} from './metro-tunnel-messages.ts';
 import { normalizeBaseUrl } from '../metro/base-url.ts';
 
 const COMPANION_REGISTER_TIMEOUT_MS = 5_000;

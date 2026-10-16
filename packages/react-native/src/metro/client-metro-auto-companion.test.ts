@@ -5,11 +5,11 @@ import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 
-vi.mock('./client-metro-companion.ts', () => ({
+vi.mock('../companion/client-metro-companion.ts', () => ({
   ensureMetroCompanion: vi.fn(),
 }));
 
-import { ensureMetroCompanion } from './client-metro-companion.ts';
+import { ensureMetroCompanion } from '../companion/client-metro-companion.ts';
 import { prepareMetroRuntime } from './client-metro.ts';
 
 const TEST_BRIDGE_SCOPE = {

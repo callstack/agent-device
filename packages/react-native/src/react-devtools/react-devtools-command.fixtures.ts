@@ -1,4 +1,4 @@
-import { runReactDevtools } from './index.ts';
+import { runReactDevtools } from '../index.ts';
 import { vi } from 'vitest';
 import vm from 'node:vm';
 import { mkdtempForTestSync } from '@agent-device/test-kit';

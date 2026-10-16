@@ -1,7 +1,11 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { commandHarness } from './react-devtools-command.fixtures.ts';
-import { FakeAppRuntime, MEMO_TYPE, encodeOperations } from './react-devtools-runtime.fixtures.ts';
+import { commandHarness } from './react-devtools/react-devtools-command.fixtures.ts';
+import {
+  FakeAppRuntime,
+  MEMO_TYPE,
+  encodeOperations,
+} from './react-devtools/react-devtools-runtime.fixtures.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
