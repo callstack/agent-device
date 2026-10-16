@@ -201,31 +201,18 @@ pnpm test:maestro-compat     # example of a focused family suite
 pnpm exec vitest run path/to/file.test.ts
 ```
 
-Before pushing a normal code change, let the repository derive the required gates:
+Before pushing, commit the change and validate that exact commit. The repository derives the
+required gates from the diff:
 
 ```bash
-pnpm check:affected --run
+pnpm check:affected --run --head "$(git rev-parse HEAD)"
 ```
 
-The selector combines the committed diff with staged, unstaged, and untracked files. Unknown,
-workflow, lockfile, and selector-owning changes fail open to the full local set. It reports
-device/toolchain checks that remain GitHub-authoritative instead of trying to run them implicitly.
-
-For broad refactors or when explicitly requested, run the deterministic core aggregate:
-
-```bash
-pnpm check
-```
-
-Serialized validation (`pnpm check` and `check:affected --run`) requires macOS or Linux.
-On Windows, use the affected plan and direct focused checks.
-
-`pnpm check` takes the same host lock as `check:affected --run`, prints a receipt path, and writes
-logs under `.tmp/validation`. It covers formatting, lint, typechecking, layering, dependency-graph parity, production
-exports, MCP metadata, the distributable build, bundle ownership, Fallow, unit tests, and local smoke
-tests. It is intentionally not a simulation of every CI job: coverage, provider integration,
-history-backed compatibility, specialized toolchains, and live device/browser lanes remain separate.
-GitHub CI is authoritative.
+Only a passed receipt with `exactCommit: true` proves validation at that commit. Without `--head`,
+the run also includes staged, unstaged, and untracked files; treat that result as local feedback.
+For broad refactors or when explicitly requested, run `pnpm check`. Both commands share one host
+lock and need macOS or Linux. GitHub CI stays authoritative for coverage, provider integration,
+specialized toolchains, and live device lanes.
 
 Useful direct entry points:
 
@@ -333,7 +320,8 @@ Read the release notes, inspect the affected-check plan, and treat a green updat
 candidate rather than an automatic merge:
 
 ```bash
-pnpm check:affected --run
+pnpm check:affected --verbose
+pnpm check:affected --run --head "$(git rev-parse HEAD)"
 ```
 
 ## Issues
