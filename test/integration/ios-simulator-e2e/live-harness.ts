@@ -68,13 +68,7 @@ const harness = createLiveDeviceHarness<LiveContext, IosSimulatorBehaviorId>({
   writeCoverageReport,
 });
 
-/**
- * Every iOS live step carries the observation-prevented re-issue policy (#2491): one runner
- * restart or bridge rebuild re-issues its own wait instead of failing the job, while a readable
- * miss (target absent, budget exhausted after a readable capture, wrong asserted value) fails at
- * once exactly as before. Steps that already own a miss policy (`allowFailure` / `expectFailure`,
- * like the destination-wait and cleanup retry loops) are exempt inside the harness itself.
- */
+// Repeat at most one typed observation failure. Scenario-owned retry loops disable this policy.
 export function runStep(
   context: LiveContext,
   step: string,
@@ -102,6 +96,7 @@ export function verifyNestedReplayCommand(
 const MICROPHONE_PERMISSION_RESET_STEP = 'reset microphone permission';
 
 export async function cleanupSession(context: LiveContext): Promise<void> {
+  context.currentScenario = 'cleanup';
   const failures: unknown[] = [];
   const cleanupSteps: Array<[string, string[]]> = [];
   if (context.tier === 'full') {
@@ -115,10 +110,14 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
   for (const [step, args] of cleanupSteps) {
     const failure = await retryCleanupStep(step, (attempt) =>
       runStep(context, `cleanup: ${step} (attempt ${attempt})`, args, {
-        allowFailure: attempt < 3,
+        allowFailure: true,
+        reattemptInfrastructureMiss: undefined,
       }),
     );
-    if (failure !== undefined) failures.push(failure);
+    if (failure !== undefined) {
+      await harness.recordFailure(context, failure);
+      failures.push(failure);
+    }
   }
   if (failures.length === 0) return;
   const errorPath = path.join(context.artifactDir, 'cleanup-error.txt');
@@ -126,28 +125,25 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
   throw new AggregateError(failures, `iOS E2E cleanup failed; details: ${errorPath}`);
 }
 
-/**
- * Runs one cleanup step's 3-attempt retry policy: success or an already-clean session
- * stops immediately, anything else waits and retries. `runAttempt` mirrors the real
- * `runStep(..., { allowFailure: attempt < 3 })` contract, including that the final
- * attempt throws instead of returning a failed result. Exported so the retry/guard
- * behavior is unit-testable without spawning the CLI (see
- * `test/integration/ios-simulator-e2e-cleanup.test.ts`).
- */
+/** Returns the failure after at most three attempts, or undefined when cleanup is complete. */
 export async function retryCleanupStep(
   step: string,
   runAttempt: (attempt: number) => Promise<CliJsonResult>,
 ): Promise<unknown> {
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; ; attempt += 1) {
     try {
       const result = await runAttempt(attempt);
       if (result.status === 0 || sessionAlreadyClean(step, result)) return undefined;
+      if (attempt === 3) {
+        return new Error(
+          `cleanup: ${step} failed after ${attempt} attempts: ${JSON.stringify(result)}`,
+        );
+      }
       await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error) {
       return error;
     }
   }
-  return undefined;
 }
 
 // SESSION_NOT_FOUND: nothing left to reset, any step. INVALID_ARGS with the published

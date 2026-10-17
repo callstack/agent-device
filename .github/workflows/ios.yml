@@ -162,23 +162,20 @@ jobs:
             }
           '
 
-      # Preflight and every step below deliberately share one AGENT_DEVICE_STATE_DIR: the prepared
-      # runner lives in the daemon this step leaves running, and a per-step state dir would rebuild it
-      # per step. That also means this daemon outlives the step and can be superseded while it lives,
-      # which used to make its 5-minute idle reap delete the metadata of the daemon then serving
-      # clients (#3087). It now removes daemon.json only when the file names its own pid and process
-      # start time, so a recycled pid cannot be mistaken for the owner, and the reap costs nothing
-      # but a daemon.log line.
+      - name: Build CLI used by every smoke step
+        run: pnpm gate build
+
+      # Reuse the prepared daemon and runner through the shared AGENT_DEVICE_STATE_DIR.
       - name: Preflight iOS runner through public CLI
         run: |
           pnpm clean:daemon
-          node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
+          node bin/agent-device.mjs prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
 
       # The replay reuses the prepared runner in the same daemon. --debug keeps every step's request
       # log, not only the failing one, so a stale tap can be traced to its pre-tap capture (#3367).
       - name: Run iOS Settings replay smoke test
         run: |
-          node --experimental-strip-types src/bin.ts test test/integration/replays/ios/simulator/01-settings.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --debug --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
+          node bin/agent-device.mjs test test/integration/replays/ios/simulator/01-settings.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --debug --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
 
       - name: Fetch current fixture app
         id: fixture-app
@@ -201,7 +198,7 @@ jobs:
       - name: Run gesture pan-duration smoke replay
         run: |
           xcrun simctl install "${{ steps.ios-simulator.outputs.simulator-udid }}" "${{ steps.fixture-app.outputs.app-path }}"
-          node --experimental-strip-types src/bin.ts test examples/test-app/replays/gesture-pan-duration.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout 180000 --retries 2 --artifacts-dir test/artifacts/replays-ios-gesture-pan-duration --report-junit test/artifacts/replays-ios-gesture-pan-duration.junit.xml
+          node bin/agent-device.mjs test examples/test-app/replays/gesture-pan-duration.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout 180000 --retries 2 --artifacts-dir test/artifacts/replays-ios-gesture-pan-duration --report-junit test/artifacts/replays-ios-gesture-pan-duration.junit.xml
 
       - name: Run fixture-backed iOS simulator E2E smoke
         env:
@@ -211,7 +208,7 @@ jobs:
           AGENT_DEVICE_IOS_E2E_TIER: smoke
           AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
         run: |
-          pnpm gate build
+          xcrun simctl spawn "$AGENT_DEVICE_IOS_UDID" defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false
           node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 
       - name: Assert simulator automation preserved host focus
@@ -228,7 +225,7 @@ jobs:
           IOS_UDID: ${{ vars.IOS_UDID }}
         run: |
           pnpm clean:daemon
-          node --experimental-strip-types src/bin.ts test test/integration/replays/ios/device/01-physical-lifecycle.ad --udid "$IOS_UDID" --retries 2 --artifacts-dir test/artifacts/replays-ios-device-smoke --report-junit test/artifacts/replays-ios-device-smoke.junit.xml
+          node bin/agent-device.mjs test test/integration/replays/ios/device/01-physical-lifecycle.ad --udid "$IOS_UDID" --retries 2 --artifacts-dir test/artifacts/replays-ios-device-smoke --report-junit test/artifacts/replays-ios-device-smoke.junit.xml
 
       - name: Assert iOS XCTest selection was honored
         if: always()

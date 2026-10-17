@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import type { TestContext } from 'node:test';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
+import { readDaemonInfo } from '../../../src/daemon-client/daemon-client-metadata.ts';
+import { sendRequest } from '../../../src/daemon-client/daemon-client-transport.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {
   assertFilesDiffer,
@@ -15,7 +18,7 @@ import {
   capturePng,
   requireNodeRect,
 } from './live-assertions.ts';
-import { assertAutomationInput } from './live-automation-scenario.ts';
+import { assertAutomationInput, assertColdDeepLinkNavigation } from './live-automation-scenario.ts';
 import { assertDeviceLifecycle } from './live-device-lifecycle.ts';
 import { assertRegularVisibleDepthFrontier } from './live-snapshot-depth-frontier.ts';
 import { assertWebViewRemoteContent } from './live-webview-remote-content.ts';
@@ -54,13 +57,26 @@ const sendToDaemonTransport: AgentDeviceDaemonTransport = async (request, contex
   if (request.session === undefined) {
     throw new Error('Snapshot conformance transport requires an explicit session.');
   }
-  return await sendToDaemon({ ...request, session: request.session }, context);
+  const stateDir = request.flags?.stateDir;
+  assert.ok(typeof stateDir === 'string', 'backend conformance requires the smoke state directory');
+  const paths = resolveDaemonPaths(stateDir, { env: process.env });
+  const info = readDaemonInfo(paths.infoPath);
+  assert.ok(info, 'backend conformance requires the daemon prepared by the built CLI');
+  return await sendRequest(
+    info,
+    { ...request, session: request.session, token: info.token },
+    'auto',
+    paths,
+    90_000,
+    {
+      signal: context?.signal,
+      timeoutRecovery: 'none',
+    },
+  );
 };
 
 async function loadBuiltAgentDeviceClient() {
-  // The live harness drives the built CLI, so use the built SDK entry as well. Importing the
-  // source SDK here would intentionally take over the daemon on code-signature mismatch and make
-  // the forced-backend evidence come from a different runtime than the rest of the scenario.
+  // Exercise the same built SDK and CLI revision; the injected transport owns no daemon lifecycle.
   const builtSdk = (await import(
     pathToFileURL(path.resolve('dist/src/index.js')).href
   )) as AgentDeviceSdk;
@@ -74,6 +90,7 @@ const LIVE_SCENARIOS = bindIosSimulatorScenarios<LiveContext>({
     await assertClose(context);
   },
   deviceLifecycle: assertDeviceLifecycle,
+  deepLinkNavigation: assertColdDeepLinkNavigation,
   fixtureReplays: assertFixtureReplays,
   formInput: assertFormInput,
   inventoryInstall: assertInventoryAndInstall,
@@ -83,12 +100,12 @@ const LIVE_SCENARIOS = bindIosSimulatorScenarios<LiveContext>({
   webviewRemoteContent: assertWebViewRemoteContent,
 });
 
-export async function runIosSimulatorE2E(): Promise<void> {
+export async function runIosSimulatorE2E(testContext?: TestContext): Promise<void> {
   const context = createContext();
   let primaryError: unknown;
   try {
     await prepareRunner(context);
-    await executeLiveScenarios(context);
+    await executeLiveScenarios(context, testContext);
   } catch (error) {
     primaryError = error;
   }
@@ -121,11 +138,42 @@ async function prepareRunner(context: LiveContext): Promise<void> {
   );
 }
 
-async function executeLiveScenarios(context: LiveContext): Promise<void> {
+async function executeLiveScenarios(
+  context: LiveContext,
+  testContext?: TestContext,
+): Promise<void> {
   let assertionCaptureVerified = false;
+  const sessionPrefix = context.session;
   for (const scenario of LIVE_SCENARIOS.filter((candidate) => candidate.tier === 'smoke')) {
-    await runScenario(context, scenario);
-    if (!assertionCaptureVerified && context.sessionOpen) {
+    const run = async () => {
+      await runScenario(context, {
+        ...scenario,
+        run: async () => {
+          if (await sessionExists(context)) {
+            await runStep(context, 'release preceding scenario session', ['close']);
+          }
+          context.session = `${sessionPrefix}-${scenario.id.replace(':', '-')}`;
+          if (scenario.setup === 'fixture-home') {
+            const opened = await runStep(context, `reset fixture for ${scenario.id}`, [
+              'open',
+              context.appId,
+              '--relaunch',
+            ]);
+            context.runnerLogPath = opened.json?.data?.runnerLogPath;
+            await assertWaitSelector(context, 'id="home-title" visible=true');
+            await assertWaitSelector(context, 'label="Form" visible=true');
+          }
+          await scenario.run(context);
+        },
+      });
+    };
+    if (testContext) await testContext.test(scenario.id, run);
+    else await run();
+    if (
+      !assertionCaptureVerified &&
+      context.sessionOpen &&
+      context.completedScenarios.includes(scenario.id)
+    ) {
       await assertLiveAssertionCapture(context);
       assertionCaptureVerified = true;
     }
@@ -304,6 +352,7 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     'seeded email should be observable before dismiss',
   );
 
+  await assertWaitSelector(context, 'label="Done" visible=true');
   const keyboardVisiblePath = path.join(context.artifactDir, 'keyboard-visible.png');
   await capturePng(context, 'capture visible input keyboard', keyboardVisiblePath);
   const keyboard = await runStep(context, 'dismiss input keyboard', ['keyboard', 'dismiss']);
