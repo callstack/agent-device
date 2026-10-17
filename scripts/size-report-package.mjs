@@ -76,15 +76,27 @@ export function assertPublishPackageContents(entries, options = {}) {
   if (forbiddenPaths.length > 0) {
     throw new Error(`npm pack includes benchmark or build scripts: ${forbiddenPaths.join(', ')}`);
   }
-  // The macOS helper ships as buildable source and the helper's own manifest declares no test
-  // targets, so anything under its Tests/ directory could only ever be dead weight the install
-  // never compiles. Its tests live in apple/macos-helper-tests, which `files` does not list.
+  // The macOS helper ships as buildable source. Its manifest declares the test targets, so the
+  // packed tree must hold at least one source per target or the install-time `swift build` dies;
+  // `files` ships exactly one PackStub.swift per target and excludes every other test source.
+  // Anything else under Tests/ in the pack means the exclusion list leaked real tests.
   const shippedSwiftTests = paths.filter(
     (entryPath) =>
-      entryPath === 'apple/macos-helper/Tests' || entryPath.startsWith('apple/macos-helper/Tests/'),
+      (entryPath === 'apple/macos-helper/Tests' ||
+        entryPath.startsWith('apple/macos-helper/Tests/')) &&
+      !entryPath.endsWith('/PackStub.swift'),
   );
   if (shippedSwiftTests.length > 0) {
     throw new Error(`npm pack includes macOS helper test sources: ${shippedSwiftTests.join(', ')}`);
+  }
+  const packStubs = paths.filter(
+    (entryPath) =>
+      entryPath.startsWith('apple/macos-helper/Tests/') && entryPath.endsWith('/PackStub.swift'),
+  );
+  if (paths.includes('apple/macos-helper/Package.swift') && packStubs.length < 2) {
+    throw new Error(
+      `npm pack is missing macOS helper test-target pack stubs: expected one PackStub.swift per test target, found ${packStubs.length}`,
+    );
   }
 }
 

@@ -41,6 +41,19 @@ test('publish package requires both Android helpers and excludes benchmark scrip
       ]),
     /benchmark or build scripts/,
   );
+  assert.doesNotThrow(() =>
+    assertPublishPackageContents([
+      ...fixturePack.files,
+      {
+        path: 'apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/PackStub.swift',
+        size: 1,
+      },
+      {
+        path: 'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift',
+        size: 1,
+      },
+    ]),
+  );
   assert.throws(
     () =>
       assertPublishPackageContents([
