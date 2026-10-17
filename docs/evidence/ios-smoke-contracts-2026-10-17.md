@@ -20,3 +20,15 @@ The merge gate must detect agent-device regressions on a controlled app. A comma
 ## Local verification
 
 Run the checked-in harness entry point with a current Release fixture, the selected simulator UDID, a purpose-specific state directory, and `AGENT_DEVICE_IOS_E2E=1 AGENT_DEVICE_IOS_E2E_TIER=smoke`. Build the CLI and unit-test-enabled XCTest runner first. The fixture must contain current JavaScript; an installed bundle ID is insufficient. Preserve the emitted coverage report and per-scenario evidence. Do not count skipped device tests as passed.
+
+### Verification results
+
+Device: iPhone 17 Pro, iOS 27.0, UDID `BC54AC11-CD86-4C10-8C4E-5101C773FFEB`. Fixture: a fresh Release build of this checkout, with current JavaScript embedded. CLI and runner builds completed locally. CI still owns its iOS 26.2 environment.
+
+- Native source at `92db564a30ec0ff39aa248339b45b12901a1ead8`: the original masked XCTest pair produced one pass and one failure; the prefilled synthesized case observed 13 bullets versus the asserted 8.
+- Revised native fixture and XCTest assertions: five focused tests passed, including both masked cases, exact readable replacement past dropped select-alls, shared unreadable classification, and bounded masked clearing. `pnpm check:xctest-selection` reached every declared regression.
+- Harness source at `83af5f485e12e16ff23bcc5606282633cad4a1f9`: the isolated-session smoke command passed 22 tests, zero failures/skips, in 130 seconds.
+- Final harness source at `31e6941b991d4f3421b8c306535472a61408ec36`: the same smoke command passed 22 tests, zero failures/skips, in 112 seconds. The seven subtests covered inventory/install, automation input, form input and forced-backend conformance, visible depth, WebView remote content, deep-link/clear-state navigation, and screenshot/session release. Each run closed its sessions and stopped its daemon.
+- Focused harness and coverage checks passed 24 tests. `pnpm check:quick`, fixture TypeScript checking, gate-manifest checking, and XCTest-selection checking passed.
+- At `31e6941b991d4f3421b8c306535472a61408ec36`, an isolated mutation restored the old policy's retries for `wait_deadline_exceeded`. The focused test `a readable destination miss fails without repeating the wait` changed from one pass to one failure (`Missing expected rejection`). The experiment checkout was removed; the implementation checkout remained unchanged.
+- Independent read-only review found one unnecessary trailing deep-link relaunch. It was removed, along with the analogous depth/WebView restores; the final follow-up review found no remaining issues.
