@@ -345,7 +345,7 @@ async function startDaemonRuntimeOnHost(
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
   // with a weaker policy than its operator named. The server loads it before composing any
   // runtime, so no capability is ever built under a policy that failed validation.
-  const daemonPolicy: DaemonPolicy | undefined = loadDaemonPolicy(env);
+  const daemonPolicy: DaemonPolicy | undefined = loadDaemonPolicy(env, host.cwd);
   // Derived here, beside the policy it reads: the server hands the same refusal to the root's
   // composition, so a runtime can never be built without the operator's shutdown gate.
   const assertShutdownAllowed = daemonPolicy

@@ -172,7 +172,7 @@ export async function ensureDaemon(settings: DaemonClientSettings): Promise<Ensu
 
   const ensured = await ensureLocalDaemon(settings);
   // Checked on both branches: a startup can resolve to a daemon another caller raced in.
-  await assertDaemonPolicyMatches(ensured.info, settings.paths.baseDir, settings.host.env);
+  await assertDaemonPolicyMatches(ensured.info, settings.paths.baseDir, settings.host);
   return ensured;
 }
 
@@ -319,11 +319,12 @@ async function canReachReusableDaemon(
 async function assertDaemonPolicyMatches(
   existing: DaemonInfo,
   stateDir: string,
-  env: Readonly<EnvMap>,
+  host: HostEnvironment,
 ): Promise<void> {
+  const { env } = host;
   if (!env.AGENT_DEVICE_DAEMON_POLICY?.trim()) return;
   const { loadDaemonPolicy } = await import('@agent-device/daemon-contracts/daemon-policy-file');
-  const expected = loadDaemonPolicy(env)?.digest;
+  const expected = loadDaemonPolicy(env, host.cwd)?.digest;
   if (expected === existing.policyDigest) return;
   throw new AppError(
     'COMMAND_FAILED',
