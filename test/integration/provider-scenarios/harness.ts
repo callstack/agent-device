@@ -264,9 +264,11 @@ export async function createProviderScenarioHarness(
       });
       const envelope = JSON.parse(body) as JsonRpcResponseEnvelope;
       if (envelope.result) assertNoInternalChromeProvenance(envelope.result);
-      if (envelope.result) return responseToRpcResult(envelope.result, String(payload.id));
+      if (envelope.result) {
+        return responseToRpcResult(envelope.result, String(payload.id), statusCode);
+      }
       return {
-        statusCode: envelope.error?.code === -32000 ? 200 : statusCode,
+        statusCode,
         json: {
           jsonrpc: '2.0',
           id: payload.id,

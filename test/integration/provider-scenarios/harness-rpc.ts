@@ -29,9 +29,10 @@ export function commandRequest(
 export function responseToRpcResult(
   response: DaemonResponse,
   id: string,
+  statusCode: number,
 ): ProviderScenarioRpcResult {
   return {
-    statusCode: 200,
+    statusCode,
     json: response.ok
       ? {
           jsonrpc: '2.0',

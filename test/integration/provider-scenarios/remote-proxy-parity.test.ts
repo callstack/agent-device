@@ -9,10 +9,7 @@ import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
-import {
-  createProviderScenarioHarness,
-  type ProviderScenarioHarness,
-} from './harness.ts';
+import { createProviderScenarioHarness, type ProviderScenarioHarness } from './harness.ts';
 import {
   createProviderScenarioProxy,
   type ProviderScenarioForwardedRequest,

@@ -31,7 +31,7 @@ test('Provider-backed integration normalizes provider failures through the reque
         snapshotInteractiveOnly: true,
       });
 
-      assert.equal(response.statusCode, 200);
+      assert.equal(response.statusCode, 500);
       assert.equal(response.json?.error?.data?.code, 'COMMAND_FAILED');
       assert.match(
         response.json?.error?.message ?? '',

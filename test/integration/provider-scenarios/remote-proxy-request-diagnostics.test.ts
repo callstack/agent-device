@@ -32,7 +32,7 @@ test('Provider-backed integration local proxy serves the daemon diagnostics reco
         meta: { requestId: REQUEST_ID, sessionExplicit: true },
       },
     );
-    assert.equal(failed.statusCode, 200, JSON.stringify(failed.json));
+    assert.equal(failed.statusCode, 404, JSON.stringify(failed.json));
     const error = failed.json.error?.data as DaemonError | undefined;
     assert.equal(error?.code, 'SESSION_NOT_FOUND', JSON.stringify(failed.json));
     assert.deepEqual(error?.diagnosticsRecord, {

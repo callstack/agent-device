@@ -43,7 +43,18 @@ export function assertRpcError(
   code: string,
   message: RegExp,
 ): Record<string, unknown> {
-  assert.equal(response.statusCode, 200, JSON.stringify(response.json));
+  const details = response.json?.error?.data?.details;
+  const expectedStatus =
+    code === 'INVALID_ARGS'
+      ? 400
+      : code === 'UNAUTHORIZED'
+        ? 401
+        : code === 'SESSION_NOT_FOUND'
+          ? 404
+          : code === 'DEVICE_IN_USE' && details?.reason === 'human_control_active'
+            ? 423
+            : 500;
+  assert.equal(response.statusCode, expectedStatus, JSON.stringify(response.json));
   assert.equal(response.json?.error?.data?.code, code, JSON.stringify(response.json));
   assert.match(response.json?.error?.message ?? '', message);
   return (response.json?.error?.data ?? {}) as Record<string, unknown>;

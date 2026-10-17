@@ -14,6 +14,7 @@ import {
 } from './entries.ts';
 import {
   ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
+  ANDROID_AUDIO_CONTRACT_EVIDENCE,
   ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE,
   ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
@@ -348,11 +349,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
   },
   [C.audio]: {
     androidEmulator: androidEmulator.contract(
-      {
-        commands: [C.audio],
-        owner: 'daemon/session-observability',
-        testName: 'audio probe starts host helper for Android emulator audio',
-      },
+      ANDROID_AUDIO_CONTRACT_EVIDENCE,
       'host audio probing has an Android-emulator session contract',
     ),
     iosSimulator: iosSimulator.contract(

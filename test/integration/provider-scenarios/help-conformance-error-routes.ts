@@ -99,9 +99,10 @@ function emptyWebProvider(nodes: () => RawSnapshotNode[]): WebProvider {
 function responseError(
   response: ProviderScenarioRpcResult,
   expectedCode: string,
+  expectedStatus: number,
   label: string,
 ): HelpConformanceErrorResponse {
-  assert.equal(response.statusCode, 200, `${label}: ${JSON.stringify(response.json)}`);
+  assert.equal(response.statusCode, expectedStatus, `${label}: ${JSON.stringify(response.json)}`);
   const error = response.json?.error?.data;
   assert.equal(error?.code, expectedCode, `${label}: ${JSON.stringify(response.json)}`);
   assert.equal(typeof error?.message, 'string');
@@ -200,6 +201,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
         { session: 'default' },
       ),
       'DEVICE_IN_USE',
+      423,
       'session owns the selected web device',
     );
 
@@ -235,6 +237,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
         { session: 'checkout' },
       ),
       'COMMAND_FAILED',
+      500,
       'superseded pinned ref',
     );
     assert.equal(staleRefRaw.error.details?.reason, 'ref_generation_mismatch');
@@ -268,6 +271,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
         { session: 'checkout' },
       ),
       'AMBIGUOUS_MATCH',
+      500,
       'ambiguous Follow match',
     );
 
@@ -304,6 +308,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
         { meta: { cwd: '/worktrees/other' } },
       ),
       'DEVICE_IN_USE',
+      500,
       'cross-daemon device claim',
     );
     assert.match(deviceClaimInUse.error.message, /session "checkout"/);

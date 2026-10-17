@@ -6,10 +6,7 @@ import { buildHttpRpcPayload } from '../../../src/daemon-client/daemon-client-rp
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
 import { commandRequest, responseToRpcResult } from './harness-rpc.ts';
-import {
-  type ProviderScenarioHarness,
-  type ProviderScenarioRpcResult,
-} from './harness.ts';
+import { type ProviderScenarioHarness, type ProviderScenarioRpcResult } from './harness.ts';
 
 export type ProviderScenarioForwardedRequest = {
   method: string;
@@ -101,9 +98,9 @@ export async function createProviderScenarioProxy(
       const result = await requestRpc(authToken, payload);
       const envelope = result.json as JsonRpcResponseEnvelope;
       const id = String(payload.id);
-      if (envelope.result) return responseToRpcResult(envelope.result, id);
+      if (envelope.result) return responseToRpcResult(envelope.result, id, result.statusCode);
       return {
-        statusCode: envelope.error?.code === -32000 ? 200 : result.statusCode,
+        statusCode: result.statusCode,
         json: {
           jsonrpc: '2.0',
           id,
