@@ -15,6 +15,7 @@ import {
   emitRequestProgress,
   findProjectRoot,
   isCommandTimeoutError,
+  runnerRuntimeSlot,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -119,7 +120,10 @@ type DeviceStartState = {
   inFlight: Set<StartAdmission>;
 };
 
-const deviceStartStates = new Map<string, DeviceStartState>();
+const DEVICE_START_STATES_SLOT = Symbol('apple-runner-device-start-states');
+// Per daemon runtime: a runtime's teardown retires only the start admissions it opened.
+const deviceStartStates = () =>
+  runnerRuntimeSlot(DEVICE_START_STATES_SLOT, () => new Map<string, DeviceStartState>());
 
 /**
  * Opens the admission one start answers to, taken when a caller asks for a runner. Registration is
@@ -144,7 +148,7 @@ export function openRunnerStartLoopAdmission(deviceId: string): RunnerStartAdmis
 /** The start settled: its token leaves the device's in-flight set. Verdicts live on the token. */
 export function finishRunnerStartAdmission(admission: RunnerStartAdmission): void {
   (admission as StartAdmission).retryPending = false;
-  const state = deviceStartStates.get(admission.deviceId);
+  const state = deviceStartStates().get(admission.deviceId);
   if (!state) return;
   state.inFlight.delete(admission as StartAdmission);
   forgetDeviceStartState(admission.deviceId, state);
@@ -180,7 +184,10 @@ export function fenceRunnerStartAdmissionsForTeardown(deviceId: string): () => v
  * build past the sweep that is about to stop it.
  */
 export function retireAllRunnerStartAdmissions(additionalDeviceIds?: Iterable<string>): () => void {
-  const deviceIds = new Set<string>([...deviceStartStates.keys(), ...(additionalDeviceIds ?? [])]);
+  const deviceIds = new Set<string>([
+    ...deviceStartStates().keys(),
+    ...(additionalDeviceIds ?? []),
+  ]);
   const settles = [...deviceIds].map((deviceId) => fenceRunnerStartAdmissionsForTeardown(deviceId));
   return () => {
     for (const settle of settles.splice(0)) settle();
@@ -193,7 +200,7 @@ export function retireAllRunnerStartAdmissions(additionalDeviceIds?: Iterable<st
  * not that teardown's retry.
  */
 export function runnerStartTeardownPending(deviceId: string): boolean {
-  return (deviceStartStates.get(deviceId)?.pendingTeardowns ?? 0) > 0;
+  return (deviceStartStates().get(deviceId)?.pendingTeardowns ?? 0) > 0;
 }
 
 /**
@@ -299,17 +306,17 @@ export function releaseRunnerStartWaiter(
 }
 
 function stateForDevice(deviceId: string): DeviceStartState {
-  const existing = deviceStartStates.get(deviceId);
+  const existing = deviceStartStates().get(deviceId);
   if (existing) return existing;
   const state: DeviceStartState = { pendingTeardowns: 0, inFlight: new Set() };
-  deviceStartStates.set(deviceId, state);
+  deviceStartStates().set(deviceId, state);
   return state;
 }
 
 /** Nothing fences the device and no start is in flight on it once the last of both is gone. */
 function forgetDeviceStartState(deviceId: string, state: DeviceStartState): void {
   if (state.pendingTeardowns <= 0 && state.inFlight.size === 0) {
-    deviceStartStates.delete(deviceId);
+    deviceStartStates().delete(deviceId);
   }
 }
 
@@ -360,7 +367,10 @@ type RunnerPrepProcess = Readonly<{
   child: ExecBackgroundResult['child'];
 }>;
 
-const runnerPrepProcessLedger = new Set<RunnerPrepProcess>();
+const RUNNER_PREP_LEDGER_SLOT = Symbol('apple-runner-prep-process-ledger');
+// Per daemon runtime: a runtime's stop signals only the prep children it started.
+const runnerPrepProcessLedger = () =>
+  runnerRuntimeSlot(RUNNER_PREP_LEDGER_SLOT, () => new Set<RunnerPrepProcess>());
 
 /**
  * Records a prep subprocess (`xcodebuild build-for-testing`) against the device it builds for and
@@ -377,9 +387,9 @@ export function registerRunnerPrepProcess(
   startAdmission?: RunnerStartAdmission,
 ): void {
   const entry: RunnerPrepProcess = { deviceId, startAdmission, child };
-  runnerPrepProcessLedger.add(entry);
+  runnerPrepProcessLedger().add(entry);
   child.on('close', () => {
-    runnerPrepProcessLedger.delete(entry);
+    runnerPrepProcessLedger().delete(entry);
   });
 }
 
@@ -426,14 +436,14 @@ export function markRunnerStartRetryPending(admission: RunnerStartAdmission): vo
 }
 
 function prepProcessEntries(deviceId?: string): readonly RunnerPrepProcess[] {
-  return [...runnerPrepProcessLedger].filter(
+  return [...runnerPrepProcessLedger()].filter(
     (entry) => deviceId === undefined || entry.deviceId === deviceId,
   );
 }
 
 export function forgetRunnerPrepProcess(child: ExecBackgroundResult['child']): void {
-  for (const entry of runnerPrepProcessLedger) {
-    if (entry.child === child) runnerPrepProcessLedger.delete(entry);
+  for (const entry of runnerPrepProcessLedger()) {
+    if (entry.child === child) runnerPrepProcessLedger().delete(entry);
   }
 }
 
