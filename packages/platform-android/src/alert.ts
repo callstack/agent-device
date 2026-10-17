@@ -21,8 +21,8 @@ import { backAndroid, pressAndroid } from './input-actions.ts';
  * the one poll/confirm/same-alert/response owner every tree-based backend rides) plus this
  * platform's own observation (`captureNodes` + the candidate reader) and acting policy (the
  * id-derived grant rank over the shared label vocabulary, the neutral-button/Back fallback).
- * The driver is loaded on the alert path like the Limrun provider loads this file, so the
- * mechanics façade keeps its eager-closure budget (ADR-0019 implementation-laziness).
+ * The driver import is function-scoped: a static one would add a new eager module to the
+ * mechanics façade and break its merge-base closure budget (ADR-0019).
  */
 
 type AndroidAlertOptions = {
