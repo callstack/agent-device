@@ -7,7 +7,7 @@ import {
   makeRepairCompleteSession,
   repairPublication,
 } from '../../../__tests__/support/session-factories.ts';
-import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/index.ts';
+import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/internal/session-close.ts';
 import {
   bindLifecycleRuntime,
   inspectLifecycleRuntimeFacts,

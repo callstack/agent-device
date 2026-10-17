@@ -7,15 +7,13 @@ import {
 } from '../../execution/handlers/session-selector-dispatch.ts';
 import { handleSessionAppDeploymentCommand } from './session-app-deployment-route.ts';
 import { runBatchCommands } from './session-batch.ts';
-import {
-  handleSessionCloseCommands,
-  handleSessionInventoryCommands,
-  handleSessionOpenCommands,
-} from '../session-lifecycle/index.ts';
+import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
+import { handleSessionInventoryCommands } from '../session-lifecycle/internal/inventory.ts';
+import { handleSessionOpenCommands } from '../session-lifecycle/internal/session-open.ts';
 import { handleBootCommand } from './session-boot.ts';
 import { handleShutdownCommand } from './session-shutdown.ts';
 import { handleAppStateCommand } from './session-appstate.ts';
-import { handleSessionObservabilityCommands } from '../session-observability/index.ts';
+import { handleSessionObservabilityCommands } from '../session-observability/internal/session-observability.ts';
 import { handleReplayCommand, handleReplayTestCommand } from './session-replay-command.ts';
 import { handleSessionScriptPublication } from './session-script-publication.ts';
 import { handleSessionClipboardCommand } from '../../execution/handlers/session-clipboard.ts';
@@ -26,12 +24,10 @@ import type {
   SessionCommandInput,
   SessionCommandParams,
 } from './session-command-input.ts';
-import type {
-  SessionCloseCommandInput,
-  SessionInventoryCommandInput,
-  SessionOpenCommandInput,
-} from '../session-lifecycle/index.ts';
-import type { SessionObservabilityCommandInput } from '../session-observability/index.ts';
+import type { SessionCloseCommandInput } from '../session-lifecycle/internal/session-close.ts';
+import type { SessionInventoryCommandInput } from '../session-lifecycle/internal/inventory.ts';
+import type { SessionOpenCommandInput } from '../session-lifecycle/internal/session-open.ts';
+import type { SessionObservabilityCommandInput } from '../session-observability/internal/session-observability.ts';
 import type { DescriptorSessionRouteCommandName } from '@agent-device/command-registry/registry';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 

@@ -1,6 +1,6 @@
 import { type ClaimRecoveryGatewayFactory } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';
-import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';
+import { createClaimRecoveryGatewayFor } from '../../platform-runtime-claim-recovery.ts';
 import type { DaemonPlatformServices } from '@agent-device/daemon';
 
 /**
@@ -22,5 +22,5 @@ export function composedPlatformServicesFixture(
  * passes its own factory.
  */
 export function composedClaimRecoveryGatewayFixture(): ClaimRecoveryGatewayFactory {
-  return createClaimRecoveryGateway;
+  return createClaimRecoveryGatewayFor(process.env);
 }

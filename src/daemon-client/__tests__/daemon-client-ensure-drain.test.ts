@@ -179,9 +179,16 @@ test('a daemon still running past the deadline that answers no probe is force-re
   launchesFreshDaemonAt(spawn, paths, fresh.port);
 
   try {
-    const connection = await ensureDaemon({ stateDir, daemonTransport: 'http' });
+    const started: Array<[string, number | undefined]> = [];
+    const connection = await ensureDaemon({
+      stateDir,
+      daemonTransport: 'http',
+      onStart: (reason, previous) => started.push([reason, previous?.pid]),
+    });
 
     assert.equal(connection.started, true);
+    // Force-retired for outlasting its drain, it was never shown idle: reported as a missing daemon.
+    assert.deepEqual(started, [['missing', childPid]]);
     assert.equal(drain.signals.length > 0, true, 'the stuck daemon was signaled');
     assert.ok(
       drain.signals.every(({ atMs }) => atMs >= DRAIN_DEADLINE_MS),
@@ -194,6 +201,7 @@ test('a daemon still running past the deadline that answers no probe is force-re
   }
 });
 
+// A drain that never finishes while the daemon keeps serving: it accepted the request but is stuck.
 test('a daemon still running past the deadline that answers a probe is left alone', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir, paths } = stateDirAndPaths();

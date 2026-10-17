@@ -35,13 +35,15 @@ test('warmup hands an Apple device to the Apple runner warmup and returns its ch
   };
   mockAppleRunnerWarmupCheck.mockResolvedValue(check);
 
-  const result = await createHostDiagnostics().warmupCheck(IOS_SIMULATOR, context);
+  const result = await createHostDiagnostics(process.env).warmupCheck(IOS_SIMULATOR, context);
 
   expect(result).toEqual(check);
   expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledWith(IOS_SIMULATOR, context);
 });
 
 test('warmup runs no probe for a non-Apple device', async () => {
-  expect(await createHostDiagnostics().warmupCheck(ANDROID_EMULATOR, context)).toBeUndefined();
+  expect(
+    await createHostDiagnostics(process.env).warmupCheck(ANDROID_EMULATOR, context),
+  ).toBeUndefined();
   expect(mockAppleRunnerWarmupCheck).not.toHaveBeenCalled();
 });

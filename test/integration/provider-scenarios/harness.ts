@@ -148,6 +148,7 @@ export async function createProviderScenarioHarness(
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
+      env: process.env,
       assertShutdownAllowed: input.assertShutdownAllowed,
       providerRuntimes: configuredRuntimes,
       providerModules,
@@ -239,6 +240,7 @@ export async function createProviderScenarioHarness(
     });
     return await new Promise<DaemonResponse>((resolve, reject) => {
       handleDaemonHttpResponseBody(body, {
+        host: createTestHostEnvironment(),
         info: {
           transport: 'http',
           httpPort,

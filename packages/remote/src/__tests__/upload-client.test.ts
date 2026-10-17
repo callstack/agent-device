@@ -4,7 +4,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
-import { uploadArtifact } from '../upload-client.ts';
+import { uploadArtifact as uploadArtifactOnHost } from '../upload-client.ts';
+
+const uploadArtifact = (options: Omit<Parameters<typeof uploadArtifactOnHost>[0], 'env'>) =>
+  uploadArtifactOnHost({ ...options, env: process.env });
 import type { UploadProgressEvent } from '../upload-progress.ts';
 import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -917,7 +920,12 @@ test.each([
       const localPath = createTempFile('app.apk', `${flow}-payload`);
       for (const leaseId of ['lease-1', undefined]) {
         leases = new Map();
-        await uploadArtifact({ localPath, baseUrl: server.baseUrl, token: TEST_TOKEN, leaseId });
+        await uploadArtifact({
+          localPath,
+          baseUrl: server.baseUrl,
+          token: TEST_TOKEN,
+          leaseId,
+        });
         const expected = routes.map((route) => [route, route === unleased ? undefined : leaseId]);
         assert.deepEqual([...leases], expected);
       }

@@ -25,11 +25,11 @@ import {
   connectCommand,
   connectionCommand,
   disconnectCommand,
-} from '../cli/commands/connection.ts';
+  materializeRemoteConnectionForCommand,
+} from './test-utils/host-bound-commands.ts';
 import { writeGeneratedRemoteConfig } from '../cli/connection/generated-config.ts';
 import {
   hasDeferredMetroConfig,
-  materializeRemoteConnectionForCommand,
   CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
   PROXY_REMOTE_LEASE_TTL_MS,
 } from '../cli/commands/connection-runtime.ts';

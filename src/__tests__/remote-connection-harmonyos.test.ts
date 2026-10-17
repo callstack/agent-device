@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import {
@@ -45,6 +45,7 @@ test('stored Harmony runtime compatibility keeps the HarmonyOS runtime for a Har
     },
   });
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'snapshot',
     client: createTestClient(),
     flags: {
@@ -73,6 +74,7 @@ async function expectRejectedSelection(
 ): Promise<void> {
   await expect(
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'snapshot',
       client: createTestClient(),
       flags: {
@@ -176,6 +178,7 @@ test('proxy HarmonyOS inventory materializes a scoped lease and closes that same
     session: 'harmony-proxy',
   };
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     flags,
     client,
@@ -189,7 +192,7 @@ test('proxy HarmonyOS inventory materializes a scoped lease and closes that same
     deviceKey: 'harmonyos:mobile:127.0.0.1:16001',
   });
   expect(readRemoteConnectionState({ stateDir, session: flags.session })?.leaseId).toBe(leaseId);
-  await disconnectCommand({ positionals: [], flags, client });
+  await disconnectCommand({ host: createTestHostEnvironment(), positionals: [], flags, client });
   expect(released).toEqual([leaseId]);
   expect(readRemoteConnectionState({ stateDir, session: flags.session })).toBeNull();
 });

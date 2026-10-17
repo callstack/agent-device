@@ -20,12 +20,15 @@ import { createPlatformRuntimeGateway } from './platform-runtime.ts';
  * claims exist only for local devices — and instance-scopes every stateful piece the gateway owns,
  * so disposal shuts down only this transaction's handles.
  */
-export const createClaimRecoveryGateway: ClaimRecoveryGatewayFactory = (input) =>
-  createPlatformRuntimeGateway({
-    sessionsDir: input.sessionsDir,
-    ownedProcesses: input.ownedProcesses,
-    resolveSessionArtifacts: input.resolveSessionArtifacts,
-  });
+export const createClaimRecoveryGatewayFor =
+  (env: EnvMap): ClaimRecoveryGatewayFactory =>
+  (input) =>
+    createPlatformRuntimeGateway({
+      env,
+      sessionsDir: input.sessionsDir,
+      ownedProcesses: input.ownedProcesses,
+      resolveSessionArtifacts: input.resolveSessionArtifacts,
+    });
 
 /**
  * Daemonless `device release --stale`: settles each provably dead owner
@@ -44,7 +47,7 @@ export async function runStaleDeviceClaimRelease(
     env,
     reconcile: createOwnerScopedDeviceClaimReconciler({
       scope: createRecoveryPlatformScope(),
-      composeGateway: createClaimRecoveryGateway,
+      composeGateway: createClaimRecoveryGatewayFor(env),
       composeRecovery,
     }),
   });

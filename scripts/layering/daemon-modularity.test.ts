@@ -197,7 +197,7 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
     new Map([
       [
         'packages/replay-port/src/daemon-port/test-command.ts',
-        "import { handleSessionCloseCommands } from '../../../../packages/daemon/src/sessions/session-lifecycle/index.ts';",
+        "import { handleSessionCloseCommands } from '../../../../packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts';",
       ],
       [
         'packages/replay-port/src/daemon-port/native-command.ts',
@@ -208,7 +208,7 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
         "import { runReplayCommand } from '../../../replay-port/src/daemon-port/native-command.ts';",
       ],
       [
-        'packages/daemon/src/sessions/session-lifecycle/index.ts',
+        'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
         'export function handleSessionCloseCommands() {}',
       ],
       ['packages/daemon/src/core/session-store.ts', 'export class SessionStore {}'],
@@ -226,7 +226,7 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
       {
         file: 'packages/replay-port/src/daemon-port/test-command.ts',
         message:
-          'replay-port must not import packages/daemon/src/sessions/session-lifecycle/index.ts',
+          'replay-port must not import packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
       },
       {
         file: 'packages/replay-port/src/daemon-port/native-command.ts',
@@ -240,24 +240,20 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
   );
 });
 
-test('session lifecycle rejects handler deep imports in both directions', () => {
+test('session lifecycle rejects handler crossings and private helper imports', () => {
   const edges = resolveImportEdges(
     new Map([
       [
         'packages/daemon/src/sessions/handlers/session.ts',
-        "import { handleSessionInventoryCommands } from '../session-lifecycle/internal/inventory.ts';\nexport function handleSessionCommands() {}",
+        "import { prepareOpenSession } from '../session-lifecycle/internal/session-open-prepare.ts';\nexport function handleSessionCommands() {}",
       ],
       [
-        'packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts',
-        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleSessionInventoryCommands() {}",
+        'packages/daemon/src/sessions/session-lifecycle/internal/session-open-prepare.ts',
+        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function prepareOpenSession() {}",
       ],
       [
         'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
         "import { handleSessionCommands } from '../../handlers/session.ts';",
-      ],
-      [
-        'packages/daemon/src/sessions/session-lifecycle/index.ts',
-        'export function handleSessionInventoryCommands() {}',
       ],
     ]),
   );
@@ -278,10 +274,10 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
         file: 'packages/daemon/src/sessions/handlers/session.ts',
         line: 1,
         message:
-          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-lifecycle's internal tree (packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts)",
+          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-lifecycle's internal tree (packages/daemon/src/sessions/session-lifecycle/internal/session-open-prepare.ts)",
       },
       {
-        file: 'packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts',
+        file: 'packages/daemon/src/sessions/session-lifecycle/internal/session-open-prepare.ts',
         line: 1,
         message:
           'daemon-session-lifecycle must not import packages/daemon/src/sessions/handlers/session.ts',
@@ -394,19 +390,19 @@ test('interaction rejects handler crossings and deep imports around its facade',
   );
 });
 
-test('session observability rejects handler deep imports in both directions', () => {
+test('session observability rejects handler crossings and private helper imports', () => {
   const edges = resolveImportEdges(
     new Map([
       [
         'packages/daemon/src/sessions/handlers/session.ts',
-        "import { handleSessionObservabilityCommands } from '../session-observability/internal/session-observability.ts';\nexport function handleSessionCommands() {}",
+        "import { handleAudioCommand } from '../session-observability/internal/session-audio.ts';\nexport function handleSessionCommands() {}",
+      ],
+      [
+        'packages/daemon/src/sessions/session-observability/internal/session-audio.ts',
+        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleAudioCommand() {}",
       ],
       [
         'packages/daemon/src/sessions/session-observability/internal/session-observability.ts',
-        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleSessionObservabilityCommands() {}",
-      ],
-      [
-        'packages/daemon/src/sessions/session-observability/index.ts',
         'export function handleSessionObservabilityCommands() {}',
       ],
     ]),
@@ -428,10 +424,10 @@ test('session observability rejects handler deep imports in both directions', ()
         file: 'packages/daemon/src/sessions/handlers/session.ts',
         line: 1,
         message:
-          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-observability's internal tree (packages/daemon/src/sessions/session-observability/internal/session-observability.ts)",
+          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-observability's internal tree (packages/daemon/src/sessions/session-observability/internal/session-audio.ts)",
       },
       {
-        file: 'packages/daemon/src/sessions/session-observability/internal/session-observability.ts',
+        file: 'packages/daemon/src/sessions/session-observability/internal/session-audio.ts',
         line: 1,
         message:
           'daemon-session-observability must not import packages/daemon/src/sessions/handlers/session.ts',
@@ -686,3 +682,39 @@ for (const file of [
     });
   }
 }
+
+test('session command owners accept direct imports without an internal barrel', () => {
+  const sources = new Map<string, string>();
+  for (const [family, owner, symbol] of [
+    ['session-lifecycle', 'session-close', 'handleSessionCloseCommands'],
+    ['session-lifecycle', 'session-open', 'handleSessionOpenCommands'],
+    ['session-lifecycle', 'inventory', 'handleSessionInventoryCommands'],
+    ['session-observability', 'session-observability', 'handleSessionObservabilityCommands'],
+  ]) {
+    sources.set(
+      `packages/daemon/src/sessions/${family}/internal/${owner}.ts`,
+      `export function ${symbol}() {}`,
+    );
+    sources.set(
+      `packages/daemon/src/sessions/handlers/${owner}.ts`,
+      `import { ${symbol} } from '../${family}/internal/${owner}.ts';`,
+    );
+  }
+  assert.deepEqual(
+    checkDaemonModularityRatchets(resolveImportEdges(sources), REFERENCE, REFERENCE),
+    [],
+  );
+});
+
+test('session command families reject restored internal barrels', () => {
+  const lifecycle = 'packages/daemon/src/sessions/session-lifecycle/index.ts';
+  const observability = 'packages/daemon/src/sessions/session-observability/index.ts';
+  assert.deepEqual(
+    checkRetiredSessionLifecyclePaths([lifecycle]).map(({ file }) => file),
+    [lifecycle],
+  );
+  assert.deepEqual(
+    checkRetiredSessionObservabilityPaths([observability]).map(({ file }) => file),
+    [observability],
+  );
+});

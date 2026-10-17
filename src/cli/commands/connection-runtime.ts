@@ -1,4 +1,4 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import crypto from 'node:crypto';
 import type { MetroBridgeScope } from '@agent-device/contracts/remote';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -61,6 +61,7 @@ export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
 export const CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS = 10 * 60 * 1000;
 
 export async function materializeRemoteConnectionForCommand(options: {
+  host: HostEnvironment;
   command: string;
   flags: CliFlags;
   client: AgentDeviceClient;
@@ -73,19 +74,19 @@ export async function materializeRemoteConnectionForCommand(options: {
   runtime?: SessionRuntimeHints;
   connection?: RemoteConnectionRequestMetadata;
 }> {
-  const { command, flags, client } = options;
+  const { command, flags, client, host } = options;
   if (!flags.remoteConfig) {
     return { flags, runtime: options.runtime };
   }
 
   const stateDir = resolveDaemonPaths(flags.stateDir, {
-    cwd: commandHostEnvironment().cwd,
-    env: commandHostEnvironment().env,
+    cwd: host.cwd,
+    env: host.env,
   }).baseDir;
   const remoteConfig = resolveRemoteConfigProfile({
     configPath: flags.remoteConfig,
-    cwd: commandHostEnvironment().cwd,
-    env: commandHostEnvironment().env,
+    cwd: host.cwd,
+    env: host.env,
   });
   const profileFlags = profileToCliFlags(remoteConfig.profile);
   const mergedFlags = {

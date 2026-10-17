@@ -107,6 +107,7 @@ test('attach reports a missing daemon without starting one', async (t) => {
   const error = await failureOf(sendToDaemon(request(stateDir), { daemonLifecycle: 'attach' }));
 
   assert.equal(error.details?.reason, 'daemon-not-running');
+  assert.match(String(error.details?.hint), /agent-device devices --state-dir /);
   assert.equal(spawn.mock.calls.length, 0);
   assert.equal(fs.existsSync(paths.infoPath), false);
 });
@@ -309,6 +310,32 @@ test.for([
     assert.equal(error.details?.reason, 'daemon-busy');
     assert.equal(error.details?.inFlightRequests, census.inFlightRequests);
     assert.equal(error.details?.leases, census.leases);
+    assert.equal(isProcessAlive(child.pid), true);
+    assert.equal(spawn.mock.calls.length, 0);
+  } finally {
+    await closeLoopbackServer(stale.server);
+  }
+});
+
+test('ensureDaemon tells a daemon that is still starting up apart from a busy one', async (t) => {
+  if (!(await withLoopback(t))) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  const stale = await startScriptedDaemon(
+    busy({ startingUp: true, inFlightRequests: 0, sessions: 0, repairSessions: 0, leases: 0 }),
+  );
+  const { child } = await registerDaemon(paths, {
+    httpPort: stale.port,
+    version: '0.0.0-stale',
+    capabilities: ['quiesce'],
+  });
+
+  try {
+    const error = await failureOf(ensureDaemon({ stateDir, daemonTransport: 'http' }));
+
+    assert.equal(error.details?.reason, 'daemon-busy');
+    assert.equal(error.details?.startingUp, true);
+    assert.match(String(error.details?.hint), /still starting up\. Retry in a moment/);
+    assert.match(String(error.details?.hint), /agent-device daemon stop --state-dir /);
     assert.equal(isProcessAlive(child.pid), true);
     assert.equal(spawn.mock.calls.length, 0);
   } finally {

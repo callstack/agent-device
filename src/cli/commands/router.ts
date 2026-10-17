@@ -26,6 +26,7 @@ const dedicatedCliCommandHandlerLoaders = {
 } satisfies ClientCommandHandlerMap;
 
 export async function tryRunClientBackedCommand(params: {
+  host: ClientCommandParams['host'];
   command: string;
   positionals: string[];
   flags: CliFlags;

@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { describe, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ClientCommandParams } from '../router-types.ts';
@@ -5,6 +6,7 @@ import { recordingCommand } from '../recording.ts';
 
 function params(positionals: string[]): ClientCommandParams {
   return {
+    host: createTestHostEnvironment(),
     positionals,
     flags: {} as ClientCommandParams['flags'],
     client: {} as ClientCommandParams['client'],

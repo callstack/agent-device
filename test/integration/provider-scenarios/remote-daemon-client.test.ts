@@ -12,6 +12,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 
 const NO_CANCELLATION = new AbortController().signal;
@@ -681,6 +682,7 @@ test('remote web recording defaults client and daemon artifact paths to WebM', a
     },
     { baseUrl: 'http://127.0.0.1:1', token: 'remote-token' },
     NO_CANCELLATION,
+    createTestHostEnvironment(),
   );
 
   assert.equal(prepared.positionals[0], 'start');
@@ -702,6 +704,7 @@ test('remote web recording appends WebM extension to extensionless client paths'
     },
     { baseUrl: 'http://127.0.0.1:1', token: 'remote-token' },
     NO_CANCELLATION,
+    createTestHostEnvironment(),
   );
 
   assert.equal(prepared.positionals[0], 'start');
@@ -720,6 +723,7 @@ test('remote recording without platform or requested path lets daemon name the c
     },
     { baseUrl: 'http://127.0.0.1:1', token: 'remote-token' },
     NO_CANCELLATION,
+    createTestHostEnvironment(),
   );
 
   assert.deepEqual(prepared.positionals, ['start']);

@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonArtifact, DaemonResponse } from '@agent-device/kernel/contracts';
 import fs from 'node:fs';
@@ -38,13 +39,14 @@ export async function prepareRemoteRequestArtifacts(
   req: Omit<DaemonWireRequest, 'token'>,
   info: DaemonArtifactEndpoint,
   signal: AbortSignal,
+  host: HostEnvironment,
 ): Promise<PreparedRemoteRequest> {
   const positionals = [...(req.positionals ?? [])];
   let flags = req.flags ? { ...req.flags } : undefined;
   let installSource = req.meta?.installSource;
   const clientArtifactPaths: Record<string, string> = {};
   let uploadedArtifactId: string | undefined;
-  const uploadProgress = createStderrUploadProgressReporter();
+  const uploadProgress = createStderrUploadProgressReporter(host.env);
 
   if (!isRemoteDaemon(info)) {
     return createPreparedRemoteRequest({
@@ -57,8 +59,14 @@ export async function prepareRemoteRequestArtifacts(
   }
 
   assertRemoteDaemonSupportsSaveScript(req);
-  flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths);
-  const remoteInstallSource = await prepareRemoteInstallSource(req, info, uploadProgress, signal);
+  flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths, host);
+  const remoteInstallSource = await prepareRemoteInstallSource(
+    req,
+    info,
+    uploadProgress,
+    signal,
+    host,
+  );
   if (remoteInstallSource) {
     installSource = remoteInstallSource.installSource;
     uploadedArtifactId = remoteInstallSource.uploadedArtifactId ?? uploadedArtifactId;
@@ -80,6 +88,7 @@ export async function prepareRemoteRequestArtifacts(
     positionals,
     uploadProgress,
     signal,
+    host,
   );
   uploadedArtifactId = installPackageResult ?? uploadedArtifactId;
   return baseResult();
@@ -112,6 +121,7 @@ async function prepareRemoteInstallPackage(
   positionals: string[],
   onProgress: UploadProgressSink | undefined,
   signal: AbortSignal,
+  host: HostEnvironment,
 ): Promise<string | undefined> {
   const pathIndex = positionals.length === 1 ? 0 : 1;
   const rawPath = positionals[pathIndex];
@@ -121,10 +131,11 @@ async function prepareRemoteInstallPackage(
     return undefined;
   }
 
-  const localPath = resolveLocalInstallPath(rawPath, req.meta?.cwd);
+  const localPath = resolveLocalInstallPath(rawPath, req.meta?.cwd, host);
   if (!localPath) return undefined;
 
   return await uploadArtifact({
+    env: host.env,
     localPath,
     baseUrl: info.baseUrl!,
     token: info.token,
@@ -140,8 +151,9 @@ function applyRemoteArtifactCommand(
   positionals: string[],
   flags: DaemonWireRequest['flags'] | undefined,
   clientArtifactPaths: Record<string, string>,
+  host: HostEnvironment,
 ): DaemonWireRequest['flags'] | undefined {
-  const remoteArtifact = prepareRemoteArtifactCommand(req, positionals);
+  const remoteArtifact = prepareRemoteArtifactCommand(req, positionals, host);
   if (!remoteArtifact) return flags;
   if (remoteArtifact.positionalIndex !== undefined && remoteArtifact.positionalPath !== undefined) {
     positionals[remoteArtifact.positionalIndex] = remoteArtifact.positionalPath;
@@ -164,10 +176,12 @@ function applyRemoteArtifactFlag(
   return { ...(flags ?? {}), [flagKey]: flagPath };
 }
 
-function resolveLocalInstallPath(rawPath: string, cwd: string | undefined): string | undefined {
-  const localPath = path.isAbsolute(rawPath)
-    ? rawPath
-    : path.resolve(cwd ?? process.cwd(), rawPath);
+function resolveLocalInstallPath(
+  rawPath: string,
+  cwd: string | undefined,
+  host: HostEnvironment,
+): string | undefined {
+  const localPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(cwd ?? host.cwd, rawPath);
   return fs.existsSync(localPath) ? localPath : undefined;
 }
 
@@ -190,6 +204,7 @@ async function prepareRemoteInstallSource(
   info: DaemonArtifactEndpoint,
   onProgress: UploadProgressSink | undefined,
   signal: AbortSignal,
+  host: HostEnvironment,
 ): Promise<{
   installSource: NonNullable<DaemonWireRequest['meta']>['installSource'];
   uploadedArtifactId?: string;
@@ -214,7 +229,7 @@ async function prepareRemoteInstallSource(
 
   const localPath = path.isAbsolute(rawPath)
     ? rawPath
-    : path.resolve(req.meta?.cwd ?? process.cwd(), rawPath);
+    : path.resolve(req.meta?.cwd ?? host.cwd, rawPath);
   if (!fs.existsSync(localPath)) {
     return {
       installSource: {
@@ -225,6 +240,7 @@ async function prepareRemoteInstallSource(
   }
 
   const uploadedArtifactId = await uploadArtifact({
+    env: host.env,
     localPath,
     baseUrl: info.baseUrl!,
     token: info.token,
@@ -245,6 +261,7 @@ async function prepareRemoteInstallSource(
 function prepareRemoteArtifactCommand(
   req: Omit<DaemonWireRequest, 'token'>,
   positionals: string[],
+  host: HostEnvironment,
 ): {
   field: string;
   localPath: string;
@@ -254,7 +271,7 @@ function prepareRemoteArtifactCommand(
   flagPath?: string;
 } | null {
   if (req.command === 'screenshot') {
-    const localPath = resolveClientArtifactOutputPath(req, 'path', '.png');
+    const localPath = resolveClientArtifactOutputPath(req, 'path', '.png', host);
     if (positionals[0]) {
       return {
         field: 'path',
@@ -276,12 +293,12 @@ function prepareRemoteArtifactCommand(
       // this destination and records to a temp path on its own host.
       return {
         field: 'outPath',
-        localPath: resolveAbsoluteClientPath(`recording-${Date.now()}`, req.meta?.cwd),
+        localPath: resolveAbsoluteClientPath(`recording-${Date.now()}`, req.meta?.cwd, host),
       };
     }
     const fallbackExtension = recordingFallbackExtension(req);
     const localPath = normalizeRecordingClientArtifactPath(
-      resolveClientArtifactOutputPath(req, 'outPath', fallbackExtension, 1),
+      resolveClientArtifactOutputPath(req, 'outPath', fallbackExtension, host, 1),
       req,
     );
     return {
@@ -301,7 +318,7 @@ function prepareRemoteArtifactCommand(
     // the same command: the daemon must never resolve a path against the caller's `cwd`.
     return {
       field: 'artifactsDir',
-      localPath: resolveClientArtifactOutputRoot(req),
+      localPath: resolveClientArtifactOutputRoot(req, host),
       flagKey: 'artifactsDir',
       flagPath: buildRemoteTempArtifactDirPath('test-artifacts'),
     };
@@ -309,10 +326,13 @@ function prepareRemoteArtifactCommand(
   return null;
 }
 
-function resolveClientArtifactOutputRoot(req: Omit<DaemonWireRequest, 'token'>): string {
+function resolveClientArtifactOutputRoot(
+  req: Omit<DaemonWireRequest, 'token'>,
+  host: HostEnvironment,
+): string {
   const requested = req.flags?.artifactsDir;
   const rawPath = hasNonEmptyString(requested) ? requested : DEFAULT_TEST_ARTIFACTS_ROOT;
-  return resolveAbsoluteClientPath(rawPath, req.meta?.cwd);
+  return resolveAbsoluteClientPath(rawPath, req.meta?.cwd, host);
 }
 
 function recordingFallbackExtension(req: Omit<DaemonWireRequest, 'token'>): string {
@@ -335,6 +355,7 @@ function resolveClientArtifactOutputPath(
   req: Omit<DaemonWireRequest, 'token'>,
   field: 'path' | 'outPath',
   fallbackExtension: string,
+  host: HostEnvironment,
   positionalIndex: number = 0,
 ): string {
   const requested = req.positionals?.[positionalIndex] ?? req.flags?.out;
@@ -342,12 +363,17 @@ function resolveClientArtifactOutputPath(
   return resolveAbsoluteClientPath(
     hasNonEmptyString(requested) ? requested : fallbackName,
     req.meta?.cwd,
+    host,
   );
 }
 
 /** Shared tail of every "what local path did the caller mean" resolution in this file. */
-function resolveAbsoluteClientPath(rawPath: string, cwd: string | undefined): string {
-  return path.isAbsolute(rawPath) ? rawPath : path.resolve(cwd ?? process.cwd(), rawPath);
+function resolveAbsoluteClientPath(
+  rawPath: string,
+  cwd: string | undefined,
+  host: HostEnvironment,
+): string {
+  return path.isAbsolute(rawPath) ? rawPath : path.resolve(cwd ?? host.cwd, rawPath);
 }
 
 function hasNonEmptyString(value: unknown): value is string {
@@ -358,6 +384,7 @@ export async function materializeRemoteArtifacts(
   info: DaemonArtifactEndpoint,
   req: DaemonWireRequest,
   response: Extract<DaemonResponse, { ok: true }>,
+  host: HostEnvironment,
 ): Promise<DaemonResponse> {
   const artifacts = Array.isArray(response.data?.artifacts) ? response.data.artifacts : [];
   if (artifacts.length === 0 || !info.baseUrl) return response;
@@ -368,7 +395,7 @@ export async function materializeRemoteArtifacts(
       nextArtifacts.push(artifact);
       continue;
     }
-    const downloadPath = resolveMaterializedArtifactPath(artifact, req);
+    const downloadPath = resolveMaterializedArtifactPath(artifact, req, host);
     const materializedPath = await downloadRemoteArtifact({
       baseUrl: info.baseUrl,
       token: info.token,
@@ -394,7 +421,11 @@ export async function materializeRemoteArtifacts(
   return { ok: true, data: nextData };
 }
 
-function resolveMaterializedArtifactPath(artifact: DaemonArtifact, req: DaemonWireRequest): string {
+function resolveMaterializedArtifactPath(
+  artifact: DaemonArtifact,
+  req: DaemonWireRequest,
+  host: HostEnvironment,
+): string {
   if (artifact.localPath && artifact.localPath.trim().length > 0) {
     return artifact.localPath;
   }
@@ -403,7 +434,7 @@ function resolveMaterializedArtifactPath(artifact: DaemonArtifact, req: DaemonWi
     return requestedPath;
   }
   const fallbackName = artifact.fileName?.trim() || `${artifact.field}-${Date.now()}`;
-  return path.resolve(req.meta?.cwd ?? process.cwd(), fallbackName);
+  return path.resolve(req.meta?.cwd ?? host.cwd, fallbackName);
 }
 
 type DownloadRemoteArtifactParams = {

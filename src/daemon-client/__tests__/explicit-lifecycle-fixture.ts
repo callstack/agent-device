@@ -106,7 +106,7 @@ export async function startScriptedSocketDaemon(
 
 export const okResult = (data: Record<string, unknown>) => ({ ok: true, data });
 export const draining = okResult({ outcome: 'draining' });
-export const busy = (census: Record<string, number>) => ({
+export const busy = (census: Record<string, number | boolean>) => ({
   ok: false,
   error: {
     code: 'COMMAND_FAILED',

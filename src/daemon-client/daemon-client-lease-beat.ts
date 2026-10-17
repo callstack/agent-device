@@ -325,6 +325,6 @@ export function buildUploadLeaseHeartbeat(
       // The beat's own budget governs; the command's heartbeat policy only ever caps it, and an
       // unbounded policy leaves the budget standing on its own.
       policyTimeoutMs === undefined ? budgetMs : Math.min(policyTimeoutMs, budgetMs),
-      { signal },
+      { host: settings.host, signal },
     );
 }

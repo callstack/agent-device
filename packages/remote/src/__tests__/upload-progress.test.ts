@@ -15,7 +15,7 @@ function renderEvents(events: UploadProgressEvent[]): string {
   const isTTYDescriptor = Object.getOwnPropertyDescriptor(process.stderr, 'isTTY');
   Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
   try {
-    const sink = createStderrUploadProgressReporter();
+    const sink = createStderrUploadProgressReporter(process.env);
     assert.equal(sink !== undefined, true);
     for (const event of events) sink!(event);
   } finally {

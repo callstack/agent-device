@@ -3,6 +3,7 @@ import {
   resolveSessionAppLogPath,
   resolveSessionAppLogPidPath,
 } from '@agent-device/daemon-contracts/session-artifact-paths';
+import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
 import path from 'node:path';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
@@ -74,7 +75,7 @@ export class SessionStore {
   assertAdmissionOpen(address: string): void {
     if (!this.acceptingSessions) {
       throw new AppError('COMMAND_FAILED', 'Daemon is shutting down', {
-        reason: 'daemon_shutting_down',
+        reason: DAEMON_SHUTTING_DOWN_REASON,
         session: address,
       });
     }

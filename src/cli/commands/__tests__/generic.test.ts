@@ -3,7 +3,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { withCapturedStdoutAsync } from '../../../__tests__/test-utils/stream-capture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { createAgentDeviceClient } from '../../../agent-device-client.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -25,6 +25,7 @@ test('snapshot --level digest --json preserves the digest through the generic CL
 
   const out = await withCapturedStdoutAsync(() =>
     runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'snapshot' as ClientBackedCliCommandName,
       positionals: [],
       flags,
@@ -66,6 +67,7 @@ test('replay human output keeps the composable warnings channel (#2560)', async 
 
   const out = await withCapturedStdoutAsync(() =>
     runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'replay' as ClientBackedCliCommandName,
       positionals: [scriptPath],
       flags: {} as CliFlags,
@@ -100,6 +102,7 @@ test('the generic CLI path prints the response warnings', async () => {
 
   const out = await withCapturedStdoutAsync(() =>
     runGenericClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'type' as ClientBackedCliCommandName,
       positionals: ['hi'],
       flags: {} as CliFlags,

@@ -1,4 +1,3 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { RecordingContactSheetCommandResult } from '../../commands/recording/runtime/contact-sheet.ts';
@@ -9,7 +8,7 @@ import type { ClientCommandHandler } from './router-types.ts';
 /** The `record` action that reads a finished file locally instead of asking a device for anything. */
 const CONTACT_SHEET_ACTION = 'contact-sheet';
 
-export const recordingCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const recordingCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   if (positionals[0] !== CONTACT_SHEET_ACTION) return false;
   if (positionals.length > 2) {
     throw new AppError(
@@ -19,12 +18,10 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
   }
 
   const recordingPath = resolveUserPath(readRequiredPositional(positionals[1]), {
-    cwd: commandHostEnvironment().cwd,
+    cwd: host.cwd,
   });
   const outputPath =
-    typeof flags.out === 'string'
-      ? resolveUserPath(flags.out, { cwd: commandHostEnvironment().cwd })
-      : undefined;
+    typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: host.cwd }) : undefined;
 
   // Lazy: createAgentDevice pulls in the client-side command runtime, which only this action needs.
   const [{ createAgentDevice }, { createLocalArtifactAdapter }] = await Promise.all([
@@ -33,7 +30,7 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
   ]);
   const runtime = createAgentDevice({
     backend: { platform: 'ios' },
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: host.cwd }),
     sessions: {
       get: (name) => ({ name }),
       set: () => {},

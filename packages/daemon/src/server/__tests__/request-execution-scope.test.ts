@@ -27,7 +27,7 @@ import {
   bindTestCommandHost,
 } from '@agent-device/test-kit';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
-import { handleSessionCloseCommands } from '../../sessions/session-lifecycle/index.ts';
+import { handleSessionCloseCommands } from '../../sessions/session-lifecycle/internal/session-close.ts';
 
 bindTestCommandHost();
 

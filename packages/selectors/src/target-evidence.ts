@@ -182,7 +182,7 @@ export function computeSiblingOrdinal(nodes: readonly SnapshotNode[], node: Snap
 }
 
 /** Decision 3 record-time write step 4: nearest scrollable ancestor's local identity, or `undefined` for *none*. */
-export function computeScrollRegionKey(
+function computeScrollRegionKey(
   node: SnapshotNode,
   byIndex: Map<number, SnapshotNode>,
 ): TargetScrollRegion | undefined {
@@ -199,13 +199,21 @@ export function computeScrollRegionKey(
   };
 }
 
-export function scrollRegionKeysEqual(
+function scrollRegionKeysEqual(
   a: TargetScrollRegion | undefined,
   b: TargetScrollRegion | undefined,
 ): boolean {
   if (!a && !b) return true;
   if (!a || !b) return false;
   return matchesLocalIdentity(a, b);
+}
+
+export function isInScrollRegion(
+  node: SnapshotNode,
+  byIndex: Map<number, SnapshotNode>,
+  region: TargetScrollRegion | undefined,
+): boolean {
+  return scrollRegionKeysEqual(computeScrollRegionKey(node, byIndex), region);
 }
 
 function boundedRect(node: SnapshotNode): TargetAnnotationV1['rect'] {
@@ -247,9 +255,7 @@ function computeDisambiguationDomain(params: {
 
   const regionMembers =
     identitySet.length > 0
-      ? identitySet.filter((candidate) =>
-          scrollRegionKeysEqual(computeScrollRegionKey(candidate, byIndex), scrollRegion),
-        )
+      ? identitySet.filter((candidate) => isInScrollRegion(candidate, byIndex, scrollRegion))
       : undefined;
 
   const orderedRegion = regionMembers ? orderByViewportPosition(regionMembers) : [];

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PNG } from '@agent-device/capture-kit/png';
-import { tryRunClientBackedCommand } from '../cli/commands/router.ts';
+import { tryRunClientBackedCommand } from './test-utils/host-bound-commands.ts';
 import { runCliCapture } from './cli-capture.ts';
 import type {
   AgentDeviceClient,

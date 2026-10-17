@@ -5,12 +5,18 @@ import {
   getRemoteConfigEnvNames,
   getRemoteConfigFieldSpec,
   type RemoteConfigProfile,
-  type RemoteConfigProfileOptions,
   type ResolvedRemoteConfigProfile,
 } from './remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveUserPath } from '@agent-device/host-kit/file';
-import { parseSourceValue } from '@agent-device/kernel/source-value';
+import { parseSourceValue, type EnvMap } from '@agent-device/kernel/source-value';
+
+/** The remote-config location and the host environment it resolves against. */
+export type HostRemoteConfigProfileOptions = {
+  configPath: string;
+  cwd: string;
+  env: EnvMap;
+};
 
 // Deliberately narrower than `resolveRemoteConfigProfile`: this reads only
 // what the config *file itself* declares, with no ambient environment
@@ -19,9 +25,9 @@ import { parseSourceValue } from '@agent-device/kernel/source-value';
 // somewhere") must use this, not the env-merged resolver, or provenance is
 // lost — an env var is global and cannot say which endpoint it belongs to.
 export function readRemoteConfigFile(
-  options: RemoteConfigProfileOptions,
+  options: HostRemoteConfigProfileOptions,
 ): ResolvedRemoteConfigProfile {
-  const env = options.env ?? process.env;
+  const { env } = options;
   const resolvedPath = resolveRemoteConfigPath(options);
   if (!fs.existsSync(resolvedPath)) {
     throw new AppError('INVALID_ARGS', `Remote config file not found: ${resolvedPath}`);
@@ -78,9 +84,7 @@ export function readRemoteConfigFile(
   return { resolvedPath, profile };
 }
 
-function readRemoteConfigEnvDefaults(
-  env: Record<string, string | undefined> = process.env,
-): RemoteConfigProfile {
+function readRemoteConfigEnvDefaults(env: EnvMap): RemoteConfigProfile {
   const profile: RemoteConfigProfile = {};
   for (const spec of REMOTE_CONFIG_PROFILE_FIELD_SPECS) {
     const envMatch = getRemoteConfigEnvNames(spec.key)
@@ -113,13 +117,13 @@ function mergeRemoteConfigProfile(
   return merged;
 }
 
-export function resolveRemoteConfigPath(options: RemoteConfigProfileOptions): string {
-  const env = options.env ?? process.env;
+export function resolveRemoteConfigPath(options: HostRemoteConfigProfileOptions): string {
+  const { env } = options;
   return resolveUserPath(options.configPath, { cwd: options.cwd, env });
 }
 
 export function resolveRemoteConfigProfile(
-  options: RemoteConfigProfileOptions,
+  options: HostRemoteConfigProfileOptions,
 ): ResolvedRemoteConfigProfile {
   const loaded = readRemoteConfigFile(options);
   return {

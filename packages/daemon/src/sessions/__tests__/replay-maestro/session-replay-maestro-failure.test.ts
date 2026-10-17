@@ -443,6 +443,65 @@ test('typed Maestro text matching an identifier reports id basis', async () => {
   expect(divergence.suggestions).toEqual([expect.objectContaining({ basis: 'id' })]);
 });
 
+test('typed Maestro failure ranks by identity and document order across scroll regions', async () => {
+  const command = {
+    kind: 'tapOn' as const,
+    source: { path: '/flows/actions.yaml', line: 4 },
+    target: { space: 'target' as const, selector: { text: 'save.*' } },
+  } satisfies Extract<MaestroRuntimeCommand, { kind: 'tapOn' }>;
+  const response = await buildFailureResponse(command, [
+    {
+      index: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      identifier: 'actions',
+      type: 'ScrollView',
+      rect: { x: 0, y: 0, width: 402, height: 300 },
+    },
+    {
+      index: 2,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Save in list',
+      rect: { x: 16, y: 40, width: 140, height: 44 },
+      hittable: true,
+    },
+    {
+      index: 3,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Save outside',
+      rect: { x: 16, y: 350, width: 140, height: 44 },
+      hittable: true,
+    },
+    {
+      index: 4,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'save-primary',
+      label: 'Confirm',
+      rect: { x: 16, y: 410, width: 140, height: 44 },
+      hittable: true,
+    },
+  ]);
+  const divergence = response.error.details?.divergence as {
+    screen: { state: string };
+    suggestions: Array<{ basis: string; label: string }>;
+  };
+
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  expect(divergence.screen.state).toBe('available');
+  expect(divergence.suggestions.map(({ basis, label }) => [basis, label])).toEqual([
+    ['id', 'Confirm'],
+    ['label', 'Save in list'],
+    ['label', 'Save outside'],
+  ]);
+});
+
 test('typed Maestro suggestions retain total count before the five-entry cap', async () => {
   const command = {
     kind: 'tapOn' as const,

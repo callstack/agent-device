@@ -11,6 +11,7 @@ import {
   listenOnLoopback,
   type LoopbackServer,
   mkdtempForTestSync,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendRequest } from '../daemon-client-transport.ts';
@@ -60,6 +61,7 @@ for (const [commandClass, row] of Object.entries(COMMAND_ROWS)) {
         'http',
         daemonPaths(),
         60,
+        { host: createTestHostEnvironment() },
       ),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
@@ -95,6 +97,7 @@ for (const [commandClass, row] of Object.entries(COMMAND_ROWS)) {
           'http',
           daemonPaths(),
           1_000,
+          { host: createTestHostEnvironment() },
         ),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
@@ -136,6 +139,7 @@ test('HTTP RPC errors preserve typed identity through the client transport', asy
       'http',
       daemonPaths(),
       1_000,
+      { host: createTestHostEnvironment() },
     ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -165,6 +169,7 @@ test('socket partial response fails at end-of-stream instead of waiting for the 
       'socket',
       daemonPaths(),
       1_000,
+      { host: createTestHostEnvironment() },
     ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -194,6 +199,7 @@ test('socket empty response fails at end-of-stream with request context', async 
       'socket',
       daemonPaths(),
       1_000,
+      { host: createTestHostEnvironment() },
     ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -222,6 +228,7 @@ test('socket malformed response stays typed at the daemon client seam', async ()
       'socket',
       daemonPaths(),
       1_000,
+      { host: createTestHostEnvironment() },
     ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
