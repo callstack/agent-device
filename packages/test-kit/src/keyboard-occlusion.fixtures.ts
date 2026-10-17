@@ -1,9 +1,5 @@
-import {
-  attachRefs,
-  type RawSnapshotNode,
-  type Rect,
-  type SnapshotState,
-} from '@agent-device/kernel/snapshot';
+import { makeSnapshotState } from '@agent-device/capture-kit/snapshot-state-fixtures';
+import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 
 /** The #2589 capture's app-owned tab bar, and the band the captured keyboard docks to. */
 export const KEYBOARD_COVERED_TAB_BAR_RECT: Rect = { x: 148, y: 791, width: 104, height: 83 };
@@ -37,7 +33,7 @@ export function keyboardCoveredTabBarSnapshot(
 }
 
 function keyboardCoveredTabBarTree(): SnapshotState {
-  return keyboardSnapshotState([
+  return makeSnapshotState([
     {
       index: 0,
       depth: 0,
@@ -99,8 +95,4 @@ function keyboardCoveredTabBarTree(): SnapshotState {
       hittable: true,
     },
   ]);
-}
-
-function keyboardSnapshotState(raw: RawSnapshotNode[]): SnapshotState {
-  return { nodes: attachRefs(raw), createdAt: Date.now() };
 }

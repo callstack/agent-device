@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import {
   CONTACT_SHEET_EXTRACTION_REASON,
@@ -67,6 +68,7 @@ export type ExtractedRecordingFrames = Readonly<{
  */
 export async function extractRecordingFrames(
   input: Readonly<{
+    host: HostEnvironment;
     videoPath: string;
     scratchDir: string;
     timesMs: readonly number[];
@@ -107,7 +109,7 @@ export async function extractRecordingFrames(
       ],
       {
         timeoutMs: EXTRACTION_TIMEOUT_MS,
-        env: buildSwiftToolEnv(),
+        env: buildSwiftToolEnv(input.host.env),
         allowFailure: true,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       },
@@ -260,11 +262,17 @@ function lastNonEmptyLine(text: string): string {
  * Compiles the decoder helper, or fails as an extraction failure: a cold Swift cache that cannot
  * build the helper is exactly as unable to produce a sheet as a helper that exits nonzero.
  */
-async function compileDecoder(input: { videoPath: string; signal?: AbortSignal }): Promise<string> {
+async function compileDecoder(input: {
+  host: HostEnvironment;
+  videoPath: string;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const { cwd } = input.host;
   try {
     return await compileSwiftSourceFile({
-      sourcePath: resolveRecordingScriptPath(FRAMES_SCRIPT, findProjectRoot()),
-      extraSourcePaths: [resolveRecordingScriptPath(SHARED_SUPPORT_SCRIPT, findProjectRoot())],
+      host: input.host,
+      sourcePath: resolveRecordingScriptPath(FRAMES_SCRIPT, findProjectRoot(), cwd),
+      extraSourcePaths: [resolveRecordingScriptPath(SHARED_SUPPORT_SCRIPT, findProjectRoot(), cwd)],
       cacheName: 'recording-frames',
       timeoutMs: COMPILATION_TIMEOUT_MS,
     });

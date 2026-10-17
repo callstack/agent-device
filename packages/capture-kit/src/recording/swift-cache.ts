@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
-import { commandHostEnvironment, runCmd } from '@agent-device/host-kit/command';
+import { runCmd } from '@agent-device/host-kit/command';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import {
   acquireProcessLock,
@@ -48,8 +49,8 @@ export function buildRecordingScriptPathCandidates(
 export function resolveRecordingScriptPath(
   scriptName: string,
   projectRoot: string,
+  cwd: string,
   moduleDir = path.dirname(fileURLToPath(import.meta.url)),
-  cwd = commandHostEnvironment().cwd,
 ): string {
   const scriptCandidates = buildRecordingScriptPathCandidates(
     scriptName,
@@ -70,9 +71,7 @@ export function resolveRecordingScriptPath(
   });
 }
 
-export function buildSwiftToolEnv(
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
-): NodeJS.ProcessEnv {
+export function buildSwiftToolEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const root = getSwiftCacheRoot(env);
   const homePath = path.join(root, 'home');
   const moduleCachePath = path.join(root, 'module-cache');
@@ -86,6 +85,7 @@ export function buildSwiftToolEnv(
 }
 
 export async function compileSwiftSourceFile(params: {
+  host: HostEnvironment;
   sourcePath: string;
   /** Additional compilation units (shared helpers) compiled into the same executable. */
   extraSourcePaths?: string[];
@@ -111,8 +111,13 @@ export async function compileSwiftSourceFile(params: {
       source,
     ]),
   ]);
-  const executablePath = path.join(getSwiftCacheRoot(), 'bin', `${cacheName}-${key}`);
+  const executablePath = path.join(
+    getSwiftCacheRoot(params.host.env),
+    'bin',
+    `${cacheName}-${key}`,
+  );
   await ensureSwiftExecutable({
+    host: params.host,
     sourcePaths,
     executablePath,
     timeoutMs: params.timeoutMs,
@@ -121,16 +126,19 @@ export async function compileSwiftSourceFile(params: {
 }
 
 export async function compileSwiftSourceText(params: {
+  host: HostEnvironment;
   source: string;
   cacheName: string;
   timeoutMs?: number;
 }): Promise<string> {
   const cacheName = sanitizeCacheName(params.cacheName);
   const key = hashParts([SWIFT_CACHE_VERSION, process.platform, process.arch, params.source]);
-  const sourcePath = path.join(getSwiftCacheRoot(), 'sources', `${cacheName}-${key}.swift`);
-  const executablePath = path.join(getSwiftCacheRoot(), 'bin', `${cacheName}-${key}`);
+  const cacheRoot = getSwiftCacheRoot(params.host.env);
+  const sourcePath = path.join(cacheRoot, 'sources', `${cacheName}-${key}.swift`);
+  const executablePath = path.join(cacheRoot, 'bin', `${cacheName}-${key}`);
 
   await ensureSwiftExecutable({
+    host: params.host,
     sourcePaths: [sourcePath],
     executablePath,
     sourceText: params.source,
@@ -139,7 +147,7 @@ export async function compileSwiftSourceText(params: {
   return executablePath;
 }
 
-function getSwiftCacheRoot(env: NodeJS.ProcessEnv = commandHostEnvironment().env): string {
+function getSwiftCacheRoot(env: NodeJS.ProcessEnv): string {
   const configured = env.AGENT_DEVICE_SWIFT_CACHE_DIR?.trim();
   if (configured) {
     return path.resolve(configured);
@@ -148,6 +156,7 @@ function getSwiftCacheRoot(env: NodeJS.ProcessEnv = commandHostEnvironment().env
 }
 
 async function ensureSwiftExecutable(params: {
+  host: HostEnvironment;
   sourcePaths: string[];
   executablePath: string;
   sourceText?: string;
@@ -183,7 +192,7 @@ async function ensureSwiftExecutable(params: {
         }
         await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
           timeoutMs,
-          env: buildSwiftToolEnv(),
+          env: buildSwiftToolEnv(params.host.env),
         });
         fs.renameSync(tempExecutablePath, params.executablePath);
       } finally {

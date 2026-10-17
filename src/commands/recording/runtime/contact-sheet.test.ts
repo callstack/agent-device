@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { beforeEach, test, vi } from 'vitest';
 import {
   buildRecordingContactSheet,
@@ -14,6 +15,8 @@ import {
   localCommandPolicy,
   restrictedCommandPolicy,
 } from '@agent-device/contracts/command-policy';
+
+bindTestCommandHost();
 
 vi.mock('@agent-device/capture-kit/recording-contact-sheet', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/capture-kit/recording-contact-sheet')>()),

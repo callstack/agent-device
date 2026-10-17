@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createTestHost } from '../host-environment.fixtures.ts';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
@@ -24,11 +25,15 @@ const directory = mkdtempForTestSync('agent-device-video-webm-');
 const playableWebm = likelyPlayableWebmContainer();
 
 test('accepts a real WebM video track and complete media block without AVFoundation', async () => {
-  await expect(isPlayableVideo(writeFixture('capture.webm', playableWebm))).resolves.toBe(true);
+  await expect(
+    isPlayableVideo(writeFixture('capture.webm', playableWebm), createTestHost()),
+  ).resolves.toBe(true);
 });
 
 test('does not infer WebM from bytes when the requested container is different', async () => {
-  await expect(isPlayableVideo(writeFixture('capture.bin', playableWebm))).resolves.toBe(false);
+  await expect(
+    isPlayableVideo(writeFixture('capture.bin', playableWebm), createTestHost()),
+  ).resolves.toBe(false);
 });
 
 function writeFixture(name: string, bytes: Buffer): string {
@@ -45,13 +50,17 @@ const moov = mp4Atom(
 
 test('reaches the semantic validator with an MP4 container whose last box runs past the file', async () => {
   const truncated = Buffer.concat([ftyp, moov]).subarray(0, ftyp.length + moov.length - 4);
-  await expect(isPlayableVideo(writeFixture('truncated.mp4', truncated))).resolves.toBe(true);
+  await expect(
+    isPlayableVideo(writeFixture('truncated.mp4', truncated), createTestHost()),
+  ).resolves.toBe(true);
   expect(runCmd).toHaveBeenCalledTimes(1);
 });
 
 test('refuses an MP4 container that never declares a movie header', async () => {
   const container = Buffer.concat([ftyp, mp4Atom('mdat', Buffer.alloc(8))]);
-  await expect(isPlayableVideo(writeFixture('no-moov.mp4', container))).resolves.toBe(false);
+  await expect(
+    isPlayableVideo(writeFixture('no-moov.mp4', container), createTestHost()),
+  ).resolves.toBe(false);
   expect(runCmd).not.toHaveBeenCalled();
 });
 
@@ -59,6 +68,10 @@ test('waiting for a playable video stops polling once its deadline passes', asyn
   const filePath = path.join(mkdtempForTestSync('agent-device-video-wait-'), 'never-playable.mp4');
   fs.writeFileSync(filePath, '');
   const started = Date.now();
-  await waitForPlayableVideo(filePath, { pollMs: 60_000, deadline: Deadline.fromTimeoutMs(0) });
+  await waitForPlayableVideo(filePath, {
+    host: createTestHost(),
+    pollMs: 60_000,
+    deadline: Deadline.fromTimeoutMs(0),
+  });
   expect(Date.now() - started).toBeLessThan(1_000);
 });

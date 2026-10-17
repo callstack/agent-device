@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { createTestHost } from '../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -12,13 +13,10 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { BLACK, RED, WHITE, paintPng, solidPng } from '../png-pixels.fixtures.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
-import { bindTestCommandHost } from '@agent-device/test-kit';
 import { decodePng } from '../png.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
 import { writeDecodedFrames, type StubFrame } from './contact-sheet.fixtures.ts';
 import { buildRecordingContactSheet, recordingContactSheetPath } from './contact-sheet.ts';
-
-bindTestCommandHost();
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -101,6 +99,7 @@ type BuildInput = Partial<
 
 function build(videoPath: string, input: BuildInput = {}) {
   return buildRecordingContactSheet({
+    host: createTestHost(),
     ...input,
     videoPath,
     maxPixels: input.maxPixels ?? 20_000_000,

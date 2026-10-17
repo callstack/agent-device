@@ -356,7 +356,6 @@
     }
   },
   "devDependencies": {
-    "@agent-device/test-kit": "workspace:*",
     "@types/pngjs": "^6.0.5",
     "fast-check": "^4.9.0",
     "jpeg-js": "^0.4.4",

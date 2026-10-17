@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { createTestHost } from '../host-environment.fixtures.ts';
 import path from 'node:path';
 import {
   CONTACT_SHEET_EXTRACTION_REASON,
@@ -7,12 +8,9 @@ import {
 } from './contact-sheet-report.ts';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
-import { bindTestCommandHost } from '@agent-device/test-kit';
 import { solidPng } from '../png-pixels.fixtures.ts';
 import { writeDecodedFrames, type StubFrame } from './contact-sheet.fixtures.ts';
 import { extractRecordingFrames } from './contact-sheet-frames.ts';
-
-bindTestCommandHost();
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -40,9 +38,9 @@ function reasonOf(action: () => Promise<unknown>): Promise<unknown> | unknown {
 
 /** Decoding is Apple tooling, so every case here states the host it is pretending to be. */
 function extract(
-  input: Omit<Parameters<typeof extractRecordingFrames>[0], 'hostPlatform'>,
+  input: Omit<Parameters<typeof extractRecordingFrames>[0], 'hostPlatform' | 'host'>,
 ): Promise<Awaited<ReturnType<typeof extractRecordingFrames>>> {
-  return extractRecordingFrames({ ...input, hostPlatform: 'darwin' });
+  return extractRecordingFrames({ host: createTestHost(), ...input, hostPlatform: 'darwin' });
 }
 
 function withTimes(args: readonly string[], times: string): string[] {
@@ -66,6 +64,7 @@ describe('extractRecordingFrames', () => {
     expect(
       await reasonOf(() =>
         extractRecordingFrames({
+          host: createTestHost(),
           videoPath: VIDEO,
           scratchDir,
           maxWidth: CELL_WIDTH,

@@ -5,6 +5,7 @@ import {
   recordingContactSheetPath,
   type RecordingContactSheetResult,
 } from '@agent-device/capture-kit/recording-contact-sheet';
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   ArtifactDescriptor,
@@ -59,6 +60,7 @@ export const contactSheetCommand: RuntimeCommand<
       artifactType: 'screen-recording-contact-sheet',
     });
     const sheet = await buildRecordingContactSheet({
+      host: commandHostEnvironment(),
       videoPath: video.path,
       outputPath: output.path,
       maxPixels: runtime.policy.maxImagePixels,
