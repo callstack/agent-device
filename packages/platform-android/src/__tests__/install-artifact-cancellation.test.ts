@@ -31,7 +31,7 @@ test('aborts an in-flight Android artifact identity probe', async () => {
   try {
     const pending = prepareAndroidInstallArtifact(
       { kind: 'path', path: archivePath },
-      { signal: controller.signal },
+      { environment: process.env, signal: controller.signal },
     );
     await vi.waitFor(() => assert.equal(probe.mock.calls.length, 1));
     controller.abort(new DOMException('cancelled', 'AbortError'));
@@ -65,12 +65,19 @@ test('cleans URL materialization when identity inspection fails', async () => {
   try {
     await assert.rejects(
       () =>
-        prepareAndroidInstallArtifact({
-          kind: 'url',
-          url: 'https://example.com/app.apk',
-        }),
+        prepareAndroidInstallArtifact(
+          {
+            kind: 'url',
+            url: 'https://example.com/app.apk',
+          },
+          { environment: { https_proxy: 'http://host-proxy' } },
+        ),
       /identity failed/,
     );
+    // The download follows the environment the caller passed, not the adb host's.
+    assert.deepEqual(requestSpy.mock.calls[0]?.[0].environment, {
+      https_proxy: 'http://host-proxy',
+    });
     assert.deepEqual(await fs.readdir(tempRoot), []);
   } finally {
     manifestSpy.mockRestore();

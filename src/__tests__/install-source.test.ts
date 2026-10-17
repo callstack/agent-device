@@ -237,10 +237,13 @@ test(ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE.testName, async () => {
     await withMockedInstallSourceFetch(
       apkBytes,
       async () => {
-        const result = await prepareAndroidInstallArtifact({
-          kind: 'url',
-          url: 'https://example.com/app.apk',
-        });
+        const result = await prepareAndroidInstallArtifact(
+          {
+            kind: 'url',
+            url: 'https://example.com/app.apk',
+          },
+          { environment: process.env },
+        );
 
         try {
           assert.equal(result.packageName, 'io.example.directurl');
@@ -258,10 +261,13 @@ test(ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE.testName, async () => {
 test('prepareAndroidInstallArtifact rejects private direct APK URL sources', async () => {
   await assert.rejects(
     async () =>
-      await prepareAndroidInstallArtifact({
-        kind: 'url',
-        url: 'http://127.0.0.1/app.apk',
-      }),
+      await prepareAndroidInstallArtifact(
+        {
+          kind: 'url',
+          url: 'http://127.0.0.1/app.apk',
+        },
+        { environment: process.env },
+      ),
     /not allowed|private or loopback/i,
   );
 });
@@ -284,10 +290,13 @@ test('prepareAndroidInstallArtifact accepts direct AAB URL sources', async () =>
     await withMockedInstallSourceFetch(
       aabBytes,
       async () => {
-        const result = await prepareAndroidInstallArtifact({
-          kind: 'url',
-          url: 'https://example.com/app.aab',
-        });
+        const result = await prepareAndroidInstallArtifact(
+          {
+            kind: 'url',
+            url: 'https://example.com/app.aab',
+          },
+          { environment: process.env },
+        );
 
         try {
           assert.equal(result.packageName, 'io.example.directaab');
@@ -320,10 +329,13 @@ test('prepareAndroidInstallArtifact extracts GitHub artifact ZIP containing one 
     },
     async () => {
       await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
-        const result = await prepareAndroidInstallArtifact({
-          kind: 'url',
-          url: 'https://api.github.com/repos/acme/app/actions/artifacts/123/zip',
-        });
+        const result = await prepareAndroidInstallArtifact(
+          {
+            kind: 'url',
+            url: 'https://api.github.com/repos/acme/app/actions/artifacts/123/zip',
+          },
+          { environment: process.env },
+        );
 
         try {
           assert.equal(path.basename(result.installablePath), 'app.apk');
@@ -354,10 +366,13 @@ test('prepareAndroidInstallArtifact extracts GitHub artifact ZIP containing one 
     },
     async () => {
       await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
-        const result = await prepareAndroidInstallArtifact({
-          kind: 'url',
-          url: 'https://api.github.com/repos/acme/app/actions/artifacts/456/zip',
-        });
+        const result = await prepareAndroidInstallArtifact(
+          {
+            kind: 'url',
+            url: 'https://api.github.com/repos/acme/app/actions/artifacts/456/zip',
+          },
+          { environment: process.env },
+        );
 
         try {
           assert.equal(path.basename(result.installablePath), 'app.aab');
@@ -545,10 +560,13 @@ test('prepareAndroidInstallArtifact rejects URL archives with multiple installab
   await withMockedInstallSourceFetch(await fs.readFile(archivePath), async () => {
     await assert.rejects(
       async () =>
-        await prepareAndroidInstallArtifact({
-          kind: 'url',
-          url: 'https://api.github.com/repos/acme/app/actions/artifacts/654/zip',
-        }),
+        await prepareAndroidInstallArtifact(
+          {
+            kind: 'url',
+            url: 'https://api.github.com/repos/acme/app/actions/artifacts/654/zip',
+          },
+          { environment: process.env },
+        ),
       /multiple Android installable/i,
     );
   });
@@ -573,10 +591,13 @@ test('prepareAndroidInstallArtifact extracts a URL archive from any public host'
     },
     async () => {
       await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
-        const result = await prepareAndroidInstallArtifact({
-          kind: 'url',
-          url: 'https://artifacts.example.com/signed/build.zip?sig=abc',
-        });
+        const result = await prepareAndroidInstallArtifact(
+          {
+            kind: 'url',
+            url: 'https://artifacts.example.com/signed/build.zip?sig=abc',
+          },
+          { environment: process.env },
+        );
 
         try {
           assert.equal(path.basename(result.installablePath), 'app.apk');

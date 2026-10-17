@@ -1,7 +1,6 @@
 import path from 'node:path';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
 import { materializeInstallablePath } from '@agent-device/provision-kit/install-source';
-import { requireAndroidAdbHost } from './adb-host.ts';
 import * as manifest from './manifest.ts';
 
 export type PreparedAndroidInstallArtifact = {
@@ -13,21 +12,26 @@ export type PreparedAndroidInstallArtifact = {
 
 export async function prepareAndroidInstallArtifact(
   source: LocalInstallSource,
-  options?: { signal?: AbortSignal; resolveIdentity?: boolean },
+  options: {
+    signal?: AbortSignal;
+    resolveIdentity?: boolean;
+    /** The host environment whose proxy settings apply to a network download. */
+    environment: NodeJS.ProcessEnv;
+  },
 ): Promise<PreparedAndroidInstallArtifact> {
   const materialized = await materializeInstallablePath({
     source,
     isInstallablePath: (candidatePath, stat) =>
       stat.isFile() && isAndroidInstallablePath(candidatePath),
     installableLabel: 'Android installable (.apk or .aab)',
-    signal: options?.signal,
-    environment: requireAndroidAdbHost().environment,
+    signal: options.signal,
+    environment: options.environment,
   });
   try {
     const identity =
-      options?.resolveIdentity === false
+      options.resolveIdentity === false
         ? {}
-        : await inspectAndroidArtifactIdentity(materialized.installablePath, options?.signal);
+        : await inspectAndroidArtifactIdentity(materialized.installablePath, options.signal);
     return {
       archivePath: materialized.archivePath,
       installablePath: materialized.installablePath,
