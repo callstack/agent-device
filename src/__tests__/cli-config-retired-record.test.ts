@@ -44,6 +44,39 @@ test('retired record config key is refused with migration guidance on every conf
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('retired record config key is refused in an explicit --config file', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const configPath = path.join(root, 'chosen.json');
+  fs.writeFileSync(configPath, JSON.stringify({ record: true }));
+
+  const result = await runCliCapture(['snapshot', '--config', configPath], {
+    cwd: project,
+    env: { HOME: home },
+    defaultResponse: { ok: true, data: {} },
+  });
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /"record" in config file .*chosen\.json was removed/);
+  assert.match(result.stderr, /--record is per-invocation only/);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('retired record config key is refused in an AGENT_DEVICE_CONFIG file', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  const configPath = path.join(root, 'from-env.json');
+  fs.writeFileSync(configPath, JSON.stringify({ record: true }));
+
+  const result = await runCliCapture(['snapshot'], {
+    cwd: project,
+    env: { HOME: home, AGENT_DEVICE_CONFIG: configPath },
+    defaultResponse: { ok: true, data: {} },
+  });
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /"record" in config file .*from-env\.json was removed/);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('retired AGENT_DEVICE_RECORD fails closed only for commands that accept --record', async () => {
   const { root, home, project } = makeTempWorkspace();
   const env = { HOME: home, AGENT_DEVICE_RECORD: 'true' };
