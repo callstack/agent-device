@@ -396,10 +396,19 @@ async function attemptLocalDaemonStartup(
   }
   const observation: StartupPhaseObservation = { spawnedAtMs, markers: {} };
   const startup = await waitForDaemonStartup(deadline, settings, launch, observation);
-  if (startup.kind === 'ready') return { daemon: startup.daemon };
+  if (startup.kind === 'ready') {
+    // A contending winner's readiness (startedByClient false) is only reachable after this launch
+    // exited busy: its own record is this client's to sweep before the handoff.
+    if (!startup.daemon.startedByClient) await discardExitedLaunchRecord(settings, launch);
+    return { daemon: startup.daemon };
+  }
   refreshStartupPhaseMarkers(settings, launch.pid, observation);
-  if (startup.kind === 'retry') return { retry: true, phases: observation };
+  if (startup.kind === 'retry') {
+    await discardExitedLaunchRecord(settings, launch);
+    return { retry: true, phases: observation };
+  }
   if (startup.kind === 'unproven') {
+    await discardExitedLaunchRecord(settings, launch);
     const startupError = normalizeError(startup.error);
     return {
       retry: false,
@@ -488,6 +497,24 @@ async function joinStartup(launch: DaemonStartupLaunch): Promise<boolean> {
     ]);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * #3782: sweeps the record of a launch whose exit this client just proved — a busy or unproven
+ * exit, or a launch that lost the registration to a contending winner. It joins this exact child
+ * first and removes only this child's own pid-named file, the same ownership rule a retired
+ * startup follows; an unjoined exit keeps its record for its writer or a later joined exit. The
+ * current winner's registration and record are untouched.
+ */
+async function discardExitedLaunchRecord(
+  settings: DaemonClientSettings,
+  launch: DaemonStartupLaunch,
+): Promise<void> {
+  if (await joinStartup(launch)) {
+    removeDaemonStartupPhasesFile(
+      resolveDaemonStartupPhasesPath(settings.paths.baseDir, launch.pid),
+    );
   }
 }
 

@@ -25,6 +25,11 @@ export type RegisteredDaemonFixtureOptions = Readonly<{
    * inherits it.
    */
   emitStartupMarker?: boolean;
+  /**
+   * Record `modules-loaded` through the real protocol before acquisition attempts, as the daemon
+   * entry does, so a child that exits busy or unproven leaves a real pre-lock marker behind.
+   */
+  emitStartupMarkerBeforeAcquisition?: boolean;
 }>;
 
 /** A real registration owner, advertising the caller's HTTP fixture and joining before deletion. */
@@ -48,11 +53,14 @@ import path from 'node:path';
 import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
 const paths = ${JSON.stringify(paths)};
 const barrier = ${JSON.stringify(acquisitionBarrier)};
+const emitBefore = ${fixtureOptions?.emitStartupMarkerBeforeAcquisition ? 'true' : 'false'};
 const emitAfter = ${fixtureOptions?.emitStartupMarker ? 'true' : 'false'};
 if (barrier) {
   fs.writeFileSync(barrier + '.ready-' + process.pid, 'ready');
   while (!fs.existsSync(barrier)) await new Promise(resolve => setTimeout(resolve, 10));
 }
+if (emitBefore)
+  recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(paths.baseDir, process.pid), 'modules-loaded');
 const acquired = await tryAcquireDaemonRegistration(paths);
 if (acquired.status !== 'acquired') process.exit(DAEMON_STARTUP_EXIT_CODES[acquired.status]);
 if (emitAfter)
