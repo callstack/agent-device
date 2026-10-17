@@ -128,7 +128,7 @@ export function createDeviceClaimAdmission(params: {
           // command, so it must not stay live: abandoned means "holds it for nobody",
           // which the next acquire supersedes.
           try {
-            await abandonDeviceClaim(ownership, process.env);
+            await abandonDeviceClaim(ownership, params.env);
           } catch (abandonError) {
             emitDiagnostic({
               level: 'error',
