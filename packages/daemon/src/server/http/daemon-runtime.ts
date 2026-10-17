@@ -79,6 +79,8 @@ import {
 import {
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
+  recordDaemonStartupMarker,
+  resolveDaemonStartupPhasesPath,
   type DaemonRegistrationOwner,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { watchDaemonMetadataLoss } from './daemon-metadata-loss.ts';
@@ -775,6 +777,9 @@ export async function startDaemonRuntime(
     return null;
   }
   const registration = acquisition.owner;
+  // #3782: the client waiting on this state dir reads these markers to tell a slow daemon from a
+  // stuck one.
+  recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(baseDir), 'lock-acquired');
 
   let servers: DaemonServer[] = [];
   let socketPort: number | undefined;
@@ -834,7 +839,11 @@ export async function startDaemonRuntime(
     servers = opened.servers;
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
+    // #3782: the last two progress markers. A client that polls the registration and the markers
+    // together can tell "listening but slow to answer" from "never progressed".
+    recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(baseDir), 'listening');
     publishDaemonInfo(socketPort, httpPort);
+    recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(baseDir), 'registered');
     stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
     await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
     for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {

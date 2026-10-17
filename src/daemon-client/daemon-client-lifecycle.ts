@@ -21,9 +21,12 @@ import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/ho
 import type { findUnrecoveredRepairCommitFailure } from '@agent-device/daemon-contracts/session-repair-tombstone';
 import {
   DAEMON_STARTUP_EXIT_CODES,
+  readDaemonStartupPhaseMarkers,
   createOwnedReplayStateDir,
   recoverAbandonedDaemonRegistration,
+  resolveDaemonStartupPhasesPath,
   type DaemonRetirementResult,
+  type DaemonStartupPhase,
   launchDaemonProcess,
   stopAndRetireDaemon,
   type OwnedReplayStateDir,
@@ -82,14 +85,59 @@ type DaemonStartupWaitResult =
   | { kind: 'ready'; daemon: EnsuredDaemon }
   | { kind: 'early_exit'; exit: ExecDetachedExit }
   | { kind: 'unproven'; error: AppError }
-  | { kind: 'retry' | 'timeout' };
+  | { kind: 'retry' | 'timeout' }
+  /** The process stayed alive but published no new startup phase within the stall window. */
+  | { kind: 'stalled' }
+  /** The process stayed alive and kept progressing, but did not register before the ceiling. */
+  | { kind: 'ceiling' };
 
-const DAEMON_STARTUP_TIMEOUT_MS = 15_000;
+/** Startup phase markers one launch published, as absolute host-clock timestamps. */
+type StartupPhaseObservation = {
+  spawnedAtMs: number;
+  markers: Partial<Record<DaemonStartupPhase, number>>;
+};
+
+/**
+ * #3782: the ceiling on one local daemon startup, shared by the CLI, MCP, and Node client, because
+ * all three reach the daemon through `startLocalDaemon`. A slow host makes startup slower, not
+ * failed: while the spawned daemon stays alive and keeps publishing phase markers, the client keeps
+ * waiting. `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` overrides the ceiling for a caller that must
+ * fail sooner than the host allows.
+ */
+const DAEMON_STARTUP_CEILING_MS = 120_000;
+/**
+ * How long a live daemon may publish no new startup phase marker before the client stops waiting.
+ * Kept beside the ceiling as one pair: a stalled daemon is retired at the stall window, a
+ * progressing one is waited for up to the ceiling. An env ceiling below this window makes the
+ * ceiling the only stop; the stall never fires past the ceiling, only earlier than it.
+ */
+const DAEMON_STARTUP_STALL_WINDOW_MS = 60_000;
 const MINIMUM_DAEMON_TAKEOVER_BUDGET_MS = 5_000;
+
+const DAEMON_STARTUP_TIMEOUT_ENV = 'AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS';
+
+/** Why a startup that never reached readiness failed, in terms a caller can branch on (#3782). */
+export type DaemonStartupFailureReason = 'startup-exited' | 'startup-stalled' | 'startup-ceiling';
+
+function resolveDaemonStartupTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env[DAEMON_STARTUP_TIMEOUT_ENV]?.trim();
+  if (raw === undefined || raw === '') return DAEMON_STARTUP_CEILING_MS;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${DAEMON_STARTUP_TIMEOUT_ENV} must be a positive integer number of milliseconds`,
+      { value: raw },
+    );
+  }
+  return parsed;
+}
+
 const LIVE_DAEMON_PROBE_RETRIES = 3;
 const LIVE_DAEMON_PROBE_RETRY_DELAY_MS = 200;
 const DAEMON_STARTUP_ATTEMPTS = 2;
 const DAEMON_STARTUP_LOG_TAIL_BYTES = 64_000;
+const DAEMON_STARTUP_MARKER_TAIL_BYTES = 16_000;
 const LOOPBACK_BLOCK_LIST = new net.BlockList();
 LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
 LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
@@ -479,10 +527,14 @@ type FailedDaemonStartup = {
   startupError?: NormalizedError;
   daemonProcess?: ExecDetachedExit | { pid: number };
   retry: boolean;
+  /** Set when the wait ended on startup progress rather than on an exit or a race. */
+  reason?: DaemonStartupFailureReason;
+  phases?: StartupPhaseObservation;
 };
 
 export async function startLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
-  const deadline = Date.now() + DAEMON_STARTUP_TIMEOUT_MS;
+  const startupTimeoutMs = resolveDaemonStartupTimeoutMs();
+  const deadline = Date.now() + startupTimeoutMs;
   const cleanupResults: DaemonRetirementResult[] = [];
   let failure: FailedDaemonStartup | undefined;
   let attempts = 0;
@@ -495,24 +547,31 @@ export async function startLocalDaemon(settings: DaemonClientSettings): Promise<
     if (!result.retry) break;
     await sleep(Math.min(150, Math.max(0, deadline - Date.now())));
   }
-  const { startError, startupError, daemonProcess }: Partial<FailedDaemonStartup> = failure ?? {};
+  const { startError, startupError, daemonProcess, reason, phases }: Partial<FailedDaemonStartup> =
+    failure ?? {};
+  const effectiveReason: DaemonStartupFailureReason = reason ?? 'startup-exited';
   const state = getDaemonMetadataState(settings.paths);
   const daemonLogTail = readRecentLogTail(settings.paths.logPath);
   throw new AppError('COMMAND_FAILED', 'Failed to start daemon', {
     kind: 'daemon_startup_failed',
+    reason: effectiveReason,
     stateDir: settings.paths.baseDir,
     infoPath: settings.paths.infoPath,
     lockPath: settings.paths.lockPath,
     logPath: settings.paths.logPath,
-    startupTimeoutMs: DAEMON_STARTUP_TIMEOUT_MS,
+    startupTimeoutMs,
     startupAttempts: attempts,
     cleanupResults,
     startError,
     startupError,
     daemonProcess,
+    ...(phases ? { phases: describeStartupPhaseTimings(phases) } : {}),
     ...(daemonLogTail ? { daemonLogTail } : {}),
     metadataState: state,
-    hint: resolveDaemonStartupHint(state, settings.paths),
+    hint:
+      reason === 'startup-stalled' || reason === 'startup-ceiling'
+        ? resolveStartupProgressHint(reason, startupTimeoutMs)
+        : resolveDaemonStartupHint(state, settings.paths),
   });
 }
 
@@ -521,14 +580,17 @@ async function attemptLocalDaemonStartup(
   deadline: number,
 ): Promise<{ daemon: EnsuredDaemon } | FailedDaemonStartup> {
   let launch: DaemonStartupLaunch;
+  const spawnedAtMs = Date.now();
   try {
     launch = startDaemon(settings);
   } catch (error) {
     return await recoverFailedDaemonLaunch(settings, error);
   }
-  const startup = await waitForDaemonStartup(deadline, settings, launch);
+  const observation: StartupPhaseObservation = { spawnedAtMs, markers: {} };
+  const startup = await waitForDaemonStartup(deadline, settings, launch, observation);
   if (startup.kind === 'ready') return { daemon: startup.daemon };
-  if (startup.kind === 'retry') return { retry: true };
+  refreshStartupPhaseMarkers(settings, observation);
+  if (startup.kind === 'retry') return { retry: true, phases: observation };
   if (startup.kind === 'unproven') {
     const startupError = normalizeError(startup.error);
     return {
@@ -536,15 +598,24 @@ async function attemptLocalDaemonStartup(
       startError: startupError.message,
       startupError,
       daemonProcess: { pid: launch.pid },
+      phases: observation,
     };
   }
   const { cleanup, joined } = await retireStartupAttempt(settings, launch, deadline);
+  const reason: DaemonStartupFailureReason =
+    startup.kind === 'stalled'
+      ? 'startup-stalled'
+      : startup.kind === 'ceiling'
+        ? 'startup-ceiling'
+        : 'startup-exited';
   const available = isRegistrationAvailable(inspectProcessLock(settings.paths.lockPath));
   return {
     cleanup,
     retry: joined && startup.kind === 'early_exit' && available,
+    reason,
     startError: startup.kind === 'early_exit' ? describeDaemonEarlyExit(startup.exit) : undefined,
     daemonProcess: startup.kind === 'early_exit' ? startup.exit : { pid: launch.pid },
+    phases: observation,
   };
 }
 
@@ -824,26 +895,114 @@ async function waitForDaemonStartup(
   deadline: number,
   settings: DaemonClientSettings,
   launch: DaemonStartupLaunch,
+  observation: StartupPhaseObservation,
 ): Promise<DaemonStartupWaitResult> {
   let earlyExit: ExecDetachedExit | undefined;
-  void launch.exited.then((exit) => {
-    earlyExit = exit;
-  });
+  void launch.exited
+    .then((exit) => {
+      earlyExit = exit;
+    })
+    // The exit is observed on the next poll; a rejected monitor promise leaves the liveness and
+    // stall paths to retire the launch, so it must not surface as an unhandled rejection.
+    .catch(() => {});
   while (Date.now() < deadline) {
     if (earlyExit) {
-      const kind = classifyDaemonStartupExit(earlyExit);
-      if (kind === 'unproven')
-        return { kind: 'unproven', error: daemonRegistrationUnprovenError(settings) };
-      if (kind === 'failed') return { kind: 'early_exit', exit: earlyExit };
-      const contender = await observeContendingDaemon(settings, deadline);
-      if (contender) return contender;
+      const settled = await judgeExitedDaemonStartup(settings, earlyExit, deadline);
+      if (settled) return settled;
     } else {
-      const info = await readReadyLaunchedDaemon(settings, launch, deadline);
-      if (info && !earlyExit) return { kind: 'ready', daemon: { info, startedByClient: true } };
+      const settled = await observeLiveDaemonStartup(settings, launch, deadline, observation);
+      // An exit observed while this iteration was in flight outranks a `ready` read: the process
+      // that published is gone, and its classification owns the next step.
+      if (settled && !(settled.kind === 'ready' && earlyExit)) return settled;
     }
     await sleep(Math.min(100, remainingStartupBudget(deadline)));
   }
-  return { kind: 'timeout' };
+  if (earlyExit || !isProcessAlive(launch.pid)) return { kind: 'timeout' };
+  // A live daemon at the ceiling registered late, not never: only its retirement is this deadline's
+  // failure, and the reason says the host, not the daemon, ran out of room.
+  return { kind: 'ceiling' };
+}
+
+async function judgeExitedDaemonStartup(
+  settings: DaemonClientSettings,
+  exit: ExecDetachedExit,
+  deadline: number,
+): Promise<DaemonStartupWaitResult | null> {
+  const kind = classifyDaemonStartupExit(exit);
+  if (kind === 'unproven')
+    return { kind: 'unproven', error: daemonRegistrationUnprovenError(settings) };
+  if (kind === 'failed') return { kind: 'early_exit', exit };
+  return await observeContendingDaemon(settings, deadline);
+}
+
+async function observeLiveDaemonStartup(
+  settings: DaemonClientSettings,
+  launch: DaemonStartupLaunch,
+  deadline: number,
+  observation: StartupPhaseObservation,
+): Promise<DaemonStartupWaitResult | null> {
+  const info = await readReadyLaunchedDaemon(settings, launch, deadline);
+  if (info) return { kind: 'ready', daemon: { info, startedByClient: true } };
+  // #3782: a live daemon that keeps publishing startup markers is slow, not stuck, and is
+  // waited for up to the ceiling. Only silence for a full stall window retires it early.
+  refreshStartupPhaseMarkers(settings, observation);
+  if (
+    isProcessAlive(launch.pid) &&
+    Date.now() - lastStartupProgressMs(observation) >= DAEMON_STARTUP_STALL_WINDOW_MS
+  ) {
+    return { kind: 'stalled' };
+  }
+  return null;
+}
+
+/**
+ * #3782: folds this launch's startup phase markers into `observation`. The record is append-only
+ * across startups, so markers older than this launch are ignored by timestamp, never by deletion.
+ */
+function refreshStartupPhaseMarkers(
+  settings: DaemonClientSettings,
+  observation: StartupPhaseObservation,
+): void {
+  const tail = readRecentFileTail(
+    resolveDaemonStartupPhasesPath(settings.paths.baseDir),
+    DAEMON_STARTUP_MARKER_TAIL_BYTES,
+  );
+  if (!tail) return;
+  for (const [phase, timestampMs] of Object.entries(readDaemonStartupPhaseMarkers(tail)) as Array<
+    [DaemonStartupPhase, number]
+  >) {
+    if (timestampMs >= observation.spawnedAtMs) observation.markers[phase] = timestampMs;
+  }
+}
+
+function lastStartupProgressMs(observation: StartupPhaseObservation): number {
+  return Object.values(observation.markers).reduce(
+    (latest, timestampMs) => Math.max(latest, timestampMs),
+    observation.spawnedAtMs,
+  );
+}
+
+function describeStartupPhaseTimings(
+  observation: StartupPhaseObservation,
+): Record<string, number> & { spawned: 0 } {
+  const timings: Record<string, number> = { spawned: 0 };
+  for (const [phase, timestampMs] of Object.entries(observation.markers)) {
+    timings[phase] = Math.max(0, timestampMs - observation.spawnedAtMs);
+  }
+  return timings as Record<string, number> & { spawned: 0 };
+}
+
+function resolveStartupProgressHint(reason: DaemonStartupFailureReason, ceilingMs: number): string {
+  if (reason === 'startup-stalled') {
+    return (
+      `The daemon is alive but made no startup progress for ${DAEMON_STARTUP_STALL_WINDOW_MS / 1000} s. ` +
+      `The host can be overloaded. Retry, or raise ${DAEMON_STARTUP_TIMEOUT_ENV}.`
+    );
+  }
+  return (
+    `The daemon kept making startup progress but did not register within ${Math.round(ceilingMs / 1000)} s. ` +
+    `The host can be overloaded. Retry, or raise ${DAEMON_STARTUP_TIMEOUT_ENV}.`
+  );
 }
 
 function classifyDaemonStartupExit(exit: ExecDetachedExit): 'busy' | 'unproven' | 'failed' {
@@ -942,12 +1101,16 @@ function describeDaemonEarlyExit(exit: ExecDetachedExit): string {
 }
 
 function readRecentLogTail(logPath: string): string | undefined {
+  return readRecentFileTail(logPath, DAEMON_STARTUP_LOG_TAIL_BYTES);
+}
+
+function readRecentFileTail(filePath: string, maxBytes: number): string | undefined {
   try {
-    if (!fs.existsSync(logPath)) return undefined;
-    const stats = fs.statSync(logPath);
+    if (!fs.existsSync(filePath)) return undefined;
+    const stats = fs.statSync(filePath);
     if (stats.size <= 0) return undefined;
-    const length = Math.min(stats.size, DAEMON_STARTUP_LOG_TAIL_BYTES);
-    const fd = fs.openSync(logPath, 'r');
+    const length = Math.min(stats.size, maxBytes);
+    const fd = fs.openSync(filePath, 'r');
     try {
       const buffer = Buffer.alloc(length);
       fs.readSync(fd, buffer, 0, length, stats.size - length);
