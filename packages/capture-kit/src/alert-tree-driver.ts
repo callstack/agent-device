@@ -177,9 +177,8 @@ async function observeTreeAlert<TCapture, TCandidate>(
     capture = await driver.capture({ signal: driver.signal ?? neverSignal });
   } catch (error) {
     if (driver.signal?.aborted) {
-      // A capture that died with the caller's cancellation is always a pre-press exit: no
-      // acting leg presses before its lookup returns, and get/wait have no press at all — so
-      // nothing can have been dispatched when this route throws.
+      // A capture that dies with the cancellation dispatches nothing on the get/wait/lookup
+      // routes; post-press deaths rejoin `actOnTreeAlert`'s catch, which owns the typed 'unknown'.
       throw createRequestCanceledError({ dispatched: 'no' }, error);
     }
     throw error;
