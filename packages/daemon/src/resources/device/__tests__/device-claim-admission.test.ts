@@ -2,6 +2,7 @@ import {
   ANDROID_EMULATOR,
   deviceClaimFilePath,
   createTestHostEnvironment,
+  mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
 import {
@@ -464,6 +465,49 @@ test('a failed release abandons the claim so the next command is not locked out'
   await retry.admit(ANDROID_EMULATOR, localAndroid);
   expect(claimedSessions()).toEqual(['transient:install']);
   await retry[Symbol.asyncDispose]();
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
+});
+
+test("a failed release abandons the claim in the host's claims directory, not the process's", async () => {
+  const { stateDir } = setup();
+  const hostClaimsDir = mkdtempForTestSync('agent-device-host-claims-');
+  const hostEnv = { ...process.env, AGENT_DEVICE_CLAIMS_DIR: hostClaimsDir };
+  const admission = createDeviceClaimAdmission({
+    env: hostEnv,
+    policy: 'transient-exclusive',
+    command: 'install',
+    session: 'own-session',
+    workspace: '/worktrees/current',
+    callerCwd: '/worktrees/current',
+    resolveScopeRoot: resolveCallerScopeRoot,
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+  await admission.admit(ANDROID_EMULATOR, localAndroid);
+  const claimFiles = fs
+    .readdirSync(hostClaimsDir, { recursive: true })
+    .map((entry) => path.join(hostClaimsDir, String(entry)))
+    .filter((entry) => fs.statSync(entry).isFile() && entry.endsWith('.json'));
+  expect(claimFiles).toHaveLength(1);
+
+  const originalUnlink = fs.unlinkSync;
+  const unlink = vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
+    if (String(target) === claimFiles[0]) {
+      throw Object.assign(new Error('read-only file system'), { code: 'EROFS' });
+    }
+    return originalUnlink(target as Parameters<typeof fs.unlinkSync>[0]);
+  });
+  try {
+    await admission[Symbol.asyncDispose]();
+  } finally {
+    unlink.mockRestore();
+  }
+
+  // The abandon went to the host's directory, where the claim was written; the process's own
+  // claims directory never held it.
+  const survivor = inspectDeviceClaims({}, hostEnv);
+  expect(survivor.map((entry) => entry.claim?.session)).toEqual(['transient:install']);
+  expect(survivor[0]?.claim?.abandonedAtMs).toBeTypeOf('number');
   expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
