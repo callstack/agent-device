@@ -9,16 +9,15 @@ import { waitForDaemonExit } from '@agent-device/daemon-contracts/daemon-process
 import { recoverAbandonedDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveLocalDaemonSettings } from './daemon-client-lifecycle.ts';
 import {
   assertDaemonPolicyMatches,
   observeLocalDaemon,
-  resolveLocalDaemonSettings,
   retireDaemonForTakeover,
-  stopDaemonForTakeover,
   startLocalDaemon,
-  type DaemonClientSettings,
-  type EnsuredDaemon,
-} from './daemon-client-lifecycle.ts';
+  stopDaemonForTakeover,
+} from './daemon-client-startup.ts';
+import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import { requestDaemonQuiesce } from './daemon-client-quiesce.ts';
 import { probeDaemonResponsive } from './daemon-client-liveness-probe.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';

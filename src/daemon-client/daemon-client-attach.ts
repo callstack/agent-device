@@ -1,10 +1,6 @@
-import {
-  assertDaemonPolicyMatches,
-  ensureManagedDaemon,
-  observeLocalDaemon,
-  type DaemonClientSettings,
-  type EnsuredDaemon,
-} from './daemon-client-lifecycle.ts';
+import { ensureManagedDaemon } from './daemon-client-lifecycle.ts';
+import { assertDaemonPolicyMatches, observeLocalDaemon } from './daemon-client-startup.ts';
+import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import { daemonIncompatibleError, daemonNotRunningError } from './daemon-lifecycle-errors.ts';
 
 /**

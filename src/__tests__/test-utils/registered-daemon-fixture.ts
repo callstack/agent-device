@@ -34,7 +34,7 @@ export function registeredDaemonFixtureArgs(
     entry,
     `import fs from 'node:fs';
 import path from 'node:path';
-import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration } from ${JSON.stringify(registrationUrl)};
+import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
 const paths = ${JSON.stringify(paths)};
 const barrier = ${JSON.stringify(acquisitionBarrier)};
 if (barrier) {
@@ -43,6 +43,10 @@ if (barrier) {
 }
 const acquired = await tryAcquireDaemonRegistration(paths);
 if (acquired.status !== 'acquired') process.exit(DAEMON_STARTUP_EXIT_CODES[acquired.status]);
+// A suite that wants this child to behave like the real entry's marker producer drops this flag
+// file before spawning; the marker is written through the real protocol, to this pid's own file.
+if (fs.existsSync(path.join(paths.baseDir, 'emit-startup-markers')))
+  recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(paths.baseDir, process.pid), 'lock-acquired');
 process.on('SIGTERM', async () => {
   if (fs.existsSync(path.join(paths.baseDir, 'ignore-sigterm'))) return;
   const deferred = path.join(paths.baseDir, 'repair-on-shutdown.json');

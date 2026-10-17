@@ -89,6 +89,7 @@ import {
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
   recordDaemonStartupMarker,
+  removeDaemonStartupPhasesFile,
   resolveDaemonStartupPhasesPath,
   type DaemonRegistrationOwner,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
@@ -663,8 +664,16 @@ async function startDaemonRuntimeOnHost(
     await finishDaemonRegistration({ registration, infoPath, logPath });
   });
   // #3782: the client waiting on this state dir reads these markers to tell a slow daemon from a
-  // stuck one.
-  recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(baseDir), 'lock-acquired');
+  // stuck one. Each marker names a phase whose work has finished; this launch's file is named for
+  // its own pid, so no other launch's evidence can add to or hide it.
+  const startupPhasesPath = resolveDaemonStartupPhasesPath(baseDir, process.pid);
+  const recordStartupPhase = (phase: Parameters<typeof recordDaemonStartupMarker>[1]): void =>
+    recordDaemonStartupMarker(startupPhasesPath, phase, (error) => {
+      // Same contract as the entry's markers: the refusal goes where the waiting client already
+      // reads failure evidence (the daemon log), and startup keeps going.
+      stderr.write(`Daemon startup marker write failed: ${error.message}\n`);
+    });
+  recordStartupPhase('lock-acquired');
 
   rollback.onRollback(() => {
     stopMetadataLossWatch();
@@ -719,6 +728,10 @@ async function startDaemonRuntimeOnHost(
       data: { error: error instanceof Error ? error.message : String(error) },
     });
   });
+  // #3782: the recovery chain above (owner-lifecycle configuration, legacy-marker and app-log
+  // recovery, owned-process reaping, web-orphan cleanup) is real completed work: its boundary
+  // extends the stall window exactly as much as it took, never more.
+  recordStartupPhase('recovery-finished');
   const { openDaemonServers, reconcileDeviceClaimsForDaemonStartup } =
     await import('./server-startup.ts');
   const { servers, socketPort, httpPort } = await openDaemonServers(
@@ -760,9 +773,12 @@ async function startDaemonRuntimeOnHost(
   );
   // #3782: the last two progress markers. A client that polls the registration and the markers
   // together can tell "listening but slow to answer" from "never progressed".
-  recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(baseDir), 'listening');
+  recordStartupPhase('listening');
   publishDaemonInfo(socketPort, httpPort);
-  recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(baseDir), 'registered');
+  recordStartupPhase('registered');
+  // This startup's evidence has done its job: no waiting client needs it anymore, and this
+  // process is the only writer of the file, so this is the removal its owner contract allows.
+  removeDaemonStartupPhasesFile(startupPhasesPath);
   stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
   for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {

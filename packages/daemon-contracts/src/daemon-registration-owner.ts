@@ -10,6 +10,7 @@ import {
   type DaemonTerminationResult,
 } from './daemon-process.ts';
 import {
+  isProcessAlive,
   readCurrentOwnerIdentity,
   readProcessStartTime,
   type OwnerIdentity,
@@ -48,16 +49,24 @@ import {
 export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
 
 /**
- * Startup phase markers (#3782): the record a daemon leaves beside its registration of how far its
+ * Startup phase markers (#3782): the record a daemon writes beside its registration of how far its
  * startup got. The client waiting for registration reads this record to tell "slow but progressing"
- * from "stuck". Each marker is one JSONL line appended to a dedicated state-directory file, so no
- * `daemon.log` reader has to learn a new line shape and `daemon.log` keeps its existing ownership.
- * The record is append-only across startups: a waiting client scopes it to its own launch by the
- * marker timestamps, never by deleting what an earlier startup left.
+ * from "stuck". One launch owns exactly one file, named for the pid that wrote it: an earlier or a
+ * concurrent launch cannot add to, replace, or hide another launch's markers, and neither the file
+ * nor a waiting client ever needs a timestamp to decide which startup a marker belongs to. A phase
+ * is recorded when the work it names has finished; the record never carries a heartbeat, so silence
+ * stays what a stalled startup looks like.
+ *
+ * Ownership, so the record never becomes residue: the writer removes the file once its startup
+ * completes; the client that launched a process removes it once that process's exit is joined; and
+ * each new registration owner sweeps the files of provably dead pids when it takes the lock. Each
+ * marker is one JSONL line appended to the launch's own file.
  */
 const DAEMON_STARTUP_PHASES = Object.freeze([
   'modules-loaded',
+  'composition-loaded',
   'lock-acquired',
+  'recovery-finished',
   'listening',
   'registered',
 ] as const);
@@ -66,35 +75,96 @@ export type DaemonStartupPhase = (typeof DAEMON_STARTUP_PHASES)[number];
 
 const DAEMON_STARTUP_PHASE_SET: ReadonlySet<string> = new Set<string>(DAEMON_STARTUP_PHASES);
 
-const DAEMON_STARTUP_PHASES_FILE = 'daemon-startup-phases.jsonl';
+const DAEMON_STARTUP_PHASES_ENTRY = /^daemon-startup-phases-(\d*)\.jsonl$/;
 
-type DaemonStartupMarkerRecord = {
-  data?: { startupPhase?: unknown; timestampMs?: unknown };
-};
-
-export function resolveDaemonStartupPhasesPath(stateDir: string): string {
-  return path.join(stateDir, DAEMON_STARTUP_PHASES_FILE);
+/** The marker file the daemon process `pid` writes in `stateDir`; an absent file is no evidence. */
+export function resolveDaemonStartupPhasesPath(stateDir: string, pid: number): string {
+  return path.join(stateDir, `daemon-startup-phases-${pid}.jsonl`);
 }
 
+/**
+ * Appends one phase marker for the launch owning `startupPhasesPath`. A marker is progress
+ * evidence, never a startup requirement: a host that refuses the append must not lose a daemon
+ * that can still register. Producers that own a diagnostics channel pass `reportFailure` so the
+ * refusal is observable where the waiting client already reads failure evidence (the daemon log
+ * tail in the startup failure details); a client never receives a false marker from a broken
+ * channel — it reads a missing record as no evidence.
+ */
 export function recordDaemonStartupMarker(
   startupPhasesPath: string,
   phase: DaemonStartupPhase,
+  reportFailure?: (error: NormalizedError) => void,
 ): void {
   try {
     const timestampMs = Date.now();
     fs.mkdirSync(path.dirname(startupPhasesPath), { recursive: true });
+    // A crash mid-append can leave the file without a trailing newline; without a separator the
+    // next append would glue into one unparsable line and lose both records.
+    const separator = endsWithoutNewline(startupPhasesPath) ? '\n' : '';
     fs.appendFileSync(
       startupPhasesPath,
-      `${JSON.stringify({ data: { startupPhase: phase, timestampMs } })}\n`,
+      `${separator}${JSON.stringify({ data: { startupPhase: phase, timestampMs } })}\n`,
     );
+  } catch (error) {
+    reportFailure?.(normalizeError(error));
+  }
+}
+
+function endsWithoutNewline(file: string): boolean {
+  let fd: number | undefined;
+  try {
+    const stats = fs.statSync(file);
+    if (stats.size === 0) return false;
+    const buffer = Buffer.alloc(1);
+    fd = fs.openSync(file, 'r');
+    if (fs.readSync(fd, buffer, 0, 1, stats.size - 1) !== 1) return false;
+    return buffer[0] !== 0x0a;
   } catch {
-    // A marker is progress evidence, never a startup requirement: a host that refuses the append
-    // must not lose a daemon that can still register.
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
   }
 }
 
 /**
- * The phases observed in a startup marker tail, keyed by phase, holding each phase's earliest
+ * Removes one startup's marker file. The writer calls it once its own startup completes; the client
+ * that launched a process calls it once that process's exit is joined. Both callers can prove no
+ * other writer can still append to this file, which is what the pid-specific name encodes.
+ */
+export function removeDaemonStartupPhasesFile(startupPhasesPath: string): void {
+  try {
+    fs.rmSync(startupPhasesPath, { force: true });
+  } catch {
+    // Evidence removal never fails a daemon that is already up or a client that already joined.
+  }
+}
+
+/**
+ * Sweeps marker files left by provably dead launches, from the position of a process that holds the
+ * registration lock. A live pid's file is kept: its launch may still be between phases, and only
+ * that launch's own completion or a joined exit may remove it. A file whose name carries no usable
+ * pid cannot be owned by any launch, so this owner retires it too.
+ */
+function sweepDeadDaemonStartupPhasesFiles(stateDir: string): void {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(stateDir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const match = DAEMON_STARTUP_PHASES_ENTRY.exec(entry);
+    if (match === null) continue;
+    const deadPid = Number(match[1]);
+    if (deadPid === process.pid) continue;
+    if (!Number.isSafeInteger(deadPid) || deadPid <= 0 || !isProcessAlive(deadPid)) {
+      removeDaemonStartupPhasesFile(path.join(stateDir, entry));
+    }
+  }
+}
+
+/**
+ * The phases observed in one launch's marker tail, keyed by phase, holding each phase's earliest
  * occurrence. Unparsable and unknown lines are ignored: the protocol is additive, and a client must
  * never fail a startup over a line shape it does not know.
  */
@@ -125,6 +195,10 @@ export function readDaemonStartupPhaseMarkers(
   }
   return phases;
 }
+
+type DaemonStartupMarkerRecord = {
+  data?: { startupPhase?: unknown; timestampMs?: unknown };
+};
 export type DaemonRegistrationFields = Readonly<{
   socketPort?: number;
   httpPort?: number;
@@ -164,6 +238,9 @@ export async function tryAcquireDaemonRegistration(
   try {
     acquisition.assertHeld();
     fs.rmSync(resolveDaemonShutdownReportPath(boundPaths.baseDir), { force: true });
+    // A dead launch's markers are this owner's to sweep: only the launch itself or a client that
+    // joined its exit may remove a live launch's file, and neither can still reach this one.
+    sweepDeadDaemonStartupPhasesFiles(boundPaths.baseDir);
   } catch (error) {
     await releaseRegistrationAfterFailure(acquisition, error, boundPaths.logPath);
   }
