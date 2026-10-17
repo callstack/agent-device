@@ -93,7 +93,7 @@ It is the only reader of CoreDevice display information.
 
 Without `--display`, `simctl io screenshot` selects the **highest** screen ID, not the primary panel.
 On a closed Duo, this is the dark inner panel.
-It exits 0 with a valid black PNG, which downstream consumers trust.
+It exits 0 with a valid black PNG. Every downstream consumer trusts that capture of nothing.
 
 | Capture path | Before | After |
 | --- | --- | --- |
@@ -402,7 +402,7 @@ Only `AVAssetExportPresetHighestQuality` preserves arbitrary geometry.
 Hardware encoding makes full-resolution export inexpensive: approximately 1–2s for 90s at `1206x2622`.
 Thus, `high` was not slower.
 
-`recording-overlay.swift` now uses the geometry-preserving preset at both quality tiers.
+`recording-overlay.swift` now always exports through the geometry-preserving preset at both quality tiers.
 `--quality` no longer reduces capture resolution.
 Before adoption, it verifies that the composited track's resolved size matches the capture.
 It also rejects uniformly black output when the raw capture had visible content.
@@ -466,7 +466,7 @@ The session closed and its daemon stopped after the run.
 The targets were iPhone Duo with iOS 27.1 and Xcode 27.1 beta, closed at 0° and open at 180°.
 A 130° session with different app content corroborated results.
 An iPhone 17 with iOS 27.0 served as the single-panel control.
-Hinge readback determined pose, not the requested preset.
+Hinge readback determined pose, not the requested preset. The amendment above makes hinge readback the only defensible source.
 Two initial inner-panel sessions requested open but read back 130°.
 They therefore serve as corroboration; the settled 180° session supplies the table.
 
@@ -596,7 +596,7 @@ The silent misses investigated here came from default outer-display routes and i
   Four reads consume twenty seconds of streams.
   A Duo that takes longer to settle inside `half-open` is refused.
   The former rule would have reported pose.
-  All observed runs settled within budget.
+  Every Duo run observed for this change settled within budget.
   No slower simulator was observed, so the budget remains unchanged rather than increasing for an unobserved case.
 - **Physical foldables.**
   The leaf fact refuses a physical device.
