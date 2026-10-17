@@ -59,16 +59,11 @@ test('root and examples/sdk reference exactly the workspace package set', () => 
 });
 
 test('the root build node is tsconfig.json plus references, and tsconfig.json has none', () => {
-  // fallow >=3.20 walks the references of the tsconfig that owns each file on every import, which
-  // made its resolve stage ~14x slower here, and `fr` loads every referenced project as its own
-  // ts.Program, which exhausts Node's default heap (#3289 CI). `extends` does not inherit
-  // references, so the typecheck node carries them without fallow, fr, editors, or tsdown seeing them.
+  // `fr` loads every referenced project as its own ts.Program, which exhausts Node's default
+  // heap (#3289 CI). `extends` does not inherit references, so the typecheck node carries them
+  // without fr, editors, or tsdown seeing them.
   const rootConfig = readTsconfig('tsconfig.json');
-  assert.equal(
-    rootConfig.references,
-    undefined,
-    'references on tsconfig.json slow every fallow gate and OOM freerange',
-  );
+  assert.equal(rootConfig.references, undefined, 'references on tsconfig.json OOM freerange');
   const typecheckConfig = readTsconfig('tsconfig.typecheck.json');
   assert.equal(typecheckConfig.extends, './tsconfig.json');
   assert.equal(

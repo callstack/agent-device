@@ -1,6 +1,6 @@
 {
-  // The `tsc -b` node for the root program. References live here, not in tsconfig.json, because
-  // fallow and freerange read tsconfig.json and slow down or run out of memory on references.
+  // The `tsc -b` node for the root program. References live here because freerange reads
+  // tsconfig.json and runs out of memory when it loads every referenced project.
   // Its own build info keeps a `tsc -p tsconfig.json` run from marking this build up to date.
   "extends": "./tsconfig.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tmp/tsconfig.typecheck.tsbuildinfo" },
