@@ -229,7 +229,7 @@ const tapInteractionResponseDataSchema = interactionResponseDataSchema({
     count: numberSchema('Number of press/click repetitions.'),
     intervalMs: numberSchema('Delay between repeated press/click actions.'),
     holdMs: numberSchema('Hold duration for each action.'),
-    jitterPx: numberSchema('Randomization radius in pixels.'),
+    jitterPx: numberSchema('Deterministic coordinate jitter radius in pixels.'),
     doubleTap: booleanSchema('Whether the command requested a double-tap action.'),
   },
 });
