@@ -6,6 +6,7 @@ public final class SnapshotHelperTestSuite {
   public static void main(String[] args) throws Exception {
     PointerEventScheduleTest.run();
     AccessibilityCaptureStabilizerTest.run();
+    AccessibilityReadBatchTest.run();
     BoundedUiAutomationConnectionTest.run();
     GestureViewportReaderTest.run();
     DisplayExtentTest.run();
