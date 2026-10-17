@@ -103,6 +103,8 @@ test('the entry names its exports: export * is refused', () => {
   for (const body of [
     "export * from './a.ts';",
     "export { a } from './a.ts';\nexport * as ns from './b.ts';",
+    "export type * from './a.ts';",
+    "export { a } from './a.ts';\nexport type * as ns from './b.ts';",
   ]) {
     const found = check({}, new Map([['packages/test-kit/src/index.ts', body]]));
     assert.equal(found.length, 1, body);
@@ -112,6 +114,13 @@ test('the entry names its exports: export * is refused', () => {
     check({}, new Map([['packages/test-kit/src/index.ts', "export { a } from './a.ts';"]])),
     [],
   );
+});
+
+test('text that only mentions a star is not an export', () => {
+  const body =
+    "// export * from './a.ts' is forbidden here\n" +
+    "const note = `export * from './b.ts'`;\nexport { note };\nexport { a } from './a.ts';";
+  assert.deepEqual(check({}, new Map([['packages/test-kit/src/index.ts', body]])), []);
 });
 
 test('the daemon entry names its exports: export * is refused', () => {

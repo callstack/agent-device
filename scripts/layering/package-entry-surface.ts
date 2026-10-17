@@ -13,6 +13,8 @@
 // Part of R83 package-export-surface. The dependency, import and reference-cycle half is the
 // shared walk in package-isolation.ts under TEST_KIT_ISOLATION.
 
+import { parseSync } from 'oxc-parser';
+import { visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
 import { PACKAGE_EXPORT_SURFACE_RULE, TEST_KIT_PACKAGE } from './package-export-surface.ts';
 import {
@@ -87,16 +89,33 @@ function checkEntrySurface(
 
   const entryFile = `${entrySurface.dir}/src/index.ts`;
   const entrySource = sources.get(entryFile);
-  const starExport = entrySource === undefined ? null : /^[ \t]*export\s*\*/m.exec(entrySource);
-  if (entrySource !== undefined && starExport) {
-    const line = entrySource.slice(0, starExport.index).split('\n').length;
+  const starLine = entrySource === undefined ? null : findStarExportLine(entryFile, entrySource);
+  if (starLine !== null) {
     violations.push(
       violation(
         entryFile,
         `${entrySurface.packageName} names every export explicitly: \`export *\` is forbidden.`,
-        line,
+        starLine,
       ),
     );
   }
   return violations;
+}
+
+/**
+ * The line of the first star re-export in an entry's source, or null when it names everything.
+ * Read as syntax rather than text, for the reason `facade-exports.ts` records from #1555: a form
+ * scanner has to enumerate every export FORM by hand and the one it forgets slips through.
+ * `ExportAllDeclaration` is the one node every star shape builds — `export *`, `export * as ns`,
+ * and their `export type` forms, which publish a module's surface under one or zero names — while a
+ * comment or template literal that merely mentions a star declares no node at all.
+ */
+function findStarExportLine(entryFile: string, source: string): number | null {
+  let start: number | null = null;
+  visitAst(parseSync(entryFile, source).program, (node) => {
+    if (start === null && node.type === 'ExportAllDeclaration' && typeof node.start === 'number') {
+      start = node.start;
+    }
+  });
+  return start === null ? null : source.slice(0, start).split('\n').length;
 }
