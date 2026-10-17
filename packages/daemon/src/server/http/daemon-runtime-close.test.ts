@@ -134,4 +134,5 @@ test('a shutdown step that rejects still releases the registration, lock and pro
   expect(stop).toHaveBeenCalledOnce();
   expect(clearLock).toHaveBeenCalledOnce();
   expect(fs.existsSync(paths.lockPath)).toBe(false);
+  expect(fs.existsSync(paths.infoPath)).toBe(false);
 });

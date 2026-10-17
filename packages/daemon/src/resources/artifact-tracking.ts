@@ -337,12 +337,7 @@ export function cleanupDownloadableArtifact(artifactId: string): void {
   clearTimeout(entry.timer);
   pendingArtifacts().delete(artifactId);
   cleanupDirectoryArchive(entry);
-  if (!entry.deleteAfterDownload) return;
-  try {
-    fs.rmSync(entry.artifactPath, { recursive: true, force: true });
-  } catch {
-    // best-effort cleanup only
-  }
+  if (entry.deleteAfterDownload) removeBestEffort(entry.artifactPath);
 }
 
 function removeBestEffort(targetPath: string): void {
@@ -355,13 +350,8 @@ function removeBestEffort(targetPath: string): void {
 
 function cleanupDirectoryArchive(entry: ArtifactEntry): void {
   if (!entry.directoryArchive) return;
-  try {
-    fs.rmSync(entry.directoryArchive.tempDir, { recursive: true, force: true });
-  } catch {
-    // best-effort cleanup only
-  } finally {
-    entry.directoryArchive = undefined;
-  }
+  removeBestEffort(entry.directoryArchive.tempDir);
+  entry.directoryArchive = undefined;
 }
 
 // --- Upload artifact tracking ---
