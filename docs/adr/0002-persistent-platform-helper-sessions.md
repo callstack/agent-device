@@ -17,7 +17,7 @@ Accepted
 - On Android, snapshot capture, gesture viewport resolution, and planned-touch injection share one bundled automation helper.
 - On Android, after a failed session command, retry one-shot only for idempotent reads, and only after the failed session has stopped.
 - On Android, return a session gesture failure directly. Do not retry it one-shot.
-- If the packaged Android helper is unavailable or invalid, agent-device must fail closed.
+- For Android snapshots, if the packaged helper is unavailable or invalid, agent-device must fail closed. It must not substitute the legacy `adb uiautomator dump` snapshot engine.
 
 ## Context
 
