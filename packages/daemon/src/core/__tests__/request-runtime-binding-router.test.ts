@@ -23,6 +23,7 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { getLeaseRegistryExecutionLocks } from '../../server/request-execution-scope.ts';
 
 test('request binding disposes once after response while adopted app-log handle survives', async () => {
   const runtime = makeGateway();
@@ -61,7 +62,7 @@ for (const outcome of ['success', 'throw', 'cancellation'] as const) {
   for (const key of ['session', 'device'] as const) {
     test(`binding cleanup holds the ${key} execution lock after ${outcome}`, async () => {
       const runtime = makeGateway();
-      const { handler, sessionStore } = makeHandler(runtime.gateway);
+      const { handler, sessionStore, leaseRegistry } = makeHandler(runtime.gateway);
       const current = sessionStore.get('session')!;
       sessionStore.publish('other-session', { ...current, name: 'other-session', actions: [] });
       const requestId = `cleanup-${key}-${outcome}`;
@@ -89,17 +90,30 @@ for (const outcome of ['success', 'throw', 'cancellation'] as const) {
       });
       const first = handler({ ...request(['doctor']), meta: { requestId } });
       await cleanupStarted;
+      const locks = getLeaseRegistryExecutionLocks(leaseRegistry);
+      const sharedKey = key === 'session' ? 'session:session' : 'device:emulator-5554';
+      let markQueued: (entry: { previous: Promise<unknown> | undefined }) => void = () => {};
+      const queued = new Promise<{ previous: Promise<unknown> | undefined }>((resolve) => {
+        markQueued = resolve;
+      });
+      const setLock = locks.set.bind(locks);
+      const queueSpy = vi.spyOn(locks, 'set').mockImplementation((lockKey, completion) => {
+        if (lockKey === sharedKey) markQueued({ previous: locks.get(lockKey) });
+        return setLock(lockKey, completion);
+      });
       const second = handler({
         ...request(['doctor']),
         session: key === 'session' ? 'session' : 'other-session',
         meta: { requestId: `${requestId}-queued` },
       });
       try {
-        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect((await queued).previous).toBeDefined();
         expect(runtime.bind).toHaveBeenCalledTimes(1);
       } finally {
+        queueSpy.mockRestore();
         finishCleanup();
         clearRequestCanceled(requestId);
+        await Promise.all([first, second]);
       }
       const [firstResponse, secondResponse] = await Promise.all([first, second]);
       expect(firstResponse.ok).toBe(outcome === 'success');
@@ -118,6 +132,7 @@ for (const outcome of ['success', 'throw', 'cancellation'] as const) {
 
 function makeHandler(gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>) {
   const sessionStore = makeSessionStore('request-runtime-binding-router-');
+  const leaseRegistry = new LeaseRegistry();
   sessionStore.publish('session', {
     name: 'session',
     device: { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
@@ -127,12 +142,13 @@ function makeHandler(gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>) {
   });
   return {
     sessionStore,
+    leaseRegistry,
     handler: createRequestHandler({
       createCommandSurface: fakeCreateCommandSurface,
       logPath: '/tmp/daemon.log',
       token: 'token',
       sessionStore,
-      leaseRegistry: new LeaseRegistry(),
+      leaseRegistry,
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
       deviceRuntimeGateway: gateway,
       trackDownloadableArtifact: () => 'artifact',

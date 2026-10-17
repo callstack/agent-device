@@ -864,9 +864,13 @@ test('#1533: an ARMED authoring recording is untouched by the abort gate', () =>
   expect(parsed.actions.map((a) => a.command)).toEqual(['click']);
 });
 
-test.each([undefined, true])(
-  'ordinary authoring strips diagnostic snapshots with effective record=%s',
-  (record) => {
+test.each([
+  { record: undefined, replayPlanStep: false },
+  { record: true, replayPlanStep: false },
+  { record: true, replayPlanStep: true },
+])(
+  'ordinary authoring strips snapshots with record=$record and replayPlanStep=$replayPlanStep',
+  ({ record, replayPlanStep }) => {
     const root = mkdtempForTestSync('agent-device-script-writer-authoring-snapshot-');
     const writer = new SessionScriptWriter(path.join(root, 'sessions'));
     const session = makeAuthoringSession('default', {
@@ -876,7 +880,7 @@ test.each([undefined, true])(
       command: 'snapshot',
       positionals: [],
       flags: { record, snapshotInteractiveOnly: true },
-      interactiveObservation: true,
+      interactiveObservation: !replayPlanStep,
     });
 
     const { parsed } = writeAndParse(writer, session);

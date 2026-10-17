@@ -86,12 +86,11 @@ export function recordActionEntry(
     runtime: recordedEntry.runtime,
     flags: sanitizeFlags(recordedEntry.flags),
     result: recordedEntry.result,
-    ...(recordedEntry.flags.record === true
-      ? { publicationIntent: 'explicit-record' as const }
-      : OBSERVATION_ONLY_COMMANDS.has(recordedEntry.command) &&
-          recordedEntry.interactiveObservation === false
-        ? { publicationIntent: 'authored' as const }
-        : {}),
+    ...(recordedEntry.flags.record !== true &&
+    OBSERVATION_ONLY_COMMANDS.has(recordedEntry.command) &&
+    recordedEntry.interactiveObservation === false
+      ? { publicationIntent: 'authored' as const }
+      : {}),
     ...(recordedEntry.targetEvidence ? { targetEvidence: recordedEntry.targetEvidence } : {}),
     ...(recordedEntry.targetEvidences ? { targetEvidences: recordedEntry.targetEvidences } : {}),
   };

@@ -75,6 +75,8 @@ test('--record forces an observation-only action through while repair-armed', ()
     interactiveObservation: true,
   });
   expect(action).toBeDefined();
+  expect(action?.flags.record).toBe(true);
+  expect(action?.publicationIntent).toBeUndefined();
   expect(session.actions.map((a) => a.command)).toEqual(['get']);
 });
 

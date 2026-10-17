@@ -28,8 +28,8 @@ export type SessionAction = {
     noRecord?: boolean;
   };
   result?: Record<string, unknown>;
-  /** Retain authored plan observations and explicitly recorded corrections during publication. */
-  publicationIntent?: 'authored' | 'explicit-record';
+  /** Retain authored plan observations during publication. */
+  publicationIntent?: 'authored';
   /**
    * ADR 0012 decision 3: parsed or record-time-computed `target-v1`
    * evidence, written as a comment immediately before this action's line.
