@@ -147,16 +147,22 @@ async function executeLiveScenarios(
   let assertionCaptureVerified = false;
   for (const scenario of LIVE_SCENARIOS.filter((candidate) => candidate.tier === 'smoke')) {
     const run = async () => {
-      if (scenario.id !== 'smoke:inventory-install') {
-        const opened = await runStep(context, `reset fixture for ${scenario.id}`, [
-          'open',
-          context.appId,
-          '--relaunch',
-        ]);
-        context.runnerLogPath = opened.json?.data?.runnerLogPath;
-        await assertWaitText(context, 'Agent Device Tester', { timeoutMs: 60_000 });
-      }
-      await runScenario(context, scenario);
+      await runScenario(context, {
+        ...scenario,
+        run: async () => {
+          if (scenario.id !== 'smoke:inventory-install') {
+            const opened = await runStep(context, `reset fixture for ${scenario.id}`, [
+              'open',
+              context.appId,
+              '--relaunch',
+            ]);
+            context.runnerLogPath = opened.json?.data?.runnerLogPath;
+            await assertWaitSelector(context, 'id="home-title" visible=true');
+            await assertWaitSelector(context, 'label="Form" visible=true');
+          }
+          await scenario.run(context);
+        },
+      });
     };
     if (testContext) await testContext.test(scenario.id, run);
     else await run();

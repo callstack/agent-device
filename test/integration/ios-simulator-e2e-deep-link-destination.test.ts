@@ -3,7 +3,10 @@ import test from 'node:test';
 
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { CliJsonResult } from './cli-json.ts';
-import { retryDestinationWait } from './ios-simulator-e2e/live-deep-link-destination.ts';
+import {
+  answerFixtureLaunchConfirmation,
+  retryDestinationWait,
+} from './ios-simulator-e2e/live-deep-link-destination.ts';
 
 function result(status: number, json?: unknown): CliJsonResult {
   return { json, status, stderr: '', stdout: '' };
@@ -76,4 +79,44 @@ test('a miss that is not a pending destination fails at once', async () => {
   const { wait, calls } = waits([INVALID_SELECTOR, LANDED]);
   await assert.rejects(retryDestinationWait(wait), /deep-link destination wait failed/);
   assert.equal(calls.length, 1);
+});
+
+test('the fixture launch confirmation is answered, while an absent alert needs no action', async () => {
+  let accepts = 0;
+  const accept = async () => {
+    accepts += 1;
+  };
+  await answerFixtureLaunchConfirmation(
+    async () =>
+      result(0, { data: { message: 'Open in “Agent Device Tester”?', items: ['Cancel', 'Open'] } }),
+    accept,
+  );
+  assert.equal(accepts, 1);
+  await answerFixtureLaunchConfirmation(
+    async () => result(1, { error: { details: { runnerErrorCode: 'ALERT_NOT_FOUND' } } }),
+    accept,
+  );
+  assert.equal(accepts, 1);
+});
+
+test('an unrelated prompt or an unreadable alert is never accepted as a fixture launch', async () => {
+  let accepts = 0;
+  const accept = async () => {
+    accepts += 1;
+  };
+  await assert.rejects(
+    answerFixtureLaunchConfirmation(
+      async () =>
+        result(0, { data: { message: 'Allow microphone access?', items: ['Cancel', 'Open'] } }),
+      accept,
+    ),
+  );
+  await assert.rejects(
+    answerFixtureLaunchConfirmation(
+      async () => result(1, { error: { message: 'ALERT_NOT_FOUND' } }),
+      accept,
+    ),
+    /launch confirmation observation failed/,
+  );
+  assert.equal(accepts, 0);
 });

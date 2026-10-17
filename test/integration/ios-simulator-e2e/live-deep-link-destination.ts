@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 
+import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isObservationPreventedStepMiss } from './live-step-retry-policy.ts';
 import type { CliJsonResult } from '../cli-json.ts';
@@ -60,4 +61,23 @@ export async function retryDestinationWait(wait: DestinationWait): Promise<CliJs
     );
   }
   throw new Error('deep-link destination observation exhausted');
+}
+
+/** The fixture owns this scheme; only its exact English launch confirmation may be answered. */
+export async function answerFixtureLaunchConfirmation(
+  read: () => Promise<CliJsonResult>,
+  accept: () => Promise<unknown>,
+): Promise<void> {
+  const result = await read();
+  if (result.status !== 0) {
+    assert.equal(
+      result.json?.error?.details?.runnerErrorCode,
+      ALERT_NOT_FOUND_RUNNER_CODE,
+      `launch confirmation observation failed: ${JSON.stringify(result.json)}`,
+    );
+    return;
+  }
+  assert.equal(result.json?.data?.message, 'Open in “Agent Device Tester”?');
+  assert.deepEqual(result.json?.data?.items, ['Cancel', 'Open']);
+  await accept();
 }
