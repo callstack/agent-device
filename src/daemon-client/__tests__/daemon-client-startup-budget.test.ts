@@ -88,14 +88,18 @@ function fields(httpPort: number) {
 function spawnUnregisteredDaemonChild(
   paths: DaemonPaths,
   options: Parameters<typeof runCmdDetachedMonitored>[2],
-  emitStartupMarkers = false,
+  emitStartupMarker = false,
 ): ReturnType<typeof runCmdDetachedMonitored> {
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
   // When asked, the child records its phases through the real protocol, into the file named for
-  // its own pid, exactly as the daemon entry does.
-  if (emitStartupMarkers) fs.writeFileSync(path.join(paths.baseDir, 'emit-startup-markers'), 'on');
-  return spawnRegisteredDaemonFixture(paths, fields(1), options);
+  // its own pid, exactly as the daemon entry does. The request is bound into this child's entry
+  // script, so no later fixture in this state dir inherits it.
+  return spawnRegisteredDaemonFixture(paths, fields(1), options, undefined, { emitStartupMarker });
+}
+
+function registrationHeldFor(paths: DaemonPaths, pid: number): string {
+  return path.join(paths.baseDir, `registration-held-${pid}`);
 }
 
 async function expectStartupFailure(pending: Promise<unknown>): Promise<AppError> {
@@ -327,9 +331,10 @@ test("a startup progressed by a fresh launch is not judged stalled by an earlier
   // The leftover launch: a real daemon-shaped child that records its phase, is SIGTERMed before
   // publishing, and leaves its record behind exactly as a crashed startup would.
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
-  fs.writeFileSync(path.join(paths.baseDir, 'emit-startup-markers'), 'on');
-  const leftover = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' });
-  await awaitFile(path.join(paths.baseDir, 'registration-held'));
+  const leftover = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' }, undefined, {
+    emitStartupMarker: true,
+  });
+  await awaitFile(registrationHeldFor(paths, leftover.pid));
   process.kill(leftover.pid, 'SIGTERM');
   await leftover.exited;
   const leftoverRecords = () =>
@@ -344,14 +349,13 @@ test("a startup progressed by a fresh launch is not judged stalled by an earlier
   vi.spyOn(Date, 'now').mockImplementation(() => now.value);
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
   let booted = false;
-  fs.rmSync(path.join(paths.baseDir, 'registration-held'), { force: true });
   spawn.mockImplementation((_command, _args, options) => {
     child = spawnUnregisteredDaemonChild(paths, options, true);
     return child;
   });
   pause.mockImplementation(async () => {
-    if (!booted) {
-      booted = fs.existsSync(path.join(paths.baseDir, 'registration-held'));
+    if (child && !booted) {
+      booted = fs.existsSync(registrationHeldFor(paths, child.pid));
       if (!booted) return await realPause();
     }
     // The 30 s env ceiling stops this wait before the 60 s stall window can; the fresh child's own
@@ -373,10 +377,13 @@ test("a startup progressed by a fresh launch is not judged stalled by an earlier
       !leftoverRecords().some((entry) => entry.includes(String(child?.pid))),
       "the joined exit must sweep this launch's own marker file",
     );
-    // A new registration owner sweeps the leftover record of a provably dead launch.
+    // A dead launch's record that survived every sweep so far: written through the real protocol
+    // against a provably dead pid after the fresh launch's own acquisition sweep, so only the next
+    // registration owner can remove it.
+    recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(paths.baseDir, 998_776), 'listening');
     const cleaner = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' });
     try {
-      await awaitFile(path.join(paths.baseDir, 'registration-held'));
+      await awaitFile(registrationHeldFor(paths, cleaner.pid));
       assert.deepEqual(
         leftoverRecords(),
         [],

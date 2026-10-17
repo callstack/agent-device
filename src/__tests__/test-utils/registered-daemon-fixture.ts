@@ -17,11 +17,22 @@ const children = new Map<
   Array<{ launch: ReturnType<typeof runCmdDetachedMonitored>; startTime: string | null }>
 >();
 
+/** Per-child behavior switches, bound into this child's entry script at write time. */
+export type RegisteredDaemonFixtureOptions = Readonly<{
+  /**
+   * Record `lock-acquired` through the real protocol after this child acquires the registration,
+   * as the daemon runtime does. Scoped to this child: no later fixture in the same state dir
+   * inherits it.
+   */
+  emitStartupMarker?: boolean;
+}>;
+
 /** A real registration owner, advertising the caller's HTTP fixture and joining before deletion. */
 export function registeredDaemonFixtureArgs(
   paths: DaemonPaths,
   fields: DaemonRegistrationFields,
   acquisitionBarrier?: string,
+  fixtureOptions?: RegisteredDaemonFixtureOptions,
 ): string[] {
   const entry = path.join(paths.baseDir, 'dist', 'src', 'internal', 'daemon.js');
   fs.mkdirSync(path.dirname(entry), { recursive: true });
@@ -37,15 +48,14 @@ import path from 'node:path';
 import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
 const paths = ${JSON.stringify(paths)};
 const barrier = ${JSON.stringify(acquisitionBarrier)};
+const emitAfter = ${fixtureOptions?.emitStartupMarker ? 'true' : 'false'};
 if (barrier) {
   fs.writeFileSync(barrier + '.ready-' + process.pid, 'ready');
   while (!fs.existsSync(barrier)) await new Promise(resolve => setTimeout(resolve, 10));
 }
 const acquired = await tryAcquireDaemonRegistration(paths);
 if (acquired.status !== 'acquired') process.exit(DAEMON_STARTUP_EXIT_CODES[acquired.status]);
-// A suite that wants this child to behave like the real entry's marker producer drops this flag
-// file before spawning; the marker is written through the real protocol, to this pid's own file.
-if (fs.existsSync(path.join(paths.baseDir, 'emit-startup-markers')))
+if (emitAfter)
   recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(paths.baseDir, process.pid), 'lock-acquired');
 process.on('SIGTERM', async () => {
   if (fs.existsSync(path.join(paths.baseDir, 'ignore-sigterm'))) return;
@@ -59,6 +69,7 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 fs.writeFileSync(path.join(paths.baseDir, 'registration-held'), 'ready');
+fs.writeFileSync(path.join(paths.baseDir, 'registration-held-' + process.pid), 'ready');
 while (fs.existsSync(path.join(paths.baseDir, 'defer-publication'))) await new Promise(resolve => setTimeout(resolve, 10));
 acquired.owner.publish(${JSON.stringify(fields)});
 setInterval(() => {}, 1000);
@@ -72,10 +83,11 @@ export function spawnRegisteredDaemonFixture(
   fields: DaemonRegistrationFields,
   options: Parameters<typeof runCmdDetachedMonitored>[2],
   acquisitionBarrier?: string,
+  fixtureOptions?: RegisteredDaemonFixtureOptions,
 ): ReturnType<typeof runCmdDetachedMonitored> {
   const child = actualCommand.runCmdDetachedMonitored(
     process.execPath,
-    registeredDaemonFixtureArgs(paths, fields, acquisitionBarrier),
+    registeredDaemonFixtureArgs(paths, fields, acquisitionBarrier, fixtureOptions),
     options,
   );
   const owned = children.get(paths.baseDir) ?? [];
