@@ -49,6 +49,22 @@ test("the runner is spawned detached onto its own log file, not onto this proces
   assert.equal(args[args.indexOf('-derivedDataPath') + 1], '/tmp/runner-derived');
 });
 
+test('the detached runner gets its environment and working directory as plain values', () => {
+  mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
+  const host = { env: { FROM_HOST: 'yes' }, cwd: '/tmp/host-cwd' };
+  appleRunnerTestHost.update({ commandHostEnvironment: () => host });
+
+  launchRunnerProcess({
+    device: IOS_SIMULATOR,
+    xctestrunPath: '/tmp/runner.xctestrun',
+    derivedPath: '/tmp/runner-derived',
+    logPath: runnerLogPath(),
+  });
+
+  const options = mockRunCmdBackground.mock.calls[0]?.[2] as { env?: unknown; cwd?: string };
+  assert.deepEqual({ env: options.env, cwd: options.cwd }, host);
+});
+
 test('test-without-building resolves a scoped-set simulator in its own set', () => {
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
 

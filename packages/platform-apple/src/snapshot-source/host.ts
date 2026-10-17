@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
-import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
+import { commandHostEnvironment, runCmd, runCmdBackground } from '@agent-device/host-kit/command';
 import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import { signalProcessGroupBestEffort } from '@agent-device/host-kit/process';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
@@ -44,6 +44,8 @@ function startSnapshotBridge(
   if (options.signal?.aborted) {
     throw snapshotSourceError('cancelled', 'abort-signal');
   }
+  // The bridge outlives this call, so it gets its environment and directory as plain values.
+  const { env, cwd } = commandHostEnvironment();
   const started = runCmdBackground(
     'xcrun',
     buildSimctlArgsForAddress(simulator, [
@@ -61,6 +63,8 @@ function startSnapshotBridge(
       allowFailure: true,
       captureOutput: false,
       detached: true,
+      env,
+      cwd,
     },
   );
   const pid = started.child.pid ?? 0;
