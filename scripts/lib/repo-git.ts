@@ -46,9 +46,30 @@ export type ChangedFileDiff = {
   readonly added: readonly number[];
   // `+++ /dev/null`: the file was deleted, so it contributes no changed lines.
   readonly deleted: boolean;
+  // Whether the new side is a regular git blob (mode 100644/100755), the only kind
+  // whose working-tree bytes are the file's content. A symlink (120000) carries its
+  // target path as content and its working-tree entry can resolve to a directory,
+  // which reading as a file dies on (EISDIR); a gitlink (160000) names a nested
+  // repository. Content readers must skip what this rules out.
+  readonly regularFile: boolean;
 };
 
-type DiffSection = { path: string; added: Set<number>; deleted: boolean; cursor: number };
+// Git object modes the new side can carry in a diff header for something that is
+// not a regular blob. `readChangedLinesDiff` reports their bodies as text lines
+// (a link target, a `Subproject commit`), which no content reader may treat as
+// source. Parsed rather than probed on disk: the verdict describes the commit the
+// diff was cut against, not whatever the working tree holds at check time.
+// `000000` is `+++ /dev/null`, the side of a deletion.
+const NON_BLOB_MODES = new Set(['000000', '120000', '160000']);
+
+type DiffSection = {
+  path: string;
+  added: Set<number>;
+  deleted: boolean;
+  cursor: number;
+  /** The new side's object mode, as the headers state it; null when they stay silent. */
+  newMode: string | null;
+};
 
 function newStartOfHunk(line: string): number | null {
   const match = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
@@ -58,6 +79,23 @@ function newStartOfHunk(line: string): number | null {
 function pathFromDiffHeader(line: string): string {
   const header = /^diff --git a\/.+ b\/(.+)$/.exec(line);
   return header ? normalizePath(header[1]!) : '';
+}
+
+// Reads the new side's object mode out of the metadata lines that carry it, last
+// writer wins in header order (`old mode`, `new mode`, then the `index` trailer).
+// A hand-built diff may carry neither, which leaves the mode unknown and the side
+// read as regular.
+function foldModeLine(section: DiffSection, line: string): boolean {
+  const declared = /^(?:new file mode|old mode|new mode|deleted file mode) (\d{6})$/.exec(line);
+  if (declared) {
+    // `deleted file mode` describes the removed side; the new side is /dev/null.
+    section.newMode = line.startsWith('deleted') ? '000000' : declared[1]!;
+    return true;
+  }
+  if (!line.startsWith('index ')) return false;
+  const trailing = / (\d{6})$/.exec(line);
+  if (trailing) section.newMode = trailing[1]!;
+  return true;
 }
 
 // Fold one line of a file's diff body into its section. Renames+edits report
@@ -76,9 +114,17 @@ function foldDiffBodyLine(section: DiffSection, line: string): void {
     section.cursor += 1;
   } else if (line.startsWith('-') || line.startsWith('\\')) {
     // Removed line or "\ No newline": occupies no new-side number.
+  } else if (foldModeLine(section, line)) {
+    // Object-mode metadata; recorded above, carries no new-side number.
   } else {
     section.cursor += 1;
   }
+}
+
+// The object mode of a section's new side is known only once its headers have
+// been read; until then it is null, which readers treat as a regular file.
+function isRegularFileSide(newMode: string | null): boolean {
+  return newMode === null || !NON_BLOB_MODES.has(newMode);
 }
 
 /**
@@ -95,13 +141,20 @@ export function parseUnifiedDiff(diff: string): ChangedFileDiff[] {
         path: section.path,
         added: [...section.added].sort((a, b) => a - b),
         deleted: section.deleted,
+        regularFile: isRegularFileSide(section.newMode),
       });
     }
   };
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git ')) {
       flush();
-      section = { path: pathFromDiffHeader(line), added: new Set(), deleted: false, cursor: 0 };
+      section = {
+        path: pathFromDiffHeader(line),
+        added: new Set(),
+        deleted: false,
+        cursor: 0,
+        newMode: null,
+      };
     } else if (section) {
       foldDiffBodyLine(section, line);
     }

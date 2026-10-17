@@ -67,6 +67,25 @@ test('passes and prints n/a for a docs-only change without touching coverage', (
   assert.match(out, /0\/0 \(n\/a\)/);
 });
 
+test('a committed symlink to a directory passes the gate without an EISDIR crash', () => {
+  // The object mode in the diff header is what keeps a committed symlink (target recorded
+  // as one added line, a directory in the working tree) out of the content read below.
+  fs.mkdirSync(path.join(repo, 'vendor'), { recursive: true });
+  write('vendor/keep.txt', 'not source\n');
+  // Shaped like includable source so the gate reaches its content read; what stands
+  // behind the name is a directory.
+  fs.symlinkSync('../vendor', path.join(repo, 'src/linked.ts'));
+  write('README.md', '# docs\nnew line\n');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'symlink into a directory and docs');
+  writeLcov('SF:src/base.ts\nDA:1,1\nend_of_record\n');
+
+  const { code, out } = capture(() => run(['--base', 'main'], repo));
+
+  assert.equal(code, 0);
+  assert.match(out, /Changed-line coverage gate: PASS/);
+});
+
 test('reads a large stacked diff beyond the subprocess default buffer', () => {
   write('README.md', '# large stack\n' + 'documentation line\n'.repeat(80_000));
   git('add', '-A');
