@@ -9,6 +9,7 @@ import {
   type DaemonStopResult,
 } from '@agent-device/daemon-contracts/daemon-stop';
 import {
+  isUnusableRecord,
   readDaemonStatus,
   type DaemonStatus,
 } from '@agent-device/daemon-contracts/daemon-registration';
@@ -140,7 +141,7 @@ function renderDaemonStop(
 function renderDaemonStatus(
   status: Omit<DaemonStatus, 'plugins'> & { plugins: readonly PluginInventoryEntry[] },
 ): string {
-  if (status.state === 'unreadable' || status.state === 'invalid') {
+  if (isUnusableRecord(status)) {
     return `The daemon record for ${status.stateDir} is ${status.state === 'invalid' ? 'not a valid record' : 'unreadable'}, so whether a daemon runs there is unknown.`;
   }
   if (status.state === 'stopped') return `No running daemon for ${status.stateDir}.`;

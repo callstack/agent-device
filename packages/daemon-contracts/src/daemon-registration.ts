@@ -132,6 +132,11 @@ export type DaemonStatus = Readonly<{
   plugins?: unknown;
 }>;
 
+/** Whether the record exists but cannot say if a daemon runs: it is `unreadable` or `invalid`. */
+export function isUnusableRecord(status: Pick<DaemonStatus, 'state'>): boolean {
+  return status.state === 'unreadable' || status.state === 'invalid';
+}
+
 /**
  * Reads the daemon's published record without contacting it. The record counts while its pid names
  * a live process, unless a readable start time differs from the recorded one: a record a crashed

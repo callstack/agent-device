@@ -1,6 +1,9 @@
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readPluginInventory } from '@agent-device/contracts/plugin-inventory';
-import { readDaemonStatus } from '@agent-device/daemon-contracts/daemon-registration';
+import {
+  isUnusableRecord,
+  readDaemonStatus,
+} from '@agent-device/daemon-contracts/daemon-registration';
 import { AppError } from '@agent-device/kernel/errors';
 import { changePlugin, listPlugins } from '@agent-device/plugins/store';
 import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
@@ -36,9 +39,7 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
     ...(daemon.state === 'running'
       ? { daemon: { pid: daemon.pid, stateDir: daemon.stateDir, plugins: daemonPlugins } }
       : {}),
-    ...(daemon.state === 'unreadable' || daemon.state === 'invalid'
-      ? { daemonRecord: daemon.state }
-      : {}),
+    ...(isUnusableRecord(daemon) ? { daemonRecord: daemon.state } : {}),
     restartRequired: action !== 'list',
   };
   await writeCommandOutput(flags, data, () =>
@@ -54,7 +55,7 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
         ? ['Restart the local daemon after closing active sessions to use the changed plugin set.']
         : []),
       ...(plugins.length === 0 ? ['No provider plugins installed.'] : []),
-      ...(daemon.state === 'unreadable' || daemon.state === 'invalid'
+      ...(isUnusableRecord(daemon)
         ? [
             `The daemon record for ${daemon.stateDir} is ${daemon.state}, so its providers are unknown.`,
           ]

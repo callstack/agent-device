@@ -26,7 +26,8 @@ vi.mock('@agent-device/daemon-contracts/daemon-shutdown-report', () => ({
 vi.mock('../../../platform-runtime-daemon-owner-cleanup.ts', () => ({
   createDaemonOwnerCleanup: () => ({ cleanup: mocks.cleanupDaemonOwner }),
 }));
-vi.mock('@agent-device/daemon-contracts/daemon-registration', () => ({
+vi.mock('@agent-device/daemon-contracts/daemon-registration', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/daemon-contracts/daemon-registration')>()),
   readDaemonStatus: mocks.readDaemonStatus,
 }));
 vi.mock('../shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
