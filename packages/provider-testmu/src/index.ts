@@ -9,8 +9,9 @@ export type TestmuOptions = {
 
 /**
  * TestMu AI as a plugin. The credentials come from `options.credentials`, with the
- * `LT_USERNAME` and `LT_ACCESS_KEY` environment variables as the fallback; credentials passed as
- * options are not part of the environment the daemon fingerprints.
+ * `LT_USERNAME` and `LT_ACCESS_KEY` environment variables as the fallback for each key the options
+ * leave out. The plugin declares only the variables it reads from the environment; credentials passed
+ * as options are not part of the environment the daemon fingerprints.
  */
 function testmu(options: TestmuOptions = {}): AgentDevicePlugin {
   const { credentials } = options;
@@ -26,10 +27,16 @@ function testmu(options: TestmuOptions = {}): AgentDevicePlugin {
           },
         }
       : host;
+  // Only the variables the options do not supply come from the environment, so only those are
+  // part of the credential fingerprint.
+  const environmentVariables = [
+    ...(credentials?.username ? [] : ['LT_USERNAME']),
+    ...(credentials?.accessKey ? [] : ['LT_ACCESS_KEY']),
+  ];
   return {
     apiVersion: 2,
     provider: 'testmu',
-    credentials: { variables: credentials ? [] : ['LT_USERNAME', 'LT_ACCESS_KEY'] },
+    credentials: { variables: environmentVariables },
     connection: {
       capabilities: TESTMU_CONNECTION,
       resolve: (context) =>

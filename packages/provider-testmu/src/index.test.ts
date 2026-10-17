@@ -49,6 +49,15 @@ test('the plugin declares the LT variables only when it reads credentials from t
   });
 });
 
+test('a credentials object missing one key still declares the variable it reads from the environment', () => {
+  assert.deepEqual(testmu({ credentials: { username: 'u' } as never }).credentials, {
+    variables: ['LT_ACCESS_KEY'],
+  });
+  assert.deepEqual(testmu({ credentials: { accessKey: 'k' } as never }).credentials, {
+    variables: ['LT_USERNAME'],
+  });
+});
+
 test('credentials passed as options replace the environment, which stays the fallback', async () => {
   const captured = capturedAuthorization();
   const env = { LT_USERNAME: 'env-user', LT_ACCESS_KEY: 'env-key' };
