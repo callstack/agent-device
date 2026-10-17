@@ -205,6 +205,7 @@ test.for(['early exit', 'timeout'] as const)(
     let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
     let now = Date.now();
     let advanced = false;
+    vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     spawn.mockImplementation((_command, _args, options) => {
       paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
@@ -426,6 +427,9 @@ test('a joined busy contender waits for a published winner to become ready witho
 for (const held of [true, false]) {
   test(`startup uses one deadline when the claim is ${held ? 'held' : 'released for relaunch'}`, async () => {
     const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-budget-'));
+    // The one-deadline behavior is budget-independent; pin the ceiling so the test keeps its
+    // original 15 s shape while the production default is the #3782 ceiling.
+    vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
     const claim = tryAcquireProcessLock({
       lockDirPath: paths.lockPath,
       owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
@@ -484,6 +488,9 @@ test.for([
 ])('an older winner is replaced only with enough startup time ($budget)', async (expected, t) => {
   if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-older-winner-'));
+  // The replacement-window behavior is budget-independent; pin the ceiling so this test keeps its
+  // original 15 s shape while the production default is the #3782 ceiling.
+  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
   const http = await startHttpDaemonFixture({ devices: [] });
   const deferred = path.join(paths.baseDir, 'defer-publication');
   fs.writeFileSync(deferred, 'wait');

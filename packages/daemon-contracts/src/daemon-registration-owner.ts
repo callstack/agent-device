@@ -46,6 +46,85 @@ import {
 } from './daemon-shutdown-report.ts';
 
 export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
+
+/**
+ * Startup phase markers (#3782): the record a daemon leaves beside its registration of how far its
+ * startup got. The client waiting for registration reads this record to tell "slow but progressing"
+ * from "stuck". Each marker is one JSONL line appended to a dedicated state-directory file, so no
+ * `daemon.log` reader has to learn a new line shape and `daemon.log` keeps its existing ownership.
+ * The record is append-only across startups: a waiting client scopes it to its own launch by the
+ * marker timestamps, never by deleting what an earlier startup left.
+ */
+const DAEMON_STARTUP_PHASES = Object.freeze([
+  'modules-loaded',
+  'lock-acquired',
+  'listening',
+  'registered',
+] as const);
+
+export type DaemonStartupPhase = (typeof DAEMON_STARTUP_PHASES)[number];
+
+const DAEMON_STARTUP_PHASE_SET: ReadonlySet<string> = new Set<string>(DAEMON_STARTUP_PHASES);
+
+const DAEMON_STARTUP_PHASES_FILE = 'daemon-startup-phases.jsonl';
+
+type DaemonStartupMarkerRecord = {
+  data?: { startupPhase?: unknown; timestampMs?: unknown };
+};
+
+export function resolveDaemonStartupPhasesPath(stateDir: string): string {
+  return path.join(stateDir, DAEMON_STARTUP_PHASES_FILE);
+}
+
+export function recordDaemonStartupMarker(
+  startupPhasesPath: string,
+  phase: DaemonStartupPhase,
+): void {
+  try {
+    const timestampMs = Date.now();
+    fs.mkdirSync(path.dirname(startupPhasesPath), { recursive: true });
+    fs.appendFileSync(
+      startupPhasesPath,
+      `${JSON.stringify({ data: { startupPhase: phase, timestampMs } })}\n`,
+    );
+  } catch {
+    // A marker is progress evidence, never a startup requirement: a host that refuses the append
+    // must not lose a daemon that can still register.
+  }
+}
+
+/**
+ * The phases observed in a startup marker tail, keyed by phase, holding each phase's earliest
+ * occurrence. Unparsable and unknown lines are ignored: the protocol is additive, and a client must
+ * never fail a startup over a line shape it does not know.
+ */
+export function readDaemonStartupPhaseMarkers(
+  markerTail: string,
+): Partial<Record<DaemonStartupPhase, number>> {
+  const phases: Partial<Record<DaemonStartupPhase, number>> = {};
+  for (const line of markerTail.split('\n')) {
+    if (!line.includes('"startupPhase"')) continue;
+    let record: DaemonStartupMarkerRecord;
+    try {
+      record = JSON.parse(line) as DaemonStartupMarkerRecord;
+    } catch {
+      continue;
+    }
+    const phase = record.data?.startupPhase;
+    const timestampMs = record.data?.timestampMs;
+    if (
+      typeof phase !== 'string' ||
+      !DAEMON_STARTUP_PHASE_SET.has(phase) ||
+      typeof timestampMs !== 'number' ||
+      !Number.isFinite(timestampMs)
+    ) {
+      continue;
+    }
+    const seen = phases[phase as DaemonStartupPhase];
+    if (seen === undefined || timestampMs < seen) phases[phase as DaemonStartupPhase] = timestampMs;
+  }
+  return phases;
+}
 export type DaemonRegistrationFields = Readonly<{
   socketPort?: number;
   httpPort?: number;

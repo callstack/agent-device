@@ -1,6 +1,22 @@
 import { asAppError } from '@agent-device/kernel/errors';
-import { daemonStartupExitCode, reportDaemonClose, startDaemonRuntime } from '@agent-device/daemon';
+import {
+  daemonStartupExitCode,
+  reportDaemonClose,
+  startDaemonRuntime,
+} from '@agent-device/daemon';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import {
+  recordDaemonStartupMarker,
+  resolveDaemonStartupPhasesPath,
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+
+// #3782: the first marker the waiting client can read. It says this entry's module graph evaluated,
+// which on an overloaded host is the slowest thing a daemon start does before it can prove itself.
+recordDaemonStartupMarker(
+  resolveDaemonStartupPhasesPath(resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR).baseDir),
+  'modules-loaded',
+);
 
 // The executable owns the process: signals, fatal-error handlers and the exit code. The runtime
 // only reports when it has closed, whoever closed it.
