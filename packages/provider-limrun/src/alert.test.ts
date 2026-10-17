@@ -223,6 +223,10 @@ describe('wait budget', () => {
     // Exactly one dispatch attempt, never a replay: the leg died with the cancel, not with a
     // second press or a confirm that contradicts what the caller already withdrew.
     expect(client.tap).toHaveBeenCalledTimes(1);
+    // And the closest witness that the leg ended BEFORE any confirm read: the only capture is
+    // the lookup probe that resolved the alert — the confirm loop's top-of-loop cancellation
+    // check stops it before it starts a probe.
+    expect(client.elementTree).toHaveBeenCalledTimes(1);
   });
 
   it('honors a cancel that arrives while a straddling lookup probe is in flight: no press starts', async () => {
