@@ -212,10 +212,11 @@ Only a passed receipt with `exactCommit: true` proves validation at that commit.
 the run also includes staged, unstaged, and untracked files; treat that result as local feedback.
 Unknown, workflow, lockfile, and selector-owning changes fail open to the full local set. For broad
 refactors or when explicitly requested, run `pnpm check`: formatting, lint, typechecking, layering,
-production exports, MCP metadata, the build, Fallow, unit tests, and local smoke tests. Both commands
-share one host lock and need macOS or Linux; on Windows, use the affected plan and direct focused
-checks. GitHub CI stays authoritative for coverage, provider integration, specialized toolchains,
-and live device lanes.
+dependency-graph parity, production exports, MCP metadata, docs prose and links, the build, bundle
+ownership, the package check, Fallow, unit tests, and local smoke tests. Both commands share one host
+lock and need macOS or Linux; on Windows, use the affected plan and direct focused checks. GitHub CI
+stays authoritative for coverage, provider integration, history-backed compatibility, specialized
+toolchains, and live device lanes.
 
 Useful direct entry points:
 
