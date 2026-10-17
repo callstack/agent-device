@@ -1,4 +1,3 @@
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type {
@@ -50,7 +49,6 @@ type InstallFromSourceResult = Readonly<{
 }>;
 
 export async function handleInstallFromSourceDeploymentCommand(params: {
-  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
