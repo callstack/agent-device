@@ -16,7 +16,7 @@ Re-evaluate those files against their remaining edges.
 
 ## Rules at a glance
 
-- A `keep` row records a decision.
+- A `keep` row is a decision, not a deferral.
   Its rationale identifies the examined direction and why it fails, usually a package cycle or spine inversion.
 - A detected community does not independently justify a move.
   Most candidates belong to a consumer's detected community because they are shared foundations.
@@ -41,7 +41,7 @@ Re-evaluate those files against their remaining edges.
 | `src/capture-admission/durable-capture-admission-ledger.ts` | keep (proposed move rejected) | The same direction is rejected. This generic engine serves three per-resource ledgers. Capture-kit's `durable-capture-resource.ts` and `durable-capture-start-preflight.ts` consume it. |
 | `src/capture-admission/perf-capture-admission-ledger.ts` | keep (proposed move rejected) | The same direction is rejected. This file is a four-line specialization of the ledger that its own package owns. |
 | `src/capture-admission/screen-recording-admission-ledger.ts` | keep (proposed move rejected) | The same direction is rejected. Capture-kit's screen-recording session resource and stop-recovery consume it. |
-| `src/durable-json.ts` | keep (proposed move rejected) | Managed-allocation already imports this capture-kit module. Reversal forms a package cycle unless that import disappears first. Contracts beside `json.ts` was also rejected: under R18, contracts holds wire vocabulary, not durable-descriptor validation mechanics. Three managed-allocation `record-*` consumers explain the community coupling and can remain. |
+| `src/durable-json.ts` | keep (proposed move rejected) | Managed-allocation already imports this capture-kit module. Reversal forms a package cycle unless that import disappears first. A design that first removes that import stays open. Contracts beside `json.ts` was also rejected: under R18, contracts holds wire vocabulary, not durable-descriptor validation mechanics. Three managed-allocation `record-*` consumers explain the community coupling and can remain. |
 | `src/snapshot/snapshot-evidence.ts` | keep | This is snapshot-capture mechanics. The daemon-dominated community represents consumers. A daemon-server home would force every platform and provider to depend on the daemon zone for capture evidence. |
 | `src/snapshot/snapshot-freshness/index.ts` | keep | The reason for the row above applies. This is platform-neutral freshness policy. All its consumers, capture-kit itself, platforms, and daemon, import it downward today. |
 | `src/snapshot/touch-reference-frame.ts` | keep | Interaction and capture share these snapshot-geometry mechanics. Only capture-kit is below both. |
@@ -157,7 +157,7 @@ They are not independent proof that the placement is optimal.
 | `packages/daemon-contracts/src/device-claim-recovery.ts` | keep (shared-below-both) | The owner-scoped claim reconciler recovers durable resources from a dead owner's state directory. Daemon `open`/startup and daemonless `device release --stale` both run it. It therefore belongs below both. Runtime recovery may reside in `daemon-contracts` only when both sides run it and root composition supplies only the gateway, per ADR 0019 section 1. The package depends on `capture-kit`. Capture-kit cannot depend back on it, because that dependency forms a project-reference cycle through `selectors`. |
 | `src/daemon-policy-file.ts` | moved → `packages/daemon-contracts/src/daemon-policy-file.ts` | This shared daemon/client contract follows #2559 and #3288's `daemon-contracts` declaration. Rank-5 daemon-client dynamically imports it, so the spine requires a home below both. Package extraction supplies that physical home with manifest-owned exports. |
 | `src/daemon.ts` | keep | This is the `internal/daemon` bundle entry. Umbrella §4 keeps composition roots at the root. |
-| `src/platform-runtime-apple-runner-owner.ts` | retain for this batch | This is a `platform-runtime-*` composition seam. R13's exact-importer rule and ADR 0022's R76 ban on the `src/platform-runtime-*.ts` family key on its path. Relocation requires coordinated changes to both declarations. The rules constrain the move without independently proving placement. |
+| `src/platform-runtime-apple-runner-owner.ts` | retain for this batch | This is a `platform-runtime-*` composition seam. R13's exact-importer rule and ADR 0022's R76 ban on the `src/platform-runtime-*.ts` family key on its path. Relocation requires coordinated ownership changes to both declarations. The rules constrain the move without independently proving placement. |
 | `src/platform-runtime-daemon-lifecycle.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. Relocation is possible only with coordinated changes to those declarations. |
 | `src/platform-runtime-device-boot.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. |
 | `src/platform-runtime-resource-cleanup.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. |
@@ -180,6 +180,7 @@ Git history retains the completed batch.
 
 ## Follow-ups (tracked on #3281)
 
+Physical root-pass moves continue under [#3294](https://github.com/callstack/agent-device/issues/3294) (child of #3276).
 Git history retains completed move records.
 The decision table retains ownership rationale.
 
@@ -220,7 +221,7 @@ Composed root tests reach the daemon through `startDaemonRuntime` from the entry
   Managed-allocation's record codec requires capture-kit durable mechanics.
   The reverse edge completes a cycle prohibited by R4/R11.
   Removal of the required import first would permit reconsideration.
-  The decision rejects the sequence, not the destination.
+  This entry rejects the sequence, not the destination.
 
 ## The enduring rule
 
