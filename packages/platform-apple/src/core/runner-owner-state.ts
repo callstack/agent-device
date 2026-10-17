@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/request';
+import type { RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 
 /**
  * Daemon-owned device-claim arbitration probe: does the embedding process hold

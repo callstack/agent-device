@@ -128,7 +128,7 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
     const { createAppleRunnerRuntimeState } =
       await import('@agent-device/platform-apple/runner-owner');
     const { createAndroidHelperRuntimeState } =
-      await import('@agent-device/platform-android/adb-host');
+      await import('./platform-runtime-android-helper-state.ts');
     return Object.freeze({
       runtimeStates: Object.freeze([
         createAppleRunnerRuntimeState(),

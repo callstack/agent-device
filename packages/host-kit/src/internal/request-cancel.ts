@@ -1,19 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-
-/**
- * What one daemon runtime owns of a kind: the module keeps its state in an async-local slot the
- * runtime enters, so two runtimes in one process never share it. Outside a runtime (a client
- * process, a unit test) the module's own standalone state answers.
- */
-export type RuntimeStateHandle = Readonly<{
-  /** Runs `fn` as the runtime that owns this state. */
-  run<T>(fn: () => T): T;
-  /** Binds this state for the rest of the current async context, after the runtime is composed. */
-  enter(): void;
-  /** Releases what the state holds (timers, handles). */
-  dispose(): void;
-}>;
+import type { RuntimeStateHandle } from '../runtime-slots.ts';
 
 type RequestCancelState = {
   canceledRequestIds: Set<string>;

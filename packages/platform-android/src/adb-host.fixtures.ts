@@ -1,5 +1,11 @@
 import { bindAndroidAdbHost, type AndroidAdbHost } from './adb-host.ts';
 import { createHash } from 'node:crypto';
+import { defineRuntimeSlots } from '@agent-device/host-kit/runtime-slots';
+
+const stubHelperRuntime = defineRuntimeSlots();
+
+/** The state of one test "daemon runtime" for the stub host's helper slots. */
+export const createStubHelperRuntimeState = stubHelperRuntime.createHandle;
 
 export type AndroidAdbHostStub = AndroidAdbHost & {
   diagnostics: Array<{ phase: string; level?: string }>;
@@ -22,6 +28,7 @@ export function bindAndroidAdbHostStub(
     return existing;
   };
   const host: AndroidAdbHostStub = {
+    runtimeSlot: stubHelperRuntime.slot,
     environment: {},
     files: {
       access: async () => {

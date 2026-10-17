@@ -72,7 +72,6 @@ const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
 const ANDROID_MECHANICS_FACADE = '@agent-device/platform-android/mechanics';
 const ANDROID_HOST_FACET = '@agent-device/platform-android/adb-host';
 const ANDROID_HOST_BINDING = 'src/platform-runtime-android-adb-host.ts';
-const ANDROID_HELPER_STATE_COMPOSITION = 'src/daemon-composition.ts';
 const ANDROID_DEVICE_BOOT_FACADE = '@agent-device/platform-android/device-boot';
 const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly string[]>>> = {
   apple: [
@@ -116,10 +115,7 @@ function isInteractorSubpathImport(
 }
 
 function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
-  // The binding wires the host; daemon composition registers the host's per-runtime helper state.
-  if (specifier === ANDROID_HOST_FACET) {
-    return file === ANDROID_HOST_BINDING || file === ANDROID_HELPER_STATE_COMPOSITION;
-  }
+  if (specifier === ANDROID_HOST_FACET) return file === ANDROID_HOST_BINDING;
   if (isPlatformTestOnlyImport(specifier)) return true;
   if (!(MECHANICS_FACET_SUBPATHS.android ?? []).includes(specifier)) return false;
   // The named facets are the implementation seam for root/core/SDK consumers. Daemon production
