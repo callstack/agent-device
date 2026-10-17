@@ -155,6 +155,7 @@ async function runLeaseHandler(
     params.req.command,
     'lease',
     await handleLeaseCommands({
+      host: params.host,
       req: params.req,
       sessionName: params.sessionName,
       sessionStore: params.sessionStore,
