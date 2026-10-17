@@ -1,6 +1,6 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { parseSync } from 'oxc-parser';
 
 /**
  * Eager-import-closure machinery shared by the startup/teardown lazy-seam pins.
@@ -29,7 +29,8 @@ const WORKSPACE_SPECIFIER = /^(@agent-device\/[^/]+)(\/.*)?$/;
 
 type AstNode = { type?: string; [key: string]: unknown };
 
-type ParsedModuleRecord = ReturnType<typeof parseSync>['module'];
+type ParsedModuleRecord = ReturnType<typeof import('oxc-parser').parseSync>['module'];
+const requireFromTestKit = createRequire(import.meta.url);
 
 /** Static specifiers this file causes to be EVALUATED (not type-only). */
 function staticEvaluatedRefs(module: ParsedModuleRecord): string[] {
@@ -118,6 +119,7 @@ export function topLevelStatementCount(fileName: string, source: string): number
 type EagerModule = { specifiers: string[]; topLevelStatements: number; statementTexts: string[] };
 
 function parseEagerModule(fileName: string, source: string): EagerModule {
+  const { parseSync } = requireFromTestKit('oxc-parser') as typeof import('oxc-parser');
   const parsed = parseSync(fileName, source);
   const dynamic: string[] = [];
   collectEagerDynamicImports(parsed.program, true, dynamic);

@@ -17,6 +17,7 @@ import {
   selectorReadSnapshot,
 } from './__tests__/test-utils/index.ts';
 import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
+import { abortWith } from './__tests__/test-utils/abort-with.ts';
 
 function textWaitDevice(params: {
   captureSnapshot: NonNullable<AgentDeviceBackend['captureSnapshot']>;
@@ -35,15 +36,6 @@ function textWaitDevice(params: {
     sessions: createMemorySessionStore([{ name: 'default' }]),
     policy: localCommandPolicy(),
     clock: params.clock ?? createFakeClock(),
-  });
-}
-
-function abortWith(signal: AbortSignal | undefined, error: unknown): Promise<never> {
-  if (!signal) return Promise.reject(new Error('the wait deadline never reached the capture'));
-  return new Promise((_resolve, reject) => {
-    const cancel = () => reject(error);
-    if (signal.aborted) cancel();
-    else signal.addEventListener('abort', cancel, { once: true });
   });
 }
 

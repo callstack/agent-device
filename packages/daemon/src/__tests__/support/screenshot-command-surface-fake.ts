@@ -1,8 +1,4 @@
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
-import { resizePngFileToScale } from '@agent-device/capture-kit/png-resize';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { forwardingCreateCommandSurfaceWithAnnotations } from './command-surface-fake.ts';
 
 export const screenshotCommandSurface: CreateDaemonCommandSurface = async (config) => {
@@ -12,10 +8,11 @@ export const screenshotCommandSurface: CreateDaemonCommandSurface = async (confi
     capture: {
       ...forwarded.capture,
       screenshot: async (options) => {
-        const tempDir =
-          options.out?.kind === 'path' ? undefined : mkdtempForTestSync('agent-device-screenshot-');
-        const outputPath =
-          options.out?.kind === 'path' ? options.out.path : path.join(tempDir!, 'screenshot.png');
+        const reserved = await config.artifacts.reserveOutput(options.out, {
+          field: 'path',
+          ext: '.png',
+          artifactType: 'screenshot',
+        });
         try {
           const captured = await config.backend.captureScreenshot?.(
             {
@@ -24,7 +21,7 @@ export const screenshotCommandSurface: CreateDaemonCommandSurface = async (confi
               appBundleId: options.appBundleId,
               signal: options.signal ?? config.signal,
             },
-            outputPath,
+            reserved.path,
             {
               fullscreen: options.fullscreen,
               overlayRefs: options.overlayRefs,
@@ -34,13 +31,12 @@ export const screenshotCommandSurface: CreateDaemonCommandSurface = async (confi
               surface: options.surface,
             },
           );
-          if (options.scale !== undefined) await resizePngFileToScale(outputPath, options.scale);
           return {
-            path: outputPath,
+            path: reserved.path,
             ...(captured?.displayRotation ? { displayRotation: captured.displayRotation } : {}),
           };
         } catch (error) {
-          if (tempDir) await fs.rm(tempDir, { recursive: true, force: true });
+          await reserved.cleanup?.();
           throw error;
         }
       },

@@ -347,7 +347,7 @@ test('iOS simulator screenshot omits logical density metadata after --scale down
     `agent-device-ios-scale-${Date.now()}.png`,
   );
   const { handler } = screenshotRouter(makeIosSession('default'), {
-    onCapture: (input) => writeSolidPng(input.outPath, 804, 1748),
+    onCapture: (input) => writeSolidPng(input.outPath, 402, 874),
   });
 
   const response = await handler({

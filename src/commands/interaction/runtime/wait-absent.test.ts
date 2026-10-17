@@ -13,6 +13,7 @@ import { createFakeClock } from './__tests__/test-utils/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
+import { abortWith } from './__tests__/test-utils/abort-with.ts';
 
 const SELECTOR = 'label="Removed"';
 
@@ -66,12 +67,7 @@ function cancelledAbsentDevice(params: {
     captures += 1;
     if (captures === 1 && params.firstSnapshot) return params.firstSnapshot;
     const signal = context.signal;
-    if (!signal) throw new Error('the wait deadline never reached the capture');
-    return await new Promise<never>((_resolve, reject) => {
-      const cancel = () => reject(params.cancellation);
-      if (signal.aborted) cancel();
-      else signal.addEventListener('abort', cancel, { once: true });
-    });
+    return await abortWith(signal, params.cancellation);
   });
   const clock = { now: () => 0, sleep: async (_durationMs: number) => {} };
   const device = createAgentDevice({

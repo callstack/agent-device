@@ -5,14 +5,7 @@ import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pip
 import { AppError } from '@agent-device/kernel/errors';
 import { WAIT_REASONS, type ReadinessPhase } from '@agent-device/contracts/wait';
 import { createWaitPolling, waitTimeoutError } from './wait-polling.ts';
-
-function abortWith(signal: AbortSignal, error: unknown): Promise<never> {
-  return new Promise((_resolve, reject) => {
-    const cancel = () => reject(error);
-    if (signal.aborted) cancel();
-    else signal.addEventListener('abort', cancel, { once: true });
-  });
-}
+import { abortWith } from './__tests__/test-utils/abort-with.ts';
 
 test('poll delay is bounded by the remaining wait budget', async () => {
   let currentMs = 0;

@@ -195,6 +195,7 @@ test('the default destination is a reserved temp file, removed when the capture 
 
   await expect(resolved.execute(executionParams(session, req))).rejects.toThrow(/capture failed/);
   expect(path.basename(requestedPath ?? '')).toBe('screenshot.png');
+  expect(path.basename(path.dirname(requestedPath ?? ''))).toContain('agent-device-screenshot-');
   expect(fs.existsSync(path.dirname(requestedPath ?? ''))).toBe(false);
 });
 
@@ -257,7 +258,7 @@ const CROP_TREE = [
   },
 ];
 
-test('the crop runs after the platform write and before the shared scale', async () => {
+test('the crop runs against the platform screenshot dimensions', async () => {
   const fixture = screenshotRuntimeFixture({
     snapshotResult: () => ({
       nodes: CROP_TREE,
@@ -272,7 +273,7 @@ test('the crop runs after the platform write and before the shared scale', async
   );
   const req = screenshotRequest({
     positionals: [outPath],
-    flags: { screenshotCropOn: 'label="Save"', screenshotScale: 0.5 },
+    flags: { screenshotCropOn: 'label="Save"' },
   });
 
   const resolved = await resolveScreenshotGenericExecution({
@@ -283,14 +284,11 @@ test('the crop runs after the platform write and before the shared scale', async
     inspectFacts: fixture.inspectFacts,
     bindDevice: fixture.bindDevice,
   });
-  const result = await executeResult(resolved, session, req, { screenshotScale: 0.5 });
+  const result = await executeResult(resolved, session, req);
 
   expect(fixture.captureScreenshot).toHaveBeenCalledTimes(1);
   expect(fixture.captureSnapshot).toHaveBeenCalledTimes(1);
-  // The platform wrote 100x50; the pre-scale box is 40x20, so only a crop-then-scale pipeline
-  // lands on 20x10 — a scale-then-crop pipeline would halve the image first and the same box
-  // would overflow it.
-  expect(result).toMatchObject({ width: 20, height: 10 });
+  expect(result).toMatchObject({ width: 40, height: 20 });
   expect(fixture.captureSnapshot.mock.calls[0]?.[0].options).toMatchObject({
     interactiveOnly: false,
     includeRects: true,
