@@ -492,6 +492,25 @@ test('a touched file the working tree no longer holds is not held against the ru
   assert.match(out, /no touched function\(s\) at or above 30/);
 });
 
+test('a committed symlink to a directory is not read as a touched file', () => {
+  // The diff of a committed symlink (`helper-tests/Sources -> ../helper`) carries its target
+  // path as one added line, so the file reaches the touched list by its lines alone. The working
+  // tree holds a directory behind it, so reading it as source dies on EISDIR before any verdict
+  // exists — the object mode in the diff header is what keeps it off the list.
+  fs.mkdirSync(path.join(repo, 'helper-tests'), { recursive: true });
+  write('helper/Helper.swift', 'func helper() {}\n');
+  fs.symlinkSync('../helper', path.join(repo, 'helper-tests/Sources'));
+  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
+  commit('add a symlink to a directory');
+  writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
+  writeStamp();
+
+  const { code, out } = check(['--base', HEADS[0]!]);
+
+  assert.equal(code, 0);
+  assert.match(out, /no touched function\(s\) at or above 30/);
+});
+
 test('coverage written without a stamp is not trustworthy', () => {
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('clean edit');

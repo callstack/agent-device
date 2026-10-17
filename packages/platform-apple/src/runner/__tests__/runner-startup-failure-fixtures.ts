@@ -14,11 +14,11 @@ import { IOS_SIMULATOR } from './device-fixtures.ts';
  * Provenance is the point of this file, so it is stated per entry and never as a blanket claim:
  *
  * - `captured` — `output` was pasted from a run, and `command` plus `xcodeVersion` (from
- *   `xcodebuild -version`) were recorded with it by `.device-evidence/CHECKLIST-runner-failures.md`.
+ *   `xcodebuild -version`) were recorded with it in the same run.
  * - `reported-log-excerpt` — `output` was pasted from a `runner.log` someone else ran, and the
- *   versions in `xcodeVersion` are the ones that reporter stated. No `command` and no checklist row:
- *   the host that produced it is not reachable from here, which is also why no run on this machine
- *   can promote such an entry to `captured`.
+ *   versions in `xcodeVersion` are the ones that reporter stated. No `command`: the host that
+ *   produced it is not reachable from here, which is also why no run on this machine can promote
+ *   such an entry to `captured`.
  * - `shipped-sniff-trigger` — the substrings a rule matches are the ones shipped in
  *   `resolveSigningFailureHint` before #2680, which is evidence xcodebuild can emit them. The
  *   sentence around them is ours, so `command` and `xcodeVersion` stay unrecorded.
@@ -28,10 +28,11 @@ import { IOS_SIMULATOR } from './device-fixtures.ts';
  * The two kinds with no observation behind the invocation — `shipped-sniff-trigger` and
  * `invented-shape` — are `unobserved` for `xcodeVersion` and carry no `command`: an invocation we did
  * not run is not provenance. `captured` records both, and `reported-log-excerpt` records the version
- * its reporter stated and no command. Nothing in the classifier reads these fields; they exist so a
- * reason can be traced to an observation instead of to a guess.
+ * its reporter stated and no command. The capture commands for the uncaptured rows are in
+ * `git show 59fdf008b9:.device-evidence/CHECKLIST-runner-failures.md`. Nothing in the classifier reads
+ * these fields; they exist so a reason can be traced to an observation instead of to a guess.
  *
- * Blocked on the host, not unexamined. One Phase B run on `thymikee-iphone` / Xcode 26.2 settled the
+ * Blocked on the host, not unexamined. One run on a physical iPhone with Xcode 26.2 settled the
  * shape question these rows were held on — `No profiles for '<id>' were found` arrives as one long
  * `error:` line, not a wrapped one — and `no-profiles-for-bundle-id` below is now `captured`. The
  * rest are gated on an Apple account this machine does not have, and they need it for the same
@@ -287,7 +288,7 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     provenance: 'invented-shape',
     output:
       "error: Provisioning profile \"match-development\" is not a valid provisioning profile (in target 'AgentDeviceRunner' from project 'AgentDeviceRunner')\nError Domain=IDEProvisioningErrorDomain Code=17 \"Provisioning profile 'match-development' is not a valid provisioning profile.\"\n** TEST BUILD FAILED **\n",
-    note: "Xcode repeats the profile inside the same line as its IDEProvisioningErrorDomain diagnostics, which is what the row reads: domain on one line and profile on another is two facts, not one complaint. Sentence and domain code are our reconstruction; Phase B capture has to record the real wording and this entry's xcodeVersion.",
+    note: "Xcode repeats the profile inside the same line as its IDEProvisioningErrorDomain diagnostics, which is what the row reads: domain on one line and profile on another is two facts, not one complaint. Sentence and domain code are our reconstruction; a capture run has to record the real wording and this entry's xcodeVersion.",
   },
   {
     id: 'profile-does-not-cover-app-id',

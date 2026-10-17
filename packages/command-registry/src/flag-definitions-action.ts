@@ -432,8 +432,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     // the synopsis stays the invocation they are choosing between (#1271 stage 2).
     usageHidden: true,
     usageDescription:
-      'Force-record this action even though its command is observation-only and would otherwise be excluded from a repair-armed heal by default (mutually exclusive with --no-record)',
-    projectConfig: true,
+      'Force-record this action into a repair-armed heal; per-invocation only, the retired config key "record" no longer opts in (mutually exclusive with --no-record)',
+    projectConfig: false,
     recorded: true,
   },
 ];
