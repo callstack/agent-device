@@ -374,10 +374,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testCrowdedScreenWithAWideSliderAdoptsItsItemsWithoutReadingEveryElement() throws {
-    // The crowded screen has about 500 elements, so reading each one live outlasts the slice by
-    // minutes. The two buttons sit over the slider as its siblings, so the expected children pin the
-    // fallback's current output and prove XCTest ran the predicate inside a real query.
+  func testCrowdedScreenWithAWideSliderPreservesItsSiblingButtons() throws {
     app.launchArguments = ["--agent-device-crowded-screen", "--agent-device-wide-slider"]
     app.launch()
     defer {
@@ -393,14 +390,6 @@ extension RunnerTests {
       customActions: false
     )
     let context = try XCTUnwrap(makeSnapshotTraversalContext(app: app, hint: hint))
-    let unstarted = try recursiveTreeSnapshotAcquisition(context: context, hint: hint, processingDeadline: Date())
-    XCTAssertEqual(
-      unstarted.outcome,
-      .deadlineExhausted,
-      "a candidate query the slice cannot fit is a tier timeout, not a complete tree"
-    )
-    XCTAssertTrue(unstarted.acquisition.truncated)
-
     let startedAt = Date()
     let capture = try recursiveTreeSnapshotAcquisition(
       context: context,
@@ -410,13 +399,47 @@ extension RunnerTests {
     let elapsed = Date().timeIntervalSince(startedAt)
     let nodes = capture.acquisition.nodes
     XCTAssertEqual(capture.outcome, .completed)
+    XCTAssertFalse(capture.acquisition.truncated)
 
     XCTAssertLessThan(elapsed, treeCaptureSliceBudget, "the tree walk must fit its processing slice")
     let slider = try XCTUnwrap(nodes.first { $0.type == "Slider" && $0.label == "Volume" })
-    XCTAssertEqual(
-      nodes.filter { $0.parentIndex == slider.index }.map { "\($0.type):\($0.label ?? "")" }.sorted(),
-      ["Button:Left", "Button:Right", "StaticText:Left", "StaticText:Right"]
+    XCTAssertTrue(nodes.filter { $0.parentIndex == slider.index }.isEmpty)
+    for label in ["Left", "Right"] {
+      let buttons = nodes.filter { $0.type == "Button" && $0.label == label }
+      XCTAssertEqual(buttons.count, 1, "each sibling button appears once")
+      XCTAssertEqual(buttons.first?.parentIndex, slider.parentIndex)
+    }
+  }
+
+  @MainActor
+  func testCollapsedTabQueryReportsWhenItsProcessingSliceCannotStartIt() throws {
+    app.launchArguments = ["--agent-device-crowded-screen", "--agent-device-collapsed-tab-bar"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
+    let hint = CaptureHint(
+      projection: .regular,
+      depth: nil,
+      regularPresentedDepth: nil,
+      interactiveOnly: false,
+      customActions: false
     )
+    let context = try XCTUnwrap(makeSnapshotTraversalContext(app: app, hint: hint))
+    let tabBar = try XCTUnwrap(Self.snapshotDescendants(of: context.rootSnapshot).first { $0.elementType == .tabBar })
+    XCTAssertTrue(tabBar.children.isEmpty, "the fixture must exercise collapsed-tab recovery")
+    let unstarted = try recursiveTreeSnapshotAcquisition(context: context, hint: hint, processingDeadline: Date())
+    XCTAssertEqual(unstarted.outcome, .deadlineExhausted)
+    XCTAssertTrue(unstarted.acquisition.truncated)
+    let capture = try recursiveTreeSnapshotAcquisition(
+      context: context,
+      hint: hint,
+      processingDeadline: Date().addingTimeInterval(treeCaptureSliceBudget)
+    )
+    XCTAssertEqual(capture.outcome, .completed)
+    XCTAssertFalse(capture.acquisition.truncated)
   }
 #endif
 }

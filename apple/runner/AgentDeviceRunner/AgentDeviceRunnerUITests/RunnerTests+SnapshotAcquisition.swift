@@ -537,14 +537,14 @@ extension RunnerTests {
     return snapshot.isSelected
   }
 
-  /// A wide tab bar, segmented control or slider that XCTest reports without children.
+  /// A wide tab bar or segmented control that XCTest reports without children.
   func isCollapsedTabContainer(_ snapshot: XCUIElementSnapshot) -> Bool {
     if !snapshot.children.isEmpty { return false }
     let frame = snapshot.frame
     if frame.isNull || frame.isEmpty { return false }
     if frame.width < max(CGFloat(160), frame.height * 1.75) { return false }
     switch snapshot.elementType {
-    case .tabBar, .segmentedControl, .slider:
+    case .tabBar, .segmentedControl:
       return true
     default:
       return false

@@ -476,7 +476,7 @@ extension RunnerTests {
     XCTAssertEqual(quality.reasonCode, "budget")
   }
 
-  /// A wide slider makes the tree tier run the collapsed tab query, and a slow root read leaves too
+  /// A childless tab bar makes the tree tier run the collapsed tab query, and a slow root read leaves too
   /// little of the processing slice for it to start. The plan must treat that tree as a tier that
   /// ran out of time and move on, not accept the truncated tree as a healthy capture.
   func testPlanMovesPastATreeTierWhoseCollapsedTabQueryCannotStart() throws {
@@ -493,7 +493,7 @@ extension RunnerTests {
       XCTFail("unable to install the slow root snapshot stub")
       return
     }
-    app.launchArguments = ["--agent-device-crowded-screen", "--agent-device-wide-slider"]
+    app.launchArguments = ["--agent-device-crowded-screen", "--agent-device-collapsed-tab-bar"]
     app.launch()
     XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
     let captureTarget = MainActor.assumeIsolated {

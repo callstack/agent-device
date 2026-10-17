@@ -848,8 +848,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     }
   }
 
-  // A native slider wide enough to read as a collapsed tab container, with two buttons over it. It
-  // sits above the crowded rows, inside both an iPhone screen and the iPhone Duo inner display.
+  // Overlapping sibling buttons must not become children of an ordinary slider.
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-wide-slider"]) {
     UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(20, 20, 360, 31)];
     slider.accessibilityLabel = @"Volume";
@@ -861,6 +860,17 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       button.frame = CGRectMake(30 + i * 170, 20, 100, 30);
       [self.view addSubview:button];
     }
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-collapsed-tab-bar"]) {
+    UITabBar *tabBar = [[UITabBar alloc] initWithFrame:CGRectMake(20, 20, 360, 60)];
+    tabBar.items = @[
+      [[UITabBarItem alloc] initWithTitle:@"First tab" image:nil tag:0],
+      [[UITabBarItem alloc] initWithTitle:@"Second tab" image:nil tag:1],
+    ];
+    tabBar.isAccessibilityElement = YES;
+    tabBar.accessibilityLabel = @"Collapsed tabs";
+    [self.view addSubview:tabBar];
   }
 
   BOOL markedButton = [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup"];
