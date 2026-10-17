@@ -52,10 +52,10 @@ describe('wait budget', () => {
     await expect(
       underFakeTimers(() => handleLimrunIosAlert(client, 'wait', { timeoutMs: 5_000 })),
     ).rejects.toThrow('alert wait timed out');
-    // One poll per interval over the whole window: never fewer (gave up early) nor real
-    // seconds. The probe the sleep lands exactly on the deadline captures nothing — a closed
-    // window answers for itself — so the count is the intervals, not intervals-plus-one.
-    expect(client.elementTree).toHaveBeenCalledTimes(Math.ceil(5_000 / 300));
+    // One poll per interval over the window, plus the final sample the polling primitive
+    // lands exactly on the deadline: a probe that starts at the boundary is a started probe,
+    // and the budget rule lets it answer — the deadline ends the loop, it does not unstart it.
+    expect(client.elementTree).toHaveBeenCalledTimes(Math.ceil(5_000 / 300) + 1);
   });
 
   it('treats a malformed window as the bounded default rather than an unbound loop', async () => {
@@ -66,7 +66,7 @@ describe('wait budget', () => {
     ).rejects.toThrow('alert wait timed out');
     // The fallback is the contract default, spent on the driven clock — this returned, so the
     // loop had a bound, which a NaN comparison would not have given it.
-    expect(client.elementTree).toHaveBeenCalledTimes(Math.ceil(10_000 / 300));
+    expect(client.elementTree).toHaveBeenCalledTimes(Math.ceil(10_000 / 300) + 1);
   });
 
   it('reads a finite budget past the timer ceiling as the bounded default, never a misfire', async () => {
@@ -77,31 +77,35 @@ describe('wait budget', () => {
       await expect(
         underFakeTimers(() => handleLimrunIosAlert(client, 'wait', { timeoutMs: oversized })),
       ).rejects.toThrow('alert wait timed out');
-      expect(client.elementTree).toHaveBeenCalledTimes(Math.ceil(10_000 / 300));
+      expect(client.elementTree).toHaveBeenCalledTimes(Math.ceil(10_000 / 300) + 1);
     }
   });
 
-  it('never consumes a second capture that starts after the window closed', async () => {
-    // The closing-probe bug: a poll the sleep lands past the deadline must not even capture —
-    // its answer, alert or absence, is a late verdict the deadline already closed.
+  it('consumes the boundary sample: an alert answering exactly at the deadline is still reported', async () => {
+    // The budget rule applied to `wait`: the poll that the sleep lands on the deadline is a
+    // started probe — it finishes and its answer counts. The old contract refused it as a late
+    // verdict; under the new one a sheet visible as the budget closes is exactly what `wait`
+    // is for. No probe ever starts once the budget has passed: the boundary sample is the last.
     const client = {
       elementTree: vi
         .fn()
         .mockResolvedValueOnce([limrunAppScreenTree()])
-        // Were this answer ever consumed, `wait` would report the alert instead of timing out.
         .mockResolvedValueOnce([limrunAttAlertTree()]),
       tap: vi.fn(async () => {}),
     } satisfies LimrunIosAlertClient;
 
-    await expect(
-      underFakeTimers(() => handleLimrunIosAlert(client, 'wait', { timeoutMs: 300 })),
-    ).rejects.toThrow('alert wait timed out');
-    expect(client.elementTree).toHaveBeenCalledTimes(1);
+    const result = await underFakeTimers(() =>
+      handleLimrunIosAlert(client, 'wait', { timeoutMs: 300 }),
+    );
+    expect(result.kind).toBe('alertWait');
+    expect(client.elementTree).toHaveBeenCalledTimes(2);
   });
 
-  it('never presses on a candidate that resolves after the action window closed', async () => {
-    // A bounded capture stalling past its 2s lookup budget lands after the deadline. Consuming
-    // it would press an alert the window never resolved inside itself.
+  it('presses a candidate whose started lookup probe answered after the deadline', async () => {
+    // The maintainer's whole-rule pin on the acting leg: a bounded lookup probe stalling past
+    // its 2s budget still finishes, and the alert it names is the alert on screen — the press
+    // acts on it rather than refusing. The old code threw `alert-window-expired, dispatched:
+    // no` here even though the sheet was plainly visible to the probe it had started.
     const client = {
       elementTree: vi
         .fn()
@@ -111,19 +115,15 @@ describe('wait budget', () => {
             new Promise((resolve) => {
               setTimeout(() => resolve([limrunAttAlertTree()]), 3_000);
             }),
-        ),
+        )
+        // The post-press confirm read sees the app screen: the press did land.
+        .mockResolvedValue([limrunAppScreenTree()]),
       tap: vi.fn(async () => {}),
     } satisfies LimrunIosAlertClient;
 
-    const thrown = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept')).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    expect(client.tap).not.toHaveBeenCalled();
-    expect(thrown).toBeInstanceOf(AppError);
-    const failure = thrown as AppError;
-    expect(failure.details?.reason).toBe('alert-window-expired');
-    expect(failure.details?.dispatched).toBe('no');
+    const handled = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept'));
+    expect(handled.kind).toBe('alertHandled');
+    expect(client.tap).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces a failed capture as itself, never as a timeout', async () => {
@@ -137,17 +137,19 @@ describe('wait budget', () => {
     await expect(handleLimrunIosAlert(client, 'wait')).rejects.toThrow('websocket closed');
   });
 
-  it('refuses a confirm capture that outruns its window without claiming a visible dialog', async () => {
-    // The Limrun WebSocket client cannot abort an in-flight `elementTree`, so a stalled capture
-    // can outlive the confirm budget. The driver must not consume that late answer — and because
-    // no post-press capture ever answered, the failure may not accuse the dialog of still being
-    // visible; it reports the press as unconfirmed.
+  it('consumes a confirm capture that answers past its window deadline', async () => {
+    // The same rule after the press: the first confirm probe started inside the confirm budget,
+    // so it finishes and its answer decides. The Limrun WebSocket client cannot abort an
+    // in-flight `elementTree` — under the old contract the leg refused the late answer and
+    // reported the press unconfirmed; under the budget rule the capture that saw the app screen
+    // IS the confirmation, and the leg handled. The cost is the documented one-call overrun:
+    // the leg waits for the started transport instead of answering at 2 s.
     const client = {
       elementTree: vi
         .fn()
-        .mockResolvedValueOnce([limrunAttAlertTree()]) // read-first probe resolves the alert
-        // The confirm probe stalls 3s on the driven clock — past its 2s budget — and would
-        // answer "gone" if its late result were trusted.
+        .mockResolvedValueOnce([limrunAttAlertTree()]) // lookup probe resolves the alert
+        // The confirm probe stalls 3s on the driven clock — past its 2s budget — and answers
+        // "gone": under the rule, that answer counts.
         .mockImplementationOnce(
           async () =>
             new Promise((resolve) => {
@@ -157,17 +159,9 @@ describe('wait budget', () => {
       tap: vi.fn(async () => {}),
     } satisfies LimrunIosAlertClient;
 
-    const thrown = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept')).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const handled = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept'));
     expect(client.tap).toHaveBeenCalledTimes(1);
-    expect(thrown).toBeInstanceOf(AppError);
-    const failure = thrown as AppError;
-    expect(failure.message).toBe(
-      'alert accept pressed the button but the dismissal could not be confirmed',
-    );
-    expect(failure.details?.reason).toBe('alert-window-expired');
+    expect(handled.kind).toBe('alertHandled');
   });
 });
 
@@ -226,12 +220,13 @@ describe('acting budgets', () => {
     expect(failure.details?.reason).toBe('alert-window-expired');
   });
 
-  it('keeps the still-visible claim when a later capture hangs after one re-named the alert', async () => {
-    // Same alert at confirm probe 1, then a stalled transport the budget cuts off. A hung probe
-    // is not an observation: the still-visible failure rides the latest capture that answered,
-    // which named the dialog, exactly as commands.md states. This is the executed provider
-    // integration timeline (Coverage run 38924441176), where the f584 catch unconditionally
-    // downgraded it to unconfirmed.
+  it('confirms on the capture that answers after a straddle, even one that first re-named the alert', async () => {
+    // Budget rule over the older sighting rule: confirm probe 1 re-named the pressed alert,
+    // probe 2 started inside the budget and answers past its deadline that the screen is now
+    // the app. Both are started-probe answers, so both count, and the freshest one settles the
+    // dismissal — the dialog the latest capture that answered saw is gone. The old code kept
+    // the earlier sighting as a still-visible failure precisely because this straddling capture
+    // was refused; the maintainer's whole-rule supersedes that.
     const client = {
       elementTree: vi
         .fn()
@@ -246,13 +241,8 @@ describe('acting budgets', () => {
       tap: vi.fn(async () => {}),
     } satisfies LimrunIosAlertClient;
 
-    const thrown = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept')).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    expect(thrown).toBeInstanceOf(AppError);
-    expect((thrown as AppError).message).toBe('alert accept did not dismiss the visible alert');
-    expect((thrown as AppError).details?.reason).toBe('alert-window-expired');
+    const handled = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept'));
+    expect(handled.kind).toBe('alertHandled');
     expect(client.tap).toHaveBeenCalledTimes(1);
   });
 

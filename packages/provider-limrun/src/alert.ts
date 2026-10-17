@@ -3,8 +3,8 @@ import type {
   TreeAlertObservation,
   TreeAlertPress,
   TreeAlertResult,
-} from '@agent-device/platform-android/mechanics';
-import { runTreeAlertAction } from '@agent-device/platform-android/mechanics';
+} from '@agent-device/capture-kit/alert-tree-driver';
+import { runTreeAlertAction } from '@agent-device/capture-kit/alert-tree-driver';
 import type { InstanceClient as LimrunIosClient } from '@limrun/api/ios-client';
 import {
   chooseLimrunAlertButton,

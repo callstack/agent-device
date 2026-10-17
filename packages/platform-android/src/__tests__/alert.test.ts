@@ -201,36 +201,74 @@ test('wait with a spent budget still reports an alert that is already visible', 
   assert.equal(result.alert?.title, 'Automation confirmation');
 });
 
-test('a press cut off mid-flight discloses that it may or may not have landed', async () => {
-  // The one typed exit that must never collapse into 'no': the adb child is killed between
-  // the tap's dispatch and its rejection, so the device may already have received it. The
-  // press hangs until the action window's 2 s closes, then the child dies with the signal.
+test('a caller cancel during the press discloses that the tap may or may not have landed', async () => {
+  // The one dispatched-unknown exit: the budget never stops a press, so the only way a press
+  // dies mid-flight is the caller's own cancellation. The adb child is killed between the tap's
+  // dispatch and its rejection, so the device may already have received it — the cancellation
+  // carries that typed, never a clean 'no'.
   runAndroidAdb.mockClear();
+  const caller = new AbortController();
   const tapSignals: (AbortSignal | undefined)[] = [];
   runAndroidAdb.mockImplementationOnce(async (_device, args, options) => {
     if (args.includes('tap')) {
       tapSignals.push(options?.signal);
-      await new Promise<void>((_resolve, reject) => {
+      // The cancel arrives while the press is in flight: the leg may already have dispatched
+      // the tap by the time the caller speaks, which is the state `unknown` names. The fake
+      // reacts to its seam signal the way the adb executor does — a child killed on abort,
+      // and an abort that beat the call still dies the call.
+      caller.abort();
+      await new Promise<void>((resolve, reject) => {
+        if (options?.signal?.aborted) {
+          reject(new Error('adb killed'));
+          return;
+        }
         options?.signal?.addEventListener('abort', () => reject(new Error('adb killed')), {
           once: true,
         });
+        setTimeout(resolve, 2_000);
       });
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   });
 
   await assert.rejects(
-    handleAndroidAlert(device, 'dismiss', { captureNodes: dialogUntilPressed() }),
+    handleAndroidAlert(device, 'dismiss', {
+      signal: caller.signal,
+      captureNodes: dialogUntilPressed(),
+    }),
     (error: unknown) =>
-      error instanceof Error &&
-      error.message ===
-        'alert dismiss was cut off while pressing; the press may or may not have landed' &&
-      (error as { details?: { dispatched?: unknown; reason?: unknown } }).details?.dispatched ===
-        'unknown' &&
-      (error as { details?: { reason?: unknown } }).details?.reason === 'alert-window-expired',
+      isRequestCanceledError(error) &&
+      (error as { details?: { dispatched?: unknown } }).details?.dispatched === 'unknown',
   );
   assert.equal(tapSignals.length, 1);
   assert.equal(tapSignals[0]?.aborted, true);
+});
+
+test('a quiet screen with captures straddling the lookup answers alert-not-found', async () => {
+  // The maintainer's budget-rule pin: ~900 ms captures against the 2 s lookup, so the probe
+  // that starts at 1.2 s cannot answer before the deadline. The deadline ends the loop, it
+  // does not cancel the started capture, and a window that only ever answered quiet is absence
+  // — never the old timing-dependent `alert-window-expired` this timeline used to throw at
+  // the straddling probe.
+  runAndroidAdb.mockClear();
+  const quietWithSlowCaptures = async () => {
+    await new Promise<void>((resolve) => setTimeout(resolve, 900));
+    return [];
+  };
+
+  await assert.rejects(
+    underFakeTimers(
+      async () =>
+        await handleAndroidAlert(device, 'dismiss', { captureNodes: quietWithSlowCaptures }),
+    ),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message === 'alert not found' &&
+      (error as { details?: { reason?: unknown; dispatched?: unknown } }).details?.reason ===
+        'alert-not-found' &&
+      (error as { details?: { dispatched?: unknown } }).details?.dispatched === 'no',
+  );
+  assert.equal(runAndroidAdb.mock.calls.length, 0);
 });
 
 test('the read-first capture rides the caller cancellation and dies with it', async () => {
@@ -263,12 +301,13 @@ test('the read-first capture rides the caller cancellation and dies with it', as
   assert.equal(runAndroidAdb.mock.calls.length, 0);
 });
 
-test('a slow first read is not cut off by its own action budget', async () => {
+test('a slow first read is never cut off by its own action budget', async () => {
   // The Android smoke timeline: the session's first capture pays the snapshot-helper cold
-  // start (install + session bring-up), landing well past the 2s action budget. That read is
-  // the leg's read-first observation — consumed whatever it costs — and the press rides the
-  // window it arms behind it. Without the read-first exemption this is the executed CI
-  // failure: `alert-window-expired, dispatched: no` with the dialog plainly on screen.
+  // start (install + session bring-up), landing well past the 2s action budget. Under the
+  // budget rule the deadline only ends the polling loop — every probe that started inside the
+  // window finishes and its answer counts — so this read resolves the alert and the press
+  // rides only the caller's cancellation. Before the rule, this was the executed CI failure:
+  // `alert-window-expired, dispatched: no` with the dialog plainly on screen.
   runAndroidAdb.mockClear();
   let reads = 0;
   const slowWarmRead = async () => {

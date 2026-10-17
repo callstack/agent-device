@@ -109,6 +109,132 @@ test('the Android 11+ permission sheet resolves its two grants by the preference
   assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, 'Deny');
 });
 
+test('a localized Android 11+ sheet resolves its grants by the id-derived rank', () => {
+  // The maintainer's localized-sheet regression: on a Spanish device neither label is in the
+  // English vocabulary, so the label table alone refuses — where main pressed the first
+  // permission_allow id. The ids carry the rank: the foreground-only grant outranks the
+  // one-time grant whatever the display strings say, and the deny id still answers `dismiss`.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(
+      1,
+      '¿Permitir que Probe acceda a la ubicación?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(
+      2,
+      'Mientras la app está en uso',
+      'permission_allow_foreground_only_button',
+      { x: 32, y: 1420 },
+      true,
+    ),
+    button(3, 'Solo esta vez', 'permission_allow_one_time_button', { x: 32, y: 1490 }, true),
+    button(4, 'No permitir', 'permission_deny_button', { x: 32, y: 1560 }, true),
+  ]);
+
+  assert.equal(
+    chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept')?.label,
+    'Mientras la app está en uso',
+  );
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, 'No permitir');
+});
+
+test('the Android 10 sheet grants foreground-only by its id', () => {
+  // Android 10's copy "Allow only while using the app" is outside the vocabulary table; its
+  // resource id is the same foreground-only grant id the id-classifier already reads, so the
+  // backend rank resolves the pair the labels cannot order.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.android.permissioncontroller',
+    }),
+    text(
+      1,
+      'Allow Probe to access this device\u2019s location?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(
+      2,
+      'Allow only while using the app',
+      'permission_allow_foreground_only_button',
+      { x: 32, y: 1420 },
+      true,
+    ),
+    button(3, 'Allow', 'permission_allow_one_time_button', { x: 32, y: 1490 }, true),
+    button(4, "Don't allow", 'permission_deny_button', { x: 32, y: 1560 }, true),
+  ]);
+
+  assert.equal(
+    chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept')?.label,
+    'Allow only while using the app',
+  );
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, "Don't allow");
+});
+
+test('a grant id outside the declared ranks keeps the refusal against a known label', () => {
+  // The closest negative to the id-rank positives: a vendor fork's own allow id is a real
+  // grant (the id classifier reads `permission_allow*`), yet no declared rank reaches it.
+  // Letting the one English label win would press an arbitrary grant of an unordered pair —
+  // and the neutral-button fallback must not aim the tap at it either — so both acting
+  // choices refuse while the deny id still answers `dismiss`.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(
+      1,
+      'Allow Probe to access contacts?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(2, 'Allow', 'permission_allow_button', { x: 32, y: 1420 }, true),
+    button(
+      3,
+      'Always allow and sync',
+      'com.vendor.permission:id/permission_allow_always_and_sync_button',
+      { x: 32, y: 1490 },
+      true,
+    ),
+    button(4, 'Deny', 'permission_deny_button', { x: 32, y: 1560 }, true),
+  ]);
+
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, 'Deny');
+});
+
+test('two points carrying one grant id refuse instead of resolving by tree order', () => {
+  // Same physical rank twice — the id-rank twin of the same-label tie: the capture names the
+  // grant at two centers and no single one of them.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(
+      1,
+      'Allow Probe to access contacts?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(
+      2,
+      'While using the app',
+      'permission_allow_foreground_only_button',
+      { x: 32, y: 1420 },
+      true,
+    ),
+    button(
+      3,
+      'While using the app',
+      'permission_allow_foreground_only_button',
+      { x: 32, y: 1640 },
+      true,
+    ),
+    button(4, 'Deny', 'permission_deny_button', { x: 32, y: 1560 }, true),
+  ]);
+
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, 'Deny');
+});
+
 test('nested nodes over one button center deduplicate to one candidate', () => {
   // uiautomator commonly nests the clickable wrapper and the label node at the same center.
   // They are one physical button, and collapsing them must not read as ambiguity.
