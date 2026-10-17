@@ -36,7 +36,10 @@ export async function sendToDaemon(
   return await sendToDaemonOnHost(req, options, captureHostEnvironment(process));
 }
 
-/** A transport whose every read of the environment and working directory is `host`'s. */
+/**
+ * A transport whose daemon resolution, spawn, policy check and request preparation read `host`.
+ * Remote artifact upload still reads the process (`packages/remote`, tracked by #3751).
+ */
 export function createDaemonTransport(host: HostEnvironment) {
   return async (
     req: Omit<DaemonRequest, 'token'>,

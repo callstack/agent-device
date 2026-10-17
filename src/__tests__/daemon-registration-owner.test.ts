@@ -20,7 +20,7 @@ import {
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readRegisteredDaemonOwnership } from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { spawnLegacyDaemonFixture } from './daemon-registration-owner.fixtures.ts';
 import {
   registeredDaemonFixtureArgs,
@@ -835,7 +835,7 @@ test('cutover refuses an already-running legacy daemon before signaling or chang
             flags: { stateDir: paths.baseDir },
           },
           undefined,
-          { env: process.env, cwd: process.cwd() },
+          createTestHostEnvironment(),
         ),
       ),
       (error: unknown) => {

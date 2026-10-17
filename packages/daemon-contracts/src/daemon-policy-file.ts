@@ -73,10 +73,10 @@ export function resolveDaemonPolicyCommandName(command: string): string | undefi
 
 const POLICY_KEYS = new Set(['version', 'devices', 'commands', 'capabilities', 'leases']);
 
-export function loadDaemonPolicy(env: EnvMap): DaemonPolicy | undefined {
+export function loadDaemonPolicy(env: EnvMap, cwd: string): DaemonPolicy | undefined {
   const configured = env[DAEMON_POLICY_ENV]?.trim();
   if (!configured) return undefined;
-  const sourcePath = path.resolve(configured);
+  const sourcePath = path.resolve(cwd, configured);
   let raw: unknown;
   try {
     raw = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));

@@ -417,7 +417,7 @@ async function startDaemonRuntimeOnHost(
   // runtime, so no capability is ever built under a policy that failed validation.
   let daemonPolicy: DaemonPolicy | undefined;
   try {
-    daemonPolicy = loadDaemonPolicy(env);
+    daemonPolicy = loadDaemonPolicy(env, host.cwd);
   } catch (error) {
     stderr.write(`Daemon error: ${asAppError(error).message}\n`);
     exit(1);

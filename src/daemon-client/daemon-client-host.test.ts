@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 const ensured = vi.hoisted(() => ({ settings: undefined as unknown }));
 
@@ -11,9 +11,14 @@ vi.mock('./daemon-client-lifecycle.ts', async (importOriginal) => ({
   },
 }));
 
+import { runCli } from '../cli.ts';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
 import { createDaemonTransport } from './daemon-client.ts';
 import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const request = { session: 'default', command: 'devices', positionals: [] };
 
@@ -41,4 +46,28 @@ test('a client reports and uses the same state dir when its host and the process
   await expect(client.devices.list()).rejects.toThrow();
 
   expect((ensured.settings as DaemonClientSettings).paths.baseDir).toBe('/client/state');
+});
+
+test('a CLI run builds its transport from the host it was given', async () => {
+  const host = { env: { AGENT_DEVICE_STATE_DIR: '/cli/state' }, cwd: '/cli/workspace' };
+  vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+  const transportForHost = vi.fn(() => async () => ({ ok: true as const, data: { devices: [] } }));
+
+  await runCli(['devices', '--json'], { sendToDaemon: vi.fn(), transportForHost }, host);
+
+  expect(transportForHost).toHaveBeenCalledWith(host);
+});
+
+test('a CLI run with the default transport resolves its daemon from the given host', async () => {
+  vi.stubEnv('AGENT_DEVICE_STATE_DIR', '/process/state');
+  const host = { env: { AGENT_DEVICE_STATE_DIR: '/cli/state' }, cwd: '/cli/workspace' };
+  vi.spyOn(process, 'exit').mockImplementation((() => {
+    throw new Error('exit');
+  }) as never);
+  vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+  vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+
+  await runCli(['devices', '--json'], undefined, host).catch(() => undefined);
+
+  expect((ensured.settings as DaemonClientSettings).paths.baseDir).toBe('/cli/state');
 });
