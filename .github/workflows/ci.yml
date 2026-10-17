@@ -148,9 +148,8 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      # The fallow audit runs in the background beside the guards below. A cold fallow run costs
-      # several minutes on a hosted runner: since fallow 3.20 every import re-walks the root
-      # tsconfig's project references.
+      # Run the Fallow audit beside the guards below. Wait before production-exports uses
+      # the same cache directory.
       - name: Run Fallow audit
         id: fallow-audit
         background: true
