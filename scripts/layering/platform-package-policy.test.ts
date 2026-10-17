@@ -52,6 +52,7 @@ function declarations(): PlatformPackageDeclaration[] {
               '@agent-device/platform-android',
               '@agent-device/platform-android/adb-host',
               '@agent-device/platform-android/device-boot',
+              '@agent-device/platform-android/helper-runtime-state',
               '@agent-device/platform-android/mechanics',
               '@agent-device/platform-android/snapshot-capture-fixtures',
               '@agent-device/platform-android/ui-hierarchy-fixtures',
