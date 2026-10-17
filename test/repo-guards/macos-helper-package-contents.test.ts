@@ -35,8 +35,9 @@ function packedPaths(): string[] {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  const pack = JSON.parse(stdout);
-  return (Array.isArray(pack) ? pack[0] : pack).files.map((entry) => entry.path);
+  const parsed = JSON.parse(stdout);
+  const pack: { files?: { path?: unknown }[] } = Array.isArray(parsed) ? parsed[0] : parsed;
+  return pack.files?.map((entry) => String(entry.path)) ?? [];
 }
 
 test('the shipped macOS helper manifest declares the helper and its test targets', () => {
