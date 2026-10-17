@@ -51,8 +51,10 @@ export type ScrollGestureOptions = {
   referenceHeight: number;
   /**
    * The scroll container the swipe is meant for, in the reference frame's own zero-origin space.
-   * Both endpoints stay inside its intersection with the padded frame (#2714): a span that already
-   * fits is unchanged, one that leaves it is moved in, and one longer than it is shortened.
+   * Both endpoints stay strictly inside its intersection with the padded frame (#2714): a span
+   * that already fits is unchanged, one that leaves it is moved in, and one longer than it is
+   * shortened. A container the padding leaves nothing of along the scrolled axis gets the padded
+   * swipe unchanged, since the safe bounds outrank the container.
    */
   container?: Rect;
 };
@@ -106,93 +108,122 @@ export const DEFAULT_SCROLL_AMOUNT = 0.6;
 const DEFAULT_EDGE_PADDING_FRACTION = 0.1;
 // Edge presets stay close to the system gesture boundary without emitting edge coordinates.
 const SWIPE_PRESET_EDGE_MARGIN_PX = 8;
+// A swipe kept inside a container stays this far off its edges, so the drag never starts on the
+// container's boundary row.
+const SCROLL_CONTAINER_EDGE_INSET = 8;
 
 export function buildScrollGesturePlan(options: ScrollGestureOptions): ScrollGesturePlan {
   const direction = options.direction;
-  const axisLength =
-    direction === 'up' || direction === 'down' ? options.referenceHeight : options.referenceWidth;
+  const vertical = direction === 'up' || direction === 'down';
+  const axisLength = vertical ? options.referenceHeight : options.referenceWidth;
+  const crossLength = vertical ? options.referenceWidth : options.referenceHeight;
   const requestedAmount = resolveRequestedAmount(options.amount);
   const requestedPixels =
     options.pixels !== undefined
       ? normalizeRequestedPixels(options.pixels)
       : Math.round(axisLength * requestedAmount);
-  const edgePadding = Math.max(1, Math.round(axisLength * DEFAULT_EDGE_PADDING_FRACTION));
+  const edgePadding = scrollEdgePadding(axisLength);
   const maxTravelPixels = Math.max(1, axisLength - edgePadding * 2);
   const travelPixels = Math.max(1, Math.min(requestedPixels, maxTravelPixels));
   const halfTravel = Math.round(travelPixels / 2);
-  const centerX = Math.round(options.referenceWidth / 2);
-  const centerY = Math.round(options.referenceHeight / 2);
-  const buildPlan = (x1: number, y1: number, x2: number, y2: number): ScrollGesturePlan => ({
+  const axisCenter = Math.round(axisLength / 2);
+  const unclamped = {
+    axisStart: axisCenter - halfTravel,
+    axisEnd: axisCenter + halfTravel,
+    cross: Math.round(crossLength / 2),
+  };
+  const crossPadding = scrollEdgePadding(crossLength);
+  const lane = options.container
+    ? keepSwipeInContainer(unclamped, options.container, vertical, {
+        axis: { min: edgePadding, max: axisLength - edgePadding },
+        cross: { min: crossPadding, max: crossLength - crossPadding },
+        crossFrame: { min: 0, max: crossLength },
+      })
+    : unclamped;
+  const laneLength = lane.axisEnd - lane.axisStart;
+  // Centring rounds an odd span up by one, so only a lane shorter than the travel itself is short.
+  const shortened = laneLength < travelPixels;
+  return {
     direction,
-    x1,
-    y1,
-    x2,
-    y2,
+    ...laneEndpoints(direction, lane),
     referenceWidth: options.referenceWidth,
     referenceHeight: options.referenceHeight,
     amount: options.amount,
-    pixels: travelPixels,
-  });
-
-  const vertical = direction === 'up' || direction === 'down';
-  const unclamped = {
-    axisStart: (vertical ? centerY : centerX) - halfTravel,
-    axisEnd: (vertical ? centerY : centerX) + halfTravel,
-    cross: vertical ? centerX : centerY,
+    pixels: shortened ? laneLength : travelPixels,
+    ...(shortened ? { requestedPixels: travelPixels } : {}),
   };
-  const lane = options.container
-    ? keepSwipeInContainer(unclamped, options.container, vertical, {
-        min: edgePadding,
-        max: axisLength - edgePadding,
-      })
-    : unclamped;
-  const shortened = lane.axisEnd - lane.axisStart < unclamped.axisEnd - unclamped.axisStart;
-  const plan = buildPlan(
-    vertical ? lane.cross : lane.axisStart,
-    vertical ? lane.axisStart : lane.cross,
-    vertical ? lane.cross : lane.axisEnd,
-    vertical ? lane.axisEnd : lane.cross,
-  );
-  const placed = shortened
-    ? { ...plan, pixels: lane.axisEnd - lane.axisStart, requestedPixels: travelPixels }
-    : plan;
-  // `up`/`left` drag from the low end toward the high end; `down`/`right` drag the other way.
-  return direction === 'up' || direction === 'left'
-    ? placed
-    : { ...placed, x1: placed.x2, y1: placed.y2, x2: placed.x1, y2: placed.y1 };
+}
+
+/** `up`/`left` drag from the lane's low end toward its high end; `down`/`right` drag the other way. */
+function laneEndpoints(
+  direction: ScrollDirection,
+  lane: SwipeLane,
+): Pick<ScrollGesturePlan, 'x1' | 'y1' | 'x2' | 'y2'> {
+  const vertical = direction === 'up' || direction === 'down';
+  const low = vertical
+    ? { x: lane.cross, y: lane.axisStart }
+    : { x: lane.axisStart, y: lane.cross };
+  const high = vertical ? { x: lane.cross, y: lane.axisEnd } : { x: lane.axisEnd, y: lane.cross };
+  const [start, end] = direction === 'up' || direction === 'left' ? [low, high] : [high, low];
+  return { x1: start.x, y1: start.y, x2: end.x, y2: end.y };
 }
 
 type SwipeLane = { axisStart: number; axisEnd: number; cross: number };
 
+type CoordinateRange = { min: number; max: number };
+
+function scrollEdgePadding(length: number): number {
+  return Math.max(1, Math.round(length * DEFAULT_EDGE_PADDING_FRACTION));
+}
+
 /**
- * Moves a centred swipe lane inside the container's intersection with the padded axis, shortening
- * it only when the intersection is shorter than the lane. A container wholly inside the padding
- * leaves nothing to swipe in, so the lane stays as the padded frame planned it.
+ * Moves a centred swipe lane inside the container's intersection with the padded frame,
+ * shortening it only when that intersection is shorter than the lane. The container is half-open,
+ * as Android bounds and View hit-testing are, and inset from its edges, so every endpoint lands on
+ * a row the container owns. A container the padding leaves nothing of on the scrolled axis keeps
+ * the lane the padded frame planned: the safe bounds outrank the container, and the movement read
+ * reports the miss as `container-outside-swipe` when nothing else moved.
  */
 function keepSwipeInContainer(
   lane: SwipeLane,
   container: Rect,
   vertical: boolean,
-  padded: { min: number; max: number },
+  padded: { axis: CoordinateRange; cross: CoordinateRange; crossFrame: CoordinateRange },
 ): SwipeLane {
-  const containerMin = vertical ? container.y : container.x;
-  const containerSize = vertical ? container.height : container.width;
-  const bandMin = Math.max(padded.min, Math.round(containerMin));
-  const bandMax = Math.min(padded.max, Math.round(containerMin + containerSize));
-  if (bandMax <= bandMin) return lane;
-
-  const crossMin = vertical ? container.x : container.y;
+  const band = insetContainerRange(
+    vertical ? container.y : container.x,
+    vertical ? container.height : container.width,
+    padded.axis,
+  );
+  const crossStart = vertical ? container.x : container.y;
   const crossSize = vertical ? container.width : container.height;
-  const cross =
-    lane.cross >= crossMin && lane.cross <= crossMin + crossSize
-      ? lane.cross
-      : Math.round(crossMin + crossSize / 2);
+  // The padding guards the scrolled axis against system bars. Across it, a rail or chip row that
+  // sits wholly in the padding is still the surface asked for, so the swipe runs along it there.
+  const crossBand =
+    insetContainerRange(crossStart, crossSize, padded.cross) ??
+    insetContainerRange(crossStart, crossSize, padded.crossFrame);
+  if (!band || !crossBand) return lane;
 
+  const cross =
+    lane.cross >= crossBand.min && lane.cross <= crossBand.max
+      ? lane.cross
+      : Math.round((crossBand.min + crossBand.max) / 2);
   const length = lane.axisEnd - lane.axisStart;
-  if (length >= bandMax - bandMin) return { axisStart: bandMin, axisEnd: bandMax, cross };
+  if (length >= band.max - band.min) return { axisStart: band.min, axisEnd: band.max, cross };
   const shift =
-    lane.axisStart < bandMin ? bandMin - lane.axisStart : Math.min(0, bandMax - lane.axisEnd);
+    lane.axisStart < band.min ? band.min - lane.axisStart : Math.min(0, band.max - lane.axisEnd);
   return { axisStart: lane.axisStart + shift, axisEnd: lane.axisEnd + shift, cross };
+}
+
+/** The coordinates of `[start, start + size)` an inset swipe may use inside `padded`, if any. */
+function insetContainerRange(
+  start: number,
+  size: number,
+  padded: CoordinateRange,
+): CoordinateRange | undefined {
+  const min = Math.max(padded.min, Math.ceil(start) + SCROLL_CONTAINER_EDGE_INSET);
+  const max = Math.min(padded.max, Math.floor(start + size) - 1 - SCROLL_CONTAINER_EDGE_INSET);
+  return max > min ? { min, max } : undefined;
 }
 
 /**
