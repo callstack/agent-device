@@ -8,7 +8,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import { SessionStore } from '../../../../core/session-store.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
 
@@ -48,6 +48,7 @@ test('an app-only kill close with no stored session carries mode kill to the pla
   const seenInputs: CloseApplicationInput[] = [];
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

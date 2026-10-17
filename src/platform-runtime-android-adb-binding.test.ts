@@ -51,7 +51,7 @@ const device: DeviceInfo = {
 };
 
 test('the composed gateway lists Android apps from inside the platform package', async () => {
-  const gateway = createPlatformRuntimeGateway(sessionArtifacts);
+  const gateway = createPlatformRuntimeGateway({ env: process.env, ...sessionArtifacts });
   const binding = await gateway.bind({ device, intent: { kind: 'ordinary' }, scope });
 
   await expect(binding.operations.listApps?.({ device, filter: 'all' })).resolves.toEqual([
@@ -76,7 +76,7 @@ test('the composed gateway lists Android apps from inside the platform package',
 });
 
 test('the composed gateway reads Android app state from inside the platform package', async () => {
-  const gateway = createPlatformRuntimeGateway(sessionArtifacts);
+  const gateway = createPlatformRuntimeGateway({ env: process.env, ...sessionArtifacts });
   const binding = await gateway.bind({ device, intent: { kind: 'ordinary' }, scope });
 
   await expect(binding.operations.appState?.()).resolves.toEqual({

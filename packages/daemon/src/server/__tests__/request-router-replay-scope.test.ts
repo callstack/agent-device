@@ -29,7 +29,11 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
   };
 });
 
-import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  IOS_SIMULATOR,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
@@ -65,6 +69,7 @@ test('replay runs active-session actions inside the parent request provider scop
   const providerScopes = requestPlatformProvidersFake();
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -106,6 +111,7 @@ test('replay routes session-changing actions through the full request path', asy
   const providerScopes = requestPlatformProvidersFake();
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -143,6 +149,7 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
   const sessionStore = makeSessionStore('agent-device-replay-open-scope-');
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -206,6 +213,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
   });
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

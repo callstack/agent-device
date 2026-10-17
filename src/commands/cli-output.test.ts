@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { describe, expect, test } from 'vitest';
 import {
   listCommandFamilyCliOutputFormatters,
@@ -5,6 +6,8 @@ import {
 } from './family/registry.ts';
 import { formatCliOutput, isParseableOutputCommand } from './cli-output.ts';
 import type { CommandName } from './command-metadata.ts';
+
+bindTestCommandHost();
 
 /**
  * #2682: one dispatcher, one warning rule. Every command that renders text owes the agent the

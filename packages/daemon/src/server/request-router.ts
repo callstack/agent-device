@@ -6,6 +6,7 @@ import {
 import { withResolveTargetDeviceCacheScope } from '@agent-device/device-selection/dispatch-resolve';
 import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { ComposedDeviceInventoryGateways } from '@agent-device/contracts/platform-module';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
@@ -15,7 +16,7 @@ import {
   retriableForErrorCode,
   type DaemonError,
 } from '@agent-device/kernel/errors';
-import { withRequestCommandEnv } from '@agent-device/host-kit/command';
+import { withCommandHost } from '@agent-device/host-kit/command';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
   type ResponseCost,
@@ -106,6 +107,8 @@ import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-
 // ---------------------------------------------------------------------------
 
 export type RequestRouterDeps = {
+  /** The environment and working directory every request of this daemon runs with. */
+  host: HostEnvironment;
   logPath: string;
   token: string;
   sessionStore: SessionStore;
@@ -150,6 +153,7 @@ export type RequestRouterDeps = {
 
 export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   const {
+    host,
     logPath,
     token,
     requestPlatformProviders = EMPTY_REQUEST_PLATFORM_PROVIDERS,
@@ -196,8 +200,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         logPath,
       },
       async () => {
-        const response = await withRequestCommandEnv(
-          requestCommandEnv(req),
+        const response = await withCommandHost(
+          { host, requestEnv: requestCommandEnv(req) },
           async () => await runRequestWithinScope(req),
         );
         if (!response.ok) {
@@ -248,6 +252,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         async () =>
           await withResolveTargetDeviceCacheScope(async () => {
             scope = await createRequestExecutionScope({
+              host,
               req,
               sessionStore,
               leaseRegistry,
@@ -345,6 +350,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     const { dispatchLedger } = lockedScope;
     const requestScope = createPlatformRequestScope(lockedScope.req);
     const handlerResponse = await runRequestHandlerChain({
+      host,
       req: lockedScope.req,
       sessionName: lockedScope.sessionName,
       logPath: lockedScope.logPath,
@@ -416,6 +422,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       try {
         const scopedReq = bindReplayDeviceExecutionLock(req, parentScope);
         childScope = await createRequestExecutionScope({
+          host,
           req: scopedReq,
           sessionStore,
           leaseRegistry,

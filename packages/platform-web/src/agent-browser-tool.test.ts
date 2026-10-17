@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,6 +17,8 @@ import {
 } from './__tests__/test-utils.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
+
+bindTestCommandHost();
 
 type SpawnedCommand = { cmd: string; args: readonly string[] };
 

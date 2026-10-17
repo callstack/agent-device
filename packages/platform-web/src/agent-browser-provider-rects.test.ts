@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test, vi } from 'vitest';
@@ -21,6 +22,8 @@ import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import type { WebSnapshotResult } from './provider.ts';
 import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
+
+bindTestCommandHost();
 
 /**
  * One backend call, with the text the provider wrote to its stdin — which is how `batch` receives

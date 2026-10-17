@@ -14,8 +14,10 @@ export async function requestApprovedUrl(params: {
   family: 4 | 6;
   headers: Record<string, string>;
   signal: AbortSignal;
+  /** The host environment whose proxy variables apply to the request. */
+  environment: NodeJS.ProcessEnv;
 }): Promise<InstallSourceNetworkResponse> {
-  const proxy = resolveProxyForUrl(params.url);
+  const proxy = resolveProxyForUrl(params.url, params.environment);
   const dispatcher = proxy
     ? proxyDispatcher(proxy, params.url)
     : directDispatcher(params.approvedAddress, params.family);
@@ -43,10 +45,7 @@ export async function requestApprovedUrl(params: {
   }
 }
 
-export function resolveProxyForUrl(
-  url: URL,
-  environment: NodeJS.ProcessEnv = process.env,
-): string | undefined {
+export function resolveProxyForUrl(url: URL, environment: NodeJS.ProcessEnv): string | undefined {
   const noProxy = environment.no_proxy ?? environment.NO_PROXY;
   if (matchesNoProxy(url, noProxy)) return undefined;
   const httpProxy = environment.http_proxy ?? environment.HTTP_PROXY;

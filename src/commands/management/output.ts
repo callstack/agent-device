@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type {
   AgentDeviceCapabilitiesResult,
   AgentDeviceDevice,
@@ -188,6 +189,11 @@ export async function doctorCliOutput(
 ): Promise<CliOutput> {
   const { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } =
     await import('@agent-device/host-kit/doctor-lines');
+  const { shouldColorStatusMarkers } = await import('@agent-device/host-kit/status-markers');
+  const useColor = shouldColorStatusMarkers(
+    commandHostEnvironment().env,
+    Boolean(process.stderr.isTTY),
+  );
   const data = result as Record<string, unknown>;
   const status = typeof data.status === 'string' ? data.status : 'unknown';
   const lines = [`Doctor: ${status}`];
@@ -203,7 +209,7 @@ export async function doctorCliOutput(
     lines.push(summary);
   } else {
     for (const check of checks) {
-      lines.push(formatDoctorCheckSummaryLine(check));
+      lines.push(formatDoctorCheckSummaryLine(check, { useColor }));
       lines.push(...formatDoctorCheckDetailLines(check));
     }
   }

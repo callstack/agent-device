@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import net from 'node:net';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   buildDaemonQuiesceRequest,
   resolveDaemonPaths,
@@ -105,12 +105,14 @@ async function bootDaemon(options: { serverMode?: 'socket' | 'dual' } = {}): Pro
   });
   const runtime = await startDaemonRuntime({
     composeDeps: daemonRuntimeDepsFixture(),
-    env: {
-      ...process.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_SERVER_MODE: options.serverMode ?? 'socket',
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-    },
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_SERVER_MODE: options.serverMode ?? 'socket',
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+      },
+    }),
     exit: resolveExit,
     registerProcessHandlers: false,
     stderr: { write: () => {} },
@@ -333,12 +335,14 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
   });
   const starting = startDaemonRuntime({
     composeDeps: daemonRuntimeDepsFixture(),
-    env: {
-      ...process.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_SERVER_MODE: 'socket',
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-    },
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'socket',
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+      },
+    }),
     exit: resolveExit,
     registerProcessHandlers: false,
     stderr: { write: () => {} },

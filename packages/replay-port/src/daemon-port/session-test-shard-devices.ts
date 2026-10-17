@@ -92,7 +92,10 @@ async function resolveReplayTestShardDevices(
 function buildReplayTestShardInventoryRequest(
   flags: CommandFlags | undefined,
 ): DeviceInventoryRequest {
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(flags?.androidDeviceAllowlist);
+  const androidSerialAllowlist = resolveAndroidSerialAllowlist(
+    flags?.androidDeviceAllowlist,
+    process.env,
+  );
   return {
     platform: flags?.platform,
     target: flags?.target,
@@ -100,6 +103,7 @@ function buildReplayTestShardInventoryRequest(
       requestedSetPath: flags?.iosSimulatorDeviceSet,
       platform: flags?.platform,
       target: flags?.target,
+      env: process.env,
     }),
     androidSerialAllowlist: androidSerialAllowlist
       ? Array.from(androidSerialAllowlist).sort()

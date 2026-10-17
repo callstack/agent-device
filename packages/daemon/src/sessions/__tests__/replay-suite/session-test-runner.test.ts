@@ -13,8 +13,14 @@ import {
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+
+bindTestCommandHost();
 
 // Opening a Simulator schedules a best-effort runner prewarm that outlives the request; a real one
 // would spawn xcodebuild after this file finished and land in whichever file the worker runs next.
@@ -68,6 +74,7 @@ test('session_list includes device_udid and ios_simulator_device_set for iOS ses
   );
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: 'default', command: 'session_list', positionals: [] },
@@ -105,6 +112,7 @@ test('test filters replay scripts by context platform and skips untyped files', 
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -177,6 +185,7 @@ test('test binds each replay script to its declared platform metadata', async ()
   let response;
   try {
     response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -217,6 +226,7 @@ test('test cleans up suite-owned sessions after each executed script', async () 
   fs.writeFileSync(path.join(root, '01-android.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -258,6 +268,7 @@ test('test retries failed scripts with fresh suite-owned sessions', async () => 
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -313,6 +324,7 @@ test('test applies per-script timeout and writes attempt artifacts', async () =>
 
   let invocationCount = 0;
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -382,6 +394,7 @@ test('open does not retain a session when the request was canceled before comple
   markRequestCanceled(requestId);
   try {
     const response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -415,6 +428,7 @@ test('test returns invalid args when no replay scripts match the platform filter
   fs.writeFileSync(path.join(root, '01-ios.ad'), 'context platform=ios\nopen "Settings"\n');
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -446,6 +460,7 @@ test('test rejects duplicate replay test metadata in the context header', async 
   );
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

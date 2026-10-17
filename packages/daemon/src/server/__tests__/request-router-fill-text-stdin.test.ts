@@ -20,6 +20,7 @@ import {
   createUnavailableRuntimeFactsForTest,
   mkdtempForTestSync,
   WEB_DESKTOP_DEVICE,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
@@ -79,6 +80,7 @@ function sendToWebSession(
   };
   const dir = mkdtempForTestSync('agent-device-router-fill-text-stdin-runtime-');
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: createTouchCommandSurface(),
     logPath: path.join(dir, 'daemon.log'),
     token: 'test-token',

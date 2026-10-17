@@ -11,7 +11,10 @@ import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-r
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
+import {
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
@@ -42,6 +45,7 @@ test('fresh default-device recording starts serialize before durable admission',
   const runtime = makeRecordingGateway(firstStartBlocked);
   const sessionStore = makeSessionStore('request-router-record-runtime-lock-');
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 'token',

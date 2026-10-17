@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { startDaemonRuntime } from '@agent-device/daemon';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
@@ -95,15 +95,17 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
   try {
     runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_test/api',
-        LIM_ANDROID_INSTANCE_TOKEN: 'lim-test-token',
-        LIM_ANDROID_INSTANCE_ADB_URL: 'https://region.limrun.example/v1/android_test/adb',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_test/api',
+          LIM_ANDROID_INSTANCE_TOKEN: 'lim-test-token',
+          LIM_ANDROID_INSTANCE_ADB_URL: 'https://region.limrun.example/v1/android_test/adb',
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },

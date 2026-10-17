@@ -36,6 +36,6 @@ export async function connectToDaemon(settings: DaemonClientSettings): Promise<E
   }
   const attached = await attachLocalDaemon(settings);
   // Checked on this branch too: attaching must not hand a policy-bound caller a daemon without it.
-  await assertDaemonPolicyMatches(attached.info, settings.paths.baseDir);
+  await assertDaemonPolicyMatches(attached.info, settings.paths.baseDir, settings.host);
   return attached;
 }

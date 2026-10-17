@@ -43,7 +43,8 @@ export function armAuthoringOnOpen(
   requested: { path?: string; force?: boolean },
 ): void {
   session.scriptPublication = armAuthoring({
-    path: requested.path !== undefined ? expandSessionPath(requested.path) : undefined,
+    path:
+      requested.path !== undefined ? expandSessionPath(requested.path, process.cwd()) : undefined,
     force: requested.force === true,
   });
 }
@@ -91,7 +92,10 @@ export function applyRecordedSaveScriptFlags(session: SessionState, flags: Comma
   if (!flags.saveScript) return;
   if (isAuthoringAborted(publicationState(session))) return;
   const requested = {
-    path: typeof flags.saveScript === 'string' ? expandSessionPath(flags.saveScript) : undefined,
+    path:
+      typeof flags.saveScript === 'string'
+        ? expandSessionPath(flags.saveScript, process.cwd())
+        : undefined,
     force: flags.force === true,
   };
   const state = publicationState(session);
@@ -126,7 +130,10 @@ export function retargetActivePublication(
   session.scriptPublication = {
     ...state,
     target: resolveScriptTarget(state.target, {
-      path: params.explicitPath !== undefined ? expandSessionPath(params.explicitPath) : undefined,
+      path:
+        params.explicitPath !== undefined
+          ? expandSessionPath(params.explicitPath, process.cwd())
+          : undefined,
       force: params.liveForce === true,
     }),
   };

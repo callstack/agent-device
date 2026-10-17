@@ -1,4 +1,5 @@
 import { test } from 'vitest';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { copyCoreDeviceRunnerFile } from '../physical-device-files.ts';
@@ -11,6 +12,8 @@ import { withFakeAppleTool, type FakeAppleToolScript } from '../../__tests__/fak
  * candidate bundle ids in order and reports only what the last one said. The shapes below pin the
  * retry boundary (one success stops the loop) and each source of the reported message.
  */
+bindTestCommandHost();
+
 test('copyCoreDeviceRunnerFile copies with the app data container domain', async () => {
   const calls = await runCopy(() => '');
   assert.equal(calls.length, 1);

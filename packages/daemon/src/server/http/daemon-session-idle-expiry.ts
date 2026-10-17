@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   clearDeviceClaim,
@@ -75,6 +76,7 @@ export type SessionIdleExpiryController = Readonly<{
  * in any other order would deadlock against a request's pair.
  */
 export function createSessionIdleExpiry(params: {
+  env: HostEnvironment['env'];
   sessionStore: SessionStore;
   idleExpiryMs: number;
   executionLocks: Map<string, Promise<unknown>>;
@@ -215,6 +217,7 @@ export function createSessionIdleExpiry(params: {
 }
 
 type IdleExpirySweepParams = {
+  env: HostEnvironment['env'];
   sessionStore: SessionStore;
   idleExpiryMs: number;
   executionLocks: Map<string, Promise<unknown>>;
@@ -360,6 +363,7 @@ async function settleIdleSessionUnderLock(
         const atMs = params.now();
         if (!isSessionIdleExpired(settled, params.idleExpiryMs, atMs)) return NOTHING_TO_RETRY;
         const outcome = await settleExpiredSession({
+          env: params.env,
           ref: params.sessionStore.refresh(params.ref),
           idleExpiryMs: params.idleExpiryMs,
           expiredAtMs: atMs,
@@ -452,6 +456,7 @@ function rememberRetry(
  * successor owns the device now, and never blocks the expiry.
  */
 async function settleExpiredSession(params: {
+  env: HostEnvironment['env'];
   ref: SessionRef;
   idleExpiryMs: number;
   expiredAtMs: number;
@@ -463,7 +468,7 @@ async function settleExpiredSession(params: {
   const deviceKey = session.deviceClaim?.deviceKey;
   const identity = { session: sessionName, idleExpiryMs, ...(deviceKey ? { deviceKey } : {}) };
   if (!(await releaseExpiredSessionResources(params, identity))) return undefined;
-  const claim = await clearExpiredClaim(sessionName, session.deviceClaim);
+  const claim = await clearExpiredClaim(sessionName, session.deviceClaim, params.env);
   if (claim === CLAIM_CLEAR_FAILED || !CLAIM_GONE[claim]) {
     emitDiagnostic({
       level: 'warn',
@@ -543,10 +548,11 @@ async function releaseExpiredSessionResources(
 async function clearExpiredClaim(
   sessionName: string,
   ownership: SessionState['deviceClaim'],
+  env: HostEnvironment['env'],
 ): Promise<DeviceClaimClearOutcome | typeof CLAIM_CLEAR_FAILED> {
   if (!ownership) return 'absent';
   try {
-    return await clearDeviceClaim(ownership);
+    return await clearDeviceClaim(ownership, env);
   } catch (error) {
     emitDiagnostic({
       level: 'warn',

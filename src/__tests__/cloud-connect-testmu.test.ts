@@ -12,10 +12,17 @@ import { verifyTestMuConnection } from '@agent-device/testmu/connection-verifica
 import testmu from '@agent-device/testmu';
 import { resolveProviderPlugins } from '@agent-device/plugins/registry';
 import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
-import { mkdtempForTestSync, pluginHome, selectPlugin } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  pluginHome,
+  selectPlugin,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
 import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
+
+bindTestCommandHost();
 
 vi.mock('@agent-device/testmu/connection-verification', () => ({
   verifyTestMuConnection: vi.fn(),

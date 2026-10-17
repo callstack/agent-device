@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import {
+  captureHostEnvironment,
   expandProcessTree,
   isProcessAlive,
   isProcessGroupAlive,
@@ -178,4 +179,19 @@ test('pid escalation returns immediately for an empty pid set', async () => {
     killSpy.mockRestore();
     vi.useRealTimers();
   }
+});
+
+test('captureHostEnvironment copies the environment and reads the working directory once', () => {
+  const source = {
+    env: { HOME: '/home/a', EMPTY: undefined } as Record<string, string | undefined>,
+    cwd: vi.fn(() => '/work'),
+  };
+  const host = captureHostEnvironment(source);
+
+  source.env.HOME = '/home/b';
+  source.env.ADDED = 'late';
+
+  assert.deepEqual(host, { env: { HOME: '/home/a', EMPTY: undefined }, cwd: '/work' });
+  assert.notEqual(host.env, source.env);
+  assert.equal(source.cwd.mock.calls.length, 1);
 });

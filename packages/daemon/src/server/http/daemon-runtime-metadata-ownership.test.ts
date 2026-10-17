@@ -5,7 +5,11 @@ import type {
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync, publishDaemonRegistration } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  publishDaemonRegistration,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 const startupFailure = vi.hoisted(() => ({ active: false }));
@@ -50,12 +54,14 @@ function startRuntime(stateDir: string, exit: (code: number) => void) {
       pluginInventory: providerComposition.inventory,
       shutdownProviderRuntimes: async () => providerComposition.cleanup,
     })),
-    env: {
-      ...process.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-    },
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+    }),
     exit,
     registerProcessHandlers: false,
     stderr: { write: () => {} },

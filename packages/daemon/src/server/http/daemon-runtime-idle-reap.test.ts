@@ -19,7 +19,7 @@ vi.mock('../../resources/lease-registry.ts', async (importOriginal) => {
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -39,12 +39,14 @@ test('daemon runtime self-reaps after the idle window when nothing ever uses it'
   try {
     const runtime = await startDaemonRuntime({
       composeDeps: daemonRuntimeDepsFixture(),
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '80',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '80',
+        },
+      }),
       exit: (code) => {
         exitCode = code;
         resolveExit();
@@ -79,12 +81,14 @@ test('daemon runtime never self-reaps when AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS i
   try {
     const runtime = await startDaemonRuntime({
       composeDeps: daemonRuntimeDepsFixture(),
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        },
+      }),
       exit: (code) => {
         exitCode = code;
       },
@@ -117,12 +121,14 @@ test('only a retained lease keeps the daemon runtime from self-reaping', async (
   try {
     const runtime = await startDaemonRuntime({
       composeDeps: daemonRuntimeDepsFixture(),
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '80',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '80',
+        },
+      }),
       exit: (code) => {
         exitCode = code;
         resolveExit();

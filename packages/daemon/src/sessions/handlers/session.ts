@@ -37,6 +37,7 @@ const handleSessionInventoryCommandGroup: SessionCommandHandler = (
 
 const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
   handleSessionOpenCommands({
+    host: params.host,
     req: params.req,
     createCommandSurface: params.createCommandSurface,
     sessionName: params.sessionName,
@@ -50,6 +51,7 @@ const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
 
 const handleSessionCloseCommandGroup: SessionCommandHandler = (params) =>
   handleSessionCloseCommands({
+    host: params.host,
     req: params.req,
     sessionName: params.sessionName,
     logPath: params.logPath,
@@ -63,6 +65,7 @@ const handleSessionCloseCommandGroup: SessionCommandHandler = (params) =>
   } satisfies SessionCloseCommandInput);
 
 const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
+  host,
   req,
   sessionName,
   sessionStore,
@@ -75,6 +78,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   throwIfCanceled,
 }) =>
   await handleSessionObservabilityCommands({
+    host,
     req,
     sessionName,
     sessionStore,
@@ -103,6 +107,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   capabilities: handleSessionInventoryCommandGroup,
   apps: handleSessionInventoryCommandGroup,
   doctor: async ({
+    host,
     req,
     sessionName,
     sessionStore,
@@ -112,6 +117,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     bindDevice,
   }) =>
     await handleDoctorCommand({
+      host,
       req,
       sessionName,
       sessionStore,
@@ -204,6 +210,7 @@ export async function handleSessionCommands(
   params: SessionCommandInput,
 ): Promise<DaemonResponse | null> {
   const {
+    host,
     req,
     sessionName,
     logPath,
@@ -235,6 +242,7 @@ export async function handleSessionCommands(
   if (!handler) return null;
 
   return await handler({
+    host,
     req,
     createCommandSurface: params.createCommandSurface,
     sessionName,

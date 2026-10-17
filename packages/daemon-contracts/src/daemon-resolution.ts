@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
 import { findProjectRoot, isSourceCheckoutProjectRoot } from '@agent-device/host-kit/version';
+import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
@@ -30,6 +31,8 @@ export type DaemonPaths = {
 
 type ResolveDaemonPathsOptions = {
   env?: EnvMap;
+  /** Resolves a relative state dir; a relative one without it is refused. */
+  cwd?: string;
   projectRoot?: string;
 };
 
@@ -53,7 +56,18 @@ function resolveStateDir(raw: string | undefined, options: ResolveDaemonPathsOpt
   if (!value) {
     return resolveDefaultDaemonStateDir(options);
   }
-  return resolveUserPath(value, { env: options.env });
+  const expanded = expandUserHomePath(value, { env: options.env });
+  if (path.isAbsolute(expanded)) return expanded;
+  if (options.cwd === undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `State dir "${value}" is relative and no working directory was given.`,
+      {
+        reason: 'relative_state_dir_without_cwd',
+      },
+    );
+  }
+  return resolveUserPath(value, { env: options.env, cwd: options.cwd });
 }
 
 function resolveDefaultDaemonStateDir(options: ResolveDaemonPathsOptions = {}): string {

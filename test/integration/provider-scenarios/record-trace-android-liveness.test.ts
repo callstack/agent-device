@@ -24,17 +24,20 @@ test('Provider-backed integration Android record stop finishes an artifact after
         remotePath,
         sessionName: 'default',
       });
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () => {
-          const provider = createAndroidRecordingProvider({
-            calls,
-            manifests: [manifest],
-            deadPids: ['4321'],
-          });
-          return provider;
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () => {
+            const provider = createAndroidRecordingProvider({
+              calls,
+              manifests: [manifest],
+              deadPids: ['4321'],
+            });
+            return provider;
+          },
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
         },
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+        tmpDir,
+      );
       seedAndroidRecordingResource(daemon, manifest);
       try {
         const stopped = await stopAndroidRecording(daemon, outputPath);

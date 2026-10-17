@@ -403,7 +403,10 @@ function toReplayTestSuiteRequest(
     cwd,
     requestId: req.meta?.requestId,
     platformFilter: flags.platform,
-    artifactsDir: artifactsDir === undefined ? undefined : expandSessionPath(artifactsDir, cwd),
+    artifactsDir:
+      artifactsDir === undefined
+        ? undefined
+        : expandSessionPath(artifactsDir, cwd ?? process.cwd()),
     failFast: flags.failFast === true,
     retries: numberFlag(flags.retries),
     timeoutMs: numberFlag(flags.timeoutMs),

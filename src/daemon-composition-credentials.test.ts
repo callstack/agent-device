@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import { startDaemonRuntime } from '@agent-device/daemon';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { providerCredentialFingerprint } from './provider-credential-fingerprint.ts';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
@@ -54,13 +54,15 @@ test('daemon startup compares lease credentials with its own startup environment
   const inventory = await builtinPluginInventory();
   const daemonEnv = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key-1' };
   const runtime = await startDaemonRuntime({
-    env: {
-      ...process.env,
-      ...daemonEnv,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-    },
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        ...daemonEnv,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+    }),
     exit: () => {},
     registerProcessHandlers: false,
     stderr: { write: () => {} },

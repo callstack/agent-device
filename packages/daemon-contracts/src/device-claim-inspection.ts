@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { matchesPlatformSelector, type PlatformSelector } from '@agent-device/kernel/device';
 import {
   classifyOwnerLivenessFromObservation,
@@ -29,8 +30,11 @@ export type DeviceClaimSelectors = {
   serial?: string;
 };
 
-export function inspectDeviceClaims(selectors: DeviceClaimSelectors): InspectedDeviceClaim[] {
-  const root = resolveDeviceClaimRoot();
+export function inspectDeviceClaims(
+  selectors: DeviceClaimSelectors,
+  env: EnvMap,
+): InspectedDeviceClaim[] {
+  const root = resolveDeviceClaimRoot(env);
   const listed = readClaimEntries(root);
   if ('claims' in listed) return listed.claims;
   const parsed = listed.entries

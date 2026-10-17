@@ -4,7 +4,11 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { assertRejectsAppError, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  assertRejectsAppError,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendRequest } from '../daemon-client-transport.ts';
 
@@ -44,6 +48,7 @@ for (const row of Object.values(PROCESS_DEATH_ROWS)) {
               'http',
               statePaths,
               1_000,
+              { host: createTestHostEnvironment() },
             );
           } catch (error) {
             observed = error;

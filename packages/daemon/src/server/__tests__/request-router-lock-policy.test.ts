@@ -31,7 +31,7 @@ import {
   type PlatformRuntimeOperations,
   snapshotRuntimePlanUses,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const runtime = snapshotRuntimeFixture();
@@ -128,6 +128,7 @@ test('direct daemon requests cannot bypass reject lock policy for existing sessi
   sessionStore.publish('qa-ios', makeIosSession('qa-ios'));
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -165,6 +166,7 @@ test('fresh named sessions with matching explicit serial bind and serialize on t
   const dispatchGate = installGatedDispatch();
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -244,6 +246,7 @@ test('fresh named sessions with the same name serialize first binding before rej
   const dispatchGate = installGatedDispatch();
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -318,6 +321,7 @@ test('fresh named sessions with only lock platform default serialize on the sele
   const dispatchGate = installGatedDispatch();
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -427,6 +431,7 @@ test('fresh named sessions reject incompatible selector combinations before bind
   for (const testCase of cases) {
     const sessionStore = makeSessionStore('agent-device-router-lock-');
     const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
       createCommandSurface: testCreateCommandSurface,
       logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
@@ -466,6 +471,7 @@ test('batch steps cannot bypass reject lock policy on nested direct requests', a
   sessionStore.publish('qa-ios', makeIosSession('qa-ios'));
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -512,6 +518,7 @@ test('direct daemon requests apply strip lock policy for existing sessions befor
   systemRuntimeSpies.appSwitcher.mockClear();
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -556,6 +563,7 @@ test('strip lock policy still refuses a request naming a different device, befor
   });
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -595,6 +603,7 @@ test('batch preserves tenant-scoped session names across nested requests', async
   systemRuntimeSpies.appSwitcher.mockClear();
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

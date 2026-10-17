@@ -24,6 +24,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   waitForHttpOk,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 
 type DaemonInfoFile = {
@@ -82,11 +83,13 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
   try {
     const runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
       exit: (code) => {
         exitCode = code;
       },
@@ -127,11 +130,13 @@ test('daemon runtime publishes dual transport metadata', async () => {
   try {
     const runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'dual',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'dual',
+        },
+      }),
       exit: (code) => {
         exitCode = code;
       },
@@ -178,14 +183,16 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
   try {
     runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        BROWSERSTACK_USERNAME: 'user',
-        BROWSERSTACK_ACCESS_KEY: 'key',
-        BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `http://127.0.0.1:${providerPort}/sessions`,
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          BROWSERSTACK_USERNAME: 'user',
+          BROWSERSTACK_ACCESS_KEY: 'key',
+          BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `http://127.0.0.1:${providerPort}/sessions`,
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },
@@ -283,10 +290,6 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
   const claimsDir = mkdtempForTestSync('agent-device-daemon-prune-claims-');
   const paths = resolveDaemonPaths(stateDir);
   const deviceKey = 'local:android:none:prune-log';
-  // resolveDeviceClaimRoot reads process.env directly, not the env passed to
-  // startDaemonRuntime, so the store has to be redirected on the process.
-  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
-  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
   let exitCode: number | undefined;
 
   try {
@@ -309,12 +312,14 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
 
     const runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        AGENT_DEVICE_CLAIMS_DIR: claimsDir,
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_CLAIMS_DIR: claimsDir,
+        },
+      }),
       exit: (code) => {
         exitCode = code;
       },
@@ -333,8 +338,6 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
     await runtime?.shutdown();
     assert.equal(exitCode, 0);
   } finally {
-    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
-    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(stateDir, { recursive: true, force: true });
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
@@ -350,8 +353,6 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
   const claimsDir = mkdtempForTestSync('agent-device-daemon-sweep-claims-');
   const deviceId = 'sweep-scope-udid';
   const deviceKey = `local:apple:ios:${deviceId}`;
-  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
-  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
 
   const sessionStoreFor = (stateDir: string) => {
     const paths = resolveDaemonPaths(stateDir);
@@ -435,12 +436,14 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
 
     runtime = await startDaemonRuntime({
       composeDeps: createDaemonRuntimeDeps,
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: daemonStateDir,
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-        AGENT_DEVICE_CLAIMS_DIR: claimsDir,
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: daemonStateDir,
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+          AGENT_DEVICE_CLAIMS_DIR: claimsDir,
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },
@@ -475,8 +478,6 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
     try {
       orphanRecorder.kill('SIGKILL');
     } catch {}
-    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
-    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(daemonStateDir, { recursive: true, force: true });
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
     fs.rmSync(claimsDir, { recursive: true, force: true });

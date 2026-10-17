@@ -3,6 +3,8 @@ import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { AgentDeviceDaemonTransportContext } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import {
   createRequestId,
   emitDiagnostic,
@@ -27,9 +29,40 @@ type DaemonTransportOptions = AgentDeviceDaemonTransportContext & {
   onProgress?: RequestProgressSink;
 };
 
+/** The released default: a process-level client, which reads the process's own host. */
 export async function sendToDaemon(
   req: Omit<DaemonRequest, 'token'>,
   options: DaemonTransportOptions = {},
+): Promise<DaemonResponse> {
+  return await sendToDaemonOnHost(req, options, captureHostEnvironment(process));
+}
+
+/**
+ * A transport whose daemon resolution, spawn, policy check and request preparation read `host`.
+ * Remote artifact upload still reads the process (`packages/remote`, tracked by #3751).
+ */
+export function createDaemonTransport(host: HostEnvironment) {
+  return async (
+    req: Omit<DaemonRequest, 'token'>,
+    options: DaemonTransportOptions = {},
+  ): Promise<DaemonResponse> => await sendToDaemonOnHost(req, options, host);
+}
+
+/** The transport one run uses: host-bound when its deps can build one, else the injected one. */
+export function resolveRunTransport(
+  deps: {
+    sendToDaemon: typeof sendToDaemon;
+    transportForHost?: (host: HostEnvironment) => typeof sendToDaemon;
+  },
+  host: HostEnvironment,
+): typeof sendToDaemon {
+  return deps.transportForHost?.(host) ?? deps.sendToDaemon;
+}
+
+async function sendToDaemonOnHost(
+  req: Omit<DaemonRequest, 'token'>,
+  options: DaemonTransportOptions,
+  host: HostEnvironment,
 ): Promise<DaemonResponse> {
   const { resolveClientSettings, attachSessionAddressHints } =
     await import('./daemon-client-lifecycle.ts');
@@ -47,6 +80,7 @@ export async function sendToDaemon(
   const settings = resolveClientSettings(
     requestWithoutAuthFlag,
     options.authToken ?? flagAuthToken,
+    host,
     options.daemonLifecycle,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
@@ -77,7 +111,7 @@ export async function sendToDaemon(
         options.signal,
       ),
   );
-  writeInstallInProgressNotice(requestWithoutAuthFlag.command);
+  writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
 
   const request = buildTransportRequest(
     requestWithoutAuthFlag,
@@ -85,7 +119,8 @@ export async function sendToDaemon(
     info,
     requestId,
     debug,
-    await readLocalProviderCredentialFingerprint(requestWithoutAuthFlag, info),
+    await readLocalProviderCredentialFingerprint(requestWithoutAuthFlag, info, host.env),
+    host.env,
   );
   emitDiagnostic({
     level: 'info',
@@ -111,6 +146,7 @@ export async function sendToDaemon(
             settings.paths,
             requestTimeoutMs,
             {
+              host,
               onProgress: options.onProgress,
               signal: options.signal,
               timeoutRecovery:
@@ -127,6 +163,7 @@ export async function sendToDaemon(
 /**
  * The transport the CLI and MCP use: `sendToDaemon` behind an explicit `ensureDaemon`. The wrapper
  * loads on the first request, so a CLI start that never reaches the daemon does not pay for it.
+ * With a `host`, ensuring and every request read it; without one, each reads the process.
  */
 export function createEnsuredDaemonTransport(
   options: EnsuringTransportOptions = {},
@@ -136,7 +173,7 @@ export function createEnsuredDaemonTransport(
   let ensured: Promise<typeof sendToDaemon> | undefined;
   return async (req, context) => {
     ensured ??= import('./daemon-client-ensuring.ts').then(({ withEnsuredDaemon }) =>
-      withEnsuredDaemon(sendToDaemon, options),
+      withEnsuredDaemon(options.host ? createDaemonTransport(options.host) : sendToDaemon, options),
     );
     return await (
       await ensured
@@ -151,6 +188,7 @@ function buildTransportRequest(
   requestId: string,
   debug: boolean,
   providerCredentialFingerprint: string | undefined,
+  env: Readonly<EnvMap>,
 ): DaemonRequest {
   return {
     ...request,
@@ -159,7 +197,7 @@ function buildTransportRequest(
     token: info.token,
     meta: {
       ...buildTransportRequestMeta(request, preparedRemoteRequest, requestId, debug),
-      ...buildLocalHostEnvMeta(info),
+      ...buildLocalHostEnvMeta(info, env),
       providerCredentialFingerprint,
     },
   };
@@ -170,6 +208,7 @@ function buildTransportRequest(
 async function readLocalProviderCredentialFingerprint(
   request: Omit<DaemonRequest, 'token'>,
   info: DaemonInfo,
+  env: Readonly<EnvMap>,
 ): Promise<string | undefined> {
   if (isRemoteDaemon(info) || request.command !== 'lease_allocate') return undefined;
   const { leaseProvider: provider, leaseBackend } = leaseScopeFromRequest(request);
@@ -180,7 +219,7 @@ async function readLocalProviderCredentialFingerprint(
   ]);
   return providerCredentialFingerprint(
     provider,
-    process.env,
+    env,
     leaseBackend,
     readPluginInventory(info.plugins),
   );
@@ -189,8 +228,9 @@ async function readLocalProviderCredentialFingerprint(
 // A developer dir is a path on the client's host, so only a local daemon can use it.
 function buildLocalHostEnvMeta(
   info: DaemonInfo,
+  env: Readonly<EnvMap>,
 ): Pick<NonNullable<DaemonRequest['meta']>, 'developerDir'> {
-  const developerDir = process.env.DEVELOPER_DIR;
+  const developerDir = env.DEVELOPER_DIR;
   if (isRemoteDaemon(info)) return { developerDir: undefined };
   return developerDir !== undefined ? { developerDir } : {};
 }
@@ -298,8 +338,8 @@ async function performDaemonRequestWithCleanup(
   return finalResponse;
 }
 
-function writeInstallInProgressNotice(command: string | undefined): void {
-  if (!isInstallLikeCommand(command) || process.stderr.isTTY !== true || process.env.CI) return;
+function writeInstallInProgressNotice(command: string | undefined, env: Readonly<EnvMap>): void {
+  if (!isInstallLikeCommand(command) || process.stderr.isTTY !== true || env.CI) return;
   process.stderr.write(
     command === PUBLIC_COMMANDS.reinstall ? 'Reinstalling...\n' : 'Installing...\n',
   );
@@ -334,6 +374,7 @@ async function protectArtifactUploadWithLeaseBeats(
       request,
       info,
       callerSignal ?? new AbortController().signal,
+      settings.host,
     );
   }
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
@@ -347,6 +388,7 @@ async function protectArtifactUploadWithLeaseBeats(
         request,
         info,
         callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
+        settings.host,
       ),
     callerSignal,
   });

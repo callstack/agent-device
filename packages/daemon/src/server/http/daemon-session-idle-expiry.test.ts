@@ -1,4 +1,8 @@
-import { deviceClaimFilePath } from '@agent-device/test-kit';
+import {
+  deviceClaimFilePath,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,6 +22,8 @@ import {
   makeIosSession,
   makeRepairCompleteSession,
 } from '../../__tests__/support/session-factories.ts';
+
+bindTestCommandHost();
 
 /**
  * #2833: what one expiry COMMITS, once it has run. Whether a session past its window is the kind that
@@ -47,6 +53,7 @@ test('a session past its window releases its claim, is deleted, and leaves a mar
   assert.equal(claimFileHeld(deviceClaim), true, 'the fixture stands a claim that is really held');
   const sweeps = createSweepBarrier();
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -82,6 +89,7 @@ test('a settle that cannot confirm the claim gone keeps the session record stand
   try {
     const sweeps = createSweepBarrier();
     const controller = createSessionIdleExpiry({
+      env: createTestHostEnvironment().env,
       sessionStore,
       idleExpiryMs: WINDOW_MS,
       executionLocks: new Map(),
@@ -121,6 +129,7 @@ test('a claim that yields no attributable owner keeps the session record standin
 
   const sweeps = createSweepBarrier();
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -152,6 +161,7 @@ test('a settle that fails keeps the session and its claim, and retries on the ne
 
   const sweeps = createSweepBarrier();
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -192,6 +202,7 @@ test('a session shutdown finalized mid-settle is not also reported as expired', 
   const sweeps = createSweepBarrier();
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -220,6 +231,7 @@ test('a session closed by its owner stops the retry clock tracking it', async ()
   let settleCalls = 0;
   const sweeps = createSweepBarrier();
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -262,6 +274,7 @@ test('a settled session of another kind is never touched by the sweep', async ()
 
   const settledNames: string[] = [];
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -298,6 +311,7 @@ test('a held-back settle leaves a repair transaction uncommitted, so a later pas
   const claimsDir = path.dirname(deviceClaimFilePath(deviceClaim.deviceKey));
   const sweeps = createSweepBarrier();
   const settleParams = {
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -359,6 +373,7 @@ test('a committed expiry finalizes the repair transaction it ends', async () => 
 
   const sweeps = createSweepBarrier();
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -393,6 +408,7 @@ test('an idle settle cannot finalize or retire a replacement at its scoped addre
   });
   let entered = false;
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),

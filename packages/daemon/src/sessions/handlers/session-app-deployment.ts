@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
@@ -53,6 +54,7 @@ type DeployResult = Readonly<{
 }>;
 
 export async function handleAppDeploymentCommand(params: {
+  host: HostEnvironment;
   req: DaemonRequest;
   command: DeployCommand;
   sessionName: string;
@@ -74,7 +76,7 @@ export async function handleAppDeploymentCommand(params: {
   try {
     const appPath = uploadedArtifactId
       ? prepareUploadedArtifact(uploadedArtifactId, req.meta?.tenantId)
-      : expandSessionPath(target.appPathInput);
+      : expandSessionPath(target.appPathInput, params.host.cwd);
     if (!fs.existsSync(appPath)) {
       return errorResponse('INVALID_ARGS', `App binary not found: ${appPath}`);
     }
@@ -128,7 +130,9 @@ export async function handlePushNotificationCommand(
       'push requires <bundle|package> <payload.json|inline-json>',
     );
   }
-  const payload = await readNotificationPayload(resolvePushPayload(payloadArg, req.meta?.cwd));
+  const payload = await readNotificationPayload(
+    resolvePushPayload(payloadArg, req.meta?.cwd ?? params.host.cwd),
+  );
   const device = await resolveCommandDevice({
     session,
     flags,
@@ -296,11 +300,11 @@ function resolveDeployTarget(
   return { ok: true, app: first, appPathInput: second };
 }
 
-function resolvePushPayload(payloadArg: string, cwd?: string): string {
+function resolvePushPayload(payloadArg: string, cwd: string): string {
   const resolved = resolvePayloadInput(payloadArg, {
     subject: 'Push payload',
     cwd,
-    expandPath: (value, currentCwd) => expandSessionPath(value, currentCwd),
+    expandPath: (value, currentCwd) => expandSessionPath(value, currentCwd ?? cwd),
   });
   return resolved.kind === 'file' ? resolved.path : resolved.text;
 }

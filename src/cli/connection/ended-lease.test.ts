@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
@@ -9,6 +10,8 @@ import {
 } from '../../__tests__/remote-connection.fixtures.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { forgetEndedProxyLease } from './ended-lease.ts';
+
+bindTestCommandHost();
 
 const LEASE_ID = 'abc123abc123abc1';
 const ENDED = [{ leaseId: LEASE_ID, outcome: 'released' }] as const;
@@ -43,6 +46,7 @@ function storedLeaseIdAfter(
       session: 'adc-proxy',
     },
     response,
+    createTestHostEnvironment(),
   );
   return readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId;
 }

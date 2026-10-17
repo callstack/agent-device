@@ -24,7 +24,13 @@ import {
   clearRuntimeHintsFixture,
   dispatchApplicationLifecycleEffect,
 } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok: true, data: {} });
@@ -61,6 +67,7 @@ async function close(params: {
   bindDevice?: Parameters<typeof handleSessionCommands>[0]['bindDevice'];
 }) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: closeRequest(params.sessionName, params.positionals ?? [], params.internal),

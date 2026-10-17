@@ -21,12 +21,19 @@ import {
   mockEnsureReadyRuntime,
   mockInspectDeviceRuntimeFacts,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+
+bindTestCommandHost();
 
 test('boot requires session or explicit selector', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -71,6 +78,7 @@ test('boot prefers explicit device selector over active session device', async (
   mockResolveTargetDevice.mockResolvedValue(selectedDevice);
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -117,6 +125,7 @@ test('boot --timeout forwards a startup deadline to bootTarget (#3004)', async (
 
   const beforeMs = Date.now();
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -152,6 +161,7 @@ test('boot without --timeout leaves the startup deadline unset', async () => {
   mockResolveTargetDevice.mockResolvedValue(selectedDevice);
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -189,6 +199,7 @@ test('boot --headless admits a stopped Android emulator through facts and binds 
     booted: true,
   });
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -235,6 +246,7 @@ test('boot rejects the macOS host boot cell after one facts inspection and befor
   mockResolveTargetDevice.mockResolvedValue(device);
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -273,6 +285,7 @@ test('boot admits a stopped Android emulator through normal readiness', async ()
     booted: true,
   });
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -312,6 +325,7 @@ test('boot forwards Android serial admission policy to readiness', async () => {
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -348,6 +362,7 @@ test('boot --headless requires avd selector when device cannot be resolved', asy
   const sessionStore = makeSessionStore();
   mockResolveTargetDevice.mockRejectedValue(new AppError('DEVICE_NOT_FOUND', 'No device found'));
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -385,6 +400,7 @@ test('boot --headless rejects non-Android selectors', async () => {
     booted: false,
   });
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -420,6 +436,7 @@ test('boot keeps --target validation before facts inspection', async () => {
     booted: false,
   });
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -457,6 +474,7 @@ test('boot rejects --headless outside Android directly', async () => {
   };
   mockResolveTargetDevice.mockResolvedValue(device);
   const response = await handleBootCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

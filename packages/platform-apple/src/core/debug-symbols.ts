@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import path from 'node:path';
 import {
   ensureHostDirectory,
@@ -5,7 +6,6 @@ import {
   readHostTextFile,
   writeHostTextFile,
 } from '@agent-device/host-kit/host-file';
-import { hostCurrentWorkingDirectory } from '@agent-device/host-kit/process';
 import { readAppleCrashArtifact } from './debug-symbols/crash-artifact.ts';
 import { matchImagesToDsyms, readDsymPaths, readDsymSlices } from './debug-symbols/dsym.ts';
 import { summarizeCrashArtifact } from './debug-symbols/report.ts';
@@ -26,7 +26,7 @@ export async function symbolicateCrashArtifact(
       hint: 'Use debug symbols --artifact <crash.ips|crash.log> --dsym <App.dSYM> or --search-path <dir> --out <path>.',
     });
   }
-  const cwd = options.cwd ?? hostCurrentWorkingDirectory();
+  const cwd = options.cwd ?? commandHostEnvironment().cwd;
   const artifactPath = resolvePath(cwd, options.artifact);
   const outPath = resolvePath(cwd, options.out ?? defaultOutPath(artifactPath));
   const artifactText = await readTextFile(artifactPath, 'crash artifact');

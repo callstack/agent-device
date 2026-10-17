@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import os from 'node:os';
 import { normalizeBatchCommandName } from '@agent-device/command-registry/batch-policy';
@@ -5,7 +6,7 @@ import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { readMacOsAppBackend } from '@agent-device/contracts/session';
 import { runCmd } from '@agent-device/host-kit/command';
-import { isProcessAlive, readHostEnvironmentVariable } from '@agent-device/host-kit/process';
+import { isProcessAlive } from '@agent-device/host-kit/process';
 import { isMacOs } from '@agent-device/kernel/device';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { isAppLeaseAllowed } from '../core/daemon-command-registry.ts';
@@ -112,11 +113,13 @@ function macOsAppLeaseDenied(
 export function assertMacOsAppLeaseAdmitsRequest(
   lease: Pick<DeviceLease, 'backend' | 'deviceKey'>,
   req: Pick<DaemonRequest, 'command' | 'positionals' | 'flags' | 'input' | 'runtime'>,
-  session?: Pick<SessionState, 'device' | 'surface' | 'appBundleId'>,
+  session: Pick<SessionState, 'device' | 'surface' | 'appBundleId'> | undefined,
+  env: HostEnvironment['env'],
 ): void {
   if (lease.backend !== 'macos-app') return;
   const key = parseMacOsAppLeaseKey(lease.deviceKey);
   assertInvocation(
+    env,
     key,
     req.command,
     req.positionals ?? [],
@@ -132,6 +135,7 @@ export function assertMacOsAppLeaseAdmitsRequest(
     for (const step of (req.flags?.batchSteps ?? []) as readonly Record<string, unknown>[]) {
       const positionals = Array.isArray(step.positionals) ? step.positionals.map(String) : [];
       assertInvocation(
+        env,
         key,
         normalizeBatchCommandName(step.command),
         positionals,
@@ -164,6 +168,7 @@ function withRuntimeInputs(
 }
 
 function assertInvocation(
+  env: HostEnvironment['env'],
   key: MacOsAppLeaseKey,
   command: string,
   positionals: readonly string[],
@@ -178,7 +183,7 @@ function assertInvocation(
   assertNoDeviceSelector(fields);
   if (command === 'screenshot') assertWindowCapture(positionals, fields);
   else assertNoHostInputs(fields);
-  if (command === 'open') assertOpensLeasedApp(key, positionals);
+  if (command === 'open') assertOpensLeasedApp(env, key, positionals);
   if (command === 'close' && positionals.length > 0 && positionals[0] !== key.bundleId) {
     throw macOsAppLeaseDenied('app', `A macos-app lease only closes ${key.bundleId}.`, {
       bundleId: key.bundleId,
@@ -242,13 +247,17 @@ function assertAppSurface(fields: Readonly<Record<string, unknown>>): void {
   }
 }
 
-function assertOpensLeasedApp(key: MacOsAppLeaseKey, positionals: readonly string[]): void {
+function assertOpensLeasedApp(
+  env: HostEnvironment['env'],
+  key: MacOsAppLeaseKey,
+  positionals: readonly string[],
+): void {
   if (positionals.length !== 1 || positionals[0] !== key.bundleId) {
     throw macOsAppLeaseDenied('app', `A macos-app lease only opens ${key.bundleId}.`, {
       bundleId: key.bundleId,
     });
   }
-  assertNativeBackend();
+  assertNativeBackend(env);
 }
 
 /**
@@ -256,8 +265,8 @@ function assertOpensLeasedApp(key: MacOsAppLeaseKey, positionals: readonly strin
  * outside the app's window lands on whatever is there. Only the native backend (ADR 0031) resolves
  * every action inside the session app.
  */
-function assertNativeBackend(): void {
-  if (readMacOsAppBackend(readHostEnvironmentVariable) === 'native') return;
+function assertNativeBackend(env: HostEnvironment['env']): void {
+  if (readMacOsAppBackend((name) => env[name]) === 'native') return;
   throw macOsAppLeaseDenied(
     'backend',
     'A macos-app lease needs the native macOS app backend (AGENT_DEVICE_MACOS_APP_BACKEND=native).',

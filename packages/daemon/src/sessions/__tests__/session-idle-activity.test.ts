@@ -30,7 +30,7 @@ import {
 } from '../../server/request-execution-scope.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 const TEST_ROOT = mkdtempForTestSync('agent-device-session-idle-activity-');
 const LOG_PATH = path.join(TEST_ROOT, 'diagnostics.log');
@@ -59,6 +59,7 @@ test('a command that completes under the session lock stamps the session it ran 
   const sessionStore = storeWithSession();
   const scope = await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, () =>
     createRequestExecutionScope({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       req: makeRequest({ command: 'snapshot' }),
@@ -76,6 +77,7 @@ test('a lock-exempt inventory command reports no activity, even against a claim-
   const sessionStore = storeWithSession();
   const scope = await withDiagnosticsScope({ command: 'devices', logPath: LOG_PATH }, () =>
     createRequestExecutionScope({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       req: makeRequest({ command: 'devices' }),
@@ -98,6 +100,7 @@ test('a command whose client hung up mid-flight preserves no activity', async ()
     { command: 'snapshot', requestId, logPath: LOG_PATH },
     () =>
       createRequestExecutionScope({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
         req: makeRequest({ command: 'snapshot', meta: { requestId } }),
@@ -127,6 +130,7 @@ test('a command still running when the expiry arrives blocks it until the stamp 
   const locks = getLeaseRegistryExecutionLocks(leaseRegistry);
   const scope = await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, () =>
     createRequestExecutionScope({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       req: makeRequest({ command: 'snapshot' }),
@@ -179,6 +183,7 @@ test('the reaper never observes a mid-command session through the shared map', a
   const leaseRegistry = new LeaseRegistry();
   const scope = await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, () =>
     createRequestExecutionScope({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       req: makeRequest({ command: 'snapshot' }),

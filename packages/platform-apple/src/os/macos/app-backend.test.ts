@@ -1,5 +1,8 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { afterEach, expect, test, vi } from 'vitest';
 import { hostMacOsAppBackend } from './app-backend.ts';
+
+bindTestCommandHost();
 
 afterEach(() => {
   vi.unstubAllEnvs();

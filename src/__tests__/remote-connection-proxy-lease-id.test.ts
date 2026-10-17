@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,6 +17,8 @@ vi.mock('@agent-device/react-native', async (importOriginal) => ({
 
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+
+bindTestCommandHost();
 
 const DAEMON_LEASE_ID = 'abc123abc123abc1';
 
@@ -79,11 +82,13 @@ test('proxy allocation sends a fresh lease id on every attempt and keeps the id 
   } as const;
 
   const first = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'install',
     flags: { ...flags },
     client,
   });
   const second = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'install',
     flags: { ...flags },
     client,
@@ -121,6 +126,7 @@ test('a non-proxy remote connection leaves the lease id to the daemon', async ()
   const requests: LeaseAllocateRequest[] = [];
 
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'screenshot',
     flags: {
       json: true,

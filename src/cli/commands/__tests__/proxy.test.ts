@@ -10,6 +10,8 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
+  bindTestCommandHost,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
@@ -46,6 +48,8 @@ vi.mock('../shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput })
 import { proxyCommand, renderProxyStartup } from '../proxy.ts';
 import type { AgentDeviceClient } from '../../../agent-device-client.ts';
 
+bindTestCommandHost();
+
 // The proxy command never reads the client; a typed stub that throws on any access proves it
 // without the `{} as never` blind cast.
 const unreferencedClient = new Proxy({} as AgentDeviceClient, {
@@ -67,6 +71,7 @@ function runProxy(flags: Partial<Parameters<typeof proxyCommand>[0]['flags']> = 
   // The command streams its startup card and then serves until interrupted, so the handler
   // promise intentionally never settles; the test observes the emitted output and lets it float.
   void proxyCommand({
+    host: createTestHostEnvironment(),
     positionals: [],
     flags: { json: true, help: false, version: false, ...flags },
     client: unreferencedClient,
@@ -90,6 +95,7 @@ async function waitForStartupOutput(): Promise<{
 test('proxy rejects positional arguments', async () => {
   await assert.rejects(
     proxyCommand({
+      host: createTestHostEnvironment(),
       positionals: ['extra'],
       flags: { json: true, help: false, version: false },
       client: unreferencedClient,
@@ -107,6 +113,7 @@ test('proxy refuses to start when the local daemon has no HTTP endpoint', async 
 
   await assert.rejects(
     proxyCommand({
+      host: createTestHostEnvironment(),
       positionals: [],
       flags: { json: true, help: false, version: false },
       client: unreferencedClient,

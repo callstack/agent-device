@@ -1,8 +1,11 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { afterAll, beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { pressLinux } from '../input-actions.ts';
 import { resetInputToolCache } from '../linux-env.ts';
 import { createLocalLinuxToolProvider, withLinuxToolProvider } from '../tool-provider.ts';
+
+bindTestCommandHost();
 
 const originalPlatform = process.platform;
 const originalEnv = { ...process.env };

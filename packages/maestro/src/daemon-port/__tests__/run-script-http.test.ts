@@ -40,13 +40,16 @@ test('keeps local requests on the existing Fetch path', async () => {
   );
   vi.stubGlobal('fetch', fetchMock);
 
-  const result = await executeRunScriptHttpRequest({
-    method: 'POST',
-    url: 'http://127.0.0.1:8080/local',
-    headers: { authorization: 'secret' },
-    body: '{}',
-    publicNetworkOnly: false,
-  });
+  const result = await executeRunScriptHttpRequest(
+    {
+      method: 'POST',
+      url: 'http://127.0.0.1:8080/local',
+      headers: { authorization: 'secret' },
+      body: '{}',
+      publicNetworkOnly: false,
+    },
+    process.env,
+  );
 
   assert.deepEqual(result, {
     status: 201,
@@ -73,13 +76,16 @@ test('preserves Fetch decompression for public requests', async (t) => {
     const port = await listenOnLoopback(server);
     approveDownloadSourceUrl.mockResolvedValue({ address: '127.0.0.1', family: 4 });
 
-    const result = await executeRunScriptHttpRequest({
-      method: 'POST',
-      url: `http://public.test:${port}/data`,
-      headers: {},
-      body: '{}',
-      publicNetworkOnly: true,
-    });
+    const result = await executeRunScriptHttpRequest(
+      {
+        method: 'POST',
+        url: `http://public.test:${port}/data`,
+        headers: {},
+        body: '{}',
+        publicNetworkOnly: true,
+      },
+      process.env,
+    );
 
     assert.equal(result.body, 'decoded');
   } finally {
@@ -109,16 +115,19 @@ test('uses Fetch cross-origin 307 header and body semantics', async (t) => {
     const port = await listenOnLoopback(server);
     approveDownloadSourceUrl.mockResolvedValue({ address: '127.0.0.1', family: 4 });
 
-    const result = await executeRunScriptHttpRequest({
-      method: 'POST',
-      url: `http://public.test:${port}/start`,
-      headers: {
-        authorization: 'secret',
-        'content-type': 'application/json',
+    const result = await executeRunScriptHttpRequest(
+      {
+        method: 'POST',
+        url: `http://public.test:${port}/start`,
+        headers: {
+          authorization: 'secret',
+          'content-type': 'application/json',
+        },
+        body: '{}',
+        publicNetworkOnly: true,
       },
-      body: '{}',
-      publicNetworkOnly: true,
-    });
+      process.env,
+    );
 
     assert.equal(result.body, 'ok');
     assert.equal(redirectedHeaders?.authorization, undefined);
@@ -146,12 +155,15 @@ test('reapproves a redirect before its connection', async (t) => {
       .mockRejectedValueOnce(new AppError('INVALID_ARGS', 'non-public address'));
 
     await assert.rejects(
-      executeRunScriptHttpRequest({
-        method: 'GET',
-        url: `http://public.test:${port}/start`,
-        headers: {},
-        publicNetworkOnly: true,
-      }),
+      executeRunScriptHttpRequest(
+        {
+          method: 'GET',
+          url: `http://public.test:${port}/start`,
+          headers: {},
+          publicNetworkOnly: true,
+        },
+        process.env,
+      ),
       /non-public address/,
     );
     assert.equal(requests, 1);
@@ -164,12 +176,15 @@ test('validates an IP literal before connecting', async () => {
   approveDownloadSourceUrl.mockRejectedValue(new AppError('INVALID_ARGS', 'non-public address'));
 
   await assert.rejects(
-    executeRunScriptHttpRequest({
-      method: 'GET',
-      url: 'http://169.254.169.254/latest/meta-data',
-      headers: {},
-      publicNetworkOnly: true,
-    }),
+    executeRunScriptHttpRequest(
+      {
+        method: 'GET',
+        url: 'http://169.254.169.254/latest/meta-data',
+        headers: {},
+        publicNetworkOnly: true,
+      },
+      process.env,
+    ),
     /non-public address/,
   );
   assert.equal(approveDownloadSourceUrl.mock.calls.length, 1);
@@ -203,12 +218,15 @@ test('preserves configured proxy routing while pinning the approved destination'
     vi.stubEnv('NO_PROXY', '');
     approveDownloadSourceUrl.mockResolvedValue({ address: '127.0.0.1', family: 4 });
 
-    const result = await executeRunScriptHttpRequest({
-      method: 'GET',
-      url: `http://public.test:${targetPort}/data`,
-      headers: {},
-      publicNetworkOnly: true,
-    });
+    const result = await executeRunScriptHttpRequest(
+      {
+        method: 'GET',
+        url: `http://public.test:${targetPort}/data`,
+        headers: {},
+        publicNetworkOnly: true,
+      },
+      process.env,
+    );
 
     assert.equal(result.body, 'proxied');
     assert.equal(connectTarget, `127.0.0.1:${targetPort}`);
@@ -220,7 +238,7 @@ test('preserves configured proxy routing while pinning the approved destination'
 });
 
 test('rejects an HTTPS downgrade before approval or dispatch', async () => {
-  const dispatcher = new PublicFetchDispatcher(true, AbortSignal.timeout(1_000));
+  const dispatcher = new PublicFetchDispatcher(true, AbortSignal.timeout(1_000), process.env);
   const error = await new Promise<Error>((resolve) => {
     dispatcher.dispatch({ origin: 'http://example.test', path: '/redirected', method: 'GET' }, {
       onError: resolve,
@@ -242,12 +260,15 @@ test('caps the decoded public response body', async (t) => {
     approveDownloadSourceUrl.mockResolvedValue({ address: '127.0.0.1', family: 4 });
 
     await assert.rejects(
-      executeRunScriptHttpRequest({
-        method: 'GET',
-        url: `http://public.test:${port}/large`,
-        headers: {},
-        publicNetworkOnly: true,
-      }),
+      executeRunScriptHttpRequest(
+        {
+          method: 'GET',
+          url: `http://public.test:${port}/large`,
+          headers: {},
+          publicNetworkOnly: true,
+        },
+        process.env,
+      ),
       new RegExp(`response exceeded ${MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES} bytes`),
     );
   } finally {

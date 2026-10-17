@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 // The HTTP server hands a `/rpc` flow rejection it answered itself to `onUnownedRequestFailure`,
 // because that event has no request scope to be recorded in — the request's own scope opens later,
@@ -99,12 +99,14 @@ async function driveFlowFailure(options: { stderrThrows?: boolean }): Promise<Fl
   try {
     runtime = await startDaemonRuntime({
       composeDeps: daemonRuntimeDepsFixture(),
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
       exit: (code) => {
         exitCode = code;
       },

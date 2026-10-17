@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
@@ -9,6 +10,8 @@ import {
 } from './test-utils.ts';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
+
+bindTestCommandHost();
 
 const COMMAND_CLASS_OPERATIONS = {
   mutation: (provider: ReturnType<typeof createAgentBrowserWebProvider>) => provider.click(10, 20),

@@ -21,7 +21,7 @@ import {
   gestureRuntimeSpies,
 } from '../../../__tests__/support/test-device-runtime-gateway.ts';
 import { refFrameState } from '../../../core/ref-frame.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 test('runtime set/show/clear manages session-scoped runtime hints before open', async () => {
@@ -32,6 +32,7 @@ test('runtime set/show/clear manages session-scoped runtime hints before open', 
   } satisfies Pick<DaemonRequest, 'token' | 'session'>;
 
   const setResponse = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -53,6 +54,7 @@ test('runtime set/show/clear manages session-scoped runtime hints before open', 
   expect(setResponse?.ok).toBe(true);
 
   const showResponse = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -79,6 +81,7 @@ test('runtime set/show/clear manages session-scoped runtime hints before open', 
   }
 
   const clearResponse = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -116,6 +119,7 @@ test('runtime clear removes applied transport hints for the active app', async (
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -167,6 +171,7 @@ test('runtime clear expires the ref frame at the admitted hint mutation boundary
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -222,6 +227,7 @@ test('runtime clear rejects a false runtime-hints fact before its one implementa
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -274,6 +280,7 @@ test('runtime gesture-viewport admits and binds the exact viewport operation onc
   gestureRuntimeSpies.gestureViewport.mockClear();
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -344,6 +351,7 @@ for (const phase of ['admission', 'effect'] as const) {
     }
     await expect(
       handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -387,6 +395,7 @@ test('runtime clear expires and uses the latest matching record after admission'
     return lifecycleRuntimeFacts(target);
   });
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

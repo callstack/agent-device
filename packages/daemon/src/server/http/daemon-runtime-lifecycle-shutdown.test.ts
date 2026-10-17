@@ -1,4 +1,9 @@
-import { ANDROID_EMULATOR, deviceClaimFilePath, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  deviceClaimFilePath,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -140,12 +145,14 @@ test('daemon shutdown detaches before session teardown and force-finalizes only 
           },
         }),
       }),
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
       exit: (code) => exits.push(code),
       registerProcessHandlers: false,
       stderr: { write: (chunk) => startupErrors.push(chunk) },
@@ -193,12 +200,14 @@ test('a SIGTERM shutdown gives the handoff a diagnostics scope to write its reas
           },
         }),
       }),
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },
@@ -246,12 +255,14 @@ test('shutdown includes drain publications, releases their claims and refuses po
         },
       }),
     }),
-    env: {
-      ...process.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-    },
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+    }),
     exit: () => {},
     registerProcessHandlers: false,
     stderr: { write: () => {} },
@@ -261,6 +272,7 @@ test('shutdown includes drain publications, releases their claims and refuses po
     expect(runtime).not.toBeNull();
     const store = shutdownProbe.store!;
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device: ANDROID_EMULATOR,
       session: 'draining',
       workspace: stateDir,
@@ -325,12 +337,14 @@ test('shutdown joins dispatch completion after force-closing the client before t
         },
       }),
     }),
-    env: {
-      ...process.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-    },
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+    }),
     exit: () => {},
     registerProcessHandlers: false,
     stderr: { write: () => {} },
@@ -354,6 +368,7 @@ test('shutdown joins dispatch completion after force-closing the client before t
     expect(runtime).not.toBeNull();
     const store = shutdownProbe.store!;
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device: ANDROID_EMULATOR,
       session: 'dispatching',
       workspace: stateDir,
@@ -491,12 +506,14 @@ test('daemon shutdown releases a session lease whose session teardown rejects', 
         },
       }),
     }),
-    env: {
-      ...process.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-    },
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+    }),
     exit: () => {},
     registerProcessHandlers: false,
     stderr: { write: () => {} },
@@ -550,12 +567,14 @@ test('daemon shutdown releases a retainOnClose lease that no session holds', asy
           },
         }),
       }),
-      env: {
-        ...process.env,
-        AGENT_DEVICE_STATE_DIR: stateDir,
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
-      },
+      host: createTestHostEnvironment({
+        env: {
+          ...process.env,
+          AGENT_DEVICE_STATE_DIR: stateDir,
+          AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+          AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+        },
+      }),
       exit: () => {},
       registerProcessHandlers: false,
       stderr: { write: () => {} },

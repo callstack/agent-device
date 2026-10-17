@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { TestContext } from 'node:test';
@@ -69,6 +70,7 @@ const sendToDaemonTransport: AgentDeviceDaemonTransport = async (request, contex
     paths,
     90_000,
     {
+      host: createTestHostEnvironment(),
       signal: context?.signal,
       timeoutRecovery: 'none',
     },

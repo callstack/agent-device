@@ -21,7 +21,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeIosAppSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
@@ -62,6 +62,7 @@ test('a Maestro replay error comes back unchanged after its inputText registered
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- inputText: "1"\n');
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(root, 'daemon.log'),
     token: 'test-token',

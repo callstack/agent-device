@@ -65,7 +65,9 @@ export type EnsureCompanionTunnelOptions = {
   profileKey?: string;
   consumerKey?: string;
   stateDir?: string;
-  env?: NodeJS.ProcessEnv;
+  /** The environment and working directory the detached companion process starts with. */
+  env: NodeJS.ProcessEnv;
+  cwd: string;
 };
 
 export type EnsureCompanionTunnelResult = {
@@ -401,7 +403,8 @@ function spawnCompanionProcess(
   let pid = 0;
   try {
     pid = runCmdDetached(process.execPath, [...execArgs, modulePath, options.definition.runArg], {
-      env: buildCompanionEnv(options, options.env ?? process.env),
+      cwd: options.cwd,
+      env: buildCompanionEnv(options, options.env),
       stdio: ['ignore', logFd, logFd],
     });
   } finally {

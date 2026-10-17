@@ -4,6 +4,7 @@ import {
   whichCmd,
   type ExecOptions,
   type ExecResult,
+  commandHostEnvironment,
 } from '@agent-device/host-kit/command';
 import type { ScopedSimctlArgs } from '@agent-device/contracts/platform-runtime-host';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
@@ -76,7 +77,7 @@ const localAppleToolProvider: AppleToolProvider = {
     runCmd,
     async (plistPath) => await readPlistJsonWithCommand(runCmd, plistPath),
   ),
-  whichCommand: whichCmd,
+  whichCommand: async (cmd) => await whichCmd(cmd, commandHostEnvironment().env),
 };
 
 const appleToolProviderScope = createScopedProvider<AppleToolProvider>(

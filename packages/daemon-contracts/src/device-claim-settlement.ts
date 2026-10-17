@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   ownerIdentityMatches,
   type readCurrentOwnerIdentity,
@@ -71,8 +72,9 @@ export async function resolveExistingClaim(params: {
   transientCommand?: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   observeDeviceBoot?: DeviceBootObservationService;
+  env: EnvMap;
 }): Promise<ExistingClaimResolution> {
-  const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(params.deviceKey));
+  const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(params.deviceKey, params.env));
   if (!existing) return { status: 'available' };
   if (
     existing.claim &&
@@ -82,7 +84,7 @@ export async function resolveExistingClaim(params: {
     return { status: 'available' };
   }
   if (existing.claim && isCurrentClaimOwner(existing.claim, params, params.owner)) {
-    return { status: 'held', ownership: renewHeldClaim(existing.claim) };
+    return { status: 'held', ownership: renewHeldClaim(existing.claim, params.env) };
   }
   return await settleForeignClaim(existing, params);
 }
@@ -93,10 +95,10 @@ export async function resolveExistingClaim(params: {
  * keep a claim stamped before the reboot, and the next foreign `open` would read that stamp as
  * proof of a device nobody owns and take it out from under a session that is demonstrably running.
  */
-function renewHeldClaim(claim: DeviceClaim): DeviceClaimSessionOwnership {
+function renewHeldClaim(claim: DeviceClaim, env: EnvMap): DeviceClaimSessionOwnership {
   if (claim.updatedAtMs >= Date.now()) return ownershipFromClaim(claim);
   const renewed: DeviceClaim = { ...claim, updatedAtMs: Date.now() };
-  writeDeviceClaim(renewed);
+  writeDeviceClaim(renewed, env);
   return ownershipFromClaim(renewed);
 }
 
@@ -112,6 +114,7 @@ async function settleForeignClaim(
     deviceKey: string;
     reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
     observeDeviceBoot?: DeviceBootObservationService;
+    env: EnvMap;
   },
 ): Promise<ExistingClaimResolution> {
   const claim = existing.claim;
@@ -132,6 +135,7 @@ async function settleForeignClaim(
   const reconciliation = await settleVerifiedOrphanedClaim(
     claim,
     params.reconcileOrphanedDeviceClaim,
+    params.env,
   );
   if (reconciliation.status === 'retained') {
     emitClaimConflict(params.deviceKey, existing, reconciliation.reason);
@@ -164,11 +168,12 @@ async function foreignClaimSettlement(params: {
 export async function settleVerifiedOrphanedClaim(
   claim: DeviceClaim,
   reconcile: DeviceClaimReconciler,
+  env: EnvMap,
 ): Promise<DeviceClaimReconciliationResult> {
   const result = await reconcile(claim);
   if (result.status === 'retained') return result;
   try {
-    fs.unlinkSync(resolveDeviceClaimPath(claim.deviceKey));
+    fs.unlinkSync(resolveDeviceClaimPath(claim.deviceKey, env));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }

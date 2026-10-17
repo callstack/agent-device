@@ -7,7 +7,11 @@ import { createRequestHandler } from '../../__tests__/support/test-device-runtim
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeIosSession, makeSession } from '../../__tests__/support/session-factories.ts';
-import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  WEB_DESKTOP_DEVICE,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 test('events reads the daemon-owned session timeline without appending poll noise', async () => {
@@ -21,6 +25,7 @@ test('events reads the daemon-owned session timeline without appending poll nois
   const eventLogPath = sessionStore.resolveEventLogPath('events-session');
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -66,6 +71,7 @@ test('events accepts a blank limit placeholder for cursor-only reads', async () 
   });
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -106,6 +112,7 @@ test('events returns structured errors for invalid limit and cursor', async () =
   });
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -154,6 +161,7 @@ test('events flushes pending event writes before reading', async () => {
   });
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -192,6 +200,7 @@ test('events reads the daemon-owned session timeline for a web-backed session', 
   });
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -226,6 +235,7 @@ test('request timeline records thrown request failures after scope creation', as
   sessionStore.publish('events-session', makeIosSession('events-session'));
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -266,6 +276,7 @@ test('request timeline records setup failures after start is appended', async ()
   const sessionStore = makeSessionStore('agent-device-router-events-setup-failure-');
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

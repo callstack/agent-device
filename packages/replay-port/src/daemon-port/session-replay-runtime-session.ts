@@ -180,7 +180,7 @@ function preflightSaveScriptTarget(params: {
   if (!saveScript) return undefined;
   const targetPath =
     typeof saveScript === 'string'
-      ? expandSessionPath(saveScript)
+      ? expandSessionPath(saveScript, process.cwd())
       : (existingSaveScriptPath ?? healedScriptSiblingPath(sourcePath));
   const effectiveForce =
     Boolean(liveForce) || (Boolean(persistedForce) && targetPath === existingSaveScriptPath);

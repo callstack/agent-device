@@ -20,7 +20,11 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  *   completely unchanged.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   resolveRunnerAppBundleId: vi.fn(),
@@ -68,6 +72,8 @@ import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
 } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
+
+bindTestCommandHost();
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
@@ -240,6 +246,7 @@ test('diagnostic get/is reads mid-repair are excluded from the healed script by 
 
   // --- Finalize: `close --save-script` commits the healed `.ad`. ---
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -321,6 +328,7 @@ test.each(['get', 'snapshot'])(
     expect(session.actions.map((a) => a.command)).toEqual(['open', command, 'click']);
 
     const closeResponse = await handleCloseCommand({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
@@ -457,6 +465,7 @@ test('an authored snapshot plan step survives replay and close into the healed f
   expect(replay.ok).toBe(true);
 
   const closed = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

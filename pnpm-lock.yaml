@@ -535,6 +535,10 @@ importers:
       '@agent-device/provision-kit':
         specifier: workspace:*
         version: link:../provision-kit
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/platform-linux:
     dependencies:
@@ -550,6 +554,10 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/platform-vega:
     dependencies:

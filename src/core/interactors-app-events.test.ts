@@ -4,8 +4,16 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { ANDROID_EMULATOR, IOS_DEVICE, MACOS_DEVICE, mkdtempForTest } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  IOS_DEVICE,
+  MACOS_DEVICE,
+  mkdtempForTest,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import { getInteractor } from './interactors.ts';
+
+bindTestCommandHost();
 
 async function triggerEvent(device: DeviceInfo, eventUrl: string, appBundleId?: string) {
   const operations = bindAdmittedLocalInteractorOperations({

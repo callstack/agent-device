@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import type { InspectDeviceRuntimeFacts } from '../../../core/request-runtime-binding.ts';
@@ -116,6 +117,7 @@ async function dispatchInstallSource(params: {
     meta: { installSource: { kind: 'path', path: '/tmp/App.apk' } },
   };
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req,

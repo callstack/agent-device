@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { emitDiagnostic, isProcessAlive, parseBooleanLiteral } from './host.ts';
+import { hostEnvironment, emitDiagnostic, isProcessAlive, parseBooleanLiteral } from './host.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
@@ -61,7 +61,7 @@ const RUNNER_ADOPTION_EXIT_POLL_INTERVAL_MS = 1_000;
 // Kill switch for the runner handoff across daemon restarts: disables both
 // detaching healthy runners on graceful shutdown and adopting them on the next
 // startup, in every handoff lane (#2681).
-export function isIosRunnerDetachEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isIosRunnerDetachEnabled(env: NodeJS.ProcessEnv = hostEnvironment().env): boolean {
   return parseBooleanLiteral(env.AGENT_DEVICE_IOS_RUNNER_DETACH ?? '') !== false;
 }
 

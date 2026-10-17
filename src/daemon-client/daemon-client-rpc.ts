@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
@@ -24,11 +25,12 @@ export function handleDaemonHttpResponseBody(
     info: DaemonInfo;
     req: DaemonWireRequest;
     stateDir: string;
+    host: HostEnvironment;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
 ): void {
-  const { info, req, stateDir, resolve, reject } = options;
+  const { info, req, stateDir, host, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
@@ -43,7 +45,7 @@ export function handleDaemonHttpResponseBody(
       );
       return;
     }
-    void resolveDaemonHttpResult(info, req, parsed.result, resolve, reject);
+    void resolveDaemonHttpResult(info, req, parsed.result, host, resolve, reject);
   } catch (err) {
     reject(
       new AppError(
@@ -154,12 +156,15 @@ async function resolveDaemonHttpResult(
   info: DaemonInfo,
   req: DaemonWireRequest,
   result: DaemonResponse,
+  host: HostEnvironment,
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
     resolve(
-      info.baseUrl && result.ok ? await materializeRemoteArtifacts(info, req, result) : result,
+      info.baseUrl && result.ok
+        ? await materializeRemoteArtifacts(info, req, result, host)
+        : result,
     );
   } catch (error) {
     reject(error);

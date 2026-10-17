@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts';
 /**
@@ -67,6 +68,8 @@ import {
   setup,
 } from './session-replay-repair-transaction.fixtures.ts';
 
+bindTestCommandHost();
+
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 const mockLifecycleDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
@@ -117,6 +120,7 @@ test('#1258: close --save-script --force overwrites an existing COMPLETE healed 
   );
 
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -370,6 +374,7 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
   // (never the rejected <b>) — proof the rejected retarget corrupted neither
   // the completion flag nor the target path.
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
     sessionName,
@@ -410,6 +415,7 @@ test('#1258 force is per-target: re-arming --save-script=<b> WITHOUT --force dro
   // `close --save-script=<b>` (NO --force): retargeting from <a> to <b>
   // without a live opt-in drops the force that was granted for <a>.
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -454,6 +460,7 @@ test('#1258 force per-target, contrast: re-arming --save-script=<b> WITH --force
   // `close --save-script=<b> --force`: the live opt-in re-grants force for the
   // new target, overwriting it.
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

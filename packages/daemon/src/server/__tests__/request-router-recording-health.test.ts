@@ -45,7 +45,7 @@ import type { SessionState } from '../../core/session-state.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 // The observation spy hangs off the port the router composes with (ADR 0019 section 11), not off
 // the platform module behind it.
@@ -90,6 +90,7 @@ test('router blocks non-record commands when recording was invalidated', async (
   sessionStore.publish('default', session);
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -146,6 +147,7 @@ test('router allows canonical iOS simulator gestures during overlay recording af
     sessionId: 'runner-after',
   });
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

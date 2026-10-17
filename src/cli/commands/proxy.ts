@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { randomBytes } from 'node:crypto';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
@@ -19,28 +20,36 @@ type ProxyStartup = {
   stateDir: string;
 };
 
-export const proxyCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const proxyCommand: ClientCommandHandler = async ({
+  positionals,
+  flags,
+  host: clientHost,
+}) => {
   if (positionals.length > 0) {
     throw new AppError('INVALID_ARGS', 'proxy does not accept positional arguments.');
   }
-  const startup = await startProxy(flags);
+  const startup = await startProxy(flags, clientHost);
   await writeCommandOutput(flags, startup, () => renderProxyStartup(startup));
   await waitForever();
   return true;
 };
 
-async function startProxy(flags: CliFlags): Promise<ProxyStartup> {
-  const settings = resolveClientSettings({
-    session: 'default',
-    command: 'proxy',
-    positionals: [],
-    flags: {
-      stateDir: flags.stateDir,
-      daemonBaseUrl: '',
-      daemonTransport: 'http',
-      daemonServerMode: 'http',
+async function startProxy(flags: CliFlags, clientHost: HostEnvironment): Promise<ProxyStartup> {
+  const settings = resolveClientSettings(
+    {
+      session: 'default',
+      command: 'proxy',
+      positionals: [],
+      flags: {
+        stateDir: flags.stateDir,
+        daemonBaseUrl: '',
+        daemonTransport: 'http',
+        daemonServerMode: 'http',
+      },
     },
-  });
+    undefined,
+    clientHost,
+  );
   const daemon = await ensureManagedDaemon(settings);
   const upstreamBaseUrl = resolveLocalDaemonBaseUrl(daemon.info.httpPort);
   const token = resolveProxyClientToken(flags);

@@ -44,6 +44,7 @@ import {
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
   mkdtempForTestSync,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
@@ -146,6 +147,7 @@ async function route(
   const sessionStore = makeSessionStore('agent-device-dispatch-route-');
   sessionStore.publish(SESSION, session);
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

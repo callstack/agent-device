@@ -13,6 +13,7 @@ import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
 import { type ExecDetachedExit } from '@agent-device/host-kit/command';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -58,6 +59,8 @@ import {
 } from './daemon-client-transport.ts';
 
 export type DaemonClientSettings = {
+  /** The environment and working directory this client reads, for every setting below and the launch. */
+  host: HostEnvironment;
   paths: DaemonPaths;
   daemonLifecycle: DaemonLifecycle;
   /**
@@ -97,12 +100,13 @@ LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 
 export function resolveClientSettings(
   req: Omit<DaemonWireRequest, 'token'>,
-  suppliedAuthToken?: string,
+  suppliedAuthToken: string | undefined,
+  host: HostEnvironment,
   daemonLifecycle: DaemonLifecycle = 'managed',
 ): DaemonClientSettings {
-  const explicitStateDir = resolveExplicitStateDir(req);
-  const remote = resolveRemoteClientSettings(req, suppliedAuthToken);
-  const transport = resolveTransportClientSettings(req.flags, remote.remoteBaseUrl);
+  const explicitStateDir = resolveExplicitStateDir(req, host.env);
+  const remote = resolveRemoteClientSettings(req, suppliedAuthToken, host.env);
+  const transport = resolveTransportClientSettings(req.flags, remote.remoteBaseUrl, host.env);
   // An attach client owns no daemon, and a private state directory would hold one nobody started.
   const ownedStateDir =
     daemonLifecycle !== 'attach' &&
@@ -110,7 +114,10 @@ export function resolveClientSettings(
       ? createOwnedReplayStateDir()
       : undefined;
   return {
-    paths: ownedStateDir?.paths ?? resolveDaemonPaths(explicitStateDir),
+    host,
+    paths:
+      ownedStateDir?.paths ??
+      resolveDaemonPaths(explicitStateDir, { env: host.env, cwd: host.cwd }),
     daemonLifecycle,
     retireIncompatibleContender: true,
     transportPreference: transport.preference,
@@ -128,9 +135,10 @@ export function resolveClientSettings(
  */
 export function resolveEnsurableDaemon(
   req: Omit<DaemonWireRequest, 'token'>,
+  host: HostEnvironment,
 ): EnsureDaemonOptions | undefined {
-  const stateDir = resolveExplicitStateDir(req);
-  const rawBaseUrl = req.flags?.daemonBaseUrl ?? process.env.AGENT_DEVICE_DAEMON_BASE_URL;
+  const stateDir = resolveExplicitStateDir(req, host.env);
+  const rawBaseUrl = req.flags?.daemonBaseUrl ?? host.env.AGENT_DEVICE_DAEMON_BASE_URL;
   if (rawBaseUrl || shouldUseOwnedReplayStateDir(req, stateDir, rawBaseUrl)) return undefined;
   return {
     ...(stateDir !== undefined ? { stateDir } : {}),
@@ -147,10 +155,17 @@ export function resolveEnsurableDaemon(
  * The settings of a local daemon with no request behind them, for the caller that ensures one. It
  * reads no remote base URL: a remote connection has no local daemon to ensure.
  */
-export function resolveLocalDaemonSettings(options: EnsureDaemonOptions): DaemonClientSettings {
-  const transport = resolveTransportClientSettings(options, undefined);
+export function resolveLocalDaemonSettings(
+  options: EnsureDaemonOptions,
+  host: HostEnvironment,
+): DaemonClientSettings {
+  const transport = resolveTransportClientSettings(options, undefined, host.env);
   return {
-    paths: resolveDaemonPaths(options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR),
+    host,
+    paths: resolveDaemonPaths(options.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR, {
+      env: host.env,
+      cwd: host.cwd,
+    }),
     daemonLifecycle: 'managed',
     retireIncompatibleContender: false,
     transportPreference: transport.preference,
@@ -158,21 +173,25 @@ export function resolveLocalDaemonSettings(options: EnsureDaemonOptions): Daemon
   };
 }
 
-function resolveExplicitStateDir(req: Omit<DaemonWireRequest, 'token'>): string | undefined {
-  return req.flags?.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR;
+function resolveExplicitStateDir(
+  req: Omit<DaemonWireRequest, 'token'>,
+  env: Readonly<EnvMap>,
+): string | undefined {
+  return req.flags?.stateDir ?? env.AGENT_DEVICE_STATE_DIR;
 }
 
 function resolveRemoteClientSettings(
   req: Omit<DaemonWireRequest, 'token'>,
   suppliedAuthToken: string | undefined,
+  env: Readonly<EnvMap>,
 ): {
   rawBaseUrl: string | undefined;
   remoteBaseUrl?: string;
   authToken?: string;
 } {
-  const rawBaseUrl = req.flags?.daemonBaseUrl ?? process.env.AGENT_DEVICE_DAEMON_BASE_URL;
+  const rawBaseUrl = req.flags?.daemonBaseUrl ?? env.AGENT_DEVICE_DAEMON_BASE_URL;
   const remoteBaseUrl = resolveRemoteDaemonBaseUrl(rawBaseUrl);
-  const authToken = suppliedAuthToken ?? process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
+  const authToken = suppliedAuthToken ?? env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
   validateRemoteDaemonTrust(remoteBaseUrl, authToken);
   return { rawBaseUrl, remoteBaseUrl, authToken };
 }
@@ -180,8 +199,9 @@ function resolveRemoteClientSettings(
 function resolveTransportClientSettings(
   flags: Partial<Pick<EnsureDaemonOptions, 'daemonTransport' | 'daemonServerMode'>> | undefined,
   remoteBaseUrl: string | undefined,
+  env: Readonly<EnvMap>,
 ): { preference: DaemonTransportPreference; serverMode: DaemonServerMode } {
-  const rawTransport = flags?.daemonTransport ?? process.env.AGENT_DEVICE_DAEMON_TRANSPORT;
+  const rawTransport = flags?.daemonTransport ?? env.AGENT_DEVICE_DAEMON_TRANSPORT;
   const preference = resolveDaemonTransportPreference(rawTransport);
   if (remoteBaseUrl && preference === 'socket') {
     throw new AppError(
@@ -192,7 +212,7 @@ function resolveTransportClientSettings(
   }
   const rawServerMode =
     flags?.daemonServerMode ??
-    process.env.AGENT_DEVICE_DAEMON_SERVER_MODE ??
+    env.AGENT_DEVICE_DAEMON_SERVER_MODE ??
     (rawTransport === 'dual' ? 'dual' : undefined);
   return {
     preference,
@@ -215,7 +235,7 @@ export async function ensureManagedDaemon(settings: DaemonClientSettings): Promi
 
   const ensured = await ensureLocalDaemon(settings);
   // Checked on both branches: a startup can resolve to a daemon another caller raced in.
-  await assertDaemonPolicyMatches(ensured.info, settings.paths.baseDir);
+  await assertDaemonPolicyMatches(ensured.info, settings.paths.baseDir, settings.host);
   return ensured;
 }
 
@@ -416,10 +436,12 @@ async function canReachReusableDaemon(
 export async function assertDaemonPolicyMatches(
   existing: DaemonInfo,
   stateDir: string,
+  host: HostEnvironment,
 ): Promise<void> {
-  if (!process.env.AGENT_DEVICE_DAEMON_POLICY?.trim()) return;
+  const { env } = host;
+  if (!env.AGENT_DEVICE_DAEMON_POLICY?.trim()) return;
   const { loadDaemonPolicy } = await import('@agent-device/daemon-contracts/daemon-policy-file');
-  const expected = loadDaemonPolicy(process.env)?.digest;
+  const expected = loadDaemonPolicy(env, host.cwd)?.digest;
   if (expected === existing.policyDigest) return;
   throw new AppError(
     'COMMAND_FAILED',
@@ -927,6 +949,8 @@ function startDaemon(settings: DaemonClientSettings): DaemonStartupLaunch {
   return launchDaemonProcess({
     paths: settings.paths,
     serverMode: settings.serverMode,
+    env: settings.host.env,
+    cwd: settings.host.cwd,
     ownedStateDir: settings.ownedStateDir,
     args: launchSpec.useSrc
       ? ['--experimental-strip-types', launchSpec.srcPath]

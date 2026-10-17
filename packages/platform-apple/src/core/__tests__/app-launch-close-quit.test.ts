@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
@@ -23,6 +24,8 @@ import { IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
+
+bindTestCommandHost();
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);

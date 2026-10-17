@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 // The platform axis a remote connection is named on (#2962).
 //
 // A `DeviceInfo` carries the INTERNAL `apple` platform while everything a connection records or
@@ -23,6 +24,8 @@ import { connectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+
+bindTestCommandHost();
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -51,6 +54,7 @@ test('proxy install against an iOS-bound connection is not refused as a platform
   const allocate = recordedLeaseAllocate({ leaseId: 'ios-lease-1', backend: 'ios-instance' });
 
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'install',
     flags: {
       json: true,
@@ -111,6 +115,7 @@ test('proxy install with the apple family selector matches an ios-bound connecti
   const allocate = recordedLeaseAllocate({ leaseId: 'ios-lease-1', backend: 'ios-instance' });
 
   await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'install',
     flags: {
       json: true,
@@ -170,6 +175,7 @@ test('remote command with the apple family selector matches an ios-bound connect
   const heartbeats: string[] = [];
 
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'snapshot',
     flags: {
       json: true,
@@ -225,6 +231,7 @@ test('proxy install against a differently-bound platform is still refused', asyn
   await assert.rejects(
     async () =>
       await materializeRemoteConnectionForCommand({
+        host: createTestHostEnvironment(),
         command: 'install',
         flags: {
           json: true,
@@ -288,6 +295,7 @@ test('proxy install records the public platform and the next command reuses that
   });
   const install = () =>
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'install',
       flags: {
         json: true,
@@ -373,6 +381,7 @@ test('a connection opened on the apple family collapses to the bound device leaf
   });
   const install = (platform: 'apple' | 'ios' | 'macos') =>
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'install',
       flags: {
         json: true,
@@ -435,6 +444,7 @@ test('a default-policy connection collapses its recorded apple alias when the le
   const allocate = recordedLeaseAllocate({ leaseId: 'default-lease-1', backend: 'ios-instance' });
   const command = (platform: 'apple' | 'ios' | 'macos') =>
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'snapshot',
       flags: {
         json: true,
@@ -498,6 +508,7 @@ test('a stored apple record refuses the other leaf even though nothing rewrote i
   const heartbeats: string[] = [];
   const command = (platform: 'macos') =>
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'snapshot',
       flags: {
         json: true,
@@ -559,6 +570,7 @@ test('connect refuses to reuse an apple-bound connection for the other leaf', as
   });
   const connect = (platform: 'apple' | 'ios' | 'macos') =>
     connectCommand({
+      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: true,
@@ -622,6 +634,7 @@ test('connect keeps the bound leaf when re-declared with the family selector', a
   });
 
   await connectCommand({
+    host: createTestHostEnvironment(),
     positionals: [],
     flags: {
       json: true,
@@ -671,6 +684,7 @@ test('an undecided record narrows to the requested leaf or refuses, and never se
     });
     allocations.push(allocation);
     return materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'snapshot',
       flags: {
         json: true,
@@ -755,6 +769,7 @@ test('connect --force refuses a backend and platform that name different devices
   await assert.rejects(
     async () =>
       await connectCommand({
+        host: createTestHostEnvironment(),
         positionals: [],
         flags: {
           json: true,

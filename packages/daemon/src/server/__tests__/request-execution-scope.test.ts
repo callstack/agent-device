@@ -21,9 +21,15 @@ import {
 } from '../request-execution-scope.ts';
 import { resolveSessionScope } from '../../sessions/session-routing.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { handleSessionCloseCommands } from '../../sessions/session-lifecycle/internal/session-close.ts';
+
+bindTestCommandHost();
 
 const TEST_ROOT = mkdtempForTestSync('agent-device-request-execution-scope-');
 const LOG_PATH = path.join(TEST_ROOT, 'diagnostics.log');
@@ -822,6 +828,7 @@ test('router: deferred tenant connect with no daemon session closes as SESSION_N
 
   const response = await scope.runLocked(async () =>
     handleSessionCloseCommands({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: scope.req,
       sessionName: scope.sessionName,
@@ -891,10 +898,12 @@ test('router: an existing lease-less session under tenant isolation still refuse
 function createTestRequestScope(
   params: Omit<
     Parameters<typeof createRequestExecutionScope>[0],
-    'platformServices' | 'claimRecoveryGateway'
-  >,
+    'platformServices' | 'claimRecoveryGateway' | 'host'
+  > &
+    Partial<Pick<Parameters<typeof createRequestExecutionScope>[0], 'host'>>,
 ) {
   return createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     ...params,
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),

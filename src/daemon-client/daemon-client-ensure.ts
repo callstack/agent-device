@@ -3,6 +3,8 @@ import type {
   DaemonIdentity,
   EnsureDaemonOptions,
 } from '@agent-device/contracts/client';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { waitForDaemonExit } from '@agent-device/daemon-contracts/daemon-process';
 import { recoverAbandonedDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -55,15 +57,18 @@ type EnsureStep =
  * connection has no local daemon to ensure, so this takes no remote option and reads no remote
  * environment.
  */
-export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<DaemonConnection> {
-  const settings = resolveLocalDaemonSettings(options);
+export async function ensureDaemon(
+  options: EnsureDaemonOptions = {},
+  host: HostEnvironment = captureHostEnvironment(process),
+): Promise<DaemonConnection> {
+  const settings = resolveLocalDaemonSettings(options, host);
   for (let attempt = 1; attempt <= ENSURE_ATTEMPTS; attempt += 1) {
     const step = await ensureOnce(settings, options.onStart);
     if (step.kind === 'judge-again') {
       await sleep(JUDGE_AGAIN_DELAY_MS);
       continue;
     }
-    await assertDaemonPolicyMatches(step.daemon.info, settings.paths.baseDir);
+    await assertDaemonPolicyMatches(step.daemon.info, settings.paths.baseDir, host);
     return {
       stateDir: settings.paths.baseDir,
       daemon: daemonIdentityOf(step.daemon.info),

@@ -7,7 +7,11 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitDiagnostic, getDiagnosticsMeta, updateDiagnosticsScope } from './diagnostics.ts';
-import { parseBooleanLiteral } from '@agent-device/kernel/source-value';
+import {
+  parseBooleanLiteral,
+  type EnvMap,
+  type HostEnvironment,
+} from '@agent-device/kernel/source-value';
 
 export type ExecResult = {
   stdout: string;
@@ -106,30 +110,56 @@ export async function withoutCommandExecutorOverride<T>(fn: () => Promise<T>): P
   return await commandExecutorOverrideScope.run(undefined, fn);
 }
 
-const requestCommandEnvScope = new AsyncLocalStorage<NodeJS.ProcessEnv>();
+type CommandHostScope = Readonly<{
+  host: HostEnvironment;
+  requestEnv: EnvMap | undefined;
+}>;
 
-/** Overlays request environment values on spawned commands without changing `process.env`. */
-export async function withRequestCommandEnv<T>(
-  env: NodeJS.ProcessEnv | undefined,
+const commandHostScope = new AsyncLocalStorage<CommandHostScope>();
+
+/**
+ * Runs `fn` as the host that owns the commands it spawns. A command without its own `env` starts
+ * from `host.env`, then takes `requestEnv` on top, so neither the process's environment nor a
+ * concurrent request's values reach it. Outside a scope a command without `env` inherits the process's.
+ */
+export async function withCommandHost<T>(
+  scope: CommandHostScope,
   fn: () => Promise<T>,
 ): Promise<T> {
-  if (!env) return await fn();
-  return await requestCommandEnvScope.run(env, fn);
+  // A nested scope of the same host that names no request env keeps the enclosing request's.
+  const enclosing = commandHostScope.getStore();
+  const requestEnv =
+    scope.requestEnv ?? (enclosing?.host === scope.host ? enclosing.requestEnv : undefined);
+  return await commandHostScope.run({ host: scope.host, requestEnv }, fn);
+}
+
+/**
+ * The host of the enclosing {@link withCommandHost} scope, for code that has no host of its own.
+ * Outside a scope there is no host to answer with, so it refuses rather than guess.
+ */
+export function commandHostEnvironment(): HostEnvironment {
+  const scope = commandHostScope.getStore();
+  if (!scope) {
+    throw new AppError('COMMAND_FAILED', 'No host environment is bound to this command.', {
+      reason: 'host_environment_unscoped',
+    });
+  }
+  return scope.host;
 }
 
 /** Effective toolchain selection; an explicitly empty request value selects `xcode-select`. */
 export function commandDeveloperDir(): string | undefined {
-  const requestEnv = requestCommandEnvScope.getStore();
-  if (requestEnv && Object.hasOwn(requestEnv, 'DEVELOPER_DIR')) {
-    return requestEnv.DEVELOPER_DIR || undefined;
+  const scope = commandHostScope.getStore();
+  if (scope?.requestEnv && Object.hasOwn(scope.requestEnv, 'DEVELOPER_DIR')) {
+    return scope.requestEnv.DEVELOPER_DIR || undefined;
   }
-  return process.env.DEVELOPER_DIR || undefined;
+  return scope?.host.env.DEVELOPER_DIR || undefined;
 }
 
 function resolveSpawnEnv(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv | undefined {
-  const requestEnv = requestCommandEnvScope.getStore();
-  if (!requestEnv) return env;
-  return { ...(env ?? process.env), ...requestEnv };
+  const scope = commandHostScope.getStore();
+  if (!scope) return env;
+  return { ...(env ?? scope.host.env), ...scope.requestEnv };
 }
 
 export async function runCmd(
@@ -288,7 +318,7 @@ function runSpawnedCommand(
   });
 }
 
-export async function whichCmd(cmd: string): Promise<boolean> {
+export async function whichCmd(cmd: string, env: EnvMap): Promise<boolean> {
   const candidate = normalizeExecutableLookup(cmd);
   if (!candidate) return false;
 
@@ -296,9 +326,9 @@ export async function whichCmd(cmd: string): Promise<boolean> {
     return isExecutablePath(candidate);
   }
 
-  const pathValue = process.env.PATH;
+  const pathValue = readPathVariable(env, 'PATH');
   if (!pathValue) return false;
-  const pathExtensions = resolvePathExtensions();
+  const pathExtensions = resolvePathExtensions(env);
   for (const directory of pathValue.split(path.delimiter)) {
     const trimmedDirectory = directory.trim();
     if (!trimmedDirectory) continue;
@@ -529,7 +559,9 @@ type ExecTraceContext = {
 function createExecTraceContext(): ExecTraceContext {
   const diagnosticsMeta = getDiagnosticsMeta();
   const diagnosticsDebugEnabled = diagnosticsMeta.debug === true;
-  const envTraceEnabled = parseBooleanLiteral(process.env.AGENT_DEVICE_EXEC_TRACE ?? '') === true;
+  const envTraceEnabled =
+    parseBooleanLiteral(commandHostScope.getStore()?.host.env.AGENT_DEVICE_EXEC_TRACE ?? '') ===
+    true;
   if (!diagnosticsDebugEnabled && !envTraceEnabled) {
     return createDisabledExecTraceContext();
   }
@@ -811,9 +843,16 @@ function normalizeExecutableLookup(cmd: string): string | null {
   return BARE_COMMAND_RE.test(candidate) ? candidate : null;
 }
 
-function resolvePathExtensions(): string[] {
+/** Windows names an environment variable in any case; a captured copy no longer folds it. */
+function readPathVariable(env: EnvMap, name: 'PATH' | 'PATHEXT'): string | undefined {
+  if (process.platform !== 'win32') return env[name];
+  const key = Object.keys(env).find((candidate) => candidate.toUpperCase() === name);
+  return key === undefined ? undefined : env[key];
+}
+
+function resolvePathExtensions(env: EnvMap): string[] {
   if (process.platform !== 'win32') return [''];
-  const rawPathExt = process.env.PATHEXT;
+  const rawPathExt = readPathVariable(env, 'PATHEXT');
   if (!rawPathExt) return WINDOWS_PATH_EXTENSIONS;
   const extensions = rawPathExt
     .split(';')

@@ -17,6 +17,7 @@ import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-d
 import {
   createTestAppLogLiveHandle,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
@@ -144,6 +145,7 @@ function makeHandler(gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>) {
     sessionStore,
     leaseRegistry,
     handler: createRequestHandler({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       logPath: '/tmp/daemon.log',
       token: 'token',

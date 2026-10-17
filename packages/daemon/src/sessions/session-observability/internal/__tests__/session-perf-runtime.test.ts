@@ -19,13 +19,19 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import { makeAndroidSession } from '../../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
+import {
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../../core/request-runtime-binding.ts';
 import { handleSessionObservabilityCommands } from '../session-observability.ts';
+
+bindTestCommandHost();
 
 const available = Object.freeze({ available: true as const });
 const unavailable = Object.freeze({
@@ -36,6 +42,7 @@ const unavailable = Object.freeze({
 test('perf requires an active session', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -64,6 +71,7 @@ test('perf frames admits and binds only the selected runtime operation', async (
   const runtime = createPerfRuntime({ perfFrames });
 
   const response = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: 'android', command: 'perf', positionals: ['frames'] },
     sessionName: 'android',
@@ -94,6 +102,7 @@ test('perf memory projects an unavailable provider metric without failing the re
   const runtime = createPerfRuntime({ perfMemorySample });
 
   const response = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -125,6 +134,7 @@ test('perf refuses from owner facts before binding', async () => {
   const sessionStore = makeStore();
   const runtime = createPerfRuntime({}, unavailable);
   const response = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: 'android', command: 'perf', positionals: ['memory', 'sample'] },
     sessionName: 'android',
@@ -192,6 +202,7 @@ test('perf native capture is adopted durably and stop uses the live handle witho
   };
 
   const startResponse = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     ...common,
     req: {
@@ -210,6 +221,7 @@ test('perf native capture is adopted durably and stop uses the live handle witho
   );
 
   const wrongModeResponse = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     ...common,
     req: {
@@ -231,6 +243,7 @@ test('perf native capture is adopted durably and stop uses the live handle witho
   assert.equal(sessionStore.get('android')?.actions.length, 1);
 
   const stopResponse = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     ...common,
     req: {
@@ -264,6 +277,7 @@ test.each(['shutdown', 'retire'] as const)(
       return bound;
     };
     const response = await handleSessionObservabilityCommands({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
@@ -370,6 +384,7 @@ test('a perf result does not record into a successor occupying the same address'
   });
   const runtime = createPerfRuntime({ perfFrames });
   const response = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: 'android', command: 'perf', positionals: ['frames'] },
     sessionName: 'android',

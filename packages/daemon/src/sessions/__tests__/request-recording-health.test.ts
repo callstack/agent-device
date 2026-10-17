@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,
@@ -199,6 +200,7 @@ test.each(['rebuild', 'retire'] as const)(
         }),
     );
     await using scope = await createRequestExecutionScope({
+      host: createTestHostEnvironment(),
       req: { token: 'token', session: 'default', command: 'snapshot', positionals: [] },
       sessionStore: store,
       leaseRegistry: new LeaseRegistry(),

@@ -3,6 +3,7 @@ import {
   formatDoctorCheckDetailLines,
   formatDoctorCheckSummaryLine,
 } from '@agent-device/host-kit/doctor-lines';
+import { shouldColorStatusMarkers } from '@agent-device/host-kit/status-markers';
 import type { DoctorCheck, DoctorStatus } from '@agent-device/contracts/observability';
 
 export function summarizeDoctorStatus(checks: DoctorCheck[]): 'pass' | 'warn' | 'fail' {
@@ -38,5 +39,10 @@ export function appendDoctorCheck(checks: DoctorCheck[], check: DoctorCheck): vo
 }
 
 function formatDoctorCheckProgressMessage(check: DoctorCheck): string {
-  return [formatDoctorCheckSummaryLine(check), ...formatDoctorCheckDetailLines(check)].join('\n');
+  return [
+    formatDoctorCheckSummaryLine(check, {
+      useColor: shouldColorStatusMarkers(process.env, Boolean(process.stderr.isTTY)),
+    }),
+    ...formatDoctorCheckDetailLines(check),
+  ].join('\n');
 }

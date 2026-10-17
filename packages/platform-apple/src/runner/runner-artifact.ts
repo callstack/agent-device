@@ -15,6 +15,7 @@ import {
   emitRequestProgress,
   findProjectRoot,
   isCommandTimeoutError,
+  hostEnvironment,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -872,16 +873,17 @@ async function buildRunnerXctestrun(
   // teardown or a last-waiter cancellation reaches this same line again, and admission is what
   // refuses it. Checking at registration would be a check after the child exists (#3220).
   assertRunnerStartAdmitsPreparation(device.id, options.startAdmission);
-  const runnerBundleBuildSettings = resolveRunnerBundleBuildSettings(process.env);
+  const { env } = hostEnvironment();
+  const runnerBundleBuildSettings = resolveRunnerBundleBuildSettings(env);
   const signingBuildSettings = resolveRunnerSigningBuildSettings(
-    process.env,
+    env,
     device.kind === 'device',
     device,
   );
   const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
-  const archBuildSettings = resolveRunnerArchBuildSettings(process.env);
-  const sandboxBuildArgs = resolveRunnerSandboxBuildArgs();
+  const archBuildSettings = resolveRunnerArchBuildSettings(env);
+  const sandboxBuildArgs = resolveRunnerSandboxBuildArgs(env);
   try {
     await runCmdStreaming(
       'xcodebuild',

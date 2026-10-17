@@ -20,10 +20,13 @@ export function expandUserHomePath(inputPath: string, options: PathResolutionOpt
   return inputPath;
 }
 
-export function resolveUserPath(inputPath: string, options: PathResolutionOptions = {}): string {
+export function resolveUserPath(
+  inputPath: string,
+  options: PathResolutionOptions & { cwd: string },
+): string {
   const expandedPath = expandUserHomePath(inputPath, options);
   if (path.isAbsolute(expandedPath)) return expandedPath;
-  return path.resolve(options.cwd ?? process.cwd(), expandedPath);
+  return path.resolve(options.cwd, expandedPath);
 }
 
 /**

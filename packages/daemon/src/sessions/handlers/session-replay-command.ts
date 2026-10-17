@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
@@ -50,6 +51,7 @@ export const handleReplayCommand: SessionCommandHandler = async ({
   });
 
 export const handleReplayTestCommand: SessionCommandHandler = async ({
+  host,
   req,
   sessionName,
   logPath,
@@ -92,6 +94,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     dependencies: replayDaemonDependencies,
     cleanupSession: async (testSessionName) =>
       await closeReplayTestSession({
+        host,
         req,
         sessionName: testSessionName,
         logPath,
@@ -177,6 +180,7 @@ export function createReplaySession(
 }
 
 type ReplayTestSessionCleanupParams = Readonly<{
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -192,6 +196,7 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
   const { req, sessionName, logPath, sessionStore } = params;
   if (!sessionStore.get(sessionName)) return;
   const closeResponse = await handleSessionCloseCommands({
+    host: params.host,
     req: onDelegatingLedger(
       {
         token: req.token,

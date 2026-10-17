@@ -1,4 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import {
   OVERLAY_BUDGET_MS,
   type overlayRecordingTouches,
@@ -13,6 +14,8 @@ const video = vi.hoisted(() => ({
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
 const overlay = vi.hoisted(() => vi.fn<typeof overlayRecordingTouches>(async () => {}));
+bindTestCommandHost();
+
 vi.mock('@agent-device/capture-kit/recording-video', () => ({
   waitForStableFile: video.stable,
   waitForPlayableVideo: video.playable,
@@ -48,7 +51,9 @@ test('requires stable playable media before publishing finalization telemetry', 
   });
 
   expect(video.stable).toHaveBeenCalledWith('/tmp/capture.mp4');
-  expect(video.playable).toHaveBeenCalledWith('/tmp/capture.mp4');
+  expect(video.playable).toHaveBeenCalledWith('/tmp/capture.mp4', {
+    host: expect.objectContaining({ cwd: process.cwd() }),
+  });
   expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
 });
 

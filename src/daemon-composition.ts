@@ -72,7 +72,7 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
   input,
 ): Promise<DaemonRuntimeDeps> => {
   const {
-    env,
+    host: { env },
     baseDir,
     sessionsDir,
     assertShutdownAllowed,
@@ -85,13 +85,14 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
     sessionsDir,
     resolveSessionDir,
   });
-  const hostDiagnostics = createHostDiagnostics();
+  const hostDiagnostics = createHostDiagnostics(env);
   const providerComposition = await createDaemonProviderRuntimeComposition(env);
   // The registry has set up every plugin. Until this function returns, nothing else owns its
   // cleanup, so any later failure closes it here; success transfers ownership to the daemon.
   try {
     const providerDeviceRuntimes = [...providerComposition.runtimes];
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
+      env,
       assertShutdownAllowed,
       providerRuntimes: providerDeviceRuntimes,
       providerModules: providerComposition.platformModules,
@@ -114,6 +115,7 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
       },
     });
     const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
+      env,
       providerRuntimeProviders.deviceInventorySource,
     );
     // Root composition of the platform-services port and the owner-scoped claim-recovery gateway.
@@ -121,7 +123,7 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
     // composition modules (and the readiness/open-target adapters only the services module pulls)
     // off `src/daemon.ts`'s eager closure; what each adapter itself loads stays as lazy as it was.
     const { createDaemonPlatformServices } = await import('./platform-runtime-daemon-services.ts');
-    const { createClaimRecoveryGateway } = await import('./platform-runtime-claim-recovery.ts');
+    const { createClaimRecoveryGatewayFor } = await import('./platform-runtime-claim-recovery.ts');
 
     return Object.freeze({
       ownedProcessRecords,
@@ -135,7 +137,7 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
       recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
       deviceRuntimeGateway,
       platformResourceCleanup,
-      claimRecoveryGateway: createClaimRecoveryGateway,
+      claimRecoveryGateway: createClaimRecoveryGatewayFor(env),
       interactorResolution: Object.freeze({ resolve: getInteractor }),
       providerDeviceAdmission: Object.freeze({
         isActive: (device: DeviceInfo) => isActiveProviderDevice(device),

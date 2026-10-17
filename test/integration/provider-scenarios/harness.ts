@@ -34,6 +34,7 @@ import {
 } from '../../../src/platform-runtime.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import type {
   DeviceInventoryProvider,
@@ -97,6 +98,8 @@ type ProviderScenarioDependencies = Partial<Omit<DaemonRuntimeDeps, 'requestRout
     providerRuntimes?: readonly ProviderDeviceRuntime[];
     platformRuntime?: ProviderScenarioPlatformRuntime;
     leaseTtlMs?: number;
+    /** Settings the daemon's host reads, on top of the isolated defaults. */
+    env?: Readonly<Record<string, string>>;
   };
 
 export async function createProviderScenarioHarness(
@@ -109,10 +112,13 @@ export async function createProviderScenarioHarness(
     PATH: process.env.PATH,
     HOME: process.env.HOME,
     TMPDIR: process.env.TMPDIR,
-    AGENT_DEVICE_STATE_DIR: stateDir,
-    AGENT_DEVICE_CLAIMS_DIR: path.join(testRoot, 'claims'),
-    AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+    // A scenario that seeds claims for its daemon names the directory through the process.
+    AGENT_DEVICE_CLAIMS_DIR: process.env.AGENT_DEVICE_CLAIMS_DIR ?? path.join(testRoot, 'claims'),
     AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '3600000',
+    ...deps.env,
+    // Set last: the harness reads its own state dir and transport back from these.
+    AGENT_DEVICE_STATE_DIR: stateDir,
+    AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
   };
   const {
     deviceInventoryProvider,
@@ -121,6 +127,7 @@ export async function createProviderScenarioHarness(
     platformRuntime,
     providerRuntimes,
     leaseTtlMs,
+    env: _env,
     requestPlatformProviders: configuredRequestPlatformProviders,
     androidAdbProvider,
     appleRunnerProvider,
@@ -142,6 +149,7 @@ export async function createProviderScenarioHarness(
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
+      env: input.host.env,
       assertShutdownAllowed: input.assertShutdownAllowed,
       providerRuntimes: configuredRuntimes,
       providerModules,
@@ -203,7 +211,7 @@ export async function createProviderScenarioHarness(
   let runtime: Awaited<ReturnType<typeof startDaemonRuntime>>;
   try {
     runtime = await startDaemonRuntime({
-      env,
+      host: createTestHostEnvironment({ env }),
       registerProcessHandlers: false,
       stdout: { write: () => undefined },
       stderr: { write: () => undefined },
@@ -235,6 +243,7 @@ export async function createProviderScenarioHarness(
     });
     return await new Promise<DaemonResponse>((resolve, reject) => {
       handleDaemonHttpResponseBody(body, {
+        host: createTestHostEnvironment(),
         info: {
           transport: 'http',
           httpPort,

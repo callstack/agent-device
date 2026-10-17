@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   deviceIdentity,
   isApplePlatform,
@@ -84,6 +85,7 @@ export async function acquireDeviceClaim(params: {
   session: string;
   workspace: string;
   stateDir: string;
+  env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   /**
    * Asks the device whether it rebooted after a foreign claim was taken, which is the only proof
@@ -95,6 +97,7 @@ export async function acquireDeviceClaim(params: {
   const deviceKey = canonicalLocalDeviceKey(identity);
   return await withDeviceClaimLock(
     deviceKey,
+    params.env,
     async () => await claimHeldDevice({ ...params, deviceKey, identity }),
   );
 }
@@ -136,12 +139,13 @@ export async function acquireTransientDeviceClaim(params: {
   coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
   workspace: string;
   stateDir: string;
+  env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }): Promise<TransientDeviceClaimResult> {
   const identity = deviceClaimIdentity(params.device);
   const deviceKey = canonicalLocalDeviceKey(identity);
-  return await withDeviceClaimLock(deviceKey, async () => {
-    const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey));
+  return await withDeviceClaimLock(deviceKey, params.env, async () => {
+    const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
     if (
       existing?.claim &&
       !isAbandonedDeviceClaim(existing.claim) &&
@@ -174,6 +178,7 @@ export async function acquireTransientDeviceClaim(params: {
       transientCommand: params.command,
       workspace: params.workspace,
       stateDir: params.stateDir,
+      env: params.env,
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
     });
   });
@@ -189,6 +194,7 @@ async function claimHeldDevice(params: {
   transientCommand?: string;
   workspace: string;
   stateDir: string;
+  env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   observeDeviceBoot?: DeviceBootObservationService;
 }): Promise<DeviceClaimAcquireResult> {
@@ -222,7 +228,7 @@ async function claimHeldDevice(params: {
     claimOwnerKind,
     ...(params.transientCommand === undefined ? {} : { transientCommand: params.transientCommand }),
   };
-  writeDeviceClaim(claim);
+  writeDeviceClaim(claim, params.env);
   return {
     status: 'acquired',
     ownership: ownershipFromClaim(claim),
@@ -240,9 +246,9 @@ async function claimHeldDevice(params: {
  * alone — one process serves one daemon — and an abandoned claim holds the
  * device for nobody, so it grants no authority either.
  */
-export function processOwnsActiveDeviceClaim(device: DeviceInfo): boolean {
+export function processOwnsActiveDeviceClaim(device: DeviceInfo, env: EnvMap): boolean {
   const deviceKey = canonicalLocalDeviceKey(deviceClaimIdentity(device));
-  const claim = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey))?.claim;
+  const claim = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, env))?.claim;
   return (
     claim !== undefined &&
     claim.deviceKey === deviceKey &&
@@ -290,10 +296,11 @@ export type DeviceClaimStaleReleaseOutcome = {
 export async function releaseProvenStaleDeviceClaims(params: {
   selectors: DeviceClaimSelectors;
   reconcile: DeviceClaimReconciler;
+  env: EnvMap;
 }): Promise<DeviceClaimStaleReleaseOutcome[]> {
   const outcomes: DeviceClaimStaleReleaseOutcome[] = [];
-  for (const entry of inspectDeviceClaims(params.selectors)) {
-    outcomes.push(await releaseInspectedStaleClaim(entry, params.reconcile));
+  for (const entry of inspectDeviceClaims(params.selectors, params.env)) {
+    outcomes.push(await releaseInspectedStaleClaim(entry, params.reconcile, params.env));
   }
   return outcomes;
 }
@@ -301,6 +308,7 @@ export async function releaseProvenStaleDeviceClaims(params: {
 async function releaseInspectedStaleClaim(
   entry: InspectedDeviceClaim,
   reconcile: DeviceClaimReconciler,
+  env: EnvMap,
 ): Promise<DeviceClaimStaleReleaseOutcome> {
   const claim = entry.claim;
   const base = {
@@ -322,13 +330,14 @@ async function releaseInspectedStaleClaim(
   // A file whose name is not the hash of its own device key is not the file
   // the claim lock protects; releasing through it could unlink something else.
   if (
-    resolveDeviceClaimPath(claim.deviceKey) !== path.join(resolveDeviceClaimRoot(), entry.fileName)
+    resolveDeviceClaimPath(claim.deviceKey, env) !==
+    path.join(resolveDeviceClaimRoot(env), entry.fileName)
   ) {
     return { ...base, status: 'refused', reason: 'claim-file-name-mismatch' };
   }
   const { deviceKey, ownerToken } = claim;
-  return await withDeviceClaimLock(deviceKey, async () => {
-    const current = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey));
+  return await withDeviceClaimLock(deviceKey, env, async () => {
+    const current = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, env));
     if (
       !current?.claim ||
       current.claim.ownerToken !== ownerToken ||
@@ -336,7 +345,7 @@ async function releaseInspectedStaleClaim(
     ) {
       return { ...base, status: 'changed' as const, reason: 'claim-changed-during-release' };
     }
-    const result = await settleVerifiedOrphanedClaim(current.claim, reconcile);
+    const result = await settleVerifiedOrphanedClaim(current.claim, reconcile, env);
     if (result.status === 'retained') {
       return { ...base, status: 'retained' as const, reason: result.reason };
     }
@@ -389,10 +398,12 @@ export type DeviceClaimClearOutcome = 'deleted' | 'absent' | 'ownership-changed'
 
 export async function clearDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
+  env: EnvMap,
 ): Promise<DeviceClaimClearOutcome> {
   if (!ownership) return 'absent';
   return await writeOwnedDeviceClaim(
     ownership,
+    env,
     (_claim, claimPath) => {
       try {
         fs.unlinkSync(claimPath);
@@ -427,13 +438,15 @@ export type DeviceClaimAbandonOutcome = 'abandoned' | 'absent' | 'ownership-chan
  */
 export async function abandonDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
+  env: EnvMap,
 ): Promise<DeviceClaimAbandonOutcome> {
   if (!ownership) return 'absent';
   return await writeOwnedDeviceClaim(
     ownership,
+    env,
     (claim) => {
       const now = Date.now();
-      writeDeviceClaim({ ...claim, abandonedAtMs: now, updatedAtMs: now });
+      writeDeviceClaim({ ...claim, abandonedAtMs: now, updatedAtMs: now }, env);
       return 'abandoned';
     },
     (conflict) => (conflict ? 'ownership-changed' : 'absent'),
@@ -459,12 +472,14 @@ export type DeviceClaimRenewal =
  */
 export async function renewDeviceClaim(
   ownership: DeviceClaimSessionOwnership | undefined,
+  env: EnvMap,
 ): Promise<DeviceClaimRenewal> {
   if (!ownership) return { status: 'lost', conflict: undefined };
   return await writeOwnedDeviceClaim(
     ownership,
+    env,
     (claim) => {
-      writeDeviceClaim({ ...claim, updatedAtMs: Date.now() });
+      writeDeviceClaim({ ...claim, updatedAtMs: Date.now() }, env);
       return { status: 'renewed' } as const;
     },
     (conflict) => ({ status: 'lost' as const, conflict }),
@@ -477,11 +492,12 @@ export async function renewDeviceClaim(
  */
 async function writeOwnedDeviceClaim<O, L>(
   ownership: DeviceClaimSessionOwnership,
+  env: EnvMap,
   act: (claim: DeviceClaim, claimPath: string) => O,
   lost: (conflict: InspectedDeviceClaim | undefined) => L,
 ): Promise<O | L> {
-  return await withDeviceClaimLock(ownership.deviceKey, async () => {
-    const claimPath = resolveDeviceClaimPath(ownership.deviceKey);
+  return await withDeviceClaimLock(ownership.deviceKey, env, async () => {
+    const claimPath = resolveDeviceClaimPath(ownership.deviceKey, env);
     const inspected = inspectDeviceClaimFile(claimPath);
     if (!inspected) return lost(undefined);
     const claim = inspected.claim;
@@ -525,8 +541,9 @@ function claimMatchesOwnership(
 export async function reconcileOrphanedDeviceClaims(
   reconcile: DeviceClaimReconciler,
   daemonStateDir: string,
+  env: EnvMap,
 ): Promise<{ examined: number; reconciled: number; retained: number; changed: number }> {
-  const root = resolveDeviceClaimRoot();
+  const root = resolveDeviceClaimRoot(env);
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(root, { withFileTypes: true });
@@ -551,11 +568,11 @@ export async function reconcileOrphanedDeviceClaims(
     const { deviceKey, ownerToken } = scanned.claim;
     // A file whose name is not the hash of its own device key is not the file
     // the lock protects, so leave it rather than unlink something else.
-    if (resolveDeviceClaimPath(deviceKey) !== filePath) {
+    if (resolveDeviceClaimPath(deviceKey, env) !== filePath) {
       retained += 1;
       continue;
     }
-    await withDeviceClaimLock(deviceKey, async () => {
+    await withDeviceClaimLock(deviceKey, env, async () => {
       const current = inspectDeviceClaimFile(filePath);
       if (
         !current?.claim ||
@@ -565,7 +582,7 @@ export async function reconcileOrphanedDeviceClaims(
         changed += 1;
         return;
       }
-      const result = await settleVerifiedOrphanedClaim(current.claim, reconcile);
+      const result = await settleVerifiedOrphanedClaim(current.claim, reconcile, env);
       if (result.status === 'retained') {
         retained += 1;
         return;

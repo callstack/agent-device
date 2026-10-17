@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -34,6 +35,7 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: request(command),
@@ -60,6 +62,7 @@ test('observability commands retain their route response and narrow facade input
         'appLogAdmissionLedger',
         'audioProbeAdmissionLedger',
         'bindDevice',
+        'host',
         'inspectFacts',
         'perfCaptureAdmissionLedger',
         'platformServices',

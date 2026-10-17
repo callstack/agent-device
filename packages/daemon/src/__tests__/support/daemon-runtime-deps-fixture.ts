@@ -87,7 +87,7 @@ export function daemonRuntimeDepsFixture(
         deviceInventoryGateways: createTestDeviceInventoryGateways(),
         platformServices: daemonPlatformServicesFixture(),
         androidObservation: clearAndroidObservationFixture,
-        providerCredentials: providerCredentialsFixture(input.env, input.baseDir),
+        providerCredentials: providerCredentialsFixture(input.host.env, input.baseDir),
         createCommandSurface: fakeCreateCommandSurface,
       }),
       ...resolved,

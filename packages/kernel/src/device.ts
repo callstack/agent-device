@@ -1,5 +1,6 @@
 import { AppError } from './errors.ts';
 import type { DeviceIdentity } from './device-identity.ts';
+import type { EnvMap } from './source-value.ts';
 
 export {
   deviceIdentity,
@@ -422,9 +423,9 @@ export function resolveRequestAppleSimulatorSetPath(params: {
   requestedSetPath?: string;
   platform?: PlatformSelector;
   target?: DeviceTarget;
-  env?: NodeJS.ProcessEnv;
+  env: EnvMap;
 }): string | undefined {
-  const { platform, target, env = process.env } = params;
+  const { platform, target, env } = params;
   if (platform === 'macos' || target === 'desktop') return undefined;
   const requested = params.requestedSetPath?.trim() || undefined;
   if (!supportsAppleSimulatorSelection(platform)) return requested;

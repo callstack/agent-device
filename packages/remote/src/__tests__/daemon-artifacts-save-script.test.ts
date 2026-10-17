@@ -7,6 +7,7 @@
  * remote request that would produce a file the caller can never see is refused here instead of
  * appearing to succeed.
  */
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -28,7 +29,13 @@ function replayRequest(saveScript?: boolean | string) {
 
 test('a remote daemon refuses --save-script, naming the caller/daemon split', async () => {
   await assert.rejects(
-    async () => await prepareRemoteRequestArtifacts(replayRequest(true), REMOTE, NO_CANCELLATION),
+    async () =>
+      await prepareRemoteRequestArtifacts(
+        replayRequest(true),
+        REMOTE,
+        NO_CANCELLATION,
+        createTestHostEnvironment(),
+      ),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
@@ -43,20 +50,31 @@ test('a remote daemon refuses an explicit --save-script output path too', async 
         replayRequest('./flows/login.healed.ad'),
         REMOTE,
         NO_CANCELLATION,
+        createTestHostEnvironment(),
       ),
     (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
   );
 });
 
 test('a local daemon leaves --save-script untouched', async () => {
-  const prepared = await prepareRemoteRequestArtifacts(replayRequest(true), LOCAL, NO_CANCELLATION);
+  const prepared = await prepareRemoteRequestArtifacts(
+    replayRequest(true),
+    LOCAL,
+    NO_CANCELLATION,
+    createTestHostEnvironment(),
+  );
 
   assert.equal(prepared.flags?.saveScript, true);
   assert.deepEqual(prepared.positionals, ['./flows/login.ad']);
 });
 
 test('a remote replay without --save-script passes through unchanged', async () => {
-  const prepared = await prepareRemoteRequestArtifacts(replayRequest(), REMOTE, NO_CANCELLATION);
+  const prepared = await prepareRemoteRequestArtifacts(
+    replayRequest(),
+    REMOTE,
+    NO_CANCELLATION,
+    createTestHostEnvironment(),
+  );
 
   assert.deepEqual(prepared.positionals, ['./flows/login.ad']);
   assert.equal(prepared.uploadedArtifactId, undefined);

@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
 import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
@@ -54,6 +55,7 @@ export async function releaseExpiredProviderLease(
 }
 
 export async function cleanupExpiredLeasedSession(params: {
+  env: HostEnvironment['env'];
   sessionName: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
@@ -63,7 +65,13 @@ export async function cleanupExpiredLeasedSession(params: {
   const lease = ref?.session.lease;
   if (!ref || !lease) return false;
   if (!params.leaseRegistry.consumeExpiredLease(lease.leaseId)) return false;
-  await endLeasedSession(ref, params.sessionStore, params.teardownSession, 'LEASE_EXPIRED');
+  await endLeasedSession(
+    ref,
+    params.sessionStore,
+    params.teardownSession,
+    'LEASE_EXPIRED',
+    params.env,
+  );
   return true;
 }
 
@@ -76,6 +84,7 @@ export async function endLeasedSession(
   sessionStore: SessionStore,
   teardownSession: SessionTeardown,
   reason: LeaseEndReason,
+  env: HostEnvironment['env'],
 ): Promise<void> {
   const session = ref.session;
   const leaseId = session.lease?.leaseId;
@@ -91,7 +100,7 @@ export async function endLeasedSession(
       data: { reason, leaseId, session: session.name, error: errorMessage(error) },
     });
   });
-  await clearDeviceClaim(session.deviceClaim).catch((error) => {
+  await clearDeviceClaim(session.deviceClaim, env).catch((error) => {
     emitDiagnostic({
       level: 'warn',
       phase: 'leased_session_end_device_claim_clear_failed',
@@ -107,6 +116,7 @@ export async function endLeasedSession(
 }
 
 export function admitRequestLeaseForLockedScope(params: {
+  env: HostEnvironment['env'];
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -118,6 +128,7 @@ export function admitRequestLeaseForLockedScope(params: {
   const ref = sessionStore.lookup(sessionName);
   const existingSession = ref?.session;
   const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
+    env: params.env,
     providerAppCatalog: params.providerAppCatalog,
     daemonPolicy: params.daemonPolicy,
   });

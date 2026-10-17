@@ -4,7 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import * as hostProcess from '@agent-device/host-kit/process';
-import { MACOS_DEVICE, mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
+import {
+  MACOS_DEVICE,
+  mkdtempForTestSync,
+  pinOwnProcessStartTime,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -63,6 +69,8 @@ import {
   inspectLifecycleRuntimeFacts,
 } from '../../../__tests__/support/application-lifecycle-runtime-harness.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
+
+bindTestCommandHost();
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockPrepareApplicationOpen = vi.mocked(prepareApplicationOpenFixture);
@@ -140,6 +148,7 @@ test('failed local open before device setup rolls its device claim back', async 
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -155,7 +164,7 @@ test('failed local open before device setup rolls its device claim back', async 
       }),
     (error: unknown) => error === rejectionError,
   );
-  assert.deepEqual(inspectDeviceClaims({ serial: stoppedAvd.id }), []);
+  assert.deepEqual(inspectDeviceClaims({ serial: stoppedAvd.id }, process.env), []);
 });
 
 test('failed local open after dispatch retains its device claim for recovery', async () => {
@@ -169,6 +178,7 @@ test('failed local open after dispatch retains its device claim for recovery', a
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -184,7 +194,7 @@ test('failed local open after dispatch retains its device claim for recovery', a
       }),
     (error: unknown) => error === rejectionError,
   );
-  const retained = inspectDeviceClaims({ serial: android.id })[0];
+  const retained = inspectDeviceClaims({ serial: android.id }, process.env)[0];
   assert.equal(retained?.classification, 'live');
   assert.equal(typeof retained?.claim?.abandonedAtMs, 'number');
 });
@@ -201,6 +211,7 @@ test('failed local runtime-hint setup retains its device claim before open dispa
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -220,7 +231,7 @@ test('failed local runtime-hint setup retains its device claim before open dispa
 
   assert.equal(mockApplyRuntimeHints.mock.calls.length, 1);
   assert.equal(mockDispatch.mock.calls.length, 0);
-  assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
+  assert.equal(inspectDeviceClaims({ serial: android.id }, process.env)[0]?.classification, 'live');
   assert.equal(store.get('claim-runtime-hint-failure'), undefined);
 });
 
@@ -229,6 +240,7 @@ test('failed local open response rolls its device claim back', async () => {
   mockResolveTargetDevice.mockResolvedValue(android);
 
   const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -245,7 +257,7 @@ test('failed local open response rolls its device claim back', async () => {
   });
 
   assert.equal(response.ok, false);
-  assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
+  assert.deepEqual(inspectDeviceClaims({ serial: android.id }, process.env), []);
 });
 
 test('a canceled attempt lets the next attempt of the same suite open the device', async () => {
@@ -256,6 +268,7 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   markRequestCanceled(requestId);
   try {
     const timedOut = await handleOpenCommand({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -277,6 +290,7 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   assert.equal(store.get('suite:1-gesture-pan-duration:attempt-1'), undefined);
 
   const retry = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -292,7 +306,7 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   });
 
   assert.equal(retry.ok, true);
-  const claim = inspectDeviceClaims({ serial: android.id })[0]?.claim;
+  const claim = inspectDeviceClaims({ serial: android.id }, process.env)[0]?.claim;
   assert.equal(claim?.session, 'suite:1-gesture-pan-duration:attempt-2');
   assert.equal(claim?.abandonedAtMs, undefined);
   assert.equal(
@@ -310,6 +324,7 @@ test('cancellation after local device setup retains the device claim for recover
 
   try {
     const response = await handleOpenCommand({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -327,7 +342,7 @@ test('cancellation after local device setup retains the device claim for recover
 
     assert.equal(response.ok, false);
     assert.equal(mockDispatch.mock.calls.length, 1);
-    const retainedClaim = inspectDeviceClaims({ serial: android.id })[0];
+    const retainedClaim = inspectDeviceClaims({ serial: android.id }, process.env)[0];
     assert.equal(retainedClaim?.classification, 'live');
     assert.equal(typeof retainedClaim?.claim?.abandonedAtMs, 'number');
     assert.equal(store.get('claim-canceled-after-dispatch'), undefined);
@@ -342,6 +357,7 @@ test('provider-owned open creates no host-local device claim from its selected o
   mockDispatch.mockResolvedValue(undefined);
 
   const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -361,7 +377,7 @@ test('provider-owned open creates no host-local device claim from its selected o
     bindDevice: bindProviderLifecycleRuntime,
   });
   assert.equal(response.ok, true);
-  assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
+  assert.deepEqual(inspectDeviceClaims({ serial: android.id }, process.env), []);
   assert.equal(store.get('remote-open')?.deviceClaim, undefined);
 });
 
@@ -371,6 +387,7 @@ test('a foreign live claim rejects open before platform preparation or mutation'
   const ownerStateDir = path.join(stateDir, 'foreign-owner');
   fs.mkdirSync(ownerStateDir);
   const acquired = await acquireDeviceClaim({
+    env: process.env,
     device: android,
     session: 'foreign-session',
     workspace: '/worktrees/foreign',
@@ -380,6 +397,7 @@ test('a foreign live claim rejects open before platform preparation or mutation'
   if (acquired.status !== 'acquired') return;
 
   const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -419,6 +437,7 @@ test('a foreign live claim rejects open before platform preparation or mutation'
 test('local close clears its matching device claim after teardown', async () => {
   const { store, stateDir } = setup();
   const acquired = await acquireDeviceClaim({
+    env: process.env,
     device: android,
     session: 'close-claim',
     workspace: process.cwd(),
@@ -436,6 +455,7 @@ test('local close clears its matching device claim after teardown', async () => 
   mockDispatch.mockResolvedValue(undefined);
 
   const response = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: { command: 'close', token: 'test', session: 'close-claim', positionals: [], flags: {} },
     sessionName: 'close-claim',
@@ -444,12 +464,13 @@ test('local close clears its matching device claim after teardown', async () => 
     leaseRegistry: new LeaseRegistry(),
   });
   assert.equal(response.ok, true);
-  assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
+  assert.deepEqual(inspectDeviceClaims({ serial: android.id }, process.env), []);
 });
 
 test('#1391: a close-time script save failure still clears the device claim and deletes the session', async () => {
   const { store, stateDir } = setup();
   const acquired = await acquireDeviceClaim({
+    env: process.env,
     device: android,
     session: 'close-save-script-failure',
     workspace: process.cwd(),
@@ -481,6 +502,7 @@ test('#1391: a close-time script save failure still clears the device claim and 
   let thrown: unknown;
   try {
     await handleCloseCommand({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: {
         command: 'close',
@@ -512,7 +534,7 @@ test('#1391: a close-time script save failure still clears the device claim and 
   assert.equal(error.details?.reason, 'script_target_exists');
   assert.equal(error.details?.path, targetPath);
   assert.equal(store.get('close-save-script-failure'), undefined);
-  assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
+  assert.deepEqual(inspectDeviceClaims({ serial: android.id }, process.env), []);
   assert.equal(fs.readFileSync(targetPath, 'utf8'), 'pre-existing\n');
 
   assert.deepEqual(
@@ -533,6 +555,7 @@ test('an open under a macos-app lease holds only its app, beside other claims on
   const ownerStateDir = path.join(stateDir, 'host-user');
   fs.mkdirSync(ownerStateDir);
   const foreign = await acquireDeviceClaim({
+    env: process.env,
     device: MACOS_DEVICE,
     session: 'host-user-session',
     workspace: '/worktrees/host-user',
@@ -555,6 +578,7 @@ test('an open under a macos-app lease holds only its app, beside other claims on
   });
 
   const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -574,7 +598,9 @@ test('an open under a macos-app lease holds only its app, beside other claims on
   assert.equal(response.ok, true, JSON.stringify(response));
   assert.equal(store.get('leased-app')?.deviceClaim, undefined);
   assert.deepEqual(
-    inspectDeviceClaims({ udid: MACOS_DEVICE.id }).map((entry) => entry.claim?.session),
+    inspectDeviceClaims({ udid: MACOS_DEVICE.id }, process.env).map(
+      (entry) => entry.claim?.session,
+    ),
     ['host-user-session'],
   );
 });

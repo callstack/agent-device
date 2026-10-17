@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { test, expect, vi } from 'vitest';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
@@ -11,6 +12,8 @@ import {
   resolveSessionLeaseForRequest,
 } from '../lease-lifecycle.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+
+bindTestCommandHost();
 
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
@@ -46,6 +49,7 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
   now = 2_000;
 
   const req = admitRequestLeaseForLockedScope({
+    env: process.env,
     req: makeRequest({ command: 'snapshot' }),
     sessionName: 'default',
     sessionStore,
@@ -82,6 +86,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
   const teardownSession = vi.fn(async () => {});
 
   const cleaned = await cleanupExpiredLeasedSession({
+    env: process.env,
     sessionName: 'default',
     sessionStore,
     leaseRegistry,

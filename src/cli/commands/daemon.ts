@@ -21,12 +21,15 @@ import { createDaemonOwnerCleanup } from '../../platform-runtime-daemon-owner-cl
 
 const daemonOwnerCleanup = createDaemonOwnerCleanup();
 
-export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   const subcommand = positionals[0];
   if ((subcommand !== 'stop' && subcommand !== 'status') || positionals.length !== 1) {
     throw new AppError('INVALID_ARGS', 'daemon accepts only: stop, status');
   }
-  const paths = resolveDaemonPaths(flags.stateDir);
+  const paths = resolveDaemonPaths(flags.stateDir, {
+    cwd: host.cwd,
+    env: host.env,
+  });
   if (subcommand === 'status') {
     const status = readDaemonStatus(paths);
     const shown = { ...status, plugins: readPluginInventory(status.plugins) };

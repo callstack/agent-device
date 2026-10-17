@@ -13,7 +13,11 @@ import {
   readinessDeviceRuntimeGateway,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  createTestHostEnvironment,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
@@ -28,6 +32,8 @@ import { createRequestExecutionScope } from '../../../server/request-execution-s
 import { handleBootCommand } from '../session-boot.ts';
 import { handleShutdownCommand } from '../session-shutdown.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
+
+bindTestCommandHost();
 
 // #1799: `boot`/`shutdown` route through a daemon that need not own the target
 // device. Two daemons on one host each keep their own state directory, so the
@@ -47,6 +53,7 @@ async function claimForeignDaemon(root: string): Promise<string> {
   const ownerStateDir = path.join(root, OWNER_STATE_DIR_NAME);
   fs.mkdirSync(ownerStateDir, { recursive: true });
   const acquired = await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'owner-session',
     workspace: '/worktrees/daemon-a',
@@ -71,6 +78,7 @@ async function runStateCommand(
     meta: { cwd: '/worktrees/daemon-b' },
   };
   const scope = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     req,
     sessionStore: store,
     leaseRegistry: new LeaseRegistry(),
@@ -85,6 +93,7 @@ async function runStateCommand(
   });
   try {
     const handlerParams = {
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: 'default',
@@ -124,7 +133,9 @@ test('shutdown refuses a device held by a foreign live claim and never reaches t
   );
   expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
   // The refusal leaves the owner's claim exactly as it was.
-  expect(inspectDeviceClaims({}).map((entry) => entry.claim?.session)).toEqual(['owner-session']);
+  expect(inspectDeviceClaims({}, process.env).map((entry) => entry.claim?.session)).toEqual([
+    'owner-session',
+  ]);
 });
 
 test('boot refuses a device held by a foreign live claim and never reaches the device', async () => {
@@ -150,7 +161,7 @@ test('shutdown on an unclaimed device succeeds and releases its transient claim'
 
   expect(response?.ok).toBe(true);
   expect(mockShutdownTargetRuntime).toHaveBeenCalledOnce();
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
 test('a failing shutdown still releases its transient claim', async () => {
@@ -161,5 +172,5 @@ test('a failing shutdown still releases its transient claim', async () => {
   const response = await runStateCommand('shutdown', daemonB(stateDir));
 
   expect(response?.ok).toBe(false);
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });

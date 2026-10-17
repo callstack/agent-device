@@ -10,7 +10,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { readOpenWaitAttempt } from '../../sessions/open-device-contention-wait.ts';
@@ -119,6 +119,7 @@ test('an open that lost the race to a free device re-waits and opens rather than
   setTimeout(() => sessionStore.retire(holder), 50);
 
   const first = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: openRequest('first-opener'),
@@ -126,6 +127,7 @@ test('an open that lost the race to a free device re-waits and opens rather than
     leaseRegistry,
   });
   const second = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: openRequest('second-opener'),
@@ -160,6 +162,7 @@ test('a close that frees the device mid-wait gets through while the open is wait
   const order: string[] = [];
 
   const opened = createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: openRequest('waiter'),
@@ -174,6 +177,7 @@ test('a close that frees the device mid-wait gets through while the open is wait
   );
   await sleep(50);
   const closer = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: closeRequest('holder'),
@@ -207,6 +211,7 @@ test('an out-of-range wait budget is refused before resolving the target device'
   const resolveCallsBefore = vi.mocked(resolveTargetDevice).mock.calls.length;
   await expect(
     createRequestExecutionScope({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       req: openRequest('unbounded-opener', max + 1, 'request-unbounded'),

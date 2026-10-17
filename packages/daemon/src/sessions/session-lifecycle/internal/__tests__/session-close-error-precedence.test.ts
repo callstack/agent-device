@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
@@ -6,6 +7,8 @@ import {
 } from './session-close-shutdown.fixtures.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 import { lifecycleOperationsSpy } from '../../../../__tests__/support/lifecycle-operations-spy.ts';
+
+bindTestCommandHost();
 
 const {
   acquireDeviceClaim,
@@ -48,6 +51,7 @@ test('a failed platform close retains the device claim and reports it', async ()
       booted: true,
     };
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: sessionName,
       workspace: process.cwd(),
@@ -77,6 +81,7 @@ test('a failed platform close retains the device claim and reports it', async ()
         let caught: unknown;
         try {
           await handleSessionCommands({
+            host: createTestHostEnvironment(),
             createCommandSurface: fakeCreateCommandSurface,
             platformServices: daemonPlatformServicesFixture(),
             req: {
@@ -105,7 +110,7 @@ test('a failed platform close retains the device claim and reports it', async ()
     expect(sessionStore.get(sessionName)).toBeUndefined();
 
     // The claim itself was NOT cleared: it is still live, still naming the deleted session.
-    const claimState = inspectDeviceClaims({ serial: device.id })[0];
+    const claimState = inspectDeviceClaims({ serial: device.id }, process.env)[0];
     expect(claimState?.classification).toBe('live');
     expect(claimState?.claim?.session).toBe(sessionName);
 
@@ -150,6 +155,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
       booted: true,
     };
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: sessionName,
       workspace: process.cwd(),
@@ -192,6 +198,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
         let caught: unknown;
         try {
           await handleSessionCommands({
+            host: createTestHostEnvironment(),
             createCommandSurface: fakeCreateCommandSurface,
             platformServices: daemonPlatformServicesFixture(),
             req: {
@@ -222,7 +229,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
     });
     expect(sessionStore.get(sessionName)).toBeUndefined();
 
-    const claimState = inspectDeviceClaims({ serial: device.id })[0];
+    const claimState = inspectDeviceClaims({ serial: device.id }, process.env)[0];
     expect(claimState?.classification).toBe('live');
     expect(claimState?.claim?.session).toBe(sessionName);
 
@@ -260,6 +267,7 @@ test('a successful close clears the device claim', async () => {
       booted: true,
     };
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: sessionName,
       workspace: process.cwd(),
@@ -279,6 +287,7 @@ test('a successful close clears the device claim', async () => {
     sessionStore.publish(sessionName, session);
 
     const response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -296,7 +305,7 @@ test('a successful close clears the device claim', async () => {
 
     expect(response?.ok).toBe(true);
     expect(sessionStore.get(sessionName)).toBeUndefined();
-    expect(inspectDeviceClaims({ serial: device.id })).toEqual([]);
+    expect(inspectDeviceClaims({ serial: device.id }, process.env)).toEqual([]);
   } finally {
     if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
@@ -327,6 +336,7 @@ test('targeted close preserves the platform-close AppError and still runs later 
 
   await expect(
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       lifecycleOperationsLoader: loader,
@@ -381,6 +391,7 @@ test('targeted close surfaces a required pre-close failure from the lifecycle po
 
   await expect(
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       lifecycleOperationsLoader: loader,

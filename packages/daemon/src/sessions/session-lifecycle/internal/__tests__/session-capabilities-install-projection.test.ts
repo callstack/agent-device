@@ -11,7 +11,7 @@ import type {
 } from '../../../../core/request-runtime-binding.ts';
 import { createCapabilitiesAdmissionRuntime } from './session-capabilities.fixtures.ts';
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 
 test('capabilities projects the install family from exactly one facts inspection', async () => {
@@ -157,6 +157,7 @@ async function dispatchCapabilities(params: {
   inspectFacts: InspectDeviceRuntimeFacts;
 }) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

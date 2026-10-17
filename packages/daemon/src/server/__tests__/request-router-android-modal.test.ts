@@ -23,7 +23,7 @@ import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { androidObservationPolicyFixture as androidObservation } from '../../__tests__/support/android-observation-fixture.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 const providerAdmission = providerDeviceAdmissionFixture();
 
@@ -154,6 +154,7 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
   const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -207,6 +208,7 @@ test('generic Android gesture commands continue when recording dialog inspection
   vi.mocked(openAndroidApp).mockClear();
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -267,6 +269,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
   providerAdmission.setActive([runtime]);
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

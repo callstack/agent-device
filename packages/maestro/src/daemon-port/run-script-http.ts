@@ -22,9 +22,10 @@ export type RunScriptHttpResponse = {
 
 export async function executeRunScriptHttpRequest(
   input: RunScriptHttpRequest,
+  environment: NodeJS.ProcessEnv,
 ): Promise<RunScriptHttpResponse> {
   if (!input.publicNetworkOnly) return await executeLocalRequest(input);
-  return await executePublicRequest(input);
+  return await executePublicRequest(input, environment);
 }
 
 async function executeLocalRequest(input: RunScriptHttpRequest): Promise<RunScriptHttpResponse> {
@@ -35,10 +36,17 @@ async function executeLocalRequest(input: RunScriptHttpRequest): Promise<RunScri
   return await serializeResponse(response);
 }
 
-async function executePublicRequest(input: RunScriptHttpRequest): Promise<RunScriptHttpResponse> {
+async function executePublicRequest(
+  input: RunScriptHttpRequest,
+  environment: NodeJS.ProcessEnv,
+): Promise<RunScriptHttpResponse> {
   const initialUrl = parsePublicUrl(input.url);
   const signal = AbortSignal.timeout(30_000);
-  const dispatcher = new PublicFetchDispatcher(initialUrl.protocol === 'https:', signal);
+  const dispatcher = new PublicFetchDispatcher(
+    initialUrl.protocol === 'https:',
+    signal,
+    environment,
+  );
   try {
     const response = await undiciFetch(initialUrl, {
       ...fetchInit(input),
@@ -69,11 +77,13 @@ export class PublicFetchDispatcher extends Dispatcher {
   readonly #dispatchers = new Set<Dispatcher>();
   #httpsRequired: boolean;
   readonly #signal: AbortSignal;
+  readonly #environment: NodeJS.ProcessEnv;
 
-  constructor(httpsRequired: boolean, signal: AbortSignal) {
+  constructor(httpsRequired: boolean, signal: AbortSignal, environment: NodeJS.ProcessEnv) {
     super();
     this.#httpsRequired = httpsRequired;
     this.#signal = signal;
+    this.#environment = environment;
   }
 
   override dispatch(
@@ -100,7 +110,7 @@ export class PublicFetchDispatcher extends Dispatcher {
     }
     if (url.protocol === 'https:') this.#httpsRequired = true;
     const approved = await approveDownloadSourceUrl(url, this.#signal);
-    const proxyUrl = resolveProxyForUrl(url);
+    const proxyUrl = resolveProxyForUrl(url, this.#environment);
     const dispatcher = proxyUrl
       ? proxyDispatcher(proxyUrl, url)
       : directDispatcher(approved.address, approved.family);

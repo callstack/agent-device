@@ -20,8 +20,8 @@ type AgentCdpCommandOptions = {
     | 'tenant'
   >;
   runtime?: SessionRuntimeHints;
-  cwd?: string;
-  env?: NodeJS.ProcessEnv;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
 };
 
 export function buildAgentCdpNpmExecArgs(args: string[]): string[] {
@@ -80,12 +80,12 @@ export function buildAgentCdpPassthroughArgs(
 
 export async function runAgentCdpCommand(
   args: string[],
-  options: AgentCdpCommandOptions = {},
+  options: AgentCdpCommandOptions,
 ): Promise<number> {
   const passthroughArgs = buildAgentCdpPassthroughArgs(args, options);
   const result = await runCmdStreaming('npm', buildAgentCdpNpmExecArgs(passthroughArgs), {
-    cwd: options.cwd ?? process.cwd(),
-    env: options.env ?? process.env,
+    cwd: options.cwd,
+    env: options.env,
     allowFailure: true,
     onStdoutChunk: (chunk) => {
       process.stdout.write(chunk);

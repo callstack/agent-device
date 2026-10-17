@@ -29,7 +29,12 @@ import type { SessionState } from '../../core/session-state.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
-import { ANDROID_EMULATOR, IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  IOS_SIMULATOR,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeSession as makeBaseSession } from '../../__tests__/support/session-factories.ts';
 
@@ -80,6 +85,7 @@ function screenshotRouter(
   sessionStore.publish(session.name, session);
   const runtime = screenshotRuntimeFixture(options);
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -237,6 +243,7 @@ test('router serializes concurrent commands for the same device across sessions'
   });
 
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

@@ -67,7 +67,13 @@ import {
   makeSessionStore,
   noopInvoke,
 } from './session-open-runtime.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);
@@ -115,6 +121,7 @@ test('open applies stored runtime launchUrl and reports runtime hints', async ()
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -180,6 +187,7 @@ test('open rejects a false runtime-hints fact before its one implementation bind
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -233,6 +241,7 @@ test('open applies launch-only flags only to the direct app launch before runtim
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -277,6 +286,7 @@ test('open --metro-port alone defaults the host to 10.0.2.2 on an Android emulat
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -310,6 +320,7 @@ test('open --metro-port alone defaults the host to 127.0.0.1 on an iOS simulator
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -343,6 +354,7 @@ test('open --metro-port alone stays host-ambiguous on a physical Android device'
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -377,6 +389,7 @@ test('open --relaunch allows Android package names ending with apk-like suffix',
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

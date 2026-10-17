@@ -1,4 +1,4 @@
-import { ANDROID_EMULATOR, deviceClaimFilePath } from '@agent-device/test-kit';
+import { ANDROID_EMULATOR, deviceClaimFilePath, bindTestCommandHost } from '@agent-device/test-kit';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
   isolatedDeviceClaimStores,
@@ -11,6 +11,8 @@ import {
 } from '@agent-device/daemon-contracts/device-claims';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import type { SessionState } from '../../core/session-state.ts';
+
+bindTestCommandHost();
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -30,6 +32,7 @@ function claimRecord(session: SessionState, name: string) {
 async function claimedSession(name: string): Promise<SessionState & { stateDir: string }> {
   const { stateDir } = setup();
   const acquired = await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: name,
     workspace: stateDir,
@@ -49,7 +52,7 @@ async function claimedSession(name: string): Promise<SessionState & { stateDir: 
 
 test('a claim cleared after clean teardown is reported released', async () => {
   const session = await claimedSession('default');
-  const ledger = createDaemonShutdownClaimLedger();
+  const ledger = createDaemonShutdownClaimLedger(process.env);
 
   await ledger.releaseClaim(session);
   ledger.finalize(session);
@@ -60,19 +63,21 @@ test('a claim cleared after clean teardown is reported released', async () => {
     superseded: [],
     unattributable: [],
   });
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
 test('a claim left behind by a failed teardown is reported orphaned', async () => {
   const session = await claimedSession('stuck');
-  const ledger = createDaemonShutdownClaimLedger();
+  const ledger = createDaemonShutdownClaimLedger(process.env);
 
   // Teardown never reached a safe terminal state, so `releaseClaim` never runs.
   ledger.finalize(session);
 
   expect(ledger.claims.released).toEqual([]);
   expect(ledger.claims.orphaned).toEqual([claimRecord(session, 'stuck')]);
-  expect(inspectDeviceClaims({}).map((entry) => entry.claim?.session)).toEqual(['stuck']);
+  expect(inspectDeviceClaims({}, process.env).map((entry) => entry.claim?.session)).toEqual([
+    'stuck',
+  ]);
 });
 
 test('a claim replaced by a successor owner is reported superseded, never released', async () => {
@@ -84,6 +89,7 @@ test('a claim replaced by a successor owner is reported superseded, never releas
   // deliberately leaves it alone, so "the call resolved" cannot mean "released".
   fs.rmSync(deviceClaimFilePath(deviceKey));
   const successor = await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'successor',
     workspace: '/worktrees/successor',
@@ -92,7 +98,7 @@ test('a claim replaced by a successor owner is reported superseded, never releas
   });
   expect(successor.status).toBe('acquired');
 
-  const ledger = createDaemonShutdownClaimLedger();
+  const ledger = createDaemonShutdownClaimLedger(process.env);
   await ledger.releaseClaim(session);
   ledger.finalize(session);
 
@@ -100,7 +106,9 @@ test('a claim replaced by a successor owner is reported superseded, never releas
   expect(ledger.claims.orphaned).toEqual([]);
   expect(ledger.claims.superseded).toEqual([claimRecord(session, 'replaced')]);
   // The successor keeps its device: teardown must never delete a foreign claim.
-  expect(inspectDeviceClaims({}).map((entry) => entry.claim?.session)).toEqual(['successor']);
+  expect(inspectDeviceClaims({}, process.env).map((entry) => entry.claim?.session)).toEqual([
+    'successor',
+  ]);
 });
 
 test('an undecodable record is reported unattributable, never orphaned or superseded', async () => {
@@ -113,7 +121,7 @@ test('an undecodable record is reported unattributable, never orphaned or supers
   // have. Claiming the bucket would send the operator to a command that refuses this record.
   fs.writeFileSync(deviceClaimFilePath(deviceKey), '{bad json');
 
-  const ledger = createDaemonShutdownClaimLedger();
+  const ledger = createDaemonShutdownClaimLedger(process.env);
   await ledger.releaseClaim(session);
   ledger.finalize(session);
 
@@ -127,7 +135,7 @@ test('an undecodable record is reported unattributable, never orphaned or supers
 
 test('a claim clear that throws is reported orphaned, the one bucket with a working remedy', async () => {
   const session = await claimedSession('unrecorded');
-  const ledger = createDaemonShutdownClaimLedger();
+  const ledger = createDaemonShutdownClaimLedger(process.env);
   // The clear never returned a verdict at all. This is the state the `orphaned` advice is written
   // for: our own owner identity dies with the exiting daemon, which is exactly the proof
   // `device release --stale` needs, and the record still names us.
@@ -148,7 +156,7 @@ test('a claim clear that throws is reported orphaned, the one bucket with a work
 });
 
 test('a session that never held a claim contributes nothing', async () => {
-  const ledger = createDaemonShutdownClaimLedger();
+  const ledger = createDaemonShutdownClaimLedger(process.env);
   const session: SessionState = {
     name: 'remote',
     device: ANDROID_EMULATOR,

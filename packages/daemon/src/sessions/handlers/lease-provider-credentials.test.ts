@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
@@ -43,6 +44,7 @@ async function allocateWithDaemonCredentials(
   let allocations = 0;
   try {
     await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req,
       sessionName: req.session,
       sessionStore: makeSessionStore('agent-device-provider-credentials-'),

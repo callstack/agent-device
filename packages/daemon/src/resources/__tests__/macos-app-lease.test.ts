@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
@@ -11,6 +12,8 @@ import {
 } from '../macos-app-lease.ts';
 import { buildOpenResult } from '../../sessions/session-lifecycle/internal/session-open-surface.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+
+bindTestCommandHost();
 
 const lease: Pick<DeviceLease, 'backend' | 'deviceKey'> = {
   backend: 'macos-app',
@@ -65,36 +68,52 @@ test('the leased app can be opened, driven, captured and closed', () => {
   assertMacOsAppLeaseAdmitsRequest(
     lease,
     request('open', ['com.example.app'], { platform: 'macos' }),
+    undefined,
+    process.env,
   );
   for (const command of ['snapshot', 'click', 'fill', 'type', 'press', 'scroll', 'screenshot']) {
-    assertMacOsAppLeaseAdmitsRequest(lease, request(command), leasedSession);
+    assertMacOsAppLeaseAdmitsRequest(lease, request(command), leasedSession, process.env);
   }
-  assertMacOsAppLeaseAdmitsRequest(lease, request('close', ['com.example.app']), leasedSession);
+  assertMacOsAppLeaseAdmitsRequest(
+    lease,
+    request('close', ['com.example.app']),
+    leasedSession,
+    process.env,
+  );
 });
 
 test('a lease of another backend is not confined', () => {
   assertMacOsAppLeaseAdmitsRequest(
     { backend: 'ios-instance', deviceKey: 'ios:mobile:UDID' },
     request('install', ['/tmp/App.app']),
+    undefined,
+    process.env,
   );
 });
 
 test('commands outside the allow list are refused, including ones added later', () => {
   for (const command of ['install', 'install_source', 'apps', 'alert', 'clipboard', 'settings']) {
     assertDenied(
-      () => assertMacOsAppLeaseAdmitsRequest(lease, request(command), leasedSession),
+      () => assertMacOsAppLeaseAdmitsRequest(lease, request(command), leasedSession, process.env),
       'command',
     );
   }
   assertDenied(
-    () => assertMacOsAppLeaseAdmitsRequest(lease, request('not-a-command-yet')),
+    () =>
+      assertMacOsAppLeaseAdmitsRequest(lease, request('not-a-command-yet'), undefined, process.env),
     'command',
   );
 });
 
 test('open accepts only the leased bundle and nothing it could launch beside it', () => {
   assertDenied(
-    () => assertMacOsAppLeaseAdmitsRequest(lease, request('open', ['com.apple.finder'])),
+    () =>
+      assertMacOsAppLeaseAdmitsRequest(
+        lease,
+        request('open', ['com.apple.finder']),
+        undefined,
+        process.env,
+      ),
     'app',
   );
   assertDenied(
@@ -102,6 +121,8 @@ test('open accepts only the leased bundle and nothing it could launch beside it'
       assertMacOsAppLeaseAdmitsRequest(
         lease,
         request('open', ['com.example.app', 'https://example.com']),
+        undefined,
+        process.env,
       ),
     'app',
   );
@@ -110,6 +131,8 @@ test('open accepts only the leased bundle and nothing it could launch beside it'
       assertMacOsAppLeaseAdmitsRequest(
         lease,
         request('open', ['com.example.app'], { platform: 'ios' }),
+        undefined,
+        process.env,
       ),
     'app',
   );
@@ -117,11 +140,27 @@ test('open accepts only the leased bundle and nothing it could launch beside it'
 
 test('nothing under the lease names a host path or launches beside the app', () => {
   const temp = '/tmp/agent-device-screenshot-1791219384278-ab12cd.png';
-  assertMacOsAppLeaseAdmitsRequest(lease, request('screenshot', [temp]), leasedSession);
-  assertMacOsAppLeaseAdmitsRequest(lease, request('screenshot', [], { out: temp }), leasedSession);
+  assertMacOsAppLeaseAdmitsRequest(
+    lease,
+    request('screenshot', [temp]),
+    leasedSession,
+    process.env,
+  );
+  assertMacOsAppLeaseAdmitsRequest(
+    lease,
+    request('screenshot', [], { out: temp }),
+    leasedSession,
+    process.env,
+  );
   for (const target of [['/Users/me/.zshrc'], ['/tmp/agent-device-screenshot-1-a.png/../x']]) {
     assertDenied(
-      () => assertMacOsAppLeaseAdmitsRequest(lease, request('screenshot', target), leasedSession),
+      () =>
+        assertMacOsAppLeaseAdmitsRequest(
+          lease,
+          request('screenshot', target),
+          leasedSession,
+          process.env,
+        ),
       'host-path',
     );
   }
@@ -131,6 +170,7 @@ test('nothing under the lease names a host path or launches beside the app', () 
         lease,
         request('screenshot', [], { out: '/Users/me/x.png' }),
         leasedSession,
+        process.env,
       ),
     'host-path',
   );
@@ -140,7 +180,13 @@ test('nothing under the lease names a host path or launches beside the app', () 
     { saveScript: '/Users/me/x.ad' },
   ]) {
     assertDenied(
-      () => assertMacOsAppLeaseAdmitsRequest(lease, request('open', ['com.example.app'], flags)),
+      () =>
+        assertMacOsAppLeaseAdmitsRequest(
+          lease,
+          request('open', ['com.example.app'], flags),
+          undefined,
+          process.env,
+        ),
       'host-path',
     );
   }
@@ -149,6 +195,8 @@ test('nothing under the lease names a host path or launches beside the app', () 
       assertMacOsAppLeaseAdmitsRequest(
         lease,
         request('open', ['com.example.app'], {}, { runtime: { launchUrl: 'other://open' } }),
+        undefined,
+        process.env,
       ),
     'host-path',
   );
@@ -158,6 +206,7 @@ test('nothing under the lease names a host path or launches beside the app', () 
         lease,
         request('close', [], {}, { input: { saveScript: '/Users/me/x.ad' } }),
         leasedSession,
+        process.env,
       ),
     'host-path',
   );
@@ -169,6 +218,7 @@ test('nothing under the lease names a host path or launches beside the app', () 
           batchSteps: [{ command: 'screenshot', positionals: ['/Users/me/x.png'], input: {} }],
         }),
         leasedSession,
+        process.env,
       ),
     'host-path',
   );
@@ -181,6 +231,7 @@ test('close cannot name another app', () => {
         lease,
         request('close', ['com.apple.finder']),
         leasedSession,
+        process.env,
       ),
     'app',
   );
@@ -189,12 +240,22 @@ test('close cannot name another app', () => {
 test.each(['desktop', 'frontmost-app', 'menubar'])('the %s surface is refused', (surface) => {
   assertDenied(
     () =>
-      assertMacOsAppLeaseAdmitsRequest(lease, request('open', ['com.example.app'], { surface })),
+      assertMacOsAppLeaseAdmitsRequest(
+        lease,
+        request('open', ['com.example.app'], { surface }),
+        undefined,
+        process.env,
+      ),
     'surface',
   );
   assertDenied(
     () =>
-      assertMacOsAppLeaseAdmitsRequest(lease, request('snapshot', [], { surface }), leasedSession),
+      assertMacOsAppLeaseAdmitsRequest(
+        lease,
+        request('snapshot', [], { surface }),
+        leasedSession,
+        process.env,
+      ),
     'surface',
   );
 });
@@ -206,6 +267,7 @@ test('screenshots stay on the app window', () => {
         lease,
         request('screenshot', [], { screenshotFullscreen: true }),
         leasedSession,
+        process.env,
       ),
     'capture',
   );
@@ -218,7 +280,7 @@ test('a session that is not the leased app is refused', () => {
     makeIosSession('ios', { appBundleId: 'com.example.app' }),
   ]) {
     assertDenied(
-      () => assertMacOsAppLeaseAdmitsRequest(lease, request('snapshot'), session),
+      () => assertMacOsAppLeaseAdmitsRequest(lease, request('snapshot'), session, process.env),
       'app',
     );
   }
@@ -236,6 +298,7 @@ test('a batch is refused whole when any step is not allowed', () => {
           ],
         }),
         leasedSession,
+        process.env,
       ),
     'app',
   );
@@ -247,6 +310,7 @@ test('a batch is refused whole when any step is not allowed', () => {
           batchSteps: [{ command: 'snapshot', input: {}, flags: { surface: 'desktop' } }],
         }),
         leasedSession,
+        process.env,
       ),
     'surface',
   );
@@ -262,12 +326,23 @@ test('no device selector reaches a host device, and open and batch must name pla
     { androidDeviceAllowlist: 'emulator-5554' },
   ]) {
     assertDenied(
-      () => assertMacOsAppLeaseAdmitsRequest(lease, request('open', ['com.example.app'], selector)),
+      () =>
+        assertMacOsAppLeaseAdmitsRequest(
+          lease,
+          request('open', ['com.example.app'], selector),
+          undefined,
+          process.env,
+        ),
       'device',
     );
     assertDenied(
       () =>
-        assertMacOsAppLeaseAdmitsRequest(lease, request('snapshot', [], selector), leasedSession),
+        assertMacOsAppLeaseAdmitsRequest(
+          lease,
+          request('snapshot', [], selector),
+          leasedSession,
+          process.env,
+        ),
       'device',
     );
     assertDenied(
@@ -278,6 +353,7 @@ test('no device selector reaches a host device, and open and batch must name pla
             batchSteps: [{ command: 'snapshot', input: {}, flags: selector }],
           }),
           leasedSession,
+          process.env,
         ),
       'device',
     );
@@ -285,11 +361,16 @@ test('no device selector reaches a host device, and open and batch must name pla
   for (const command of ['open', 'batch']) {
     assertDenied(
       () =>
-        assertMacOsAppLeaseAdmitsRequest(lease, {
-          command,
-          positionals: command === 'open' ? ['com.example.app'] : [],
-          flags: {},
-        }),
+        assertMacOsAppLeaseAdmitsRequest(
+          lease,
+          {
+            command,
+            positionals: command === 'open' ? ['com.example.app'] : [],
+            flags: {},
+          },
+          undefined,
+          process.env,
+        ),
       'device',
     );
   }
@@ -307,6 +388,7 @@ test('a batch is refused whole when a later step carries a launch URL in its run
           ],
         }),
         leasedSession,
+        process.env,
       ),
     'host-path',
   );
@@ -315,7 +397,23 @@ test('a batch is refused whole when a later step carries a launch URL in its run
 test('open needs the native app backend, which resolves every action inside the app', () => {
   vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'xctest');
   assertDenied(
-    () => assertMacOsAppLeaseAdmitsRequest(lease, request('open', ['com.example.app'])),
+    () =>
+      assertMacOsAppLeaseAdmitsRequest(
+        lease,
+        request('open', ['com.example.app']),
+        undefined,
+        process.env,
+      ),
+    'backend',
+  );
+});
+
+test('the backend is read from the request host, not the process', () => {
+  assertDenied(
+    () =>
+      assertMacOsAppLeaseAdmitsRequest(lease, request('open', ['com.example.app']), undefined, {
+        AGENT_DEVICE_MACOS_APP_BACKEND: 'xctest',
+      }),
     'backend',
   );
 });

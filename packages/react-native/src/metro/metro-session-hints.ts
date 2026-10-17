@@ -3,6 +3,7 @@ import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import { resolveMetroServerUrl, type MetroReloadTargetInput } from './metro-reload-endpoints.ts';
 
@@ -14,11 +15,20 @@ export type MetroSessionHints = {
 
 export type MetroSessionScope = { stateDir: string; session: string };
 
-export type MetroSessionOptions = { stateDir?: string; session: string };
+export type MetroSessionOptions = {
+  stateDir?: string;
+  session: string;
+  /** The host whose state directory and working directory the session binding is read from. */
+  host: HostEnvironment;
+};
 
 function resolveMetroSessionScope(options: MetroSessionOptions): MetroSessionScope {
+  const { host } = options;
   return {
-    stateDir: resolveDaemonPaths(options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir,
+    stateDir: resolveDaemonPaths(options.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR, {
+      env: host.env,
+      cwd: host.cwd,
+    }).baseDir,
     session: options.session,
   };
 }
@@ -97,19 +107,29 @@ export function resolveSessionMetroServerUrl(
     (input.metroHost !== undefined && input.metroPort !== undefined);
   return resolveMetroServerUrl({
     ...input,
-    runtime: (complete ? undefined : readMetroSessionRuntime(scope)) ?? input.runtime,
+    runtime: (complete ? undefined : readScopedMetroSessionRuntime(scope)) ?? input.runtime,
   });
+}
+
+function readScopedMetroSessionRuntime(scope: MetroSessionScope): SessionRuntimeHints | undefined {
+  try {
+    const binding = readMetroSessionHints(scope);
+    return binding ? { bundleUrl: binding.controlBaseUrl } : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function readMetroSessionRuntime(
   options: MetroSessionOptions,
 ): SessionRuntimeHints | undefined {
+  let scope: MetroSessionScope;
   try {
-    const binding = readMetroSessionHints(resolveMetroSessionScope(options));
-    return binding ? { bundleUrl: binding.controlBaseUrl } : undefined;
+    scope = resolveMetroSessionScope(options);
   } catch {
     return undefined;
   }
+  return readScopedMetroSessionRuntime(scope);
 }
 
 function runtimeServerUrl(runtime: SessionRuntimeHints | undefined): string | undefined {

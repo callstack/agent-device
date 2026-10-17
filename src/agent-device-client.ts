@@ -59,16 +59,9 @@ import {
   type DaemonCommandName,
 } from './commands/command-projection.ts';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
-import { sendToDaemon } from './daemon-client/daemon-client.ts';
+import { createDaemonTransport } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import {
-  prepareMetroRuntime,
-  reloadMetro,
-  clearMetroSessionHintsQuietly,
-  recordPreparedMetroSession,
-  recordOpenedMetroSession,
-  readMetroSessionRuntime,
-} from '@agent-device/react-native';
+import * as devServer from '@agent-device/react-native';
 import {
   asOptionalRecord,
   readPresentedSurfaceFact,
@@ -76,17 +69,40 @@ import {
 } from '@agent-device/kernel/record';
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
 import { createRequestGuard } from './daemon-client/daemon-client-transport.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
-  deps: { transport?: AgentDeviceDaemonTransport } = {},
+  deps: { transport?: AgentDeviceDaemonTransport; host?: HostEnvironment } = {},
 ): AgentDeviceClient {
-  const transport = deps.transport ?? sendToDaemon;
+  const host = deps.host ?? captureHostEnvironment(process);
+  const transport = deps.transport ?? createDaemonTransport(host);
   // A typo in a JSON or JS config must not fall through to the default and manage a daemon.
   readDaemonLifecycle(config.daemonLifecycle);
+  // The dev-server helpers take the client's host explicitly.
+  const prepareMetroRuntime = (input: Parameters<typeof devServer.prepareMetroRuntime>[0]) =>
+    devServer.prepareMetroRuntime(input, host);
+  const { reloadMetro } = devServer;
+  const withHost = <Options extends { session: string }>(options: Options) => ({
+    ...options,
+    host,
+  });
+  const clearMetroSessionHintsQuietly = (options: { session: string; stateDir?: string }) =>
+    devServer.clearMetroSessionHintsQuietly(withHost(options));
+  const recordPreparedMetroSession = (
+    options: { session: string; stateDir?: string },
+    result: Parameters<typeof devServer.recordPreparedMetroSession>[1],
+  ) => devServer.recordPreparedMetroSession(withHost(options), result);
+  const recordOpenedMetroSession = (
+    options: { session: string; stateDir?: string },
+    input: Parameters<typeof devServer.recordOpenedMetroSession>[1],
+  ) => devServer.recordOpenedMetroSession(withHost(options), input);
+  const readMetroSessionRuntime = (options: { session: string; stateDir?: string }) =>
+    devServer.readMetroSessionRuntime(withHost(options));
 
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the
@@ -216,7 +232,10 @@ export function createAgentDeviceClient(
       // Pure local resolution; mirrors how the daemon client picks its state dir.
       stateDir: async (options = {}) => {
         const merged = mergeClientOptions(config, options);
-        return resolveDaemonPaths(merged.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir;
+        return resolveDaemonPaths(merged.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR, {
+          env: host.env,
+          cwd: host.cwd,
+        }).baseDir;
       },
       close: async (options = {}) => {
         const session = resolveRequestSession(options);

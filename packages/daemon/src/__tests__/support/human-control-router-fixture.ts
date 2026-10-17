@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   daemonPlatformServicesFixture,
@@ -28,6 +29,7 @@ export function createHumanControlHarness() {
     }),
   );
   const handleRequest = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: '/tmp/agent-device-human-control.log',
     platformServices: daemonPlatformServicesFixture(),

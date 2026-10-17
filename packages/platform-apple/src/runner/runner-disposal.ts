@@ -1,4 +1,5 @@
 import {
+  hostEnvironment,
   emitDiagnostic,
   isProcessAlive,
   isProcessGroupAlive,
@@ -24,7 +25,7 @@ import {
 } from './runner-lease.ts';
 import {
   forgetRunnerPrepProcess,
-  IOS_RUNNER_CONTAINER_BUNDLE_IDS,
+  resolveRunnerContainerBundleIds,
   runnerPrepProcessChildren,
   runnerPrepProcessChildrenWithoutLiveOwner,
 } from './runner-xctestrun.ts';
@@ -289,7 +290,7 @@ async function terminateRunnerSimulatorApps(device: DeviceInfo): Promise<void> {
   if (device.kind !== 'simulator') return;
 
   await Promise.allSettled(
-    IOS_RUNNER_CONTAINER_BUNDLE_IDS.map(async (bundleId) => {
+    resolveRunnerContainerBundleIds(hostEnvironment().env).map(async (bundleId) => {
       try {
         await runXcrun(buildSimctlArgsForDevice(device, ['terminate', device.id, bundleId]), {
           allowFailure: true,

@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import * as path from 'node:path';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 
@@ -13,6 +13,7 @@ function request(command: string): DaemonRequest {
 
 async function dispatch(command: string) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: request(command),

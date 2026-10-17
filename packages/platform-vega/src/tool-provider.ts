@@ -6,6 +6,7 @@ import {
   whichCmd,
   type ExecOptions,
   type ExecResult,
+  commandHostEnvironment,
 } from '@agent-device/host-kit/command';
 import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
@@ -93,7 +94,7 @@ let cachedVegaCliExecutable: string | undefined;
 
 async function resolveVegaCliExecutable(): Promise<string | undefined> {
   if (cachedVegaCliExecutable) return cachedVegaCliExecutable;
-  if (await whichCmd('vega')) {
+  if (await whichCmd('vega', commandHostEnvironment().env)) {
     cachedVegaCliExecutable = 'vega';
     return cachedVegaCliExecutable;
   }

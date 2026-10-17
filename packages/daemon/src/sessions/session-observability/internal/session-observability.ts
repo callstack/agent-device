@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { LogBackend } from '@agent-device/contracts/observability';
@@ -44,6 +45,7 @@ import {
 } from '@agent-device/kernel/contracts';
 
 export type SessionObservabilityCommandInput = {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -209,7 +211,7 @@ async function executeLogsRuntimePlan(
       return await handleLogsStop(params);
     case 'mark':
       await params.bindDevice(params.session.device, plan.use);
-      return handleLogsMark(plan.marker, params.sessionName, params.sessionStore);
+      return handleLogsMark(plan.marker, params.sessionName, params.sessionStore, params.host.env);
     case 'clear':
       await params.bindDevice(params.session.device, plan.use);
       return handleLogsClear(params);
@@ -299,9 +301,10 @@ function handleLogsMark(
   marker: string,
   sessionName: string,
   sessionStore: SessionStore,
+  env: NodeJS.ProcessEnv,
 ): DaemonResponse {
   const logPath = sessionStore.resolveAppLogPath(sessionName);
-  appendAppLogMarker(logPath, marker);
+  appendAppLogMarker(logPath, marker, env);
   return { ok: true, data: { path: logPath, marked: true } };
 }
 

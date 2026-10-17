@@ -19,7 +19,7 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { unavailableDeviceRuntimeGateway } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { getResolveTargetDeviceMock } from '../../__tests__/support/request-router-dispatch-mocks.ts';
 import { makeIosDevice, openRequest } from './request-router-open-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 
@@ -44,6 +44,7 @@ test('open composes claim recovery from the foreign owner state directory', asyn
   try {
     writeForeignClaim(claimsDir, foreignStateDir, device);
     const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
@@ -64,7 +65,9 @@ test('open composes claim recovery from the foreign owner state directory', asyn
     const daemonSessionsDir = resolveDaemonPaths(sessionStore.resolveDaemonStateDir()).sessionsDir;
     expect(recoverySessionDirs).toEqual([ownerSessionsDir]);
     expect(recoverySessionDirs[0]).not.toBe(daemonSessionsDir);
-    expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.session).toBe('takeover');
+    expect(inspectDeviceClaims({ udid: device.id }, process.env)[0]?.claim?.session).toBe(
+      'takeover',
+    );
   } finally {
     if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;

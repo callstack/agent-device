@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 // Real-scope same-device serialization guard for the concurrency torture lane
 
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
@@ -69,6 +70,7 @@ export async function measureRealScopeMaxOverlap(concurrency: number): Promise<n
         const scopes = await Promise.all(
           Array.from({ length: concurrency }, (_, i) =>
             createRequestExecutionScope({
+              host: createTestHostEnvironment(),
               platformServices: daemonPlatformServicesFixture(),
               claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
               req: openRequest(`real-${i}`, device.id),

@@ -14,9 +14,15 @@ import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
+
+bindTestCommandHost();
 
 const {
   handleSessionCommands,
@@ -53,6 +59,7 @@ const IOS_SIM: SessionState['device'] = {
 
 async function closeAtAddress(sessionStore: ReturnType<typeof makeSessionStore>) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: ADDRESS, command: 'close', positionals: [], flags: {} },

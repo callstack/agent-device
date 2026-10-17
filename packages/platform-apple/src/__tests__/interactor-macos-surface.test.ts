@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { SCREENSHOT_FULLSCREEN_REASONS } from '@agent-device/contracts/capture';
@@ -50,6 +51,8 @@ import {
 } from '../os/macos/helper.ts';
 import { captureScreenshotViaRunner, screenshotIos } from '../core/screenshot.ts';
 import { runAppleRunnerCommand } from '../core/runner-client.ts';
+
+bindTestCommandHost();
 
 const macOsDevice: DeviceInfo = {
   platform: 'apple',

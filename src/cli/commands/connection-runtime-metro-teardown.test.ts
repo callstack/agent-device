@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,6 +17,8 @@ vi.mock('@agent-device/react-native', async (importOriginal) => ({
 
 import { stopMetroTunnel } from '@agent-device/react-native';
 import { materializeRemoteConnectionForCommand } from './connection-runtime.ts';
+
+bindTestCommandHost();
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -57,6 +60,7 @@ test('deferred materialization stops the new Metro companion if state persistenc
   await assert.rejects(
     async () =>
       await materializeRemoteConnectionForCommand({
+        host: createTestHostEnvironment(),
         command: 'open',
         flags: {
           json: true,

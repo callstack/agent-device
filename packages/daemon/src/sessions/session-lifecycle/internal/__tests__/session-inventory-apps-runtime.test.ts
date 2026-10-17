@@ -13,7 +13,11 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
+import {
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -22,6 +26,8 @@ import {
   clearRequestAbortRegistration,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
+
+bindTestCommandHost();
 
 const MACOS_DEVICE = {
   platform: 'apple' as const,
@@ -118,6 +124,7 @@ test('macOS apps consumes generic readiness and app inventory through one runtim
   };
 
   const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName,
@@ -148,6 +155,7 @@ test('deferred provider apps returns uploaded assets without resolving a device'
   };
 
   const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: req.session,
@@ -196,6 +204,7 @@ test('deferred provider apps forwards request cancellation to the catalog', asyn
 
   try {
     const response = handleSessionInventoryCommands({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: req.session,
@@ -224,6 +233,7 @@ test('deferred provider apps forwards public daemon access to the catalog', asyn
   };
 
   await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: req.session,

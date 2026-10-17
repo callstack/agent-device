@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -43,6 +44,7 @@ import type { PlatformResourceCleanup } from '../../../core/platform-resource-cl
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type SessionCloseCommandInput = Readonly<{
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -259,6 +261,7 @@ export async function handleSessionCloseCommands(
   });
   if ('response' in repair) return repair.response;
   const closed = await runCloseTeardownAndRelease({
+    env: params.host.env,
     req,
     ref,
     logPath,
@@ -293,6 +296,7 @@ type SessionCloseFinalization =
 // once both are known) the device-claim clear and session delete. A failed
 // lease release keeps the session retryable instead (`{kind:'response'}`).
 async function runCloseTeardownAndRelease(params: {
+  env: HostEnvironment['env'];
   req: DaemonRequest;
   ref: SessionRef;
   logPath: string;
@@ -352,7 +356,7 @@ async function runCloseTeardownAndRelease(params: {
       });
     }
   } else {
-    await clearDeviceClaim(session.deviceClaim);
+    await clearDeviceClaim(session.deviceClaim, params.env);
   }
   sessionStore.retire(ref);
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;

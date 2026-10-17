@@ -59,7 +59,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import { makeIosDevice, openRequest, storedClaimUpdatedAt } from './request-router-open-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -71,6 +71,7 @@ function createOpenHandler(
   leaseRegistry = new LeaseRegistry(),
 ) {
   return createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -144,7 +145,9 @@ test('open takes a live foreign claim whose device rebooted after the claim was 
     expect(response.data?.warnings).toContain(
       'Took the device from session "shared" in workspace "/worktrees/live": that device rebooted after its claim was taken, so its app and runner were already gone.',
     );
-    expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.session).toBe('reboot-takeover');
+    expect(inspectDeviceClaims({ udid: device.id }, process.env)[0]?.claim?.session).toBe(
+      'reboot-takeover',
+    );
   } finally {
     if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
@@ -191,7 +194,9 @@ test('open renews the claim of an existing session that reopened its app after a
     expect(foreign.ok).toBe(false);
     if (foreign.ok) return;
     expect(foreign.error.code).toBe('DEVICE_IN_USE');
-    expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.session).toBe('renew-owner');
+    expect(inspectDeviceClaims({ udid: device.id }, process.env)[0]?.claim?.session).toBe(
+      'renew-owner',
+    );
   } finally {
     if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
@@ -228,7 +233,7 @@ test('an owner reopen that lost the device mid-flight reports the loss instead o
       expect(reopened.error.code).toBe('DEVICE_IN_USE');
       expect(reopened.error.message).toContain('shared');
     }
-    expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.ownerToken).toBe(
+    expect(inspectDeviceClaims({ udid: device.id }, process.env)[0]?.claim?.ownerToken).toBe(
       'reboot-takeover-token',
     );
   } finally {

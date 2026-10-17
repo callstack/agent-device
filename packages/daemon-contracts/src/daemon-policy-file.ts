@@ -4,6 +4,7 @@ import path from 'node:path';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import type { CommandDescriptor } from '@agent-device/command-registry/types';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 
 /**
  * ADR 0029: the operator-owned rules one daemon enforces for every request it admits. This module
@@ -72,10 +73,10 @@ export function resolveDaemonPolicyCommandName(command: string): string | undefi
 
 const POLICY_KEYS = new Set(['version', 'devices', 'commands', 'capabilities', 'leases']);
 
-export function loadDaemonPolicy(env: NodeJS.ProcessEnv = process.env): DaemonPolicy | undefined {
+export function loadDaemonPolicy(env: EnvMap, cwd: string): DaemonPolicy | undefined {
   const configured = env[DAEMON_POLICY_ENV]?.trim();
   if (!configured) return undefined;
-  const sourcePath = path.resolve(configured);
+  const sourcePath = path.resolve(cwd, configured);
   let raw: unknown;
   try {
     raw = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));

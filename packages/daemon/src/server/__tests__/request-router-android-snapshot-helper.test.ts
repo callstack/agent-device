@@ -1,7 +1,11 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
@@ -21,6 +25,7 @@ function snapshotHandler(error: AppError) {
     },
   });
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: forwardingCreateCommandSurface,
     logPath: `${mkdtempForTestSync('agent-device-snapshot-helper-response-')}/daemon.log`,
     token: 'token',

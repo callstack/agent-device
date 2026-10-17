@@ -1,4 +1,6 @@
 import type { DaemonIdentity, EnsureDaemonOptions } from '@agent-device/contracts/client';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { sendToDaemon } from './daemon-client.ts';
 import { isDaemonNotRunningError } from './daemon-lifecycle-errors.ts';
@@ -6,6 +8,8 @@ import { isDaemonNotRunningError } from './daemon-lifecycle-errors.ts';
 type DaemonTransport = typeof sendToDaemon;
 
 export type EnsuringTransportOptions = {
+  /** The host the ensured daemon is resolved and started from; the process's own when omitted. */
+  host?: HostEnvironment;
   /**
    * Called when ensuring replaced a daemon: an `incompatible` one that held no work, or an
    * `unreachable` one that answered nothing.
@@ -37,9 +41,10 @@ export function withEnsuredDaemon(
   return async (req, context) => {
     // Loaded on the first request: the lifecycle module is not part of what every CLI start pays for.
     const { resolveEnsurableDaemon } = await import('./daemon-client-lifecycle.ts');
-    const target = resolveEnsurableDaemon(req);
+    const host = options.host ?? captureHostEnvironment(process);
+    const target = resolveEnsurableDaemon(req, host);
     if (!target) return await transport(req, context);
-    const stateDir = resolveDaemonPaths(target.stateDir).baseDir;
+    const stateDir = resolveDaemonPaths(target.stateDir, { env: host.env, cwd: host.cwd }).baseDir;
     // A caller that has already given up starts nothing: attaching refuses before any connection.
     if (context?.signal?.aborted) {
       return await transport(req, { ...context, daemonLifecycle: 'attach' });
@@ -49,7 +54,7 @@ export function withEnsuredDaemon(
     const ensure = async (): Promise<{ relied: Promise<unknown> }> => {
       let pending = ensured.get(stateDir);
       if (!pending) {
-        const started = ensureLocalDaemon(target, stateDir, options);
+        const started = ensureLocalDaemon(target, stateDir, host, options);
         pending = started;
         ensured.set(stateDir, started);
         started.catch(() => {
@@ -79,19 +84,23 @@ export function withEnsuredDaemon(
 async function ensureLocalDaemon(
   target: EnsureDaemonOptions,
   stateDir: string,
+  host: HostEnvironment,
   options: EnsuringTransportOptions,
 ): Promise<void> {
   const { ensureDaemon } = await import('./daemon-client-ensure.ts');
-  await ensureDaemon({
-    ...target,
-    onStart: (reason, previous) => {
-      if (previous) {
-        options.onReplaced?.({
-          stateDir,
-          previous,
-          reason: reason === 'incompatible' ? 'incompatible' : 'unreachable',
-        });
-      }
+  await ensureDaemon(
+    {
+      ...target,
+      onStart: (reason, previous) => {
+        if (previous) {
+          options.onReplaced?.({
+            stateDir,
+            previous,
+            reason: reason === 'incompatible' ? 'incompatible' : 'unreachable',
+          });
+        }
+      },
     },
-  });
+    host,
+  );
 }

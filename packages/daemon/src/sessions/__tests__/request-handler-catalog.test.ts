@@ -32,7 +32,7 @@ import {
   unavailableInspectFacts,
 } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
@@ -116,6 +116,7 @@ test('lease handler executes commands owned by the lease route', async () => {
 
   for (const command of leaseCommands) {
     const response = await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: {
         command,
         token: 'test-token',
@@ -140,6 +141,7 @@ test('lease handler preserves device-aware lease fields', async () => {
   const leaseRegistry = new LeaseRegistry();
   const sessionStore = makeSessionStore('agent-device-lease-fields-');
   const allocateResponse = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: {
       command: INTERNAL_COMMANDS.leaseAllocate,
       token: 'test-token',
@@ -167,6 +169,7 @@ test('lease handler preserves device-aware lease fields', async () => {
   assert.equal(allocateLease.leaseProvider, 'proxy');
 
   const heartbeatResponse = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: {
       command: INTERNAL_COMMANDS.leaseHeartbeat,
       token: 'test-token',
@@ -201,6 +204,7 @@ test('lease artifacts lists daemon inventory for proxy lease scopes', async () =
 
   try {
     const response = await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: proxyArtifactsRequest(),
       sessionName: 'catalog-test',
       sessionStore,
@@ -219,6 +223,7 @@ test('lease release calls provider hook using the released lease without heartbe
   const sessionStore = makeSessionStore('agent-device-lease-release-');
   const releaseCalls: string[] = [];
   const allocateResponse = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: {
       command: INTERNAL_COMMANDS.leaseAllocate,
       token: 'test-token',
@@ -241,6 +246,7 @@ test('lease release calls provider hook using the released lease without heartbe
   const lease = readLeaseResponse(allocateResponse);
 
   const releaseResponse = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: {
       command: INTERNAL_COMMANDS.leaseRelease,
       token: 'test-token',
@@ -299,6 +305,7 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
 
   try {
     const response = await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: {
         command: INTERNAL_COMMANDS.leaseAllocate,
         token: 'test-token',
@@ -361,6 +368,7 @@ test('a lease allocated for a requester that left is released, not registered', 
     await assert.rejects(
       () =>
         handleLeaseCommands({
+          host: createTestHostEnvironment(),
           req: leaseAllocateRequest(requestId),
           sessionName: 'catalog-test',
           sessionStore,
@@ -410,6 +418,7 @@ test('a failed provider release after cancellation is reported as unreleased wit
     await assert.rejects(
       () =>
         handleLeaseCommands({
+          host: createTestHostEnvironment(),
           req: leaseAllocateRequest(requestId),
           sessionName: 'catalog-test',
           sessionStore,
@@ -457,6 +466,7 @@ test('a throwing provider release after cancellation is reported as unreleased, 
     await assert.rejects(
       () =>
         handleLeaseCommands({
+          host: createTestHostEnvironment(),
           req: leaseAllocateRequest(requestId),
           sessionName: 'catalog-test',
           sessionStore,
@@ -521,6 +531,7 @@ async function runCatalogCommandThroughHandlerChain(
       async () => [],
       async () =>
         await runRequestHandlerChain({
+          host: createTestHostEnvironment(),
           createCommandSurface: fakeCreateCommandSurface,
           platformServices: daemonPlatformServicesFixture(),
           req,

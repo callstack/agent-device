@@ -9,7 +9,13 @@ import {
   WINDOW_MS,
 } from '../__tests__/session-idle-expiry-harness.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit';
+import {
+  IOS_SIMULATOR,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 /**
  * #2833: WHEN the reaper starts an expiry and how long it may take. The window that arms it, the
@@ -44,6 +50,7 @@ test('a session still inside its window survives a sweep that actually ran', asy
   const sweeps = createSweepBarrier();
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -71,6 +78,7 @@ test('the policy being off arms nothing at all, even for a long-dead session', a
   let settleCalls = 0;
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: 0,
     executionLocks: new Map(),
@@ -100,6 +108,7 @@ test('a window longer than a timer can express does not sweep a session that is 
   let sweeps = 0;
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: LONG_WINDOW_MS,
     executionLocks: new Map(),
@@ -131,6 +140,7 @@ test('a window longer than a timer can express still expires once the window ela
     session.lastActivityAtMs = NOW;
 
     const controller = createSessionIdleExpiry({
+      env: createTestHostEnvironment().env,
       sessionStore,
       idleExpiryMs: LONG_WINDOW_MS,
       executionLocks: new Map(),
@@ -166,6 +176,7 @@ test('an expiry waits for the session lock a command of its own holds', async ()
   const sweeps = createSweepBarrier();
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: locks,
@@ -207,6 +218,7 @@ test('an expiry waits for the DEVICE lock a command on another session holds', a
   const sweeps = createSweepBarrier();
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: locks,
@@ -249,6 +261,7 @@ test('a command that re-stamped activity while the expiry queued cancels it', as
   let sweepsCompleted = 0;
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: locks,
@@ -297,6 +310,7 @@ test('a session that moved to another device is fenced by that device, not the s
   const sweeps = createSweepBarrier();
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: locks,
@@ -355,6 +369,7 @@ test('a settle that outlives the budget is caught by the sweep rather than the p
   idleClaimedSession(sessionStore);
   const sweeps = createSweepBarrier();
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -377,6 +392,7 @@ test('a sweep runs inside the composition diagnostics scope it is given', async 
   const scopes: string[] = [];
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -411,6 +427,7 @@ test('a settle that outruns its wait still finishes the release it started', asy
 
   // A window short enough that the retry becomes reachable while the settle is still stuck.
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: 40,
     executionLocks: new Map(),
@@ -472,6 +489,7 @@ test('a daemon beginning to leave does not start settling the next session', asy
   });
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -512,6 +530,7 @@ test('an over-budget expiry keeps the locks the release itself needs', async () 
   });
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: locks,
@@ -562,6 +581,7 @@ test('an expiry that lands after its budget still reports the session it release
   const expired: string[] = [];
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
@@ -601,6 +621,7 @@ test('a stuck expiry does not leave the timer firing with no delay', async () =>
   let clock = NOW;
 
   const controller = createSessionIdleExpiry({
+    env: createTestHostEnvironment().env,
     sessionStore,
     idleExpiryMs: 20,
     executionLocks: new Map(),
@@ -661,6 +682,7 @@ test('a settle that outlives its window is retried a full window after it ends, 
     let settledAt = 0;
 
     const controller = createSessionIdleExpiry({
+      env: createTestHostEnvironment().env,
       sessionStore,
       idleExpiryMs: WINDOW,
       executionLocks: new Map(),

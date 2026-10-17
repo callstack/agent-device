@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
@@ -43,6 +44,7 @@ import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/p
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
 type LeaseHandlerArgs = {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -104,7 +106,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           : undefined;
         try {
           providerData = await leaseLifecycleProvider?.allocate?.(lease, {
-            ...leaseLifecycleContext(req),
+            ...leaseLifecycleContext(req, args.host),
             signal: getRequestSignal(requestId),
             deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
           });
@@ -141,7 +143,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
       const providerData = await leaseLifecycleProvider?.heartbeat?.(
         lease,
-        leaseLifecycleContext(req),
+        leaseLifecycleContext(req, args.host),
       );
       return {
         ok: true,
@@ -160,7 +162,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
             leaseLifecycleProvider,
             lease,
             releaseRequest,
-            leaseLifecycleContext(req),
+            leaseLifecycleContext(req, args.host),
           ),
       );
       // Outside the device mutation: ending a session waits for its execution locks, and a
@@ -327,11 +329,11 @@ function canceledAllocationHint(
   return `The lease request was canceled while the provider was still allocating, and the session it produced could NOT be confirmed released — it may still be running and billing. Stop provider session ${String(providerSessionId ?? '(unknown)')} for lease ${leaseId} by hand.`;
 }
 
-function leaseLifecycleContext(req: DaemonRequest): LeaseLifecycleContext {
+function leaseLifecycleContext(req: DaemonRequest, host: HostEnvironment): LeaseLifecycleContext {
   return {
     flags: req.flags,
     ...(typeof req.flags?.providerApp === 'string' ? { initialApp: req.flags.providerApp } : {}),
-    cwd: typeof req.meta?.cwd === 'string' ? req.meta.cwd : undefined,
+    cwd: typeof req.meta?.cwd === 'string' ? req.meta.cwd : host.cwd,
     ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
   };
 }

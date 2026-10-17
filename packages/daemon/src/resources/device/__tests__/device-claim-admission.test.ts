@@ -1,4 +1,9 @@
-import { ANDROID_EMULATOR, deviceClaimFilePath } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  deviceClaimFilePath,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
 import {
   daemonPlatformServicesFixture,
@@ -44,6 +49,7 @@ function makeAdmission(
   callerCwd: string | null = '/worktrees/current',
 ) {
   return createDeviceClaimAdmission({
+    env: process.env,
     policy,
     command,
     session,
@@ -56,7 +62,7 @@ function makeAdmission(
 }
 
 function claimedSessions(): (string | undefined)[] {
-  return inspectDeviceClaims({}).map((entry) => entry.claim?.session);
+  return inspectDeviceClaims({}, process.env).map((entry) => entry.claim?.session);
 }
 
 // Enforcement is a pure function of the declared policy, not of a command name:
@@ -81,7 +87,7 @@ test.for(POLICY_CLAIMS)(
     expect(claimedSessions()).toEqual(held);
 
     await admission[Symbol.asyncDispose]();
-    expect(inspectDeviceClaims({})).toEqual([]);
+    expect(inspectDeviceClaims({}, process.env)).toEqual([]);
     // A claim-free policy never even creates the store.
     if (held.length === 0) expect(fs.existsSync(claimsDir)).toBe(false);
   },
@@ -92,6 +98,7 @@ test('a foreign live claim refuses the command before it can reach device operat
   const ownerStateDir = path.join(root, 'foreign');
   fs.mkdirSync(ownerStateDir, { recursive: true });
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'owner-session',
     workspace: '/worktrees/foreign',
@@ -123,6 +130,7 @@ test('a foreign live claim refuses the command before it can reach device operat
 test('a claim this daemon holds for the same session covers the command instead of colliding with it', async () => {
   const { stateDir } = setup();
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'open-session',
     workspace: '/worktrees/current',
@@ -141,6 +149,7 @@ test('a claim this daemon holds for the same session covers the command instead 
 test('a claim this daemon holds for another session refuses the command like any live owner', async () => {
   const { stateDir } = setup();
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'owning-session',
     workspace: '/worktrees/current',
@@ -191,11 +200,12 @@ test('an in-flight transient claim refuses a request named after its label, whil
   expect(claimedSessions()).toEqual(['transient:install']);
 
   await holder[Symbol.asyncDispose]();
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 
   // A genuinely open session may carry that name; its claim is the session kind and covers
   // its own workspace's command.
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'transient:install',
     workspace: '/worktrees/current',
@@ -215,6 +225,7 @@ test('an in-flight transient claim refuses a request named after its label, whil
 test("an open session named after a command's label is not renew-adopted by that command's requests", async () => {
   const { stateDir } = setup();
   const open = await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'transient:install',
     workspace: '/worktrees/current',
@@ -233,9 +244,9 @@ test("an open session named after a command's label is not renew-adopted by that
   await foreign[Symbol.asyncDispose]();
 
   // The open session's claim survived, with its original token: nothing was adopted.
-  const held = inspectDeviceClaims({})[0]?.claim;
+  const held = inspectDeviceClaims({}, process.env)[0]?.claim;
   expect(held?.ownerToken).toBe(open.ownership.ownerToken);
-  expect(await abandonDeviceClaim(open.ownership)).toBe('abandoned');
+  expect(await abandonDeviceClaim(open.ownership, process.env)).toBe('abandoned');
 });
 
 // A legacy record states no kind, so coverage cannot treat it as an open session's claim. The
@@ -290,7 +301,7 @@ test('a legacy record under this process identity covers nothing, not even under
       expect(error.code).toBe('DEVICE_IN_USE');
       expect(error.details?.reason).toBe('DEVICE_CLAIM_LIVE_OWNER');
       await claimOwner[Symbol.asyncDispose]();
-      expect(inspectDeviceClaims({})[0]?.claim?.ownerToken).toBe('legacy-token');
+      expect(inspectDeviceClaims({}, process.env)[0]?.claim?.ownerToken).toBe('legacy-token');
     } finally {
       owner.mockRestore();
     }
@@ -302,6 +313,7 @@ test('a legacy record under this process identity covers nothing, not even under
 test('a current-version open-session claim of this workspace still covers', async () => {
   const { stateDir } = setup();
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'transient:install',
     workspace: '/worktrees/current',
@@ -329,7 +341,7 @@ test('a transient claim this request took covers re-admitting the same device', 
   // key, while the identity key carries the target and binding treats them apart.
   await admission.admit({ ...ANDROID_EMULATOR, target: 'tv' }, localAndroid);
   await admission[Symbol.asyncDispose]();
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
 // Session addresses are printed by `device status` and re-enter through `--session`, so
@@ -345,6 +357,7 @@ test("a claim at this workspace's implicit address still covers its own workspac
   // directories one workspace; without a checkout the two are just two paths.
   fs.mkdirSync(path.join(workspace, '.git'), { recursive: true });
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'cwd:aaa111:android',
     workspace,
@@ -372,6 +385,7 @@ test('naming another workspace\u2019s session address does not cover a transient
   fs.mkdirSync(ownerWorkspace, { recursive: true });
   fs.mkdirSync(foreignWorkspace, { recursive: true });
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'cwd:aaa111:android',
     workspace: ownerWorkspace,
@@ -401,6 +415,7 @@ test('naming another workspace\u2019s session address does not cover a transient
 test('a request that carries no cwd keeps coverage of its session\u2019s claim', async () => {
   const { stateDir } = setup();
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'sdk-session',
     workspace: '/somewhere/else',
@@ -442,7 +457,7 @@ test('a failed release abandons the claim so the next command is not locked out'
 
   // The claim survived the failed unlink as abandoned, not live: a live survivor would
   // refuse this session's next install.
-  const survivor = inspectDeviceClaims({});
+  const survivor = inspectDeviceClaims({}, process.env);
   expect(survivor.map((entry) => entry.claim?.session)).toEqual(['transient:install']);
   expect(survivor[0]?.claim?.abandonedAtMs).toBeTypeOf('number');
 
@@ -450,12 +465,56 @@ test('a failed release abandons the claim so the next command is not locked out'
   await retry.admit(ANDROID_EMULATOR, localAndroid);
   expect(claimedSessions()).toEqual(['transient:install']);
   await retry[Symbol.asyncDispose]();
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
+});
+
+test("a failed release abandons the claim in the host's claims directory, not the process's", async () => {
+  const { stateDir } = setup();
+  const hostClaimsDir = mkdtempForTestSync('agent-device-host-claims-');
+  const hostEnv = { ...process.env, AGENT_DEVICE_CLAIMS_DIR: hostClaimsDir };
+  const admission = createDeviceClaimAdmission({
+    env: hostEnv,
+    policy: 'transient-exclusive',
+    command: 'install',
+    session: 'own-session',
+    workspace: '/worktrees/current',
+    callerCwd: '/worktrees/current',
+    resolveScopeRoot: resolveCallerScopeRoot,
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+  await admission.admit(ANDROID_EMULATOR, localAndroid);
+  const claimFiles = fs
+    .readdirSync(hostClaimsDir, { recursive: true })
+    .map((entry) => path.join(hostClaimsDir, String(entry)))
+    .filter((entry) => fs.statSync(entry).isFile() && entry.endsWith('.json'));
+  expect(claimFiles).toHaveLength(1);
+
+  const originalUnlink = fs.unlinkSync;
+  const unlink = vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
+    if (String(target) === claimFiles[0]) {
+      throw Object.assign(new Error('read-only file system'), { code: 'EROFS' });
+    }
+    return originalUnlink(target as Parameters<typeof fs.unlinkSync>[0]);
+  });
+  try {
+    await admission[Symbol.asyncDispose]();
+  } finally {
+    unlink.mockRestore();
+  }
+
+  // The abandon went to the host's directory, where the claim was written; the process's own
+  // claims directory never held it.
+  const survivor = inspectDeviceClaims({}, hostEnv);
+  expect(survivor.map((entry) => entry.claim?.session)).toEqual(['transient:install']);
+  expect(survivor[0]?.claim?.abandonedAtMs).toBeTypeOf('number');
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
 test("an abandoned claim becomes this command's own transient claim and is released", async () => {
   const { stateDir } = setup();
   const aborted = await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'aborted-open',
     workspace: '/worktrees/current',
@@ -464,7 +523,7 @@ test("an abandoned claim becomes this command's own transient claim and is relea
   });
   expect(aborted.status).toBe('acquired');
   if (aborted.status !== 'acquired') return;
-  expect(await abandonDeviceClaim(aborted.ownership)).toBe('abandoned');
+  expect(await abandonDeviceClaim(aborted.ownership, process.env)).toBe('abandoned');
 
   const admission = makeAdmission('transient-exclusive', stateDir, 'install');
   await admission.admit(ANDROID_EMULATOR, localAndroid);
@@ -472,7 +531,7 @@ test("an abandoned claim becomes this command's own transient claim and is relea
   // Coverage would have left the abandoned record owning the device with nothing to release it.
   expect(claimedSessions()).toEqual(['transient:install']);
   await admission[Symbol.asyncDispose]();
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
 test('a provider-owned device takes no host-local claim', async () => {
@@ -541,6 +600,7 @@ test('the none policy still reaches no device state at all', async () => {
   const ownerStateDir = path.join(root, 'foreign');
   fs.mkdirSync(ownerStateDir, { recursive: true });
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'owner-session',
     workspace: '/worktrees/foreign',
@@ -564,6 +624,7 @@ async function bindInRequestSession(params: {
   cwd?: string;
 }): Promise<{ claims: (string | undefined)[]; error?: AppError }> {
   const scope = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: {
@@ -606,7 +667,7 @@ test('the request scope claims only for commands whose descriptor declares trans
   expect(
     (await bindInRequestSession({ command: 'snapshot', stateDir, session: 'default' })).claims,
   ).toEqual([]);
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
 // `--session transient:install` is a legal explicit name — the store sanitizes only directory
@@ -628,12 +689,13 @@ test('the request scope refuses a session addressed by a transient label while a
   expect(intruder.claims).toEqual(['transient:install']);
 
   await holder[Symbol.asyncDispose]();
-  expect(inspectDeviceClaims({})).toEqual([]);
+  expect(inspectDeviceClaims({}, process.env)).toEqual([]);
 });
 
 test('the request scope admits a transient command only in the session whose claim owns the device', async () => {
   const { stateDir } = setup();
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: 'owning-session',
     workspace: '/worktrees/current',
@@ -686,6 +748,7 @@ test('the request scope covers the implicit workspace session that routed to the
   // The point of the pin: the owning address is not the name the request carried.
   expect(routedAddress).not.toBe('default');
   await acquireDeviceClaim({
+    env: process.env,
     device: ANDROID_EMULATOR,
     session: routedAddress,
     workspace,

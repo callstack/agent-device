@@ -1,5 +1,6 @@
 import type { MetroSessionOptions, MetroSessionOpenInput } from './metro/metro-session-hints.ts';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { resolveRuntimeTransportHints } from '@agent-device/host-kit/runtime-transport-hints';
 import type { PrepareMetroRuntimeOptions, ReloadMetroOptions } from './metro/client-metro.ts';
 import type { PrepareMetroRuntimeResult, ReloadMetroResult } from '@agent-device/contracts/remote';
@@ -34,10 +35,11 @@ export function resolveRuntimeTransport(
 }
 
 export async function prepareMetroRuntime(
-  input: PrepareMetroRuntimeOptions = {},
+  input: PrepareMetroRuntimeOptions,
+  host: HostEnvironment,
 ): Promise<PrepareMetroRuntimeResult> {
   const runtime = await import('./metro/client-metro.ts');
-  return await runtime.prepareMetroRuntime(input);
+  return await runtime.prepareMetroRuntime(input, host);
 }
 
 export async function reloadMetro(input: ReloadMetroOptions = {}): Promise<ReloadMetroResult> {

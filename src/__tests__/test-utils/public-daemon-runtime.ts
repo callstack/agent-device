@@ -8,7 +8,7 @@ import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-c
 import { AppError } from '@agent-device/kernel/errors';
 import { startDaemonRuntime, type DaemonRuntimeController } from '@agent-device/daemon';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import { createDaemonRuntimeDeps } from '../../daemon-composition.ts';
 import { currentDaemonCodeSignature } from './daemon-http-fixture.ts';
@@ -43,13 +43,15 @@ export async function startPublicDaemonRuntime(
           }
         : deps;
     },
-    env: {
-      ...process.env,
-      ...options.env,
-      AGENT_DEVICE_STATE_DIR: stateDir,
-      AGENT_DEVICE_DAEMON_SERVER_MODE: options.serverMode ?? 'dual',
-      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
-    },
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        ...options.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_SERVER_MODE: options.serverMode ?? 'dual',
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+      },
+    }),
     exit: () => {},
     registerProcessHandlers: false,
     stderr: { write: () => {} },

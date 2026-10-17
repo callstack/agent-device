@@ -25,6 +25,7 @@ import {
   type SkippableTestContext,
   skipWhenLoopbackUnavailable,
   trackLoopbackSockets,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 
 const { handleRequestTimeoutCalls } = vi.hoisted(() => ({
@@ -78,7 +79,9 @@ async function runTimerDiscipline(
       transport,
       STATE_PATHS,
       TIMEOUT_MS,
-      aborted ? { signal: controller.signal } : {},
+      aborted
+        ? { host: createTestHostEnvironment(), signal: controller.signal }
+        : { host: createTestHostEnvironment() },
     );
     if (aborted) {
       const armedTimeoutIndex = setTimeoutSpy.mock.calls.findIndex(
@@ -162,7 +165,7 @@ test('an abort during a restart health probe never retires the daemon or redispa
       'auto',
       STATE_PATHS,
       1_000,
-      { signal: controller.signal },
+      { host: createTestHostEnvironment(), signal: controller.signal },
     );
     const rejection = assert.rejects(request, (error: unknown) => isRequestCanceledError(error));
     await healthStarted;

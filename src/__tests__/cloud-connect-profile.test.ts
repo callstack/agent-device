@@ -20,8 +20,14 @@ import {
   verifyAwsDeviceFarmConnection,
   verifyBrowserStackConnection,
 } from '@agent-device/provider-webdriver/connection-verification';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
+
+bindTestCommandHost();
 
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../cli/auth-session.ts')>()),
@@ -161,6 +167,7 @@ test('connect limrun generates a local daemon remote profile', async () => {
   try {
     await captureConnectStdout(async () => {
       await connectCommand({
+        host: createTestHostEnvironment(),
         positionals: ['limrun'],
         flags: {
           json: true,
@@ -214,6 +221,7 @@ test('connect limrun attaches to an existing instance without storing its token'
 
   await captureConnectStdout(async () => {
     await connectCommand({
+      host: createTestHostEnvironment(),
       positionals: ['limrun'],
       flags: { json: true, help: false, version: false, stateDir, platform: 'ios' },
       client: {} as AgentDeviceClient,
@@ -234,6 +242,7 @@ test('connect limrun persists deferred Metro bridge settings', async () => {
   try {
     await captureConnectStdout(async () => {
       await connectCommand({
+        host: createTestHostEnvironment(),
         positionals: ['limrun'],
         flags: {
           json: true,
@@ -292,6 +301,7 @@ test('connect limrun requires LIMRUN_API_KEY or access to an existing instance',
   try {
     await assert.rejects(
       connectCommand({
+        host: createTestHostEnvironment(),
         positionals: ['limrun'],
         flags: {
           json: true,
@@ -550,22 +560,18 @@ test('connect browserstack persists a local app artifact as an absolute path', a
   vi.stubEnv('BROWSERSTACK_ACCESS_KEY', 'browser-key');
 
   try {
-    const previousCwd = process.cwd();
-    process.chdir(tempRoot);
-    try {
-      await connectWithGeneratedProviderProfile({
-        stateDir,
-        positionals: ['browserstack'],
-        flags: {
-          platform: 'android',
-          device: 'Google Pixel 8',
-          providerOsVersion: '14.0',
-          providerApp: './sample.apk',
-        },
-      });
-    } finally {
-      process.chdir(previousCwd);
-    }
+    // The host the command runs in decides what `./sample.apk` is relative to.
+    await connectWithGeneratedProviderProfile({
+      stateDir,
+      host: { env: process.env, cwd: fs.realpathSync(tempRoot) },
+      positionals: ['browserstack'],
+      flags: {
+        platform: 'android',
+        device: 'Google Pixel 8',
+        providerOsVersion: '14.0',
+        providerApp: './sample.apk',
+      },
+    });
 
     const state = readRequiredActiveState(stateDir);
     assert.equal(readGeneratedConfig(state.remoteConfigPath).providerApp, fs.realpathSync(appPath));
@@ -793,6 +799,7 @@ test('connect does not activate provider state when verification fails', async (
   try {
     await assert.rejects(
       connectCommand({
+        host: createTestHostEnvironment(),
         positionals: ['limrun'],
         flags: {
           json: true,
@@ -901,6 +908,7 @@ function fetchProfileUrl(fetchMock: ReturnType<typeof vi.fn>): string | undefine
 async function connectWithGeneratedCloudProfile(stateDir: string): Promise<void> {
   await captureConnectStdout(async () => {
     await connectCommand({
+      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: true,

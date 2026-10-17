@@ -7,7 +7,7 @@ import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-r
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness } from './harness.ts';
@@ -24,6 +24,8 @@ import {
 } from './cloud-webdriver-regression-fixtures.ts';
 import { inspectProviderDeploymentAdmission } from './stale-provider-runtime-admission.fixtures.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
+
+bindTestCommandHost();
 
 const limrunState = vi.hoisted(() => ({
   androidCreate: vi.fn(async () => ({

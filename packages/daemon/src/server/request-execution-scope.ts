@@ -1,3 +1,4 @@
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   resolveSessionRequestLog,
   resolveSessionRunnerLogPath,
@@ -120,6 +121,8 @@ const gatewayMissing = async (): Promise<never> => {
 };
 
 export type RequestExecutionScope = AsyncDisposable & {
+  /** The environment and working directory of the daemon serving this request. */
+  host: HostEnvironment;
   req: DaemonRequest;
   command: string;
   sessionName: string;
@@ -168,6 +171,7 @@ type LockedRequestScopeResult =
   | { type: 'response'; response: DaemonResponse };
 
 export async function createRequestExecutionScope(params: {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
@@ -259,10 +263,11 @@ export async function createRequestExecutionScope(params: {
     });
     const dispatchLedger = requestDispatchLedger(scopedReq);
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
+      env: params.host.env,
       command,
       sessionName,
       dispatchLedger,
-      workspace: scopedReq.meta?.cwd ?? process.cwd(),
+      workspace: scopedReq.meta?.cwd ?? params.host.cwd,
       callerCwd: scopedReq.meta?.cwd,
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
@@ -293,6 +298,7 @@ export async function createRequestExecutionScope(params: {
     };
 
     const scope: RequestExecutionScope = {
+      host: params.host,
       req: scopedReq,
       command,
       sessionName,
@@ -311,6 +317,7 @@ export async function createRequestExecutionScope(params: {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
         try {
           await cleanupExpiredLeasedSession({
+            env: params.host.env,
             sessionName,
             sessionStore,
             leaseRegistry,
@@ -324,6 +331,7 @@ export async function createRequestExecutionScope(params: {
               }),
           });
           scopedReq = admitRequestLeaseForLockedScope({
+            env: params.host.env,
             req: scopedReq,
             sessionName,
             sessionStore,
@@ -410,6 +418,7 @@ export async function createRequestExecutionScope(params: {
  * stays out of the claim store.
  */
 function createRequestDeviceAccess(params: {
+  env: EnvMap;
   command: string;
   sessionName: string;
   dispatchLedger: RequestDispatchLedger;
@@ -436,6 +445,7 @@ function createRequestDeviceAccess(params: {
     callerCwd: params.callerCwd,
     resolveScopeRoot: resolveCallerScopeRoot,
     stateDir: params.stateDir,
+    env: params.env,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
       scope: platformRequestScope,
       composeGateway: params.claimRecoveryGateway,
@@ -677,6 +687,7 @@ export type LeaseSessionEnd = Readonly<{
 }>;
 
 export function createLeaseSessionEnd(params: {
+  env: HostEnvironment['env'];
   sessionStore: SessionStore;
   executionLocks: Map<string, Promise<unknown>>;
   teardownSession: SessionTeardown;
@@ -702,6 +713,7 @@ export function createLeaseSessionEnd(params: {
                 sessionStore,
                 teardownSession,
                 reason,
+                params.env,
               );
             },
           ),

@@ -25,10 +25,13 @@ test(ANDROID_RECORDING_CONTRACT_EVIDENCE.testName, async () => {
       const calls: string[][] = [];
       const pulls: PullCall[] = [];
       const outputPath = path.join(tmpDir, 'sessionless.mp4');
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () => createAndroidRecordingProvider({ calls, pulls }),
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () => createAndroidRecordingProvider({ calls, pulls }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       try {
         const started = await daemon.callCommand('record', ['start', outputPath], {
           platform: 'android',
@@ -71,11 +74,14 @@ test('Provider-backed integration Android record stop reattaches a matching dura
         remotePath,
         sessionName: 'default',
       });
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () =>
-          createAndroidRecordingProvider({ calls, pulls, manifests: [manifest] }),
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () =>
+            createAndroidRecordingProvider({ calls, pulls, manifests: [manifest] }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       seedAndroidRecordingResource(daemon, manifest);
       try {
         const stopped = await stopAndroidRecording(daemon, outputPath);
@@ -115,11 +121,14 @@ test('Provider-backed integration Android record stop returns fenced completed n
           recordOnlySession: false,
         },
       });
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () =>
-          createAndroidRecordingProvider({ calls, manifests: [manifest], deadPids: ['4321'] }),
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () =>
+            createAndroidRecordingProvider({ calls, manifests: [manifest], deadPids: ['4321'] }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       seedAndroidRecordingResource(daemon, manifest);
       try {
         const stopped = await stopAndroidRecording(daemon, outputPath);
@@ -165,15 +174,18 @@ test('Provider-backed integration Android record start retires completed evidenc
         },
       });
       fs.writeFileSync(previousPath, 'saved recording');
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () =>
-          createAndroidRecordingProvider({
-            calls,
-            manifests: [manifest],
-            reusedPids: [{ pid: '4004', startTime: '5432' }],
-          }),
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () =>
+            createAndroidRecordingProvider({
+              calls,
+              manifests: [manifest],
+              reusedPids: [{ pid: '4004', startTime: '5432' }],
+            }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       try {
         const started = await daemon.callCommand('record', ['start', outputPath], {
           platform: 'android',
@@ -217,11 +229,14 @@ test('Provider-backed integration Android record start retires evidence stranded
         deviceId: 'emulator-5588',
         chunks: [{ index: 1, remotePath, remotePid: '4004', remoteStartTime: '3766' }],
       });
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () =>
-          createAndroidRecordingProvider({ calls, manifests: [manifest], deadPids: ['4004'] }),
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () =>
+            createAndroidRecordingProvider({ calls, manifests: [manifest], deadPids: ['4004'] }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       try {
         const started = await daemon.callCommand('record', ['start', outputPath], {
           platform: 'android',
@@ -271,15 +286,18 @@ test('Provider-backed integration Android record start retains completed evidenc
           recordOnlySession: false,
         },
       });
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () =>
-          createAndroidRecordingProvider({
-            calls,
-            manifests: [manifest],
-            reusedPids: [{ pid: '4004', startTime: '9911', role: 'replacement-recorder' }],
-          }),
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () =>
+            createAndroidRecordingProvider({
+              calls,
+              manifests: [manifest],
+              reusedPids: [{ pid: '4004', startTime: '9911', role: 'replacement-recorder' }],
+            }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       try {
         assertRpcError(
           await daemon.callCommand('record', ['start', outputPath], {
@@ -338,10 +356,14 @@ test('Provider-backed integration Android record start refuses completed evidenc
           recordOnlySession: false,
         },
       });
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () => createAndroidRecordingProvider({ calls, manifests: [manifest] }),
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () =>
+            createAndroidRecordingProvider({ calls, manifests: [manifest] }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       try {
         assertRpcError(
           await daemon.callCommand('record', ['start', outputPath], {
@@ -386,10 +408,14 @@ test('Provider-backed integration Android corrupt descriptor is retained without
         remotePath: '/sdcard/agent-device-recording-323456789.mp4',
         sessionName: 'default',
       });
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () => createAndroidRecordingProvider({ calls, manifests: [manifest] }),
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () =>
+            createAndroidRecordingProvider({ calls, manifests: [manifest] }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       seedAndroidRecordingResource(daemon, manifest, { descriptor: { malformed: true } });
       try {
         const stopped = await stopAndroidRecording(daemon);
@@ -423,10 +449,13 @@ test('Provider-backed integration Android cleanup-only recovery terminalizes bef
         pendingRemotePath: '/sdcard/agent-device-recording-423456789.mp4',
       });
       const provider = createAndroidRecordingProvider({ calls, manifests: [manifest] });
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () => provider,
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () => provider,
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       seedAndroidRecordingResource(daemon, manifest);
       try {
         assertRpcError(

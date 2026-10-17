@@ -10,7 +10,6 @@ import {
   recoverAbandonedDaemonRegistration,
   createOwnedReplayStateDir,
   DAEMON_STARTUP_EXIT_CODES,
-  launchDaemonProcess,
   type DaemonRetirementResult,
   type OwnedReplayStateDir,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
@@ -21,16 +20,17 @@ import {
 import { readRegisteredDaemonOwnership } from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { spawnLegacyDaemonFixture } from './daemon-registration-owner.fixtures.ts';
+import {
+  devicesClientSettings,
+  launchDaemonProcess,
+  spawnLegacyDaemonFixture,
+} from './daemon-registration-owner.fixtures.ts';
 import {
   registeredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
 } from './test-utils/registered-daemon-fixture.ts';
-import {
-  ensureManagedDaemon,
-  resolveClientSettings,
-} from '../daemon-client/daemon-client-lifecycle.ts';
+import { ensureManagedDaemon } from '../daemon-client/daemon-client-lifecycle.ts';
 import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -794,14 +794,7 @@ test('cutover refuses an already-running legacy daemon before signaling or chang
     assert.ok(disposition, 'a new daemon must refuse an occupied legacy file');
     assert.equal(disposition.exitCode, DAEMON_STARTUP_EXIT_CODES.unproven);
     await assert.rejects(
-      ensureManagedDaemon(
-        resolveClientSettings({
-          session: 'default',
-          command: 'devices',
-          positionals: [],
-          flags: { stateDir: paths.baseDir },
-        }),
-      ),
+      ensureManagedDaemon(devicesClientSettings(paths.baseDir)),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'daemon_registration_unproven');

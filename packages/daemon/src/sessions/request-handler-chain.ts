@@ -26,11 +26,14 @@ import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 
 type RequestHandlerChainParams = {
+  /** The request's bound host: the environment and working directory its routes read configuration from. */
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -153,6 +156,7 @@ async function runLeaseHandler(
     params.req.command,
     'lease',
     await handleLeaseCommands({
+      host: params.host,
       req: params.req,
       sessionName: params.sessionName,
       sessionStore: params.sessionStore,
@@ -175,6 +179,7 @@ async function runSessionHandler(
     params.req.command,
     'session',
     await handleSessionCommands({
+      host: params.host,
       req: params.req,
       sessionName: params.sessionName,
       logPath: params.logPath,
@@ -257,6 +262,7 @@ async function runRecordTraceHandler(
     params.req.command,
     'record-trace',
     await handleRecordTraceCommands({
+      host: params.host,
       req: params.req,
       sessionName: params.sessionName,
       sessionStore: params.sessionStore,

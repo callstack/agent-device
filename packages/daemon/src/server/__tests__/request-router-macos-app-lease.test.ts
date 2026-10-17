@@ -2,7 +2,11 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { MACOS_DEVICE, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  MACOS_DEVICE,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeMacOsSession } from '../../__tests__/support/session-factories.ts';
 import type { DaemonRequest } from '../../index.ts';
@@ -53,6 +57,7 @@ function leasedRouter() {
   });
   const runtime = screenshotRuntimeFixture();
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
@@ -121,6 +126,7 @@ test('a leased snapshot carries the app tree and nothing about the host', async 
 test('a request without a macos-app lease keeps its log locators', async () => {
   const sessionStore = makeSessionStore('agent-device-router-unleased-');
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

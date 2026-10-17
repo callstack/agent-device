@@ -6,6 +6,7 @@ import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from './diagnosti
 import {
   coerceExecResult,
   commandDeveloperDir,
+  commandHostEnvironment,
   isCommandTimeoutError,
   requireExecSuccess,
   runCmd,
@@ -14,10 +15,11 @@ import {
   runCmdStreaming,
   runCmdSync,
   whichCmd,
-  withRequestCommandEnv,
+  withCommandHost,
   type ExecResult,
 } from './exec.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 test('runCmd enforces timeoutMs and rejects with COMMAND_FAILED', async () => {
@@ -161,29 +163,24 @@ test('runCmdBackground can leave output streams to the caller', async () => {
   assert.equal(stderr, 'err');
 });
 
-test('runCmd stays silent when exec tracing is not enabled', { concurrent: false }, async () => {
-  const previousTraceEnv = process.env.AGENT_DEVICE_EXEC_TRACE;
-  delete process.env.AGENT_DEVICE_EXEC_TRACE;
+test('runCmd stays silent when exec tracing is not enabled', async () => {
+  const diagnosticsPath = await withCommandHost(
+    { host: hostWith({ AGENT_DEVICE_EXEC_TRACE: undefined }), requestEnv: undefined },
+    async () =>
+      await withDiagnosticsScope(
+        {
+          session: 'exec-silent',
+          requestId: 'exec-silent-1',
+          command: 'home',
+        },
+        async () => {
+          await runCmd(process.execPath, ['-e', 'process.stdout.write("ok")']);
+          return flushDiagnosticsToSessionFile()?.path ?? null;
+        },
+      ),
+  );
 
-  try {
-    const diagnosticsPath = await withDiagnosticsScope(
-      {
-        session: 'exec-silent',
-        requestId: 'exec-silent-1',
-        command: 'home',
-      },
-      async () => {
-        await runCmd(process.execPath, ['-e', 'process.stdout.write("ok")']);
-        return flushDiagnosticsToSessionFile()?.path ?? null;
-      },
-    );
-
-    assert.equal(diagnosticsPath, null);
-  } finally {
-    if (previousTraceEnv !== undefined) {
-      process.env.AGENT_DEVICE_EXEC_TRACE = previousTraceEnv;
-    }
-  }
+  assert.equal(diagnosticsPath, null);
 });
 
 test('runCmdBackground aborts with request cancellation details', async () => {
@@ -197,7 +194,7 @@ test('runCmdBackground aborts with request cancellation details', async () => {
 });
 
 test('whichCmd resolves absolute executable paths without invoking a shell', async () => {
-  assert.equal(await whichCmd(process.execPath), true);
+  assert.equal(await whichCmd(process.execPath, process.env), true);
 });
 
 async function assertRejectsRequestCanceled(promise: Promise<unknown>): Promise<void> {
@@ -212,7 +209,7 @@ async function assertRejectsRequestCanceled(promise: Promise<unknown>): Promise<
 }
 
 test('whichCmd resolves bare commands from PATH', async () => {
-  assert.equal(await whichCmd('node'), true);
+  assert.equal(await whichCmd('node', process.env), true);
 });
 
 test.runIf(process.platform !== 'win32')(
@@ -281,29 +278,22 @@ test.runIf(process.platform !== 'win32')(
 );
 
 test('whichCmd rejects suspicious command strings', async () => {
-  assert.equal(await whichCmd('node; rm -rf /'), false);
-  assert.equal(await whichCmd('./node'), false);
+  assert.equal(await whichCmd('node; rm -rf /', process.env), false);
+  assert.equal(await whichCmd('./node', process.env), false);
 });
 
-test(
-  'whichCmd ignores directories that match a command name in PATH',
-  { concurrent: false },
-  async () => {
-    const root = mkdtempForTestSync('agent-device-whichcmd-');
-    const fakeCommandDir = path.join(root, 'fake-tool');
-    fs.mkdirSync(fakeCommandDir);
+test('whichCmd ignores directories that match a command name in PATH', async () => {
+  const root = mkdtempForTestSync('agent-device-whichcmd-');
+  const fakeCommandDir = path.join(root, 'fake-tool');
+  fs.mkdirSync(fakeCommandDir);
 
-    const previousPath = process.env.PATH;
-    process.env.PATH = `${root}${path.delimiter}${previousPath ?? ''}`;
-
-    try {
-      assert.equal(await whichCmd('fake-tool'), false);
-    } finally {
-      process.env.PATH = previousPath;
-      fs.rmSync(root, { recursive: true, force: true });
-    }
-  },
-);
+  try {
+    const env = { PATH: `${root}${path.delimiter}${process.env.PATH ?? ''}` };
+    assert.equal(await whichCmd('fake-tool', env), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 function readExecDiagnosticEvents(diagnosticsPath: string | null): Array<{
   level?: string;
@@ -338,21 +328,10 @@ function readExecDiagnosticEvent(diagnosticsPath: string | null): {
 }
 
 async function withExecTraceEnv<T>(fn: () => Promise<T>): Promise<T> {
-  const previousTraceEnv = process.env.AGENT_DEVICE_EXEC_TRACE;
-  process.env.AGENT_DEVICE_EXEC_TRACE = '1';
-  try {
-    return await fn();
-  } finally {
-    restoreOptionalEnv('AGENT_DEVICE_EXEC_TRACE', previousTraceEnv);
-  }
-}
-
-function restoreOptionalEnv(key: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[key];
-    return;
-  }
-  process.env[key] = value;
+  return await withCommandHost(
+    { host: hostWith({ AGENT_DEVICE_EXEC_TRACE: '1' }), requestEnv: undefined },
+    fn,
+  );
 }
 
 function assertBackgroundExecTraceEvents(
@@ -472,25 +451,33 @@ test('isCommandTimeoutError reads the structured timeout, not the message text',
 
 const PRINT_DEVELOPER_DIR = ['-e', 'process.stdout.write(process.env.DEVELOPER_DIR ?? "")'];
 
-test('a request command env reaches spawned commands; outside it they inherit the daemon env', async () => {
-  const daemonEnv = { ...process.env, DEVELOPER_DIR: '/daemon/Developer' };
-  const inherited = await runCmd(process.execPath, PRINT_DEVELOPER_DIR, { env: daemonEnv });
+function hostWith(env: Record<string, string | undefined>): HostEnvironment {
+  return { env: { ...process.env, ...env }, cwd: process.cwd() };
+}
+
+test('a request command env reaches spawned commands; outside it they inherit the host env', async () => {
+  const host = hostWith({ DEVELOPER_DIR: '/daemon/Developer' });
+  const inherited = await runCmd(process.execPath, PRINT_DEVELOPER_DIR, { env: host.env });
   assert.equal(inherited.stdout, '/daemon/Developer');
 
-  const [first, second, unscoped] = await Promise.all([
-    withRequestCommandEnv({ DEVELOPER_DIR: '/a/Developer' }, async () =>
-      runCmd(process.execPath, PRINT_DEVELOPER_DIR, { env: daemonEnv }),
+  const [first, second, unscoped, hostOnly] = await Promise.all([
+    withCommandHost({ host, requestEnv: { DEVELOPER_DIR: '/a/Developer' } }, async () =>
+      runCmd(process.execPath, PRINT_DEVELOPER_DIR, { env: host.env }),
     ),
-    withRequestCommandEnv({ DEVELOPER_DIR: '/b/Developer' }, async () =>
+    withCommandHost({ host, requestEnv: { DEVELOPER_DIR: '/b/Developer' } }, async () =>
       runCmdSync(process.execPath, PRINT_DEVELOPER_DIR),
     ),
-    withRequestCommandEnv(undefined, async () =>
-      runCmd(process.execPath, PRINT_DEVELOPER_DIR, { env: daemonEnv }),
+    withCommandHost({ host, requestEnv: undefined }, async () =>
+      runCmd(process.execPath, PRINT_DEVELOPER_DIR, { env: host.env }),
+    ),
+    withCommandHost({ host, requestEnv: undefined }, async () =>
+      runCmd(process.execPath, PRINT_DEVELOPER_DIR),
     ),
   ]);
   assert.equal(first.stdout, '/a/Developer');
   assert.equal(second.stdout, '/b/Developer');
   assert.equal(unscoped.stdout, '/daemon/Developer');
+  assert.equal(hostOnly.stdout, '/daemon/Developer');
 });
 
 test.runIf(process.platform !== 'win32')(
@@ -504,8 +491,12 @@ test.runIf(process.platform !== 'win32')(
       { mode: 0o755 },
     );
     await assert.rejects(
-      withRequestCommandEnv({ DEVELOPER_DIR: '/Library/Developer/CommandLineTools' }, async () =>
-        runCmd(xcrun, ['simctl', 'list']),
+      withCommandHost(
+        {
+          host: hostWith({}),
+          requestEnv: { DEVELOPER_DIR: '/Library/Developer/CommandLineTools' },
+        },
+        async () => runCmd(xcrun, ['simctl', 'list']),
       ),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
@@ -530,12 +521,17 @@ const XCRUN_DEVICECTL_NOT_FOUND = {
 
 test('an allowFailure xcrun result guarded by requireExecSuccess gets the toolchain hint over the caller hint', async () => {
   await assert.rejects(
-    withRequestCommandEnv({ DEVELOPER_DIR: '/Library/Developer/CommandLineTools' }, async () =>
-      requireExecSuccess(XCRUN_DEVICECTL_NOT_FOUND, 'Failed to install app', {
-        cmd: 'xcrun',
-        args: ['devicectl', 'device', 'install', 'app'],
-        hint: 'Ensure the iOS device is unlocked, trusted, and available in Xcode > Devices, then retry.',
-      }),
+    withCommandHost(
+      {
+        host: hostWith({}),
+        requestEnv: { DEVELOPER_DIR: '/Library/Developer/CommandLineTools' },
+      },
+      async () =>
+        requireExecSuccess(XCRUN_DEVICECTL_NOT_FOUND, 'Failed to install app', {
+          cmd: 'xcrun',
+          args: ['devicectl', 'device', 'install', 'app'],
+          hint: 'Ensure the iOS device is unlocked, trusted, and available in Xcode > Devices, then retry.',
+        }),
     ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -550,13 +546,10 @@ test('an allowFailure xcrun result guarded by requireExecSuccess gets the toolch
   );
 });
 
-test(
-  'without a developer dir the toolchain hint points at xcode-select',
-  { concurrent: false },
-  () => {
-    const saved = process.env.DEVELOPER_DIR;
-    delete process.env.DEVELOPER_DIR;
-    try {
+test('without a developer dir the toolchain hint points at xcode-select', async () => {
+  await withCommandHost(
+    { host: hostWith({ DEVELOPER_DIR: undefined }), requestEnv: undefined },
+    async () => {
       // No cmd/args: the call site only had the result, so xcrun's own stderr identifies the tool.
       assert.throws(
         () => requireExecSuccess(XCRUN_DEVICECTL_NOT_FOUND, 'Failed to list devices'),
@@ -570,43 +563,33 @@ test(
           return true;
         },
       );
-    } finally {
-      if (saved !== undefined) process.env.DEVELOPER_DIR = saved;
-    }
-  },
-);
+    },
+  );
+});
 
-test(
-  'a request that clears DEVELOPER_DIR is not reported under the daemon one',
-  { concurrent: false },
-  async () => {
-    const saved = process.env.DEVELOPER_DIR;
-    process.env.DEVELOPER_DIR = '/daemon/Developer';
-    try {
-      // The child runs without a usable DEVELOPER_DIR (xcode-select decides), so the key and report
-      // must too, whether the request clears it or carries it unset.
-      for (const requestEnv of [{ DEVELOPER_DIR: '' }, { DEVELOPER_DIR: undefined }]) {
-        await withRequestCommandEnv(requestEnv, async () => {
-          assert.equal((await runCmd(process.execPath, PRINT_DEVELOPER_DIR)).stdout, '');
-          assert.equal(commandDeveloperDir(), undefined);
-          assert.throws(
-            () => requireExecSuccess(XCRUN_DEVICECTL_NOT_FOUND, 'Failed to list devices'),
-            (error: unknown) => {
-              assert.ok(error instanceof AppError);
-              assert.equal(error.details?.developerDir, null);
-              assert.match(String(error.details?.hint), /selected by xcode-select/);
-              return true;
-            },
-          );
-        });
-      }
-      assert.equal(commandDeveloperDir(), '/daemon/Developer');
-    } finally {
-      if (saved === undefined) delete process.env.DEVELOPER_DIR;
-      else process.env.DEVELOPER_DIR = saved;
-    }
-  },
-);
+test('a request that clears DEVELOPER_DIR is not reported under the daemon one', async () => {
+  const host = hostWith({ DEVELOPER_DIR: '/daemon/Developer' });
+  // The child runs without a usable DEVELOPER_DIR (xcode-select decides), so the key and report
+  // must too, whether the request clears it or carries it unset.
+  for (const requestEnv of [{ DEVELOPER_DIR: '' }, { DEVELOPER_DIR: undefined }]) {
+    await withCommandHost({ host, requestEnv }, async () => {
+      assert.equal((await runCmd(process.execPath, PRINT_DEVELOPER_DIR)).stdout, '');
+      assert.equal(commandDeveloperDir(), undefined);
+      assert.throws(
+        () => requireExecSuccess(XCRUN_DEVICECTL_NOT_FOUND, 'Failed to list devices'),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.developerDir, null);
+          assert.match(String(error.details?.hint), /selected by xcode-select/);
+          return true;
+        },
+      );
+    });
+  }
+  await withCommandHost({ host, requestEnv: undefined }, async () => {
+    assert.equal(commandDeveloperDir(), '/daemon/Developer');
+  });
+});
 
 test('a non-xcrun failure keeps the caller hint', () => {
   assert.throws(
@@ -644,4 +627,20 @@ test('runCmdStreaming can forward output without retaining it in the result', as
   assert.equal(stdout, 'out');
   assert.equal(stderr, 'err');
   assert.deepEqual(result, { stdout: '', stderr: '', exitCode: 7, stdoutBuffer: undefined });
+});
+
+test('commandHostEnvironment names the enclosing host and refuses outside one', async () => {
+  assert.throws(
+    () => commandHostEnvironment(),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'host_environment_unscoped');
+      return true;
+    },
+  );
+
+  const host = hostWith({ AGENT_DEVICE_TEST_HOST: 'yes' });
+  await withCommandHost({ host, requestEnv: undefined }, async () => {
+    assert.equal(commandHostEnvironment(), host);
+  });
 });

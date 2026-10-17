@@ -1,4 +1,8 @@
-import { deviceClaimFilePath, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  deviceClaimFilePath,
+  mkdtempForTestSync,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -14,6 +18,8 @@ import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { SessionTeardown } from '../../sessions/lease-lifecycle.ts';
 import { createLeaseSessionEnd } from '../request-execution-scope.ts';
+
+bindTestCommandHost();
 
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
@@ -32,6 +38,7 @@ async function publishLeasedSession(
     lease: { leaseId, tenantId: 'tenant-a', runId: 'run-1' },
   });
   const acquired = await acquireDeviceClaim({
+    env: process.env,
     device: session.device,
     session: name,
     workspace: stateDir,
@@ -64,7 +71,12 @@ function leaseSessionEnd(sessionStore: SessionStore, teardownSession: SessionTea
   const executionLocks = new Map<string, Promise<unknown>>();
   return {
     executionLocks,
-    ender: createLeaseSessionEnd({ sessionStore, executionLocks, teardownSession }),
+    ender: createLeaseSessionEnd({
+      env: process.env,
+      sessionStore,
+      executionLocks,
+      teardownSession,
+    }),
   };
 }
 

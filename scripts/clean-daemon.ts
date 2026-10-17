@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { withCommandHost } from '@agent-device/host-kit/command';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readRegisteredDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import {
@@ -14,7 +16,10 @@ const DAEMON_KILL_TIMEOUT_MS = 2_000;
 const PRUNE_DEV_FLAG = '--prune-dev';
 const PRUNE_DEV_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
-const paths = resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR);
+const paths = resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR, {
+  env: process.env,
+  cwd: process.cwd(),
+});
 const retirement = await stopAndRetireDaemon({
   paths,
   observed: readRegisteredDaemonIdentity(paths.infoPath),
@@ -36,7 +41,10 @@ if (retirement.status === 'retained') {
 if (retirement.status === 'retired') {
   const { cleanupRunnerLeasesForOwner } =
     await import('@agent-device/platform-apple/runner/operations');
-  await cleanupRunnerLeasesForOwner(retirement.termination.identity);
+  await withCommandHost(
+    { host: captureHostEnvironment(process), requestEnv: undefined },
+    async () => await cleanupRunnerLeasesForOwner(retirement.termination.identity),
+  );
 }
 
 if (process.argv.includes(PRUNE_DEV_FLAG)) {
@@ -48,7 +56,7 @@ async function pruneStaleDevStateDirs(): Promise<void> {
   const cutoffMs = Date.now() - PRUNE_DEV_MAX_AGE_MS;
   for (const dirPath of listDevStateDirs(devRoot)) {
     if (newestMtimeMs(dirPath) > cutoffMs) continue;
-    const paths = resolveDaemonPaths(dirPath);
+    const paths = resolveDaemonPaths(dirPath, { cwd: process.cwd() });
     const result = await recoverAbandonedDaemonRegistration({
       paths,
       observed: readRegisteredDaemonIdentity(paths.infoPath),

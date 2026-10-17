@@ -15,6 +15,7 @@
     { "path": "../contracts" },
     { "path": "../host-kit" },
     { "path": "../kernel" },
-    { "path": "../provision-kit" }
+    { "path": "../provision-kit" },
+    { "path": "../test-kit" }
   ]
 }

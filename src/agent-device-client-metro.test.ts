@@ -203,12 +203,13 @@ test('metro reload targets the dev server bound by metro prepare in the same ses
         if (req.command === 'close') return { ok: true, data: {} };
         throw new Error('metro prepare/reload must stay local and never call the daemon');
       },
+      // The public MetroPrepareOptions doesn't expose env, so the fake npx must be on the host's PATH.
+      host: {
+        env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}` },
+        cwd: projectRoot,
+      },
     },
   );
-
-  // The public MetroPrepareOptions doesn't expose env, so the fake npx must be on the real PATH.
-  const previousPath = process.env.PATH;
-  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ''}`;
 
   let pid = 0;
   try {
@@ -247,7 +248,6 @@ test('metro reload targets the dev server bound by metro prepare in the same ses
       undefined,
     );
   } finally {
-    process.env.PATH = previousPath;
     await stopTestMetroProcess(pid);
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -279,11 +279,12 @@ test('metro prepare keeps a public Expo address separate from the local reload a
       transport: async () => {
         throw new Error('metro prepare/reload must stay local and never call the daemon');
       },
+      host: {
+        env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}` },
+        cwd: projectRoot,
+      },
     },
   );
-
-  const previousPath = process.env.PATH;
-  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ''}`;
 
   let pid = 0;
   try {
@@ -331,7 +332,6 @@ test('metro prepare keeps a public Expo address separate from the local reload a
       deviceBaseUrls: [`https://127.0.0.1:${metroPort}${publicBasePath}`],
     });
   } finally {
-    process.env.PATH = previousPath;
     await stopTestMetroProcess(pid);
     rmSync(tempRoot, { recursive: true, force: true });
   }

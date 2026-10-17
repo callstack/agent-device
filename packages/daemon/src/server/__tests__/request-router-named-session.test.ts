@@ -14,7 +14,7 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 // #3674: a run whose daemon was replaced mid-test keeps sending commands to the session it opened.
 // The answer has to name the session that went missing, and must not depend on how many devices
@@ -44,6 +44,7 @@ function makeHandler(
 ) {
   const sessionStore = makeSessionStore('agent-device-router-named-session-');
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

@@ -14,6 +14,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import {
   createProviderScenarioHarness,
@@ -106,6 +107,7 @@ test('the composed daemon and client path materializes the directory produced by
             { baseUrl: proxy.baseUrl, token: PROXY_TOKEN },
             request,
             response,
+            createTestHostEnvironment(),
           );
           assert.equal(materialized.ok, true);
           if (!materialized.ok) return;

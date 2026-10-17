@@ -38,8 +38,14 @@ import {
   makeAndroidSession,
   makeMacOsSession,
 } from '../../../__tests__/support/session-factories.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts';
+
+bindTestCommandHost();
 
 const ANDROID_ONE: DeviceInfo = {
   platform: 'android',
@@ -65,6 +71,7 @@ test('test does not retry infrastructure startup failures and stops the suite', 
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -114,6 +121,7 @@ test('test --fail-fast stops the suite after the first failure and leaves the re
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -162,6 +170,7 @@ test('test surfaces a suite-level failure when a source fails to parse', async (
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -198,6 +207,7 @@ test('test discovers Maestro YAML suites when replay backend is set', async () =
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -235,6 +245,7 @@ test('test emits progress when attempts retry and pass', async () => {
     (event) => events.push(event),
     async () =>
       await handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -344,6 +355,7 @@ test('test stops before retrying when a rejected close leaves the prior macOS se
 
   let replayAttempts = 0;
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -397,6 +409,7 @@ test('test stops retrying after maxAttempts when every attempt fails', async () 
 
   let attemptCount = 0;
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -442,6 +455,7 @@ test('test emits skip progress without synthetic duration', async () => {
     (event) => events.push(event),
     async () =>
       await handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -496,6 +510,7 @@ test('test aggregates snapshot diagnostics from replay session samples', async (
   let captures = 0;
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -556,6 +571,7 @@ test('test aggregates snapshot diagnostics from failed replay session samples', 
   fs.writeFileSync(path.join(root, '01-fail.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -630,6 +646,7 @@ test('test stops the suite when the parent request is canceled during an active 
       (event) => events.push(event),
       async () =>
         await handleSessionCommands({
+          host: createTestHostEnvironment(),
           createCommandSurface: fakeCreateCommandSurface,
           platformServices: daemonPlatformServicesFixture(),
           req: {
@@ -697,6 +714,7 @@ test('test --shard-all runs each runnable entry on each selected device', async 
     async () => [ANDROID_ONE, ANDROID_TWO],
     async () =>
       await handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -774,6 +792,7 @@ test('test --shard-split distributes runnable entries by modulo and keeps skips 
     async () => [ANDROID_TWO, ANDROID_ONE],
     async () =>
       await handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -824,6 +843,7 @@ test('test sharding rejects mutually exclusive shard modes', async () => {
   fs.writeFileSync(path.join(root, '01-a.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -852,6 +872,7 @@ test('test sharding rejects non-positive shard counts', async () => {
   fs.writeFileSync(path.join(root, '01-a.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -883,6 +904,7 @@ test('test sharding rejects fewer matched devices than requested shards', async 
     async () => [ANDROID_ONE],
     async () =>
       await handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -919,6 +941,7 @@ test('test sharding does not require devices when every entry is skipped', async
     },
     async () =>
       await handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {

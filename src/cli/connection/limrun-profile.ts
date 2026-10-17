@@ -19,10 +19,10 @@ export function resolveLimrunConnectProfile(options: {
   flags: CliFlags;
   stateDir: string;
   cwd: string;
-  env?: EnvMap;
+  env: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
-  const env = options.env ?? process.env;
-  const profile = buildLimrunRemoteProfile({ flags: options.flags });
+  const { env } = options;
+  const profile = buildLimrunRemoteProfile({ flags: options.flags, cwd: options.cwd, env });
   const credentials = readLimrunCredentials(env);
   const platform = limrunPlatformForLeaseBackend(profile.leaseBackend) ?? 'android';
   if (!credentials?.apiKey && !credentials?.instances?.[platform]) {
@@ -44,10 +44,17 @@ export function resolveLimrunConnectProfile(options: {
   });
 }
 
-function buildLimrunRemoteProfile(options: { flags: CliFlags }): RemoteConfigProfile {
+function buildLimrunRemoteProfile(options: {
+  flags: CliFlags;
+  cwd: string;
+  env: EnvMap;
+}): RemoteConfigProfile {
   const flags = options.flags;
   const leaseBackend = validateLimrunConnectFlags(flags);
-  const daemonPaths = resolveDaemonPaths(flags.stateDir);
+  const daemonPaths = resolveDaemonPaths(flags.stateDir, {
+    cwd: options.cwd,
+    env: options.env,
+  });
   return {
     stateDir: daemonPaths.baseDir,
     daemonTransport: 'auto',

@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -37,6 +38,8 @@ import { handleSessionCloseCommands } from '../internal/session-close.ts';
 import { handleSessionInventoryCommands } from '../internal/inventory.ts';
 import { handleSessionOpenCommands } from '../internal/session-open.ts';
 
+bindTestCommandHost();
+
 const mockHandleSessionCloseCommands = vi.mocked(handleSessionCloseCommands);
 const mockHandleSessionInventoryCommands = vi.mocked(handleSessionInventoryCommands);
 const mockHandleSessionOpenCommands = vi.mocked(handleSessionOpenCommands);
@@ -59,6 +62,7 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: request(command),
@@ -118,6 +122,7 @@ test('open routes only its lifecycle input through its owner', async () => {
   expect(Object.keys(forwarded ?? {}).sort()).toEqual(
     [
       'bindDevice',
+      'host',
       'createCommandSurface',
       'inspectFacts',
       'logPath',
@@ -145,6 +150,7 @@ test('close routes only its lifecycle input through its owner', async () => {
   expect(Object.keys(forwarded ?? {}).sort()).toEqual(
     [
       'bindDevice',
+      'host',
       'inspectFacts',
       'leaseLifecycleProvider',
       'leaseRegistry',

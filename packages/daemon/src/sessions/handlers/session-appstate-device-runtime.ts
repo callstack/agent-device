@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
 import {
   isIosFamily,
@@ -14,8 +15,11 @@ import {
   appleSessionRequiredRefusal,
 } from './session-appstate-apple-session.ts';
 
-function sortedAndroidSerialAllowlist(value: string | undefined): string[] | undefined {
-  const allowlist = resolveAndroidSerialAllowlist(value);
+function sortedAndroidSerialAllowlist(
+  value: string | undefined,
+  env: HostEnvironment['env'],
+): string[] | undefined {
+  const allowlist = resolveAndroidSerialAllowlist(value, env);
   return allowlist ? [...allowlist].sort() : undefined;
 }
 
@@ -52,7 +56,10 @@ export async function queryDeviceRuntimeAppState(
   const runtime = admitted.runtime;
   await runtime.operations.ensureReady({
     serial: flags.serial,
-    androidSerialAllowlist: sortedAndroidSerialAllowlist(flags.androidDeviceAllowlist),
+    androidSerialAllowlist: sortedAndroidSerialAllowlist(
+      flags.androidDeviceAllowlist,
+      params.host.env,
+    ),
   });
   const state = await runtime.operations.appState();
   return {

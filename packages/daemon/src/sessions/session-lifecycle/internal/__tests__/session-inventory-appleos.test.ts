@@ -26,7 +26,11 @@ import {
   MACOS_DEVICE,
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
+  bindTestCommandHost,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const mockListDeviceInventory = vi.mocked(listDeviceInventory);
 
@@ -45,6 +49,7 @@ async function runDevices(): Promise<DaemonResponse | null> {
     flags: {},
   };
   return handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',

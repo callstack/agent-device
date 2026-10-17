@@ -62,7 +62,9 @@ import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import { withCommandHost } from '@agent-device/host-kit/command';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   readCurrentOwnerIdentity,
   reapOwnedProcessRecordsAtStartup,
@@ -183,7 +185,8 @@ export type DaemonRuntimeDeps = Readonly<{
 
 /** Everything the composition factory needs that the server owns: paths, policy, and the store. */
 export type DaemonRuntimeDepsInput = Readonly<{
-  env: NodeJS.ProcessEnv;
+  /** The environment and working directory this daemon runs with; nothing below reads the process's. */
+  host: HostEnvironment;
   /** The resolved state-dir root; the server resolves daemon paths and passes it down. */
   baseDir: string;
   sessionsDir: string;
@@ -204,7 +207,7 @@ export type ComposeDaemonRuntimeDeps = (
 ) => Promise<DaemonRuntimeDeps>;
 
 export type DaemonRuntimeOptions = {
-  env?: NodeJS.ProcessEnv;
+  host: HostEnvironment;
   stdout?: WritableOutput;
   stderr?: WritableOutput;
   exit?: (code: number) => void;
@@ -404,11 +407,20 @@ export async function teardownDaemonSessionForShutdown(params: {
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions,
 ): Promise<DaemonRuntimeController | null> {
-  const env = options.env ?? process.env;
+  return await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
+    return await startDaemonRuntimeOnHost(options);
+  });
+}
+
+async function startDaemonRuntimeOnHost(
+  options: DaemonRuntimeOptions,
+): Promise<DaemonRuntimeController | null> {
+  const { host } = options;
+  const { env } = host;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
   const exit = options.exit ?? ((code: number) => process.exit(code));
-  const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR);
+  const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
@@ -417,7 +429,7 @@ export async function startDaemonRuntime(
   // runtime, so no capability is ever built under a policy that failed validation.
   let daemonPolicy: DaemonPolicy | undefined;
   try {
-    daemonPolicy = loadDaemonPolicy(env);
+    daemonPolicy = loadDaemonPolicy(env, host.cwd);
   } catch (error) {
     stderr.write(`Daemon error: ${asAppError(error).message}\n`);
     exit(1);
@@ -431,7 +443,7 @@ export async function startDaemonRuntime(
 
   const sessionStore = new SessionStore(sessionsDir);
   const deps = await options.composeDeps({
-    env,
+    host,
     baseDir,
     sessionsDir,
     assertShutdownAllowed,
@@ -505,6 +517,7 @@ export async function startDaemonRuntime(
   );
   leaseExpirySweep.unref();
   const dispatchRequest = createRequestHandler({
+    host,
     logPath,
     token,
     sessionStore,
@@ -541,7 +554,7 @@ export async function startDaemonRuntime(
     });
   };
 
-  const shutdownClaimLedger = createDaemonShutdownClaimLedger();
+  const shutdownClaimLedger = createDaemonShutdownClaimLedger(env);
 
   const teardownDaemonSession = async (ref: SessionRef): Promise<void> => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
@@ -609,6 +622,7 @@ export async function startDaemonRuntime(
   };
 
   const leaseSessionEnd = createLeaseSessionEnd({
+    env,
     sessionStore,
     executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
     teardownSession: settleIdleExpiredSession,
@@ -621,6 +635,7 @@ export async function startDaemonRuntime(
   };
 
   const sessionIdleExpiry = createSessionIdleExpiry({
+    env,
     sessionStore,
     idleExpiryMs: resolveSessionIdleExpiryMs(env),
     executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
@@ -783,7 +798,7 @@ export async function startDaemonRuntime(
   try {
     await deps.ownerLifecycle.configureForDaemonLock({
       stateDir: baseDir,
-      hasDeviceClaimAuthority: processOwnsActiveDeviceClaim,
+      hasDeviceClaimAuthority: (device) => processOwnsActiveDeviceClaim(device, env),
       onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
     });
     const legacyMarkerRecovery = await deps.ownerLifecycle.recoverLegacyAppLogMarkers(sessionsDir);
@@ -857,6 +872,7 @@ export async function startDaemonRuntime(
         composeGateway: deps.claimRecoveryGateway,
       }),
       baseDir,
+      env,
     );
     // Arms the initial idle-reap timer: a daemon that starts and never
     // receives a request must still be able to reap itself.
@@ -880,7 +896,7 @@ export async function startDaemonRuntime(
   // cannot start, PNG processing falls back to the in-process sync path.
   prewarmPngWorker();
 
-  const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
+  const shutdownOnHost = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
     leaseSessionEnd.cancel();
@@ -956,6 +972,13 @@ export async function startDaemonRuntime(
     exit(shutdownOptions.exitCode ?? 0);
   };
 
+  // Signal handlers and external callers run outside the startup scope, so shutdown re-enters it.
+  const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) =>
+    await withCommandHost(
+      { host, requestEnv: undefined },
+      async () => await shutdownOnHost(shutdownOptions),
+    );
+
   startingUp = false;
 
   if (options.registerProcessHandlers !== false) {
@@ -993,10 +1016,11 @@ async function reconcileDeviceClaimsForDaemonStartup(
   logPath: string,
   reconcile: DeviceClaimReconciler,
   stateDir: string,
+  env: EnvMap,
 ): Promise<void> {
   await withDaemonDiagnosticsScope({ logPath }, async () => {
     try {
-      const summary = await reconcileOrphanedDeviceClaims(reconcile, stateDir);
+      const summary = await reconcileOrphanedDeviceClaims(reconcile, stateDir, env);
       if (summary.examined > 0) {
         emitDiagnostic({ phase: 'device_claim_reconcile', data: summary });
       }

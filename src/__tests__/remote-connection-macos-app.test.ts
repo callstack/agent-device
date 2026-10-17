@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
@@ -7,6 +8,8 @@ import { connectCommand, disconnectCommand } from '../cli/commands/connection.ts
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+
+bindTestCommandHost();
 
 const LEASE_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
@@ -65,6 +68,7 @@ test('a macos-app remote config opens on the lease the host allocated, unchanged
   });
   const flags = flagsFor(stateDir, remoteConfigPath);
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     positionals: ['com.example.app'],
     flags,
@@ -107,6 +111,7 @@ test('an inactive host lease is reported, never replaced by a tenant allocation'
   });
   await expect(
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'snapshot',
       flags: flagsFor(stateDir, remoteConfigPath),
       client,
@@ -123,6 +128,7 @@ async function connectHostedMacosApp(
   const stdoutCapture = beginStdoutCapture();
   try {
     await connectCommand({
+      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         ...flagsFor(workspace.stateDir, workspace.remoteConfigPath),
@@ -162,6 +168,7 @@ test('connect binds the lease and device a macos-app remote config names, and op
   });
 
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     positionals: ['com.example.app'],
     flags: { ...flagsFor(workspace.stateDir, workspace.remoteConfigPath), platform: 'macos' },
@@ -242,6 +249,7 @@ test('disconnect drops the local connection and never releases the host lease', 
   const stdoutCapture = beginStdoutCapture();
   try {
     await disconnectCommand({
+      host: createTestHostEnvironment(),
       positionals: [],
       flags: flagsFor(workspace.stateDir, workspace.remoteConfigPath),
       client: createTestClient({

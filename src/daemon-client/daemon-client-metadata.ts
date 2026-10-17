@@ -6,7 +6,6 @@ import {
   readDaemonCapabilities,
   readDaemonRecord,
   readRecordedDaemonTransport,
-  resolveDaemonPaths,
   type DaemonCapability,
   type DaemonPaths,
   type DaemonServerMode,
@@ -99,9 +98,7 @@ export function isRemoteDaemon(info: DaemonInfo): boolean {
 
 export function resolveDaemonStartupHint(
   state: { hasInfo: boolean; hasLock: boolean },
-  paths: Pick<DaemonPaths, 'infoPath' | 'lockPath'> = resolveDaemonPaths(
-    process.env.AGENT_DEVICE_STATE_DIR,
-  ),
+  paths: Pick<DaemonPaths, 'infoPath' | 'lockPath'>,
 ): string {
   const artifacts = [state.hasInfo ? paths.infoPath : null, state.hasLock ? paths.lockPath : null]
     .filter(Boolean)

@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -161,6 +162,7 @@ test('HTTP RPC errors sanitize an untrusted cause before rehydration', () => {
       },
     }),
     {
+      host: createTestHostEnvironment(),
       info: { token: 'daemon-token', pid: 1 },
       req: {
         command: 'apps_install_source',

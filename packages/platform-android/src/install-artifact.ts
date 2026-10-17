@@ -12,20 +12,26 @@ export type PreparedAndroidInstallArtifact = {
 
 export async function prepareAndroidInstallArtifact(
   source: LocalInstallSource,
-  options?: { signal?: AbortSignal; resolveIdentity?: boolean },
+  options: {
+    signal?: AbortSignal;
+    resolveIdentity?: boolean;
+    /** The host environment whose proxy settings apply to a network download. */
+    environment: NodeJS.ProcessEnv;
+  },
 ): Promise<PreparedAndroidInstallArtifact> {
   const materialized = await materializeInstallablePath({
     source,
     isInstallablePath: (candidatePath, stat) =>
       stat.isFile() && isAndroidInstallablePath(candidatePath),
     installableLabel: 'Android installable (.apk or .aab)',
-    signal: options?.signal,
+    signal: options.signal,
+    environment: options.environment,
   });
   try {
     const identity =
-      options?.resolveIdentity === false
+      options.resolveIdentity === false
         ? {}
-        : await inspectAndroidArtifactIdentity(materialized.installablePath, options?.signal);
+        : await inspectAndroidArtifactIdentity(materialized.installablePath, options.signal);
     return {
       archivePath: materialized.archivePath,
       installablePath: materialized.installablePath,

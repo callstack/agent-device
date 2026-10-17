@@ -8,7 +8,11 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type { DaemonArtifactInventoryEntry } from '@agent-device/contracts/observability';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
-import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  WEB_DESKTOP_DEVICE,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 import {
   cleanupDownloadableArtifact,
@@ -34,6 +38,7 @@ test('artifacts lists a daemon-tracked artifact produced during a web session', 
 
   try {
     const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',

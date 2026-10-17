@@ -11,6 +11,9 @@
     "@agent-device/kernel": "workspace:*",
     "@agent-device/provision-kit": "workspace:*"
   },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",

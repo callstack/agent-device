@@ -67,6 +67,7 @@ test('reconciles claims whose owner is gone and keeps every other claim', async 
     const summary = await reconcileOrphanedDeviceClaims(
       async () => ({ status: 'reconciled' }),
       process.cwd(),
+      process.env,
     );
 
     const claimPathFor = (name: string) => deviceClaimFilePath(`local:android:none:${name}`);
@@ -86,7 +87,11 @@ test('reconciles nothing when the claim store does not exist', async () => {
     'agent-device-reconciliation-absent-store',
   );
   assert.deepEqual(
-    await reconcileOrphanedDeviceClaims(async () => ({ status: 'reconciled' }), process.cwd()),
+    await reconcileOrphanedDeviceClaims(
+      async () => ({ status: 'reconciled' }),
+      process.cwd(),
+      process.env,
+    ),
     {
       examined: 0,
       reconciled: 0,
@@ -138,6 +143,7 @@ test('leaves a live successor written while the reconciliation waited for the cl
     const reconciliation = reconcileOrphanedDeviceClaims(
       async () => ({ status: 'reconciled' }),
       process.cwd(),
+      process.env,
     );
     // The reconciliation is now blocked on the lock; stand in the live successor.
     writeContested(owner.pid, owner.startTime, 'live-token');
@@ -174,6 +180,7 @@ test('reconciles a claim whose owning daemon was replaced while still running', 
     const summary = await reconcileOrphanedDeviceClaims(
       async () => ({ status: 'reconciled' }),
       stateDir,
+      process.env,
     );
 
     assert.deepEqual(summary, { examined: 1, reconciled: 1, retained: 0, changed: 0 });
@@ -201,6 +208,7 @@ test('leaves a superseded owner in another state dir to the device that asks for
     const summary = await reconcileOrphanedDeviceClaims(
       reconcile,
       path.join(claimsDir, 'our-state'),
+      process.env,
     );
 
     assert.deepEqual(summary, { examined: 0, reconciled: 0, retained: 0, changed: 0 });

@@ -10,7 +10,7 @@ import { DAEMON_POLICY_ENV, loadDaemonPolicy, parseDaemonPolicy } from './daemon
 const SOURCE = '/etc/agent-device/policy.json';
 
 test('no configured policy leaves the daemon unrestricted', () => {
-  expect(loadDaemonPolicy({})).toBeUndefined();
+  expect(loadDaemonPolicy({}, process.cwd())).toBeUndefined();
 });
 
 test('a policy file that cannot be read or parsed fails loading', () => {
@@ -18,12 +18,21 @@ test('a policy file that cannot be read or parsed fails loading', () => {
   const policyPath = path.join(dir, 'policy.json');
   fs.writeFileSync(policyPath, '{ not json');
 
-  expect(() => loadDaemonPolicy({ [DAEMON_POLICY_ENV]: policyPath })).toThrow(
+  expect(() => loadDaemonPolicy({ [DAEMON_POLICY_ENV]: policyPath }, dir)).toThrow(
     /Invalid daemon policy/,
   );
-  expect(() => loadDaemonPolicy({ [DAEMON_POLICY_ENV]: path.join(dir, 'missing.json') })).toThrow(
-    /cannot read policy JSON/,
-  );
+  expect(() =>
+    loadDaemonPolicy({ [DAEMON_POLICY_ENV]: path.join(dir, 'missing.json') }, dir),
+  ).toThrow(/cannot read policy JSON/);
+});
+
+test('a relative policy path resolves against the host working directory, not the process', () => {
+  const dir = mkdtempForTestSync('agent-device-daemon-policy-relative-');
+  fs.writeFileSync(path.join(dir, 'policy.json'), JSON.stringify({ version: 1 }));
+
+  const policy = loadDaemonPolicy({ [DAEMON_POLICY_ENV]: 'policy.json' }, dir);
+
+  expect(policy?.sourcePath).toBe(path.join(dir, 'policy.json'));
 });
 
 test.each([

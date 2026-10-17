@@ -12,8 +12,11 @@ import {
   installFakeManagedAgentBrowser,
   mkdtempForTestSync,
   WEB_DESKTOP_DEVICE,
+  bindTestCommandHost,
 } from '@agent-device/test-kit';
 import { platformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
+
+bindTestCommandHost();
 
 const mockRunCmd = vi.mocked(runCmd);
 

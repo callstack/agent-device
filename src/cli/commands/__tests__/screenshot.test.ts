@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { withCapturedStdoutAsync } from '../../../__tests__/test-utils/stream-capture.ts';
@@ -32,7 +33,7 @@ test('screenshot --level digest --json preserves the digest payload through the 
   const flags = { json: true, responseLevel: 'digest' } as CliFlags;
 
   const out = await withCapturedStdoutAsync(() =>
-    screenshotCommand({ positionals: [], flags, client }),
+    screenshotCommand({ host: createTestHostEnvironment(), positionals: [], flags, client }),
   );
   const parsed = JSON.parse(out) as { success: boolean; data: Record<string, unknown> };
 
@@ -50,7 +51,7 @@ test('screenshot surfaces response-level warnings under the summary', async () =
   const flags = { json: false } as CliFlags;
 
   const out = await withCapturedStdoutAsync(() =>
-    screenshotCommand({ positionals: [], flags, client }),
+    screenshotCommand({ host: createTestHostEnvironment(), positionals: [], flags, client }),
   );
 
   assert.equal(out, `/tmp/shot.png (40x20)\n${CROP_WARNING}\n`);
@@ -62,7 +63,7 @@ test('screenshot --json carries response-level warnings in the data', async () =
   const flags = { json: true } as CliFlags;
 
   const out = await withCapturedStdoutAsync(() =>
-    screenshotCommand({ positionals: [], flags, client }),
+    screenshotCommand({ host: createTestHostEnvironment(), positionals: [], flags, client }),
   );
   const parsed = JSON.parse(out) as { data: { path: string; warnings?: string[] } };
 
@@ -84,7 +85,7 @@ test('screenshot --json at the default level still emits normalized screenshot m
   const flags = { json: true } as CliFlags;
 
   const out = await withCapturedStdoutAsync(() =>
-    screenshotCommand({ positionals: [], flags, client }),
+    screenshotCommand({ host: createTestHostEnvironment(), positionals: [], flags, client }),
   );
   const parsed = JSON.parse(out) as {
     data: { path: string; width?: number; pixelDensity?: number };

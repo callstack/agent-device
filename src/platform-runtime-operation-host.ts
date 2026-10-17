@@ -1,3 +1,4 @@
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { DeviceShutdownRuntimeLoaders } from '@agent-device/contracts/device-shutdown-runtime';
 import type {
@@ -15,7 +16,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
-import { runCmd, whichCmd } from '@agent-device/host-kit/command';
+import { runCmd, whichCmd, commandHostEnvironment } from '@agent-device/host-kit/command';
 import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
 import { createManagedAppLogProcesses } from './platform-runtime-app-log-process.ts';
@@ -53,6 +54,7 @@ export async function loadMacOsSurfaceSnapshot(
 }
 
 export function createPlatformRuntimeHost(options: {
+  env: Readonly<EnvMap>;
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
@@ -64,12 +66,13 @@ export function createPlatformRuntimeHost(options: {
   const localProcessTransport = Object.freeze({ mode: 'local' as const, start: processes.start });
   const appleTools = createAppleToolHost();
   const commands = Object.freeze({
-    which: async (executable: string) => ((await whichCmd(executable)) ? executable : undefined),
+    which: async (executable: string) =>
+      (await whichCmd(executable, commandHostEnvironment().env)) ? executable : undefined,
     run: async (request: HostCommandRequest, signal?: AbortSignal) => {
       const result = await runCmd(request.executable, guardedHostCommandArgv(request), {
         allowFailure: request.allowFailure,
         cwd: request.cwd,
-        env: request.env ? { ...process.env, ...request.env } : undefined,
+        env: request.env ? { ...commandHostEnvironment().env, ...request.env } : undefined,
         signal,
         timeoutMs: request.timeoutMs,
       });
@@ -91,7 +94,7 @@ export function createPlatformRuntimeHost(options: {
   return Object.freeze({
     commands,
     appleTools,
-    toolchains: createHostToolchainPreparer(),
+    toolchains: createHostToolchainPreparer(options.env),
     artifacts: Object.freeze({ resolveSession: options.resolveSessionArtifacts }),
     outputs: Object.freeze({
       openAppend: async (pathname: string) => await openAppLogOutput(options.sessionsDir, pathname),
@@ -113,7 +116,7 @@ export function createPlatformRuntimeHost(options: {
     }),
     ...network,
     appleDeployment: createAppleAppDeploymentExecutor(),
-    androidDeployment: createAndroidAppDeploymentExecutor(),
+    androidDeployment: createAndroidAppDeploymentExecutor(options.env),
     androidTools: createAndroidToolHost(),
     temporaryFiles: Object.freeze({
       create: async (temporaryFileOptions: { prefix: string; suffix: string }) =>

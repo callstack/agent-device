@@ -36,6 +36,7 @@ export {
   dispatchDisclosureRowsOwnedBy,
 } from './dispatch-disclosure.fixtures.ts';
 export { restoreEnv } from './env.ts';
+export { bindTestCommandHost, createTestHostEnvironment } from './host-environment.ts';
 export {
   eagerClosureGraphOf,
   eagerClosureOf,

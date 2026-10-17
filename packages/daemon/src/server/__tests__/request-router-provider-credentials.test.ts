@@ -2,7 +2,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { fakeCreateCommandSurface as testCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
@@ -19,6 +19,7 @@ test.for([
     const stateDir = mkdtempForTestSync('agent-device-router-provider-credentials-');
     let allocated = 0;
     const handler = createRequestHandler({
+      host: createTestHostEnvironment(),
       createCommandSurface: testCreateCommandSurface,
       logPath: path.join(stateDir, 'daemon.log'),
       token: 'test-token',

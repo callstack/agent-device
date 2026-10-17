@@ -57,6 +57,7 @@ test('direct requests connect to the approved address through the real lookup', 
       family: 4,
       headers: {},
       signal: AbortSignal.timeout(5_000),
+      environment: process.env,
     });
     try {
       assert.equal(response.statusCode, 200);

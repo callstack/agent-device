@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
@@ -49,6 +50,7 @@ import type {
 import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../../execution/apps-runtime.ts';
 
 export async function handleDoctorCommand(params: {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -99,6 +101,7 @@ export async function handleDoctorCommand(params: {
     inspectFacts,
     bindDevice,
     req,
+    env: params.host.env,
   });
   const warmupDevice = session?.device ?? resolveHostWarmupDevice(inventory, appCheckDevice);
   if (warmupDevice) {
@@ -171,6 +174,7 @@ async function appendLocalDoctorChecks(params: {
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
   req: DaemonRequest;
+  env: HostEnvironment['env'];
 }): Promise<DeviceInfo | undefined> {
   const {
     checks,
@@ -182,6 +186,7 @@ async function appendLocalDoctorChecks(params: {
     inspectFacts,
     bindDevice,
     req,
+    env,
   } = params;
   const appCheckDevice =
     session?.device ?? resolveDoctorDeviceForAppCheck(checks, inventory, options.targetApp);
@@ -195,6 +200,7 @@ async function appendLocalDoctorChecks(params: {
       inspectFacts,
       bindDevice,
       req,
+      env,
     });
   }
   if (options.shouldProbeMetro) {
@@ -215,9 +221,10 @@ async function appendDeviceScopedDoctorChecks(
     inspectFacts?: InspectDeviceRuntimeFacts;
     bindDevice?: BindDeviceRuntime;
     req: DaemonRequest;
+    env: HostEnvironment['env'];
   },
 ): Promise<void> {
-  const { context, hostDiagnostics, device, options, session, inspectFacts, bindDevice, req } =
+  const { context, hostDiagnostics, device, options, session, inspectFacts, bindDevice, req, env } =
     params;
   let listInstalledApps: DoctorAppInventory | undefined;
   try {
@@ -227,6 +234,7 @@ async function appendDeviceScopedDoctorChecks(
       targetApp: options.targetApp,
       inspectFacts,
       bindDevice,
+      env,
     });
   } catch (error) {
     // Keep facts/bind/readiness failures inside appendAppChecks' accumulator path so doctor
@@ -259,10 +267,11 @@ async function resolveDoctorAppInventory(params: {
   targetApp?: string;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
+  env: HostEnvironment['env'];
 }): Promise<
   ((filter: 'all' | 'user-installed') => Promise<readonly InstalledAppInfo[]>) | undefined
 > {
-  const { device, req, targetApp, inspectFacts, bindDevice } = params;
+  const { device, req, targetApp, inspectFacts, bindDevice, env } = params;
   if (!targetApp || !inspectFacts || !bindDevice) {
     return undefined;
   }
@@ -274,7 +283,10 @@ async function resolveDoctorAppInventory(params: {
     device,
     appsRuntimeUse,
   );
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(req.flags?.androidDeviceAllowlist);
+  const androidSerialAllowlist = resolveAndroidSerialAllowlist(
+    req.flags?.androidDeviceAllowlist,
+    env,
+  );
   const readyDevice = await ensureAppsRuntimeReady(runtime, {
     serial: req.flags?.serial,
     androidSerialAllowlist: androidSerialAllowlist ? [...androidSerialAllowlist].sort() : undefined,

@@ -1,9 +1,15 @@
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test } from 'vitest';
 import { sessionCloseShutdownFixture } from './session-close-shutdown.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 import { lifecycleOperationsSpy } from '../../../../__tests__/support/lifecycle-operations-spy.ts';
+
+bindTestCommandHost();
 
 const {
   handleSessionCommands,
@@ -40,6 +46,7 @@ test('close --save-script on a session with an active .ad repair transaction is 
   sessionStore.publish(sessionName, session);
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -77,6 +84,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
 
   await expect(
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       lifecycleOperationsLoader: loader,
@@ -107,6 +115,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
   expect(finalizeApplicationClose).not.toHaveBeenCalled();
 
   const plainClose = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     lifecycleOperationsLoader: loader,

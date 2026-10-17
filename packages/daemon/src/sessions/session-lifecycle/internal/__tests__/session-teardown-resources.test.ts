@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
   sessionCloseShutdownFixture,
@@ -7,6 +8,8 @@ import { platformResourceCleanupFixture } from '../../../../__tests__/support/pl
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 import { lifecycleOperationsSpy } from '../../../../__tests__/support/lifecycle-operations-spy.ts';
+
+bindTestCommandHost();
 
 const {
   AppError,
@@ -196,6 +199,7 @@ test('close finalizes an active iOS simulator recording before deleting the sess
   const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     platformResourceCleanup,
@@ -232,6 +236,7 @@ test('close surfaces a recording finalization failure through the cleanup-failur
 
   await expect(
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       lifecycleOperationsLoader: loader,

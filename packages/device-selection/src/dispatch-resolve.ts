@@ -215,8 +215,12 @@ export function buildDeviceInventoryRequestFromFlags(
     requestedSetPath: flags.iosSimulatorDeviceSet,
     platform,
     target: flags.target,
+    env: process.env,
   });
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(flags.androidDeviceAllowlist);
+  const androidSerialAllowlist = resolveAndroidSerialAllowlist(
+    flags.androidDeviceAllowlist,
+    process.env,
+  );
   return {
     platform,
     target: flags.target,

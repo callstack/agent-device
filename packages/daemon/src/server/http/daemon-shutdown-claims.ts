@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
@@ -58,7 +59,9 @@ const CLEAR_UNRECORDED = 'clear-unrecorded';
  *                   it. Nor is it `superseded`, which would assert a successor
  *                   this verdict explicitly refuses to assume.
  */
-export function createDaemonShutdownClaimLedger(): DaemonShutdownClaimLedger {
+export function createDaemonShutdownClaimLedger(
+  env: HostEnvironment['env'],
+): DaemonShutdownClaimLedger {
   const claims: DaemonShutdownClaims = {
     released: [],
     orphaned: [],
@@ -71,7 +74,7 @@ export function createDaemonShutdownClaimLedger(): DaemonShutdownClaimLedger {
     releaseClaim: async (session) => {
       if (!session.deviceClaim) return;
       try {
-        outcomes.set(session.name, await clearDeviceClaim(session.deviceClaim));
+        outcomes.set(session.name, await clearDeviceClaim(session.deviceClaim, env));
       } catch (error) {
         outcomes.set(session.name, CLEAR_UNRECORDED);
         emitDiagnostic({

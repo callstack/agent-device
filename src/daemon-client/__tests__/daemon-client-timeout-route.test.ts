@@ -48,6 +48,7 @@ import {
   type LoopbackServer,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 
 import {
@@ -362,6 +363,7 @@ for (const row of ROUTE_ROWS) {
           row.transport === 'remote' ? 'http' : row.transport,
           statePaths,
           TIMEOUT_MS,
+          { host: createTestHostEnvironment() },
         ),
         row.hintPattern,
       );
@@ -406,6 +408,7 @@ test('request-timeout route: a reset never deletes a registration a replacement 
         'socket',
         statePaths,
         TIMEOUT_MS,
+        { host: createTestHostEnvironment() },
       ),
       /The daemon could not be safely retired/,
     );
@@ -439,7 +442,14 @@ test('a refused timeout fallback preserves the timeout without an unhandled reje
   });
   try {
     await assert.rejects(
-      sendRequest(info, buildRequest(RESET_POLICY_COMMAND, undefined), 'socket', paths, TIMEOUT_MS),
+      sendRequest(
+        info,
+        buildRequest(RESET_POLICY_COMMAND, undefined),
+        'socket',
+        paths,
+        TIMEOUT_MS,
+        { host: createTestHostEnvironment() },
+      ),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'daemon_transport_timeout');
@@ -470,7 +480,7 @@ test('request-timeout route: an attach client leaves a daemon that answers no pr
         'socket',
         paths,
         TIMEOUT_MS,
-        { timeoutRecovery: 'none' },
+        { host: createTestHostEnvironment(), timeoutRecovery: 'none' },
       ),
       /did not answer the liveness probe.*does not retire a daemon it did not start.*agent-device daemon stop/s,
     );
@@ -510,6 +520,7 @@ test('request-timeout route: the reset acts on the resolved state paths, not the
         'http',
         resolvedPaths,
         TIMEOUT_MS,
+        { host: createTestHostEnvironment() },
       ),
       /The daemon did not answer the liveness probe and was reset after the timeout/,
     );

@@ -102,6 +102,7 @@ function createDeviceClaimFixture(root: string): FilesystemBoundaryFixture {
     targetPath: claimPath,
     run: async () =>
       acquireDeviceClaim({
+        env: process.env,
         device,
         session: 'filesystem-fault',
         workspace: process.cwd(),

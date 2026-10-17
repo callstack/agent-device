@@ -1,8 +1,11 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+
+bindTestCommandHost();
 
 // Getting to the macOS helper binary means answering two host facts first: where the Swift package
 // sits relative to this module, and under which home the install directory lives. A Linux coverage

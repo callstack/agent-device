@@ -2,7 +2,7 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { replayScriptSourceBundleFor } from '../../__tests__/support/replay-script-source-fixture.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
@@ -47,6 +47,7 @@ function leasedDaemon() {
     }),
   );
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(root, 'daemon.log'),
     token: 'test-token',

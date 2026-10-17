@@ -25,7 +25,13 @@ import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({
   ok: true,
@@ -42,6 +48,7 @@ async function runDevices(
     { local: async () => inventory },
     async () =>
       await handleSessionInventoryCommands({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         req: { token: 't', session: 'default', command: 'devices', positionals: [], flags },
         sessionName: 'default',
@@ -393,6 +400,7 @@ test('close clears retained materialized install paths bound to the session', as
   mockCleanupRetainedMaterializedPaths.mockImplementation(realCleanup);
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },

@@ -3,6 +3,7 @@ import { publishFileSync, acquireProcessLock, withProcessLock } from '@agent-dev
 
 import {
   commandDeveloperDir,
+  commandHostEnvironment,
   isCommandTimeoutError,
   requireExecSuccess,
   runCmdBackground,
@@ -71,6 +72,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   requireExecSuccess,
   isCommandTimeoutError,
   commandDeveloperDir,
+  hostEnvironment: commandHostEnvironment,
   shellQuote,
   emitDiagnostic,
   withDiagnosticTimer,

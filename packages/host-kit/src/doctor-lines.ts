@@ -2,8 +2,11 @@ import { formatCliStatusMarker, type CliStatusMarkerStatus } from './status-mark
 
 type DoctorLineCheck = Partial<Record<'id' | 'status' | 'summary' | 'command' | 'hint', unknown>>;
 
-export function formatDoctorCheckSummaryLine(check: DoctorLineCheck): string {
-  const statusMarker = formatCliStatusMarker(doctorStatusMarker(check.status));
+export function formatDoctorCheckSummaryLine(
+  check: DoctorLineCheck,
+  options: { useColor: boolean },
+): string {
+  const statusMarker = formatCliStatusMarker(doctorStatusMarker(check.status), options);
   return `${statusMarker} ${formatDoctorCheckLabel(check)}`;
 }
 

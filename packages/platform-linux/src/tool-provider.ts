@@ -6,9 +6,9 @@ import {
   whichCmd,
   type ExecOptions,
   type ExecResult,
+  commandHostEnvironment,
 } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { hostEnvironment } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
@@ -79,12 +79,15 @@ export type LinuxToolProvider = {
   input?: LinuxInputProvider;
 };
 
+const whichOnPath = async (cmd: string): Promise<boolean> =>
+  await whichCmd(cmd, commandHostEnvironment().env);
+
 const localLinuxToolProvider: LinuxToolProvider = {
   runCommand: runCmd,
-  whichCommand: whichCmd,
-  desktop: createLocalLinuxDesktopProvider(runCmd, whichCmd),
-  clipboard: createLocalLinuxClipboardProvider(runCmd, whichCmd),
-  screenshot: createLocalLinuxScreenshotProvider(runCmd, whichCmd),
+  whichCommand: whichOnPath,
+  desktop: createLocalLinuxDesktopProvider(runCmd, whichOnPath),
+  clipboard: createLocalLinuxClipboardProvider(runCmd, whichOnPath),
+  screenshot: createLocalLinuxScreenshotProvider(runCmd, whichOnPath),
 };
 
 const linuxToolProviderScope = createScopedProvider(
@@ -307,6 +310,6 @@ async function resolveLocalLinuxTool<T extends string>(
 }
 
 function isLinuxWayland(): boolean {
-  const environment = hostEnvironment();
+  const environment = commandHostEnvironment().env;
   return Boolean(environment['WAYLAND_DISPLAY']) || environment['XDG_SESSION_TYPE'] === 'wayland';
 }

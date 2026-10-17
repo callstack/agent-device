@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -161,6 +162,7 @@ test('artifacts refuses a provider session returned after a canceled allocation 
   try {
     await assert.rejects(
       handleLeaseCommands({
+        host: createTestHostEnvironment(),
         req: leaseRequest('lease_allocate', {
           requestId,
           tenantId: 'tenant-a',
@@ -245,6 +247,7 @@ function createWorld(
 
 async function allocateLease(world: World, tenantId: string, runId: string): Promise<DeviceLease> {
   const response = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: leaseRequest('lease_allocate', {
       tenantId,
       runId,
@@ -264,6 +267,7 @@ async function allocateLease(world: World, tenantId: string, runId: string): Pro
 
 async function releaseLease(world: World, lease: DeviceLease): Promise<void> {
   const response = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: leaseRequest('lease_release', {
       tenantId: lease.tenantId,
       runId: lease.runId,
@@ -290,6 +294,7 @@ async function listArtifacts(
   },
 ): Promise<DaemonResponse> {
   return (await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: leaseRequest(
       'artifacts',
       {
