@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { buildOpenResult } from '../session-open-surface.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 
 test('buildOpenResult exposes the Vega serial without leaking an internal platform alias', () => {

@@ -1,12 +1,13 @@
 import { expect, test, vi } from 'vitest';
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
-import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
+import { runtimeSubjectFact, type DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidPlatformRuntime } from './runtime.ts';
+import { ANDROID_SETTINGS } from './settings.ts';
 import type { AndroidAdbExecutorOptions, AndroidAdbInvocation } from './adb-transport.ts';
 import { bindAndroidAdbHostStub } from './adb-host.fixtures.ts';
 import {
@@ -245,6 +246,31 @@ test('Android admits the fold fact on emulators and refuses every other kind', a
   }
 });
 
+test('Android admits the telephony fact on emulators and refuses every other kind', async () => {
+  const emulator = await bindOrdinary(
+    createAndroidPlatformRuntime(androidNavigationHost()),
+    ANDROID_EMULATOR,
+  );
+  expect(emulator.facts.operations.sendTelephonyEvent).toEqual({ available: true });
+  expect(emulator.operations.sendTelephonyEvent).toEqual(expect.any(Function));
+  for (const runtimeDevice of [
+    { ...ANDROID_EMULATOR, kind: 'device' as const },
+    { ...ANDROID_EMULATOR, kind: 'simulator' as const },
+    UNKNOWN_KIND_DEVICE,
+  ]) {
+    const binding = await bindOrdinary(
+      createAndroidPlatformRuntime(androidNavigationHost()),
+      runtimeDevice,
+    );
+    expect(binding.facts.operations.sendTelephonyEvent).toMatchObject({
+      available: false,
+      reason: 'unsupported-device-kind',
+      hint: expect.stringContaining('physical device has no console'),
+    });
+    expect(binding.operations.sendTelephonyEvent).toBeUndefined();
+  }
+});
+
 // R55 parity: the retired `clipboard` bucket was `ANDROID_ALL` (emulator/device/unknown) with no
 // Android admission closure, so `cmd clipboard get/set text` is admitted on every real kind and
 // refused only on the synthetic `simulator` row the bucket never listed. (`unknown` is the
@@ -268,9 +294,16 @@ test('admits both clipboard halves and the app switcher on every real Android ki
     expect(binding.operations.triggerAppEvent).toBeTypeOf('function');
     // R58: settings run over adb (`appops`, `settings put`, `pm clear`, …) on that cell too, and
     // so does the read leg (`settings get system font_scale`), which every Android kind can answer.
-    expect(binding.facts.operations.setSetting).toEqual({ available: true });
+    const { setSetting, readSetting } = binding.facts.operations;
+    for (const setting of ANDROID_SETTINGS) {
+      expect(runtimeSubjectFact(setSetting, setting)).toEqual({ available: true });
+    }
+    expect(runtimeSubjectFact(setSetting, 'reset-keychain')).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
     expect(binding.operations.setSetting).toBeTypeOf('function');
-    expect(binding.facts.operations.readSetting).toEqual({ available: true });
+    expect(runtimeSubjectFact(readSetting, 'text-size')).toEqual({ available: true });
     expect(binding.operations.readSetting).toBeTypeOf('function');
     // R59: all four alert legs read the same dump and tap with the same `input tap`.
     for (const operation of ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'] as const) {

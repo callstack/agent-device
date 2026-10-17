@@ -7,11 +7,9 @@ import {
 } from '../macos-e2e/live-scenarios.ts';
 import {
   LINUX_COMMAND_EVIDENCE,
-  LINUX_COVERAGE_GAP_ISSUE,
   LINUX_REPLAY_EVIDENCE,
   MACOS_COVERAGE_GAP_ISSUE,
   TVOS_COVERAGE_GAP_ISSUE,
-  WEB_COVERAGE_GAP_ISSUE,
   WEB_SMOKE_EVIDENCE,
   type RepositoryEvidence,
 } from './evidence.ts';
@@ -58,6 +56,11 @@ export type MacOsPlatformCoverageEntry =
       assertion: string;
       level: 'known-gap';
       trackingIssue: number;
+    }
+  | {
+      assertion: string;
+      level: 'accepted-gap';
+      reason: string;
     };
 
 export type TvOsPlatformCoverageEntry =
@@ -91,8 +94,8 @@ export type WebPlatformCoverageEntry =
     }
   | {
       assertion: string;
-      level: 'known-gap';
-      trackingIssue: number;
+      level: 'accepted-gap';
+      reason: string;
     };
 
 export type LinuxPlatformCoverageEntry =
@@ -103,8 +106,8 @@ export type LinuxPlatformCoverageEntry =
     }
   | {
       assertion: string;
-      level: 'known-gap';
-      trackingIssue: number;
+      level: 'accepted-gap';
+      reason: string;
     };
 
 /** One command's coverage judgment on every platform that classifies the public catalog. */
@@ -170,6 +173,11 @@ export const macos = {
     level: 'known-gap',
     trackingIssue: MACOS_COVERAGE_GAP_ISSUE,
   }),
+  accepted: (assertion: string, reason: string): MacOsPlatformCoverageEntry => ({
+    assertion,
+    level: 'accepted-gap',
+    reason,
+  }),
 };
 
 export const tvos = {
@@ -207,10 +215,10 @@ export const web = {
     level: 'command-contract',
     owner: { path, test },
   }),
-  gap: (assertion: string): WebPlatformCoverageEntry => ({
+  accepted: (assertion: string, reason: string): WebPlatformCoverageEntry => ({
     assertion,
-    level: 'known-gap',
-    trackingIssue: WEB_COVERAGE_GAP_ISSUE,
+    level: 'accepted-gap',
+    reason,
   }),
 };
 
@@ -230,10 +238,10 @@ export const linux = {
     level: 'command-contract',
     owner: { path, test },
   }),
-  gap: (assertion: string): LinuxPlatformCoverageEntry => ({
+  accepted: (assertion: string, reason: string): LinuxPlatformCoverageEntry => ({
     assertion,
-    level: 'known-gap',
-    trackingIssue: LINUX_COVERAGE_GAP_ISSUE,
+    level: 'accepted-gap',
+    reason,
   }),
 };
 

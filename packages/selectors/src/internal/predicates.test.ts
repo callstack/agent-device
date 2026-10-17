@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { evaluateIsPredicate, normalizeIsPositionals } from './predicates.ts';
+import {
+  checkIsPredicate,
+  evaluateIsPredicate,
+  IS_PREDICATE_REQUIRED_MESSAGE,
+  IS_PREDICATE_USAGE_HINT,
+  normalizeIsPositionals,
+} from './predicates.ts';
 import { formatRole } from '@agent-device/kernel/snapshot';
 
 test('normalizeIsPositionals keeps canonical predicate-first arguments untouched', () => {
@@ -339,4 +345,19 @@ test('the text predicate never consults the visibility index', () => {
 
   assert.equal(match.pass, true);
   assert.deepEqual(materialized, { nodeMap: 0, viewportRects: 0 });
+});
+
+test('an unsupported is predicate always carries the usage hint', () => {
+  const refused = checkIsPredicate('nope');
+  expect(refused).toEqual({
+    ok: false,
+    code: 'INVALID_ARGS',
+    message: IS_PREDICATE_REQUIRED_MESSAGE,
+    hint: IS_PREDICATE_USAGE_HINT,
+  });
+});
+
+test('is predicates are admitted case-insensitively, matching what the daemon executes', () => {
+  expect(checkIsPredicate('TEXT')).toEqual({ ok: true, predicate: 'text' });
+  expect(checkIsPredicate('Visible')).toEqual({ ok: true, predicate: 'visible' });
 });

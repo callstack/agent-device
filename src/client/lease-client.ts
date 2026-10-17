@@ -75,14 +75,21 @@ function normalizeHumanControlHold(value: unknown): HumanControlHold {
 
 function normalizeLease(data: Record<string, unknown>): Lease {
   const rawLease = data.lease;
-  if (!isRecord(rawLease)) {
-    throw new Error('Invalid lease response from daemon');
+  const leaseId = isRecord(rawLease) ? readOptionalString(rawLease, 'leaseId') : undefined;
+  const tenantId = isRecord(rawLease) ? readOptionalString(rawLease, 'tenantId') : undefined;
+  const runId = isRecord(rawLease) ? readOptionalString(rawLease, 'runId') : undefined;
+  const backend = isRecord(rawLease) ? readOptionalString(rawLease, 'backend') : undefined;
+  if (!isRecord(rawLease) || !leaseId || !tenantId || !runId || !backend) {
+    throw new AppError('COMMAND_FAILED', 'Invalid lease response from daemon', {
+      reason: 'INVALID_LEASE_RESPONSE',
+      response: data,
+    });
   }
   return {
-    leaseId: readRequiredString(rawLease, 'leaseId'),
-    tenantId: readRequiredString(rawLease, 'tenantId'),
-    runId: readRequiredString(rawLease, 'runId'),
-    backend: readRequiredString(rawLease, 'backend') as Lease['backend'],
+    leaseId,
+    tenantId,
+    runId,
+    backend: backend as Lease['backend'],
     leaseProvider: readOptionalString(rawLease, 'leaseProvider'),
     clientId: readOptionalString(rawLease, 'clientId'),
     deviceKey: readOptionalString(rawLease, 'deviceKey'),

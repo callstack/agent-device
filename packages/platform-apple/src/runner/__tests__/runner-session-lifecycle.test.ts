@@ -532,7 +532,7 @@ test('a command abandoned by a cancelled transport keeps the runner occupied', a
   // An answered queued exchange forgives the abandoned charge: the serial queue makes it evidence that
   // the abandoned handling ahead of it finished, and whatever is still draining is stamped onto that
   // very reply. An answer the runner serves inline forgives nothing (#2965); that case is pinned in
-  // `runner-recovery-wiring.test.ts`, where the probe reaches a real session.
+  // `runner-client-recovery-wiring.test.ts`, where the probe reaches a real session.
   await serveOneCommand(device, session);
   assert.equal(session.commandCharges.hasOutstandingCharges, false);
   assert.equal(await detachIosRunnerSessionsForShutdown(), 1);

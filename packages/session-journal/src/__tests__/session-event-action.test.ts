@@ -300,3 +300,35 @@ test('record and trace events expose only bounded artifact basenames', () => {
     showTouches: false,
   });
 });
+
+test('telephony action events name the simulated event and carry neither number nor text', () => {
+  const sms = action(
+    'telephony',
+    {
+      action: 'sms',
+      number: '5551234',
+      textLength: 11,
+      message: 'Simulated an incoming SMS from 5551234',
+    },
+    { positionals: ['sms', '5551234', 'private msg'] },
+  );
+  const call = action('telephony', { action: 'call', number: '5551234' });
+  const cancel = action('telephony', { action: 'cancel', number: '5551234' });
+
+  assert.equal(buildActionSummary(sms), 'Simulated an incoming SMS');
+  assert.equal(buildActionSummary(call), 'Simulated an incoming call');
+  assert.equal(
+    buildActionSummary(action('telephony', { action: 'accept', number: '5551234' })),
+    'Accepted the simulated call',
+  );
+  assert.equal(buildActionSummary(cancel), 'Ended the simulated call');
+  assert.equal(buildActionSummary(action('telephony', {})), 'Simulated a telephony event');
+  assert.deepEqual(buildActionDetails(sms), {
+    command: 'telephony',
+    action: 'sms',
+    positionals: ['<arg>', '<arg>', '<arg>'],
+  });
+  const serialized = JSON.stringify(buildActionDetails(sms));
+  assert.equal(serialized.includes('5551234'), false);
+  assert.equal(serialized.includes('private msg'), false);
+});

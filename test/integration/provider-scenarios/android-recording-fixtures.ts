@@ -28,7 +28,7 @@ export async function stopAndroidRecording(
 export async function createAndroidRecordingScenarioHarness(
   deps: Parameters<typeof createProviderScenarioHarness>[0],
 ): Promise<ProviderScenarioDaemon> {
-  return await createProviderScenarioHarness({ ...deps, platformRuntime: true });
+  return await createProviderScenarioHarness({ ...deps });
 }
 
 export async function withAndroidRecordingScenario<T>(

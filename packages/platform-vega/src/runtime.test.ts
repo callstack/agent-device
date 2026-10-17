@@ -196,6 +196,12 @@ test.each([
       });
       expect(binding.operations[button]).toBeUndefined();
     }
+    expect(binding.facts.operations.sendTelephonyEvent).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'telephony is not supported on Vega OS.',
+    });
+    expect(binding.operations.sendTelephonyEvent).toBeUndefined();
     expect(binding.facts.operations.triggerAppEvent).toMatchObject({
       available: false,
       reason: 'unsupported-platform-leaf',

@@ -1,9 +1,11 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
+import type { Deadline } from '@agent-device/host-kit/retry';
 import {
   getRecordingOverlaySupportWarning,
   overlayRecordingTouches,
+  startRecordingOverlayBudget,
 } from '@agent-device/capture-kit/recording-overlay';
 import { persistRecordingTelemetry } from '@agent-device/capture-kit/recording-telemetry';
 import {
@@ -24,6 +26,7 @@ async function sniffRecording(input: Readonly<{ outputPath: string }>): Promise<
 async function finalizeScreenRecording(
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
 ) {
+  const overlayDeadline = startRecordingOverlayBudget();
   await waitForStableFile(input.outputPath);
   await waitForPlayableVideo(input.outputPath);
   if (!(await isPlayableVideo(input.outputPath))) throw unplayableRecording(input.outputPath);
@@ -31,12 +34,13 @@ async function finalizeScreenRecording(
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
   });
   if (!input.showTouches || input.gestureEvents.length === 0) return { telemetryPath };
-  return await overlayTouches(input, telemetryPath);
+  return await overlayTouches(input, telemetryPath, overlayDeadline);
 }
 
 async function overlayTouches(
   input: Parameters<ScreenRecordingRuntimeHost['finalize']['complete']>[0],
   telemetryPath: string,
+  deadline: Deadline,
 ) {
   const warning = getRecordingOverlaySupportWarning();
   if (warning) return { telemetryPath, overlayWarning: warning };
@@ -47,6 +51,7 @@ async function overlayTouches(
       exportQuality: input.exportQuality,
       ...(input.fps === undefined ? {} : { fps: input.fps }),
       targetLabel: input.targetLabel,
+      deadline,
     });
     if (!(await isPlayableVideo(input.outputPath))) {
       throw new Error('recording post-processing produced an unplayable video');

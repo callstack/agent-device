@@ -185,13 +185,15 @@ export type CrapScope = 'touched' | 'all';
 export type TouchedFile = Readonly<{ path: string; addedLines: number }>;
 
 /**
- * The files whose lines this change edits. A pure rename, delete, or mode change adds no lines, so
- * it contributes none — which is also exactly the set of files fallow's `--diff-stdin` scoping can
- * charge a finding to, since that filter indexes the same added lines.
+ * The files whose lines this change edits. A pure rename, delete, mode change, or non-blob side
+ * (a symlink or a gitlink) adds no scoreable source, so it contributes none — which is also exactly
+ * the set of files fallow's `--diff-stdin` scoping can charge a finding to, since that filter indexes
+ * the same added lines. Dropping non-blob sides here is also what keeps every `TouchedFile` a path
+ * the working tree can be asked to hold as a readable file.
  */
 export function readTouchedFiles(diffs: readonly ChangedFileDiff[]): TouchedFile[] {
   return diffs
-    .filter((diff) => !diff.deleted && diff.added.length > 0)
+    .filter((diff) => !diff.deleted && diff.regularFile && diff.added.length > 0)
     .map((diff) => ({ path: diff.path, addedLines: diff.added.length }));
 }
 

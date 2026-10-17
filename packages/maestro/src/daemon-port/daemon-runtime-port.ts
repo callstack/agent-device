@@ -127,12 +127,20 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       applied.push(describePermissionMutation(mutation));
     }
   };
+  const inputTextDelayMs =
+    platform === 'android'
+      ? MAESTRO_RUNTIME_ADAPTER_POLICY.androidInputTextCharacterDelayMs
+      : undefined;
   const typeTextAndSettle = async (
     text: string,
     context: MaestroRuntimeOperationContext,
+    delayMs?: number,
   ): Promise<void> => {
     registerDiagnosticSensitiveValue(text);
-    await invokeMutation({ kind: 'typeText', text }, context);
+    await invokeMutation(
+      { kind: 'typeText', text, ...(delayMs === undefined ? {} : { delayMs }) },
+      context,
+    );
     const stable = await waitForTypedSnapshotStability({
       timeoutMs: MAESTRO_RUNTIME_ADAPTER_POLICY.settleTimeoutMs,
       context,
@@ -262,7 +270,8 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       );
       return data ? { data } : undefined;
     },
-    inputText: async (input, context) => await typeTextAndSettle(input.text, context),
+    inputText: async (input, context) =>
+      await typeTextAndSettle(input.text, context, inputTextDelayMs),
     eraseText: async (input, context) =>
       await typeTextAndSettle(
         '\b'.repeat(

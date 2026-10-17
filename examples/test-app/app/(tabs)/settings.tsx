@@ -20,6 +20,7 @@ export default function SettingsRoute() {
         onOpenAccessorySetup={() => router.push('/accessory-setup')}
         onOpenAutomationLab={() => router.push('/automation')}
         onOpenInertSurface={() => router.push('/inert')}
+        onOpenSnapshotDepth={() => router.push('/snapshot-depth')}
         onOpenWebViewLab={() => router.push('/webview')}
         onRetryDiagnostics={state.retryDiagnostics}
         onSetNotificationsEnabled={state.setNotificationsEnabled}

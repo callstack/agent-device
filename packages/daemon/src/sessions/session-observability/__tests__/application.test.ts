@@ -5,8 +5,8 @@ import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
-vi.mock('../index.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../index.ts')>();
+vi.mock('../internal/session-observability.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../internal/session-observability.ts')>();
   return {
     ...actual,
     handleSessionObservabilityCommands: vi.fn(actual.handleSessionObservabilityCommands),
@@ -14,7 +14,7 @@ vi.mock('../index.ts', async (importOriginal) => {
 });
 
 import { handleSessionCommands } from '../../handlers/session.ts';
-import { handleSessionObservabilityCommands } from '../index.ts';
+import { handleSessionObservabilityCommands } from '../internal/session-observability.ts';
 
 const mockHandleSessionObservabilityCommands = vi.mocked(handleSessionObservabilityCommands);
 

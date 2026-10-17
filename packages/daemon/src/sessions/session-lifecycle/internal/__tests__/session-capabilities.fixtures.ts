@@ -16,7 +16,7 @@ import type {
 import {
   createUnavailableRuntimeFactsForTest,
   unavailableApplicationLifecycleOperationFacts,
-} from '@agent-device/test-kit/runtime-operation-facts';
+} from '@agent-device/test-kit';
 
 const nativeRefUnavailable = Object.freeze({
   available: false,
@@ -89,6 +89,7 @@ function createAdmissionFacts(
       appLogInspect: cell(options.appLogAvailable),
       captureScreenshot: screenshotFact,
       deployApp: cell(options.deployAvailable),
+      uninstallApp: cell(options.deployAvailable),
       materializeAppSource: cell(options.sourceAvailable),
       deployMaterializedApp: cell(options.sourceAvailable),
       sendPushNotification: cell(options.pushAvailable),

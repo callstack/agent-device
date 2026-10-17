@@ -4,7 +4,7 @@ import {
   makeAndroidSession,
   makeIosSession,
 } from '../../../__tests__/support/session-factories.ts';
-import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 

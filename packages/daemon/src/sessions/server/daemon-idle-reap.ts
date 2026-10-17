@@ -1,3 +1,16 @@
+import {
+  DAEMON_QUIESCE_COMMAND,
+  DAEMON_QUIESCE_REASONS,
+  DAEMON_SHUTTING_DOWN_REASON,
+  readDaemonQuiesceFence,
+  type DaemonQuiesceCensus,
+  type DaemonQuiesceFence,
+} from '@agent-device/daemon-contracts/daemon-resolution';
+import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
+import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { SessionState } from '../../core/session-state.ts';
@@ -128,4 +141,117 @@ export function createDaemonIdleReap(params: {
   };
 
   return { noteActivity, cancel, idleMs };
+}
+
+/**
+ * ADR 0006: a daemon leaves for a newer one only when it holds nothing, and it decides that
+ * itself. A client that read "idle" and then signaled would race every other client of the state
+ * directory; the daemon is the one place the answer and the closing of admission can be one step.
+ */
+export type DaemonQuiesce = Readonly<{
+  /**
+   * Puts the quiesce request and the closed admission it leaves behind in front of `handler`: a
+   * quiesce request gets its verdict, and any other request gets the shutting-down refusal once a
+   * quiesce has closed admission.
+   */
+  admit(handler: DaemonInvokeFn): DaemonInvokeFn;
+}>;
+
+export function daemonShuttingDownResponse(): DaemonResponse {
+  return {
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'Daemon is shutting down.',
+      details: { reason: DAEMON_SHUTTING_DOWN_REASON },
+    },
+  };
+}
+
+export function createDaemonQuiesce(params: {
+  token: string;
+  identity: DaemonQuiesceFence;
+  sessionStore: Pick<SessionStore, 'toArray'>;
+  leaseRegistry: Pick<LeaseRegistry, 'listActiveLeases'>;
+  /** Requests being served, not counting the quiesce request itself. */
+  inFlightRequestCount: () => number;
+  /** Whether the daemon has yet to build the drain path `drain` runs. */
+  startingUp: () => boolean;
+  /** Starts the drain; called at most once, after the response is on its way. */
+  drain: () => void;
+}): DaemonQuiesce {
+  let admitting = true;
+  const refuse = (error: AppError): DaemonResponse => ({ ok: false, error: normalizeError(error) });
+
+  const quiesce = (req: DaemonRequest): DaemonResponse => {
+    if (typeof req.token !== 'string' || !timingSafeStringEqual(req.token, params.token)) {
+      return refuse(new AppError('UNAUTHORIZED', 'Invalid daemon token.'));
+    }
+    // A remote client reaches this daemon through the proxy with the shared token, and only the
+    // host that owns the state directory may retire the daemon on it.
+    if (req.internal?.publicNetworkOnly) {
+      return refuse(
+        new AppError('UNAUTHORIZED', 'Daemon quiesce is not available to remote clients.'),
+      );
+    }
+    const fence = readDaemonQuiesceFence(req.input);
+    // A pid alone can name a recycled process, so a daemon that cannot prove its start time
+    // cannot be addressed at all.
+    if (!fence || fence.pid !== params.identity.pid) return refuse(instanceMismatch());
+    if (params.identity.processStartTime === null) return refuse(instanceMismatch());
+    if (fence.processStartTime !== params.identity.processStartTime) {
+      return refuse(instanceMismatch());
+    }
+    // Admission closes and the census is read in the same synchronous step, so no request can be
+    // admitted between the two; a refusal reopens admission in that same step.
+    if (!admitting) return { ok: true, data: { outcome: 'draining' } };
+    admitting = false;
+    const census = readCensus();
+    if (isHeld(census)) {
+      admitting = true;
+      return refuse(
+        new AppError('COMMAND_FAILED', 'Daemon is busy and was not asked to leave.', {
+          reason: DAEMON_QUIESCE_REASONS.busy,
+          ...census,
+        }),
+      );
+    }
+    setImmediate(params.drain);
+    return { ok: true, data: { outcome: 'draining' } };
+  };
+
+  const readCensus = (): DaemonQuiesceCensus => {
+    const sessions = params.sessionStore.toArray();
+    const repairSessions = sessions.filter(isUncommittedRepairSession).length;
+    return {
+      startingUp: params.startingUp(),
+      inFlightRequests: params.inFlightRequestCount(),
+      sessions: sessions.length - repairSessions,
+      repairSessions,
+      leases: params.leaseRegistry.listActiveLeases().length,
+    };
+  };
+
+  return {
+    admit: (handler) => async (req) => {
+      if (req.command === DAEMON_QUIESCE_COMMAND) return quiesce(req);
+      return admitting ? await handler(req) : daemonShuttingDownResponse();
+    },
+  };
+}
+
+function isHeld(census: DaemonQuiesceCensus): boolean {
+  return (
+    census.startingUp ||
+    census.inFlightRequests > 0 ||
+    census.sessions > 0 ||
+    census.repairSessions > 0 ||
+    census.leases > 0
+  );
+}
+
+function instanceMismatch(): AppError {
+  return new AppError('COMMAND_FAILED', 'Quiesce request names a different daemon instance.', {
+    reason: DAEMON_QUIESCE_REASONS.instanceMismatch,
+  });
 }

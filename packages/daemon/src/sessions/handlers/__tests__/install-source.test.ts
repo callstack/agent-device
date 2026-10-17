@@ -26,8 +26,10 @@ import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { unavailableApplicationLifecycleOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import {
+  mkdtempForTestSync,
+  unavailableApplicationLifecycleOperationFacts,
+} from '@agent-device/test-kit';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -463,6 +465,7 @@ function sourceRuntimeFacts(
       ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
       ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),
       setFoldPose: unavailable,
+      sendTelephonyEvent: unavailable,
       triggerAppEvent: unavailable,
       setSetting: unavailable,
       readSetting: unavailable,
@@ -474,6 +477,7 @@ function sourceRuntimeFacts(
       materializeAppSource: materializationAvailable ? { available: true } : unavailable,
       deployMaterializedApp: materializationAvailable ? { available: true } : unavailable,
       sendPushNotification: unavailable,
+      uninstallApp: unavailable,
       networkDump: unavailable,
       screenRecordingStart: unavailable,
       screenRecordingReattach: unavailable,

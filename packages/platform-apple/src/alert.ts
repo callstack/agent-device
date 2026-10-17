@@ -87,6 +87,7 @@ export async function awaitAppleAlert(
   const timeout = options?.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS;
   const start = Date.now();
   let firstAttempt = true;
+  let lastAbsence: AppError | undefined;
   while (Date.now() - start < timeout) {
     try {
       const budgetMs = firstAttempt ? timeout : remainingBudgetMs(start, timeout);
@@ -97,10 +98,11 @@ export async function awaitAppleAlert(
       // helper, a canceled request — is reported as itself rather than spent as poll budget and
       // relabeled `alert wait timed out`.
       if (!isAlertNotFoundError(error)) throw error;
+      lastAbsence = error;
     }
     await sleep(ALERT_POLL_INTERVAL_MS);
   }
-  throw new AppError('COMMAND_FAILED', 'alert wait timed out');
+  throw new AppError('COMMAND_FAILED', 'alert wait timed out', lastAbsence?.details);
 }
 
 /**
@@ -152,7 +154,7 @@ function withAlertFallbackHint(error: unknown): unknown {
  * `details.runnerErrorCode` (it stays `COMMAND_FAILED` on the wire, like `RUNNER_BUSY`); the macOS
  * helper's arrives as `details.reason`, forwarded verbatim from its JSON error envelope.
  */
-function isAlertNotFoundError(error: unknown): boolean {
+function isAlertNotFoundError(error: unknown): error is AppError {
   if (!(error instanceof AppError)) return false;
   const details = error.details ?? {};
   return (

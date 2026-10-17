@@ -151,7 +151,7 @@ releases the lease. Keep `leases.release()` in `finally`: it does nothing after 
 and releases the lease when a command fails first. Add `providerDeviceType: 'real'` to
 `leases.allocate` to run on a real device.
 
-The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment. If you change credentials while the daemon runs, see [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
+The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment, unless a JavaScript host passes the plugin `testmu({ credentials })` instead. If you change credentials while the daemon runs, see [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';

@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
-import { sleep } from '@agent-device/host-kit/retry';
+import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
@@ -559,7 +559,8 @@ async function resolveAndroidPackageToEnd(
 
 async function stopAndroidPackage(device: DeviceInfo, packageName: string): Promise<void> {
   await runAndroidShell(device, ['am', 'force-stop', packageName]);
-  await waitForAndroidPackageStopped(device, packageName);
+  const expired = await waitForAndroidPackageStopped(device, packageName);
+  if (expired) throw androidCloseTimeoutError(packageName, expired);
 }
 
 /**
@@ -590,7 +591,10 @@ async function killAndroidPackage(device: DeviceInfo, packageName: string): Prom
     );
   }
   await runAndroidShell(device, ['am', 'kill', packageName]);
-  await waitForAndroidPackageStopped(device, packageName);
+  // Both fences run as on close, but a survivor is classified below rather than refused as a
+  // close timeout.
+  await waitForAndroidPackageNotForeground(device, packageName);
+  await waitForAndroidPackageProcessGone(device, packageName);
   const process = await readAndroidPackageProcessState(device, packageName);
   if (process === 'running') {
     throw new AppError('COMMAND_FAILED', `am kill did not stop ${packageName}`, {
@@ -606,24 +610,52 @@ async function killAndroidPackage(device: DeviceInfo, packageName: string): Prom
   }
 }
 
+type AndroidStopFencePhase = 'foreground' | 'process';
+
+/** The fence that expired before the package stopped, or undefined once it stopped. */
 async function waitForAndroidPackageStopped(
   device: DeviceInfo,
   packageName: string,
-): Promise<void> {
-  await waitForAndroidPackageNotForeground(device, packageName);
-  await waitForAndroidPackageProcessGone(device, packageName);
+): Promise<AndroidStopFencePhase | undefined> {
+  if (!(await waitForAndroidPackageNotForeground(device, packageName))) return 'foreground';
+  if (!(await waitForAndroidPackageProcessGone(device, packageName))) return 'process';
+  return undefined;
+}
+
+function androidCloseTimeoutError(packageName: string, phase: AndroidStopFencePhase): AppError {
+  const message =
+    phase === 'foreground'
+      ? `Android app ${packageName} remained foreground after close`
+      : `Android app ${packageName} process remained running after close`;
+  return new AppError('COMMAND_FAILED', message, {
+    reason: 'android-app-close-timeout',
+    phase,
+    packageName,
+    timeoutMs:
+      phase === 'foreground' ? ANDROID_CLOSE_FOCUS_TIMEOUT_MS : ANDROID_CLOSE_PROCESS_TIMEOUT_MS,
+  });
 }
 
 async function waitForAndroidPackageNotForeground(
   device: DeviceInfo,
   packageName: string,
-): Promise<void> {
-  const deadline = Date.now() + ANDROID_CLOSE_FOCUS_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const foreground = await readAndroidForegroundApp(device);
-    if (foreground?.package !== packageName) return;
+): Promise<boolean> {
+  const deadline = Deadline.fromTimeoutMs(ANDROID_CLOSE_FOCUS_TIMEOUT_MS);
+  while (!deadline.isExpired()) {
+    const foreground = await probeBeforeDeadline(deadline, () => readAndroidForegroundApp(device));
+    if (!foreground) break;
+    if (foreground.value?.package !== packageName) return true;
     await sleep(ANDROID_CLOSE_FOCUS_POLL_MS);
   }
+  return false;
+}
+
+async function probeBeforeDeadline<T>(
+  deadline: Deadline,
+  probe: () => Promise<T>,
+): Promise<{ value: T } | undefined> {
+  const value = await probe();
+  return deadline.isExpired() ? undefined : { value };
 }
 
 async function readAndroidForegroundApp(device: DeviceInfo): Promise<AppStateRuntimeResult | null> {
@@ -634,15 +666,26 @@ async function readAndroidForegroundApp(device: DeviceInfo): Promise<AppStateRun
 async function waitForAndroidPackageProcessGone(
   device: DeviceInfo,
   packageName: string,
-): Promise<void> {
-  const deadline = Date.now() + ANDROID_CLOSE_PROCESS_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if ((await readAndroidPackageProcessState(device, packageName)) !== 'running') {
+): Promise<boolean> {
+  const deadline = Deadline.fromTimeoutMs(ANDROID_CLOSE_PROCESS_TIMEOUT_MS);
+  const probeProcessRunning = () =>
+    probeBeforeDeadline(
+      deadline,
+      async () => (await readAndroidPackageProcessState(device, packageName)) === 'running',
+    );
+  while (!deadline.isExpired()) {
+    const processRunning = await probeProcessRunning();
+    if (!processRunning) break;
+    if (!processRunning.value) {
       await sleep(ANDROID_CLOSE_PROCESS_GONE_STABLE_MS);
-      if ((await readAndroidPackageProcessState(device, packageName)) !== 'running') return;
+      if (deadline.isExpired()) break;
+      const processStillRunning = await probeProcessRunning();
+      if (!processStillRunning) break;
+      if (!processStillRunning.value) return true;
     }
     await sleep(ANDROID_CLOSE_PROCESS_POLL_MS);
   }
+  return false;
 }
 
 async function readAndroidPackageProcessState(

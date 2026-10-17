@@ -64,12 +64,23 @@ function selectScrollContainer(
   target: ScrollEdgeTarget,
 ): SnapshotNode | null {
   const visibility = createSnapshotVisibility(nodes);
-  const scrollables = nodes.filter((node) => isScrollableNodeLike(node) && isUsableRect(node.rect));
+  const reportsVerticalEdge = (node: SnapshotNode): boolean =>
+    hasHiddenContentAtEdge(node, hiddenHints.get(node.index), 'top') ||
+    hasHiddenContentAtEdge(node, hiddenHints.get(node.index), 'bottom');
+  const edgeContainer = (node: SnapshotNode): SnapshotNode =>
+    sameRectScrollableAncestor(node, visibility.nodeByIndex, reportsVerticalEdge) ?? node;
+  const scrollables = [
+    ...new Set(
+      nodes
+        .filter((node) => isScrollableNodeLike(node) && isUsableRect(node.rect))
+        .map(edgeContainer),
+    ),
+  ];
   if (scrollables.length === 0) return null;
 
   const targetAncestor = findNearestScrollableAncestor(target.nodeIndex, visibility.nodeByIndex);
   if (targetAncestor) {
-    return targetAncestor;
+    return edgeContainer(targetAncestor);
   }
 
   const targetPoint = target.point;
@@ -136,12 +147,14 @@ function findNearestScrollableAncestor(
   byIndex: ReadonlyMap<number, SnapshotNode>,
 ): SnapshotNode | null {
   if (nodeIndex === undefined) return null;
+  const visited = new Set<number>();
   let node = byIndex.get(nodeIndex);
-  while (node) {
+  while (node && !visited.has(node.index)) {
+    visited.add(node.index);
     if (isScrollableNodeLike(node) && isUsableRect(node.rect)) {
       return node;
     }
-    node = node.parentIndex === undefined ? undefined : byIndex.get(node.parentIndex);
+    node = parentOf(node, byIndex);
   }
   return null;
 }
@@ -155,6 +168,54 @@ function hasHiddenContentAtEdge(
     return node.hiddenContentBelow === true || hint?.hiddenContentBelow === true;
   }
   return node.hiddenContentAbove === true || hint?.hiddenContentAbove === true;
+}
+
+/**
+ * The outermost scrollable in an unbroken chain of same-rect, vertically scrolling ancestors, or
+ * undefined when the nearest scrollable ancestor frames different pixels or reports no vertical edge.
+ * Scroll edge selection stands that ancestor in for the nested scroller: Android's Settings
+ * RecyclerView offers scroll-backward even at the top, while the ScrollView framing the same pixels
+ * reports the real position (#3737). Choosing the ancestor also keeps the nested scroller inside the
+ * scoped recapture. Visited indexes stop a cyclic `parentIndex` chain in a malformed tree.
+ *
+ * An identical rect is a geometric heuristic for "these two scrollers move the same content", and
+ * geometry carries no scroll axis. Requiring the ancestor to report a vertical edge hint keeps a
+ * horizontal pager whose page holds a vertical list from standing in for that list; the snapshot
+ * emits vertical edge hints only for vertical scrollers. A vertical ancestor whose content fits in
+ * both directions reports no edge either, and leaves the nested scroller to answer for itself.
+ */
+function sameRectScrollableAncestor(
+  node: SnapshotNode,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
+  reportsVerticalEdge: (candidate: SnapshotNode) => boolean,
+): SnapshotNode | undefined {
+  const visited = new Set<number>([node.index]);
+  let owner: SnapshotNode | undefined;
+  let current = node;
+  let parent = parentOf(current, byIndex);
+  while (parent && !visited.has(parent.index)) {
+    visited.add(parent.index);
+    if (isScrollableNodeLike(parent) && isUsableRect(parent.rect)) {
+      if (!sameRect(parent.rect, current.rect) || !reportsVerticalEdge(parent)) return owner;
+      owner = parent;
+      current = parent;
+    }
+    parent = parentOf(parent, byIndex);
+  }
+  return owner;
+}
+
+function parentOf(
+  node: SnapshotNode,
+  byIndex: ReadonlyMap<number, SnapshotNode>,
+): SnapshotNode | undefined {
+  return node.parentIndex === undefined ? undefined : byIndex.get(node.parentIndex);
+}
+
+function sameRect(a: SnapshotNode['rect'], b: SnapshotNode['rect']): boolean {
+  return Boolean(
+    a && b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height,
+  );
 }
 
 function buildScrollContainerScope(

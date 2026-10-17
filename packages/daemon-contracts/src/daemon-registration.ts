@@ -1,12 +1,19 @@
-import fs from 'node:fs';
 import type { ProcessLockInspection } from '@agent-device/host-kit/file';
 import {
+  isProcessAlive,
   ownerIdentityDiffers,
   isProcessPid,
   ownerIdentityMatches,
+  readProcessStartTime,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
-import { resolveDaemonPaths } from './daemon-resolution.ts';
+import {
+  readDaemonRecord,
+  readRecordedDaemonTransport,
+  resolveDaemonPaths,
+  type DaemonPaths,
+  type DaemonServerMode,
+} from './daemon-resolution.ts';
 
 /**
  * The daemon identity published in a state dir's `daemon.json`. It is the only
@@ -34,32 +41,29 @@ export function processLockHoldsDaemonIdentity(
 /** The raw record's identity. A pid of `null` is a file that names no owner, not owner zero. */
 type ParsedRegistration = { pid: number | null; startTime: string | null };
 
+type DaemonRecord = Readonly<Record<string, unknown>>;
+
+/**
+ * Whether `daemon.json` registers a daemon: a projection of the one record reader that adds the
+ * identity, so a record that names no owner is `ownerless` however it came to.
+ */
 function readRegistration(
   infoPath: string,
 ):
-  | Readonly<{ status: 'registered'; identity: OwnerIdentity }>
+  | Readonly<{ status: 'registered'; identity: OwnerIdentity; record: DaemonRecord }>
   | Readonly<{ status: 'absent' | 'unreadable' | 'ownerless' }> {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(infoPath, 'utf8');
-  } catch (error) {
-    // Only a path the host reports as gone proves there is no record. A permission error, an I/O
-    // fault, or a read this process lost leaves a file present whose contents are unknown, which no
-    // caller may read as "someone removed it".
-    const code = (error as NodeJS.ErrnoException | null)?.code;
-    return code === 'ENOENT' || code === 'ENOTDIR'
-      ? { status: 'absent' }
-      : { status: 'unreadable' };
+  const read = readDaemonRecord(infoPath);
+  if (read.status !== 'present') {
+    return { status: read.status === 'invalid' ? 'ownerless' : read.status };
   }
-  let parsed: ParsedRegistration;
-  try {
-    parsed = parseRegistration(JSON.parse(raw) as { pid?: unknown; processStartTime?: unknown });
-  } catch {
-    return { status: 'ownerless' };
-  }
+  const parsed = parseRegistration(read.record);
   return parsed.pid === null
     ? { status: 'ownerless' }
-    : { status: 'registered', identity: { pid: parsed.pid, startTime: parsed.startTime } };
+    : {
+        status: 'registered',
+        identity: { pid: parsed.pid, startTime: parsed.startTime },
+        record: read.record,
+      };
 }
 
 function parseRegistration(parsed: {
@@ -108,6 +112,69 @@ export function readRegisteredDaemonOwnership(
     return { state: 'match' };
   }
   return { state: 'unproven' };
+}
+
+/** What `daemon.json` says about the daemon serving a state dir, checked against the process. */
+export type DaemonStatus = Readonly<{
+  /**
+   * `unreadable`: the record exists but cannot be read; `invalid`: it is not a record. Either way
+   * whether a daemon runs is unknown.
+   */
+  state: 'running' | 'stopped' | 'unreadable' | 'invalid';
+  stateDir: string;
+  pid?: number;
+  version?: string;
+  transport?: DaemonServerMode;
+  /**
+   * The provider plugin inventory the running daemon published, as recorded; `readPluginInventory`
+   * validates it where it is shown, so this module stays out of the inventory vocabulary's closure.
+   */
+  plugins?: unknown;
+}>;
+
+/** Whether the record exists but cannot say if a daemon runs: it is `unreadable` or `invalid`. */
+export function isUnusableRecord(status: Pick<DaemonStatus, 'state'>): boolean {
+  return status.state === 'unreadable' || status.state === 'invalid';
+}
+
+/**
+ * Reads the daemon's published record without contacting it. The record counts while its pid names
+ * a live process, unless a readable start time differs from the recorded one: a record a crashed
+ * daemon left behind, or whose pid was reused, is `stopped`, and a failed start-time read does not
+ * end the record.
+ */
+export function readDaemonStatus(paths: DaemonPaths): DaemonStatus {
+  const base = { stateDir: paths.baseDir } as const;
+  const read = readDaemonRecord(paths.infoPath);
+  if (read.status !== 'present') {
+    return read.status === 'absent'
+      ? { state: 'stopped', ...base }
+      : { state: read.status, ...base };
+  }
+  const { record } = read;
+  const parsed = parseRegistration(record);
+  if (parsed.pid === null) return { state: 'stopped', ...base };
+  const identity = { pid: parsed.pid, startTime: parsed.startTime };
+  if (identity.startTime === null || !isProcessAlive(identity.pid)) {
+    return { state: 'stopped', ...base };
+  }
+  if (
+    ownerIdentityDiffers(identity, {
+      pid: identity.pid,
+      startTime: readProcessStartTime(identity.pid),
+    })
+  ) {
+    return { state: 'stopped', ...base };
+  }
+  const transport = readRecordedDaemonTransport(record.transport);
+  return {
+    state: 'running',
+    stateDir: paths.baseDir,
+    pid: identity.pid,
+    ...(typeof record.version === 'string' ? { version: record.version } : {}),
+    ...(transport ? { transport } : {}),
+    plugins: record.plugins,
+  };
 }
 
 function readableStartTime(value: unknown): string | null {

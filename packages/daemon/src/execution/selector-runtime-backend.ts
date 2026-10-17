@@ -115,6 +115,17 @@ async function resolveSelectorRuntimeDevice(
   params.captureProof ??= {};
   const ref = params.sessionStore.lookup(params.sessionName);
   const session = ref?.session;
+  // Ordered before the required-session return: a named missing session answers with its own
+  // typed reason. Only that branch pays the function-scoped import (ADR-0019 loading shape).
+  if (!session) {
+    const { requireNamedSessionHoldsDevice } =
+      await import('../core/explicit-session-resolution.ts');
+    requireNamedSessionHoldsDevice({
+      req: params.req,
+      sessionAddress: params.sessionName,
+      session,
+    });
+  }
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
   return { ok: true, ref, session, device };

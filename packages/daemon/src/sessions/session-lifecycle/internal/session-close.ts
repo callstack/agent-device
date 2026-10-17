@@ -206,6 +206,7 @@ export async function handleSessionCloseCommands(
   if (!ref) {
     return await closeWithoutSession({
       req,
+      sessionName,
       logPath,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
@@ -425,12 +426,16 @@ async function closeAppWithoutEndingSession(params: {
 
 async function closeWithoutSession(params: {
   req: DaemonRequest;
+  sessionName: string;
   logPath: string;
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { req, logPath, inspectFacts, bindDevice, platformServices } = params;
+  const { req, sessionName, logPath, inspectFacts, bindDevice, platformServices } = params;
+  const { requireNamedSessionHoldsDevice } =
+    await import('../../../core/explicit-session-resolution.ts');
+  requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session: undefined });
   if (!req.positionals || req.positionals.length === 0)
     return errorResponse('SESSION_NOT_FOUND', 'No active session');
   const device = await resolveCommandDevice({

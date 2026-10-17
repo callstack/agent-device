@@ -20,9 +20,11 @@ import {
   type OffscreenScrollDirection,
 } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import { toBackendContext } from '../../runtime-common.ts';
-import { assertTapTargetClearOfVisibleKeyboard } from './keyboard-occlusion.ts';
-import { interactionVerb } from './interaction-verb.ts';
-import type { InteractionAction } from './interaction-resolution-request.ts';
+import { assertTapTargetClearOfVisibleKeyboard } from '@agent-device/selectors/keyboard-occlusion';
+import {
+  interactionVerb,
+  type InteractionAction,
+} from '@agent-device/selectors/interaction-action';
 
 /**
  * The one construction site for "covered by another visible element" refusals, shared by the

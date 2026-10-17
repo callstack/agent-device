@@ -29,6 +29,11 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: >-
+    ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   contract:
     name: Ownership and context budgets

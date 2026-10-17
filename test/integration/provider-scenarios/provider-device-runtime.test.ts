@@ -29,6 +29,34 @@ test('Provider-backed scenario composes lease, inventory, dispatch, and port rev
   });
 }, 15_000);
 
+test('provider session retains the allocated device and lease for implicit commands', async () => {
+  await withProviderScenarioResource(createFakeProviderWorld, async ({ daemon, runtime }) => {
+    const lease = await allocateFakeProviderLease(daemon);
+    assertRpcOk(
+      await daemon.callCommand('open', ['com.example.demo'], leaseFlags(lease.leaseId), {
+        meta: leaseMeta(lease.leaseId),
+      }),
+    );
+
+    const sessions = await daemon.client().sessions.list();
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0]?.device.id, runtime.deviceIdForLease(lease.leaseId));
+
+    const click = await daemon.callCommand('click', ['10', '20']);
+    assertRpcOk(click);
+    assert.deepEqual(
+      runtime.calls.filter((call) => call.type === 'tap').map((call) => call.deviceId),
+      [runtime.deviceIdForLease(lease.leaseId)],
+    );
+
+    assertRpcOk(await daemon.callCommand('close'));
+    assert.deepEqual(
+      runtime.calls.filter((call) => call.type === 'lease.release').map((call) => call.leaseId),
+      [lease.leaseId],
+    );
+  });
+}, 15_000);
+
 test('provider-owned iOS simulators relaunch without local CoreSimulator refresh', async () => {
   await withProviderScenarioResource(
     async () => await createFakeProviderWorld('ios'),
@@ -61,37 +89,47 @@ test('provider-owned iOS simulators relaunch without local CoreSimulator refresh
   );
 });
 
-test('provider lease allocation fails when the daemon lacks the requested runtime', async () => {
+test('provider lease allocation is refused when no registered runtime claims the provider', async () => {
   const daemon = await createProviderScenarioHarness({
     providerRuntimeIds: [FAKE_PROVIDER],
-    providerRuntimeRequiredIds: ['limrun'],
     deviceInventoryProvider: async () => null,
   });
+  // A daemon never reuses an id it issued, so naming the refused lease's id again proves no lease
+  // was recorded.
+  const leaseId = 'abcdef0123456789abcdef0123456789';
   try {
     const response = await daemon.callCommand(
       'lease_allocate',
       [],
-      {
-        platform: 'ios',
-        tenant: 'team-a',
-        runId: 'run-a',
-        leaseProvider: 'limrun',
-      },
+      { platform: 'ios', tenant: 'team-a', runId: 'run-a', leaseProvider: 'testmu' },
       {
         meta: {
           tenantId: 'team-a',
           runId: 'run-a',
+          leaseId,
           leaseBackend: 'ios-instance',
-          leaseProvider: 'limrun',
+          leaseProvider: 'testmu',
         },
       },
     );
     const error = assertRpcError(
       response,
+      500,
       'UNSUPPORTED_OPERATION',
-      /Provider "limrun" is not available in this daemon runtime/,
+      /Provider "testmu" is not available in this daemon runtime/,
     );
+    const details = error.details as Record<string, unknown>;
+    assert.equal(details.reason, 'provider-not-registered');
+    assert.equal(details.provider, 'testmu');
+    assert.deepEqual(details.registeredProviders, [FAKE_PROVIDER]);
     assert.match(String(error.hint), /Restart the daemon/);
+    const retried = await daemon.callCommand(
+      'lease_allocate',
+      [],
+      { tenant: 'team-a', runId: 'run-a' },
+      { meta: { tenantId: 'team-a', runId: 'run-a', leaseId } },
+    );
+    assert.equal(assertRpcOk<{ lease: DeviceLease }>(retried).lease.leaseId, leaseId);
   } finally {
     await daemon.close();
   }
@@ -100,7 +138,6 @@ test('provider lease allocation fails when the daemon lacks the requested runtim
 test('proxy lease allocation remains daemon-local when direct runtimes are configured', async () => {
   const daemon = await createProviderScenarioHarness({
     providerRuntimeIds: [FAKE_PROVIDER],
-    providerRuntimeRequiredIds: ['limrun'],
     deviceInventoryProvider: async () => null,
   });
   try {
@@ -134,7 +171,7 @@ async function runFakeProviderScenario(
       flags: leaseFlags(lease.leaseId),
       meta: leaseMeta(lease.leaseId),
     });
-    assertFakeProviderScenarioResult(daemon, runtime, lease, appPath);
+    assertFakeProviderScenarioResult(runtime, lease, appPath);
   });
 }
 
@@ -221,15 +258,11 @@ function expectedPortReverseData(leaseId: string): Record<string, unknown> {
 }
 
 function assertFakeProviderScenarioResult(
-  daemon: Awaited<ReturnType<typeof createProviderScenarioHarness>>,
   runtime: FakeProviderDeviceRuntime,
   lease: DeviceLease,
   appPath: string,
 ): void {
   const deviceId = runtime.deviceIdForLease(lease.leaseId);
-  const session = daemon.session();
-  assert.equal(session?.device.id, deviceId);
-  assert.equal(session?.lease?.leaseId, lease.leaseId);
   assert.deepEqual(
     runtime.calls.find((call) => call.type === 'install'),
     {

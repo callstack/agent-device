@@ -227,6 +227,7 @@ test.each([
     ]) {
       expect(operation.available).toBe(deployAvailable);
     }
+    expect(facts.uninstallApp).toBe(facts.deployApp);
     expect(facts.sendPushNotification.available).toBe(pushAvailable);
     if (unavailableReason) {
       expect(deployAvailable ? facts.sendPushNotification : facts.deployApp).toMatchObject({
@@ -625,3 +626,61 @@ test('clears a concurrently repopulated fuzzy resolution after a partial-failed 
   expect(withInvalidatedAppResolutionCache).toHaveBeenCalledOnce();
   expect(resolveFuzzyTarget).toHaveBeenCalledTimes(2);
 });
+
+test.each([
+  [
+    'iOS simulator',
+    appleDevice(),
+    ['simctl', 'uninstall', 'apple-deployment-fact', 'com.example.app'],
+  ],
+  [
+    'physical iOS CoreDevice',
+    appleDevice({ kind: 'device', iosPhysicalDeviceBackend: 'coredevice' }),
+    [
+      'devicectl',
+      'device',
+      'uninstall',
+      'app',
+      '--device',
+      'apple-deployment-fact',
+      'com.example.app',
+    ],
+  ],
+] as const)(
+  'uninstall on the %s removes an installed bundle and skips a missing one',
+  async (_name, device, argv) => {
+    const resolveAppBundleId = vi.fn(async () => 'com.example.app');
+    const run = xcrunLikeRun(bootedSimulatorListResult);
+    const operations = createAppleAppDeploymentOperations({
+      host: deploymentHost(
+        {
+          resolveAppBundleId,
+          withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+        } as unknown as AppleAppDeploymentExecutor,
+        run,
+      ),
+      device,
+      signal: new AbortController().signal,
+    });
+    const uninstalls = () =>
+      run.mock.calls
+        .map(([request]) => [request.tool, ...request.args])
+        .filter((call) => call.includes('uninstall'));
+
+    await expect(operations.uninstallApp?.({ app: 'Example' })).resolves.toEqual({
+      wasInstalled: true,
+      bundleId: 'com.example.app',
+    });
+    expect(resolveAppBundleId).toHaveBeenCalledWith(device, 'Example', { installedOnly: true });
+    expect(uninstalls()).toEqual([argv]);
+
+    resolveAppBundleId.mockRejectedValue(new AppError('APP_NOT_INSTALLED', 'No app found'));
+    await expect(operations.uninstallApp?.({ app: 'com.example.gone' })).resolves.toEqual({
+      wasInstalled: false,
+    });
+    await expect(operations.uninstallApp?.({ app: 'Gone' })).rejects.toMatchObject({
+      code: 'APP_NOT_INSTALLED',
+    });
+    expect(uninstalls()).toEqual([argv]);
+  },
+);

@@ -5,7 +5,7 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
-} from '../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { isHostAllocatedLease } from '../commands/connection-runtime.ts';
 import { connectionProviderCapabilities } from './provider-policy.ts';
 

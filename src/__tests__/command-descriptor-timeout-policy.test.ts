@@ -147,6 +147,7 @@ test('request envelopes deviating from the default are bounded, reviewed sets', 
     prepare: 270_000,
     install: 180_000,
     reinstall: 180_000,
+    uninstall: 180_000,
     install_source: 180_000,
     longpress: 210_000,
     // fold: proven by the worst-case ledger test in
@@ -332,9 +333,9 @@ test('snapshot uses the standard daemon request timeout with an explicit overrid
 });
 
 test('the touch overlay budget leaves record stop room inside its request envelope', () => {
-  // The recorder stop, the copies and the playability checks around the overlay are outside its
-  // budget (about 1 s for a 10-minute simulator recording), so the envelope keeps a reserve for
-  // them beyond it.
+  // The recorder stop and the copies before finalization, and the playability check after the
+  // overlay, are outside its budget (about 1 s for a 10-minute simulator recording), so the envelope
+  // keeps a reserve for them beyond it.
   const reserveMs = 20_000;
   const envelopeMs = resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('record'), {
     positionals: ['stop'],

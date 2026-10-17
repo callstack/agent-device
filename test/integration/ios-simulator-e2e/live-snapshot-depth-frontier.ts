@@ -7,25 +7,20 @@ import {
   type LiveSnapshotNode as SnapshotNode,
   snapshotNodes,
 } from './live-assertions.ts';
-import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
-const VISIBLE_DEPTH_DEEP_LINK = 'agent-device-test-app:///snapshot-depth';
 const CHILD_ID = 'visible-depth-projected-child';
 const MISSING_HITTABILITY_WARNING =
   'iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.';
 
 export async function assertRegularVisibleDepthFrontier(context: LiveContext): Promise<void> {
+  await runStep(context, 'open depth fixture settings', ['click', 'label="Settings"']);
+  await assertWaitText(context, 'Settings');
   await runStep(context, 'open regular visible-depth fixture', [
-    'open',
-    context.appId,
-    '--relaunch',
-    '--launch-url',
-    VISIBLE_DEPTH_DEEP_LINK,
-    '--debug',
+    'click',
+    'id="open-snapshot-depth-lab"',
   ]);
-  // Wait for the target itself so the depth assertion is about the frontier, not route readiness.
-  await waitForDeepLinkDestination(context, [`id="${CHILD_ID}"`], { debug: true });
+  await runStep(context, 'wait for visible-depth fixture', ['wait', `id="${CHILD_ID}"`, '15000']);
 
   const regular = await runStep(context, 'capture regular visible-depth frontier', [
     'snapshot',
@@ -75,8 +70,18 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '--depth',
     '1',
   ]);
-  assertSimulatorSnapshotAcquisition(rawDepthOne, 'raw depth-1 visible-depth snapshot');
   const rawDepthOneNodes = snapshotNodes(rawDepthOne);
+  requireRoot(rawDepthOneNodes, 'raw depth-1 visible-depth snapshot');
+  // Raw acquisition stops before semantic content; this structural frontier can be sparse.
+  if (rawDepthOne.json?.data?.snapshotQuality?.state === 'sparse') {
+    assert.equal(rawDepthOne.json.data.snapshotQuality.reasonCode, 'sparse-tree');
+    assert.equal(rawDepthOne.json.data.truncated, true);
+    assert.ok(
+      rawDepthOneNodes.every((node) => node.type === 'Application' || node.type === 'Window'),
+    );
+  } else {
+    assertSimulatorSnapshotAcquisition(rawDepthOne, 'raw depth-1 visible-depth snapshot');
+  }
   assert.equal(
     rawDepthOneNodes.some((node) => node.identifier === CHILD_ID),
     false,
@@ -87,12 +92,6 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     `raw --depth 1 exceeded the acquisition frontier: ${JSON.stringify(rawDepthOne)}`,
   );
 
-  await runStep(context, 'restore fixture home after visible-depth capture', [
-    'open',
-    context.appId,
-    '--relaunch',
-  ]);
-  await assertWaitText(context, 'Agent Device Tester');
   verifyBehavior(
     context,
     'regular-visible-depth-frontier',

@@ -32,7 +32,7 @@ import {
   unavailableInspectFacts,
 } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
@@ -157,6 +157,7 @@ test('lease handler preserves device-aware lease fields', async () => {
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
+    providerRuntimeIds: ['fake-provider'],
   });
 
   assert.equal(allocateResponse?.ok, true);
@@ -234,6 +235,7 @@ test('lease release calls provider hook using the released lease without heartbe
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
+    providerRuntimeIds: ['fake-provider'],
   });
   assert.equal(allocateResponse?.ok, true);
   const lease = readLeaseResponse(allocateResponse);
@@ -315,6 +317,7 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
       sessionName: 'catalog-test',
       sessionStore,
       leaseRegistry,
+      providerRuntimeIds: ['fake-provider'],
       leaseLifecycleProvider: {
         allocate: async (_lease, context) => {
           observed = {
@@ -362,6 +365,7 @@ test('a lease allocated for a requester that left is released, not registered', 
           sessionName: 'catalog-test',
           sessionStore,
           leaseRegistry,
+          providerRuntimeIds: ['fake-provider'],
           leaseLifecycleProvider: {
             allocate: async (lease) => {
               // The client disconnects mid-allocation; the provider finishes anyway.
@@ -410,6 +414,7 @@ test('a failed provider release after cancellation is reported as unreleased wit
           sessionName: 'catalog-test',
           sessionStore,
           leaseRegistry,
+          providerRuntimeIds: ['fake-provider'],
           leaseLifecycleProvider: {
             allocate: async () => {
               markRequestCanceled(requestId);
@@ -456,6 +461,7 @@ test('a throwing provider release after cancellation is reported as unreleased, 
           sessionName: 'catalog-test',
           sessionStore,
           leaseRegistry,
+          providerRuntimeIds: ['fake-provider'],
           leaseLifecycleProvider: {
             allocate: async () => {
               markRequestCanceled(requestId);

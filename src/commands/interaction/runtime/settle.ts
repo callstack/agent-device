@@ -36,6 +36,7 @@ import {
   resolvePostActionSurfaceChange,
   summarizePostActionEvidence,
 } from './post-action-surface.ts';
+import { settleUnavailable } from './settle-unavailable.ts';
 
 /**
  * `--settle` (#1101): after a mutating command, wait for the UI to go quiet
@@ -147,29 +148,11 @@ async function settleAfterAction(
       resetBudgetOnPrivateAxRecovery: true,
       broadTransitionBaseline: params.baseline,
     });
-    if (outcome.failure) return settleUnavailable(base, outcome.quietMs, outcome.failure.error);
+    if (outcome.failure) return settleUnavailable(base, outcome, outcome.failure.error);
     return await readSettledOutcome(runtime, options, params, base, outcome);
   } catch (error) {
-    return settleUnavailable(base, outcome?.quietMs ?? base.quietMs, error);
+    return settleUnavailable(base, outcome, error);
   }
-}
-
-/**
- * Never fail the action over the observation: report that settling itself broke, with the window the
- * run held, and let the caller fall back to an explicit snapshot.
- */
-function settleUnavailable(
-  base: SettleObservation,
-  quietMs: number,
-  error: unknown,
-): SettleOutcome {
-  return {
-    observation: {
-      ...base,
-      quietMs,
-      hint: `Settle observation unavailable (${error instanceof Error ? error.message : String(error)}). The action itself succeeded; take a snapshot to observe the result.`,
-    },
-  };
 }
 
 /** Turns a finished stable-capture loop into the settled observation payload. */

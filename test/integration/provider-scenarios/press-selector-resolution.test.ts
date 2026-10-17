@@ -119,7 +119,7 @@ test('press refuses a selector miss after one interactive and full capture attem
     async (daemon, transcript) => {
       const callsBeforePress = transcript.calls.length;
       const press = await daemon.callCommand('press', ['label=Continue']);
-      const error = assertRpcError(press, 'COMMAND_FAILED', /Selector did not match/);
+      const error = assertRpcError(press, 500, 'COMMAND_FAILED', /Selector did not match/);
       const details = error.details as { reason: unknown; dispatched?: unknown };
       assert.equal(details.reason, 'selector_not_found');
       assert.equal(details.dispatched, 'no');

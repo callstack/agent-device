@@ -47,13 +47,13 @@ Accepted (2026-09-29).
   - public commands, by their own name;
   - internal commands with platform execution, by the public command their
     `catalog.servesPublicCommand` names (`install_source` as `install-from-source`), or else by
-    their own name (`runtime`, which `react-devtools` and Maestro flows send);
+    their own name (`runtime`, which Maestro flows send);
   - internal commands with no platform execution (leases, `human_control`, session bookkeeping) are
     protocol plumbing that no rule decides;
   - any other name is decided by the rules, so an allow list fails closed for it.
 
   Names are checked against that vocabulary at load; a local-cli name such as `react-devtools` is
-  refused with a pointer to the daemon command it sends. With `allow`, commands added by a later
+  refused, because it runs in the client. With `allow`, commands added by a later
   upgrade are denied by default.
 - `capabilities.deny` — operations denied whichever command reaches them. `device-shutdown` is the
   only capability today.

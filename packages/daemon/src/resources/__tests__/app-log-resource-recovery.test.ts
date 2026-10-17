@@ -12,9 +12,11 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  createTestAppLogLiveHandle,
+  mkdtempForTestSync,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+} from '@agent-device/test-kit';
 
 const scope = {
   signal: new AbortController().signal,

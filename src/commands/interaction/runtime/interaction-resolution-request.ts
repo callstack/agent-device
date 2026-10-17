@@ -1,4 +1,5 @@
 import type { ActingPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
+import type { InteractionAction } from '@agent-device/selectors/interaction-action';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 
@@ -18,22 +19,6 @@ import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay
  * split BEFORE the device action.
  */
 export type ExpectedResolvedTarget = ReplayTargetGuardDenotation;
-
-export type InteractionAction =
-  | 'click'
-  | 'press'
-  | 'fill'
-  | 'focus'
-  | 'longPress'
-  | 'hover'
-  | 'scroll'
-  | 'swipe'
-  | 'pinch'
-  | 'pan'
-  | 'drag'
-  | 'fling'
-  | 'rotate'
-  | 'transform';
 
 export type ResolveInteractionTargetParams = {
   action: InteractionAction;

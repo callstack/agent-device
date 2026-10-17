@@ -7,6 +7,7 @@ import type {
   AppStateCommandResult,
   BootCommandResult,
   ShutdownCommandResult,
+  TelephonyCommandResult,
   TriggerAppEventCommandResult,
 } from '@agent-device/contracts/device';
 import type {
@@ -60,6 +61,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const appstate: Equal<CommandResult<'appstate'>, AppStateCommandResult> = true;
   const keyboard: Equal<CommandResult<'keyboard'>, KeyboardCommandResult> = true;
   const tvRemote: Equal<CommandResult<'tv-remote'>, TvRemoteCommandResult> = true;
+  const telephony: Equal<CommandResult<'telephony'>, TelephonyCommandResult> = true;
   const wait: Equal<CommandResult<'wait'>, WaitCommandResult> = true;
   const prepare: Equal<CommandResult<'prepare'>, PrepareCommandResult> = true;
   const push: Equal<CommandResult<'push'>, PushCommandResult> = true;
@@ -90,6 +92,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     appstate,
     keyboard,
     tvRemote,
+    telephony,
     wait,
     prepare,
     push,
@@ -132,6 +135,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'appstate'
     | 'keyboard'
     | 'tv-remote'
+    | 'telephony'
     | 'wait'
     | 'scroll'
     | 'prepare'

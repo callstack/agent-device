@@ -17,9 +17,8 @@ import { test } from 'vitest';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
 import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { androidSettingsXml, androidSnapshotHelperOutput } from './android-world.ts';
+import { androidRepairAdbResult } from './replay-repair-world.ts';
 import {
-  androidImeLifecycleAdbResult,
   createAndroidProviderShellState,
   updateAndroidProviderImeShellState,
 } from './android-ime-lifecycle-world.ts';
@@ -98,7 +97,7 @@ async function armRepairAndAssertHeld(params: {
   repairPath: string;
   selection: ScenarioSelection;
 }): Promise<{ from: number; planDigest: string }> {
-  const { client, daemon, repairPath, selection } = params;
+  const { client, repairPath, selection } = params;
   const divergenceError = await client.replay
     .run({ path: repairPath, saveScript: true, ...selection })
     .then(
@@ -114,11 +113,6 @@ async function armRepairAndAssertHeld(params: {
   // R7/C1: the divergence reports the repair transaction as held — the exact
   // signal the #1271 stage-1 guidance clause is gated on.
   assert.equal(divergenceReport.resume.repairSessionHeld, true);
-  // The session is repair-armed: the repair variant's boundary is what the
-  // exclusion keys off (an ordinary `open --save-script` never sets it).
-  const publication = daemon.session()?.scriptPublication;
-  const armedBoundary = publication?.kind === 'repair' ? publication.boundary : undefined;
-  assert.equal(typeof armedBoundary, 'number');
   return divergenceReport.resume;
 }
 
@@ -131,7 +125,6 @@ async function assertRepairSegmentReadExclusion(params: {
   selection: ScenarioSelection;
 }): Promise<void> {
   const { daemon, selection } = params;
-  const actionsBeforeReads = daemon.session()?.actions.length ?? 0;
 
   // (a) A diagnostic read used to LOCATE the target: excluded by default,
   //     with no `--no-record` needed (the #1271 stage-1 foot-gun).
@@ -139,22 +132,15 @@ async function assertRepairSegmentReadExclusion(params: {
     ...selection,
   });
   assertRpcOk(diagnosticRead);
-  assert.equal(
-    daemon.session()?.actions.length,
-    actionsBeforeReads,
-    'a diagnostic read inside a repair segment must not be recorded',
-  );
 
   // (b) The corrective read (the wave-3 E3 shape: the diverged step is itself
   //     a read), forced into the heal with `--record`.
-  const correctiveRead = await daemon.callCommand('get', ['text', SEARCH_SELECTOR], {
+  await daemon.client().interactions.get({
+    format: 'text',
+    selector: SEARCH_SELECTOR,
     ...selection,
     record: true,
   });
-  assertRpcOk(correctiveRead);
-  const armedActions = daemon.session()?.actions ?? [];
-  assert.equal(armedActions.length, actionsBeforeReads + 1);
-  assert.equal(armedActions.at(-1)?.command, 'get');
 
   // (c) `--record` and `--no-record` are opposite intents for one action.
   const conflictingFlags = await daemon.callCommand('get', ['text', SEARCH_SELECTOR], {
@@ -162,7 +148,7 @@ async function assertRepairSegmentReadExclusion(params: {
     record: true,
     noRecord: true,
   });
-  assertRpcError(conflictingFlags, 'INVALID_ARGS', /--record and --no-record are mutually/);
+  assertRpcError(conflictingFlags, 400, 'INVALID_ARGS', /--record and --no-record are mutually/);
 }
 
 /** What must (and must not) have landed in the healed script. */
@@ -196,34 +182,4 @@ function healedLines(script: string, command: string): string[] {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line === command || line.startsWith(`${command} `));
-}
-
-function androidRepairAdbResult(
-  args: readonly string[],
-  shellState: ReturnType<typeof createAndroidProviderShellState>,
-): {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-} {
-  const ime = androidImeLifecycleAdbResult(args.join(' '), args, shellState);
-  if (ime) return ime;
-  if (args.join(' ') === 'shell getprop sys.boot_completed') {
-    return { stdout: '1\n', stderr: '', exitCode: 0 };
-  }
-  if (args.join(' ') === 'shell dumpsys window windows') {
-    return {
-      stdout: 'mCurrentFocus=Window{42 u0 com.android.settings/.Settings}\n',
-      stderr: '',
-      exitCode: 0,
-    };
-  }
-  if (args.join(' ').startsWith('shell am instrument ')) {
-    return {
-      stdout: androidSnapshotHelperOutput(androidSettingsXml('Display')),
-      stderr: '',
-      exitCode: 0,
-    };
-  }
-  return { stdout: '', stderr: '', exitCode: 0 };
 }

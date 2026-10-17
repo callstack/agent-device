@@ -31,6 +31,7 @@ const unavailableDeploymentOperationFacts = Object.freeze({
   materializeAppSource: unavailable,
   deployMaterializedApp: unavailable,
   sendPushNotification: unavailable,
+  uninstallApp: unavailable,
 });
 
 /** Default fact for tests that are unrelated to explicit device shutdown. */
@@ -68,6 +69,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
   ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),
   setFoldPose: unavailable,
+  sendTelephonyEvent: unavailable,
   triggerAppEvent: unavailable,
   setSetting: unavailable,
   readSetting: unavailable,

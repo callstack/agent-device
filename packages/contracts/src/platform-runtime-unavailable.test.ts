@@ -46,6 +46,7 @@ const UNAVAILABLE_FACTS: UnavailablePlatformRuntimeFacts = {
   clipboard: { available: false, reason: 'unsupported-provider-mode' },
   systemButton: { available: false, reason: 'unsupported-provider-mode' },
   fold: { available: false, reason: 'unsupported-provider-mode' },
+  telephony: { available: false, reason: 'unsupported-provider-mode' },
   triggerAppEvent: { available: false, reason: 'unsupported-provider-mode' },
   settings: { available: false, reason: 'unsupported-provider-mode' },
   readAlert: { available: false, reason: 'unsupported-provider-mode' },

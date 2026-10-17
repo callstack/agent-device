@@ -27,7 +27,6 @@ import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { systemButtonRuntimeOperationFacts } from './system-button-runtime.ts';
 import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
-import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import { alertRuntimeOperationFacts } from './alert-runtime.ts';
 import { audioProbeRuntimeOperationFacts } from './audio-probe-runtime.ts';
 import { perfRuntimeOperationFacts } from './perf-runtime.ts';
@@ -59,17 +58,13 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   back: RuntimeOperationUnavailability;
   orientation: RuntimeOperationUnavailability;
   fold: RuntimeOperationUnavailability;
+  telephony: RuntimeOperationUnavailability;
   tvRemote: RuntimeOperationUnavailability;
   keyboard: RuntimeOperationUnavailability;
   clipboard: RuntimeOperationUnavailability;
   systemButton: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
-  /**
-   * One cell for both settings halves: an owner that names no settings surface here refuses the
-   * write and the read alike, and an owner whose two halves genuinely differ (the Apple leaf, whose
-   * host can set an appearance it cannot read back) states them directly through
-   * `settingsRuntimeOperationFacts` instead of routing both through this denial.
-   */
+  /** Refuses every setting, read and write alike. */
   settings: RuntimeOperationUnavailability;
   readAlert: RuntimeOperationUnavailability;
   awaitAlert: RuntimeOperationUnavailability;
@@ -120,6 +115,7 @@ const UNAVAILABLE_CELLS = {
   back: true,
   orientation: true,
   fold: true,
+  telephony: true,
   tvRemote: true,
   keyboard: true,
   clipboard: true,
@@ -208,6 +204,7 @@ export function createUnavailablePlatformRuntimeFacts(
       materializeAppSource: frozen.appDeployment,
       deployMaterializedApp: frozen.appDeployment,
       sendPushNotification: frozen.appDeployment,
+      uninstallApp: frozen.appDeployment,
       appState: frozen.appState,
       networkDump: frozen.network,
       screenRecordingStart: frozen.screenRecording,
@@ -244,15 +241,14 @@ export function createUnavailablePlatformRuntimeFacts(
       // Stated directly rather than through `foldRuntimeOperationFacts`, so this hub does not
       // evaluate the fold contract for owners that never pose a hinge (eager-closure budgets).
       setFoldPose: frozen.fold,
+      sendTelephonyEvent: frozen.telephony,
       ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
       ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
       ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...systemButtonRuntimeOperationFacts({ unsupported: frozen.systemButton }),
       ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
-      ...settingsRuntimeOperationFacts({
-        setSetting: frozen.settings,
-        readSetting: frozen.settings,
-      }),
+      setSetting: frozen.settings,
+      readSetting: frozen.settings,
       ...alertRuntimeOperationFacts({
         read: frozen.readAlert,
         wait: frozen.awaitAlert,

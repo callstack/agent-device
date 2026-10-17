@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createScreenRecordingOutputHost } from './platform-runtime-screen-recording-output-host.ts';
 
 test('prepares the closed recording output path after semantic validation', async () => {

@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const REMOTE_DAEMON_ENV = {
   AGENT_DEVICE_DAEMON_BASE_URL: 'http://remote-mac.example.test:7777/agent-device',

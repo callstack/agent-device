@@ -5,7 +5,7 @@ import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   EQUIVALENT_WRAPPER_CHAIN_NODES,
   UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
-} from '@agent-device/selectors/interaction-targeting-fixtures';
+} from '@agent-device/test-kit';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { resolveActionSelector } from './selector-action-resolution.ts';
 

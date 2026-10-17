@@ -22,10 +22,12 @@ import {
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
   resolveDaemonPaths,
+  type DaemonCapability,
   type DaemonPaths,
   type DaemonServerMode,
 } from './daemon-resolution.ts';
@@ -51,6 +53,10 @@ export type DaemonRegistrationFields = Readonly<{
   codeOrigin: DaemonCodeOrigin;
   codeSignature: string;
   policyDigest?: string;
+  /** What this daemon can do beyond the base RPC contract; absent from daemons that predate it. */
+  capabilities?: readonly DaemonCapability[];
+  /** The provider plugin inventory, so a client can read what this daemon registered. */
+  plugins?: readonly PluginInventoryEntry[];
 }>;
 type DaemonRegistrationRemoval =
   | Readonly<{ state: 'removed' }>

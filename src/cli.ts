@@ -5,14 +5,13 @@ import {
   asAppError,
   AppError,
   normalizeError,
-  throwDaemonError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
-import { sendToDaemon } from './daemon-client/daemon-client.ts';
+import { createEnsuredDaemonTransport, sendToDaemon } from './daemon-client/daemon-client.ts';
 import fs from 'node:fs';
 import type { BatchStep } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
@@ -43,13 +42,12 @@ import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
-} from './remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
-import { INTERNAL_COMMANDS, isKnownCliCommandName } from '@agent-device/command-registry/catalog';
-import { sendInjectedDaemonRequest } from './cli/injected-daemon-dispatch.ts';
+import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
@@ -72,8 +70,24 @@ const printJson = (
   import('./commands/output/json.ts').then(({ printJson: write }) => write(result));
 
 const DEFAULT_CLI_DEPS: CliDeps = {
-  sendToDaemon,
+  sendToDaemon: createEnsuredDaemonTransport({ onReplaced: writeDaemonReplacedNotice }),
 };
+
+function writeDaemonReplacedNotice(replaced: {
+  stateDir: string;
+  previous: { pid: number; version?: string };
+  reason: 'incompatible' | 'unreachable';
+}): void {
+  const { stateDir, previous, reason } = replaced;
+  const identity = previous.version
+    ? `pid ${previous.pid}, v${previous.version}`
+    : `pid ${previous.pid}`;
+  process.stderr.write(
+    reason === 'unreachable'
+      ? `Replaced unreachable daemon (${identity}) in ${stateDir}.\n`
+      : `Replaced idle daemon (${identity}) in ${stateDir}: it did not match this client.\n`,
+  );
+}
 
 const METRO_RUNTIME_OVERRIDE_FLAG_KEYS = new Set<FlagKey>([
   'launchUrl',
@@ -140,7 +154,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
       let logTailStopper: (() => void) | null = null;
       try {
         if (command === 'react-devtools') {
-          await exitAfterFlush(await runReactDevtoolsCli(ctx, deps));
+          await exitAfterFlush(await runReactDevtoolsCli(ctx));
           return;
         }
         if (command === 'web') {
@@ -350,38 +364,12 @@ async function resolveRunContextOrExit(
   }
 }
 
-async function runReactDevtoolsCli(ctx: CliRunContext, deps: CliDeps): Promise<number> {
+async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
   const { runReactDevtoolsCommand } = await import('./cli/commands/react-devtools.ts');
-  const { daemonAuthToken, ...directRequestFlags } = ctx.effectiveFlags;
   return await runReactDevtoolsCommand(ctx.positionals, {
-    flags: {
-      ...directRequestFlags,
-      leaseProvider: ctx.connectionDefaults?.connection?.leaseProvider,
-    },
+    flags: ctx.effectiveFlags,
     stateDir: ctx.daemonPaths.baseDir,
     session: ctx.effectiveFlags.session ?? ctx.sessionName,
-    cwd: process.cwd(),
-    env: process.env,
-    configureDirectPortReverse: async () => {
-      const response = await sendInjectedDaemonRequest({
-        route: 'react-devtools',
-        command: INTERNAL_COMMANDS.runtime,
-        request: {
-          positionals: ['port-reverse'],
-          flags: {
-            ...directRequestFlags,
-            leaseProvider: ctx.connectionDefaults?.connection?.leaseProvider,
-            devicePort: 8097,
-            hostPort: 8097,
-            portReverseName: 'react-devtools',
-          },
-          session: ctx.effectiveFlags.session ?? ctx.sessionName,
-        },
-        transport: deps.sendToDaemon,
-        transportOptions: { authToken: daemonAuthToken },
-      });
-      if (!response.ok) throwDaemonError(response.error);
-    },
   });
 }
 

@@ -111,7 +111,7 @@ export function releaseSpeculativeRunner(
  * A launch the bridge cannot read as up may be a launch URL SpringBoard holds behind a
  * confirmation, so any verdict short of `observable` — including a target discovery that failed on
  * its own deadline — reads the sheet. Only a verdict that proves the app up skips the read, and a
- * sheet that is not there costs one runner command.
+ * sheet that is not there costs one 3-second presentation window.
  *
  * An accept is the only answer that changes the device, so only its outcome is re-observed: the URL
  * is in flight and this open is the only one that knows whether it landed. When the app is then
@@ -119,9 +119,9 @@ export function releaseSpeculativeRunner(
  * held URL, and the URL is handed over again and read once more. A launch still proven not running
  * afterwards fails the open with `launch_confirmation_unanswered` rather than returning green to a
  * session whose every later command then fails `app is not running`. A recognized prompt still
- * visible after a failed accept also fails the open, even if the app is running. A read that found no prompt, an
- * unrecognized prompt and an unresolved URL owner all leave the open as green as it was, with only
- * the one extra runner command spent.
+ * visible after a failed accept also fails the open, even if the app is running. A missing or
+ * unrecognized prompt, or an unresolved URL owner, leaves the launch unchanged. An unresolved owner
+ * spends both the 3-second presentation window and the bounded URL-owner lookup.
  */
 export async function settleAppleOpen(
   host: Pick<PlatformRuntimeHost, 'clock'>,
@@ -177,7 +177,7 @@ export async function settleAppleOpen(
 /**
  * Reads and answers the confirmation the launch may be held behind. Only an accept changes the
  * device: a read that finds no prompt, or a prompt this open must not answer, leaves the launch
- * exactly as the first verdict described it, at the cost of one runner command. Once an accept has
+ * exactly as the first verdict described it, at the cost of one 3-second presentation window. Once an accept has
  * been attempted the launch URL is in flight and only this open knows whether it landed — an accept
  * that reported failure died with the runner session that raised it, and one that reported success
  * can still leave the device having dropped a held URL. Either way, an app then proven to have no

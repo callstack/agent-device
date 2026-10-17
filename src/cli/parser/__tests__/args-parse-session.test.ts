@@ -275,14 +275,14 @@ test('parseArgs recognizes network include flag', () => {
   assert.equal(parsed.flags.networkInclude, 'headers');
 });
 
-test('parseArgs preserves react-devtools arguments as passthrough positionals', () => {
+test('parseArgs preserves react-devtools profile options as passthrough positionals', () => {
   const parsed = parseArgs(
     [
       'react-devtools',
       'profile',
-      'diff',
-      '--threshold',
-      '10',
+      'stop',
+      '--metro-device',
+      'Pixel 9',
       '--limit=5',
       '--json',
       '--session',
@@ -293,14 +293,25 @@ test('parseArgs preserves react-devtools arguments as passthrough positionals', 
   assert.equal(parsed.command, 'react-devtools');
   assert.equal(parsed.flags.json, true);
   assert.equal(parsed.flags.session, 'rn');
-  assert.deepEqual(parsed.positionals, ['profile', 'diff', '--threshold', '10', '--limit=5']);
+  assert.deepEqual(parsed.positionals, [
+    'profile',
+    'stop',
+    '--metro-device',
+    'Pixel 9',
+    '--limit=5',
+  ]);
 });
 
-test('parseArgs supports explicit passthrough boundary for react-devtools global flag names', () => {
-  const parsed = parseArgs(['react-devtools', '--', 'status', '--json'], { strictFlags: true });
-  assert.equal(parsed.command, 'react-devtools');
-  assert.equal(parsed.flags.json, false);
-  assert.deepEqual(parsed.positionals, ['status', '--json']);
+test('parseArgs preserves react-devtools inspection options as passthrough positionals', () => {
+  assert.deepEqual(
+    parseArgs(['react-devtools', 'tree', '@c3', '--depth', '3'], { strictFlags: true }).positionals,
+    ['tree', '@c3', '--depth', '3'],
+  );
+  assert.deepEqual(
+    parseArgs(['react-devtools', 'find', 'Row', '--exact', '--limit', '2'], { strictFlags: true })
+      .positionals,
+    ['find', 'Row', '--exact', '--limit', '2'],
+  );
 });
 
 test('parseArgs preserves cdp arguments as passthrough positionals', () => {

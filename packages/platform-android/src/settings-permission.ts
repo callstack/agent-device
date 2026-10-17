@@ -1,12 +1,14 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
-  type MobilePermissionTarget,
   parsePermissionAction,
   parsePermissionTarget,
-  type PermissionAction,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
+import {
+  type MobilePermissionTarget,
+  type PermissionAction,
+} from '@agent-device/contracts/settings-catalog';
 import { runAndroidShell } from './adb.ts';
 import { androidAdbResultError } from './adb-failure.ts';
 import {

@@ -6,7 +6,7 @@ import type {
   sendToDaemon,
 } from '../daemon-client/daemon-client.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { beginStderrCapture, beginStdoutCapture } from './test-utils/stream-capture.ts';
 
 class ExitSignal extends Error {

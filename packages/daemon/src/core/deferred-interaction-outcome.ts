@@ -4,7 +4,7 @@ import type { PostOpenObservation } from '@agent-device/contracts/application-li
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import type { MovingTargetBaseline } from '@agent-device/contracts/moving-target-gate';
+import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import {
   captureAndroidFreshnessRecoveredAttempt,
   getActiveAndroidSnapshotFreshness,

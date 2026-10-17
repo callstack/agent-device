@@ -177,6 +177,11 @@ test('local Apple tool provider exposes macOS host operations as semantic method
   const calls: Array<[string, string[], string | undefined]> = [];
   const provider = createLocalAppleToolProvider({
     runCommand: async (cmd, args, options) => {
+      // The bundle open's LaunchServices registration probe is the seam's own read, asserted in
+      // launch-services-registration.test.ts; this routing test only reports it as listing the bundle.
+      if (cmd === '/usr/bin/lsappinfo') {
+        return { exitCode: 0, stdout: 'ASN:0x0-0x1234-"Demo":\n', stderr: '' };
+      }
       calls.push([cmd, args, typeof options?.stdin === 'string' ? options.stdin : undefined]);
       if (cmd === 'pbpaste') {
         return { exitCode: 0, stdout: 'copied\r\n', stderr: '' };

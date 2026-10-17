@@ -3,19 +3,18 @@ import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { sparseCaptureQuality } from '@agent-device/selectors/absence-observation';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { evaluateIsPredicate } from '@agent-device/selectors';
-import { sparseCaptureQuality } from '@agent-device/selectors/absence-observation';
 import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import {
   canScrollFurtherAtEdge,
-  pushScrollSurfaceSignature,
+  runScrollPasses,
   scrollNoProgressHint,
   scrollSurfaceFingerprint,
-  scrollSurfaceIsStuck,
   verticalEdgeFor,
-  type ScrollEdge,
+  type ScrollCaptureRefusal,
 } from '@agent-device/capture-kit/scroll-edge-state';
 
 /**
@@ -24,7 +23,8 @@ import {
  *
  * One module beside the route that runs it. `scroll` reaches a device in exactly one place (ADR
  * 0019, `scroll-runtime.ts`), so there is no second caller to keep in agreement and no reason for
- * this to be a package surface.
+ * this to be a package surface. `scroll top`/`scroll bottom` borrow `scrollCaptureRefusal` from
+ * here so both loops share one definition of readable without loading another module.
  */
 
 /**
@@ -34,15 +34,6 @@ import {
  * better reached by `scroll bottom` or a search field.
  */
 export const SCROLL_UNTIL_PASS_LIMIT = 12;
-
-/**
- * Cap for the vertical stuck-signature window fed to `scrollSurfaceIsStuck`. Matches the capture-kit
- * edge loop so both loops notice a stuck container after the same handful of non-advancing passes.
- */
-const SCROLL_UNTIL_STUCK_WINDOW = 6;
-
-/** Why a capture cannot answer the `--until` question at all. Never an outcome about the content. */
-type ScrollUntilCaptureRefusal = { reason: 'no-capture' | 'sparse-tree'; detail: string };
 
 /**
  * Scrolls until the selector matches a node that is on screen.
@@ -65,85 +56,43 @@ export async function runScrollUntilVisible<TResult>(params: {
   scroll: () => Promise<TResult>;
 }): Promise<{ passes: number; result?: TResult }> {
   const { selector, direction, platform, capture, scroll } = params;
-  const passLimit = params.passLimit ?? SCROLL_UNTIL_PASS_LIMIT;
   const edge = verticalEdgeFor(direction);
-  let passes = 0;
-  let result: TResult | undefined;
-  const recentSignatures: string[] = [];
-
-  let scrolling = false;
+  let scrolled = false;
   try {
-    while (true) {
-      const decision = await decideUntilPass({
-        captured: await capture(),
-        selector,
-        direction,
-        platform,
-        edge,
-        passes,
-        passLimit,
-        recentSignatures,
-      });
-      if (decision.visible) {
-        return { passes, ...(result === undefined ? {} : { result }) };
-      }
-      scrolling = true;
-      result = await scroll();
-      scrolling = false;
-      passes += 1;
-    }
+    const { passes, result } = await runScrollPasses({
+      observe: capture,
+      refuse: (captured) => {
+        const refusal = scrollCaptureRefusal(captured);
+        return refusal ? scrollUntilCaptureError(direction, selector, refusal) : undefined;
+      },
+      shouldStop: async (captured, passes) => {
+        const nodes = (captured.nodes ?? []) as SnapshotNode[];
+        if (await isSelectorVisible(nodes, selector, platform)) return true;
+        if (edge && !(await canScrollFurtherAtEdge(nodes, edge))) {
+          throw scrollUntilNotFoundError(direction, selector, 'edge-reached', passes);
+        }
+        return false;
+      },
+      passLimit: params.passLimit ?? SCROLL_UNTIL_PASS_LIMIT,
+      passLimitError: (passes) =>
+        scrollUntilNotFoundError(direction, selector, 'pass-limit', passes),
+      // Vertical only: a stuck container revisits the same one or two signatures. A horizontal
+      // scroll has no analyzer to read a surface off, so it is bounded by the pass budget alone.
+      fingerprint: async (captured) =>
+        edge
+          ? await scrollSurfaceFingerprint((captured.nodes ?? []) as SnapshotNode[], edge)
+          : undefined,
+      noProgressError: (passes) => scrollUntilNoProgressError(direction, selector, passes),
+      scroll: async () => {
+        scrolled = true;
+        return await scroll();
+      },
+    });
+    return { passes, ...(result === undefined ? {} : { result }) };
   } catch (error) {
-    if (passes === 0 && !scrolling && error instanceof AppError) {
-      throw discloseDispatch(error, 'no');
-    }
+    if (!scrolled && error instanceof AppError) throw discloseDispatch(error, 'no');
     throw error;
   }
-}
-
-/**
- * What one capture tells us about the `--until` loop, answered in the order that matters: refuse an
- * unusable read, report an arrived target, then the two ways a pass cannot usefully continue. Every
- * terminal condition raises its own typed error; a non-terminal pass returns `{ visible: false }` so
- * the caller flings once more and asks again. The stuck window mutates in place so the loop keeps one
- * running history across passes.
- */
-async function decideUntilPass(params: {
-  captured: SnapshotResult;
-  selector: string;
-  direction: ScrollDirection;
-  platform: Platform | PublicPlatform;
-  edge: ScrollEdge | undefined;
-  passes: number;
-  passLimit: number;
-  recentSignatures: string[];
-}): Promise<{ visible: boolean }> {
-  const { captured, selector, direction, platform, edge, passes, passLimit, recentSignatures } =
-    params;
-  const refusal = captureRefusal(captured);
-  if (refusal) throw scrollUntilCaptureError(direction, selector, refusal);
-  const nodes = (captured.nodes ?? []) as SnapshotNode[];
-  if (await isSelectorVisible(nodes, selector, platform)) {
-    return { visible: true };
-  }
-  if (edge && !(await canScrollFurtherAtEdge(nodes, edge))) {
-    throw scrollUntilNotFoundError(direction, selector, 'edge-reached', passes);
-  }
-  if (passes >= passLimit) {
-    throw scrollUntilNotFoundError(direction, selector, 'pass-limit', passes);
-  }
-  if (edge) {
-    // Vertical only: a stuck container revisits the same one or two signatures. Checked after the
-    // pass-limit branch so an explicit small budget still reports `scroll_until_pass_limit`.
-    pushScrollSurfaceSignature(
-      recentSignatures,
-      await scrollSurfaceFingerprint(nodes, edge),
-      SCROLL_UNTIL_STUCK_WINDOW,
-    );
-    if (scrollSurfaceIsStuck(recentSignatures)) {
-      throw scrollUntilNoProgressError(direction, selector, passes);
-    }
-  }
-  return { visible: false };
 }
 
 export function formatScrollUntilMessage(
@@ -188,22 +137,18 @@ async function isSelectorVisible(
 }
 
 /**
- * Sparseness is the same question absence assertions ask, answered by the same helper rather than a
- * second definition of readable. Truncation is deliberately NOT refused: a truncated tree is real
- * and readable with its tail missing, and refusing it would fail large screens where the target is
- * plainly in view.
+ * Whether a scroll capture can answer anything at all, for every scroll loop. Sparseness is the
+ * question absence assertions ask, answered by the same helper rather than a second definition of
+ * readable. Truncation is deliberately NOT refused: a truncated tree is real and readable with its
+ * tail missing, and refusing it would fail large screens where the answer is plainly in view.
  */
-function captureRefusal(result: SnapshotResult): ScrollUntilCaptureRefusal | undefined {
+export function scrollCaptureRefusal(result: SnapshotResult): ScrollCaptureRefusal | undefined {
   const nodes = result.nodes;
-  if (nodes === undefined) {
-    return { reason: 'no-capture', detail: 'the capture returned no accessibility tree' };
-  }
-  if (nodes.length === 0) {
-    return { reason: 'no-capture', detail: 'the capture returned an empty accessibility tree' };
-  }
+  // Sparseness first: a backend that names why its tree is unusable (the Android helper's
+  // presentation failure ships no nodes and a sparse verdict) gives the better answer.
   const sparse = sparseCaptureQuality({
     backend: result.backend as SnapshotState['backend'],
-    nodes: nodes as SnapshotNode[],
+    nodes: (nodes ?? []) as SnapshotNode[],
     ...(result.quality ? { snapshotQuality: result.quality } : {}),
   });
   if (sparse) {
@@ -211,6 +156,12 @@ function captureRefusal(result: SnapshotResult): ScrollUntilCaptureRefusal | und
       reason: 'sparse-tree',
       detail: sparse.reason ?? 'the capture backend reported a sparse tree',
     };
+  }
+  if (nodes === undefined) {
+    return { reason: 'no-capture', detail: 'the capture returned no accessibility tree' };
+  }
+  if (nodes.length === 0) {
+    return { reason: 'no-capture', detail: 'the capture returned an empty accessibility tree' };
   }
   return undefined;
 }
@@ -272,7 +223,7 @@ function scrollUntilNoProgressError(
 function scrollUntilCaptureError(
   direction: ScrollDirection,
   selector: string,
-  refusal: ScrollUntilCaptureRefusal,
+  refusal: ScrollCaptureRefusal,
 ): AppError {
   return new AppError(
     'COMMAND_FAILED',

@@ -1,4 +1,4 @@
-import { beforeEach, test } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { killAndroidApp } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
@@ -147,6 +147,39 @@ test('killAndroidApp proceeds when focus still names the target but the resumed 
     ['shell', 'pidof', 'com.example.app'],
     ['shell', 'pidof', 'com.example.app'],
   ]);
+});
+
+test('killAndroidApp waits out a slow exit even while stale focus still names the target', async () => {
+  vi.useFakeTimers();
+  let pidofCalls = 0;
+  try {
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          const command = args.join(' ');
+          if (command === dumpsysActivityActivities) {
+            return { stdout: RESUMED_LAUNCHER_DUMP, stderr: '', exitCode: 0 };
+          }
+          if (command === dumpsysWindowWindows) {
+            return { stdout: TARGET_FOCUS_DUMP, stderr: '', exitCode: 0 };
+          }
+          if (command === pidofTarget) {
+            pidofCalls += 1;
+            return { stdout: pidofCalls <= 2 ? '12345\n' : '', stderr: '', exitCode: 0 };
+          }
+          return { stdout: '', stderr: '', exitCode: 0 };
+        },
+        reverse: noReverse,
+      },
+      { serial: 'emulator-5554' },
+      async () => {
+        await Promise.all([killAndroidApp(DEVICE, 'com.example.app'), vi.runAllTimersAsync()]);
+      },
+    );
+    assert.ok(pidofCalls > 2, `the kill polled the process until it exited (${pidofCalls})`);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('killAndroidApp fails when the process survives the kill', async () => {

@@ -10,8 +10,8 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   type LoopbackServer,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendRequest } from '../daemon-client-transport.ts';
 

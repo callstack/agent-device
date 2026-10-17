@@ -11,6 +11,7 @@ export type {
   AppOpenResult,
   AppPushOptions,
   AppTriggerEventOptions,
+  AppUninstallOptions,
   DeviceSelectionMetadata,
   DeviceSelectionReason,
   DeviceSelectionSource,
@@ -33,7 +34,11 @@ export type {
   AgentDeviceIdentifiers,
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,
+  DaemonConnection,
+  DaemonIdentity,
+  DaemonLifecycle,
   DeviceCommandBaseOptions,
+  EnsureDaemonOptions,
 } from '../client-connection.ts';
 export type {
   AgentDeviceCapabilitiesResult,
@@ -120,6 +125,7 @@ export type {
   OrientationCommandOptions,
   PrepareCommandOptions,
   ReactNativeCommandOptions,
+  TelephonyCommandOptions,
   TvRemoteCommandOptions,
   ViewportCommandOptions,
   WaitCommandOptions,

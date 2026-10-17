@@ -23,6 +23,11 @@ export async function handleRequestTimeout(
     info: DaemonInfo;
     statePaths: DaemonPaths;
     remote: boolean;
+    /**
+     * Whether this caller may retire a daemon that answers nothing. An attach client never may: the
+     * daemon is not its to kill, and `ensureDaemon` is where an unresponsive one is replaced.
+     */
+    retireUnresponsive: boolean;
     timeoutMs: number;
     requestId: string | undefined;
     command: string | undefined;
@@ -32,8 +37,18 @@ export async function handleRequestTimeout(
     action?: string;
   }>,
 ): Promise<AppError> {
-  const { info, statePaths, remote, timeoutMs, requestId, command, platform, session, action } =
-    params;
+  const {
+    info,
+    statePaths,
+    remote,
+    retireUnresponsive,
+    timeoutMs,
+    requestId,
+    command,
+    platform,
+    session,
+    action,
+  } = params;
   // The command's declared policy (`timeoutPolicy.onTimeout`, ADR 0008) decides whether a local
   // timed-out request is RESET-ELIGIBLE; the liveness probe decides whether the eligibility runs.
   // A remote client cannot reach the host's process table or the daemon's state dir, so a remote
@@ -51,16 +66,14 @@ export async function handleRequestTimeout(
       })
     : undefined;
   const unresponsive = probeAnswered === false;
-  let retirement: DaemonRetirementResult | undefined;
-  if (unresponsive) {
-    const { stopAndRetireDaemon } =
-      await import('@agent-device/daemon-contracts/daemon-registration-owner');
-    retirement = await stopAndRetireDaemon({
-      paths: statePaths,
-      observed: { pid: info.pid, startTime: info.processStartTime ?? null },
-      mode: 'force',
-    });
-  }
+  const mayRetire = unresponsive && retireUnresponsive;
+  // Loaded only here: a timeout is the one place that needs it, and the CLI's eager closure must
+  // not pay for it.
+  const stopCommand =
+    unresponsive && !retireUnresponsive
+      ? (await import('./daemon-lifecycle-errors.ts')).daemonStopCommand(statePaths.baseDir)
+      : undefined;
+  const retirement = mayRetire ? await forceRetireDaemon(info, statePaths) : undefined;
   const resetDaemon = retirement?.status === 'retired';
   const preserved =
     retirement?.status === 'retained' && retirement.termination?.status !== 'exited';
@@ -74,7 +87,7 @@ export async function handleRequestTimeout(
       daemonPidReset: resetDaemon ? info.pid : undefined,
       daemonPidForceKilled: resetDaemon ? daemonWasForceKilled(retirement) : undefined,
       daemonRetirement: retirement,
-      daemonPreservedAfterTimeout: preserved || (!remote && !unresponsive),
+      daemonPreservedAfterTimeout: preserved || (!remote && !mayRetire),
       daemonLivenessProbeAnswered: probeAnswered,
       daemonBaseUrl: info.baseUrl,
     },
@@ -90,11 +103,25 @@ export async function handleRequestTimeout(
         : resolveRequestTimeoutHint({
             remote,
             resetDaemon: resetDaemon,
+            stopCommand,
             command,
             applePlatformDeclared: isAffirmativelyApplePlatform(platform),
             session,
             action,
           }),
+  });
+}
+
+async function forceRetireDaemon(
+  info: DaemonInfo,
+  statePaths: DaemonPaths,
+): Promise<DaemonRetirementResult> {
+  const { stopAndRetireDaemon } =
+    await import('@agent-device/daemon-contracts/daemon-registration-owner');
+  return await stopAndRetireDaemon({
+    paths: statePaths,
+    observed: { pid: info.pid, startTime: info.processStartTime ?? null },
+    mode: 'force',
   });
 }
 
@@ -132,6 +159,8 @@ function isAffirmativelyApplePlatform(platform: PlatformSelector | undefined): b
 export function resolveRequestTimeoutHint(params: {
   remote: boolean;
   resetDaemon: boolean;
+  /** Set when the daemon answered nothing and this caller is not allowed to retire it. */
+  stopCommand?: string;
   command: string | undefined;
   /** Only ever consulted on the kept-alive branch, where an Apple hint has evidence to stand on. */
   applePlatformDeclared: boolean;
@@ -139,7 +168,8 @@ export function resolveRequestTimeoutHint(params: {
   action?: string;
   session?: string;
 }): string {
-  const { remote, resetDaemon, command, applePlatformDeclared, session, action } = params;
+  const { remote, resetDaemon, stopCommand, command, applePlatformDeclared, session, action } =
+    params;
   // A daemon that survives this client window may still be exporting a `record stop` that ran out
   // of time — a stop still queued for the device lock is dropped before any export starts, hence
   // "may" — and a finished file stays retrievable by asking again. This holds whether the daemon
@@ -157,6 +187,9 @@ export function resolveRequestTimeoutHint(params: {
     // The reset SIGKILLs the daemon pid only; child processes it owned (Apple runners included)
     // are not proven stopped from here, so the hint claims nothing about them.
     return 'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.';
+  }
+  if (stopCommand) {
+    return `Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe, and this request does not retire a daemon it did not start. Stop it with ${stopCommand}, then retry. SDK clients call ensureDaemon() to start a fresh one.`;
   }
   const iosPrepareHint =
     applePlatformDeclared && command === PUBLIC_COMMANDS.snapshot

@@ -9,10 +9,11 @@ import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
   handleAppDeploymentCommand,
   handlePushNotificationCommand,
+  handleUninstallCommand,
 } from './session-app-deployment.ts';
 import { handleInstallFromSourceDeploymentCommand } from './session-app-source-deployment.ts';
 
-/** The four canonical install-family descriptors share one daemon route boundary. */
+/** The canonical install-family descriptors share one daemon route boundary. */
 export async function handleSessionAppDeploymentCommand(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -35,6 +36,16 @@ export async function handleSessionAppDeploymentCommand(params: {
   }
   if (req.command === 'install_source') {
     return await handleInstallFromSourceDeploymentCommand({
+      req,
+      sessionName,
+      sessionStore,
+      inspectFacts,
+      bindDevice,
+      platformServices,
+    });
+  }
+  if (req.command === 'uninstall') {
+    return await handleUninstallCommand({
       req,
       sessionName,
       sessionStore,

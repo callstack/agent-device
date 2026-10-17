@@ -35,7 +35,7 @@ import { isLikelyStaleSnapshotDrop } from '@agent-device/capture-kit/snapshot-fr
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
-import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
+import { formatReactNativeOverlayWarning } from '@agent-device/capture-kit/react-native-overlay';
 import { now } from '../../runtime-common.ts';
 import { iosSnapshotTruncationEvidence } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type {
@@ -197,10 +197,9 @@ async function captureRuntimeSnapshot(
       ...(options.observeOnly === undefined ? {} : { observeOnly: options.observeOnly }),
     },
   );
-  const normalizedSnapshot = normalizeBackendSnapshot(result, runtime);
   const snapshot = copySnapshotClickabilityEvidence(
-    normalizedSnapshot,
-    ensureSnapshotPresentationKey(normalizedSnapshot, options),
+    result.snapshot,
+    ensureSnapshotPresentationKey(result.snapshot, options),
   );
   const annotations = snapshotCaptureAnnotationsFrom(result);
   const warningTime = now(runtime);
@@ -215,36 +214,9 @@ async function captureRuntimeSnapshot(
       snapshot,
       options,
       session,
-      capturedAt: snapshot.createdAt ?? warningTime,
+      capturedAt: snapshot.createdAt,
       runtimeNow: warningTime,
     }),
-  };
-}
-
-function normalizeBackendSnapshot(
-  result: BackendSnapshotResult,
-  runtime: AgentDeviceRuntime,
-): SnapshotState {
-  // A backend may hand over state it built itself, and the response-level facts it publishes beside
-  // that state travel with this capture: returning the state alone would drop a producer's own
-  // keyboard band or viewport box (#3182) on the one path where the backend named them itself.
-  // The copy must carry the private clickability evidence with it: that fact is retained by object
-  // identity, so a spread that forgets it makes Maestro's clickable-first ordering fall back to
-  // divergence and tap the document-order (inert) duplicate of a tapped id.
-  if (result.snapshot) {
-    return copySnapshotClickabilityEvidence(result.snapshot, {
-      ...result.snapshot,
-      ...(result.keyboard ? { keyboard: result.keyboard } : {}),
-      ...(result.viewport ? { viewport: result.viewport } : {}),
-    });
-  }
-  return {
-    nodes: result.nodes ?? [],
-    truncated: result.truncated,
-    backend: result.backend as SnapshotState['backend'],
-    createdAt: now(runtime),
-    ...(result.keyboard ? { keyboard: result.keyboard } : {}),
-    ...(result.viewport ? { viewport: result.viewport } : {}),
   };
 }
 

@@ -153,6 +153,10 @@ const foldUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'fold is not supported on Vega OS.',
 );
+const telephonyUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'telephony is not supported on Vega OS.',
+);
 const clipboardUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'clipboard is not supported on Vega OS.',
@@ -199,6 +203,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     clipboard: clipboardUnavailable,
     systemButton: systemButtonUnavailable,
     fold: foldUnavailable,
+    telephony: telephonyUnavailable,
     triggerAppEvent: appEventUnavailable,
     settings: settingsUnavailable,
     readAlert: alertUnavailable,

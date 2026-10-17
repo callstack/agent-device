@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  closeLoopbackServer,
+  mkdtempForTestSync,
+  supportsLoopbackBind,
+} from '@agent-device/test-kit';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
@@ -12,7 +16,6 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendToDaemon } from '../daemon-client.ts';
-import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit/loopback';
 import { startHttpDaemonFixture } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { beginStderrCapture } from '../../__tests__/test-utils/stream-capture.ts';
 import { AppError } from '@agent-device/kernel/errors';

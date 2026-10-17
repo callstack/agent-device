@@ -11,7 +11,7 @@ import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { makeMacOsSession, repairPublication } from '../../__tests__/support/session-factories.ts';
 
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 

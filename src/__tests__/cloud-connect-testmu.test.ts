@@ -6,30 +6,31 @@ import { runCliCapture } from './cli-capture.ts';
 import {
   readActiveConnectionState,
   type RemoteConnectionState,
-} from '../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 import { verifyTestMuConnection } from '@agent-device/testmu/connection-verification';
-import testMuPlugin from '@agent-device/testmu';
-import { createPluginHost } from '../plugins/host.ts';
+import testmu from '@agent-device/testmu';
+import { resolveProviderPlugins } from '@agent-device/plugins/registry';
 import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
-import { selectPlugin, pluginHome } from '@agent-device/test-kit/plugin.fixtures';
-import { installedPlugins } from '../plugins/store.ts';
+import { mkdtempForTestSync, pluginHome, selectPlugin } from '@agent-device/test-kit';
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
-import type { PluginConnection } from '../plugins/connection.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('@agent-device/testmu/connection-verification', () => ({
   verifyTestMuConnection: vi.fn(),
 }));
-vi.mock('../plugins/load.ts', () => ({
+vi.mock('@agent-device/plugins/load', () => ({
   withPluginConnection: async (
     _provider: string,
-    env: NodeJS.ProcessEnv,
-    runConnection: (connection: PluginConnection) => Promise<unknown>,
+    _builtinProviders: readonly string[],
+    _env: NodeJS.ProcessEnv,
+    runConnection: (connection: PluginConnectionCallbacks) => Promise<unknown>,
   ) => {
-    const registration = testMuPlugin(createPluginHost(env, undefined));
-    return await runConnection(registration.connection);
+    const { connections } = await resolveProviderPlugins([
+      { source: 'store', package: manifest.name, load: () => testmu() },
+    ]);
+    return await runConnection(connections.get('testmu')!);
   },
 }));
 
@@ -41,10 +42,18 @@ afterEach(() => {
 const mockedVerifyWebDriverConnection = vi.mocked(verifyTestMuConnection);
 
 beforeEach(() => {
-  const { home, env } = pluginHome();
+  const { home } = pluginHome();
   selectPlugin(home, manifest.name, 'testmu', 'export default () => {};');
-  const [plugin] = installedPlugins(env);
-  const manifestPath = path.join(plugin!.directory, 'package.json');
+  const { installation } = JSON.parse(fs.readFileSync(path.join(home, 'config.json'), 'utf8'))
+    .plugins[manifest.name];
+  const manifestPath = path.join(
+    home,
+    'plugins',
+    installation,
+    'node_modules',
+    manifest.name,
+    'package.json',
+  );
   const declared = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   declared.agentDevicePlugin.connection = manifest.agentDevicePlugin.connection;
   fs.writeFileSync(manifestPath, JSON.stringify(declared));

@@ -11,7 +11,7 @@ import {
   readActiveConnectionState,
   readRemoteConnectionState,
   type RemoteConnectionState,
-} from '../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -20,7 +20,7 @@ import {
   verifyAwsDeviceFarmConnection,
   verifyBrowserStackConnection,
 } from '@agent-device/provider-webdriver/connection-verification';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({

@@ -1,4 +1,16 @@
 {
+  "snapshot.digest.json": {
+    "bytes": 214,
+    "reason": "The public daemon route now supplies the live response-view input. Its production six-digit refsGeneration is four bytes larger than the old two-digit static fixture, matching the generation seed that prevents common cross-lifetime ref collisions."
+  },
+  "settle.digest.json": {
+    "bytes": 274,
+    "reason": "The public daemon route now supplies the live settled-click response. Its retained targetKind and production six-digit refsGeneration make the measured digest 10 bytes larger than the prior static response fixture."
+  },
+  "screenshot.default.json": {
+    "bytes": 650,
+    "reason": "The public screenshot route includes its request-finalized artifact retrieval handle, local path and response message; the prior static response fixture did not include the live route metadata."
+  },
   "settle-tail.default.text": {
     "bytes": 188,
     "reason": "ADR 0014: a settled diff's reusable tail refs render in ready-to-copy pinned @eN~s<refsGeneration> form so a human CLI caller can paste them straight into the next mutation (+8 bytes for the two tail pins). The response-level refsGeneration stays the token-economical authority for JSON and MCP; only human-CLI text carries the pins."

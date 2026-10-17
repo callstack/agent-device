@@ -20,7 +20,7 @@ import {
   INDEXED_PARITY_POLICY_NODES,
   TWO_ACTIONABLE_WRAPPER_CHAIN_NODES,
   UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
-} from './interaction-targeting.fixtures.ts';
+} from '@agent-device/test-kit';
 
 test('collapses one same-label wrapper chain to its shared actionable node', () => {
   const snapshot = makeSnapshotState(EQUIVALENT_WRAPPER_CHAIN_NODES);

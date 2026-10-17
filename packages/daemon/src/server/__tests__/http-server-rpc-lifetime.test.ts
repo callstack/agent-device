@@ -2,7 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { postRpcCommand, startRpcServer } from './http-server-rpc.fixtures.ts';
 
 const TOKEN = 'lifetime-token';
@@ -12,7 +12,7 @@ const TOKEN = 'lifetime-token';
 // the rerun below would be refused as `duplicate_request_id`. The token gate refuses a call that
 // already registered — admission order is pinned in `http-server-rpc-admission.test.ts` — so
 // this is where that release is pinned. Disconnect and streaming releases live in
-// `daemon-http-server.test.ts` and `daemon-http-boundary-cancellation.test.ts`.
+// `daemon-http-server.test.ts` and `http-server-boundary-cancellation.test.ts`.
 test('an rpc request registers its tracking id while in flight and releases it once answered', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const { port, server } = await startRpcServer(TOKEN, async (request) => {

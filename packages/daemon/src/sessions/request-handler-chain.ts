@@ -1,3 +1,4 @@
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
@@ -36,7 +37,7 @@ type RequestHandlerChainParams = {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
-  providerRuntimeRequiredIds?: readonly string[];
+  failedPlugins?: readonly PluginInventoryEntry[];
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -157,7 +158,7 @@ async function runLeaseHandler(
       sessionStore: params.sessionStore,
       leaseRegistry: params.leaseRegistry,
       providerRuntimeIds: params.providerRuntimeIds,
-      providerRuntimeRequiredIds: params.providerRuntimeRequiredIds,
+      failedPlugins: params.failedPlugins,
       providerCredentials: params.providerCredentials,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       cloudArtifactProvider: params.cloudArtifactProvider,

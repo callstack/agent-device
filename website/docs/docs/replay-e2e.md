@@ -324,7 +324,7 @@ A failing `replay`/`test` step returns a structured `REPLAY_DIVERGENCE` error. T
 
 - **`step`** — the 1-based plan index and its source file/line (through Maestro `runFlow` includes).
 - **`screen`** — a fresh post-failure snapshot digest with actionable refs, or `unavailable` with a reason/hint when capture failed or was sparse (never a stale tree).
-- **`suggestions`** — up to 5 ranked, re-resolved candidates for the failing selector (id match ranks above role+label, which ranks above label-only), each with a `basis` you can inspect before acting.
+- **`suggestions`** — up to 5 ranked, re-resolved candidates for the failing selector (id match ranks above role+label, which ranks above label-only), each with a `basis` you can inspect before acting. For a verified `target-v1` annotation, equally strong candidates in the recorded scroll region rank first; document order breaks remaining ties.
 - **`resume`** — whether and how to continue without re-running the script from the top.
 
 ```jsonc
@@ -350,6 +350,8 @@ A failing `replay`/`test` step returns a structured `REPLAY_DIVERGENCE` error. T
 Text output prints a compact summary of the same fields; `--json`/MCP carry the full object.
 
 ## Resume a failed replay
+
+During a repair armed with `replay --save-script`, diagnostic reads stay out of the healed script. To keep a corrective read, pass `--record` on that invocation, or `record: true` in that SDK/MCP call. `--record` is per-invocation only: the config key `record` and `AGENT_DEVICE_RECORD` were removed, and a config file or environment still naming them fails with migration guidance. Authored replay observations are retained automatically.
 
 `replay --from <n> --plan-digest <sha256>` resumes **at** plan step `n`, not after it, skipping `1..n-1` without executing them. Both flags come from a divergence report's `resume` field — `from` is the failed step, `planDigest` is the digest of the exact unchanged plan that produced it.
 

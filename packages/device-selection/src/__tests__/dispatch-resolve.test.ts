@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 
 const mockFindIosSimulatorInstalledApp = vi.fn();
 const mockListAppleDevices = vi.fn();
@@ -597,6 +603,42 @@ test('resolveTargetDevice keeps simulator-set scope separate from the macOS host
 
   assert.equal(requests[0]?.iosSimulatorSetPath, '/tmp/isolated-set');
   assert.equal(requests[1]?.iosSimulatorSetPath, undefined);
+});
+
+test('the resolve_target_device phase shows the requested udid and simulator set', async () => {
+  // Recovery lanes answer FROM the request log: a manifest-first stop must be provable from the
+  // phase line alone, so the requested identity and the set it was scoped to are echoed there.
+  const logDir = mkdtempForTestSync('dispatch-resolve-diag-');
+  const logPath = `${logDir}/requests.ndjson`;
+  await withTestDeviceInventory(
+    {
+      local: async () => [simulator],
+      findInstalledApp: mockFindIosSimulatorInstalledApp,
+    },
+    async () => {
+      await withDiagnosticsScope(
+        { session: 'qa', command: 'record', debug: true, logPath },
+        async () => {
+          await resolveTargetDeviceInContext({
+            platform: 'apple',
+            udid: simulator.id,
+            iosSimulatorDeviceSet: '/tmp/recovery-set',
+          });
+          flushDiagnosticsToSessionFile({ force: true });
+        },
+      );
+    },
+  );
+
+  const phases = fs
+    .readFileSync(logPath, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { phase: string; data?: Record<string, unknown> })
+    .filter((entry) => entry.phase === 'resolve_target_device');
+  assert.equal(phases.length, 1);
+  assert.equal(phases[0]?.data?.udid, simulator.id);
+  assert.equal(phases[0]?.data?.iosSimulatorSetPath, '/tmp/recovery-set');
 });
 
 test('resolveTargetDevice discovers simulators in the daemon operator set when the request names none', async () => {

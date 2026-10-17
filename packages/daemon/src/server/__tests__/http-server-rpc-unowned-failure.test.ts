@@ -2,7 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { NormalizedError } from '@agent-device/kernel/errors';
-import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { postRpcCommand, startRpcServer } from './http-server-rpc.fixtures.ts';
 
 const TOKEN = 'unowned-failure-token';

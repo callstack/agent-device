@@ -2,11 +2,7 @@ import { projectCoverage } from '../command-coverage/declarations.ts';
 import type { PublicCommand } from '../command-coverage/entries.ts';
 import { buildCoverageClassificationSummary } from '../support/coverage-classification.ts';
 
-export {
-  WEB_COVERAGE_GAP_ISSUE,
-  WEB_SMOKE_EVIDENCE,
-  WEB_SMOKE_TEST_NAME,
-} from '../command-coverage/evidence.ts';
+export { WEB_SMOKE_EVIDENCE, WEB_SMOKE_TEST_NAME } from '../command-coverage/evidence.ts';
 
 /**
  * One primary, observable owner for every public command on the managed web target.
@@ -21,12 +17,12 @@ export {
  * permanent denial (e.g. `boot`, `push`).
  *
  * #1900 closed 14 of the 15 known-gap rows this manifest originally carried using the shapes
- * above. `test` stays `known-gap`: its declared-platform filter structurally excludes web
+ * above. `test` is an accepted-gap row: its declared-platform filter structurally excludes web
  * (`ReplayTestPlatform = Exclude<PlatformSelector, 'web'>`), so `test --platform web` can never
  * select a script — real, tested, command-specific behavior (see
  * `session-command-replay.test.ts`), but evidence of what the command cannot do, not executable
  * evidence that it works on web. Closing this row needs a separate product decision: either web
- * replay-test support, or an explicit denial.
+ * replay-test support, or an explicit denial. Until one is taken, web carries no open gap row.
  *
  * Projected from the command-owned declaration table; the rows are authored there.
  */

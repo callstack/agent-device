@@ -21,7 +21,7 @@ const harmonyosPlugin = {
   id: 'harmonyos',
   platforms: ['harmonyos'],
   createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
-    const { createHarmonyInteractor } = await import('./harmonyos.ts');
+    const { createHarmonyInteractor } = await import('@agent-device/platform-harmonyos/interactor');
     return createHarmonyInteractor(device, runner);
   },
 } as const satisfies PlatformPlugin;
@@ -33,7 +33,7 @@ const linuxPlugin = {
   // linux tool provider, formerly gated by `device.platform === 'linux'`).
   providers: { platformGatedResolvers: ['linuxToolProvider'] },
   createInteractor: async () => {
-    const { createLinuxInteractor } = await import('./linux.ts');
+    const { createLinuxInteractor } = await import('@agent-device/platform-linux/interactor');
     return createLinuxInteractor();
   },
 } as const satisfies PlatformPlugin;
@@ -45,7 +45,7 @@ const webPlugin = {
   // provider, formerly gated by `device.platform === 'web'`).
   providers: { platformGatedResolvers: ['webProvider'] },
   createInteractor: async () => {
-    const { createWebInteractor } = await import('./web.ts');
+    const { createWebInteractor } = await import('@agent-device/platform-web/interactor');
     return await createWebInteractor();
   },
 } as const satisfies PlatformPlugin;

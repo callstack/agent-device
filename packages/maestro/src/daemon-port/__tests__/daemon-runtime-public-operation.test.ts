@@ -95,6 +95,10 @@ describe('Maestro public operation projection', () => {
       expected: { command: 'type', positionals: ['hello'] },
     },
     {
+      operation: { kind: 'typeText', text: 'hello', delayMs: 75 },
+      expected: { command: 'type', positionals: ['hello'], flags: { delayMs: 75 } },
+    },
+    {
       operation: { kind: 'gestureViewport' },
       expected: { command: 'runtime', positionals: ['gesture-viewport'] },
     },

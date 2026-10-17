@@ -702,7 +702,7 @@ extension RunnerTests {
         element: nil,
         refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
         prefersFocusedElement: false,
-        inputAtRefreshPoint: try XCTUnwrap(coordinateTapTextInputIdentityAt(app: app, x: frame.midX, y: frame.midY))
+        inputAtRefreshPoint: try requireTextInputAtPoint(app: app, x: frame.midX, y: frame.midY)
       ),
       text: "abc",
       delaySeconds: 0.001,

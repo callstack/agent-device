@@ -36,7 +36,7 @@ const HOSTED_WEBDRIVER_CONNECTION: ConnectionProviderCapabilities = {
   usesCloudWebDriverLease: true,
 };
 
-const CLOUD_WEBDRIVER_PROVIDER_DECLARATIONS: readonly CloudWebDriverProviderDeclaration[] =
+export const CLOUD_WEBDRIVER_PROVIDER_DECLARATIONS: readonly CloudWebDriverProviderDeclaration[] =
   Object.freeze([
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,

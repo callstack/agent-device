@@ -1,6 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { containsPoint } from '@agent-device/kernel/rect';
 import {
   buildFillFailureDetails,
@@ -9,7 +10,6 @@ import {
   type AndroidFillVerificationNode,
   type FillFailureDetails,
 } from './fill-diagnostics.ts';
-import { sleep } from './adb.ts';
 import { getAndroidKeyboardState } from './device-input-state.ts';
 import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/android-input-ownership';
 import { captureAndroidUiHierarchyXml } from './snapshot.ts';
@@ -50,39 +50,22 @@ type AndroidFillVerificationContext = {
 const FILL_VERIFICATION_SAMPLE_INTERVAL_MS = 150;
 const FILL_VERIFICATION_DEADLINE_MS = 1500;
 
-/** The clock the sampler paces itself by; a test hands in one it advances instead of waiting. */
-export type FillVerificationClock = Readonly<{
-  now(): number;
-  sleep(milliseconds: number): Promise<void>;
-}>;
-
-const wallClock: FillVerificationClock = Object.freeze({ now: () => Date.now(), sleep });
-
 export async function verifyAndroidFilledText(
   device: DeviceInfo,
   x: number,
   y: number,
   expected: string,
   helper: AndroidHelperSessionOptions = {},
-  clock: FillVerificationClock = wallClock,
 ): Promise<AndroidFillVerification> {
   const context = await readAndroidFillVerificationContext(device);
-  const deadline = clock.now() + FILL_VERIFICATION_DEADLINE_MS;
-  let previous: AndroidFillVerification | null = null;
-
-  for (;;) {
-    const verification = await inspectAndroidFilledText(device, x, y, expected, context, helper);
-    if (verification.reason === 'ime_capture') {
-      return verification;
-    }
-    const remainingMs = deadline - clock.now();
-    if ((verification.ok && previous?.ok) || remainingMs <= 0) {
-      return verification;
-    }
-    previous = verification;
-    // The last sleep ends at the deadline, so the final sample starts there and not an interval later.
-    await clock.sleep(Math.min(FILL_VERIFICATION_SAMPLE_INTERVAL_MS, remainingMs));
-  }
+  const { value } = await pollUntilSettled({
+    probe: () => inspectAndroidFilledText(device, x, y, expected, context, helper),
+    settled: (verification, previous) =>
+      verification.reason === 'ime_capture' || (verification.ok && previous?.ok === true),
+    deadline: Deadline.fromTimeoutMs(FILL_VERIFICATION_DEADLINE_MS),
+    intervalMs: FILL_VERIFICATION_SAMPLE_INTERVAL_MS,
+  });
+  return value;
 }
 
 export async function readAndroidTextAtPoint(

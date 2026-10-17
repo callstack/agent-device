@@ -58,16 +58,6 @@ vi.mock('@limrun/api/ios-client', () => ({
   })),
 }));
 
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, runAppleRunnerCommand: vi.fn(async () => ({})) };
-});
-
-vi.mock('@agent-device/daemon/testing/ios-app-session-hint', () => ({
-  buildIosOpenCommandHint: vi.fn(async () => undefined),
-}));
-
 beforeEach(() => {
   limrunApiState.createInstance.mockClear();
   limrunApiState.deleteInstance.mockClear();
@@ -94,6 +84,7 @@ test('Limrun iOS acquisition reaches one host presenter and the public snapshot 
 
   try {
     const lease = await allocateLease(daemon);
+    assert.equal(limrunApiState.createInstance.mock.calls.length, 1);
     const flags = {
       platform: 'ios' as const,
       tenant: 'team-a',

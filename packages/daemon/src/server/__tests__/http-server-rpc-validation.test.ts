@@ -13,9 +13,9 @@ import { resolveInstallSource } from '../../sessions/install-source-resolution.t
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 
 type RpcErrorResponse = {
   jsonrpc: string;

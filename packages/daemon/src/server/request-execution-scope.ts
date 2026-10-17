@@ -21,7 +21,10 @@ import {
   contextFromFlags as contextFromFlagsWithLog,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
-import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
+import {
+  resolveCallerScopeRoot,
+  resolveEffectiveSessionName,
+} from '../sessions/session-routing.ts';
 import {
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
@@ -257,14 +260,37 @@ export async function createRequestExecutionScope(params: {
     const dispatchLedger = requestDispatchLedger(scopedReq);
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
       command,
+      sessionName,
       dispatchLedger,
       workspace: scopedReq.meta?.cwd ?? process.cwd(),
+      callerCwd: scopedReq.meta?.cwd,
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
       daemonPolicy: params.daemonPolicy,
       claimRecoveryGateway: params.claimRecoveryGateway,
     });
+
+    let bindingCleanup: Promise<void> | undefined;
+    const disposeBindings = (): Promise<void> => {
+      bindingCleanup ??= (async () => {
+        try {
+          await runtimeBindings?.[Symbol.asyncDispose]();
+        } finally {
+          await claimAdmission?.[Symbol.asyncDispose]();
+        }
+      })();
+      return bindingCleanup;
+    };
+    const runAdmittedAndDispose = async <T>(task: () => Promise<T>): Promise<T> => {
+      try {
+        return await scope.runAdmitted(task);
+      } finally {
+        // The router consumes the same cleanup outcome when it finalizes the response,
+        // preserving a primary command failure over a secondary disposal failure.
+        await Promise.allSettled([disposeBindings()]);
+      }
+    };
 
     const scope: RequestExecutionScope = {
       req: scopedReq,
@@ -330,22 +356,16 @@ export async function createRequestExecutionScope(params: {
       runLocked: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
         if (!openWait) {
-          return await requestExecutionLocks.run(async () => await scope.runAdmitted(task));
+          return await requestExecutionLocks.run(async () => await runAdmittedAndDispose(task));
         }
         return await openWait.runWhenDeviceIsUnheld({
           acquireLocks: requestExecutionLocks.run,
-          task: async () => await scope.runAdmitted(task),
+          task: async () => await runAdmittedAndDispose(task),
         });
       },
       // Claims outlive the bindings they guard: release only once no device
       // operation from this request can still run.
-      [Symbol.asyncDispose]: async () => {
-        try {
-          await runtimeBindings?.[Symbol.asyncDispose]();
-        } finally {
-          await claimAdmission?.[Symbol.asyncDispose]();
-        }
-      },
+      [Symbol.asyncDispose]: disposeBindings,
     };
     requestScopeFinalizers.set(scope, (response) => {
       if (shouldRecordRequestEvents) {
@@ -391,8 +411,10 @@ export async function createRequestExecutionScope(params: {
  */
 function createRequestDeviceAccess(params: {
   command: string;
+  sessionName: string;
   dispatchLedger: RequestDispatchLedger;
   workspace: string;
+  callerCwd: string | undefined;
   stateDir: string;
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> | undefined;
   platformRequestScope: PlatformRequestScope | undefined;
@@ -409,7 +431,10 @@ function createRequestDeviceAccess(params: {
   const claimAdmission = createDeviceClaimAdmission({
     policy: resolveCommandDeviceClaimPolicy(params.command),
     command: params.command,
+    session: params.sessionName,
     workspace: params.workspace,
+    callerCwd: params.callerCwd,
+    resolveScopeRoot: resolveCallerScopeRoot,
     stateDir: params.stateDir,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
       scope: platformRequestScope,

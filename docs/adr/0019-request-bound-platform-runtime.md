@@ -201,12 +201,12 @@ the Apple package. R13 models the package by enumeration rather than by exceptio
 exports its root façade plus thirteen named domain/mechanics facades — `./app-lifecycle`,
 `./app-resolution`, `./debug-symbols`, `./doctor`, `./install-artifact`, `./macos`,
 `./perf`, `./physical-device`, `./runner-owner`, `./runner/operations`, `./simctl`, `./simulator`, and
-`./tool-provider` — as well as exactly the `./runner` and `./runner/test-host`
-subpaths. The named facades replace root-only access for synchronous domain consumers without a
+`./tool-provider` — as well as the `./runner`
+subpath. The named facades replace root-only access for synchronous domain consumers without a
 broad compatibility barrel; R13 pins the exact export set and allowed consumer seams. The
 `./runner` façade subpath is the seam through which daemon and root consumers reach runner mechanics
-directly today; the host-bound runner client stays package-internal and `./runner/test-host` has one
-vitest installer; the facet owns its cache files and usbmux sockets (the
+directly today; the host-bound runner client and its test host stay package-internal (the `apple-runner` vitest
+project installs the test host from the package's own `__tests__/host-setup.ts`); the facet owns its cache files and usbmux sockets (the
 ambient-host rule exempts exactly that subtree), while raw process primitives stay banned — host
 authority still enters through one focused injected port (`AppleRunnerHost`: process execution,
 diagnostics, retry, probes, locks, foreground Apple tooling, physical-device control) constructed by
@@ -282,6 +282,13 @@ preferred runtime-use shape. Such a shape is refused by the owning leaf mechanic
 typed reason and a hint, at the point the shape is requested. Absence of a whole admitted
 operation's member remains an ownership bug and fails closed with its own typed reason; it is never
 the mechanism that expresses an unsupported shape.
+
+**A subject of an operation may carry its own fact.** When one operation serves a closed vocabulary
+that owners serve unevenly — `setSetting` over the settings catalog — its available fact may name a
+fact per subject and an `unlisted` refusal for every other subject. Admission takes the subject the
+request names and refuses an unavailable one exactly as it refuses an unavailable operation, before
+binding. A subject is the thing the request names (which setting); a shape of the request (a
+coordinate form, a permission target) still belongs to the owning leaf mechanic, as above.
 
 `RequestExecutionScope.bindDevice(device, use)` is the trust choke point. It:
 
@@ -841,7 +848,7 @@ therefore structurally enforced rather than periodically measured.
 Some request-path work asks the host machine something without ever taking a device runtime:
 concrete local readiness, boot-time and runner-session observation, and open-target
 classification. Those asks now cross the daemon boundary as one required dependency,
-`DaemonPlatformServices` (`packages/daemon/src/core/platform-services.ts`), assembled by the daemon runtime's
+`DaemonPlatformServices` (`packages/daemon/src/core/platform-services.ts`, exported from the package entry `@agent-device/daemon`), assembled by the daemon runtime's
 root-composition module in `src/daemon-composition.ts` — which reaches the concrete adapters
 through `src/platform-runtime-daemon-services.ts` behind a function-scoped `await import` — and
 threaded composition → `startDaemonRuntime` deps → `RequestRouterDeps` → the request execution
@@ -983,19 +990,23 @@ anchor, not as a proposed commitment.
   `interaction-targeting` and the android UI-hierarchy fixtures) and
   `src/__tests__/snapshot-desktop-surface.test.ts` (pinned to the root
   eager-import-closure fixtures).
-- `src/screenshot-diff/*.ts` (region split/overlay/summarization/component composition) —
-  pixel-diff computation and PNG decode/encode already call capture-kit's `png`/
-  `png-worker-client`; the root files remain for daemon/CLI diff-report composition.
-  Equivalent: none (built atop already-migrated capture-kit mechanics).
+- `src/screenshot-diff/*.ts` (region split/overlay/summarization/component composition, with its
+  test) — **migrated to `packages/capture-kit/src/`** beside the pixel worker and screenshot
+  overlays it was built on. The CLI and command output consume it through
+  `@agent-device/capture-kit/screenshot-diff`, `/screenshot-diff-regions`, and
+  `/screenshot-diff-overlay-matches`.
 - `src/provider-device-runtime.ts`, `src/provider-device-runtimes.ts`,
   `src/provider-limrun-runtime.ts`, `src/provider-webdriver.ts`. Mostly already thin: the bulk of
   WebDriver and Limrun provider logic lives in `packages/provider-webdriver/src/` and
   `packages/provider-limrun/src/`; these root files are the composition-time wiring, comparable in
   role to `src/platform-runtime.ts` itself.
 - `src/core` (R13-governed consumer seams), `src/commands`, `src/cli`, `src/cli-schema`,
-  `src/mcp`, `src/client`, `src/sdk`, `src/ai-sdk`, `src/remote`, `src/request`, `src/metro`.
+  `src/mcp`, `src/client`, `src/sdk`, `src/ai-sdk`, `src/remote`, `src/request`.
   Not migration targets: these are command-surface, protocol-projection, and
   daemon-owned zones this ADR keeps in `src/` by design, not residue awaiting a package.
+- React Native development tooling lives in `@agent-device/react-native`: Metro preparation and
+  session bindings, companion tunnels, component inspection, and render profiling share one
+  package. CLI output and SDK session normalization remain application adapters in `src/`.
 
 Neither number has an owning issue, gate, or accepted budget yet. Treat both as inputs to a
 maintainer decision, not as a ratchet.

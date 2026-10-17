@@ -196,10 +196,6 @@
       "types": "./src/device-shutdown-runtime.ts",
       "default": "./src/device-shutdown-runtime.ts"
     },
-    "./dispatch-disclosure-fixtures": {
-      "types": "./src/dispatch-disclosure.fixtures.ts",
-      "default": "./src/dispatch-disclosure.fixtures.ts"
-    },
     "./divergence": {
       "types": "./src/facades/divergence.ts",
       "default": "./src/facades/divergence.ts"
@@ -304,6 +300,10 @@
       "types": "./src/lease-scope.ts",
       "default": "./src/lease-scope.ts"
     },
+    "./plugin-inventory": {
+      "types": "./src/plugin-inventory.ts",
+      "default": "./src/plugin-inventory.ts"
+    },
     "./local-interactor-operation-set": {
       "types": "./src/local-interactor-operation-set.ts",
       "default": "./src/local-interactor-operation-set.ts"
@@ -315,10 +315,6 @@
     "./managed-web-backend": {
       "types": "./src/managed-web-backend.ts",
       "default": "./src/managed-web-backend.ts"
-    },
-    "./moving-target-gate": {
-      "types": "./src/moving-target-gate.ts",
-      "default": "./src/moving-target-gate.ts"
     },
     "./navigation": {
       "types": "./src/navigation.ts",
@@ -487,6 +483,10 @@
     "./settings": {
       "types": "./src/settings.ts",
       "default": "./src/settings.ts"
+    },
+    "./settings-catalog": {
+      "types": "./src/settings-catalog.ts",
+      "default": "./src/settings-catalog.ts"
     },
     "./settings-runtime": {
       "types": "./src/settings-runtime.ts",

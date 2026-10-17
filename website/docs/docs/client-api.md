@@ -31,10 +31,16 @@ Entry points for driving devices from Node.js:
 
 - `agent-device`
   - `createAgentDeviceClient(options?)`
+  - `ensureDaemon(options?)`
   - `createLocalArtifactAdapter(options?)`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
+  - `isUnreadableCaptureContentError(error)`: true when an Android helper capture found no readable
+    app content yet (`empty-helper-output`, `system-window-only`, `content-poor-app-window`), for
+    example while the app is still loading. Polling callers may keep polling. False for every other
+    platform, backend, and mechanism failure.
   - `centerOfRect(rect)`
   - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
+  - types: `DaemonLifecycle`, `EnsureDaemonOptions`, `DaemonConnection`, `DaemonIdentity`
   - types: every option and result type of the client's methods, among them `AppOpenOptions`,
     `AppOpenResult`, `CaptureSnapshotOptions`, `CaptureSnapshotResult`, `CaptureScreenshotResult`,
     `PressOptions`
@@ -79,6 +85,42 @@ if ('cloudArtifacts' in result) {
   }
 }
 ```
+
+## Daemon lifecycle
+
+A client talks to one local daemon per state directory. `daemonLifecycle` says who owns that daemon.
+
+| Mode | What the client does with the daemon |
+| --- | --- |
+| `'managed'` (default) | Starts a missing daemon, replaces one that does not match the client, and retires an unresponsive one after a timeout. |
+| `'attach'` | Connects to the running daemon. Never starts, replaces or stops one, even after a timeout. |
+
+`'managed'` stays the default until 0.22. Use `'attach'` when your code, or another process, owns the daemon, and call `ensureDaemon()` to start or replace it deliberately:
+
+```ts
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
+
+const stateDir = './.my-app/agent-device-state';
+
+await ensureDaemon({
+  stateDir,
+  onStart: (reason, previous) => console.log(`started a daemon: ${reason}`, previous),
+});
+const client = createAgentDeviceClient({ stateDir, daemonLifecycle: 'attach' });
+```
+
+`ensureDaemon()` starts a daemon when none runs. It replaces a daemon that does not match the client only if that daemon holds no work: no request in flight, no session, no repair session and no live lease. A resumable upload still streaming and a host human-control hold that names no lease are not counted, so a replacement can end them. Otherwise it fails and leaves the daemon alone. Two cases retire a daemon without that proof, because it cannot be asked: a registered daemon that answers nothing on any transport, and one that times out on the quiesce request and then fails repeated liveness probes. A daemon that accepted the quiesce request is never signaled while it drains: the call waits up to 60 s for it to exit and clear its registration. One still running after that fails repeated liveness probes and is force-retired when its process is provably a daemon. A daemon that still answers, or whose process cannot be proven to be a daemon, fails the call with `daemon-drain-timeout`; a force retirement that cannot be confirmed fails it with `daemon_retirement_unconfirmed`. It returns `{ stateDir, daemon, started }`; `daemon` holds the pid, version and code identity, and no credentials. `onStart` runs when the call started a daemon: `'incompatible'` when it replaced a daemon that agreed to leave, with that daemon as `previous`, and `'missing'` otherwise. A `'missing'` start that also has a `previous` replaced a registered daemon that answered nothing, or one that accepted the request to leave and was force-retired after outlasting its drain.
+
+These failures carry a typed `error.details.reason`:
+
+| Reason | Meaning |
+| --- | --- |
+| `daemon-not-running` | An `'attach'` client found no daemon to connect to. Call `ensureDaemon()`. |
+| `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. Stop it with `agent-device daemon stop --state-dir <path>`, then call `ensureDaemon()`. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
+| `daemon-busy` | `ensureDaemon()` found an incompatible daemon that still holds work. `details` counts `inFlightRequests`, `sessions`, `repairSessions` and `leases`. Wait for them to end and retry. |
+| `daemon-drain-timeout` | A daemon accepted the request to leave but was still running 60 s later and could not be force-retired, either because it still answers or because its process cannot be proven to be a daemon (an embedded host). It was not signaled. Retry once it has exited, or stop it with `agent-device daemon stop --state-dir <path>`. |
+
+`ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` never starts or stops a local daemon in either mode, and `daemonLifecycle` does not change `daemonTransport` or `daemonServerMode`.
 
 ## Device cloud sessions
 
@@ -195,6 +237,8 @@ await client.command.tvRemote({
 await client.command.appSwitcher();
 await client.command.actionButton();
 await client.command.fold({ pose: 'open' });
+await client.command.telephony({ action: 'call', number: '5551234' });
+await client.command.telephony({ action: 'sms', number: '5551234', text: 'Your code is 1234' });
 await client.command.fold({
   keyframes: [
     { atMs: 0, angle: 0 },
@@ -229,6 +273,7 @@ Supported command methods:
 - `appSwitcher`
 - `actionButton`
 - `fold`
+- `telephony`
 - `keyboard`
 - `clipboard`
 - `tvRemote`
@@ -243,9 +288,9 @@ Domain client methods:
 
 - `client.devices.list()`, `capabilities()`, `boot()`, `shutdown()`
 - `client.sessions.list()`, `stateDir()`, `close()`, `saveScript()`, `artifacts()`
-- `client.apps.install()`, `reinstall()`, `installFromSource()`, `list()`, `open()`, `close()`, `push()`, `triggerEvent()`
+- `client.apps.install()`, `reinstall()`, `uninstall()`, `installFromSource()`, `list()`, `open()`, `close()`, `push()`, `triggerEvent()`
 - `client.materializations.release()`
-- `client.leases.allocate()`, `heartbeat()`, `release()`. Pass `retainOnClose: true` to `allocate()` when you release the lease yourself; session `close` then leaves it active until `release()`, expiry, or daemon shutdown. The returned lease has `retainOnClose: true` only when the daemon honored it. Keep heartbeating a retained lease between sessions: it expires after its `ttlMs` like any other lease. Pass `leaseId` (16 to 128 hex characters) to `allocate()` to name a new lease with an id the daemon has never issued, or to get back your live lease with that id when you retry with the same tenant, run, client, lease backend, and provider (and no device, or the leased one), then use the returned `leaseId`: a run that already holds a lease gets that one back, and an older daemon mints its own.
+- `client.leases.allocate()`, `heartbeat()`, `release()`. Pass `retainOnClose: true` to `allocate()` when you release the lease yourself; session `close` then leaves it active until `release()`, expiry, or daemon shutdown. The returned lease has `retainOnClose: true` only when the daemon honored it. Keep heartbeating a retained lease between sessions: it expires after its `ttlMs` like any other lease. Pass `leaseId` (16 to 128 hex characters) to `allocate()` to name a new lease with an id the daemon has never issued, or to get back your live lease with that id when you retry with the same tenant, run, client, lease backend, and provider (and no device, or the leased one), then use the returned `leaseId`: a run that already holds a lease gets that one back, and an older daemon mints its own. `allocate()` with a `leaseProvider` the daemon has no runtime for fails with `UNSUPPORTED_OPERATION`, reason `provider-not-registered`, and `details.registeredProviders`; no lease is recorded. Leases with no provider, `proxy`, or `cloud` need no runtime.
 - `client.metro.prepare()`, `reload()`
 - `client.capture.snapshot()`, `screenshot()`, `diff()`
 - `client.interactions.click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `drag()`, `fling()`, `swipeGesture()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `get()`, `is()`, `find()`
@@ -255,6 +300,9 @@ Domain client methods:
 - `client.debug.symbols()`
 - `client.recording.record()` and `client.recording.trace()`
 - `client.settings.update()`
+
+If the daemon returns a missing or non-object lease, or a lease without a non-empty string for `leaseId`, `tenantId`, `runId`, or `backend`, `client.leases.allocate()` and `client.leases.heartbeat()` reject with `COMMAND_FAILED` and `details.reason: "INVALID_LEASE_RESPONSE"`.
+The original daemon response is available in `error.details.response`.
 
 `client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/docs/commands#device-discovery) for the sources.
 

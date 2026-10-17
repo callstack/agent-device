@@ -16,6 +16,11 @@ extension RunnerTests {
 
   static let defaultAlertCommandTimeout: TimeInterval = 10
 
+  /// One recovery sentence for every alert failure that activated nothing, so the refusal in
+  /// `handleAlert` and the unactivated `alertVerificationResponse` branches cannot drift apart.
+  static let alertNoButtonActivatedHint =
+    "No alert button was activated. Inspect the current alert before deciding on an action."
+
   static func alertCommandTimeout(timeoutMs: Double?) -> TimeInterval {
     guard let timeoutMs, timeoutMs.isFinite else { return defaultAlertCommandTimeout }
     return max(0.001, timeoutMs / 1000)
@@ -38,6 +43,10 @@ extension RunnerTests {
       break
     }
 #endif
+    let state = activeApp.state
+    guard state != .notRunning && state != .unknown else {
+      return nil
+    }
     // Guard the query: when a remote-hosted modal (e.g. the AccessorySetupKit
     // picker) was just dismissed, the dismissal re-check re-enters here with the
     // now-gone host as `activeApp`, and its `alerts` query raises
@@ -54,8 +63,14 @@ extension RunnerTests {
   @MainActor
   func handleAlert(_ alert: RunnerAlert, action: String, deadline: Date) -> Response {
     if action == "accept" || action == "dismiss" {
-      guard let button = chooseAlertButton(alert.buttons, action: action) else {
-        return Response(ok: false, error: ErrorPayload(message: "alert \(action) button not found"))
+      guard let button = chooseAlertButton(alert, action: action) else {
+        // The choice refused before any activation, so this discloses dispatched: no like the
+        // runner's other pre-run refusals.
+        return Response(ok: false, error: ErrorPayload(
+          code: RunnerWireErrorCode.alertButtonNotFound,
+          message: "alert \(action) button not found",
+          hint: RunnerTests.alertNoButtonActivatedHint
+        ))
       }
       guard Date() < deadline else {
         return alertVerificationResponse(.timedOut, action: action, activated: false)
@@ -242,42 +257,17 @@ extension RunnerTests {
   )
   private static let dismissPopupMarkerText = NSPredicate(format: "SELF MATCHES[c] %@", dismissPopupMarkerPattern)
 
-  private func chooseAlertButton(_ buttons: [XCUIElement], action: String) -> XCUIElement? {
-    if action == "accept" {
-      if let accept = buttons.first(where: { isAcceptButton($0.label) }) {
-        return accept
-      }
-      return buttons.count == 1 && !isDismissButton(buttons[0].label) ? buttons[0] : nil
+  // Internal, not private: the dismiss-popup wiring is pinned by
+  // RunnerTests+AlertTests, and the label rule itself by RunnerAlertButtonChoice.
+  func chooseAlertButton(_ alert: RunnerAlert, action: String) -> XCUIElement? {
+    guard let index = RunnerAlertButtonChoice.buttonIndex(
+      for: alert.buttons.map(\.label),
+      action: action,
+      popupMarkerSurface: alert.source == .dismissPopup
+    ) else {
+      return nil
     }
-
-    return buttons.first(where: { isDismissButton($0.label) }) ?? buttons.last
-  }
-
-  func isAcceptButton(_ label: String) -> Bool {
-    let normalized = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return [
-      "ok",
-      "allow",
-      "yes",
-      "continue",
-      "done",
-      "open",
-      "open settings"
-    ].contains(normalized) || normalized.hasPrefix("confirm")
-  }
-
-  private func isDismissButton(_ label: String) -> Bool {
-    [
-      "cancel",
-      "close",
-      "dismiss",
-      "don't allow",
-      "don’t allow",
-      "not now",
-      "no",
-      "keep browsing",
-      "later"
-    ].contains(label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    return alert.buttons[index]
   }
 
   private func preferredAlertTitle(_ element: XCUIElement, buttons: [XCUIElement]) -> String {

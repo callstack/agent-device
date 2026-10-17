@@ -125,8 +125,8 @@ export default defineConfig({
       files: [
         'src/daemon-client/daemon-client-rpc.ts',
         'packages/daemon/src/server/downloadable-artifact-http.ts',
-        'src/remote/remote-request-diagnostics.ts',
-        'src/remote/upload-stream.ts',
+        'packages/remote/src/remote-request-diagnostics.ts',
+        'packages/remote/src/upload-stream.ts',
       ],
       rules: {
         'unicorn/catch-error-name': 'off',

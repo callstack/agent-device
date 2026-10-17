@@ -16,9 +16,9 @@ export function createAndroidAppDeploymentExecutor(): AndroidAppDeploymentExecut
       const { prepareAndroidInstallArtifact } = await loadAndroidMechanics();
       return await prepareAndroidInstallArtifact(input.source, options);
     },
-    resolveAppPackage: async (device, app) => {
+    resolveAppPackage: async (device, app, options) => {
       const { resolveAndroidApp } = await loadAndroidMechanics();
-      const resolved = await resolveAndroidApp(device, app);
+      const resolved = await resolveAndroidApp(device, app, options);
       if (resolved.type === 'intent') {
         const { AppError } = await import('@agent-device/kernel/errors');
         throw new AppError('INVALID_ARGS', 'App uninstall requires a package name, not an intent');

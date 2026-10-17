@@ -25,6 +25,7 @@ export function harmonyAppDeploymentFacts(device: DeviceInfo): Readonly<{
   materializeAppSource: RuntimeOperationFact;
   deployMaterializedApp: RuntimeOperationFact;
   sendPushNotification: RuntimeOperationFact;
+  uninstallApp: RuntimeOperationFact;
 }> {
   const deploy =
     device.kind === 'emulator' || device.kind === 'device' ? available : unsupportedKind;
@@ -33,6 +34,7 @@ export function harmonyAppDeploymentFacts(device: DeviceInfo): Readonly<{
     materializeAppSource: unsupportedLeaf,
     deployMaterializedApp: unsupportedLeaf,
     sendPushNotification: unsupportedLeaf,
+    uninstallApp: unsupportedLeaf,
   });
 }
 

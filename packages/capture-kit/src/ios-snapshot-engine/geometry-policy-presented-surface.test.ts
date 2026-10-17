@@ -55,9 +55,8 @@ function readFixture(): Fixture {
   return JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf8')) as Fixture;
 }
 
-// Cross-language parity: the classifier must mirror the canonical table the Swift
-// SnapshotPresentedSurface also reads, and the vocabulary it mirrors by hand. A drift on either side
-// fails here or in the Swift test.
+// The classifier must mirror the canonical table and the vocabulary it mirrors by hand. The Swift
+// SnapshotPresentedSurface checks the same table's `classBlindExpected` column.
 test('the classifier mirrors the canonical vocabulary exactly', () => {
   const vocabulary = readFixture().vocabulary;
   expect(vocabulary.presentationContainerClass).toBe(PRESENTATION_CONTAINER_CLASS);

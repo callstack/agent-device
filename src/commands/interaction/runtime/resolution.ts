@@ -14,12 +14,10 @@ import type {
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
-import { describeKeyboardOccludedPointWarning } from './keyboard-occlusion.ts';
+import { describeKeyboardOccludedPointWarning } from '@agent-device/selectors/keyboard-occlusion';
+import type { InteractionAction } from '@agent-device/selectors/interaction-action';
 import { assertReplayTargetResolution } from './replay-target-guard.ts';
-import type {
-  InteractionAction,
-  ResolveInteractionTargetParams,
-} from './interaction-resolution-request.ts';
+import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 import { resolveRefInteractionTarget } from './ref-target-resolution.ts';
 import {
   buildSelectorResolutionDisclosure,

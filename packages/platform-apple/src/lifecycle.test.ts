@@ -594,7 +594,7 @@ test('a launch URL the bridge sees land in the app never reaches the runner', as
   expect(outcome.timing.runnerDemand).toBe('none');
   expect(releaseSpeculativeRunner).toHaveBeenCalledOnce();
   expect(prewarmRunnerSession).not.toHaveBeenCalled();
-  expect(interactor.readAlert).not.toHaveBeenCalled();
+  expect(interactor.awaitAlert).not.toHaveBeenCalled();
   expect(events).toEqual(['release', `open ${LAUNCH_URL}`, 'observe observable']);
 });
 
@@ -632,7 +632,7 @@ test.each([
 
     expect(outcome.launchConfirmation).toBe('accepted');
     expect(outcome.timing.runnerDemand).toBe('required');
-    expect(interactor.readAlert).toHaveBeenCalledOnce();
+    expect(interactor.awaitAlert).toHaveBeenCalledOnce();
     expect(outcome.timing.postOpenObservation).toBe(afterAnswer.observation);
     // A verdict the bridge could not produce keeps its typed failure, so the open still says why
     // the app came back unreadable.
@@ -643,7 +643,7 @@ test.each([
       'release',
       `open ${LAUNCH_URL}`,
       'observe probe-failed',
-      'alert get',
+      'alert wait',
       'alert accept',
       `observe ${afterAnswer.observation}`,
     ]);
@@ -667,7 +667,7 @@ test('a launch URL held behind a confirmation for the session app is accepted an
     'release',
     `open ${LAUNCH_URL}`,
     'observe unobservable',
-    'alert get',
+    'alert wait',
     'alert accept',
     'observe observable',
   ]);
@@ -717,7 +717,7 @@ test.each([
     expect(outcome.launchConfirmation).toBeUndefined();
     expect(outcome.timing.runnerDemand).toBe('required');
     expect(outcome.timing.postOpenObservation).toBe('unobservable');
-    expect(events).toEqual(['release', `open ${LAUNCH_URL}`, 'observe unobservable', 'alert get']);
+    expect(events).toEqual(['release', `open ${LAUNCH_URL}`, 'observe unobservable', 'alert wait']);
   },
 );
 
@@ -738,7 +738,7 @@ test.each([
         throw SPAWN_TIMEOUT;
       },
     },
-    ['release', `open ${LAUNCH_URL}`, 'observe unobservable', 'alert get'],
+    ['release', `open ${LAUNCH_URL}`, 'observe unobservable', 'alert wait'],
   ],
 ])('an unobservable launch where %s returns the open as it was', async (_case, legs, expected) => {
   const { lifecycle, events } = launchUrlSimulator(async () => CONFIRMATION, [UNOBSERVABLE], legs);
@@ -778,12 +778,12 @@ test('an accept that dies with the runner session hands the URL over again and r
     'release',
     `open ${LAUNCH_URL}`,
     'observe unobservable',
-    'alert get',
+    'alert wait',
     'alert accept',
     'alert get',
     'observe unobservable',
     'open',
-    'alert get',
+    'alert wait',
     'alert accept',
     'observe observable',
   ]);
@@ -813,7 +813,8 @@ test.each([
       details: { reason: 'launch_confirmation_unanswered', appBundleId: 'com.example.app' },
     });
     expect(interactor.acceptAlert).toHaveBeenCalledOnce();
-    expect(interactor.readAlert).toHaveBeenCalledTimes(2);
+    expect(interactor.awaitAlert).toHaveBeenCalledOnce();
+    expect(interactor.readAlert).toHaveBeenCalledOnce();
     expect(events.filter((event) => event === 'open' || event === `open ${LAUNCH_URL}`)).toEqual([
       `open ${LAUNCH_URL}`,
     ]);
@@ -860,7 +861,8 @@ test.each([
     expect(outcome.launchConfirmation).toBeUndefined();
     expect(outcome.timing.postOpenObservation).toBe('unobservable');
     expect(interactor.acceptAlert).toHaveBeenCalledOnce();
-    expect(interactor.readAlert).toHaveBeenCalledTimes(2);
+    expect(interactor.awaitAlert).toHaveBeenCalledOnce();
+    expect(interactor.readAlert).toHaveBeenCalledOnce();
     expect(events.filter((event) => event === 'open' || event === `open ${LAUNCH_URL}`)).toEqual([
       `open ${LAUNCH_URL}`,
     ]);
@@ -882,7 +884,7 @@ test('an accept leaving a launch-transition window open stays green and re-hands
     'release',
     `open ${LAUNCH_URL}`,
     'observe unobservable',
-    'alert get',
+    'alert wait',
     'alert accept',
     'observe unobservable',
   ]);
@@ -947,7 +949,7 @@ test.each([
 
   expect(outcome.launchConfirmation).toBeUndefined();
   expect(outcome.timing.runnerDemand).toBe('none');
-  expect(interactor.readAlert).not.toHaveBeenCalled();
+  expect(interactor.awaitAlert).not.toHaveBeenCalled();
 });
 
 test('a physical iOS launch URL never reads an alert', async () => {
@@ -964,5 +966,5 @@ test('a physical iOS launch URL never reads an alert', async () => {
   const outcome = await lifecycle.openApplication({ ...launchUrlInput(), relaunch: false });
 
   expect(outcome.launchConfirmation).toBeUndefined();
-  expect(interactor.readAlert).not.toHaveBeenCalled();
+  expect(interactor.awaitAlert).not.toHaveBeenCalled();
 });

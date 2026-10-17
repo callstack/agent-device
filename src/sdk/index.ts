@@ -1,4 +1,5 @@
 export { createAgentDeviceClient } from '../agent-device-client.ts';
+export { ensureDaemon } from './ensure-daemon.ts';
 export { createLocalArtifactAdapter } from '../io.ts';
 export {
   AppError,
@@ -6,6 +7,7 @@ export {
   normalizeAgentDeviceError,
 } from '@agent-device/kernel/errors';
 export { centerOfRect } from '@agent-device/kernel/snapshot';
+export { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 
 // The types the root's two functions are written in. `createAgentDeviceClient` returns
 // `AgentDeviceClient`, whose every option and result type is a named type of
@@ -13,6 +15,12 @@ export { centerOfRect } from '@agent-device/kernel/snapshot';
 // `ReturnType<typeof createAgentDeviceClient>` and `Awaited<ReturnType<...>>`, and typed the
 // nodes a snapshot returns by hand.
 export type * from '../client/client-types.ts';
+export type {
+  DaemonConnection,
+  DaemonIdentity,
+  DaemonLifecycle,
+  EnsureDaemonOptions,
+} from '@agent-device/contracts/client';
 // Two results `client-types.ts` imports for its signatures without re-exporting them.
 export type {
   AgentArtifactsResult,

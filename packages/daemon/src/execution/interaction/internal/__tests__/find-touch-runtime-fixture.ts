@@ -1,7 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expect } from 'vitest';
 import { legacyDispatchCapture } from '../../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import {
   getRuntimeBindings,
   mockFillPoint,

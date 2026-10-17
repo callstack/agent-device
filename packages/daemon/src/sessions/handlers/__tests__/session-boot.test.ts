@@ -21,7 +21,7 @@ import {
   mockEnsureReadyRuntime,
   mockInspectDeviceRuntimeFacts,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 test('boot requires session or explicit selector', async () => {
@@ -486,6 +486,7 @@ test('boot rejects --headless outside Android directly', async () => {
         clipboard: { available: false, reason: 'owner-capability-missing' },
         systemButton: { available: false, reason: 'owner-capability-missing' },
         fold: { available: false, reason: 'owner-capability-missing' },
+        telephony: { available: false, reason: 'owner-capability-missing' },
         triggerAppEvent: { available: false, reason: 'owner-capability-missing' },
         settings: { available: false, reason: 'owner-capability-missing' },
         readAlert: { available: false, reason: 'owner-capability-missing' },

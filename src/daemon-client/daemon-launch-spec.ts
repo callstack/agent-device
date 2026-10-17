@@ -107,10 +107,17 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
   };
 }
 
+/**
+ * Why a daemon is not the one this client would use. `transport` means alive but not on the
+ * transport this client uses: the ladder only ever answers `unreachable` for it, and a caller that
+ * must not kill a live daemon refines it with `observeLocalDaemon`.
+ */
+export type DaemonTakeoverCause = 'version' | 'code' | 'transport' | 'unreachable';
+
 /** What to do with the daemon already running on this state directory. */
 export type DaemonTakeoverDecision =
   | { kind: 'reuse' }
-  | { kind: 'replace'; reason: string }
+  | { kind: 'replace'; reason: string; cause: DaemonTakeoverCause }
   | { kind: 'refuseNewer'; daemonVersion: string; clientVersion: string };
 
 /**
@@ -148,12 +155,18 @@ export async function resolveDaemonTakeover(
     ) {
       return { kind: 'refuseNewer', daemonVersion: info.version, clientVersion };
     }
-    return { kind: 'replace', reason: `version mismatch (client v${clientVersion})` };
+    return {
+      kind: 'replace',
+      reason: `version mismatch (client v${clientVersion})`,
+      cause: 'version',
+    };
   }
   const localIdentity = await resolveLocalDaemonCodeIdentity();
   const codeMismatch = resolveCodeIdentityMismatch(localIdentity, info);
-  if (codeMismatch) return { kind: 'replace', reason: codeMismatch };
-  if (!(await reachability.onClientTransport())) return { kind: 'replace', reason: 'unreachable' };
+  if (codeMismatch) return { kind: 'replace', reason: codeMismatch, cause: 'code' };
+  if (!(await reachability.onClientTransport())) {
+    return { kind: 'replace', reason: 'unreachable', cause: 'unreachable' };
+  }
   return { kind: 'reuse' };
 }
 

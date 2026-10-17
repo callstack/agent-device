@@ -1,6 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -16,7 +16,7 @@ import { runReplayForTest } from './replay-command-fixture.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
-import { maestroScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { maestroScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,

@@ -1,7 +1,7 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
+import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { assertRpcOk } from './assertions.ts';
@@ -54,9 +54,7 @@ test('cloud iOS snapshot captures through the provider session after open', asyn
       ),
       true,
     );
-    // The explicit bundle id is the one identity a cloud open can adopt without
-    // local tooling, so the session keeps it for every appBundleId-gated command.
-    assert.equal(daemon.session()?.appBundleId, 'com.example.demo');
+    // The app-gated capture succeeds after opening the cloud session through the public client.
   });
 }, 15_000);
 
@@ -254,7 +252,7 @@ function textEntryTranscript(server: FakeIosWebDriverServer): string[] {
 
 async function createCloudIosWorld() {
   const server = await FakeIosWebDriverServer.start();
-  const runtimes = createBundledCloudWebDriverRuntimes({
+  const runtimes = await createBundledCloudWebDriverRuntimes({
     env: {
       BROWSERSTACK_USERNAME: 'browser-user',
       BROWSERSTACK_ACCESS_KEY: 'browser-key',
@@ -291,10 +289,11 @@ async function openCloudIosSession(daemon: ProviderScenarioHarness): Promise<Dev
   const open = await daemon.callCommand('open', ['com.example.demo'], leaseFlags(lease.leaseId), {
     meta: leaseMeta(lease.leaseId),
   });
-  assertRpcOk(open);
+  const opened = assertRpcOk<{ appBundleId?: string }>(open);
+  assert.equal(opened.appBundleId, 'com.example.demo');
   // The prepared cloud session chose iOS. This must become an explicit device leaf before the
   // runtime facts admission; a collapsed record may not borrow support from an owner label.
-  assert.equal(daemon.session()?.device.appleOs, 'ios');
+  assert.equal((await daemon.client().sessions.list())[0]?.device.appleOs, 'ios');
   return lease;
 }
 

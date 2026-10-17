@@ -6,8 +6,8 @@ import { makeSessionStore } from '../../../__tests__/support/handlers/session-te
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 
-import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 test('replay parses open --relaunch flag and replays open with relaunch semantics', async () => {

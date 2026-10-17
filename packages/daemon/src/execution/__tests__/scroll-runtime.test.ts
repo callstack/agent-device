@@ -20,8 +20,10 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../core/request-runtime-binding.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import {
+  IOS_SIMULATOR,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+} from '@agent-device/test-kit';
 import { makeIosSession, makeMacOsSession } from '../../__tests__/support/session-factories.ts';
 import { activateCompleteRefFrame, expireRefFrame } from '../../core/ref-frame.ts';
 
@@ -340,6 +342,95 @@ test('bound scroll bottom keeps scoped capture failures scoped', async () => {
       error.details?.scope === 'Messages',
   );
   assert.equal(snapshotCount, 2);
+});
+
+/**
+ * A failed or sparse read used to coerce to an empty tree, which the edge analyzer reads as "no
+ * hidden content below", so `scroll bottom` answered "Already at bottom" about a screen it never
+ * saw (#2468). Each case counts gestures, so the refusal is proven to land before any scroll.
+ */
+test.each([
+  { name: 'a capture with no tree', frame: { backend: 'xctest' }, refusal: 'no-capture' },
+  { name: 'an empty tree', frame: { backend: 'xctest', nodes: [] }, refusal: 'no-capture' },
+  {
+    name: 'a tree the backend calls sparse',
+    frame: {
+      ...makeScrollSnapshot({ hiddenBelow: true, message: 'Middle message' }),
+      quality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
+    },
+    refusal: 'sparse-tree',
+  },
+  {
+    // The Android helper's presentation failure: no nodes, and a sparse verdict naming why. The
+    // backend's reason is the more useful answer, so it outranks the generic empty-tree refusal.
+    name: 'a missing tree the backend calls sparse',
+    frame: {
+      backend: 'xctest',
+      quality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
+    },
+    refusal: 'sparse-tree',
+  },
+  {
+    name: 'an empty tree the backend calls sparse',
+    frame: {
+      backend: 'xctest',
+      nodes: [],
+      quality: { state: 'sparse', backend: 'tree', reason: 'AX bridge unavailable' },
+    },
+    refusal: 'sparse-tree',
+  },
+])(
+  'bound scroll bottom refuses $name instead of reporting the edge',
+  async ({ frame, refusal }) => {
+    let scrolls = 0;
+    await assert.rejects(
+      () =>
+        runScroll(
+          ['bottom'],
+          {},
+          {
+            scroll: async () => {
+              scrolls += 1;
+              return {};
+            },
+            captureSnapshot: async () => frame,
+          },
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.reason, 'scroll_edge_capture_unreadable');
+        assert.equal(error.details?.edge, 'bottom');
+        assert.equal(error.details?.captureRefusal, refusal);
+        return true;
+      },
+    );
+    assert.equal(scrolls, 0);
+  },
+);
+
+test('bound scroll bottom refuses a capture that goes unreadable mid-loop', async () => {
+  let scrolls = 0;
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['bottom'],
+        {},
+        {
+          scroll: async () => {
+            scrolls += 1;
+            return {};
+          },
+          captureSnapshot: async () =>
+            scrolls === 0
+              ? makeScrollSnapshot({ hiddenBelow: true, message: 'Middle message' })
+              : { backend: 'xctest', nodes: [] },
+        },
+      ),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'scroll_edge_capture_unreadable',
+  );
+  assert.equal(scrolls, 1);
 });
 
 function makeScrollSnapshot(options: { hiddenBelow: boolean; message: string }) {

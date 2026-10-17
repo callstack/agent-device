@@ -238,9 +238,21 @@
       "types": "./src/screenshot-density.ts",
       "default": "./src/screenshot-density.ts"
     },
+    "./screenshot-diff": {
+      "types": "./src/screenshot-diff.ts",
+      "default": "./src/screenshot-diff.ts"
+    },
+    "./screenshot-diff-overlay-matches": {
+      "types": "./src/screenshot-diff-overlay-matches.ts",
+      "default": "./src/screenshot-diff-overlay-matches.ts"
+    },
     "./screenshot-diff-pixels": {
       "types": "./src/screenshot-diff-pixels.ts",
       "default": "./src/screenshot-diff-pixels.ts"
+    },
+    "./screenshot-diff-regions": {
+      "types": "./src/screenshot-diff-regions.ts",
+      "default": "./src/screenshot-diff-regions.ts"
     },
     "./screenshot-overlay": {
       "types": "./src/screenshot-overlay.ts",
@@ -303,8 +315,8 @@
       "default": "./src/snapshot/snapshot-presentation/android/helper.ts"
     },
     "./snapshot-presentation-ios-transitions-fixtures": {
-      "types": "./src/snapshot/snapshot-presentation/ios/transitions.fixtures.ts",
-      "default": "./src/snapshot/snapshot-presentation/ios/transitions.fixtures.ts"
+      "types": "./src/ios-snapshot-engine/transitions.fixtures.ts",
+      "default": "./src/ios-snapshot-engine/transitions.fixtures.ts"
     },
     "./snapshot-quality-backend-capabilities": {
       "types": "./src/snapshot-quality-backend-capabilities.ts",

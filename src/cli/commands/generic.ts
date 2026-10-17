@@ -3,12 +3,11 @@ import { runCliCommandWithOutput } from '../../commands/cli-runner.ts';
 import { isParseableOutputCommand } from '../../commands/cli-output.ts';
 import { routeResponseWarnings } from '../../commands/output-common.ts';
 import type { CommandName } from '../../commands/command-metadata.ts';
-import type { CliOutput } from '../../commands/command-contract.ts';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
-import { writeCommandOutput } from './shared.ts';
+import { writeCommandOutput, writeCliOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from './client-backed.ts';
 import type { ClientCommandParams } from './router-types.ts';
 
@@ -81,15 +80,4 @@ async function writeGenericCliOutput(
     ),
   );
   return 0;
-}
-
-async function writeCliOutput(flags: CliFlags, output: CliOutput): Promise<void> {
-  if (!flags.json && output.stderr) {
-    process.stderr.write(output.stderr);
-  }
-  await writeCommandOutput(
-    flags,
-    flags.json ? (output.jsonData ?? output.data) : output.data,
-    () => output.text,
-  );
 }

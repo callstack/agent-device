@@ -7,7 +7,7 @@ import {
 import { retiredScreenshotMaxSizeFlagError } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { hasExplicitSessionFlag } from '../session-routing.ts';
+import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
 
 const IOS_DEVICE_RECORD_MIN_FPS = 1;
 const IOS_DEVICE_RECORD_MAX_FPS = 120;
@@ -60,7 +60,7 @@ export function missingAppSessionResponse(req: DaemonRequest) {
     ok: false as const,
     error: {
       code: 'INVALID_ARGS',
-      message: hasExplicitSessionFlag(req)
+      message: namesSessionExplicitly(req)
         ? 'record start with app scope and an explicit session requires an active app session; run open <app> first, or use --scope device to record the full screen'
         : 'record start defaults to app scope and requires an active app session; run open <app> first, or use --scope device to record the full screen',
     },

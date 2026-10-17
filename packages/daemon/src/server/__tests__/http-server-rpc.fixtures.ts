@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import http from 'node:http';
 import { createDaemonHttpServer } from '../http/http-server.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { listenOnLoopback } from '@agent-device/test-kit';
 
 const RPC_ANSWER_DEADLINE_MS = 1_000;
 

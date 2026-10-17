@@ -33,7 +33,7 @@ import { awaitFixtureReadiness } from '../../__tests__/support/application-lifec
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 /**
  * The production route for the #2031/#1394 defect: a request without `--session` resolves the

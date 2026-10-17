@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
+import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import type {
   RemoteConfigProfile,
   ResolvedRemoteConfigProfile,
-} from '../../remote/remote-config-schema.ts';
+} from '@agent-device/remote/remote-config-schema';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 import type { CliFlags } from '@agent-device/contracts/command';

@@ -14,8 +14,9 @@ import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/t
 import {
   prepareRemoteRequestArtifacts,
   type PreparedRemoteRequest,
-} from '../remote/daemon-artifacts.ts';
+} from '@agent-device/remote/daemon-artifacts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
+import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
 import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
@@ -30,8 +31,9 @@ export async function sendToDaemon(
   req: Omit<DaemonRequest, 'token'>,
   options: DaemonTransportOptions = {},
 ): Promise<DaemonResponse> {
-  const { resolveClientSettings, ensureDaemon, attachSessionAddressHints } =
+  const { resolveClientSettings, attachSessionAddressHints } =
     await import('./daemon-client-lifecycle.ts');
+  const { connectToDaemon } = await import('./daemon-client-attach.ts');
   const requestId = req.meta?.requestId ?? createRequestId();
   const debug = Boolean(req.meta?.debug || req.flags?.verbose);
   // A few internal callers build DaemonRequest directly instead of using the
@@ -45,6 +47,7 @@ export async function sendToDaemon(
   const settings = resolveClientSettings(
     requestWithoutAuthFlag,
     options.authToken ?? flagAuthToken,
+    options.daemonLifecycle,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
@@ -55,10 +58,14 @@ export async function sendToDaemon(
   const cancellation = createRequestGuard({ signal: options.signal, requestId });
   cancellation.refuseIfAborted();
   const daemon = await cancellation.guard(async () => {
-    return await withDiagnosticTimer('daemon_startup', async () => await ensureDaemon(settings), {
-      requestId,
-      session: req.session,
-    });
+    return await withDiagnosticTimer(
+      'daemon_startup',
+      async () => await connectToDaemon(settings),
+      {
+        requestId,
+        session: req.session,
+      },
+    );
   });
   const info = daemon.info;
   const preparedRemoteRequest = await cancellation.guard(
@@ -103,13 +110,38 @@ export async function sendToDaemon(
             settings.transportPreference,
             settings.paths,
             requestTimeoutMs,
-            { onProgress: options.onProgress, signal: options.signal },
+            {
+              onProgress: options.onProgress,
+              signal: options.signal,
+              timeoutRecovery:
+                settings.daemonLifecycle === 'attach' ? 'none' : 'retire-unresponsive',
+            },
           ),
         { requestId, command: req.command },
       );
       return attachSessionAddressHints(response, requestWithoutAuthFlag, settings);
     },
   );
+}
+
+/**
+ * The transport the CLI and MCP use: `sendToDaemon` behind an explicit `ensureDaemon`. The wrapper
+ * loads on the first request, so a CLI start that never reaches the daemon does not pay for it.
+ */
+export function createEnsuredDaemonTransport(
+  options: EnsuringTransportOptions = {},
+): typeof sendToDaemon {
+  // The load is memoized as a promise, so concurrent first requests share one wrapper and its
+  // ensure-once state.
+  let ensured: Promise<typeof sendToDaemon> | undefined;
+  return async (req, context) => {
+    ensured ??= import('./daemon-client-ensuring.ts').then(({ withEnsuredDaemon }) =>
+      withEnsuredDaemon(sendToDaemon, options),
+    );
+    return await (
+      await ensured
+    )(req, context);
+  };
 }
 
 function buildTransportRequest(
@@ -142,8 +174,16 @@ async function readLocalProviderCredentialFingerprint(
   if (isRemoteDaemon(info) || request.command !== 'lease_allocate') return undefined;
   const { leaseProvider: provider, leaseBackend } = leaseScopeFromRequest(request);
   if (!provider) return undefined;
-  const { providerCredentialFingerprint } = await import('../provider-credential-fingerprint.ts');
-  return providerCredentialFingerprint(provider, process.env, leaseBackend);
+  const [{ providerCredentialFingerprint }, { readPluginInventory }] = await Promise.all([
+    import('../provider-credential-fingerprint.ts'),
+    import('@agent-device/contracts/plugin-inventory'),
+  ]);
+  return providerCredentialFingerprint(
+    provider,
+    process.env,
+    leaseBackend,
+    readPluginInventory(info.plugins),
+  );
 }
 
 // A developer dir is a path on the client's host, so only a local daemon can use it.

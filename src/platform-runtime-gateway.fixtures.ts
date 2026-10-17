@@ -23,7 +23,7 @@ import { applySimctlSetting } from '@agent-device/platform-apple/simctl-settings
 import {
   createUnavailableRuntimeFactsForTest,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
-} from '@agent-device/test-kit/runtime-operation-facts';
+} from '@agent-device/test-kit';
 import {
   createComposedPlatformRuntimeGateway,
   type PlatformRuntimeProviderRegistration,

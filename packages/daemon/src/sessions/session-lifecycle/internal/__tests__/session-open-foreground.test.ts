@@ -1,6 +1,8 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { snapshotRuntimeFixture } from '../../../../__tests__/support/snapshot-runtime-fixture.ts';
+import { repairPublication } from '../../../../__tests__/support/session-factories.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 
 const dispatchSnapshotViaRuntime = vi.hoisted(() => vi.fn());
@@ -209,7 +211,7 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
       ...req,
       command: 'snapshot',
       positionals: [],
-      flags: { ...req.flags, snapshotInteractiveOnly: true },
+      flags: { ...req.flags, snapshotInteractiveOnly: true, noRecord: true },
     },
     sessionName: 'default',
     sessionRef: ref,
@@ -312,3 +314,31 @@ test('a THROWN snapshot-capture failure never masks the successful open either',
     ]);
   }
 });
+
+test.each([undefined, true])(
+  'a replayed foreground open does not record its composite snapshot (record=%s)',
+  async (record) => {
+    const realSnapshotRuntime = await vi.importActual<
+      typeof import('../../../snapshot-runtime.ts')
+    >('../../../snapshot-runtime.ts');
+    dispatchSnapshotViaRuntime.mockImplementation(realSnapshotRuntime.dispatchSnapshotViaRuntime);
+    sessionStore.update(ref, { scriptPublication: repairPublication('complete') });
+
+    const result = await composeOpenWithInitialSnapshot({
+      ...snapshotRuntimeFixture(),
+      createCommandSurface: fakeCreateCommandSurface,
+      req: baseRequest({
+        flags: { foreground: true, record },
+        positionals: ['Demo'],
+        internal: { replayPlanStep: true },
+      }),
+      ref,
+      logPath: '/tmp/daemon.log',
+      sessionStore,
+      openResponse: okOpenResponse,
+    });
+
+    expect(result).toMatchObject({ ok: true, data: { snapshot: { nodes: [] } } });
+    expect(sessionStore.requireCurrent(ref).actions).toEqual([]);
+  },
+);

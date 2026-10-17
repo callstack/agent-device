@@ -1,9 +1,19 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test } from 'vitest';
 import {
-  providerCredentialFingerprint,
-  readDaemonProviderCredentials,
+  providerCredentialFingerprint as fingerprintFor,
+  readDaemonProviderCredentials as daemonCredentialsFor,
 } from './provider-credential-fingerprint.ts';
-import { pluginHome, selectPluginManifest } from '@agent-device/test-kit/plugin.fixtures';
+import type { EnvMap } from '@agent-device/kernel/source-value';
+import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
+import { pluginHome, selectPluginManifest } from '@agent-device/test-kit';
+
+const inventory = await builtinPluginInventory();
+const providerCredentialFingerprint = (provider: string, env: EnvMap, leaseBackend?: string) =>
+  fingerprintFor(provider, env, leaseBackend, inventory);
+const readDaemonProviderCredentials = (env: EnvMap, stateDir: string) =>
+  daemonCredentialsFor(env, stateDir, inventory);
 
 const BROWSERSTACK_ENV = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key-1' };
 
@@ -55,7 +65,7 @@ test('a fingerprint hashes the exact values each provider reads', () => {
     }),
   ).not.toBe(browserstack);
   const limrun = providerCredentialFingerprint('limrun', { LIMRUN_API_KEY: 'lim-key' });
-  expect(providerCredentialFingerprint('limrun', { LIMRUN_API_KEY: ' lim-key ' })).toBe(limrun);
+  expect(providerCredentialFingerprint('limrun', { LIMRUN_API_KEY: ' lim-key ' })).not.toBe(limrun);
 });
 
 test('a provider name that only matches an inherited object key has no fingerprint', () => {
@@ -151,4 +161,26 @@ test('a plugin declaration never adds a fingerprint to a bundled provider', () =
     AWS_ACCESS_KEY_ID: 'id',
   };
   expect(providerCredentialFingerprint('aws-device-farm', env)).toBe(undefined);
+});
+
+function testMuPluginEnv(): Record<string, string> {
+  const manifest = path.resolve(import.meta.dirname, '../packages/provider-testmu/package.json');
+  const { home, env } = pluginHome();
+  selectPluginManifest(home, JSON.parse(fs.readFileSync(manifest, 'utf8')));
+  return env;
+}
+
+test('the bundled TestMu AI plugin manifest fingerprints its LT credentials', () => {
+  const home = testMuPluginEnv();
+  const env = { ...home, LT_USERNAME: 'user', LT_ACCESS_KEY: 'key-1' };
+  const fingerprint = providerCredentialFingerprint('testmu', env);
+
+  expect(fingerprint).toMatch(/^v1:[0-9a-f]{16}$/);
+  expect(providerCredentialFingerprint('testmu', { ...env })).toBe(fingerprint);
+  expect(providerCredentialFingerprint('testmu', { ...env, LT_ACCESS_KEY: 'key-2' })).not.toBe(
+    fingerprint,
+  );
+  expect(providerCredentialFingerprint('testmu', home)).toBe(undefined);
+  expect(readDaemonProviderCredentials(env, '/state').fingerprint('testmu')).toBe(fingerprint);
+  expect(readDaemonProviderCredentials(home, '/state').fingerprint('testmu')).toBe(undefined);
 });

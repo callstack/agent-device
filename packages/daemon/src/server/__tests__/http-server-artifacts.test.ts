@@ -13,10 +13,10 @@ import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 import { ANDROID_ARTIFACTS_CONTRACT_EVIDENCE } from './http-server-artifacts.coverage.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 type ArtifactInventoryResponse = {
   artifacts: Array<{

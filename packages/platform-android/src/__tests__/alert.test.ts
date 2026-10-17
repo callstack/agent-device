@@ -14,8 +14,6 @@ const runAndroidShell = vi.fn(
     await runAndroidAdb(device, deviceShellArgv('adb', 'shell', words)),
 );
 vi.mock('../adb.ts', () => ({ runAndroidAdb, runAndroidShell }));
-// The dismissal re-check polls at the contract interval; the clock is the assertion, not the wait.
-vi.mock('@agent-device/host-kit/retry', () => ({ sleep: async () => {} }));
 
 const { handleAndroidAlert } = await import('../alert.ts');
 
@@ -24,6 +22,19 @@ const dialog = [
   text(1, 'Automation confirmation', 'android:id/alertTitle'),
   button(2, 'Cancel', 'android:id/button2', { x: 210, y: 612 }),
 ];
+
+/** Runs an alert action whose polls sleep between captures, without waiting the sleeps out. */
+async function underFakeTimers<T>(run: () => Promise<T>): Promise<T> {
+  vi.useFakeTimers();
+  try {
+    const outcome = run();
+    outcome.catch(() => {});
+    await vi.runAllTimersAsync();
+    return await outcome;
+  } finally {
+    vi.useRealTimers();
+  }
+}
 
 /** The dialog is in the tree until the button press lands, then gone — the real timeline. */
 function dialogUntilPressed(nodes = dialog) {
@@ -97,9 +108,12 @@ test('dismiss returns only after the dialog has left the tree', async () => {
   // Pre-press lookup, then two captures that still show the closing dialog, then the app.
   const captures = [dialog, dialog, dialog, []];
   let reads = 0;
-  const result = await handleAndroidAlert(device, 'dismiss', {
-    captureNodes: async () => captures[Math.min(reads++, captures.length - 1)] ?? [],
-  });
+  const result = await underFakeTimers(
+    async () =>
+      await handleAndroidAlert(device, 'dismiss', {
+        captureNodes: async () => captures[Math.min(reads++, captures.length - 1)] ?? [],
+      }),
+  );
 
   assert.equal(result.kind, 'alertHandled');
   assert.equal(reads, 4);
@@ -126,28 +140,24 @@ test('a different alert replacing the pressed one counts as dismissed', async ()
 
 test('dismiss fails when the dialog is still visible after the action budget', async () => {
   runAndroidAdb.mockClear();
-  vi.useFakeTimers({ now: 0, toFake: ['Date'] });
-  try {
-    let reads = 0;
-    await assert.rejects(
-      handleAndroidAlert(device, 'dismiss', {
-        captureNodes: async () => {
-          // Every post-press capture costs wall clock; the dialog never leaves.
-          if (reads++ > 0) vi.setSystemTime(Date.now() + 700);
-          return dialog;
-        },
-      }),
-      (error: unknown) =>
-        error instanceof Error &&
-        error.message === 'alert dismiss did not dismiss the visible alert' &&
-        (error as { code?: string }).code === 'COMMAND_FAILED',
-    );
-    assert.equal(runAndroidAdb.mock.calls.length, 1);
-    assert.ok(
-      reads >= 4,
-      `expected the re-check to poll until the budget expired, got ${reads} reads`,
-    );
-  } finally {
-    vi.useRealTimers();
-  }
+  await assert.rejects(
+    underFakeTimers(
+      async () => await handleAndroidAlert(device, 'dismiss', { captureNodes: async () => dialog }),
+    ),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message === 'alert dismiss did not dismiss the visible alert' &&
+      (error as { code?: string }).code === 'COMMAND_FAILED',
+  );
+  assert.equal(runAndroidAdb.mock.calls.length, 1);
+});
+
+test('wait with a spent budget still reports an alert that is already visible', async () => {
+  const result = await handleAndroidAlert(device, 'wait', {
+    timeoutMs: 0,
+    captureNodes: async () => dialog,
+  });
+
+  assert.equal(result.kind, 'alertWait');
+  assert.equal(result.alert?.title, 'Automation confirmation');
 });

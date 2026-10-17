@@ -46,7 +46,7 @@ import type {
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-runtime.ts';
-import { LIMRUN_CLIENT_ID, requireLimrunOrgClient } from './client-options.ts';
+import { LIMRUN_CLIENT_ID, limrunUserAgent, requireLimrunOrgClient } from './client-options.ts';
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import type { LimrunAppAsset } from './app-catalog.ts';
@@ -156,7 +156,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     }
     this.options = options;
     this.dependencies = dependencies;
-    this.limrun = options.apiKey ? new Limrun({ apiKey: options.apiKey }) : undefined;
+    this.limrun = options.apiKey
+      ? new Limrun({
+          apiKey: options.apiKey,
+          userAgent: limrunUserAgent(dependencies.clientVersion),
+        })
+      : undefined;
   }
 
   ownsDevice(device: DeviceInfo): boolean {

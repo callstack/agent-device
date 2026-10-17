@@ -15,6 +15,7 @@
     { "path": "../command-registry" },
     { "path": "../contracts" },
     { "path": "../host-kit" },
-    { "path": "../kernel" }
+    { "path": "../kernel" },
+    { "path": "../test-kit" }
   ]
 }

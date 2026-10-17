@@ -223,7 +223,7 @@ AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
   devices and `serial` for Android.
 - `commands` takes either `allow` or `deny`, not both. With `allow`, commands added in later releases
   stay denied. Some client-side tools reach the daemon through internal commands: allow `runtime` for
-  `react-devtools` and Maestro flows, and `install-from-source` for remote installs.
+  Maestro flows, and `install-from-source` for remote installs.
 - `capabilities.deny: ["device-shutdown"]` blocks `shutdown`, `close --shutdown`, and any other path
   that would shut the device down.
 - `leases.require: "macos-app"` (the only accepted value) refuses every request that is not made

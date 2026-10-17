@@ -374,6 +374,27 @@ test.each(Object.entries(leaves))(
   },
 );
 
+test.each([...Object.entries(leaves), ['ios physical device', appleDevice({ kind: 'device' })]])(
+  'refuses the telephony fact for the %s leaf',
+  async (_name, device) => {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    expect(binding.facts.operations.sendTelephonyEvent).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: expect.stringContaining('Android emulator console'),
+    });
+    expect(binding.operations.sendTelephonyEvent).toBeUndefined();
+  },
+);
+
 // A simulator scoped to a non-default set is refused by the owner's own fact, before any display
 // probe or HID effect: CoreDevice's display inventory and hinge-angle readback cannot resolve it,
 // so ADR 0025's post-dispatch verification is impossible. The default-set iOS leaf stays admitted.

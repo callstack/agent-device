@@ -9,12 +9,31 @@ const fixturePack = JSON.parse(
   await readFile(join(import.meta.dirname, 'fixtures', 'size-report-npm-pack.json'), 'utf8'),
 );
 
+// The fixture pack ships the macOS helper (manifest, sources, and per-target PackStub.swift),
+// so every assertion here names the manifest source the guard would read from the packed tree;
+// without it the guard falls back to this checkout's manifest via repoRoot.
+const helperManifestSource = [
+  '.target(',
+  '  name: "AgentDeviceMacOSInput",',
+  '.executableTarget(',
+  '  name: "AgentDeviceMacOSHelper",',
+  '.testTarget(',
+  '  name: "AgentDeviceMacOSHelperTests",',
+  '.testTarget(',
+  '  name: "AgentDeviceMacOSInputTests",',
+].join('\n');
+
 test('publish package requires both Android helpers and excludes benchmark scripts', () => {
-  assert.doesNotThrow(() => assertPublishPackageContents(fixturePack.files));
+  assert.doesNotThrow(() =>
+    assertPublishPackageContents(fixturePack.files, {
+      macosHelperManifestSource: helperManifestSource,
+    }),
+  );
   assert.throws(
     () =>
       assertPublishPackageContents(
         fixturePack.files.filter((entry) => !entry.path.startsWith('android/ime-helper/')),
+        { macosHelperManifestSource: helperManifestSource },
       ),
     /android\/ime-helper/,
   );
@@ -31,15 +50,51 @@ test('publish package requires both Android helpers and excludes benchmark scrip
   assert.doesNotThrow(() =>
     assertPublishPackageContents(
       fixturePack.files.filter((entry) => !entry.path.startsWith('apple/snapshot-bridge/')),
+      { macosHelperManifestSource: helperManifestSource },
     ),
   );
   assert.throws(
     () =>
-      assertPublishPackageContents([
-        ...fixturePack.files,
-        { path: 'scripts/ios-snapshot-benchmark/run.ts', size: 1 },
-      ]),
+      assertPublishPackageContents(
+        [...fixturePack.files, { path: 'scripts/ios-snapshot-benchmark/run.ts', size: 1 }],
+        { macosHelperManifestSource: helperManifestSource },
+      ),
     /benchmark or build scripts/,
+  );
+  // Each declared test target needs its PackStub.swift or the install-time `swift build` of the
+  // packed tree dies; a missing one must name the missing path.
+  assert.throws(
+    () =>
+      assertPublishPackageContents(
+        fixturePack.files.filter(
+          (entry) =>
+            entry.path !== 'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift',
+        ),
+        { macosHelperManifestSource: helperManifestSource },
+      ),
+    /pack stubs: apple\/macos-helper\/Tests\/AgentDeviceMacOSInputTests\/PackStub\.swift/,
+  );
+  assert.throws(
+    () =>
+      assertPublishPackageContents(
+        [
+          ...fixturePack.files,
+          {
+            path: 'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/ScheduleTests.swift',
+            size: 1,
+          },
+        ],
+        { macosHelperManifestSource: helperManifestSource },
+      ),
+    /macOS helper test sources/,
+  );
+  // Sources without the manifest are not a buildable Swift package; the pack must say so.
+  assert.throws(
+    () =>
+      assertPublishPackageContents(
+        fixturePack.files.filter((entry) => entry.path !== 'apple/macos-helper/Package.swift'),
+      ),
+    /sources without its Package\.swift/,
   );
 });
 

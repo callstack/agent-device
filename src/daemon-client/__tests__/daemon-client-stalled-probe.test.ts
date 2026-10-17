@@ -17,9 +17,9 @@ import { sendToDaemon } from '../daemon-client.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   supportsLoopbackBind,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 
 const NEWER_DAEMON_VERSION = '999.0.0';

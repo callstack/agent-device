@@ -1,3 +1,4 @@
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import {
   createOwnerScopedDeviceClaimReconciler,
   type ClaimRecoveryGatewayFactory,
@@ -130,55 +131,22 @@ export type RequestRouterDeps = {
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   providerRuntimeIds?: readonly string[];
-  providerRuntimeRequiredIds?: readonly string[];
+  failedPlugins?: readonly PluginInventoryEntry[];
   providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   /** Ends the sessions opened under a lease the tenant just released, and clears their claims. */
   endSessionsForLease?: (leaseId: string) => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
-  androidObservation?: AndroidObservationAdapter;
+  androidObservation: AndroidObservationAdapter;
   /** Builds the per-request command surface the device-facing runtimes execute through. */
   createCommandSurface: CreateDaemonCommandSurface;
-  platformResourceCleanup?: PlatformResourceCleanup;
+  platformResourceCleanup: PlatformResourceCleanup;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
   daemonPolicy?: DaemonPolicy;
   trackDownloadableArtifact: TrackDownloadableArtifact;
 };
-
-const unavailableAndroidObservation = new Proxy({} as AndroidObservationAdapter, {
-  get() {
-    return async () => {
-      throw new AppError(
-        'INTERNAL_ERROR',
-        'Android observation was not supplied by root runtime composition',
-      );
-    };
-  },
-});
-
-function missingPlatformResourceCleanup(): AppError {
-  return new AppError(
-    'INTERNAL_ERROR',
-    'Platform resource cleanup was not supplied by root runtime composition',
-  );
-}
-
-const unavailablePlatformResourceCleanup: PlatformResourceCleanup = Object.freeze({
-  stopSnapshotHelper: async () => {
-    throw missingPlatformResourceCleanup();
-  },
-  closeManagedBrowser: async () => {
-    throw missingPlatformResourceCleanup();
-  },
-  cleanupSessionlessExecutionHost: async () => {
-    throw missingPlatformResourceCleanup();
-  },
-  retainExecutionHostAfterClose: () => {
-    throw missingPlatformResourceCleanup();
-  },
-});
 
 export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   const {
@@ -194,15 +162,15 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger(),
     hostDiagnostics,
     providerRuntimeIds,
-    providerRuntimeRequiredIds,
+    failedPlugins,
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
     endSessionsForLease,
     providerAppCatalog,
-    androidObservation = unavailableAndroidObservation,
+    androidObservation,
     createCommandSurface,
-    platformResourceCleanup = unavailablePlatformResourceCleanup,
+    platformResourceCleanup,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
     daemonPolicy,
@@ -384,7 +352,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       leaseRegistry,
       leaseLifecycleProvider,
       providerRuntimeIds,
-      providerRuntimeRequiredIds,
+      failedPlugins,
       providerCredentials,
       cloudArtifactProvider,
       endSessionsForLease,

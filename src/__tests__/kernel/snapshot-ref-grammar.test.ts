@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
-import { formatRef, refArb } from '@agent-device/test-kit/property-arbitraries';
+import { formatRef, refArb } from '@agent-device/test-kit';
 import { PROPERTY_RUNS } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { normalizeRef, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
 

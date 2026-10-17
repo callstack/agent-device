@@ -8,12 +8,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runCmdStreaming, runCmdSync } from '@agent-device/host-kit/command';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import {
   checkLockfileInstallSync,
   STALE_NODE_MODULES_MESSAGE,
   type LockfileInstallSyncResult,
 } from './lockfile-install-sync.ts';
+import { runValidation, type ValidationContext } from './execution.ts';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import {
@@ -34,11 +35,19 @@ function ciJobsByCheck(): Map<CheckId, string[]> {
   return owningLanes(loadModel(repoRoot, []));
 }
 
-type Args = { base: string; head: string; json: boolean; run: boolean };
+type Args = {
+  base: string;
+  head: string;
+  json: boolean;
+  run: boolean;
+  verbose?: boolean;
+  full?: boolean;
+};
 
 const repoRoot = runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim();
 
-const USAGE = 'Usage: pnpm check:affected [--base <ref>] [--head <ref>] [--json] [--run]\n';
+const USAGE =
+  'Usage: pnpm check:affected [--base <ref>] [--head <ref>] [--json] [--run] [--verbose] [--full]\n';
 
 function parseArgs(argv: readonly string[]): Args {
   const values = parseScriptArgs(argv, USAGE, {
@@ -46,12 +55,16 @@ function parseArgs(argv: readonly string[]): Args {
     head: { type: 'string', default: 'HEAD' },
     json: { type: 'boolean', default: false },
     run: { type: 'boolean', default: false },
+    verbose: { type: 'boolean', default: false },
+    full: { type: 'boolean', default: false },
   });
   return {
     base: values.base ?? 'origin/main',
     head: values.head ?? 'HEAD',
     json: Boolean(values.json),
     run: Boolean(values.run),
+    verbose: Boolean(values.verbose),
+    full: Boolean(values.full),
   };
 }
 
@@ -173,17 +186,7 @@ function printPlanHuman(plan: CheckPlan, args: Args): void {
 // How a resolved command is executed. Injectable so the entrypoint's `--run`
 // propagation (order, skip of GitHub-authoritative checks, stop-on-failure) is
 // testable without spawning real processes.
-export type CommandExecutor = (command: string[], cwd: string) => Promise<number>;
-
-const streamingExecutor: CommandExecutor = async (command, cwd) => {
-  const result = await runCmdStreaming(command[0]!, command.slice(1), {
-    cwd,
-    allowFailure: true,
-    onStdoutChunk: (chunk) => void process.stdout.write(chunk),
-    onStderrChunk: (chunk) => void process.stderr.write(chunk),
-  });
-  return result.exitCode;
-};
+export type CommandExecutor = (command: string[], cwd: string, id: string) => Promise<number>;
 
 export async function runChecks(
   plan: CheckPlan,
@@ -191,10 +194,11 @@ export async function runChecks(
   args: Args,
   options: {
     cwd?: string;
-    execute?: CommandExecutor;
+    skip?: ValidationContext['skip'];
+    execute: CommandExecutor;
     changedFiles?: readonly string[];
     checkLockfileSync?: (cwd: string) => LockfileInstallSyncResult;
-  } = {},
+  },
 ): Promise<number> {
   const cwd = options.cwd ?? repoRoot;
   const checkLockfileSync = options.checkLockfileSync ?? checkLockfileInstallSync;
@@ -204,28 +208,29 @@ export async function runChecks(
     reportStaleInstall(lockfileSync.reason, cwd);
     return 1;
   }
-  const execute = options.execute ?? streamingExecutor;
+  const execute = options.execute;
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
   const relatedSelected = plan.checks.includes('vitest-related');
   const ciJobs = skipped.length > 0 ? ciJobsByCheck() : new Map<CheckId, string[]>();
   for (const spec of skipped) {
-    process.stdout.write(`\n[skip] ${spec.id} — ${describeOwner(spec.id, ciJobs)}\n`);
+    const reason = describeOwner(spec.id, ciJobs);
+    options.skip?.(spec.id, reason, false);
+    process.stderr.write(`[skip] ${spec.id} — ${reason}\n`);
   }
   for (const spec of runnable) {
     if (isCoveredByRelatedTests(spec, relatedSelected)) {
-      process.stdout.write(`\n[dedupe] ${spec.id} — covered by related tests or GitHub CI\n`);
+      options.skip?.(spec.id, 'covered by related tests', true);
       continue;
     }
     const command = resolveCommand(spec, pkg.scripts, args.base, options.changedFiles ?? []);
-    process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
-    const exitCode = await execute(command, cwd);
+    const exitCode = await execute(command, cwd, spec.id);
     if (exitCode !== 0) {
       process.stderr.write(`\ncheck:affected: ${spec.id} failed.\n`);
-      return 1;
+      return exitCode;
     }
   }
-  process.stdout.write('\ncheck:affected: all runnable checks passed.\n');
+  process.stderr.write('check:affected: all runnable checks passed.\n');
   return 0;
 }
 
@@ -255,20 +260,59 @@ function isCoveredByRelatedTests(spec: CheckSpec, relatedSelected: boolean): boo
 async function main(argv = process.argv.slice(2)): Promise<number> {
   assertCatalogComplete();
   const args = parseArgs(argv);
+  if (args.full && !args.run) throw new Error('--full requires --run');
   const pkg = loadPackageJson();
   // Validate every catalog command resolves before selecting, so a broken
   // catalog fails loudly rather than silently dropping a gate.
   for (const spec of CHECK_CATALOG) resolveCommand(spec, pkg.scripts, args.base);
-  const changedFiles = readChangedFiles(args.base, args.head);
-  const plan = selectChecks({
-    changedFiles,
-    packageEntryFiles: packageEntryFiles(pkg),
-  });
-
+  const prepare = (base = args.base, currentPackage = pkg) => {
+    const changedFiles = readChangedFiles(base, args.head);
+    return {
+      changedFiles,
+      plan: selectChecks({ changedFiles, packageEntryFiles: packageEntryFiles(currentPackage) }),
+    };
+  };
+  if (args.run)
+    return await runValidation(repoRoot, args, async ({ receipt, execute, skip }) => {
+      const currentPackage = loadPackageJson();
+      for (const spec of CHECK_CATALOG) resolveCommand(spec, currentPackage.scripts, args.base);
+      const install = checkLockfileInstallSync(repoRoot);
+      if (install.status === 'out-of-sync') {
+        reportStaleInstall(install.reason, repoRoot);
+        receipt.error = `${STALE_NODE_MODULES_MESSAGE}: ${install.reason}`;
+        return 1;
+      }
+      if (args.full) {
+        const scripts = ['check:tooling', 'check:fallow', 'check:unit'];
+        receipt.results = scripts.map((id) => ({ id, status: 'not-run' }));
+        for (const script of scripts) {
+          const code = await execute(['pnpm', 'run', script], repoRoot, script);
+          if (code !== 0) return code;
+        }
+        return 0;
+      }
+      const { changedFiles, plan } = prepare(receipt.refs.resolvedBase, currentPackage);
+      receipt.changedFiles = changedFiles;
+      receipt.plan = plan;
+      receipt.results = plan.checks.map((id) => ({ id, status: 'not-run' }));
+      process.stderr.write(
+        `Selected ${plan.checks.length} checks${plan.failOpen ? '; FAIL-OPEN: full set (see receipt.plan.failOpenReasons)' : ''}.\n`,
+      );
+      return await runChecks(
+        plan,
+        currentPackage,
+        { ...args, base: receipt.refs.resolvedBase! },
+        { changedFiles, execute, skip },
+      );
+    });
+  const { plan } = prepare();
   if (args.json) printPlanJson(plan, args);
-  else printPlanHuman(plan, args);
-
-  if (args.run) return await runChecks(plan, pkg, args, { changedFiles });
+  else if (args.verbose) printPlanHuman(plan, args);
+  else {
+    writeLine(`Selected ${plan.checks.length} checks: ${plan.checks.join(', ') || 'none'}`);
+    if (plan.failOpen) printFailOpen(plan);
+    writeLine('Use --verbose for selection reasons, --json for the plan, --run for execution.');
+  }
   return 0;
 }
 

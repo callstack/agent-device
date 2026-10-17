@@ -21,6 +21,8 @@ extension RunnerTests {
   struct SnapshotTraversalContext {
     let queryRoot: XCUIElement
     let rootSnapshot: XCUIElementSnapshot
+    /// How long reading `rootSnapshot` took: what one more query over the whole app is expected to cost.
+    let rootReadDuration: TimeInterval
     /** Carries which way the app's interface is turned from the device's native space (#2612). */
     let viewport: SnapshotViewport
     /**
@@ -144,9 +146,11 @@ extension RunnerTests {
     min(startedAt.addingTimeInterval(flatInteractiveFallbackBudget), planDeadline)
   }
 
-  /// Whether a sweep query started at `now` can still finish before the slice `deadline`.
-  static func querySweepCanStartQuery(deadline: Date, now: Date) -> Bool {
-    deadline.timeIntervalSince(now) >= flatInteractiveQueryBudget
+  /// Whether a query started at `now` and expected to take `expectedCost` can still finish before
+  /// `deadline`. XCTest cannot cancel a query once it starts; the least admitted cost is a sweep
+  /// query's.
+  static func xctestQueryCanStart(deadline: Date, now: Date, expectedCost: TimeInterval = 0) -> Bool {
+    deadline.timeIntervalSince(now) >= max(flatInteractiveQueryBudget, expectedCost)
   }
 
   /// What one capture may spend reading the keyboard band before it gives up on the fact and lets the
@@ -181,18 +185,19 @@ extension RunnerTests {
   @MainActor
   func recursiveTreeSnapshotAcquisition(
     context: SnapshotTraversalContext,
-    hint: CaptureHint
-  ) throws -> SnapshotAcquisition {
-    var cachedDescendantElements: [XCUIElement]?
-    func collapsedTabDescendants() -> [XCUIElement] {
-      if let cachedDescendantElements {
-        return cachedDescendantElements
+    hint: CaptureHint,
+    processingDeadline: Date
+  ) throws -> (acquisition: SnapshotAcquisition, outcome: SnapshotTierOutcome) {
+    var outcome = SnapshotTierOutcome.completed
+    var cachedCollapsedTabCandidates: [CollapsedTabCandidate]?
+    func collapsedTabCandidatesOnce() -> [CollapsedTabCandidate] {
+      if let cachedCollapsedTabCandidates {
+        return cachedCollapsedTabCandidates
       }
-      let result = snapshotElementsQuery {
-        context.queryRoot.descendants(matching: .any).allElementsBoundByIndex
-      }
-      cachedDescendantElements = result.elements
-      return result.elements
+      let candidates = collapsedTabCandidates(context: context, processingDeadline: processingDeadline)
+      if candidates == nil { outcome = .deadlineExhausted }
+      cachedCollapsedTabCandidates = candidates ?? []
+      return candidates ?? []
     }
 
     // Acquisition serializes reported frames only; no coordinate space or fold decision is carried
@@ -212,7 +217,7 @@ extension RunnerTests {
       appendCollapsedTabFallbackNodes(
         to: &nodes,
         containerSnapshot: context.rootSnapshot,
-        resolveElements: collapsedTabDescendants,
+        resolveCandidates: collapsedTabCandidatesOnce,
         depth: 1,
         parentIndex: 0
       )
@@ -269,19 +274,22 @@ extension RunnerTests {
         appendCollapsedTabFallbackNodes(
           to: &nodes,
           containerSnapshot: snapshot,
-          resolveElements: collapsedTabDescendants,
+          resolveCandidates: collapsedTabCandidatesOnce,
           depth: depth + 1,
           parentIndex: node.index
         )
       }
     }
 
-    return SnapshotAcquisition(
-      hint: hint,
-      nodes: nodes,
-      truncated: false,
-      effectiveDepth: nil,
-      viewport: context.viewport
+    return (
+      SnapshotAcquisition(
+        hint: hint,
+        nodes: nodes,
+        truncated: outcome == .deadlineExhausted,
+        effectiveDepth: nil,
+        viewport: context.viewport
+      ),
+      outcome
     )
   }
 
@@ -469,7 +477,7 @@ extension RunnerTests {
     let flatElements = flatInteractiveElements(app: app, deadline: deadline)
     var outcome = flatElements.outcome
     for element in flatElements.elements {
-      if !Self.querySweepCanStartQuery(deadline: deadline, now: Date()) {
+      if !Self.xctestQueryCanStart(deadline: deadline, now: Date()) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_FLAT_FALLBACK_DEADLINE")
         outcome = .deadlineExhausted
         break

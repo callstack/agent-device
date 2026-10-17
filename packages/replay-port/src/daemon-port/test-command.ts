@@ -294,7 +294,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
 /**
  * #2246: against a remote daemon, the client redirects `--artifacts-dir` to a temp directory on
  * THIS host before the suite runs (`prepareRemoteRequestArtifacts` in
- * `src/remote/daemon-artifacts.ts`) — the caller's real `cwd` names no path here, so the
+ * `packages/remote/src/daemon-artifacts.ts`) — the caller's real `cwd` names no path here, so the
  * scheduler above must never resolve suite artifacts against it. `req.meta.clientArtifactPaths`
  * is how that client tells the daemon the real caller-local ROOT (e.g. `--artifacts-dir`, or its
  * default) it will pull the directory back into once the request returns — that root is resolved

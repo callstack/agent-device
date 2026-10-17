@@ -1,3 +1,4 @@
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { handleLeaseCommands } from '../lease.ts';
@@ -7,7 +8,7 @@ import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { IOS_SIMULATOR, TVOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR, TVOS_SIMULATOR } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   clearRequestCanceled,
@@ -589,5 +590,162 @@ test("a proxy allocation naming another owner's lease id still picks and is refu
     ),
     (error: AppError) =>
       error.code === 'INVALID_ARGS' && error.details?.reason === 'LEASE_ID_IN_USE',
+  );
+});
+
+const RUNTIME_LESS_LEASES: readonly (readonly [string, Record<string, string>])[] = [
+  ['no provider', {}],
+  ['a backend and no provider', { leaseBackend: 'ios-instance' }],
+  ['the proxy routing identity', { leaseProvider: 'proxy' }],
+  ['the cloud remote profile', { leaseProvider: 'cloud' }],
+];
+
+for (const [label, scope] of RUNTIME_LESS_LEASES) {
+  test(`lease_allocate keeps a runtime-less logical lease with ${label}`, async () => {
+    const registry = new LeaseRegistry();
+    const response = await handleLeaseCommands({
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', ...scope },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-logical-lease-'),
+      leaseRegistry: registry,
+      providerRuntimeIds: ['browserstack'],
+    });
+    assert.equal(response?.ok, true);
+    assert.equal(registry.listActiveLeases().length, 1);
+  });
+}
+
+test('lease_allocate refuses a provider no registered runtime claims, before recording a lease', async () => {
+  const registry = new LeaseRegistry();
+  await assert.rejects(
+    handleLeaseCommands({
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'testmu' },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-unregistered-provider-'),
+      leaseRegistry: registry,
+      providerRuntimeIds: ['browserstack'],
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.equal(error.details?.provider, 'testmu');
+      assert.deepEqual(error.details?.registeredProviders, ['browserstack']);
+      return true;
+    },
+  );
+  assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+test('lease_allocate names the plugin that failed to register when it could have backed the provider', async () => {
+  const registry = new LeaseRegistry();
+  const failed = (provider: string | undefined, packageName: string): PluginInventoryEntry => ({
+    ...(provider === undefined ? {} : { provider }),
+    source: 'store',
+    package: packageName,
+    state: 'failed',
+    error: { code: 'INVALID_ARGS', message: `${packageName} is broken`, reason: 'invalid_plugin' },
+    credentials: { variables: [], byBackend: {} },
+  });
+  await assert.rejects(
+    handleLeaseCommands({
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'testmu' },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-failed-plugin-provider-'),
+      leaseRegistry: registry,
+      providerRuntimeIds: ['browserstack'],
+      failedPlugins: [
+        failed('testmu', '@agent-device/testmu'),
+        failed(undefined, 'unloadable-plugin'),
+        failed('other', 'other-plugin'),
+      ],
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.deepEqual(error.details?.failedPlugins, [
+        {
+          provider: 'testmu',
+          package: '@agent-device/testmu',
+          code: 'INVALID_ARGS',
+          reason: 'invalid_plugin',
+          message: '@agent-device/testmu is broken',
+        },
+        {
+          package: 'unloadable-plugin',
+          code: 'INVALID_ARGS',
+          reason: 'invalid_plugin',
+          message: 'unloadable-plugin is broken',
+        },
+      ]);
+      return true;
+    },
+  );
+  assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+test('lease_allocate treats a daemon that reports no provider runtimes as having none registered', async () => {
+  await assert.rejects(
+    handleLeaseCommands({
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'browserstack' },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-no-runtimes-'),
+      leaseRegistry: new LeaseRegistry(),
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.equal(error.details?.provider, 'browserstack');
+      assert.deepEqual(error.details?.registeredProviders, []);
+      return true;
+    },
+  );
+});
+
+test('lease_allocate classifies the trimmed provider id and rejects a malformed one as INVALID_ARGS', async () => {
+  const allocate = async (leaseProvider: string, providerRuntimeIds: string[]) =>
+    await handleLeaseCommands({
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-provider-id-forms-'),
+      leaseRegistry: new LeaseRegistry(),
+      providerRuntimeIds,
+    });
+
+  assert.equal((await allocate(' testmu ', ['testmu']))?.ok, true);
+  await assert.rejects(
+    allocate('a b', ['testmu']),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
   );
 });

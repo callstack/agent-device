@@ -5,7 +5,10 @@ import {
   type DispatchDisclosure,
 } from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
-import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
+import {
+  ALERT_BUTTON_NOT_FOUND_RUNNER_CODE,
+  ALERT_NOT_FOUND_RUNNER_CODE,
+} from '@agent-device/contracts/alert-contract';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type { ClickButton } from '@agent-device/contracts/click-button';
@@ -257,22 +260,46 @@ export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = n
 ]);
 
 /**
+ * The runner's own code refusing a coordinate `fill` whose point identified no text input (#1721).
+ * The synthesized first-responder replacement this route would otherwise take has no element, so its
+ * clear and its typed text reach whichever field already holds focus. The runner refuses before
+ * dispatching the focus tap, so the reply proves nothing ran.
+ */
+export const NO_TEXT_INPUT_AT_POINT_RUNNER_CODE = 'NO_TEXT_INPUT_AT_POINT';
+
+/**
+ * The runner code refusing a coordinate `fill` whose pre-tap input lookup could not answer on the
+ * degraded channel. Like NO_TEXT_INPUT_AT_POINT it answers before the focus tap, and it is not a
+ * claim that the point has no input — only that the runner could not tell.
+ */
+export const TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE = 'TEXT_INPUT_PROBE_UNAVAILABLE';
+
+/**
  * Runner codes that classify a failure for the host without renaming it on the wire. They stay
  * `COMMAND_FAILED` and survive as `details.runnerErrorCode`, which is what family policy reads:
  * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet,
  * the scroll keyboard refusal for a surface the runner declined to swipe under the keys, and the
  * retriable `APP_NOT_RUNNING` for a read the runner refused rather than launch the session app.
  */
-const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
-  string,
-  { retriable?: true; reason?: RunnerReportedErrorReason }
-> = new Map([
-  [RUNNER_BUSY_RUNNER_CODE, { retriable: true, reason: 'runner_busy' }],
-  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, { reason: 'runner_main_thread_timeout' }],
+const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<string, { retriable?: true }> = new Map([
+  [RUNNER_BUSY_RUNNER_CODE, { retriable: true }],
+  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, {}],
   [APP_NOT_RUNNING_RUNNER_CODE, { retriable: true }],
   [ALERT_NOT_FOUND_RUNNER_CODE, {}],
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, {}] as const),
+]);
+
+/**
+ * `details.reason` for the runner codes a consumer acts on, so it reads one field instead of
+ * `details.runnerErrorCode`, which stays for the runner's own vocabulary. Both the codes that stay
+ * off the wire and the codes that travel under their own name are answered from this one table.
+ */
+const RUNNER_REPORTED_ERROR_REASONS: ReadonlyMap<string, RunnerReportedErrorReason> = new Map([
+  [RUNNER_BUSY_RUNNER_CODE, 'runner_busy'],
+  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, 'runner_main_thread_timeout'],
+  [NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'no_text_input_at_point'],
+  [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'text_input_probe_unavailable'],
 ]);
 
 /**
@@ -293,6 +320,9 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
   ['OBSERVATION_UNAVAILABLE', 'no'],
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, 'no'],
   [ALERT_NOT_FOUND_RUNNER_CODE, 'no'],
+  [NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'no'],
+  [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'no'],
+  [ALERT_BUTTON_NOT_FOUND_RUNNER_CODE, 'no'],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
 ]);
 
@@ -300,7 +330,11 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
  * `details.reason` for the runner codes a consumer acts on, so it reads one field instead of
  * `details.runnerErrorCode`, which stays for the runner's own vocabulary.
  */
-type RunnerReportedErrorReason = 'runner_busy' | 'runner_main_thread_timeout';
+type RunnerReportedErrorReason =
+  | 'runner_busy'
+  | 'runner_main_thread_timeout'
+  | 'no_text_input_at_point'
+  | 'text_input_probe_unavailable';
 
 /** Wire code plus the details every path must publish for one runner-reported error code. */
 export type RunnerReportedErrorClass = Readonly<{
@@ -326,11 +360,14 @@ export function classifyRunnerReportedError(
     runnerErrorCode === undefined
       ? undefined
       : DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.get(runnerErrorCode);
+  const reason =
+    runnerErrorCode === undefined ? undefined : RUNNER_REPORTED_ERROR_REASONS.get(runnerErrorCode);
   return Object.freeze({
     code: diagnosticOnly ? 'COMMAND_FAILED' : toAppErrorCode(runnerErrorCode),
     details: Object.freeze({
       runnerErrorCode,
       ...diagnosticOnly,
+      ...(reason === undefined ? {} : { reason }),
       dispatched:
         (runnerErrorCode === undefined
           ? undefined

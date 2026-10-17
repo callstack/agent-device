@@ -6,7 +6,7 @@ import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
-} from '@agent-device/contracts/dispatch-disclosure-fixtures';
+} from '@agent-device/test-kit';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { createTestRequestCancellation, makeRunnerSession } from './runner-session-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';

@@ -28,7 +28,18 @@ extension RunnerTests {
       xCTestChannelPenalized: xCTestChannelPenalized
     ), let x = command.x, let y = command.y {
       // Resolved before the tap: the focus it causes can move the field away from this point.
-      let inputAtPoint = coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y)
+      // A replacement with no input at the point has nothing to bind to: its clear and its typed
+      // text would reach the app-level first responder, so an empty point and a lookup that cannot
+      // answer both refuse here, each under its own reason.
+      let inputAtPoint: TextInputAtPoint
+      switch coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y) {
+      case .input(let input):
+        inputAtPoint = input
+      case .absent:
+        return noTextInputAtPointResponse()
+      case .unavailable:
+        return textInputProbeUnavailableResponse()
+      }
       let policyKind = SynthesizedGesturePolicyKind.coordinateTap
       let context = synthesizedCoordinateContext(
         app: activeApp,
@@ -148,5 +159,34 @@ extension RunnerTests {
       )
     }
     return Response(ok: true, data: data)
+  }
+
+  /// The refusal of a coordinate `fill` whose point identified no text input, answered before the
+  /// focus tap is dispatched so nothing runs. Without an input at the point the synthesized
+  /// replacement has no element to bind to, so its clear and its typed text would reach the app-level
+  /// first responder and overwrite whatever field currently holds focus.
+  private func noTextInputAtPointResponse() -> Response {
+    Response(
+      ok: false,
+      error: ErrorPayload(
+        code: RunnerWireErrorCode.noTextInputAtPoint,
+        message: "no text input identified at the provided coordinates",
+        hint: "A fill replaces the text of the input under its point, so the point must sit inside one — for a ref or selector fill, that point is the centre of the rect it resolved to, which an outer container or a non-input node does not give you. Run snapshot -i, pick the input node itself, and aim at a point inside its rect."
+      )
+    )
+  }
+
+  /// The refusal of a coordinate `fill` whose point the input lookup could not read, answered before
+  /// the focus tap so nothing runs. The channel is degraded, so the runner cannot tell whether an
+  /// input is there; typing would reach the app-level first responder, which is what #1721 refuses.
+  private func textInputProbeUnavailableResponse() -> Response {
+    Response(
+      ok: false,
+      error: ErrorPayload(
+        code: RunnerWireErrorCode.textInputProbeUnavailable,
+        message: "the runner could not read the text input at the provided coordinates",
+        hint: "The accessibility lookup for the point could not answer on the degraded channel, so the runner dispatched nothing and no field changed — this does not mean the point has no input. Retry the fill, or run snapshot -i and fill the input node by ref once its capture reads back."
+      )
+    )
   }
 }

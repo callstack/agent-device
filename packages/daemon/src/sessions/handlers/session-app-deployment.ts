@@ -6,6 +6,7 @@ import type { AppDeploymentResult } from '@agent-device/contracts/app-deployment
 import {
   deployAppUse,
   readySendPushNotificationUse,
+  uninstallAppUse,
 } from '@agent-device/contracts/app-deployment-runtime-plan';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { readNotificationPayload } from '../dispatch-payload.ts';
@@ -163,6 +164,46 @@ export async function handlePushNotificationCommand(
   recordSessionAction(sessionStore, ref, req, 'push', data, {
     positionals: [appId, payloadArg],
   });
+  return { ok: true, data };
+}
+
+export async function handleUninstallCommand(
+  params: RuntimeCommandHandlerParams,
+): Promise<DaemonResponse> {
+  const { req, sessionName, sessionStore } = params;
+  const ref = sessionStore.lookup(sessionName);
+  const session = ref?.session;
+  const flags = req.flags ?? {};
+  const guard = requireSessionOrExplicitSelector('uninstall', session, flags);
+  if (guard) return guard;
+
+  const app = req.positionals?.[0]?.trim();
+  if (!app) return errorResponse('INVALID_ARGS', 'uninstall requires <app>');
+  const device = await resolveCommandDevice({
+    session,
+    flags,
+    platformServices: params.platformServices,
+  });
+  const facts = await requireRuntimeFacts(params.inspectFacts)(device);
+  const unsupported = unavailableRuntimeOperationResponse(
+    'uninstall',
+    facts.operations.uninstallApp,
+  );
+  if (unsupported) return unsupported;
+
+  const runtime = await requireRuntimeBinding(params.bindDevice)(device, uninstallAppUse);
+  if (ref) expireRefFrame(sessionStore.requireCurrent(ref));
+  const result = await runtime.operations.uninstallApp({ app });
+  const platform = isIosFamily(device) ? 'ios' : 'android';
+  const appId = !result.wasInstalled
+    ? undefined
+    : 'bundleId' in result
+      ? result.bundleId
+      : result.packageName;
+  const data = appId
+    ? withSuccessText({ platform, app, wasInstalled: true, appId }, `Uninstalled: ${appId}`)
+    : withSuccessText({ platform, app, wasInstalled: false }, `Not installed: ${app}`);
+  recordSessionAction(sessionStore, ref, req, 'uninstall', data);
   return { ok: true, data };
 }
 

@@ -47,7 +47,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   const parsedOrResponse = parseWaitRequest(req);
   if ('ok' in parsedOrResponse) return parsedOrResponse;
   const parsed = parsedOrResponse;
-  const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
+  const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req);
   // ADR 0019: facts are the only support authority, through the selector family's one
   // admit-then-bind entry. A duration wait observes nothing, so it never asks for a binding —
   // exactly the cell legacy admission skipped by testing `parsed.kind !== 'sleep'`.

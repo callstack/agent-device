@@ -3,7 +3,7 @@ import type {
   CloudProviderSessionResult,
 } from '@agent-device/contracts/observability';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
+import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import {
   readActiveConnectionState,
   buildRemoteConnectionRequestMetadata,
@@ -16,12 +16,13 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
-} from '../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   connectProviderNamesForError,
   connectionProviderCapabilities,
   isConnectProviderName,
+  primeProviderConnection,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
 import {
@@ -35,7 +36,6 @@ import {
   releasePreviousLease,
   resolveRequestedLeaseBackend,
   stopMetroCleanup,
-  stopReactDevtoolsCleanup,
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
@@ -55,6 +55,7 @@ import {
 
 export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  await primeProviderConnection(positionals[0]);
   const provider = readConnectProvider(positionals);
   assertConnectProviderUsage(provider, flags);
   const resolved = await resolveConnectProviderProfile({ provider, flags, stateDir });
@@ -86,7 +87,6 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   writeRemoteConnectionState({ stateDir, state });
   const previousLeaseNotice = await cleanupForcedPreviousConnection(
     client,
-    stateDir,
     connectFlags,
     context.previous,
     state,
@@ -267,14 +267,12 @@ function shouldReusePreviousConnectionState(
 
 async function cleanupForcedPreviousConnection(
   client: Parameters<ClientCommandHandler>[0]['client'],
-  stateDir: string,
   flags: CliFlags,
   previous: RemoteConnectionState | null,
   next: RemoteConnectionState,
 ): Promise<PreviousLeaseReleaseNotice | undefined> {
   if (!previous || !flags.force) return undefined;
   await stopMetroCleanup(previous.metro);
-  await stopReactDevtoolsCleanup({ stateDir, state: previous });
   if (previous.leaseId && previous.leaseId === next.leaseId) return undefined;
   return await releasePreviousLease(client, previous, {
     nextDaemonBaseUrl: next.daemon?.baseUrl,
@@ -314,7 +312,6 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
     }
   }
   await stopMetroCleanup(state.metro);
-  await stopReactDevtoolsCleanup({ stateDir, state });
   let released = false;
   if (state.leaseId) {
     try {
@@ -348,6 +345,7 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
+  await primeProviderConnection(state.leaseProvider);
   const leasePreparation = buildLeasePreparationNotice(state);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state);
   await writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>

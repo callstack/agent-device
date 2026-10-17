@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { memoizedImportParser, resolveImportEdges } from './model.ts';
-import { measureRatchets, mergeBaseRatchets } from './ratchet-reference.ts';
+import { inHeadCoordinates, measureRatchets, mergeBaseRatchets } from './ratchet-reference.ts';
 import { sessionStateWritePressure } from './session-state.ts';
 import { listTrackedProductionSources } from './tracked-sources.ts';
 import { readCommittedSources } from '../__tests__/committed-source-tree.ts';
@@ -52,6 +52,17 @@ test('sessionStateWritePressure counts written fields and (field, writer) claims
   });
 });
 
+test('carried merge-base entries map to head paths and stay sorted', () => {
+  const moved = new Map([['src/z-old.test.ts', 'src/a-new.test.ts']]);
+  assert.deepEqual(
+    inHeadCoordinates(
+      ['src/b.test.ts', 'src/z-old.test.ts', 'src/c.test.ts'],
+      (file) => moved.get(file) ?? file,
+    ),
+    ['src/a-new.test.ts', 'src/b.test.ts', 'src/c.test.ts'],
+  );
+});
+
 test('measureRatchets reports all ratchets from one tree', () => {
   const sources = tree();
   assert.deepEqual(measureRatchets(sources, resolveImportEdges(sources)), {
@@ -59,9 +70,24 @@ test('measureRatchets reports all ratchets from one tree', () => {
     largestTypeCycle: ['src/client/client.ts', 'src/commands/loop.ts'],
     sessionState: { writerOwnedFields: 2, ownerFileClaims: 3 },
     sessionAuthority: { shapeFiles: [], authorityFiles: [] },
+    testOnlyExports: [],
+    unmatchedTests: [],
   });
+  const withExports = measureRatchets(sources, resolveImportEdges(sources), {
+    manifests: new Map([
+      [
+        'packages/p/package.json',
+        JSON.stringify({ name: '@agent-device/p', exports: { './x-fixtures': './src/x.ts' } }),
+      ],
+    ]),
+    files: [],
+  });
+  assert.deepEqual(
+    withExports.testOnlyExports.map(({ id }) => id),
+    ['@agent-device/p ./x-fixtures'],
+  );
   const withAuthority = tree({
-    'packages/daemon/src/sessions/handlers/fixture.ts':
+    'packages/daemon/src/sessions/handlers/subject.ts':
       "import type { SessionState } from '../../core/session-state.ts';\n" +
       "import { SessionStore } from '../../core/session-store.ts';",
     'packages/daemon/src/core/session-store.ts': 'export class SessionStore {}',
@@ -69,8 +95,8 @@ test('measureRatchets reports all ratchets from one tree', () => {
   assert.deepEqual(
     measureRatchets(withAuthority, resolveImportEdges(withAuthority)).sessionAuthority,
     {
-      shapeFiles: ['packages/daemon/src/sessions/handlers/fixture.ts'],
-      authorityFiles: ['packages/daemon/src/sessions/handlers/fixture.ts'],
+      shapeFiles: ['packages/daemon/src/sessions/handlers/subject.ts'],
+      authorityFiles: ['packages/daemon/src/sessions/handlers/subject.ts'],
     },
   );
 });

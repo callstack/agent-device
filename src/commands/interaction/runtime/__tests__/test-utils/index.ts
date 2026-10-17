@@ -12,7 +12,7 @@ import {
   RN_TEXT_ECHO_NODES,
   RN_TEXT_ECHO_OFFSET_RECT_NODES,
   UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
-} from '@agent-device/selectors/interaction-targeting-fixtures';
+} from '@agent-device/test-kit';
 import { createMemorySessionStore } from '../../../../../command-runtime/runtime-factory.ts';
 
 export function selectorSnapshot(): SnapshotState {

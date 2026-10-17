@@ -3,7 +3,7 @@ import { normalizeType } from '@agent-device/contracts/snapshot';
 import type { IosSnapshotFoldPolicy, IosSnapshotPresentationNode } from './types.ts';
 
 // Kept in step with `eligibleInteractiveTypes` in SnapshotPresentationProjection.swift by
-// ios-snapshot-engine/eligibility-parity.test.ts. Excludes `scrollarea`, which `isScrollableSnapshotType`
+// ios-snapshot-engine/engine-eligibility-parity.test.ts. Excludes `scrollarea`, which `isScrollableSnapshotType`
 // accepts but the iOS runner never emits (ADR 0026; macOS decision recorded in that test).
 const REGULAR_ELIGIBLE_TYPES = new Set([
   'button',

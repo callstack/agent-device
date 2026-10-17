@@ -5,31 +5,27 @@
  * discipline, not the sweep — and each case outlives the armed budget, so the assertion proves the
  * timer was cleared rather than merely beaten to the settle.
  *
- * The abort case aborts right after `sendRequest` arms its timer, so the clear is what is tested.
- * The paired no-signal case lets the same budget expire and must reach the mocked seam, which
- * makes the abort case's empty-calls assertion evidence instead of an absent hook: delete the
- * abort path's `clearTimeout` and only the abort case fails.
+ * The socket abort also checks that the exact timer handle armed for the request was cleared. The
+ * paired no-signal case lets the same budget expire and must reach the mocked seam, so the test
+ * proves both the socket timer setup and the abort cleanup.
  */
-import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import net from 'node:net';
 import { DAEMON_HTTP_INSTANCE_MISMATCH_HEADER } from '@agent-device/contracts/daemon-http';
 import { test, vi } from 'vitest';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { getRequestSignal } from '@agent-device/host-kit/request';
-import type { DaemonInvokeFn } from '@agent-device/daemon/daemon-request';
-import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { sendRequest } from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  type LoopbackServer,
+  mkdtempForTestSync,
+  type SkippableTestContext,
   skipWhenLoopbackUnavailable,
   trackLoopbackSockets,
-  type SkippableTestContext,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 
 const { handleRequestTimeoutCalls } = vi.hoisted(() => ({
   handleRequestTimeoutCalls: [] as unknown[],
@@ -49,33 +45,28 @@ const TIMEOUT_MS = 15;
 // Past the armed budget, so a timer the abort forgot to clear fires inside the case.
 const OUTLIVE_MS = 80;
 
-// A request the daemon never answers: the only things that can end it are the client's abort and
-// the transport's own budget, which is what makes the timer's fate observable.
-function hangingHandler(): DaemonInvokeFn {
-  return async (req: DaemonWireRequest): Promise<DaemonResponse> => {
-    const signal = getRequestSignal(req.meta?.requestId);
-    return await new Promise<DaemonResponse>((_resolve, reject) => {
-      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
-    });
-  };
-}
-
 async function runTimerDiscipline(
   t: SkippableTestContext,
   outcome: 'aborted' | 'timed-out',
+  transport: 'http' | 'socket' = 'http',
 ): Promise<void> {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const aborted = outcome === 'aborted';
   handleRequestTimeoutCalls.length = 0;
-  const server = createSocketServer(hangingHandler());
-  // The hanging handler never answers, so whichever way the request ends, a failed assertion
-  // before that would leave the connection open and `net.Server.close()` would hang the lane.
+  const server: LoopbackServer =
+    transport === 'http'
+      ? http.createServer(() => {})
+      : net.createServer((socket) => socket.on('error', () => {}));
   const destroySockets = trackLoopbackSockets(server);
+  const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+  const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
   try {
-    const port = await listenNetServer(server);
+    const port = await listenOnLoopback(server);
     const controller = new AbortController();
+    setTimeoutSpy.mockClear();
+    clearTimeoutSpy.mockClear();
     const request = sendRequest(
-      { port, token: 't', pid: 1 },
+      transport === 'http' ? { httpPort: port, token: 't', pid: 1 } : { port, token: 't', pid: 1 },
       {
         token: 't',
         command: 'wait',
@@ -84,15 +75,24 @@ async function runTimerDiscipline(
         flags: {},
         meta: { requestId: `req-${outcome}-timeout-timer` },
       },
-      'socket',
+      transport,
       STATE_PATHS,
       TIMEOUT_MS,
       aborted ? { signal: controller.signal } : {},
     );
     if (aborted) {
+      const armedTimeoutIndex = setTimeoutSpy.mock.calls.findIndex(
+        ([, timeout]) => timeout === TIMEOUT_MS,
+      );
+      const armedTimeout =
+        armedTimeoutIndex === -1 ? undefined : setTimeoutSpy.mock.results[armedTimeoutIndex]?.value;
+      if (transport === 'socket') assert.ok(armedTimeout);
       // `sendRequest` armed the timeout timer synchronously by returning; this abort must disarm it.
       controller.abort();
       await assert.rejects(request, (error: unknown) => isRequestCanceledError(error));
+      if (transport === 'socket') {
+        assert.ok(clearTimeoutSpy.mock.calls.some(([handle]) => handle === armedTimeout));
+      }
     } else {
       await assert.rejects(
         request,
@@ -104,6 +104,8 @@ async function runTimerDiscipline(
     await new Promise((resolve) => setTimeout(resolve, OUTLIVE_MS));
     if (aborted) assert.deepEqual(handleRequestTimeoutCalls, []);
   } finally {
+    setTimeoutSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
     destroySockets();
     await closeLoopbackServer(server);
   }
@@ -115,6 +117,14 @@ test('an abort with a timeout armed clears the timer instead of running the time
 
 test('the same budget without a signal reaches the timeout seam', async (t) => {
   await runTimerDiscipline(t, 'timed-out');
+});
+
+test('a socket abort with a timeout armed clears the timer instead of running the timeout path', async (t) => {
+  await runTimerDiscipline(t, 'aborted', 'socket');
+});
+
+test('the socket budget without a signal reaches the timeout seam', async (t) => {
+  await runTimerDiscipline(t, 'timed-out', 'socket');
 });
 
 test('an abort during a restart health probe never retires the daemon or redispatches', async (t) => {

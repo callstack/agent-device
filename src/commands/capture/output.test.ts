@@ -123,3 +123,29 @@ test('a repaired capture renders the disclosure and keeps the structured fact', 
     otherActiveApplicationPid: 4562,
   });
 });
+
+test('JSON output keeps snapshot quality and warnings and drops capture analysis and freshness', async () => {
+  const snapshotQuality = { state: 'healthy', backend: 'tree' };
+  const output = await snapshotCliOutput({
+    result: {
+      nodes: attachRefs([{ index: 0, depth: 0, type: 'android.widget.TextView', label: 'Albums' }]),
+      truncated: false,
+      identifiers: { session: 'qa' },
+      snapshotQuality,
+      warnings: ['backend warning from interaction capture'],
+      analysis: { rawNodeCount: 1, maxDepth: 0 },
+      freshness: { action: 'swipe', retryCount: 0, staleAfterRetries: false },
+    } as unknown as CaptureSnapshotResult,
+  });
+
+  assert.deepEqual(
+    (output.jsonData as { snapshotQuality?: unknown }).snapshotQuality,
+    snapshotQuality,
+  );
+  assert.deepEqual((output.jsonData as { warnings?: unknown }).warnings, [
+    'backend warning from interaction capture',
+  ]);
+  const jsonData = output.jsonData as Record<string, unknown>;
+  assert.equal('analysis' in jsonData, false);
+  assert.equal('freshness' in jsonData, false);
+});

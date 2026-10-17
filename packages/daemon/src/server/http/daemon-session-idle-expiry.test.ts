@@ -1,4 +1,4 @@
-import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
+import { deviceClaimFilePath } from '@agent-device/test-kit';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -77,7 +77,7 @@ test('a settle that cannot confirm the claim gone keeps the session record stand
 
   // A claim store this process cannot write into: the clear reaches NO verdict, which is different
   // information from a successor having taken the device.
-  const claimsDir = path.dirname(resolveDeviceClaimPath(deviceClaim.deviceKey));
+  const claimsDir = path.dirname(deviceClaimFilePath(deviceClaim.deviceKey));
   fs.chmodSync(claimsDir, 0o500);
   try {
     const sweeps = createSweepBarrier();
@@ -117,7 +117,7 @@ test('a claim that yields no attributable owner keeps the session record standin
   // The record this daemon wrote is now unreadable. The clear therefore learns nothing about whether
   // its claim is gone, which is a different answer from a successor owning the device — and only that
   // successor case may justify forgetting a session whose daemon is still alive.
-  fs.writeFileSync(resolveDeviceClaimPath(deviceClaim.deviceKey), '{bad json');
+  fs.writeFileSync(deviceClaimFilePath(deviceClaim.deviceKey), '{bad json');
 
   const sweeps = createSweepBarrier();
   const controller = createSessionIdleExpiry({
@@ -295,7 +295,7 @@ test('a held-back settle leaves a repair transaction uncommitted, so a later pas
   sessionStore.retire(sessionStore.lookup('default')!);
   sessionStore.publish('default', session);
 
-  const claimsDir = path.dirname(resolveDeviceClaimPath(deviceClaim.deviceKey));
+  const claimsDir = path.dirname(deviceClaimFilePath(deviceClaim.deviceKey));
   const sweeps = createSweepBarrier();
   const settleParams = {
     sessionStore,

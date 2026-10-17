@@ -44,7 +44,9 @@ const openCommandMetadata = defineFieldCommandMetadata(
       'macOS presentation surface to open: the app itself, the frontmost app, the desktop, or the menu bar.',
     ),
     activity: stringField('Android activity name.'),
-    launchConsole: stringField('Launch console mode.'),
+    launchConsole: stringField(
+      'File path on the daemon host for the stdout and stderr of the initial app launch. iOS simulator direct app launches only; not for URL opens.',
+    ),
     launchArgs: stringArrayField(
       'Launch arguments forwarded verbatim to the platform launch command.',
     ),
@@ -82,7 +84,7 @@ const openCommandMetadata = defineFieldCommandMetadata(
 
 const closeCommandMetadata = defineFieldCommandMetadata(
   'close',
-  'Close the named app, or close the active session app when app is omitted. Use shutdown only when the selected simulator or emulator should also stop.',
+  'Close the named app, or close the active session app when app is omitted. Use shutdown only when the selected simulator or emulator should also stop. Android ADB close fails with android-app-close-timeout if the app stays foreground, or its process stays running, past its 2s check window.',
   {
     app: stringField('Optional app to close.'),
     shutdown: booleanField('Shutdown the session/device where supported.'),

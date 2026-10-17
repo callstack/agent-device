@@ -29,7 +29,9 @@ test('keeps only artifact and identity capabilities in the root adapter', async 
 
   await expect(executor.resolveAppBundleId(device, 'Example')).resolves.toBe('com.example.app');
 
-  expect(resolveIosApp).toHaveBeenCalledWith(device, 'Example');
+  expect(resolveIosApp).toHaveBeenCalledWith(device, 'Example', undefined);
+  await executor.resolveAppBundleId(device, 'Example', { installedOnly: true });
+  expect(resolveIosApp).toHaveBeenLastCalledWith(device, 'Example', { installedOnly: true });
   expect(executor).not.toHaveProperty('install');
   expect(executor).not.toHaveProperty('uninstall');
   expect(executor).not.toHaveProperty('push');

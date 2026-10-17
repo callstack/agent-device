@@ -5,7 +5,8 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { likelyPlayableWebmContainer } from '../__tests__/test-utils/video-fixtures.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
-import { isPlayableVideo } from './video.ts';
+import { Deadline } from '@agent-device/host-kit/retry';
+import { isPlayableVideo, waitForPlayableVideo } from './video.ts';
 
 vi.mock('@agent-device/host-kit/command', () => ({
   runCmd: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
@@ -52,4 +53,12 @@ test('refuses an MP4 container that never declares a movie header', async () => 
   const container = Buffer.concat([ftyp, mp4Atom('mdat', Buffer.alloc(8))]);
   await expect(isPlayableVideo(writeFixture('no-moov.mp4', container))).resolves.toBe(false);
   expect(runCmd).not.toHaveBeenCalled();
+});
+
+test('waiting for a playable video stops polling once its deadline passes', async () => {
+  const filePath = path.join(mkdtempForTestSync('agent-device-video-wait-'), 'never-playable.mp4');
+  fs.writeFileSync(filePath, '');
+  const started = Date.now();
+  await waitForPlayableVideo(filePath, { pollMs: 60_000, deadline: Deadline.fromTimeoutMs(0) });
+  expect(Date.now() - started).toBeLessThan(1_000);
 });

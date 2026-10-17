@@ -26,7 +26,7 @@ import { assertSessionSelectorMatches } from '../../core/session-selector.ts';
 import { resolveSessionScope } from '../session-routing.ts';
 import { resolveEffectiveOpenRuntimeHints } from '../session-runtime.ts';
 import { captureSnapshot } from '../../core/snapshot-capture.ts';
-import { handleSessionCloseCommands } from '../session-lifecycle/index.ts';
+import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
 import { onDelegatingLedger } from '../../core/request-ended-leases.ts';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
 import type { SessionCommandHandler } from './session-command-input.ts';

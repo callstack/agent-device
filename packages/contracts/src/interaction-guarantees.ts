@@ -96,6 +96,7 @@ export const INTERACTION_PATH_IDS = [
   'target-drag',
   'native-ref',
   'coordinate',
+  'find-focus-dispatch',
   'maestro-direct-selector',
   'maestro-non-hittable-fallback',
 ] as const;
@@ -153,6 +154,8 @@ export type InteractionPathContract = {
 
 const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
 const TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/3335';
+// The four guarantees this route's own seam leaves open are owned by #3734.
+const FIND_FOCUS_DISPATCH_GAPS_ISSUE = 'https://github.com/callstack/agent-device/issues/3734';
 
 /**
  * The moving-target gate's shared cell (#3471). Scoped to the two commands that dispatch a tap the
@@ -233,7 +236,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // `occlusion` nor `offscreen` can reach it.
   keyboardOcclusion: {
     kind: 'runtime',
-    via: 'src/commands/interaction/runtime/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
+    via: 'packages/selectors/src/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
   },
   // #1542: the base decision is the contracts-owned snapshot visibility resolver (bulk accessibility
   // tree), but throwIfOffscreenInteractionTarget is the actual end-to-end
@@ -348,7 +351,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       keyboardOcclusion: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
+        via: 'packages/selectors/src/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
       },
       offscreen: {
         kind: 'runtime',
@@ -420,7 +423,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // the snapshot annotation the pipeline reads.
       keyboardOcclusion: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
+        via: 'packages/selectors/src/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
       },
       parentOwnedTouchPoint: {
         kind: 'inapplicable',
@@ -542,6 +545,99 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'inapplicable',
         reason:
           'Coordinates are the escape hatch that dispatches the point it was given; there is no resolved element whose position could be confirmed, and re-resolving a caller-authored coordinate would replace the instruction rather than verify it.',
+      },
+    },
+  },
+  'find-focus-dispatch': {
+    description:
+      'Mutating `find <locator> focus`, and the focus leg of `find <locator> type`: find captures its own tree, ranks its own candidate set, runs the node stages its `findAct` row declares, then dispatches a point focus itself (`type` then dispatches the text) instead of re-entering the interaction leaf. `find click`/`find fill` are NOT this path — they hand the resolved node to `runtime-ref` as a pre-resolved target (#1654). `focus <x> <y>` is the coordinate route. Every cell below classifies what the `findAct` row plus this seam actually run, not what the acting rows run.',
+    commands: ['find'],
+    guarantees: {
+      // find's own ranking, but under the same ambiguity contract the runtime paths use: one
+      // `reject-candidates` policy row (#1625), `--first`/`--last` the only narrowing, and
+      // `preferOnscreenMatches` as the tie-break rather than a geometry-wins rule.
+      disambiguation: {
+        kind: 'runtime',
+        via: 'packages/daemon/src/execution/interaction/internal/find-match-resolution.ts#resolveFindMatch',
+      },
+      occlusion: {
+        kind: 'runtime',
+        via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
+      },
+      // #2622: the seam dispatches the point itself, so the shared #2589 guard runs here rather
+      // than at the interaction leaf's door. Same refusal, same typed details, measured at the
+      // center the seam dispatches.
+      keyboardOcclusion: {
+        kind: 'runtime',
+        via: 'packages/selectors/src/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
+      },
+      offscreen: {
+        kind: 'waived',
+        reason:
+          'gap: the `findAct` row declares `offscreen: "ignore"` because find ranks across the whole tree and prefers on-screen matches rather than refusing off-screen ones (#1625), and focus/type never re-enter the acting leaf where the runtime rows refuse. So the seam dispatches at a captured rect center the acting paths would reject as outside the root viewport — a closed drawer or an off-viewport carousel is a silent no-op focus here.',
+        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
+      },
+      parentOwnedTouchPoint: {
+        kind: 'waived',
+        reason:
+          'gap: the seam aims `centerOfRect` of the resolved node rather than the parent-owned point `resolveInteractionTouchPoint` chooses, so a match whose center is tiled by an independently interactive descendant activates that descendant instead of failing closed — and the keyboard guard above measures the same center the tap uses, which is the point actually dispatched but not the point the acting paths would aim.',
+        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
+      },
+      // The guarantee is promotion AND annotation. This seam runs only the first half, so the
+      // cell cannot claim `runtime` for the whole guarantee (the same shape `native-ref` classifies
+      // the other way round, annotation without promotion).
+      nonHittable: {
+        kind: 'waived',
+        reason:
+          "gap: the promotion half does run — the `findAct` row declares `hittable-ancestor-below-root`, so the seam dispatches the promoted ancestor's center (regression-proven in packages/daemon/src/execution/interaction/internal/__tests__/find.test.ts) — but the annotation half never does: the response is the focus runtime's point payload, so a match still reporting `hittable: false` after promotion is accepted silently, where press/click/fill answer with `targetHittable: false` plus a hint. Closing it needs the annotation composed at this seam, which is response-shape work the `responseIdentity` waiver below also records.",
+        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
+      },
+      // One construction site per dispatch kind, both shared with the plain commands: the focus
+      // payload is `executeFocusPoint`'s (the same owner `focus <x> <y>` reaches), and `type`'s
+      // second dispatch is `executeBoundTypeText`'s. The seam hand-rolls neither.
+      responseConstruction: {
+        kind: 'runtime',
+        via: 'packages/daemon/src/execution/focus-runtime.ts#executeFocusPoint',
+      },
+      responseIdentity: {
+        kind: 'waived',
+        reason:
+          "Intentional: the payload is the focus (or text) dispatch result, which omits `refLabel`, `selectorChain`, and `data.ref` entirely — this route issues no pinnable or diagnostic response identity, since ADR 0014 keeps mutating find's pre-action ref diagnostic-only (no `refsGeneration`) and the seam never enters the ref/selector response builder that mints the identity fields.",
+      },
+      verifyEvidence: {
+        kind: 'inapplicable',
+        reason:
+          'find exposes no --verify flag: its flag surface is snapshot depth/raw plus --first/--last, and --verify would have no post-action capture owner on a route whose response is the dispatch payload.',
+      },
+      settleObservation: {
+        kind: 'inapplicable',
+        reason:
+          'find exposes no --settle flag for the same reason; settling is built on the tree-based runtime baseline and the captures the acting leaf owns.',
+      },
+      // Locator misses and candidate sets use find's shared diagnostics, and a pre-action guard
+      // refusal travels as the AppError its owner built (`coveredInteractionDetails`,
+      // TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS) through `normalizeError`, so code, hint, and reason
+      // reach the wire unchanged.
+      errorTaxonomy: {
+        kind: 'runtime',
+        via: 'packages/daemon/src/execution/selector-match-errors.ts#buildAmbiguousMatchError',
+      },
+      resolutionDisclosure: {
+        kind: 'inapplicable',
+        reason:
+          'The additive `resolution` field discloses the provenance of an identity the response issues; this seam issues none (ADR 0014), and its ambiguity is disclosed as the bounded candidate error the `errorTaxonomy` cell names instead.',
+      },
+      outcomeObservation: {
+        kind: 'waived',
+        reason:
+          'gap: the response reports the focus (and for `type`, the text) dispatch only. Nothing observes that the field took focus or that the text landed, and unlike the tap-shaped paths this route has no opt-in --verify/--settle that could carry such evidence.',
+        trackingIssue: TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE,
+      },
+      targetStability: {
+        kind: 'waived',
+        reason:
+          "gap: the seam dispatches a rect center captured one runner round trip earlier without the #3471 re-observation, so a focus issued right after an action that animated the surface can aim a position the target has already vacated and report success on the vacancy. The gate itself is the acting leaf's (`guardResolvedTargetAgainstMotion`), and this route does not pass through it.",
+        trackingIssue: FIND_FOCUS_DISPATCH_GAPS_ISSUE,
       },
     },
   },

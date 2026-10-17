@@ -251,7 +251,7 @@ test('a runner payload with the hittable bit absent presents without declaring i
 // what cannot be placed belongs to `readSnapshotKeyboardBandFact` in @agent-device/kernel, which owns
 // that table; this seam owns forwarding AND the proof that it forwards through that reader. The
 // same-process capture path feeds `result.keyboard` straight into the tap/click occlusion guard in
-// src/commands/interaction/runtime/keyboard-occlusion.ts before any serialization, so a seam that
+// packages/selectors/src/keyboard-occlusion.ts before any serialization, so a seam that
 // passed the raw wire value through would hand the guard an unvalidated shape with nothing red.
 // The malformed cases below are what prove the routing; kernel/src/record.test.ts owns the table.
 

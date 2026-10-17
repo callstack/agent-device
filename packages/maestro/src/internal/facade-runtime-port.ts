@@ -48,6 +48,8 @@ export const MAESTRO_RUNTIME_ADAPTER_POLICY = {
   retryTapMaxAttempts: MAESTRO_COMPATIBILITY_PRESETS.command.retryTapMaxAttempts,
   longPressDurationMs: MAESTRO_COMPATIBILITY_PRESETS.command.longPressDurationMs,
   eraseTextMaxCharacters: MAESTRO_COMPATIBILITY_PRESETS.command.eraseTextMaxCharacters,
+  androidInputTextCharacterDelayMs:
+    MAESTRO_COMPATIBILITY_PRESETS.command.androidInputTextCharacterDelayMs,
   scrollUntilVisiblePercentage: MAESTRO_COMPATIBILITY_PRESETS.command.scrollUntilVisiblePercentage,
   animationWaitTimeoutMs: MAESTRO_COMPATIBILITY_PRESETS.command.waitForAnimationToEndTimeoutMs,
   animationDifferencePercent:

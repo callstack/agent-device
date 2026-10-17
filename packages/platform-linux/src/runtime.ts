@@ -206,6 +206,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     // own `appSwitcher` throws unsupported, and no Linux leaf has hardware buttons.
     systemButton: linuxPlatformLeafUnavailable,
     fold: linuxPlatformLeafUnavailable,
+    telephony: linuxPlatformLeafUnavailable,
     // The retired `trigger-app-event` descriptor declared `linux: {}`.
     triggerAppEvent: linuxPlatformLeafUnavailable,
     // The retired `settings` descriptor declared `linux: {}` too.

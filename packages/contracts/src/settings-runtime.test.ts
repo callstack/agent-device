@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { runtimeSubjectFact } from './platform-runtime.ts';
 import { bindSetSetting, settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
@@ -12,16 +13,40 @@ const device = {
   booted: true,
 } as const;
 
-test('builds the exact settings operation fact catalog', () => {
-  const setSetting = { available: true } as const;
-  const readSetting = {
-    available: false,
-    reason: 'unsupported-platform-leaf',
-  } as const;
-  expect(settingsRuntimeOperationFacts({ setSetting, readSetting })).toEqual({
-    setSetting,
-    readSetting,
+const available = { available: true } as const;
+const unsupported = {
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'not here',
+} as const;
+const handheldOnly = { available: false, reason: 'unsupported-device-kind' } as const;
+
+test('a setting the owner does not list answers with its unsupported refusal', () => {
+  const facts = settingsRuntimeOperationFacts({
+    target: available,
+    unsupported,
+    write: { wifi: available, 'text-size': handheldOnly },
   });
+  expect(runtimeSubjectFact(facts.setSetting, 'wifi')).toEqual(available);
+  expect(runtimeSubjectFact(facts.setSetting, 'text-size')).toEqual(handheldOnly);
+  expect(runtimeSubjectFact(facts.setSetting, 'airplane')).toEqual(unsupported);
+  expect(facts.readSetting).toEqual(unsupported);
+});
+
+test('an unavailable target refuses every setting with its own fact', () => {
+  const target = { available: false, reason: 'unsupported-device-kind', hint: 'kind' } as const;
+  const facts = settingsRuntimeOperationFacts({ target, unsupported, write: { wifi: available } });
+  expect(facts).toEqual({ setSetting: target, readSetting: target });
+});
+
+test('an operation none of whose settings is available answers with the first refusal', () => {
+  const facts = settingsRuntimeOperationFacts({
+    target: available,
+    unsupported,
+    write: { appearance: available },
+    read: { 'text-size': handheldOnly },
+  });
+  expect(facts.readSetting).toEqual(handheldOnly);
 });
 
 // The daemon has already parsed the CLI form, resolved the target app, and typed the coordinates

@@ -11,7 +11,12 @@ import { collectReplaySelectorCandidates } from '@agent-device/replay-port/sessi
 import { buildSelectorCandidates, resolveReplaySuggestionCandidate } from '@agent-device/selectors';
 import { collectSettleChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
 import { buildAndPersistReplayDivergenceResume } from '@agent-device/replay-port/session-replay-resume';
-import { formatDivergenceActionLabel, isTouchTargetCommand } from '@agent-device/ad-script';
+import {
+  buildIndexMap,
+  formatDivergenceActionLabel,
+  isTouchTargetCommand,
+} from '@agent-device/ad-script';
+import { isInScrollRegion } from '@agent-device/selectors/target-evidence';
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
@@ -508,8 +513,7 @@ function buildReplayDivergenceScreenRefs(
 /**
  * Decision 1's candidate machinery reused READ-ONLY over the shared capture.
  * Ranking: identity-component strength (id > role+label > label > other),
- * then document order; the same-scrollRegion tier awaits decision 3's
- * recorded evidence (migration step 4).
+ * then recorded scroll region for a verified `target-v1` annotation, then document order.
  */
 function collectReplayDivergenceSuggestions(params: {
   action: ReplayReportAction;
@@ -576,7 +580,20 @@ function rankSuggestionCandidates(params: {
     if (!entry) continue;
     entries.push(entry);
   }
-  return rankAndDedupeReplaySuggestions(entries).map((entry) => entry.suggestion);
+  let recordedRegionNodeIndices: Set<number> | undefined;
+  const targetEvidence = action.targetEvidence;
+  if (targetEvidence?.verification === 'verified') {
+    const byIndex = buildIndexMap(nodes);
+    recordedRegionNodeIndices = new Set();
+    for (const { nodeIndex } of entries) {
+      const node = byIndex.get(nodeIndex);
+      if (node && isInScrollRegion(node, byIndex, targetEvidence.scrollRegion)) {
+        recordedRegionNodeIndices.add(nodeIndex);
+      }
+    }
+  }
+  const ranked = rankAndDedupeReplaySuggestions(entries, recordedRegionNodeIndices);
+  return ranked.map((entry) => entry.suggestion);
 }
 
 function resolveSuggestionCandidate(params: {

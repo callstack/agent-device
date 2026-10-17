@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { readRemoteConnectionState } from '../../src/remote/remote-connection-state.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { runSourceCliJsonSync } from './cli-json.ts';
 
 test('separate CLI processes do not adopt and overwrite the ambient remote session', () => {

@@ -166,7 +166,11 @@ extension RunnerTests {
       XCTAssertTrue(response.ok, "prefilled: \(prefilled) \(String(describing: response.error))")
       XCTAssertEqual(response.data?.textEntryRoute, "synthesized-first-responder-replacement")
       XCTAssertEqual(response.data?.message, "typed", "prefilled: \(prefilled)")
-      XCTAssertEqual(textField.value as? String, String(repeating: "\u{2022}", count: 8), "prefilled: \(prefilled)")
+      // An unreadable field cannot certify replacement or commit timing. Readable-field tests
+      // below pin exact replacement, including dropped select-alls; this case pins classification.
+      let delivered = app.staticTexts["agent-device-masked-delivery"]
+      let delivery = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "delivered"), object: delivered)
+      XCTAssertEqual(XCTWaiter.wait(for: [delivery], timeout: appExistenceTimeout), .completed, "prefilled: \(prefilled)")
       XCTAssertEqual(togglePresses.label, "presses=0", "prefilled: \(prefilled)")
     }
   }
@@ -222,7 +226,7 @@ extension RunnerTests {
     let field = try focusSynthesizedReplacementField()
     defer { tearDownSynthesizedReplacementField() }
     let frame = field.frame
-    let found = try XCTUnwrap(coordinateTapTextInputIdentityAt(app: app, x: frame.midX, y: frame.midY))
+    let found = try requireTextInputAtPoint(app: app, x: frame.midX, y: frame.midY)
     let cases: [(dropped: Int, failure: TextEntryFailure?)] = [
       (2, nil),
       (SynthesizedTextPlan.Step.maxClearPassCount, .clearNotObserved),
@@ -420,10 +424,12 @@ extension RunnerTests {
   }
 
   /// The pre-tap lookup runs on a channel already penalized for failing XCTest reads. A lookup that
-  /// fails leaves the fill to the point; it used to record the failure, which fails the command
-  /// and ends the runner.
+  /// fails used to record the failure, which fails the command and ends the runner, and left the
+  /// fill to the point. Containment stays: no recorded failure. What changed is what the fill then
+  /// does with a point it cannot read: it refuses under the probe-unavailable reason, which is not a
+  /// claim that the point has no input (#1721).
   @MainActor
-  func testSynthesizedReplacementContainsAFailedLookupOfTheInputUnderThePoint() throws {
+  func testSynthesizedReplacementFailsClosedOnAFailedLookupOfTheInputUnderThePoint() throws {
     let textField = try focusSynthesizedReplacementField()
     defer {
       textInputProbeIssueForTesting = nil
@@ -437,8 +443,9 @@ extension RunnerTests {
     let response = try replaceSynthesizedFieldText(textField, text: "fresh", commandId: "fill-lookup-failed")
 
     XCTAssertNil(textInputProbeIssueForTesting, "the fill made no lookup")
-    XCTAssertTrue(response.ok, String(describing: response.error))
-    XCTAssertEqual(String(describing: textField.value ?? ""), "fresh")
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_PROBE_UNAVAILABLE")
+    XCTAssertEqual(String(describing: textField.value ?? ""), "")
   }
 #endif
 }

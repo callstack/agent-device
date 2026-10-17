@@ -415,10 +415,12 @@ function webRuntimeFacts(
       }),
       ...systemButtonRuntimeOperationFacts({ unsupported: navigationUnavailable }),
       setFoldPose: navigationUnavailable,
+      sendTelephonyEvent: navigationUnavailable,
       ...appEventRuntimeOperationFacts({ triggerAppEvent: navigationUnavailable }),
       ...settingsRuntimeOperationFacts({
-        setSetting: navigationUnavailable,
-        readSetting: navigationUnavailable,
+        target: navigationUnavailable,
+        unsupported: navigationUnavailable,
+        write: {},
       }),
       ...alertRuntimeOperationFacts({
         read: navigationUnavailable,
@@ -434,6 +436,7 @@ function webRuntimeFacts(
       materializeAppSource: readinessUnavailable,
       deployMaterializedApp: readinessUnavailable,
       sendPushNotification: readinessUnavailable,
+      uninstallApp: readinessUnavailable,
       shutdownTarget: readinessUnavailable,
       ...webLifecycleFacts(device),
     },

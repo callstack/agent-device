@@ -8,6 +8,7 @@ allowBuilds:
   fallow: true
 minimumReleaseAgeExclude:
   - '@chenglou/freerange@0.0.4'
+  - '@limrun/api@0.64.1'
 overrides:
   brace-expansion@5: '^5.0.12'
   fast-uri: 3.1.7

@@ -1,5 +1,7 @@
 import {
   AppError,
+  createRequestCanceledError,
+  discloseDispatch,
   sessionAppRequiredDetails,
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
@@ -14,13 +16,17 @@ import {
   resolveSettingsApp,
   SETTINGS_APP_NOT_PACKAGE_REASON,
   textSizeSettingPayload,
-  TEXT_SIZE_CATEGORIES,
-  type ReadableSetting,
   type ReadSettingResult,
   type SettingOptions,
   type TextSizeSettingPayload,
 } from '@agent-device/contracts/settings';
+import {
+  TEXT_SIZE_CATEGORIES,
+  type ReadableSetting,
+  type SettingName,
+} from '@agent-device/contracts/settings-catalog';
 import { runAndroidAdb, runAndroidShell } from './adb.ts';
+import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
@@ -30,6 +36,22 @@ import {
   setAndroidPermission,
 } from './settings-permission.ts';
 
+/** The settings {@link setAndroidSetting} applies over adb, wherever an owner runs it. */
+export const ANDROID_SETTINGS = [
+  'wifi',
+  'airplane',
+  'mobile-data',
+  'location',
+  'animations',
+  'appearance',
+  'text-size',
+  'fingerprint',
+  'clear-app-state',
+  'permission',
+] as const satisfies readonly SettingName[];
+
+export type AndroidSetting = (typeof ANDROID_SETTINGS)[number];
+
 const ANDROID_ANIMATION_SCALE_SETTINGS = [
   'window_animation_scale',
   'transition_animation_scale',
@@ -37,21 +59,10 @@ const ANDROID_ANIMATION_SCALE_SETTINGS = [
 ] as const;
 
 /**
- * The Android half of `settings text-size`. Android has no content-size category: its preferred text
- * size is one `system font_scale` multiplier that every app scales its own fonts from. The shared
- * ladder is therefore expressed here as multipliers, and only here — the command surface, the CLI,
- * and the read payload all speak the ladder.
- *
- * The seven standard rungs are the Dynamic Type body ratios against the default size, rounded to two
- * decimals: 14/17, 15/17, 16/17, 17/17, 19/17, 21/17, 23/17. The five accessibility rungs are
- * Android's own larger range rather than an Apple ratio: Android has no accessibility tier below
- * 1.4x, and 3.2 is the largest multiplier its own tooling documents. Every rung must stay strictly
- * increasing and distinct, because a read names the nearest rung to whatever the device holds.
- *
- * This table lives beside the dispatcher that selects it rather than in its own module because
- * `mechanics.ts` is a CLI-eager entry whose import closure is ratcheted by
- * `scripts/__tests__/eager-closure-budgets.test.ts`: a new static module on this path is a growth
- * the gate refuses.
+ * The text-size ladder as Android `system font_scale` multipliers. The seven standard rungs are the
+ * Dynamic Type body ratios against the default size (14/17 … 23/17); the five accessibility rungs
+ * are Android's own range up to 3.2, the largest multiplier its tooling documents. Rungs must stay
+ * strictly increasing, because a read names the nearest rung to whatever the device holds.
  */
 const TEXT_SIZE_FONT_SCALES = {
   'extra-small': '0.82',
@@ -78,8 +89,11 @@ export async function setAndroidSetting(
   state: string,
   appPackage?: string,
   options?: SettingOptions,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown> | void> {
-  const normalized = setting.toLowerCase();
+  const normalized = ANDROID_SETTINGS.find((name) => name === setting.toLowerCase());
+  if (normalized === undefined)
+    throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
   switch (normalized) {
     case 'wifi': {
       const enabled = parseSettingState(state);
@@ -88,6 +102,9 @@ export async function setAndroidSetting(
     }
     case 'airplane': {
       return await setAndroidAirplaneMode(device, parseSettingState(state));
+    }
+    case 'mobile-data': {
+      return await setAndroidMobileData(device, parseSettingState(state), signal);
     }
     case 'location': {
       if (state.toLowerCase() === 'set') {
@@ -183,7 +200,7 @@ export async function setAndroidSetting(
       return await setAndroidTextSize(device, state);
     }
     default:
-      throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
+      return normalized satisfies never;
   }
 }
 
@@ -212,16 +229,7 @@ async function resolveAndroidSettingsPackage(
   return resolved.value;
 }
 
-/**
- * The ONE place an Android target answers `settings <setting>` with the value it holds. The command
- * surface only sends a setting its own vocabulary declares readable, so a name outside this switch
- * is a leaf mismatch rather than a user typo, and says so.
- */
-/**
- * The Android read leg, exhaustive over the readable list: a setting joins `READABLE_SETTINGS` only
- * with an answer here, so a new readable name is a compile error on this map rather than a runtime
- * refusal hidden in a default case.
- */
+/** Exhaustive over the readable settings, so a new one is a compile error here. */
 const ANDROID_READABLE_SETTINGS = {
   'text-size': readAndroidTextSize,
 } as const satisfies Record<ReadableSetting, (device: DeviceInfo) => Promise<ReadSettingResult>>;
@@ -283,6 +291,86 @@ function nearestTextSizeCategory(scale: number): (typeof TEXT_SIZE_CATEGORIES)[n
     nearestDistance = distance;
   }
   return nearest;
+}
+
+type AndroidMobileData = 'enabled' | 'disabled';
+
+/** `svc data` can return before the telephony service stores the switch, so the read-back polls. */
+const MOBILE_DATA_SETTLE_MS = 2000;
+const MOBILE_DATA_SAMPLE_INTERVAL_MS = 100;
+const MOBILE_DATA_NOT_APPLIED_REASON = 'mobile-data-not-applied';
+const MOBILE_DATA_UNREADABLE_REASON = 'mobile-data-unreadable';
+
+/**
+ * Reads back only the global `mobile_data` row, where a single-SIM device stores the switch. A
+ * multi-SIM device keeps it per subscription; that read-back is uncovered until a dual-SIM run shows
+ * which row to read.
+ */
+async function setAndroidMobileData(
+  device: DeviceInfo,
+  enabled: boolean,
+  signal: AbortSignal | undefined,
+): Promise<{ mobileData: AndroidMobileData }> {
+  const requested: AndroidMobileData = enabled ? 'enabled' : 'disabled';
+  if (signal?.aborted) throw createRequestCanceledError();
+  try {
+    await runAndroidShell(device, ['svc', 'data', enabled ? 'enable' : 'disable'], { signal });
+    return { mobileData: await awaitAndroidMobileData(device, requested, signal) };
+  } catch (error) {
+    throw error instanceof AppError ? discloseDispatch(error, 'unknown') : error;
+  }
+}
+
+async function awaitAndroidMobileData(
+  device: DeviceInfo,
+  requested: AndroidMobileData,
+  signal: AbortSignal | undefined,
+): Promise<AndroidMobileData> {
+  const deadline = Deadline.fromTimeoutMs(MOBILE_DATA_SETTLE_MS);
+  const { settled, value } = await pollUntilSettled({
+    probe: async () => {
+      const { stdout } = await runAndroidShell(
+        device,
+        ['settings', 'get', 'global', 'mobile_data'],
+        { signal, timeoutMs: Math.max(1, deadline.remainingMs()) },
+      );
+      const storedValue = stdout.trim();
+      return { storedValue, mobileData: parseAndroidMobileData(storedValue) };
+    },
+    settled: (read) => read.mobileData === requested,
+    deadline,
+    intervalMs: MOBILE_DATA_SAMPLE_INTERVAL_MS,
+    signal,
+  });
+  if (settled) return requested;
+  throw androidMobileDataSettleError(device, requested, value.mobileData, value.storedValue);
+}
+
+function parseAndroidMobileData(storedValue: string): AndroidMobileData | undefined {
+  if (storedValue === '1') return 'enabled';
+  if (storedValue === '0') return 'disabled';
+  return undefined;
+}
+
+function androidMobileDataSettleError(
+  device: DeviceInfo,
+  requested: AndroidMobileData,
+  mobileData: AndroidMobileData | undefined,
+  storedValue: string,
+): AppError {
+  const message =
+    mobileData === undefined
+      ? `Android reported an unusable mobile_data value after requesting mobile data ${requested}: ${storedValue || '(empty)'}`
+      : `Android mobile data reads ${mobileData} after requesting ${requested}.`;
+  return new AppError('COMMAND_FAILED', message, {
+    deviceId: device.id,
+    reason:
+      mobileData === undefined ? MOBILE_DATA_UNREADABLE_REASON : MOBILE_DATA_NOT_APPLIED_REASON,
+    requested,
+    ...(mobileData === undefined ? {} : { mobileData }),
+    storedValue,
+    hint: 'Run `adb shell settings get global mobile_data` to see what the device holds. A target without an active SIM, or with more than one, can accept svc data without changing that row.',
+  });
 }
 
 type AndroidFingerprintAction = 'match' | 'nonmatch';

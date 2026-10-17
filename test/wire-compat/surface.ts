@@ -54,16 +54,16 @@ const ARTIFACT_HTTP = 'packages/daemon/src/server/downloadable-artifact-http.ts'
 const REQUEST_DIAGNOSTICS_HTTP = 'packages/daemon/src/server/request-diagnostics-http.ts';
 const SESSION_TENANT_SCOPE = 'packages/daemon/src/core/session-tenant-scope.ts';
 const HTTP_REQUEST_TARGET = 'packages/daemon/src/server/http-request-target.ts';
-const REMOTE_REQUEST_DIAGNOSTICS = 'src/remote/remote-request-diagnostics.ts';
+const REMOTE_REQUEST_DIAGNOSTICS = 'packages/remote/src/remote-request-diagnostics.ts';
 const PROGRESS_PROTOCOL = 'packages/daemon-contracts/src/request-progress-protocol.ts';
 const CLIENT_RPC = 'src/daemon-client/daemon-client-rpc.ts';
 const CLIENT_PROGRESS = 'src/daemon-client/daemon-client-progress.ts';
 const CLIENT_TRANSPORT = 'src/daemon-client/daemon-client-transport.ts';
 const DAEMON_PROXY = 'packages/proxy/src/daemon-proxy.ts';
-const UPLOAD_CLIENT = 'src/remote/upload-client.ts';
-const REMOTE_ARTIFACTS = 'src/remote/daemon-artifacts.ts';
-const ARTIFACT_DOWNLOAD = 'src/remote/artifact-download.ts';
-const UPLOAD_STREAM = 'src/remote/upload-stream.ts';
+const UPLOAD_CLIENT = 'packages/remote/src/upload-client.ts';
+const REMOTE_ARTIFACTS = 'packages/remote/src/daemon-artifacts.ts';
+const ARTIFACT_DOWNLOAD = 'packages/remote/src/artifact-download.ts';
+const UPLOAD_STREAM = 'packages/remote/src/upload-stream.ts';
 
 function from(file: string, ...names: string[]): WireDeclarationRef[] {
   return names.map((name) => ({ file, name }));
@@ -380,7 +380,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ),
       // The prepared artifact whose fields (sha256, sizeBytes, fileName,
       // artifactType, contentType) ARE the preflight body the daemon parses.
-      ...from('src/remote/upload-client-artifact.ts', 'PreparedUploadArtifact'),
+      ...from('packages/remote/src/upload-client-artifact.ts', 'PreparedUploadArtifact'),
       // Consumer side of the resumable 308 contract. Listing the daemon's
       // `handleResumableUpload` proves it still PRODUCES 308; it says nothing
       // about the client still CONSUMING the released one. These own which

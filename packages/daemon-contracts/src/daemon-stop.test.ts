@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const mocks = vi.hoisted(() => ({ stopAndRetireDaemon: vi.fn() }));
 vi.mock('./daemon-registration-owner.ts', () => ({

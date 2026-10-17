@@ -4,7 +4,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 import { HOST_LEASE_HTTP_PREFIX } from '../host-lease-http.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createDaemonHttpServer } from '../http/http-server.ts';

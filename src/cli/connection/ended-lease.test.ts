@@ -7,7 +7,7 @@ import {
   seedConnectionState,
   type StoredConnectionSeed,
 } from '../../__tests__/remote-connection.fixtures.ts';
-import { readRemoteConnectionState } from '../../remote/remote-connection-state.ts';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
 import { forgetEndedProxyLease } from './ended-lease.ts';
 
 const LEASE_ID = 'abc123abc123abc1';

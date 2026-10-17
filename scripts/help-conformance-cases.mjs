@@ -560,19 +560,18 @@ Use the output already shown to determine whether the feed-search UI is present,
     recovery: { code: 'DEVICE_IN_USE', sample: DEVICE_IN_USE_SAMPLE },
     task: quiz(
       DEVICE_IN_USE_SAMPLE,
-      'You are continuing the checkout flow that the "checkout" session was already running on this device. What command should run next?',
+      'The default web session cannot open https://example.test because the "checkout" session already owns the device. Without closing that session, what command can reuse it or wait for the device to free up?',
     ),
     expectations: ['validPlanCommands', 'fullPrefix'],
     matchers: [
       {
-        id: 'retriesWithOwningSession',
-        pattern: /(?:^|\n)agent-device\s+press\b[^\n]*--session\s+checkout\b/i,
+        id: 'opensWebWithOwningSessionOrWaits',
+        pattern:
+          /(?:^|\n)agent-device\s+open\s+https:\/\/example\.test\b(?=[^\n]*--platform\s+web\b)(?=[^\n]*(?:--session\s+checkout\b|--wait\s+\d+\b))[^\n]*/i,
       },
-      { id: 'keepsSettle', pattern: /--settle\b/i },
     ],
     forbidden: [
       { id: 'noClose', pattern: /(?:^|\n)agent-device\s+close\b/i },
-      { id: 'noReopen', pattern: /(?:^|\n)agent-device\s+open\b/i },
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
     ],
   },
@@ -604,7 +603,7 @@ Use the output already shown to determine whether the feed-search UI is present,
     recovery: { code: 'COMMAND_FAILED', sample: STALE_REF_SAMPLE },
     task: quiz(
       STALE_REF_SAMPLE,
-      'The Continue control this ref pointed at may have moved. What command should run next?',
+      'The Place order control this ref pointed at may have moved. What command should run next?',
     ),
     expectations: ['validPlanCommands', 'fullPrefix'],
     matchers: [

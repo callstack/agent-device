@@ -125,7 +125,7 @@ export function createAndroidInteractor(
     readClipboard: () => readAndroidClipboardText(device),
     writeClipboard: (text) => writeAndroidClipboardText(device, text),
     setSetting: (setting, state, appId, options) =>
-      setAndroidSetting(device, setting, state, appId, options),
+      setAndroidSetting(device, setting, state, appId, options, runnerContext?.signal),
     readSetting: (setting) => readAndroidSetting(device, setting),
     // R59: Android's alert legs read the same presented accessibility tree `snapshot` publishes
     // and own their own polling, so the family supplies the node capture rather than the daemon.

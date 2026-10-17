@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { assertThrowsAppError } from '@agent-device/test-kit/app-error';
+import { assertThrowsAppError } from '@agent-device/test-kit';
 import { parseUploadContentLength, parseUploadContentRange } from '../resumable-upload-range.ts';
 
 test('content ranges are bounded by the declared upload size', () => {

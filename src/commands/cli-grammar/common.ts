@@ -239,17 +239,6 @@ function optionalTrimmedText(values: string[]): string | undefined {
   return text || undefined;
 }
 
-export function setOf<T extends string>(...values: T[]): ReadonlySet<T> {
-  return new Set(values);
-}
-
-export function isOneOf<T extends string>(
-  value: string | undefined,
-  values: ReadonlySet<T>,
-): value is T {
-  return value !== undefined && values.has(value as T);
-}
-
 export function isFiniteNumberString(value: string | undefined): boolean {
   if (value === undefined || value.trim() === '') return false;
   return Number.isFinite(Number(value));

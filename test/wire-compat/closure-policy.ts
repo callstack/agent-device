@@ -49,9 +49,9 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Client-side narrowing of the listed kernel DaemonRequest (token and session required, flags typed as CommandFlags); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
   'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequestMeta':
     'Narrowing of the listed kernel DaemonRequestMeta (installSource, lockPlatform and the lease coordinates); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequestMeta.',
-  'src/remote/upload-stream.ts#UploadStreamProgressOptions':
+  'packages/remote/src/upload-stream.ts#UploadStreamProgressOptions':
     'Byte-progress callback options for local upload rendering. The bytes counted are digested through the request/response declarations; these options never cross the wire.',
-  'src/remote/upload-progress.ts#UploadProgressSink':
+  'packages/remote/src/upload-progress.ts#UploadProgressSink':
     'A callback for client-local upload progress rendering. Its events never leave the client, unlike the daemon progress stream, whose envelope and events are listed.',
   'packages/contracts/src/request-progress.ts#RequestProgressSink':
     'A callback type (event) => void. The event it receives is RequestProgressEvent, which is listed; the sink itself never crosses the wire.',

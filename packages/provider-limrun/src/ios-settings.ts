@@ -1,6 +1,16 @@
 import type { SettingOptions } from '@agent-device/contracts/settings';
+import type { SettingName } from '@agent-device/contracts/settings-catalog';
 import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import type { LimrunIosSession } from './ios.ts';
+
+const LIMRUN_IOS_SETTINGS = [
+  'appearance',
+  'permission',
+  'location',
+  'clear-app-state',
+] as const satisfies readonly SettingName[];
+
+export type LimrunIosSetting = (typeof LIMRUN_IOS_SETTINGS)[number];
 
 /**
  * Changes one setting on a Limrun iOS instance. `appearance`, `permission`, and `location` run the
@@ -14,7 +24,14 @@ export async function setLimrunIosSetting(
   appId: string | undefined,
   options: SettingOptions | undefined,
 ): Promise<Record<string, unknown> | void> {
-  const normalized = setting.toLowerCase();
+  const normalized = LIMRUN_IOS_SETTINGS.find((name) => name === setting.toLowerCase());
+  if (normalized === undefined) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      `Limrun iOS direct sessions support appearance, permission, location, and clear-app-state settings, not ${setting}.`,
+      { command: 'settings' },
+    );
+  }
   switch (normalized) {
     case 'appearance':
     case 'permission':
@@ -32,11 +49,7 @@ export async function setLimrunIosSetting(
     case 'clear-app-state':
       return await clearAppState(session, state, appId);
     default:
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        `Limrun iOS direct sessions support appearance, permission, location, and clear-app-state settings, not ${setting}.`,
-        { command: 'settings' },
-      );
+      return normalized satisfies never;
   }
 }
 

@@ -1,13 +1,12 @@
 import crypto from 'node:crypto';
 import type { MetroBridgeScope } from '@agent-device/contracts/remote';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { stopReactDevtoolsCompanion } from '../../client/client-react-devtools-companion.ts';
-import { stopMetroTunnel } from '../../metro/metro.ts';
-import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
+import { stopMetroTunnel } from '@agent-device/react-native';
+import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 // Provenance-preserving file-only read (no ambient env defaults merged in) —
 // see resolvePreviousOwnDaemonAuthToken below for why this must not be
 // resolveRemoteConfigProfile.
-import { readRemoteConfigFile } from '../../remote/remote-config-core.ts';
+import { readRemoteConfigFile } from '@agent-device/remote/remote-config-core';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
 import {
@@ -20,7 +19,7 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
-} from '../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import type { BatchStep } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
@@ -35,7 +34,10 @@ import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
-import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
+import {
+  connectionProviderCapabilities,
+  primeProviderConnection,
+} from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
 import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
 import {
@@ -103,6 +105,7 @@ export async function materializeRemoteConnectionForCommand(options: {
     );
   }
 
+  await primeProviderConnection(providerOf(existingState, remoteConfig.profile));
   const state =
     existingState ??
     createRemoteConnectionStateFromFlags(
@@ -566,22 +569,6 @@ export async function stopMetroCleanup(
   }
 }
 
-export async function stopReactDevtoolsCleanup(options: {
-  stateDir: string;
-  state: Pick<RemoteConnectionState, 'remoteConfigPath' | 'session'>;
-}): Promise<void> {
-  try {
-    await stopReactDevtoolsCompanion({
-      projectRoot: process.cwd(),
-      stateDir: options.stateDir,
-      profileKey: options.state.remoteConfigPath,
-      consumerKey: options.state.session,
-    });
-  } catch {
-    // Connection lifecycle cleanup must stay best-effort.
-  }
-}
-
 /** The host allocated a `macos-app` lease and ends it itself; a tenant never releases it. */
 export function isHostAllocatedLease(state: RemoteConnectionState): boolean {
   return state.leaseBackend === 'macos-app';
@@ -834,6 +821,14 @@ function selectCompatibleRuntime(
 ): SessionRuntimeHints | undefined {
   if (!runtime) return undefined;
   return isRuntimeCompatibleWithPlatform(runtime, platform) ? runtime : undefined;
+}
+
+// A stored connection names its provider; before one exists, the remote config profile does.
+function providerOf(
+  existingState: Pick<RemoteConnectionState, 'leaseProvider'> | null | undefined,
+  profile: Pick<RemoteConnectionState, 'leaseProvider'>,
+): string | undefined {
+  return existingState?.leaseProvider ?? profile.leaseProvider;
 }
 
 function createRemoteConnectionStateFromFlags(

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { readDaemonInfo, type DaemonInfo } from '../daemon-client-metadata.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -51,4 +51,15 @@ test('a registration this version did not write reads back unreported', () => {
 
     assert.equal(readDaemonInfo(infoPath)?.codeOrigin, undefined);
   }
+});
+
+test('a daemon record without capabilities reads as a daemon with none', () => {
+  const [, infoPath] = scratchStateDir();
+  fs.writeFileSync(infoPath, JSON.stringify({ httpPort: 41_234, token: 'legacy', pid: 1 }));
+  assert.deepEqual(readDaemonInfo(infoPath)?.capabilities, []);
+  fs.writeFileSync(
+    infoPath,
+    JSON.stringify({ httpPort: 41_234, token: 'new', pid: 1, capabilities: ['quiesce', 'future'] }),
+  );
+  assert.deepEqual(readDaemonInfo(infoPath)?.capabilities, ['quiesce']);
 });

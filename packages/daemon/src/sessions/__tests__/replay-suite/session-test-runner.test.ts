@@ -13,7 +13,7 @@ import {
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 // Opening a Simulator schedules a best-effort runner prewarm that outlives the request; a real one

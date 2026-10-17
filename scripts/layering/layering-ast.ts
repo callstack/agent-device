@@ -1,6 +1,18 @@
 /** Shared AST helpers for permanent layering policies. */
 export type ProductionSource = Readonly<{ path: string; source: string }>;
 
+export type AstNode = Record<string, unknown>;
+
+export function asNode(value: unknown): AstNode | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as AstNode)
+    : undefined;
+}
+
+export function nodeList(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export function memberName(node: Record<string, unknown>): string | undefined {
   const property = node.property as Record<string, unknown> | undefined;
   if (!property) return undefined;

@@ -112,10 +112,6 @@
       "types": "./src/daemon-port/session-replay-video-recording.ts",
       "default": "./src/daemon-port/session-replay-video-recording.ts"
     },
-    "./session-test-infrastructure": {
-      "types": "./src/daemon-port/session-test-infrastructure.ts",
-      "default": "./src/daemon-port/session-test-infrastructure.ts"
-    },
     "./session-test-outcome": {
       "types": "./src/daemon-port/session-test-outcome.ts",
       "default": "./src/daemon-port/session-test-outcome.ts"
@@ -124,17 +120,9 @@
       "types": "./src/daemon-port/session-test-shard-devices.ts",
       "default": "./src/daemon-port/session-test-shard-devices.ts"
     },
-    "./session-test-source-discovery": {
-      "types": "./src/daemon-port/session-test-source-discovery.ts",
-      "default": "./src/daemon-port/session-test-source-discovery.ts"
-    },
     "./target-classification": {
       "types": "./src/daemon-port/target-classification.ts",
       "default": "./src/daemon-port/target-classification.ts"
-    },
-    "./target-classification-fixtures": {
-      "types": "./src/target-classification.fixtures.ts",
-      "default": "./src/target-classification.fixtures.ts"
     },
     "./target-token": {
       "types": "./src/daemon-port/target-token.ts",
@@ -147,10 +135,9 @@
     "./source-discovery": {
       "types": "./src/source-discovery.ts",
       "default": "./src/source-discovery.ts"
-    },
-    "./replay-script-source-fixtures": {
-      "types": "./src/replay-script-source.fixtures.ts",
-      "default": "./src/replay-script-source.fixtures.ts"
     }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
   }
 }

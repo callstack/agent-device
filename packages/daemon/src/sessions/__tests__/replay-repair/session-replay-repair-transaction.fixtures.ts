@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import {
@@ -7,7 +7,7 @@ import {
   makeRepairCompleteSession,
   repairPublication,
 } from '../../../__tests__/support/session-factories.ts';
-import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/index.ts';
+import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/internal/session-close.ts';
 import {
   bindLifecycleRuntime,
   inspectLifecycleRuntimeFacts,

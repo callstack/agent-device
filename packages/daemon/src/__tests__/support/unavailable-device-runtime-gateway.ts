@@ -5,7 +5,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
+import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,

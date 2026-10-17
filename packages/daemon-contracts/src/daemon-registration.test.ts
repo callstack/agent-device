@@ -7,8 +7,7 @@ import {
   readRegisteredDaemonIdentity,
   readRegisteredDaemonOwnership,
 } from './daemon-registration.ts';
-import { publishDaemonRegistration } from './daemon-registration.fixtures.ts';
-import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import { mkdtempForTestSync, publishDaemonRegistration } from '@agent-device/test-kit';
 
 const roots: string[] = [];
 

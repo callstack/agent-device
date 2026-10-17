@@ -21,6 +21,7 @@ import { resolveDeviceClaimPath } from './device-claim-paths.ts';
 import {
   ownershipFromClaim,
   type DeviceClaim,
+  type DeviceClaimOwnerKind,
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
 import { writeDeviceClaim } from './device-claim-store.ts';
@@ -44,6 +45,13 @@ export type DeviceClaimReconciler = (
 ) => Promise<DeviceClaimReconciliationResult>;
 
 /**
+ * The acquirer whose ownership `resolveExistingClaim` judges: the kind of claim it could have
+ * written itself — never `unstated`, which no acquirer can be — plus the command a transient
+ * acquirer scopes to.
+ */
+export type DeviceClaimAcquirerKind = Exclude<DeviceClaimOwnerKind, 'unstated'>;
+
+/**
  * Settles the claim file an acquisition found, and decides whether this caller may write its own.
  * The recorded owner's own state answers first — a dead, unreachable, or superseded owner is
  * settled exactly as `device release --stale` settles it. A claim whose owner can still release it
@@ -57,6 +65,10 @@ export async function resolveExistingClaim(params: {
   session: string;
   workspace: string;
   stateDir: string;
+  /** The kind of claim this acquirer would write, so `isCurrentClaimOwner` can compare kinds. */
+  claimOwnerKind: DeviceClaimAcquirerKind;
+  /** The command a `transient-command` acquirer scopes to; absent exactly when the kind is. */
+  transientCommand?: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   observeDeviceBoot?: DeviceBootObservationService;
 }): Promise<ExistingClaimResolution> {
@@ -187,11 +199,31 @@ function isAbandonedClaimOfThisDaemon(
   return isAbandonedDeviceClaim(claim) && isClaimOwnedByThisDaemon(claim, stateDir, owner);
 }
 
+/**
+ * An acquirer holds an existing claim only when the record states the very kind of claim this
+ * acquirer would write itself — the same `transientCommand` for transient admission — under the
+ * same session, workspace, and daemon. `unstated` matches no acquirer, so a migrated record can
+ * hold and fence the device but can never be adopted at acquisition, however exactly its session
+ * label or copyable `--session` address lines up (#3345).
+ */
 function isCurrentClaimOwner(
   claim: DeviceClaim,
-  params: { session: string; workspace: string; stateDir: string },
+  params: {
+    session: string;
+    workspace: string;
+    stateDir: string;
+    claimOwnerKind: DeviceClaimAcquirerKind;
+    transientCommand?: string;
+  },
   owner: ReturnType<typeof readCurrentOwnerIdentity>,
 ): boolean {
+  if (claim.claimOwnerKind !== params.claimOwnerKind) return false;
+  if (
+    params.claimOwnerKind === 'transient-command' &&
+    claim.transientCommand !== params.transientCommand
+  ) {
+    return false;
+  }
   return (
     claim.session === params.session &&
     claim.workspace === params.workspace &&

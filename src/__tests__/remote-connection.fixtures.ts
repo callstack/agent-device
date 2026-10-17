@@ -6,8 +6,8 @@ import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,
   type RemoteConnectionState,
-} from '../remote/remote-connection-state.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/remote/remote-connection-state';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 export const unexpectedCommandCall = async (): Promise<never> => {
   throw new Error('unexpected call');

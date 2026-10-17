@@ -108,6 +108,12 @@
     "dispatched": "no"
   },
   {
+    "id": "daemon.route.named-session-refusal",
+    "producer": "daemon",
+    "trigger": "a command naming a session this daemon does not hold and no device selector: requireNamedSessionHoldsDevice refuses with SESSION_NOT_FOUND and details.reason named_session_not_found before any device is listed or resolved",
+    "dispatched": "no"
+  },
+  {
     "id": "daemon.route.find-type-refused-after-focus",
     "producer": "daemon",
     "trigger": "find <q> type: the focus tap returned, then the typeText send was refused before send (no); the request reports unknown with details.dispatchedSteps 1",
@@ -191,6 +197,24 @@
     "id": "ios-runner.reply.ALERT_NOT_FOUND",
     "producer": "ios-runner",
     "trigger": "structured runner reply with code ALERT_NOT_FOUND: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.NO_TEXT_INPUT_AT_POINT",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code NO_TEXT_INPUT_AT_POINT: a coordinate fill refused before its focus tap because the runner identified no text input under the point",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.TEXT_INPUT_PROBE_UNAVAILABLE",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code TEXT_INPUT_PROBE_UNAVAILABLE: a coordinate fill refused before its focus tap because the pre-tap input lookup could not answer",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.ALERT_BUTTON_NOT_FOUND",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ALERT_BUTTON_NOT_FOUND: the accept/dismiss button choice refused before any activation (#3627)",
     "dispatched": "no"
   },
   {

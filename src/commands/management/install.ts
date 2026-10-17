@@ -42,6 +42,14 @@ const reinstallCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
+const uninstallCommandMetadata = defineFieldCommandMetadata(
+  'uninstall',
+  'Remove an installed app from the selected device. A package name or bundle id that is not installed succeeds with wasInstalled: false.',
+  {
+    app: requiredField(stringField('Package name, bundle id, or installed app name.')),
+  },
+);
+
 const installFromSourceCommandMetadata = defineFieldCommandMetadata(
   'install-from-source',
   'Install app builds from URLs, remote source specs, or CI artifacts resolved by a remote daemon.',
@@ -64,6 +72,10 @@ const reinstallCliSchema = {
   positionalArgs: ['app', 'path'],
 } as const satisfies CommandSchemaOverride;
 
+const uninstallCliSchema = {
+  positionalArgs: ['app'],
+} as const satisfies CommandSchemaOverride;
+
 const installFromSourceCliSchema = {
   usageOverride:
     'install-from-source <url> | install-from-source --github-actions-artifact <owner/repo:artifact>',
@@ -77,6 +89,11 @@ const installCliReader: CliReader = (positionals, flags) => installInputFromCli(
 
 const reinstallCliReader: CliReader = (positionals, flags) =>
   reinstallInputFromCli(positionals, flags);
+
+const uninstallCliReader: CliReader = (positionals, flags) => ({
+  ...commonInputFromFlags(flags),
+  app: requiredString(positionals[0], 'uninstall requires app'),
+});
 
 const installFromSourceCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
@@ -92,6 +109,10 @@ const installDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.install, (input
 const reinstallDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.reinstall, (input) =>
   requiredPair(input.app, input.appPath),
 );
+
+const uninstallDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.uninstall, (input) => [
+  requiredDaemonString(input.app, 'missing app'),
+]);
 
 const installFromSourceDaemonWriter: DaemonWriter = (input) =>
   request(INTERNAL_COMMANDS.installSource, [], {
@@ -127,6 +148,18 @@ const reinstallCommandFacet = defineCommandFacet({
   cliOutputFormatter: managementCliOutputFormatters.reinstall,
 });
 
+const uninstallCommandFacet = defineCommandFacet({
+  name: 'uninstall',
+  text: {
+    summary: 'Remove an installed app',
+  },
+  metadata: uninstallCommandMetadata,
+  run: (client, input) => client.apps.uninstall(input),
+  cliSchema: uninstallCliSchema,
+  cliReader: uninstallCliReader,
+  daemonWriter: uninstallDaemonWriter,
+});
+
 const installFromSourceCommandFacet = defineCommandFacet({
   name: 'install-from-source',
   text: {
@@ -143,6 +176,7 @@ const installFromSourceCommandFacet = defineCommandFacet({
 export const installManagementCommandFacets = [
   installCommandFacet,
   reinstallCommandFacet,
+  uninstallCommandFacet,
   installFromSourceCommandFacet,
 ] as const;
 

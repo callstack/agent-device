@@ -11,12 +11,12 @@ import {
   writeCliSession,
 } from '../auth-session.ts';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
+  mkdtempForTestSync,
   recordCommandSpawns,
-  withMockedPlatform,
   type RecordedSpawn,
-} from '@agent-device/test-kit/host-execution';
+  withMockedPlatform,
+} from '@agent-device/test-kit';
 
 const baseFlags = {
   json: false,

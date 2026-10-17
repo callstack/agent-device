@@ -45,14 +45,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,
-} from '@agent-device/replay-port/replay-script-source-fixtures';
+} from '../../../__tests__/support/replay-script-source-fixture.ts';
 import { captureSnapshotThroughLegacyDispatchFixture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor-capture.ts';
 import { seedReplayFixtureSession } from '../replay-runtime/session-replay-runtime.fixtures.ts';

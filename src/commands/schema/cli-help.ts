@@ -132,7 +132,7 @@ Escalate:
   help scripting recording, save-script, batch, replay repair
   help gestures multi-touch gesture shapes/quirks
   help tv Android TV, tvOS, Vega VVD remote
-  help react-devtools RN perf/profiling, hooks, renders
+  help react-devtools RN components, props/state/hooks, render profiling
   help react-native RN hazards, Metro/Re.Pack, routing
   help remote remote/cloud config, lease, tunnels
   help macos desktop, frontmost-app, menu bar
@@ -168,6 +168,7 @@ Reusable open-to-destination scripts:
   To keep the value out of the CLI's argv as well, pipe it in with --text-stdin instead of a text argument:
     printf %s "$AD_VAR_PASSWORD" | agent-device fill 'id="password"' --text-stdin --record-as PASSWORD
   --text-stdin reads at most 64 KiB, removes exactly one trailing newline, and refuses a terminal, empty input, invalid UTF-8, or an extra text argument. While recording is armed, --record-as publishes \${VAR} and --no-record leaves the step out; passing neither is an error. Without an armed recording the step is not recorded. It is not available inside batch steps.
+  The privacy controls for typed input (--text-stdin and --record-as) keep the literal out of agent-device's own responses, diagnostics, and recorded scripts. They do not rewrite what the platform records: on iOS, XCTest writes its own diagnostic logs and its .xcresult bundle, and typed text can appear in both, on a simulator or a physical device. Treat those as sensitive, and use test-only credentials when they may be kept or shared.
 
 Replay divergence and repair:
   A failing replay/test step returns REPLAY_DIVERGENCE with a bounded report (screen digest, ranked selector suggestions, resume). Fix app state, then resume with replay --from <n> --plan-digest <sha256> (both from the report's resume field) to continue without re-running earlier steps; resume never re-executes skipped steps, so app state there is the caller's responsibility. --from is replay-only; test rejects it. The digest binds the script, includes, effective --platform/--target, and per-action runtime/identity; native .ad interpolation is late-bound so changing only its values keeps the digest, while Maestro environment substitution can change it.
@@ -278,77 +279,66 @@ Focus and visual truth:
   },
   ...debuggingHelpTopics,
   'react-devtools': {
-    summary: 'React Native performance, profiling, and component internals',
+    summary: 'React Native components, props/state/hooks, and render profiling',
     body: `agent-device help react-devtools
 
-Use this for React Native performance/profiling and internals that the accessibility tree cannot expose: components, props, state, hooks, ownership, slow renders, and rerenders.
+Use this for React Native internals the accessibility tree cannot show: the component tree, a component's props, state, hooks, and owners, errors and warnings components logged while rendering, and render performance (slow renders, rerenders and their causes, commits over a 16 ms frame).
 
-Core commands:
-  agent-device react-devtools status
-  agent-device react-devtools start
-  agent-device react-devtools stop
-  agent-device react-devtools wait --connected
-  agent-device react-devtools wait --component <ComponentName>
-  agent-device react-devtools count
-  agent-device react-devtools get tree --depth 3
-  agent-device react-devtools find <ComponentName>
-  agent-device react-devtools find <ComponentName> --exact
-  agent-device react-devtools get component @c5
+Components:
+  agent-device react-devtools tree [@ref|Name] [--depth 8] [--limit 60]
+  agent-device react-devtools find <Name> [--exact]
+  agent-device react-devtools inspect <@ref|Name>
   agent-device react-devtools errors
+
+Render profiling:
   agent-device react-devtools profile start
   agent-device react-devtools profile stop
-  agent-device react-devtools profile slow --limit 5
-  agent-device react-devtools profile rerenders --limit 5
-  agent-device react-devtools profile report @c5
-  agent-device react-devtools profile timeline --limit 20
-  agent-device react-devtools profile export profile.json
-  agent-device react-devtools profile diff before.json after.json --limit 10
+  agent-device react-devtools profile report [Component]
+  agent-device react-devtools profile commit [N]
+
+Connection:
+  Every command except profile report and profile commit, which read the saved profile, attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no start or connect step. It is verified on Android emulators and iOS simulators, through agent-device proxy, and on remote bridge sessions, where it uses the Metro server next to the agent: the session's binding from metro prepare, or --metro-host/--metro-port. A device-facing Metro URL, such as the bridge's, refuses the debugger connection.
+  Add --app <bundle-id> when several apps share the dev server, --metro-device <name> when one app runs on several devices connected to it, and --metro-port/--metro-host (or --bundle-url) when the dev server is neither the session's nor localhost:8081.
+
+Component inspection:
+  Start with find <part of a name> or tree; both print @c refs. Wrapper chains such as providers collapse onto one line, and three or more consecutive siblings with identical subtrees, such as list rows, collapse into one line with a count; run tree @ref to open a branch.
+  inspect takes an @c ref, or a name only one mounted component has. It prints the owners that rendered it, its props, state, hooks (custom hooks list the hooks they call), and what it logged while rendering. Deep values print as short previews.
+  errors lists the mounted components that logged console errors or warnings while rendering, with the messages. When the app's React DevTools backend does not attribute every log to a component, as on React Native 0.74 and 0.76, errors says its list can be incomplete; check logs as well.
+  Refs are DevTools element ids: they change when a component remounts or the app reloads, so find again after either.
+  With a React DevTools window connected to the app, tree, find, errors, and inspect by name fail with tree-unavailable; close it and reload the app.
 
 Profiling loop:
-  1. Run agent-device react-devtools status first. Use start only if status reports the React DevTools helper is not running; start is not a connection check.
-  2. Always run agent-device react-devtools wait --connected after status and before profiling so the app, not just the helper, is attached.
-  3. If correlating with logs or network, run logs clear --restart before the first logs mark.
-  4. Start profiling immediately before the interaction.
-  5. Drive the interaction with normal agent-device commands and mark before/after the repro when timing matters.
-  6. Stop profiling.
-  7. Make one bounded first-pass survey: profile stop for the summary, profile slow --limit 5 once, profile rerenders --limit 5 once, and profile timeline --limit 20 only when commit timing matters.
-  8. Use profile report @cN for targeted render causes and changed props/state/hooks; use get component @cN for current props/state/hooks.
+  1. Run profile start immediately before the interaction; keep the window narrow.
+  2. Drive the interaction with normal agent-device commands. When correlating with logs, run logs clear --restart before the first logs mark.
+  3. Run profile stop. It saves the recording, then prints the commit count, render time, commits over the 16 ms frame budget, and ranked findings, each naming a component, its evidence, and a fix. If changed-prop inspection is interrupted after collection, profile report and profile commit can still read the saved recording.
+  4. Drill into one finding with profile report <Component> or profile commit <N>. Without an argument, report lists components by self time with why they rendered, and commit lists commits in order (the slowest when capped).
+  5. After a fix, repeat the same start, interaction, and stop, and compare the findings.
+
+Findings:
+  slow-render: the component's own render is expensive. memo-defeated: a memoized component often re-renders because props change identity. parent-cascade: the component often re-renders with unchanged props, state, and context when its owner renders. context-cascade: most of the component's renders come from context changes. effect-chain: the component triggers a follow-up commit right after rendering, likely state set in an effect. render-storm: one component commits many times per second. eager-mount: hundreds of instances mount in one commit. slow-commit: a commit of three frames or more that other findings leave mostly unexplained.
+  Timings come from development builds and run slower than release builds; compare runs instead of reading absolute numbers.
 
 Rules:
-  Every React DevTools command is an agent-device subcommand: agent-device react-devtools ...
-  Do not write agent-devtools, agent-react-devtools, or bare react-devtools commands in final command plans. Every profiling and survey line must begin with agent-device react-devtools.
-  Start with get tree --depth 3 or find <name>; use find --exact when fuzzy results are noisy.
-  @c refs reset after reload/remount. After reload, wait --connected and inspect again.
-  Keep the profile window narrow; unrelated navigation makes render data noisy.
-  Do not repeatedly raise broad profile slow limits such as --limit 50, --limit 200, or --limit 500. Drill into a specific @c ref with profile report unless you have a specific target that needs more rows.
+  Every command is an agent-device subcommand: agent-device react-devtools ...
+  Do not repeatedly raise table limits such as --limit 50 or --limit 200; drill into one component with profile report instead.
   For network evidence, use agent-device network dump --include headers; headers is not a positional argument.
-  For cross-platform validation with explicit device selectors, use separate sessions/devices and restart react-devtools between platforms.
-  Remote Android and iOS bridge runs normally through agent-device react-devtools; the CLI keeps the needed local service tunnel alive until agent-device react-devtools stop or disconnect. Expo support depends on the SDK's bundled React Native runtime.
-  Remote iOS apps attempt the legacy React DevTools websocket during JavaScript startup. If the app was already open before react-devtools start, run open <bundle-id> --platform ios --relaunch, then wait --connected.
-  React Native 0.87+ needs agent-react-devtools installed as a dev dependency of the app project, then a one-time npx agent-react-devtools init there and a rebundle, before wait --connected can succeed. The npm exec package this wrapper runs is temporary and does not install it into the app. Run npx agent-react-devtools uninit when the task is done unless the user wants to keep the setup.
-  Verify an attached app with status or wait --connected before trusting any result. With 0 connected apps, count, errors, and get tree return empty results that look like a clean pass.
 
 Example:
-  agent-device react-devtools status
-  agent-device react-devtools wait --connected
   agent-device logs clear --restart
   agent-device logs mark "before catalog search"
   agent-device react-devtools profile start
   agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
   agent-device logs mark "after catalog search"
   agent-device react-devtools profile stop
-  agent-device react-devtools profile slow --limit 5
-  agent-device react-devtools profile rerenders --limit 5
-  agent-device react-devtools profile timeline --limit 20
-  agent-device react-devtools profile report @c5
+  agent-device react-devtools profile report CatalogScreen
   agent-device network dump --include headers
 
 Device busy and ownership:
-  DEVICE_IN_USE has two flavors. "already in use by session X" is this daemon: reuse it with --session X, or run close --session X first. "owned by session X in workspace Y" is another worktree's daemon holding the host-global device claim: it is never retriable — run the error's exact recovery command instead of retrying.
+  DEVICE_IN_USE has two flavors. "already in use by session X" is this daemon's session table: reuse it with --session X, or run close --session X first. "owned by session X in workspace Y" is the host-global device claim another session — from this daemon or another worktree's daemon — or an in-flight command holds; there may be no session to close, and it is never retriable, so run the error's exact recovery command instead of retrying.
   Inspect ownership without any daemon: agent-device device status (add --stale for proven-dead owners; settle and release those with agent-device device release --stale). devices marks rows that are claimed, so pick an unclaimed device instead of contending.
   A live foreign owner is released by closing its session from its own workspace or stopping its daemon: agent-device daemon stop --state-dir <owner state dir> (the error names the state dir). The device itself can settle a claim: when it rebooted after that claim was taken, its app, runner, and accessibility session were destroyed, so open reconciles the owner's resources, takes the claim, and reports the release in warnings. Never recover by hunting PIDs with ps/kill. boot/install/shutdown take the same claims as open and refuse foreign-claimed devices identically; they do not ask the device about its boot.
 
-Use snapshot, screenshot, logs, network, perf frames, and perf memory for device/app runtime evidence. Use react-devtools when component internals or React rendering behavior matters.`,
+Use snapshot, screenshot, logs, network, perf frames, and perf memory for device/app runtime evidence. Use react-devtools when component internals or React rendering performance matter.`,
   },
   cdp: {
     summary: 'React Native CDP targets, JS heap snapshots, and leak triage',
@@ -400,7 +390,7 @@ Output contract:
   Until cdp has a compact leak report command, synthesize one from memory usage diff, snapshot diff, leak-triplet, and retainers. Report heap deltas, top retained classes/shapes, leak-triplet rows that stayed high after cleanup, and the shortest useful retaining paths. Do not paste raw heap snapshots or large allocation profiles into the response; use exported artifacts only when the user asks for raw data.
 
 Target caveats:
-  React Native/Hermes implements a subset of browser CDP. If a command reports an unsupported method, keep the target selected and switch to heap usage samples plus heap snapshots. Prefer react-devtools for component tree/render causes; prefer perf memory sample or perf memory snapshot for native/process memory.`,
+  React Native/Hermes implements a subset of browser CDP. If a command reports an unsupported method, keep the target selected and switch to heap usage samples plus heap snapshots. Prefer react-devtools profile for render causes; prefer perf memory sample or perf memory snapshot for native/process memory.`,
   },
   'react-native': {
     summary: 'React Native app automation hazards and routing',
@@ -414,7 +404,7 @@ Choose the next help topic:
   Routine QA/dogfood/manual-test flow (open, snapshot -i, press/fill --settle, verify, close): help manual-qa; it has the concrete command shapes, so you should not need generic navigation help for a normal pass.
   Deep exploration of navigation/selector/ref edge cases, or a serial-command question manual-qa does not answer: help workflow (full reference, larger read).
   Logs, network, diagnostics, traces, permission dialogs, or runtime failures: help debugging.
-  Component tree, props/state/hooks, slow renders, rerenders, or render causes: help react-devtools.
+  Component tree, props/state/hooks, slow renders, rerenders, render causes, or dropped frames in React: help react-devtools.
   JS heap growth, heap snapshots, allocation hotspots, or retained-object leaks: help cdp.
   Remote/cloud config, leases, and local service tunnels: help remote.
 
@@ -445,10 +435,9 @@ Overlays and busy RN UIs:
     agent-device snapshot -i
     agent-device press 'id="submit-order"'
   Do not use a plain snapshot after dismiss-overlay when the next step needs current refs; use snapshot -i.
-  When overlay evidence and React diagnostics are required before continuing, keep the sequence explicit:
+  When overlay evidence is required before continuing, keep the sequence explicit:
     agent-device snapshot -i
     agent-device screenshot --overlay-refs
-    agent-device react-devtools errors
     agent-device react-native dismiss-overlay
     agent-device snapshot -i
     agent-device press 'id="submit-order"'
@@ -461,8 +450,8 @@ Overlays and busy RN UIs:
 
 React DevTools routing:
   Keep the agent-device react-devtools prefix on every React DevTools command.
-  Use help react-devtools for status/wait, component trees, props/state/hooks, profile windows, slow renders, rerenders, and remote bridge rules.
-  If React DevTools cannot connect, report status and continue with logs, network, perf frames, perf memory, screenshot, and trace evidence instead of blocking the whole flow.
+  Use help react-devtools for component trees, props/state/hooks, render profiles, slow renders, rerenders, and their causes.
+  If React DevTools cannot attach, report the error and continue with logs, network, perf frames, perf memory, screenshot, and trace evidence instead of blocking the whole flow.
 
 CDP memory routing:
   Keep the agent-device cdp prefix on every CDP command.
@@ -474,11 +463,8 @@ Slow-flow investigation:
   Start React Native slow-flow plans with this ordered scaffold:
     agent-device open "Agent Device Tester" --platform android
     agent-device snapshot -i
-    agent-device react-devtools status
-    agent-device react-devtools wait --connected
   If the task says to open the app, include the open command even when it also describes the current screen.
-  Use help react-devtools for the narrow React profile window. Profiling plans need both status and wait --connected before profile start.
-  Check status before wait/profile. Do not substitute react-devtools start for status; start launches the helper, while status reports connection state.
+  Use help react-devtools for the narrow React profile window: react-devtools profile start right before the interaction and react-devtools profile stop after it.
   Use help debugging for logs clear --restart, logs mark, network dump --include headers, perf frames, perf memory, native profiles, traces, and runtime failure evidence.
   For 15-20s async work, use wait with the exact expected text or selector instead of repeated snapshots.
   Report React render offenders separately from network/backend waits and device frame/CPU/memory findings.`,
@@ -510,7 +496,7 @@ iOS physical-device prerequisites:
   If Xcode cannot choose a profile, set AGENT_DEVICE_IOS_PROVISIONING_PROFILE to the profile name/specifier, not a file path.
   AGENT_DEVICE_IOS_SIGNING_IDENTITY is optional; omit it unless xcodebuild asks for a specific identity.
   The profile/team must allow AGENT_DEVICE_IOS_BUNDLE_ID and <id>.uitests.
-  A runner startup failure names its class in error details.reason rather than only in prose: signing_no_development_team, signing_provisioning_profile_missing, bundle_identifier_already_registered, signing_unspecified, devtools_security_developer_mode_disabled (the Mac's DevToolsSecurity setting, which says nothing about the device's Developer Mode toggle), device_developer_mode_disabled (read from an iPhone's own report before the runner builds, and the only device state that stops a run up front), device_developer_disk_image_unavailable (also read from the device, and published on a startup failure that named no cause of its own, since iOS 17+ mounts the developer disk image on demand during build and launch rather than gating the build), or build_failed_unclassified when nothing proved a cause. The two device reasons are never inferred from tool output or from each other. Branch on details.reason and follow hint; the message is for humans.
+  A runner startup failure names its class in error details.reason rather than only in prose: signing_no_development_team, signing_provisioning_profile_missing, bundle_identifier_already_registered, signing_unspecified, devtools_security_developer_mode_disabled (the Mac's DevToolsSecurity setting, which says nothing about the device's Developer Mode toggle), simulator_service_hub_unavailable (an Xcode too old for the host macOS: macOS refuses to load its DTServiceHub, so every runner launch fails; the command stops as soon as the refusal reaches runner.log, and selecting an Xcode that supports this macOS on the daemon host is the fix), simulator_set_destination_not_found (a --ios-simulator-device-set simulator the selected Xcode cannot resolve; names the set), device_developer_mode_disabled (read from an iPhone's own report before the runner builds, and the only device state that stops a run up front), device_developer_disk_image_unavailable (also read from the device, and published on a startup failure that named no cause of its own, since iOS 17+ mounts the developer disk image on demand during build and launch rather than gating the build), or build_failed_unclassified when nothing proved a cause. The two device reasons are never inferred from tool output or from each other. Branch on details.reason and follow hint; the message is for humans.
   First-run XCTest setup/build can take longer than normal commands; keep the device connected and use --debug to inspect signing/build diagnostics if setup times out.
 
 Android physical-device prerequisites:
@@ -522,6 +508,7 @@ Runner and daemon lifecycle (applies to simulators too):
   No runner read launches a session app that is not running: snapshot, wait, is, get, a reading find, and an interaction's leading reads (a gesture's viewport read, the capture that resolves a selector click/fill) answer the retriable APP_NOT_RUNNING instead of bare-launching over a launch SpringBoard still holds behind its deep-link confirmation. Only open, activate, and a command that mutates without a leading read bring a stopped app up.
   close keeps a healthy iOS simulator XCTest runner warm by default so the next open on that simulator (same udid in the same simulator set) skips the runner build, unless --shutdown was requested, the session was recording, or the session held a device lease. A retained runner auto-stops after an idle window (default 5 minutes); set AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS to override, or 0 to disable idle stop and retain until daemon exit. Only a ready runner with an observed listener is retained; close retires unfinished prewarm recovery. Losing the retained listener stops that generation, and daemon shutdown stops idle retained runners rather than handing them off without supervision.
   Each AGENT_DEVICE_STATE_DIR runs its own daemon. It self-exits after an idle window (default 5 minutes, matching the runner idle-stop default) once it has no open sessions, no in-flight requests, and no active recording; set AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS to override, or 0 to disable idle reap.
+  A command that needs the shared local daemon starts it for its state dir when none runs (device status and device release --stale never contact one). When the running daemon comes from another version or build, the command replaces it only if the daemon reports no work: no in-flight request, session, repair session, or live lease (a streaming resumable upload and a host human-control hold that names no lease are not counted); otherwise it fails with details.reason daemon-busy and leaves the daemon alone. A daemon that agreed to leave is waited for up to 60 s and never signaled while it drains; one still running then fails with details.reason daemon-drain-timeout unless it answers nothing and is provably a daemon process, which is force-retired. A daemon from a release that predates this check is never replaced and fails with daemon-incompatible. End a busy or older daemon deliberately with agent-device daemon stop --state-dir <path>. Node clients pick daemonLifecycle 'attach' (never starts or replaces a daemon; fails with daemon-not-running or daemon-incompatible) or 'managed' (the default until 0.22), and ensureDaemon() starts or replaces one explicitly.
   On a machine shared by several agents, set AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS to also expire an individual session that has taken a host-global device claim and then received no commands for that long; the claim is released and the next command on that session answers SESSION_NOT_FOUND with details.reason SESSION_IDLE_EXPIRED naming the window and the device. Off by default, because on a shared host "idle" and "thinking" are indistinguishable: only set it where an abandoned claim blocking every other agent is the worse failure. Sessions holding a remote lease or any active capture (recording, logs, audio, performance, or trace) are never expired this way.
   A stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically instead of failing with "is already owned by another agent-device daemon". A live owner's runner is also reclaimed when the requesting daemon holds the host-global device claim for that device: claims are exclusive, so holding one proves the runner's owner released the device and merely kept the runner warm. The error remains only for owners outside claim arbitration (a pre-claims build, or daemons pointed at different claim stores).
 
@@ -677,11 +664,12 @@ Rules:
   Use Limrun, BrowserStack, AWS Device Farm, and TestMu AI through local provider profiles; they do not accept a remote agent-device daemon URL.
   Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY, or the LIM_*_INSTANCE_* variables for an existing instance. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. TestMu AI uses LT_USERNAME and LT_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
   A local daemon keeps the Limrun, BrowserStack, and TestMu AI credentials it started with. When the shell holds different ones, the first command that allocates a lease refuses with reason provider-credentials-changed; run agent-device daemon stop with the same --state-dir, then rerun the command. A shell that sets none of them uses the daemon's. A daemon with an HTTP auth hook serves remote callers and does not compare.
+  A lease for a provider the daemon has no runtime for refuses with UNSUPPORTED_OPERATION, reason provider-not-registered, and lists the registered providers, plus the plugins that failed to register as failedPlugins; no lease is recorded. Restart the daemon with the provider configured. Provider-less leases, proxy, and cloud need no provider runtime.
   Direct-provider connect performs read-only provider calls and saves active connection state only after verification succeeds. It never creates a device, instance, App Automate session, or AWS remote access session.
   connect without --session always creates a fresh remote session and prints that session in its next-step commands. Concurrent callers must pass the returned --session on every command; the ambient active connection is only a single-workflow convenience.
   To replace an existing connection, pass its returned session explicitly with --session <name> --force. --force without --session creates another fresh session and does not release or overwrite an unrelated active connection.
   Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys or instance tokens, BrowserStack or TestMu AI access keys, or AWS credentials.
-  Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro/React DevTools URL because it cannot reach local host ports directly.
+  Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro URL because it cannot reach local host ports directly.
   After closing a device cloud session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.
   connect proxy stores the connection profile and client identity. Proxy device leases are acquired on open and expire after five minutes without commands; when a lease expires or is released, the daemon ends the session opened under it and frees its device; devices may inspect proxy inventory without allocating.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.
@@ -689,14 +677,13 @@ Rules:
   A busy direct-proxy device error means another agent owns the device until it closes or its inactivity lease expires.
   Keep the proxy token secret. Anyone with the token can control the proxied daemon.
   A daemon with AGENT_DEVICE_HTTP_AUTH_HOOK configured treats HTTP requests as remote: host-path install sources are rejected, uploaded artifacts remain supported, and Maestro runScript HTTP helpers allow only public network destinations. No-hook local HTTP and socket flows retain their local behavior.
-  A daemon started with AGENT_DEVICE_DAEMON_POLICY=<policy.json> enforces that policy for every request, including batch steps and replay actions: it can limit which devices are visible and bindable, allow or deny commands (react-devtools and Maestro flows reach the daemon as the runtime command), and deny device-shutdown. A denial is UNAUTHORIZED with details.reason DAEMON_POLICY_DENIED; do not retry it. Use an allowed command or device, or ask the daemon operator to change the policy; a denied capability such as device-shutdown has no allowed alternative.
+  A daemon started with AGENT_DEVICE_DAEMON_POLICY=<policy.json> enforces that policy for every request, including batch steps and replay actions: it can limit which devices are visible and bindable, allow or deny commands (Maestro flows reach the daemon as the runtime command), and deny device-shutdown. A denial is UNAUTHORIZED with details.reason DAEMON_POLICY_DENIED; do not retry it. Use an allowed command or device, or ask the daemon operator to change the policy; a denied capability such as device-shutdown has no allowed alternative.
   If local/proxy iOS reports that the runner is already owned by another agent-device daemon after lease admission, retry after the owning session closes or after lease expiry. If the conflict repeats, clean stale daemon state on the machine with simulator access.
   Do not use --config as a remote profile flag. --config loads CLI defaults; --remote-config selects remote daemon/profile settings.
   For self-contained scripts, pass the same --remote-config to every operational command, including disconnect; a preceding connect is optional but not required.
   For remote artifact installs, use install-from-source <url> or install-from-source --github-actions-artifact org/repo:artifact; do not download CI artifacts locally first.
   After connect, let the active remote connection supply runtime hints.
   For connected phone/tablet setup and iOS signing prerequisites, read agent-device help physical-device.
-  For remote Android and iOS bridge React DevTools, run agent-device react-devtools normally. The CLI opens the needed local service tunnel for the DevTools daemon and keeps it alive until agent-device react-devtools stop or disconnect.
   Use --debug when remote connection or transport errors need diagnostic ids and remote log hints.`,
   },
   macos: {
@@ -980,14 +967,20 @@ function buildHelpTopicUsageText(topicName: string): string | null {
   const topic = HELP_TOPICS[topicName as keyof typeof HELP_TOPICS];
   if (!topic) return null;
   const body = topicName === 'commands' ? renderFullCommandReferenceText() : topic.body;
+  const related = RELATED_HELP_LINES.filter((entry) => entry.topic !== topicName)
+    .map((entry) => `  ${entry.line}\n`)
+    .join('');
   return `${withVersionHeader(topicName, body)}
 
 Related:
-  agent-device help <command>   command-specific flags
-  agent-device help manual-qa   routine QA loop
-  agent-device help workflow    full automation reference
-`;
+${related}`;
 }
+
+const RELATED_HELP_LINES = [
+  { topic: null, line: 'agent-device help <command>   command-specific flags' },
+  { topic: 'manual-qa', line: 'agent-device help manual-qa   routine QA loop' },
+  { topic: 'workflow', line: 'agent-device help workflow    full automation reference' },
+] as const;
 
 // Every topic body's first line is authored as `agent-device help <topicId>`. Swapping in the
 // installed version here (instead of hand-editing every topic string) gives the skill router a

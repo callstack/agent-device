@@ -28,10 +28,6 @@ export function requireSessionOrExplicitSelector(
   );
 }
 
-export function hasExplicitSessionFlag(flags: DaemonRequest['flags'] | undefined): boolean {
-  return typeof flags?.session === 'string' && flags.session.trim().length > 0;
-}
-
 export async function resolveCommandDevice(params: {
   session: SessionState | undefined;
   flags: DaemonRequest['flags'] | undefined;

@@ -3,6 +3,7 @@
   "entry": [
     "tsdown.config.ts",
     "scripts/check-provider-plugin.mjs",
+    "scripts/check-affected/command.ts",
     "packages/provider-testmu/test/package-smoke.mjs",
     "packages/provider-testmu/tsdown.config.ts",
     "packages/provider-testmu/src/plugin.ts",
@@ -23,7 +24,7 @@
     "packages/proxy/src/index.ts",
     "packages/proxy/tsdown.config.ts",
     "src/bin.ts",
-    "src/client/companion-tunnel.ts",
+    "packages/react-native/src/companion/companion-tunnel.ts",
     "src/daemon.ts",
     "packages/capture-kit/src/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
@@ -63,7 +64,11 @@
     "scripts/maestro-conformance/corpus/**",
     "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
     "scripts/help-conformance-sample-outputs.d.mts",
-    "scripts/help-conformance-runner-output.d.mts"
+    "scripts/help-conformance-runner-output.d.mts",
+    // A hand-written type surface for a plain-Node .mjs the typechecked program (and Fallow's
+    // graph) cannot import; its only consumer is the .mjs's real importers, resolved by tsc, not
+    // by an import edge. Same shape as the help-conformance declaration files above.
+    "scripts/size-report-package.d.mts"
   ],
   "dynamicallyLoaded": ["packages/daemon/src/execution/interaction/index.ts"],
   "ignoreDependencies": [
@@ -94,8 +99,13 @@
       "exports": ["*"]
     },
     {
-      // A published provider package's default export is its plugin contract; src/plugins/load.ts imports the package by name at runtime and reads `default`.
+      // A published provider package's default export is its plugin contract; packages/plugins/src/load.ts imports the package by name at runtime and reads `default`.
       "file": "packages/provider-*/src/index.ts",
+      "exports": ["default"]
+    },
+    {
+      // The version 1 entry a provider package's `agentDevicePlugin.entry` names; hosts without the version 2 contract import the built file and read `default`.
+      "file": "packages/provider-*/src/plugin.ts",
       "exports": ["default"]
     },
     {

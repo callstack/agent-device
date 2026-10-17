@@ -201,27 +201,22 @@ pnpm test:maestro-compat     # example of a focused family suite
 pnpm exec vitest run path/to/file.test.ts
 ```
 
-Before pushing a normal code change, let the repository derive the required gates:
+Before pushing a normal code change, commit it and validate that exact commit. The repository
+derives the required gates from the diff:
 
 ```bash
-pnpm check:affected --run
+pnpm check:affected --run --head "$(git rev-parse HEAD)"
 ```
 
-The selector combines the committed diff with staged, unstaged, and untracked files. Unknown,
-workflow, lockfile, and selector-owning changes fail open to the full local set. It reports
-device/toolchain checks that remain GitHub-authoritative instead of trying to run them implicitly.
-
-For broad refactors or when explicitly requested, run the deterministic core aggregate:
-
-```bash
-pnpm check
-```
-
-`pnpm check` covers formatting, lint, typechecking, layering, dependency-graph parity, production
-exports, MCP metadata, the distributable build, bundle ownership, Fallow, unit tests, and local smoke
-tests. It is intentionally not a simulation of every CI job: coverage, provider integration,
-history-backed compatibility, specialized toolchains, and live device/browser lanes remain separate.
-GitHub CI is authoritative.
+Only a passed receipt with `exactCommit: true` proves validation at that commit. Without `--head`,
+the run also includes staged, unstaged, and untracked files; treat that result as local feedback.
+Unknown, workflow, lockfile, and selector-owning changes fail open to the full local set. For broad
+refactors or when explicitly requested, run `pnpm check`: formatting, lint, typechecking, layering,
+dependency-graph parity, production exports, MCP metadata, docs prose and links, the build, bundle
+ownership, the package check, Fallow, unit tests, and local smoke tests. Both commands share one host
+lock and need macOS or Linux; on Windows, use the affected plan and direct focused checks. GitHub CI
+stays authoritative for coverage, provider integration, history-backed compatibility, specialized
+toolchains, and live device lanes.
 
 Useful direct entry points:
 
@@ -238,8 +233,8 @@ Useful direct entry points:
 - `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
 - `pnpm fallow:baseline` — intentionally regenerate the reviewed Fallow health baseline
 
-See [`docs/agents/testing.md`](docs/agents/testing.md) for gate ownership, shared test utilities,
-mutation/fuzz lanes, contention policy, and test-speed rules. For real devices, follow
+See [`docs/agents/testing.md`](docs/agents/testing.md) for check selection and blocked validation; see
+[`test authoring`](docs/agents/test-authoring.md) for shared test utilities and test-speed rules. See [gate maintenance](docs/agents/gates.md) for mutation and fuzz harnesses. For real devices, follow
 [`docs/agents/device-verification.md`](docs/agents/device-verification.md); a fixture-backed test does
 not prove that a native path was active.
 
@@ -329,7 +324,8 @@ Read the release notes, inspect the affected-check plan, and treat a green updat
 candidate rather than an automatic merge:
 
 ```bash
-pnpm check:affected --run
+pnpm check:affected --verbose
+pnpm check:affected --run --head "$(git rev-parse HEAD)"
 ```
 
 ## Issues

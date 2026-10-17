@@ -5,6 +5,16 @@ import type { CommandFlags } from './command-flags.ts';
 import type { EndedLease } from './client-lease.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
+export const CLOUD_LEASE_PROVIDER = 'cloud';
+
+/**
+ * Lease providers that name a logical routing identity rather than a provider runtime. Any other
+ * `leaseProvider` is backed by a registered runtime or is refused at allocation.
+ */
+const RUNTIME_LESS_LEASE_PROVIDERS: ReadonlySet<string> = new Set([
+  PROXY_LEASE_PROVIDER,
+  CLOUD_LEASE_PROVIDER,
+]);
 
 const REQUIRED_PROXY_LEASE_FIELDS = [
   'leaseId',
@@ -326,6 +336,17 @@ export function parseLeaseDeviceKey(
 
 export function isProxyLeaseScope(scope: LeaseScope): boolean {
   return scope.leaseProvider === PROXY_LEASE_PROVIDER;
+}
+
+/**
+ * The provider whose registered runtime must back this lease, or `undefined` for a logical lease:
+ * one with no provider (a `leaseBackend` alone names no provider), `proxy`, or `cloud`.
+ */
+export function leaseProviderRequiringRuntime(scope: LeaseScope): string | undefined {
+  const { leaseProvider } = scope;
+  return leaseProvider === undefined || RUNTIME_LESS_LEASE_PROVIDERS.has(leaseProvider)
+    ? undefined
+    : leaseProvider;
 }
 
 export function findMissingProxyLeaseFields(scope: LeaseScope): string[] {

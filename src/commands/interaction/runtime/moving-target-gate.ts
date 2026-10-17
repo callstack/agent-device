@@ -1,9 +1,3 @@
-import {
-  MOVING_TARGET_GATE_SAMPLE_GAP_MS,
-  movingTargetGateDecision,
-  type MovingTargetBaseline,
-  type MovingTargetGateDecision,
-} from '@agent-device/contracts/moving-target-gate';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type {
   InteractionTarget,
@@ -18,6 +12,7 @@ import type {
   AgentDeviceRuntime,
   CommandContext,
   CommandSessionRecord,
+  MovingTargetBaseline,
 } from '@agent-device/contracts/runtime-contract';
 import { nodeRectByIdentity } from '@agent-device/ad-script';
 import { now, sleep } from '../../runtime-common.ts';
@@ -27,15 +22,29 @@ import { resolveInteractionTarget } from './resolution.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 
 /**
- * The moving-target gate (#3471): the seam that spends the window, in front of the tap and behind
- * every pre-dispatch guard that already judged the target (occlusion, off-screen, keyboard), so it
- * re-decides none of them. The decision and its budget live in
- * `@agent-device/contracts/moving-target-gate`; what lives here is the part that can only be done
- * with a runtime — taking the second and third observations, and putting the tap at the position two
- * of them agree on.
+ * The moving-target gate (#3471): a press or click resolved from a selector or `@ref` must not
+ * dispatch at a point an in-flight transition has already vacated. A raw-coordinate target has no
+ * resolved element to re-observe, so the gate passes it through. A capture is one instant's
+ * photograph of a surface that may still be rearranging itself, and the ADB-backed Android helper is
+ * measured reporting frames in flight — so an interaction issued right after an action that moved
+ * the UI can resolve a point the target has already left and report success on the vacancy. The exposure is the runtime path's own capture-to-dispatch
+ * distance, so the gate is backend-neutral.
  *
- * Agreement dispatches rather than refuses: a control that settled inside the window is the tap the
- * caller asked for, at where it ended up. The refusal is reserved for a target the window could not
+ * Two judgements decide when it is real: {@link movingTargetGateDecision} asks whether this position
+ * is still owed a second observation, and kernel's `areCapturedRectsAtSamePosition` asks whether the
+ * target has stopped — that one lives in `@agent-device/kernel/rect-center` because the post-gesture
+ * no-effect comparison judges the same pair of capture rects and must not hold its own band. Both
+ * are pure over values the caller already holds, so neither is re-derived per platform. The window is
+ * anchored on the mutation's END, so the gate waits out only what is LEFT of it — which is also why
+ * the refusal's hint names `--settle` as the caller-opted superset.
+ *
+ * This is the seam that spends the window, in front of the dispatch and behind every pre-dispatch
+ * guard that already judged the target (occlusion, off-screen, keyboard), so it re-decides none of
+ * them: it takes the second and third observations, and dispatches the requested interaction at the
+ * position two of them agree on.
+ *
+ * Agreement dispatches rather than refuses: a control that settled inside the window is the target
+ * the caller asked for, at where it ended up. The refusal is reserved for a target the window could not
  * settle, where a coordinate would be a guess.
  *
  * Re-resolving rather than re-pointing is deliberate: the recheck spends the whole resolution path,
@@ -61,6 +70,49 @@ export async function guardResolvedTargetAgainstMotion(
   const gate = await readMovingTargetGate(runtime, options, resolved.node, resolved.preAction);
   if (!gate) return resolved;
   return await resolveAtRestTarget(runtime, options, params, resolved, gate);
+}
+
+/** How long after a mutation its target positions stay owed a second observation. */
+export const MOVING_TARGET_GATE_WINDOW_MS = 500;
+
+/**
+ * How far apart the two observations must be for agreeing to mean "at rest". Below one capture
+ * round trip, two observations of a still-moving target agree by timing rather than by the target
+ * having stopped, and the gate would certify a position it never measured. The gate therefore waits
+ * `max(remaining window, this)` before re-observing.
+ */
+export const MOVING_TARGET_GATE_SAMPLE_GAP_MS = 50;
+
+type MovingTargetGateDecision =
+  /** The session holds no baseline: nothing has resolved a mutation recently enough to matter. */
+  | { kind: 'idle' }
+  /** The last resolving mutation finished at or beyond the window ago; the resolved point stands. */
+  | { kind: 'not-recent' }
+  /** Inside the window, but the pre-action tree already shows this node at the resolved rect. */
+  | { kind: 'stationary' }
+  /** Inside the window and disturbed: re-observe at the end of it before dispatching. */
+  | { kind: 'recheck'; waitMs: number };
+
+/**
+ * Whether a resolved rect is still owed a second observation, from the session's mutation clock and
+ * its pre-action tree's verdict on the resolved node. A missing verdict (no baseline tree) can only
+ * mean "not shown at rest", so it rechecks.
+ */
+export function movingTargetGateDecision(params: {
+  /** When the session's last resolving mutation finished; `undefined` when the session is idle. */
+  baselineFinishedAtMs: number | undefined;
+  /** Whether the action's own pre-action tree already shows the resolved node at this rect. */
+  targetShownAtRest: boolean;
+  nowMs: number;
+}): MovingTargetGateDecision {
+  if (params.baselineFinishedAtMs === undefined) return { kind: 'idle' };
+  const ageMs = params.nowMs - params.baselineFinishedAtMs;
+  if (ageMs >= MOVING_TARGET_GATE_WINDOW_MS) return { kind: 'not-recent' };
+  if (params.targetShownAtRest) return { kind: 'stationary' };
+  return {
+    kind: 'recheck',
+    waitMs: Math.max(MOVING_TARGET_GATE_WINDOW_MS - ageMs, MOVING_TARGET_GATE_SAMPLE_GAP_MS),
+  };
 }
 
 /** A press owed a re-observation: the recheck decision, which carries the wait it owes. */

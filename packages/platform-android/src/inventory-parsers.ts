@@ -39,11 +39,14 @@ export function parseAndroidDeviceDescription(rawOutput: string): {
   };
 }
 
+/** avdmanager restricts AVD names to these characters; other stdout lines are emulator logging. */
+const ANDROID_AVD_NAME = /^[A-Za-z0-9._-]+$/;
+
 export function parseAndroidAvdList(rawOutput: string): string[] {
   return rawOutput
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+    .filter((line) => ANDROID_AVD_NAME.test(line));
 }
 
 export function parseAndroidEmulatorAvdNameOutput(rawOutput: string): string | undefined {

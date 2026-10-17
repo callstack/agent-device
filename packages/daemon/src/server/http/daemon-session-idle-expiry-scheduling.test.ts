@@ -9,7 +9,7 @@ import {
   WINDOW_MS,
 } from '../__tests__/session-idle-expiry-harness.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 
 /**
  * #2833: WHEN the reaper starts an expiry and how long it may take. The window that arms it, the

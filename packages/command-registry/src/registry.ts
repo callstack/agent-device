@@ -27,6 +27,7 @@ import {
   deployAppUse,
   readyMaterializeAndDeployAppUse,
   readySendPushNotificationUse,
+  uninstallAppUse,
 } from '@agent-device/contracts/app-deployment-runtime-plan';
 import {
   closeApplicationRuntimePlanUses,
@@ -42,6 +43,7 @@ import {
   alertRuntimePlanUses,
   actionButtonRuntimeUse,
   foldRuntimeUse,
+  telephonyRuntimeUse,
   appEventRuntimeUse,
   appStateRuntimeUses,
   appSwitcherRuntimeUse,
@@ -145,19 +147,6 @@ export type DescriptorSessionRouteCommandName =
     (typeof commandDescriptors)[number],
     { daemon: { route: 'session' } }
   > extends infer Descriptor
-    ? Descriptor extends { name: infer Name extends string }
-      ? Name
-      : never
-    : never;
-
-/**
- * The literal union of every command the daemon routes. A command that never reaches a
- * daemon route cannot be the target of a request, so this is the type a caller building
- * one must name — an unregistered or CLI-only target is a compile error rather than a
- * string the receiver rejects at runtime.
- */
-export type DescriptorDaemonRouteCommandName =
-  Extract<(typeof commandDescriptors)[number], { daemon: object }> extends infer Descriptor
     ? Descriptor extends { name: infer Name extends string }
       ? Name
       : never
@@ -966,6 +955,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...DEPLOY_APP_COMMAND_DESCRIPTOR,
   },
   {
+    name: 'uninstall',
+    ...DEPLOY_APP_COMMAND_DESCRIPTOR,
+    platformExecution: { kind: 'device-runtime', use: uninstallAppUse },
+  },
+  {
     name: 'install_source',
     deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled
@@ -1522,6 +1516,18 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', uses: [foldRuntimeUse] },
   },
   {
+    name: 'telephony',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+    catalog: { group: 'public' },
+    frameworkTier: 'extended',
+    // Admission is the owner's `sendTelephonyEvent` fact. The event goes to the emulator console
+    // rather than the screen, so no blocking-dialog guard applies; the call screen or message
+    // notification it raises can still cover the app, so refs may be invalidated.
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
+    daemon: { ...GENERIC_MUTATING_COMMAND_TRAITS.daemon, androidBlockingDialogGuard: false },
+    platformExecution: { kind: 'device-runtime', uses: [telephonyRuntimeUse] },
+  },
+  {
     name: 'scroll',
     ...(ownerFilesEnabled
       ? { ownerFiles: ['packages/daemon/src/execution/scroll-runtime.ts'] as const }
@@ -1814,13 +1820,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
-    // Wave 6 residue: `react-devtools start` on a Limrun Android instance dispatches internal
-    // `runtime port-reverse` through the CLI-injected dispatch seam. `runtime` is itself fully
-    // migrated (`device-runtime`, R31), so the dispatched execution is accounted for under its
-    // own descriptor rather than hidden behind this one — this route owns no unmigrated platform
-    // execution of its own. The CLI-route dominance gate
-    // (`__tests__/platform-execution-cli-route.test.ts`) still rejects a `none` route whose
-    // CLI-injected dispatch target is still `legacy`.
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
@@ -1881,7 +1880,7 @@ const CLI_COMMAND_NAMES = new Set<string>(
  * claims. Classifications are pinned as literal command-name lists, so reclassifying or
  * renaming a command they name means editing that list in the same diff: the device-claim
  * deviating set in
- * `packages/command-registry/src/__tests__/device-claim-policy.test.ts`; the timeout
+ * `packages/command-registry/src/__tests__/registry-device-claim-policy.test.ts`; the timeout
  * envelopes and budgets in `src/__tests__/command-descriptor-timeout-policy.test.ts` (a
  * declared trait since `b25ef7b024` #1084); and the `targetIdentityVerification` and
  * `'core'` tier sets, plus the tier-iff-public rule, in
@@ -1921,8 +1920,7 @@ type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
  * Compile-time literalness of {@link Command}. The `as const` on {@link RAW_COMMAND_DESCRIPTORS}
  * keeps each descriptor's literal `name` through the composition and the `.map` above; an array
  * that lost it would widen this union to `string`, and nothing downstream would say so:
- * `COMMAND_DEFAULTS` below and `Record<DescriptorCliCommandName, …>` in
- * `src/cli/injected-daemon-dispatch.ts` stop rejecting an unknown key, and the `command: Command`
+ * `COMMAND_DEFAULTS` below stops rejecting an unknown key, and the `command: Command`
  * parameters in `src/cli/command-explain.ts` and `owner-files.ts` would stop excluding a name no
  * descriptor declares. That silence is why this is a type guard and not a value comparison.
  */

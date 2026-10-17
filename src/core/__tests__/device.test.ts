@@ -19,7 +19,7 @@ import {
   MACOS_DEVICE,
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
-} from '@agent-device/test-kit/device-fixtures';
+} from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 
 test('isTvOsDevice selects only the Apple tvOS leaf, not any TV target', () => {

@@ -45,7 +45,7 @@ import type {
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
 import { deviceShape, hasAppleActionButton, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createProviderScenarioHarness } from './harness.ts';
@@ -273,6 +273,8 @@ function providerScenarioRuntimeFacts(
       // A provider session has no host simulator for the fold HID helper, so no fixture leg poses
       // a hinge.
       setFoldPose: fakeProviderUnavailable,
+      // A provider device exposes no emulator console on the daemon host.
+      sendTelephonyEvent: fakeProviderUnavailable,
       // Provider-owned iOS keyboard actions ride the same runner transport the shared interactor
       // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
       ...keyboardRuntimeOperationFacts({

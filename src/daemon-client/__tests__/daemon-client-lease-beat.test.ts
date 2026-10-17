@@ -3,7 +3,7 @@ import { afterEach, describe, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
-import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   buildLeaseHeartbeatRequest,
@@ -580,6 +580,8 @@ describe('buildUploadLeaseHeartbeat', () => {
   const settings = {
     paths: resolveDaemonPaths('/tmp/agent-device-upload-lease'),
     transportPreference: 'socket' as const,
+    daemonLifecycle: 'managed' as const,
+    retireIncompatibleContender: true,
     serverMode: 'socket' as const,
   };
 

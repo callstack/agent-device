@@ -14,7 +14,7 @@ const NEGLIGIBLE_DECORATION_TOLERANCE = 1;
  * view as the presentation that dims everything before it, and the presented-surface rule reads a window
  * holding MORE than one of them as a capture it cannot call un-presented. A UIKit version that stopped
  * using this class would degrade one reader to `unknown` and the other to no cut at all, and both
- * failures are silent, so the pairing lives in the golden table's vocabulary and in both parity tests.
+ * failures are silent, so the pairing lives in the golden table's vocabulary and its parity test.
  */
 export const PRESENTATION_CONTAINER_CLASS = 'UITransitionView';
 
@@ -385,8 +385,8 @@ export type PresentedSurfaceCompleteness = 'complete' | 'capped' | 'unstated';
  * `presented` or `unknown`, never `absent`.
  *
  * The cross-language rule and the tree shapes it is pinned on are the golden table
- * `contracts/fixtures/ios-presented-surface.json`; the Swift `SnapshotPresentedSurface` mirrors this
- * vocabulary and each side has a parity test against that table.
+ * `contracts/fixtures/ios-presented-surface.json`. The Swift `SnapshotPresentedSurface` implements only
+ * the class-blind reading (`classBlindExpected`), and each side has a parity test against that table.
  */
 export function collectPresentedSurface(
   nodes: readonly RawSnapshotNode[],
@@ -462,9 +462,7 @@ function isSystemWindow(node: RawSnapshotNode): boolean {
  * support a claim about every window it read, and such a tree is answered here rather than walked
  * further. The engine's own fold refuses this tree outright, so the regular route never reaches here with
  * one; the guard is what keeps the answer honest when the classifier is called on a tree that has not
- * passed through it — which is the Apple runner's route, where the classification runs on the acquisition
- * and no graph validation happens first. Both languages answer `unknown` for the same reason, which is
- * the parity the golden table pins.
+ * passed through it.
  */
 function identifiesEachNodeOnce(nodes: readonly RawSnapshotNode[]): boolean {
   return new Set(nodes.map((node) => node.index)).size === nodes.length;
@@ -524,9 +522,8 @@ function positionsOutsideSystemWindows(
 /**
  * A node and everything reachable from it through parent links, as the places in `nodes` they occupy.
  * Reported depths are not needed. Visited is keyed on the occurrence and seeded with the root: a producer
- * that closes a loop deeper in the tree is one this walk would follow forever, and the classification runs
- * outside the Apple runner's bounded main-thread work, where no timeout would catch the spin. The golden
- * table's cycle case is pinned on exactly that shape, in both languages.
+ * that closes a loop deeper in the tree is one this walk would follow forever. The golden table's cycle
+ * case is pinned on exactly that shape.
  */
 function subtreePositions(
   rootPosition: number,

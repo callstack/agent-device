@@ -7,7 +7,8 @@ import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 import type { GesturePlan } from './gesture-plan-types.ts';
-import type { ReadableSetting, ReadSettingResult, SettingOptions } from './settings.ts';
+import type { ReadSettingResult, SettingOptions } from './settings.ts';
+import type { ReadableSetting } from './settings-catalog.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { BackendSnapshotResult } from './snapshot-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
@@ -107,7 +108,7 @@ export const MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE = 'tapped via non-hittable co
  * its only producer and the boundary that narrows it
  * (readTypeTextBackendResult, packages/platform-apple/src/interactions.ts) drops a
  * route it cannot name — so a Swift-side addition would silently vanish. The
- * route-parity test in packages/platform-apple/src/core/__tests__/interactions.test.ts
+ * route-parity test in packages/platform-apple/src/interactions.test.ts
  * reads the Swift sources and fails instead.
  */
 export const TEXT_ENTRY_ROUTES = [

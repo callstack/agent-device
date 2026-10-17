@@ -31,7 +31,7 @@ export type MaestroPublicOperation =
       mode?: 'full' | 'limited';
     }
   | { kind: 'openLink'; appId?: string; link: string; prewarmRunner: boolean }
-  | { kind: 'typeText'; text: string }
+  | { kind: 'typeText'; text: string; delayMs?: number }
   | {
       kind: 'clickSelector';
       selector: MaestroDispatchSelector;
@@ -288,7 +288,11 @@ function projectInputOperation(operation: MaestroInputOperation): MaestroDaemonO
     case 'gestureViewport':
       return { command: 'runtime', positionals: ['gesture-viewport'] };
     case 'typeText':
-      return { command: 'type', positionals: [operation.text] };
+      return {
+        command: 'type',
+        positionals: [operation.text],
+        ...(operation.delayMs === undefined ? {} : { flags: { delayMs: operation.delayMs } }),
+      };
     case 'clickSelector':
       return projectSelectorClick(operation);
     case 'clickPoint':
