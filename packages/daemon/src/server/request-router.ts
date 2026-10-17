@@ -1,3 +1,4 @@
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import {
   createOwnerScopedDeviceClaimReconciler,
   type ClaimRecoveryGatewayFactory,
@@ -130,6 +131,7 @@ export type RequestRouterDeps = {
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   providerRuntimeIds?: readonly string[];
+  failedPlugins?: readonly PluginInventoryEntry[];
   providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -160,6 +162,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger(),
     hostDiagnostics,
     providerRuntimeIds,
+    failedPlugins,
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
@@ -349,6 +352,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       leaseRegistry,
       leaseLifecycleProvider,
       providerRuntimeIds,
+      failedPlugins,
       providerCredentials,
       cloudArtifactProvider,
       endSessionsForLease,

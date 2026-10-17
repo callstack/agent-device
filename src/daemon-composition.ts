@@ -99,9 +99,8 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
       ownedProcesses: ownedProcessRecords,
       resolveSessionArtifacts,
     });
-    const providerRuntimeProviders = createProviderDeviceRuntimeRequestProviders(
-      providerDeviceRuntimes,
-    );
+    const providerRuntimeProviders =
+      createProviderDeviceRuntimeRequestProviders(providerDeviceRuntimes);
     const requestPlatformProviders = createRequestPlatformProviders({
       providers: {
         appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,

@@ -1,4 +1,7 @@
-import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
+import type {
+  PluginCleanupOutcome,
+  PluginInventoryEntry,
+} from '@agent-device/contracts/plugin-inventory';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -8,6 +11,7 @@ const lifecycleEvents = vi.hoisted(() => [] as string[]);
 const startupFailure = vi.hoisted(() => ({ active: false }));
 const providerComposition = vi.hoisted(() => ({
   inventory: [] as PluginInventoryEntry[],
+  cleanup: [] as PluginCleanupOutcome[],
 }));
 
 import {
@@ -44,6 +48,7 @@ function startRuntime(stateDir: string, exit: (code: number) => void) {
         },
       }),
       pluginInventory: providerComposition.inventory,
+      shutdownProviderRuntimes: async () => providerComposition.cleanup,
     })),
     env: {
       ...process.env,
@@ -77,6 +82,7 @@ afterEach(() => {
   startupFailure.active = false;
   lifecycleEvents.length = 0;
   providerComposition.inventory = [];
+  providerComposition.cleanup = [];
   vi.restoreAllMocks();
 });
 
@@ -263,4 +269,37 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   expect(finishes[0]).toBeGreaterThan(stops[0]!);
   expect(finishes[0]).toBeLessThan(stops[1]!);
   expect(finishes[1]).toBeGreaterThan(stops[1]!);
+});
+
+test('a plugin whose cleanup failed at shutdown is recorded in daemon.log', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-provider-cleanup-');
+  providerComposition.cleanup = [
+    {
+      provider: 'example',
+      source: 'store',
+      shutdown: { status: 'failed', error: { code: 'COMMAND_FAILED', message: 'shutdown broke' } },
+      dispose: { status: 'ok' },
+    },
+    {
+      provider: 'healthy',
+      source: 'builtin',
+      shutdown: { status: 'ok' },
+      dispose: { status: 'ok' },
+    },
+  ];
+  const runtime = await startRuntime(stateDir, () => {});
+  try {
+    await runtime?.shutdown();
+    const events = logEvents(stateDir).filter(
+      ({ phase }) => phase === 'provider_plugin_cleanup_failed',
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]?.data).toMatchObject({
+      provider: 'example',
+      source: 'store',
+      shutdown: { code: 'COMMAND_FAILED' },
+    });
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
 });

@@ -1,3 +1,4 @@
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   DeviceLease,
@@ -47,6 +48,7 @@ type LeaseHandlerArgs = {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
+  failedPlugins?: readonly PluginInventoryEntry[];
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -60,6 +62,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     sessionStore,
     leaseRegistry,
     providerRuntimeIds,
+    failedPlugins,
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
@@ -84,7 +87,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       // The registry stores the trimmed, validated id, so every admission check reads that id:
       // " testmu " names testmu, and a malformed id is INVALID_ARGS as everywhere else.
       const leaseProvider = normalizeLeaseProvider(leaseScope.leaseProvider);
-      assertProviderRuntimeRegistered(leaseProvider, providerRuntimeIds ?? []);
+      assertProviderRuntimeRegistered(leaseProvider, providerRuntimeIds ?? [], failedPlugins ?? []);
       assertProviderCredentialsUnchanged(
         { leaseProvider, leaseBackend: leaseScope.leaseBackend },
         req.meta?.providerCredentialFingerprint,
@@ -336,9 +339,24 @@ function leaseLifecycleContext(req: DaemonRequest): LeaseLifecycleContext {
 function assertProviderRuntimeRegistered(
   leaseProvider: string | undefined,
   registeredProviders: readonly string[],
+  failedPlugins: readonly PluginInventoryEntry[],
 ): void {
   const provider = leaseProviderRequiringRuntime({ leaseProvider });
   if (provider === undefined || registeredProviders.includes(provider)) return;
+  // A plugin that failed before its provider id was known could have been this provider.
+  const failures = failedPlugins.flatMap((plugin) =>
+    plugin.state === 'failed' && (plugin.provider === provider || plugin.provider === undefined)
+      ? [
+          {
+            ...(plugin.provider === undefined ? {} : { provider: plugin.provider }),
+            ...(plugin.package === undefined ? {} : { package: plugin.package }),
+            code: plugin.error.code,
+            ...(plugin.error.reason === undefined ? {} : { reason: plugin.error.reason }),
+            message: plugin.error.message,
+          },
+        ]
+      : [],
+  );
   throw new AppError(
     'UNSUPPORTED_OPERATION',
     `Provider "${provider}" is not available in this daemon runtime.`,
@@ -346,7 +364,11 @@ function assertProviderRuntimeRegistered(
       reason: 'provider-not-registered',
       provider,
       registeredProviders: [...registeredProviders],
-      hint: `Restart the daemon with ${provider} configured, then retry lease allocation.`,
+      ...(failures.length > 0 ? { failedPlugins: failures } : {}),
+      hint:
+        failures.length > 0
+          ? `Fix the plugin that failed to register (see failedPlugins or agent-device daemon status), restart the daemon, then retry lease allocation.`
+          : `Restart the daemon with ${provider} configured, then retry lease allocation.`,
     },
   );
 }

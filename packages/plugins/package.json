@@ -18,10 +18,6 @@
       "types": "./src/contract.ts",
       "default": "./src/contract.ts"
     },
-    "./discovery": {
-      "types": "./src/discovery.ts",
-      "default": "./src/discovery.ts"
-    },
     "./host": {
       "types": "./src/host.ts",
       "default": "./src/host.ts"

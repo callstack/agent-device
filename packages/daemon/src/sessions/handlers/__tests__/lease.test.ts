@@ -1,3 +1,4 @@
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { handleLeaseCommands } from '../lease.ts';
@@ -642,6 +643,59 @@ test('lease_allocate refuses a provider no registered runtime claims, before rec
       assert.equal(error.details?.reason, 'provider-not-registered');
       assert.equal(error.details?.provider, 'testmu');
       assert.deepEqual(error.details?.registeredProviders, ['browserstack']);
+      return true;
+    },
+  );
+  assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+test('lease_allocate names the plugin that failed to register when it could have backed the provider', async () => {
+  const registry = new LeaseRegistry();
+  const failed = (provider: string | undefined, packageName: string): PluginInventoryEntry => ({
+    ...(provider === undefined ? {} : { provider }),
+    source: 'store',
+    package: packageName,
+    state: 'failed',
+    error: { code: 'INVALID_ARGS', message: `${packageName} is broken`, reason: 'invalid_plugin' },
+    credentials: { variables: [], byBackend: {} },
+  });
+  await assert.rejects(
+    handleLeaseCommands({
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'testmu' },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-failed-plugin-provider-'),
+      leaseRegistry: registry,
+      providerRuntimeIds: ['browserstack'],
+      failedPlugins: [
+        failed('testmu', '@agent-device/testmu'),
+        failed(undefined, 'unloadable-plugin'),
+        failed('other', 'other-plugin'),
+      ],
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.deepEqual(error.details?.failedPlugins, [
+        {
+          provider: 'testmu',
+          package: '@agent-device/testmu',
+          code: 'INVALID_ARGS',
+          reason: 'invalid_plugin',
+          message: '@agent-device/testmu is broken',
+        },
+        {
+          package: 'unloadable-plugin',
+          code: 'INVALID_ARGS',
+          reason: 'invalid_plugin',
+          message: 'unloadable-plugin is broken',
+        },
+      ]);
       return true;
     },
   );

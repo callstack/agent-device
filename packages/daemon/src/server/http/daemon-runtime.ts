@@ -453,20 +453,22 @@ export async function startDaemonRuntime(
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const deviceRuntimeGateway = deps.deviceRuntimeGateway;
   // Provider cleanup is best effort for the daemon, but a plugin whose cleanup failed is recorded.
-  const closeProviders = async (): Promise<void> => {
+  // A daemon that lost the registration does not own `daemon.log`, so it reports on stderr instead.
+  const closeProviders = async (report: 'daemon-log' | 'stderr'): Promise<void> => {
     const outcomes = await deps.shutdownProviderRuntimes().catch(() => []);
     for (const { provider, source, shutdown, dispose } of outcomes) {
       if (shutdown.status === 'ok' && dispose.status === 'ok') continue;
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'provider_plugin_cleanup_failed',
-        data: {
-          provider,
-          source,
-          shutdown: shutdown.status === 'failed' ? shutdown.error : undefined,
-          dispose: dispose.status === 'failed' ? dispose.error : undefined,
-        },
-      });
+      const data = {
+        provider,
+        source,
+        shutdown: shutdown.status === 'failed' ? shutdown.error : undefined,
+        dispose: dispose.status === 'failed' ? dispose.error : undefined,
+      };
+      if (report === 'daemon-log') {
+        await emitDaemonDiagnostic(logPath, 'provider_plugin_cleanup_failed', data);
+      } else {
+        stderr.write(`Provider plugin cleanup failed: ${JSON.stringify(data)}\n`);
+      }
     }
   };
   const applicationLifecycle = deviceRuntimeGateway.applicationLifecycle;
@@ -521,6 +523,7 @@ export async function startDaemonRuntime(
     platformResourceCleanup: deps.platformResourceCleanup,
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
     providerRuntimeIds: deps.providerRuntimeIds,
+    failedPlugins: deps.pluginInventory.filter(({ state }) => state === 'failed'),
     ...deps.requestRouter,
   });
 
@@ -766,7 +769,7 @@ export async function startDaemonRuntime(
 
   const acquisition = await tryAcquireDaemonRegistration(daemonPaths);
   if (acquisition.status !== 'acquired') {
-    await closeProviders();
+    await closeProviders('stderr');
     stderr.write(`Daemon registration ${acquisition.status}; exiting.\n`);
     exit(DAEMON_STARTUP_EXIT_CODES[acquisition.status]);
     return null;
@@ -865,7 +868,7 @@ export async function startDaemonRuntime(
     stderr.write(`Daemon error: ${appErr.message}\n`);
     closeServersBestEffort(servers);
     stopMetadataLossWatch();
-    await closeProviders();
+    await closeProviders('daemon-log');
     await finishDaemonRegistration({ registration, infoPath, logPath });
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
     exit(1);
@@ -936,7 +939,7 @@ export async function startDaemonRuntime(
     });
     expiredProviderLeaseReleaser.shutdown();
     await deviceRuntimeGateway.shutdown();
-    await closeProviders();
+    await closeProviders('daemon-log');
     await applicationLifecycle.finalizeDaemonShutdown();
     // Best effort: stop the PNG worker so an in-flight job cannot delay exit.
     await Promise.race([

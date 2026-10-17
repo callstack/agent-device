@@ -7,9 +7,10 @@ import type {
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 
 /**
- * Extracts eager provider-owner metadata without loading a provider implementation, so a
- * harness-built gateway classifies provider-owned devices the way a daemon registering the same
- * runtimes does. Only runtimes that carry a platform module are registered.
+ * Test-only owner inference for scenario runtimes that are not built through the plugin registry.
+ * The daemon takes each runtime's platform module from the plugin's `setup` result instead; this
+ * infers an equivalent module from a fixture runtime that carries `owner` and `loadRuntime`, so a
+ * harness-built gateway can classify provider-owned devices. Runtimes without them are skipped.
  */
 export function createProviderPlatformRuntimeRegistrations(
   runtimes: readonly ProviderDeviceRuntime[],
