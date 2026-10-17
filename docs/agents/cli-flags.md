@@ -6,7 +6,7 @@ Pass a flag only through layers that consume it:
    Add its definition to the owner in `packages/command-registry/src/flag-definitions-*.ts`.
    Add it to the applicable group in `packages/command-registry/src/flag-groups.ts`, for example `SNAPSHOT_FLAGS`.
    Update the command family metadata/schema that exposes the flag.
-   To find the owner, run `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli/parser`.
+   To find the owner, run `rg -n "<command>|helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser`.
    For schema-only CLI commands, use `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in `src/commands/schema/command-overrides.ts`.
    Each flag declaration requires `projectConfig` and `recorded`.
    `projectConfig` permits a project `agent-device.json` to set the flag.
@@ -36,7 +36,6 @@ An example is `find --first`.
 ## Where CLI help and schema live
 
 - Long help prose is in `src/commands/schema/cli-help.ts`.
-  Flag definitions are in `packages/command-registry/src/flag-definitions-*.ts`.
   CLI input readers are in `src/commands/cli-grammar/`.
 - `src/commands/schema/usage.ts` generates the synopsis `[label]` flag tail from `allowedFlags`.
   A new option reaches `--help` without a synopsis edit.
@@ -54,4 +53,3 @@ An example is `find --first`.
 - Keep command-specific usage/flag metadata with the command family metadata that owns the command.
 - Keep argument parsing in `src/cli/parser/`. Keep help rendering in `src/commands/schema/`.
   Command schema metadata derives from command metadata, family declarations, and the schema-only merge in `src/commands/schema/command-overrides.ts`.
-- To find an owner, run `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser`.
