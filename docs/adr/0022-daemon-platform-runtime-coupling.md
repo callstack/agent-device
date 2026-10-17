@@ -29,7 +29,9 @@ Section 2 retains the classification outcomes. Git history retains the completed
 - Open-target plans/results remain separate from platform mechanics, with one construction path.
 - R75 fails when a handler file enters the state-shape set or the store-authority set and the merge-base set does not contain that file.
   Handler files may leave these sets.
-- Route depth may collapse only pass-through hops that the deletion test proves removable.
+- Route depth may collapse only a hop that the deletion test proves removable.
+  The deletion test applies to each pass-through or translation hop.
+  At `27a97ee619`, the only proven removable hop is the pass-through hop `commands/runtime-types.ts`.
   The ≤14 target is superseded.
 
 ## 1. Context
@@ -135,7 +137,7 @@ The ADR 0019 trace recorded routes of approximately 24 files without an accepted
   Three child issues for the nine leaked edges, instead of one refactor, keep each child issue independently reviewable.
   They preserve the existing behavior that each surface depends on.
   The selector edge is deliberately outside #2332.
-  #2273/#2274 already owned that boundary; another producer would duplicate snapshot-producer policy.
+  #2273/#2274 already owned the selector seam; another producer would duplicate snapshot-producer policy.
 - **R75 ratchets handler files, not the complete overlay.**
   The repository's 112/68 sets include correct owning-module reads, such as session lifecycle reads of session state.
   A repository-wide ratchet would prevent legitimate movement.
