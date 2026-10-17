@@ -33,6 +33,7 @@ const spawn = vi.mocked(runCmdDetachedMonitored);
 
 afterEach(async () => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   spawn.mockReset();
   await finishRegisteredDaemonFixtures();
 });
@@ -103,6 +104,7 @@ test('an idle incompatible daemon is replaced, and the replacement is reported',
       { stateDir: paths.baseDir, pid: child.pid, reason: 'incompatible' },
     ]);
     assert.equal(sent[0]?.lifecycle, 'attach');
+    assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
   } finally {
     await closeLoopbackServer(stale.server);
     await closeLoopbackServer(fresh.server);

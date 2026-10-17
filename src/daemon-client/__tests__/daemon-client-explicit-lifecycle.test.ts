@@ -277,6 +277,7 @@ test('ensureDaemon replaces an incompatible idle daemon through a fenced quiesce
       'the drained daemon is gone before its successor',
     );
     assert.equal(spawn.mock.calls.length, 1);
+    assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
   } finally {
     await closeLoopbackServer(stale.server);
     await closeLoopbackServer(fresh.server);
@@ -460,6 +461,7 @@ test('a live daemon on another transport is quiesced, never killed as unreachabl
     assert.deepEqual(live.commands, [DAEMON_QUIESCE_COMMAND]);
     assert.deepEqual(started, ['incompatible']);
     assert.equal(isProcessAlive(child.pid), false, 'it left because it agreed to');
+    assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
   } finally {
     await closeLoopbackServer(live.server);
     await closeLoopbackServer(fresh.server);
@@ -517,6 +519,7 @@ test('ensureDaemon judges again after the daemon it addressed turned out to be g
       [DAEMON_QUIESCE_COMMAND],
       'the second judgement asked again',
     );
+    assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
   } finally {
     await closeLoopbackServer(stale.server);
     await closeLoopbackServer(fresh.server);
@@ -622,6 +625,7 @@ test('ensureDaemon quiesces an incompatible daemon that wins a startup race inst
     assert.ok(winner);
     assert.equal(isProcessAlive(winner.pid), false);
     assert.equal(spawn.mock.calls.length, 2, 'the second start follows the quiesce');
+    assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
   } finally {
     await closeLoopbackServer(stale.server);
     await closeLoopbackServer(fresh.server);

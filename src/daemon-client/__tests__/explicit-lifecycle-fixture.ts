@@ -1,6 +1,6 @@
 import http from 'node:http';
 import net from 'node:net';
-import type { Mock } from 'vitest';
+import { vi, type Mock } from 'vitest';
 import { listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   resolveDaemonPaths,
@@ -29,12 +29,32 @@ export type ScriptedDaemon = {
  * its own registration cleanup. The registered child stands in for the daemon process, so
  * `leave` makes it exit the way a finished drain does, without the client signaling anything.
  */
-export function createDaemonLeaver(): { pid?: number; leave: () => void } {
-  const leaver: { pid?: number; leave: () => void } = {
+export function createDaemonLeaver(): {
+  pid?: number;
+  leave: () => void;
+  /** Signals the code under test sent to the daemon; the leaver's own exit is not among them. */
+  clientSignals: Array<NodeJS.Signals | number>;
+} {
+  const actualKill = process.kill.bind(process);
+  let leaving = false;
+  const leaver: ReturnType<typeof createDaemonLeaver> = {
+    clientSignals: [],
     leave: () => {
-      if (leaver.pid !== undefined) process.kill(leaver.pid, 'SIGTERM');
+      if (leaver.pid === undefined) return;
+      leaving = true;
+      actualKill(leaver.pid, 'SIGTERM');
+      leaving = false;
     },
   };
+  vi.spyOn(process, 'kill').mockImplementation(((
+    target: number,
+    signal?: NodeJS.Signals | number,
+  ) => {
+    if (!leaving && target === leaver.pid && signal !== undefined && signal !== 0) {
+      leaver.clientSignals.push(signal);
+    }
+    return actualKill(target, signal ?? 'SIGTERM');
+  }) as typeof process.kill);
   return leaver;
 }
 

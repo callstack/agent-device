@@ -10,7 +10,7 @@ import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { resolveLocalDaemonCodeIdentity, type DaemonTakeoverCause } from './daemon-launch-spec.ts';
 
-// The three ways an explicit lifecycle stops short of a usable daemon. Callers branch on
+// The four ways an explicit lifecycle stops short of a usable daemon. Callers branch on
 // `details.reason`, so each reason is one constant here and the messages are free to change.
 const DAEMON_LIFECYCLE_REASONS = {
   notRunning: 'daemon-not-running',

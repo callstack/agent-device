@@ -4,7 +4,10 @@ import type {
   EnsureDaemonOptions,
 } from '@agent-device/contracts/client';
 import { waitForDaemonExit } from '@agent-device/daemon-contracts/daemon-process';
-import { recoverAbandonedDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import {
+  recoverAbandonedDaemonRegistration,
+  type DaemonRetirementResult,
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -116,7 +119,7 @@ async function replaceIncompatible(
   // A daemon that predates the capability cannot say whether it is idle, so it is never replaced.
   // One without a recorded start time cannot be addressed by the fence, so it cannot accept either.
   const startTime = info.processStartTime;
-  if (!info.capabilities?.includes('quiesce') || !startTime) {
+  if (!info.capabilities?.includes('quiesce') || !startTime?.trim()) {
     throw await daemonIncompatibleError({
       info,
       mismatch: 'no-quiesce',
@@ -160,7 +163,24 @@ async function awaitDrainedDaemon(
     return;
   }
   if (await answersLivenessProbe(info)) throw await daemonDrainTimeoutError(info, settings);
-  await retireDaemonForTakeover(info, settings.paths, 'force');
+  try {
+    await retireDaemonForTakeover(info, settings.paths, 'force');
+  } catch (error) {
+    if (isRefusalToSignalNonDaemon(error)) throw await daemonDrainTimeoutError(info, settings);
+    throw error;
+  }
+}
+
+/** The daemon-process identity check refused to signal a live process that is not a daemon entry. */
+function isRefusalToSignalNonDaemon(error: unknown): boolean {
+  if (!(error instanceof AppError) || error.details?.reason !== 'daemon_retirement_unconfirmed') {
+    return false;
+  }
+  const { termination } = error.details.retirement as Extract<
+    DaemonRetirementResult,
+    { status: 'retained' }
+  >;
+  return termination?.status === 'retained' && termination.reason === 'identity-unverified';
 }
 
 /**

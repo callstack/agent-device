@@ -17,6 +17,16 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
   runCmdDetachedMonitored: vi.fn(),
 }));
+// An embedded host registered by some other process runs a command that is no daemon entry.
+let hostedByAnotherProcess = false;
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
+  return {
+    ...actual,
+    readProcessCommand: (pid: number) =>
+      hostedByAnotherProcess ? 'node /opt/app/server.js' : actual.readProcessCommand(pid),
+  };
+});
 vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/retry')>()),
   sleep: vi.fn(),
@@ -42,6 +52,7 @@ const OLD_GRACE_MS = 3_000;
 const DRAIN_DEADLINE_MS = 60_000;
 
 afterEach(async () => {
+  hostedByAnotherProcess = false;
   vi.restoreAllMocks();
   spawn.mockReset();
   vi.mocked(sleep).mockReset();
@@ -210,4 +221,35 @@ test('a daemon still running past the deadline that answers a probe is left alon
   } finally {
     await closeLoopbackServer(stale.server);
   }
+});
+
+test('an embedded host that outlives the deadline and answers no probe is never signaled', async (t) => {
+  if (!(await withLoopback(t))) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  let childPid = 0;
+  const drain = installVirtualDrain(() => childPid);
+  const stale = await startScriptedDaemon(draining, {
+    afterRpc: () => {
+      drain.begin(undefined);
+      void closeLoopbackServer(stale.server);
+    },
+  });
+  const { child } = await registerDaemon(paths, {
+    httpPort: stale.port,
+    version: '0.0.0-stale',
+    capabilities: ['quiesce'],
+  });
+  childPid = child.pid;
+  hostedByAnotherProcess = true;
+
+  await assert.rejects(ensureDaemon({ stateDir, daemonTransport: 'http' }), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'daemon-drain-timeout');
+    return true;
+  });
+
+  assert.deepEqual(drain.signals, []);
+  assert.equal(isProcessAlive(childPid), true);
+  assert.equal(spawn.mock.calls.length, 0);
+  drain.end();
 });
