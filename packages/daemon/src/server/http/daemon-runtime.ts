@@ -6,7 +6,7 @@ import {
   type ClaimRecoveryGatewayFactory,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import crypto from 'node:crypto';
-import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
+import { asAppError, AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
@@ -76,7 +76,6 @@ import {
   readCurrentOwnerIdentity,
   reapOwnedProcessRecordsAtStartup,
   type OwnedProcessRecordStore,
-  type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
 import {
@@ -91,9 +90,13 @@ import {
   recordDaemonStartupMarker,
   removeDaemonStartupPhasesFile,
   resolveDaemonStartupPhasesPath,
-  type DaemonRegistrationOwner,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import { watchDaemonMetadataLoss } from './daemon-metadata-loss.ts';
+import {
+  armDaemonMetadataLossWatch,
+  emitDaemonDiagnostic,
+  finishDaemonRegistration,
+  flushDaemonStartupDiagnostics,
+} from './daemon-startup-diagnostics.ts';
 import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
@@ -243,83 +246,6 @@ export type DaemonRuntimeController = {
 export function daemonStartupExitCode(error: unknown): number {
   const exitCode = asAppError(error).details?.exitCode;
   return typeof exitCode === 'number' ? exitCode : 1;
-}
-
-export async function flushDaemonStartupDiagnostics(
-  logPath: string,
-  diagnostics: readonly ResourceDiagnostic[],
-): Promise<void> {
-  if (diagnostics.length === 0) return;
-  await withDaemonDiagnosticsScope({ logPath, command: 'daemon-startup', debug: false }, () => {
-    for (const diagnostic of diagnostics) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: diagnostic.phase,
-        data: { resourcePath: diagnostic.resourcePath, ...diagnostic.data },
-      });
-    }
-  });
-}
-
-/**
- * Records one daemon-level event. These run outside any request, so there is no request scope and no
- * resolved debug level to inherit; debug is forced on for the same reason the #2681 handoff forces it —
- * the event is the point of the record and must not be dropped by a level that was never set for it.
- */
-async function emitDaemonDiagnostic(
-  logPath: string,
-  phase: string,
-  data: Record<string, unknown>,
-): Promise<void> {
-  await withDaemonDiagnosticsScope({ logPath }, () => {
-    emitDiagnostic({ level: 'warn', phase, data });
-  });
-}
-
-async function finishDaemonRegistration(params: {
-  registration: DaemonRegistrationOwner;
-  infoPath: string;
-  logPath: string;
-  outcome?: Parameters<DaemonRegistrationOwner['finish']>[0];
-}): Promise<void> {
-  try {
-    const removal = await params.registration.finish(params.outcome);
-    if (removal.state !== 'removed' && removal.state !== 'absent') {
-      await emitDaemonDiagnostic(params.logPath, 'daemon_info_removal_declined', {
-        infoPath: params.infoPath,
-        removed: false,
-        reason: removal.state,
-        ...(removal.state === 'replaced' ? { registeredPid: removal.identity.pid } : {}),
-      });
-    }
-  } catch (error) {
-    await emitDaemonDiagnostic(params.logPath, 'daemon_registration_finish_failed', {
-      error: normalizeError(error),
-    });
-  }
-}
-
-/**
- * Starts the watch that reports this daemon's registration being taken over, and returns the handle
- * that stops it. It is armed only once this process has published its own record: before publication
- * the file legitimately describes a predecessor, and losing that is not this daemon's event.
- */
-function armDaemonMetadataLossWatch(
-  stateDir: string,
-  infoPath: string,
-  logPath: string,
-  owner: OwnerIdentity,
-): () => void {
-  return watchDaemonMetadataLoss({
-    infoPath,
-    stateDir,
-    owner,
-    onLoss: (loss) =>
-      void emitDaemonDiagnostic(logPath, 'daemon_metadata_lost', {
-        infoPath,
-        ...loss,
-      }).catch(() => {}),
-  });
 }
 
 export async function startDaemonRuntime(
