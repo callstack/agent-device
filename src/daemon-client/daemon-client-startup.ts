@@ -616,14 +616,12 @@ function lastStartupProgressMs(observation: StartupPhaseObservation): number {
   );
 }
 
-function describeStartupPhaseTimings(
-  observation: StartupPhaseObservation,
-): Record<string, number> & { spawned: 0 } {
+function describeStartupPhaseTimings(observation: StartupPhaseObservation): Record<string, number> {
   const timings: Record<string, number> = { spawned: 0 };
   for (const [phase, timestampMs] of Object.entries(observation.markers)) {
     timings[phase] = Math.max(0, timestampMs - observation.spawnedAtMs);
   }
-  return timings as Record<string, number> & { spawned: 0 };
+  return timings;
 }
 
 function resolveStartupProgressHint(reason: DaemonStartupFailureReason, ceilingMs: number): string {
