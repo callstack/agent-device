@@ -14,6 +14,7 @@ import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   leaseReleaseRequestFor,
   normalizeLeaseBackend,
+  normalizeLeaseProvider,
   type ReleaseLeaseRequest,
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
@@ -333,7 +334,11 @@ function assertProviderRuntimeRegistered(
   leaseScope: LeaseScope,
   registeredProviders: readonly string[],
 ): void {
-  const provider = leaseProviderRequiringRuntime(leaseScope);
+  // The registry stores the trimmed, validated id, so classify that id: " testmu " names testmu
+  // and a malformed id is INVALID_ARGS, as it is everywhere else a lease provider is read.
+  const provider = leaseProviderRequiringRuntime({
+    leaseProvider: normalizeLeaseProvider(leaseScope.leaseProvider),
+  });
   if (provider === undefined || registeredProviders.includes(provider)) return;
   throw new AppError(
     'UNSUPPORTED_OPERATION',

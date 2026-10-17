@@ -672,3 +672,26 @@ test('lease_allocate treats a daemon that reports no provider runtimes as having
     },
   );
 });
+
+test('lease_allocate classifies the trimmed provider id and rejects a malformed one as INVALID_ARGS', async () => {
+  const allocate = async (leaseProvider: string, providerRuntimeIds: string[]) =>
+    await handleLeaseCommands({
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-provider-id-forms-'),
+      leaseRegistry: new LeaseRegistry(),
+      providerRuntimeIds,
+    });
+
+  assert.equal((await allocate(' testmu ', ['testmu']))?.ok, true);
+  await assert.rejects(
+    allocate('a b', ['testmu']),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+});
