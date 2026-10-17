@@ -120,3 +120,60 @@ test('--state-dir belongs to plugins list and daemon status, not to the commands
   const help = await usageForCommand('daemon');
   assert.match(help ?? '', /daemon status \[--state-dir <path>\]/);
 });
+
+async function listPluginsAsText(home: string, stateDir: string): Promise<string> {
+  vi.stubEnv('AGENT_DEVICE_HOME', home);
+  vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
+  vi.stubEnv('AGENT_DEVICE_NO_UPDATE_NOTIFIER', '1');
+  const stdoutCapture = beginStdoutCapture();
+  try {
+    await runCli(['plugins', 'list'], {
+      sendToDaemon: vi.fn(async () => {
+        throw new Error('unexpected daemon access');
+      }),
+    });
+    return stdoutCapture.read();
+  } finally {
+    stdoutCapture.restore();
+  }
+}
+
+test('plugins list names a plugin the running daemon did not register', async () => {
+  const { home } = pluginHome();
+  const stateDir = path.join(home, 'state');
+  const owner = readCurrentOwnerIdentity();
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(stateDir, 'daemon.json'),
+    JSON.stringify({
+      token: 't',
+      port: 1,
+      pid: owner.pid,
+      processStartTime: owner.startTime,
+      plugins: [
+        {
+          provider: 'example',
+          source: 'store',
+          package: 'example',
+          state: 'failed',
+          error: { code: 'INVALID_ARGS', message: 'bad plugin', reason: 'invalid_plugin' },
+          credentials: { variables: [], byBackend: {} },
+        },
+      ],
+    }),
+  );
+  selectPlugin(home, 'example', 'example', 'export default () => {};');
+  const text = await listPluginsAsText(home, stateDir);
+  assert.match(text, /example@.* \(example\)/);
+  assert.match(text, /The running daemon did not register example: bad plugin/);
+});
+
+test('plugins list says when the daemon record cannot be used instead of hiding it', async () => {
+  const { home } = pluginHome();
+  const stateDir = path.join(home, 'state');
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(path.join(stateDir, 'daemon.json'), '{not json');
+  const text = await listPluginsAsText(home, stateDir);
+  assert.match(text, /No provider plugins installed\./);
+  assert.match(text, /daemon record for .* is (unreadable|invalid), so its providers are unknown/);
+});
