@@ -352,6 +352,7 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     'seeded email should be observable before dismiss',
   );
 
+  await assertWaitSelector(context, 'label="Done" visible=true');
   const keyboardVisiblePath = path.join(context.artifactDir, 'keyboard-visible.png');
   await capturePng(context, 'capture visible input keyboard', keyboardVisiblePath);
   const keyboard = await runStep(context, 'dismiss input keyboard', ['keyboard', 'dismiss']);

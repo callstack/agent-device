@@ -70,8 +70,18 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '--depth',
     '1',
   ]);
-  assertSimulatorSnapshotAcquisition(rawDepthOne, 'raw depth-1 visible-depth snapshot');
   const rawDepthOneNodes = snapshotNodes(rawDepthOne);
+  requireRoot(rawDepthOneNodes, 'raw depth-1 visible-depth snapshot');
+  // Raw acquisition stops before semantic content; this structural frontier can be sparse.
+  if (rawDepthOne.json?.data?.snapshotQuality?.state === 'sparse') {
+    assert.equal(rawDepthOne.json.data.snapshotQuality.reasonCode, 'sparse-tree');
+    assert.equal(rawDepthOne.json.data.truncated, true);
+    assert.ok(
+      rawDepthOneNodes.every((node) => node.type === 'Application' || node.type === 'Window'),
+    );
+  } else {
+    assertSimulatorSnapshotAcquisition(rawDepthOne, 'raw depth-1 visible-depth snapshot');
+  }
   assert.equal(
     rawDepthOneNodes.some((node) => node.identifier === CHILD_ID),
     false,

@@ -36,6 +36,9 @@ Automatic confirmation remains covered by the launch-confirmation and lifecycle 
 
 Use semantic readiness landmarks before interaction.
 A title alone can precede the React tab controls.
+Before testing keyboard dismissal, require the fixture's visible Done control.
+Enable the simulator software keyboard for that lifecycle contract.
+For intentionally truncated raw-depth assertions, validate the structural frontier; require semantic capture quality on regular and full-raw observations.
 Use the built CLI for preparation and execution after building once.
 Use the built SDK with the existing-daemon transport for forced-backend probes.
 Do not let a probe start or replace the daemon under test.
