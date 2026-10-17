@@ -126,11 +126,10 @@ For `close --save-script` in ABORTED, this ADR specifies a refusal that promises
 Thus, the gap also made an existing error message untrue.
 
 ABORTED is now terminal by construction.
-This amendment routed `--save-script` arming through one rule that the publication projection owned.
-That rule answered "not recording" for an ABORTED lifecycle on every surface that handled the flag.
-These surfaces were the re-open builder, the close finalizer, and the recorded-action ingress.
-Thus, the flag could no longer contradict the status.
-The follow-up amendment below replaces the stored flag with a derivation.
+`--save-script` arms recording through one rule that the publication projection owns.
+That rule answers "not recording" for an ABORTED lifecycle on every surface that handles the flag.
+These surfaces are the re-open builder, the close finalizer, and the recorded-action ingress.
+Thus, the flag can no longer contradict the status.
 The aggregate likewise answers publication authorization.
 The writer asks one publication-blocked question.
 That question covers not-recording, an uncommittable or committed repair, and an ABORTED authoring lifecycle alike.
