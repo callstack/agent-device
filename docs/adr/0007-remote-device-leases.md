@@ -12,8 +12,8 @@ Accepted
 - Generated connection profiles must strip daemon and Metro bearer tokens.
 - A session cannot outlive its lease. Lease-end teardown clears the session's device claim even when the device no longer answers.
 - Report each lease that a request ended once, at response level. A client never sends a release after such a request.
-- Admitted work that is still wanted preserves its lease. If the client hung up, the request neither defers expiry nor renews the lease.
-- Before admission, protect long client phases with lease heartbeats. Renew under the window that the caller named, or else under the lease's existing window.
+- Admitted work that is still wanted preserves its lease. If the client hung up, the request neither defers expiry past that cancellation nor renews the lease.
+- Before admission, send lease heartbeats for as long as a client phase runs, for example an artifact upload. Renew under the window that the caller named, or else under the lease's existing window.
 - Before a pending human-control activation reports active, it fences new mutations and drains the mutations already admitted.
 - Only host administrators allocate `macos-app` leases. Tenant `lease_release` is refused.
 - Confine each request admitted under a `macos-app` lease to the leased app.
