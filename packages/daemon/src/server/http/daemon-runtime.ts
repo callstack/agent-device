@@ -91,12 +91,6 @@ import {
   removeDaemonStartupPhasesFile,
   resolveDaemonStartupPhasesPath,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import {
-  armDaemonMetadataLossWatch,
-  emitDaemonDiagnostic,
-  finishDaemonRegistration,
-  flushDaemonStartupDiagnostics,
-} from './daemon-startup-diagnostics.ts';
 import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
@@ -276,6 +270,16 @@ async function startDaemonRuntimeOnHost(
   const { env } = host;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
+  // The daemon-log diagnostics and registration-completion helpers enter behind a
+  // function-scoped `await import`: they are startup/lifecycle evidence work this server
+  // performs after composition, and the daemon entry's eager closure stays exactly the
+  // operational server's (ADR 0019). This is their first possible use point.
+  const {
+    armDaemonMetadataLossWatch,
+    emitDaemonDiagnostic,
+    finishDaemonRegistration,
+    flushDaemonStartupDiagnostics,
+  } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
