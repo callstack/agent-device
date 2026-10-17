@@ -106,9 +106,9 @@ test('connect uses the option credentials without an environment and verifies wi
     ],
     ['opt-user', 'opt-key'],
   );
-  assert.throws(
-    () =>
-      testmu().connection!.resolve({
+  await assert.rejects(
+    async () =>
+      await testmu().connection!.resolve({
         flags,
         stateDir: '/state',
         cwd: '/work',

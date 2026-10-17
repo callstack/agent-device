@@ -1,11 +1,18 @@
 import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
-import { TESTMU_CONNECTION } from './connection.ts';
-import testMuV1Plugin from './plugin.ts';
+import manifest from '../package.json' with { type: 'json' };
+
+type ConnectionCapabilities = NonNullable<AgentDevicePlugin['connection']>['capabilities'];
 
 export type TestmuOptions = {
   /** Used instead of `LT_USERNAME` and `LT_ACCESS_KEY` when set. */
   credentials?: { username: string; accessKey: string };
 };
+
+// The connection and WebDriver code load when they are first used, so importing the package for its
+// declaration stays small.
+async function loadConnection(host: ProviderPluginHost) {
+  return (await import('./connection.ts')).createTestMuConnection(host);
+}
 
 /**
  * TestMu AI as a plugin. The credentials come from `options.credentials`, with the
@@ -38,13 +45,19 @@ function testmu(options: TestmuOptions = {}): AgentDevicePlugin {
     provider: 'testmu',
     credentials: { variables: environmentVariables },
     connection: {
-      capabilities: TESTMU_CONNECTION,
-      resolve: (context) =>
-        testMuV1Plugin(withCredentials(context.host)).connection.resolve(context),
+      // The declaration hosts without the version 2 contract read from package.json; the registry
+      // validates it when the plugin loads.
+      capabilities: manifest.agentDevicePlugin.connection as ConnectionCapabilities,
+      resolve: async (context) =>
+        (await loadConnection(withCredentials(context.host))).resolve(context),
       verify: async (context) =>
-        await testMuV1Plugin(withCredentials(context.host)).connection.verify(context),
+        await (await loadConnection(withCredentials(context.host))).verify(context),
     },
-    setup: (host) => ({ webDriver: testMuV1Plugin(withCredentials(host)).webDriver }),
+    setup: async (host) => ({
+      webDriver: (await import('./testmu-webdriver.ts')).createTestMuWebDriver(
+        withCredentials(host),
+      ),
+    }),
   };
 }
 
