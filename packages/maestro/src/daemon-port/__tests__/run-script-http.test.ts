@@ -5,6 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { Dispatcher } from 'undici';
 import { AppError } from '@agent-device/kernel/errors';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -22,6 +23,8 @@ import {
   MAX_RUN_SCRIPT_HTTP_RESPONSE_BYTES,
   PublicFetchDispatcher,
 } from '../run-script-http.ts';
+
+bindTestCommandHost();
 
 beforeEach(() => {
   vi.resetAllMocks();

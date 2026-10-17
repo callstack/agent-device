@@ -3,11 +3,15 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { text } from 'node:stream/consumers';
 import { test, vi } from 'vitest';
+import { withCommandHost } from '@agent-device/host-kit/command';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import {
   matchesNoProxy,
   requestApprovedUrl,
   resolveProxyForUrl,
 } from './install-source-network-transport.ts';
+
+bindTestCommandHost();
 
 test('lowercase proxy variables override uppercase even when empty', () => {
   assert.equal(
@@ -25,6 +29,18 @@ test('lowercase proxy variables override uppercase even when empty', () => {
     }),
     'http://fallback-proxy',
   );
+});
+
+test('proxy variables come from the command host, not the process', async () => {
+  const proxy = await withCommandHost(
+    {
+      host: { env: { https_proxy: 'http://host-proxy' }, cwd: process.cwd() },
+      requestEnv: undefined,
+    },
+    async () => resolveProxyForUrl(new URL('https://example.net')),
+  );
+
+  assert.equal(proxy, 'http://host-proxy');
 });
 
 test('HTTPS proxy selection falls back to the selected HTTP proxy', () => {

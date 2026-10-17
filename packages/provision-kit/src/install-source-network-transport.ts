@@ -1,4 +1,5 @@
 import net from 'node:net';
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { Agent, ProxyAgent, request, type Dispatcher } from 'undici';
 
 export type InstallSourceNetworkResponse = {
@@ -45,7 +46,7 @@ export async function requestApprovedUrl(params: {
 
 export function resolveProxyForUrl(
   url: URL,
-  environment: NodeJS.ProcessEnv = process.env,
+  environment: NodeJS.ProcessEnv = commandHostEnvironment().env,
 ): string | undefined {
   const noProxy = environment.no_proxy ?? environment.NO_PROXY;
   if (matchesNoProxy(url, noProxy)) return undefined;

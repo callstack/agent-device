@@ -458,6 +458,9 @@ importers:
         specifier: workspace:*
         version: link:../selectors
     devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       undici:
         specifier: 7.29.1
         version: 7.29.1
@@ -680,6 +683,9 @@ importers:
         specifier: workspace:*
         version: link:../kernel
     devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       ipaddr.js:
         specifier: ^2.5.0
         version: 2.5.0

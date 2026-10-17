@@ -33,6 +33,7 @@
     }
   },
   "devDependencies": {
+    "@agent-device/test-kit": "workspace:*",
     "undici": "7.29.1",
     "yaml": "^2.9.0"
   }
