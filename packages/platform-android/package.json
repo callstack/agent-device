@@ -29,6 +29,10 @@
       "types": "./src/device-boot.ts",
       "default": "./src/device-boot.ts"
     },
+    "./helper-runtime-state": {
+      "types": "./src/helper-runtime-state.ts",
+      "default": "./src/helper-runtime-state.ts"
+    },
     "./mechanics": {
       "types": "./src/mechanics.ts",
       "default": "./src/mechanics.ts"
