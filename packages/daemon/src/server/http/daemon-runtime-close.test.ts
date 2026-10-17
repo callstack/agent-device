@@ -1,4 +1,6 @@
+import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
@@ -47,23 +49,33 @@ test('close is idempotent and every caller receives the one report', async () =>
       }),
     }),
   });
-  expect(process.listenerCount('SIGTERM')).toBe(signalListeners);
+  try {
+    expect(process.listenerCount('SIGTERM')).toBe(signalListeners);
 
-  const [first, second] = await Promise.all([runtime.close(), runtime.close()]);
-  const third = await runtime.close();
+    const [first, second] = await Promise.all([runtime.close(), runtime.close()]);
+    const third = await runtime.close();
 
-  expect(second).toBe(first);
-  expect(third).toBe(first);
-  await expect(runtime.closed).resolves.toBe(first);
-  expect(first.runners).toEqual({ stopped: ['stopped-device'], handedOff: ['handed-off-device'] });
-  expect(first.sessions).toEqual({ closed: 0, failed: 0 });
-  expect(first.providerReleases).toEqual({ completed: [], pending: [], unknown: [] });
-  expect(first.plugins.disposed).toEqual(['stops']);
-  expect(first.plugins.failed).toEqual([
-    { provider: 'fails', error: expect.objectContaining({ message: 'provider refused to stop' }) },
-  ]);
-  expect(stop).toHaveBeenCalledOnce();
-  expect(failing).toHaveBeenCalledOnce();
+    expect(second).toBe(first);
+    expect(third).toBe(first);
+    await expect(runtime.closed).resolves.toBe(first);
+    expect(first.runners).toEqual({
+      stopped: ['stopped-device'],
+      handedOff: ['handed-off-device'],
+    });
+    expect(first.sessions).toEqual({ closed: 0, failed: 0 });
+    expect(first.providerReleases).toEqual({ completed: [], pending: [], unknown: [] });
+    expect(first.plugins.disposed).toEqual(['stops']);
+    expect(first.plugins.failed).toEqual([
+      {
+        provider: 'fails',
+        error: expect.objectContaining({ message: 'provider refused to stop' }),
+      },
+    ]);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(failing).toHaveBeenCalledOnce();
+  } finally {
+    await runtime.close();
+  }
 });
 
 test('a startup that fails after acquiring resources rolls them back once', async () => {
@@ -92,4 +104,34 @@ test('a startup that fails after acquiring resources rolls them back once', asyn
   expect(stop).toHaveBeenCalledOnce();
   expect(clearLock).toHaveBeenCalledOnce();
   expect(process.listenerCount('SIGTERM')).toBe(signalListeners);
+});
+
+test('a shutdown step that rejects still releases the registration, lock and providers', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-close-failure-');
+  const stop = vi.fn(async () => {});
+  const clearLock = vi.fn(async () => {});
+  const runtime = await startDaemonRuntime({
+    host: hostFor(stateDir),
+    ...silent,
+    composeDeps: daemonRuntimeDepsFixture({
+      providerDeviceRuntimes: [providerRuntime('stops', stop)],
+      ownerLifecycle: platformOwnerLifecycleFixture({ clearDaemonLockConfiguration: clearLock }),
+      deviceRuntimeGateway: Object.freeze({
+        ...lifecycleDeviceRuntimeGateway,
+        applicationLifecycle: applicationLifecycleResourceFixture({
+          finalizeDaemonShutdown: async () => {
+            throw new Error('runner finalization failed');
+          },
+        }),
+      }),
+    }),
+  });
+  const paths = resolveDaemonPaths(stateDir);
+
+  await expect(runtime.close()).rejects.toThrow('runner finalization failed');
+  await expect(runtime.closed).rejects.toThrow('runner finalization failed');
+
+  expect(stop).toHaveBeenCalledOnce();
+  expect(clearLock).toHaveBeenCalledOnce();
+  expect(fs.existsSync(paths.lockPath)).toBe(false);
 });

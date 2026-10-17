@@ -60,9 +60,10 @@ test('daemon startup installs the interactor resolution the composition supplied
     });
     expect(runtime).not.toBeNull();
 
-    const resolution = runtime.run(() => interactorResolution());
-    expect(resolution).toBe(composed);
-    await resolution.resolve(IOS_SIMULATOR, {});
+    await runtime.run(async () => {
+      expect(interactorResolution()).toBe(composed);
+      await interactorResolution().resolve(IOS_SIMULATOR, {});
+    });
     expect(composed.resolve).toHaveBeenCalledOnce();
   } finally {
     await runtime?.close();

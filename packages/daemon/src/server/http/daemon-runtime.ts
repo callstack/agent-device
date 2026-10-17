@@ -933,7 +933,9 @@ async function startDaemonRuntimeOnHost(
   // cannot start, PNG processing falls back to the in-process sync path.
   const releasePngWorker = retainPngWorker();
 
-  const closeOnHost = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
+  let registrationFinished = false;
+  let lockConfigurationCleared = false;
+  const closeSteps = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
     leaseSessionEnd.cancel();
@@ -999,14 +1001,15 @@ async function startDaemonRuntimeOnHost(
       releasePngWorker().catch(() => {}),
       sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
     ]);
+    registrationFinished = true;
     await finishDaemonRegistration({
       registration,
       infoPath,
       logPath,
       outcome: { providerReleases: providerReleaseDrain, claims: shutdownClaimLedger.claims },
     });
+    lockConfigurationCleared = true;
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
-    runtimeContext.dispose();
     const unknownLeaseIds = new Set(providerReleaseDrain.unknown.map((lease) => lease.leaseId));
     return {
       providerReleases: {
@@ -1020,6 +1023,24 @@ async function startDaemonRuntimeOnHost(
       sessions,
       plugins,
     };
+  };
+
+  // A step that rejects must not strand what the later steps release: the PNG worker hold, the
+  // provider runtimes, the registration and lock, and the runtime's own state.
+  const closeOnHost = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
+    try {
+      return await closeSteps(closeOptions);
+    } finally {
+      await Promise.allSettled([
+        releasePngWorker(),
+        pluginDisposal.dispose(),
+        registrationFinished
+          ? undefined
+          : finishDaemonRegistration({ registration, infoPath, logPath }),
+        lockConfigurationCleared ? undefined : deps.ownerLifecycle.clearDaemonLockConfiguration(),
+      ]);
+      runtimeContext.dispose();
+    }
   };
 
   // Idle reap, external callers and the executable's signal handlers all close through here, and

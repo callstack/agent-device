@@ -69,8 +69,14 @@ export function createArtifactTrackingRuntimeState(): RuntimeStateHandle {
     run: (fn) => artifactTrackingStorage.run(owned, fn),
     enter: () => artifactTrackingStorage.enterWith(owned),
     dispose: () => {
-      for (const entry of [...owned.artifacts.values(), ...owned.uploads.values()]) {
+      for (const entry of owned.artifacts.values()) {
         clearTimeout(entry.timer);
+        cleanupDirectoryArchive(entry);
+        if (entry.deleteAfterDownload) removeBestEffort(entry.artifactPath);
+      }
+      for (const entry of owned.uploads.values()) {
+        clearTimeout(entry.timer);
+        removeBestEffort(entry.tempDir);
       }
       owned.artifacts.clear();
       owned.uploads.clear();
@@ -334,6 +340,14 @@ export function cleanupDownloadableArtifact(artifactId: string): void {
   if (!entry.deleteAfterDownload) return;
   try {
     fs.rmSync(entry.artifactPath, { recursive: true, force: true });
+  } catch {
+    // best-effort cleanup only
+  }
+}
+
+function removeBestEffort(targetPath: string): void {
+  try {
+    fs.rmSync(targetPath, { recursive: true, force: true });
   } catch {
     // best-effort cleanup only
   }

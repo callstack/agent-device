@@ -45,7 +45,14 @@ export function createResumableUploadRuntimeState(): RuntimeStateHandle {
     run: (fn) => resumableUploadStorage.run(owned, fn),
     enter: () => resumableUploadStorage.enterWith(owned),
     dispose: () => {
-      for (const entry of owned.byId.values()) clearTimeout(entry.timer);
+      for (const entry of owned.byId.values()) {
+        clearTimeout(entry.timer);
+        try {
+          fs.rmSync(entry.tempDir, { recursive: true, force: true });
+        } catch {
+          // best-effort cleanup only
+        }
+      }
       owned.byId.clear();
       owned.byKey.clear();
     },

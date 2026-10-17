@@ -52,9 +52,11 @@ async function callSessionList(httpPort: number, token: string, requestId: strin
 }
 
 test('two runtimes in one process serve, close and keep their state independently', async () => {
-  const a = await startIsolatedRuntime('a', 'interactor-a', true);
-  const b = await startIsolatedRuntime('b', 'interactor-b', false);
+  let a: Awaited<ReturnType<typeof startIsolatedRuntime>> | undefined;
+  let b: Awaited<ReturnType<typeof startIsolatedRuntime>> | undefined;
   try {
+    a = await startIsolatedRuntime('a', 'interactor-a', true);
+    b = await startIsolatedRuntime('b', 'interactor-b', false);
     expect(a.httpPort).not.toBe(b.httpPort);
     expect(path.basename(a.stateDir)).not.toBe(path.basename(b.stateDir));
 
@@ -98,7 +100,7 @@ test('two runtimes in one process serve, close and keep their state independentl
     const reportB = await b.runtime.close();
     expect(reportB.plugins).toEqual({ disposed: [], failed: [] });
   } finally {
-    await a.runtime.close();
-    await b.runtime.close();
+    await a?.runtime.close();
+    await b?.runtime.close();
   }
 });

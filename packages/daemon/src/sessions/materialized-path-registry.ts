@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { RuntimeStateHandle } from '@agent-device/host-kit/request';
 import crypto from 'node:crypto';
+import { rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -47,7 +48,14 @@ export function createMaterializedPathRuntimeState(): RuntimeStateHandle {
     run: (fn) => retainedPathsStorage.run(owned, fn),
     enter: () => retainedPathsStorage.enterWith(owned),
     dispose: () => {
-      for (const entry of owned.values()) clearTimeout(entry.timer);
+      for (const entry of owned.values()) {
+        clearTimeout(entry.timer);
+        try {
+          rmSync(entry.rootPath, { recursive: true, force: true });
+        } catch {
+          // best-effort cleanup only
+        }
+      }
       owned.clear();
     },
   };

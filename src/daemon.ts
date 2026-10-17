@@ -16,9 +16,8 @@ async function runDaemon(): Promise<void> {
   let exitCode = 0;
   const closeAndExit = (code: number, cause?: unknown): void => {
     exitCode = Math.max(exitCode, code);
-    void runtime.close({ cause }).catch(() => {
-      exitCode = 1;
-    });
+    // A failed close is reported once, through `closed` below.
+    void runtime.close({ cause }).catch(() => {});
   };
   const failFatally = (error: unknown): void => {
     process.stderr.write(`Daemon error: ${asAppError(error).message}\n`);
@@ -31,7 +30,8 @@ async function runDaemon(): Promise<void> {
   process.on('unhandledRejection', (reason) =>
     failFatally(reason instanceof Error ? reason : new Error(String(reason))),
   );
-  await runtime.closed.catch(() => {
+  await runtime.closed.catch((error: unknown) => {
+    process.stderr.write(`Daemon shutdown error: ${asAppError(error).message}\n`);
     exitCode = 1;
   });
   process.exit(exitCode);
