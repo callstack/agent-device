@@ -67,7 +67,7 @@ import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { withCommandHost } from '@agent-device/host-kit/command';
-import { type RuntimeStateHandle } from '@agent-device/host-kit/request';
+import { cancelAllRequests, type RuntimeStateHandle } from '@agent-device/host-kit/request';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import {
@@ -111,6 +111,9 @@ const DAEMON_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const LEASE_EXPIRY_SWEEP_INTERVAL_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
+// A handler that ignores cancellation must not hold `close()` forever; past this it is reported
+// abandoned and the registration stays held while the process lives.
+const DAEMON_REQUEST_DRAIN_TIMEOUT_MS = 5_000;
 // An orphaned `simctl recordVideo` releases the host-wide recording lock only after it finishes
 // finalizing on SIGINT; force-killing it sooner leaves every later recording failing with EBUSY
 // (#2170). Bound the grace to the recorder purpose, so daemon startup stays under the client budget.
@@ -207,6 +210,8 @@ export type DaemonRuntimeOptions = {
   stderr?: WritableOutput;
   /** The root's runtime composition, as a factory so the server owns paths, policy, and store. */
   composeDeps: ComposeDaemonRuntimeDeps;
+  /** Shutdown time budgets, for hosts and tests that need other than the defaults. */
+  shutdownBudgets?: { requestDrainMs?: number; pluginMs?: number };
 };
 
 export type DaemonRuntimeController = {
@@ -376,7 +381,12 @@ async function startDaemonRuntimeOnHost(
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerDeviceRuntimes = deps.providerDeviceRuntimes;
-  const pluginDisposal = createProviderRuntimeDisposal(providerDeviceRuntimes);
+  const requestDrainTimeoutMs =
+    options.shutdownBudgets?.requestDrainMs ?? DAEMON_REQUEST_DRAIN_TIMEOUT_MS;
+  const pluginDisposal = createProviderRuntimeDisposal(
+    providerDeviceRuntimes,
+    options.shutdownBudgets?.pluginMs,
+  );
   rollback.onRollback(async () => {
     await pluginDisposal.dispose();
   });
@@ -787,6 +797,31 @@ async function startDaemonRuntimeOnHost(
 
   let registrationFinished = false;
   let lockConfigurationCleared = false;
+  // Work that ignored cancellation may still be running, so this process keeps the registration
+  // and lock it holds: releasing them would let a second daemon drive the same devices.
+  let abandonedRequests = 0;
+  const drainInFlightRequests = async (): Promise<ShutdownReport['requests']> => {
+    const total = inFlightRequests.size;
+    if (total === 0) return { drained: 0, abandoned: 0 };
+    cancelAllRequests();
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
+      Promise.allSettled(inFlightRequests).then(() => 'drained' as const),
+      new Promise<'deadline'>((resolve) => {
+        deadlineTimer = setTimeout(() => resolve('deadline'), requestDrainTimeoutMs);
+      }),
+    ]);
+    clearTimeout(deadlineTimer);
+    abandonedRequests = outcome === 'drained' ? 0 : inFlightRequests.size;
+    if (abandonedRequests > 0) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'daemon_shutdown_requests_abandoned',
+        data: { abandoned: abandonedRequests, budgetMs: requestDrainTimeoutMs },
+      });
+    }
+    return { drained: total - abandonedRequests, abandoned: abandonedRequests };
+  };
   const closeSteps = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
@@ -797,8 +832,11 @@ async function startDaemonRuntimeOnHost(
     if (closeOptions.cause) {
       await emitFatalDiagnostic(closeOptions.cause);
     }
-    await closeDaemonServers(servers);
-    await Promise.allSettled(inFlightRequests);
+    // Cancellation and the listener close run together: a connection held by a request that ignores
+    // cancellation is force-closed at the same budget the drain gives it.
+    const serversClosed = closeDaemonServers(servers, requestDrainTimeoutMs);
+    const requests = await drainInFlightRequests();
+    await serversClosed;
     await leaseSessionEnd.drain();
     // Hand healthy runners off before durable session teardown. The lifecycle gateway later
     // terminates only still-owned generations once all resources have finalized.
@@ -853,15 +891,17 @@ async function startDaemonRuntimeOnHost(
       releasePngWorker().catch(() => {}),
       sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
     ]);
-    registrationFinished = true;
-    await finishDaemonRegistration({
-      registration,
-      infoPath,
-      logPath,
-      outcome: { providerReleases: providerReleaseDrain, claims: shutdownClaimLedger.claims },
-    });
-    lockConfigurationCleared = true;
-    await deps.ownerLifecycle.clearDaemonLockConfiguration();
+    if (abandonedRequests === 0) {
+      registrationFinished = true;
+      await finishDaemonRegistration({
+        registration,
+        infoPath,
+        logPath,
+        outcome: { providerReleases: providerReleaseDrain, claims: shutdownClaimLedger.claims },
+      });
+      lockConfigurationCleared = true;
+      await deps.ownerLifecycle.clearDaemonLockConfiguration();
+    }
     const unknownLeaseIds = new Set(providerReleaseDrain.unknown.map((lease) => lease.leaseId));
     return {
       providerReleases: {
@@ -871,6 +911,7 @@ async function startDaemonRuntimeOnHost(
           .map((lease) => lease.leaseId),
         unknown: [...unknownLeaseIds],
       },
+      requests,
       runners: { stopped: [...stoppedRunners], handedOff: [...handedOffRunners] },
       sessions,
       plugins,
@@ -886,10 +927,12 @@ async function startDaemonRuntimeOnHost(
       await Promise.allSettled([
         releasePngWorker(),
         pluginDisposal.dispose(),
-        registrationFinished
+        registrationFinished || abandonedRequests > 0
           ? undefined
           : finishDaemonRegistration({ registration, infoPath, logPath }),
-        lockConfigurationCleared ? undefined : deps.ownerLifecycle.clearDaemonLockConfiguration(),
+        lockConfigurationCleared || abandonedRequests > 0
+          ? undefined
+          : deps.ownerLifecycle.clearDaemonLockConfiguration(),
       ]);
       runtimeContext.dispose();
     }

@@ -122,6 +122,11 @@ export function markRequestCanceled(requestId: string | undefined): void {
   requestAbortControllers().get(requestId)?.abort(createRequestCanceledError());
 }
 
+/** Aborts every request this runtime has in flight, as a canceled request. */
+export function cancelAllRequests(): void {
+  for (const requestId of requestAbortControllers().keys()) markRequestCanceled(requestId);
+}
+
 export function clearRequestCanceled(
   requestId: string | undefined,
   registration?: RequestAbortRegistration,

@@ -98,7 +98,7 @@ test('two runtimes in one process serve, close and keep their state independentl
     expect(b.runtime.run(() => isActiveProviderDevice({} as never))).toBe(false);
 
     const reportB = await b.runtime.close();
-    expect(reportB.plugins).toEqual({ disposed: [], failed: [] });
+    expect(reportB.plugins).toEqual({ disposed: [], failed: [], pending: [] });
   } finally {
     await a?.runtime.close();
     await b?.runtime.close();

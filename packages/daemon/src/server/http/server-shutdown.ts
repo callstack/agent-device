@@ -20,6 +20,7 @@ import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-te
 import { runtimeHintValues } from '../../sessions/session-runtime.ts';
 
 const DAEMON_SHUTDOWN_TIMEOUT_MS = 5_000;
+const DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS = 5_000;
 
 function forceCloseServer(server: DaemonServer): void {
   server.destroyConnections?.();
@@ -63,8 +64,18 @@ export type ShutdownReport = {
   providerReleases: { completed: string[]; pending: string[]; unknown: string[] };
   /** Device runners, by device id: `handedOff` was left running for the next daemon. */
   runners: { stopped: string[]; handedOff: string[] };
+  /**
+   * Requests in flight at close. `abandoned` ones ignored cancellation past the drain budget and may
+   * still be running, so the registration stays held while this process lives.
+   */
+  requests: { drained: number; abandoned: number };
   sessions: { closed: number; failed: number };
-  plugins: { disposed: string[]; failed: { provider: string; error: NormalizedError }[] };
+  /** `pending` plugins were still shutting down when the budget ran out. */
+  plugins: {
+    disposed: string[];
+    failed: { provider: string; error: NormalizedError }[];
+    pending: string[];
+  };
 };
 
 export type ProviderRuntimeDisposal = Readonly<{
@@ -74,22 +85,35 @@ export type ProviderRuntimeDisposal = Readonly<{
 
 export function createProviderRuntimeDisposal(
   runtimes: readonly Pick<ProviderDeviceRuntime, 'provider' | 'shutdown'>[],
+  timeoutMs: number = DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS,
 ): ProviderRuntimeDisposal {
   let disposal: Promise<ShutdownReport['plugins']> | undefined;
   return {
     dispose: () =>
       (disposal ??= (async () => {
-        const report: ShutdownReport['plugins'] = { disposed: [], failed: [] };
+        const report: ShutdownReport['plugins'] = { disposed: [], failed: [], pending: [] };
+        let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+        const deadline = new Promise<'deadline'>((resolve) => {
+          deadlineTimer = setTimeout(() => resolve('deadline'), timeoutMs);
+        });
         await Promise.all(
           runtimes.map(async (runtime) => {
-            try {
-              await runtime.shutdown();
-              report.disposed.push(runtime.provider);
-            } catch (error) {
-              report.failed.push({ provider: runtime.provider, error: normalizeError(error) });
+            const settled = (async () => {
+              try {
+                await runtime.shutdown();
+                report.disposed.push(runtime.provider);
+              } catch (error) {
+                report.failed.push({ provider: runtime.provider, error: normalizeError(error) });
+              }
+              return 'settled' as const;
+            })();
+            // A shutdown that outlives the budget keeps running; the report says so instead of waiting.
+            if ((await Promise.race([settled, deadline])) === 'deadline') {
+              report.pending.push(runtime.provider);
             }
           }),
         );
+        clearTimeout(deadlineTimer);
         return report;
       })()),
   };
