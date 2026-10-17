@@ -9,9 +9,9 @@ import { isObservationPreventedStepMiss } from './live-step-retry-policy.ts';
 import type { CliJsonResult } from '../cli-json.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 
-/** One destination wait; generous because the WebView lab took over 2.5 s to mount on cold CI. */
+/** Allow the cold fixture route to mount before declaring a readable miss. */
 const DESTINATION_WAIT_MS = 15_000;
-// One repeat is allowed only when the runtime could not make an observation.
+// One repeat follows a prevented observation or the stopped-app confirmation branch.
 const DESTINATION_WAITS = 2;
 
 /** One destination wait; the final one is run without `allowFailure`, so its failure throws. */
@@ -21,8 +21,8 @@ export type DestinationWait = (
 ) => Promise<CliJsonResult>;
 
 /**
- * Waits for a deep-link route's own first landmark after `open` answered any launch confirmation.
- * Repeats only a typed, retriable observation failure. A readable miss fails immediately.
+ * Observe the route before looking for a launch confirmation.
+ * A typed stopped-app result permits explicit confirmation handling; readable misses fail.
  */
 export async function waitForDeepLinkDestination(
   context: LiveContext,

@@ -76,9 +76,7 @@ const sendToDaemonTransport: AgentDeviceDaemonTransport = async (request, contex
 };
 
 async function loadBuiltAgentDeviceClient() {
-  // The live harness drives the built CLI, so use the built SDK entry as well. Importing the
-  // source SDK here would intentionally take over the daemon on code-signature mismatch and make
-  // the forced-backend evidence come from a different runtime than the rest of the scenario.
+  // Exercise the same built SDK and CLI revision; the injected transport owns no daemon lifecycle.
   const builtSdk = (await import(
     pathToFileURL(path.resolve('dist/src/index.js')).href
   )) as AgentDeviceSdk;
@@ -155,11 +153,7 @@ async function executeLiveScenarios(
             await runStep(context, 'release preceding scenario session', ['close']);
           }
           context.session = `${sessionPrefix}-${scenario.id.replace(':', '-')}`;
-          if (
-            scenario.id !== 'smoke:inventory-install' &&
-            scenario.id !== 'smoke:automation-input' &&
-            scenario.id !== 'smoke:deep-link-navigation'
-          ) {
+          if (scenario.setup === 'fixture-home') {
             const opened = await runStep(context, `reset fixture for ${scenario.id}`, [
               'open',
               context.appId,

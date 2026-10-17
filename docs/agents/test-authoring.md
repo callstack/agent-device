@@ -3,6 +3,8 @@
 For checks, read [validation](testing.md).
 For deletions, read [test audits](test-audit.md).
 
+For iOS fixture smoke or native input regressions, read [iOS smoke authoring](ios-smoke.md).
+
 ## Choose the boundary
 
 Before you add a test, name:

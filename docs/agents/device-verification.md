@@ -2,6 +2,8 @@
 
 Use this for Apple runner changes or manual device runs. For foldables, also read [foldable verification](device-foldable.md).
 
+For iOS fixture smoke or native input regressions, read [iOS smoke authoring](ios-smoke.md).
+
 ## Prepare
 
 1. To build runtime changes, run `pnpm build`.
