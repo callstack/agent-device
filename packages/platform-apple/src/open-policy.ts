@@ -1,5 +1,7 @@
 import type {
-  LaunchConfirmation,
+  LaunchConfirmationAbsent,
+  LaunchConfirmationOutcome,
+  LaunchConfirmationProbeFailure,
   OpenApplicationInput,
   OpenApplicationOutcome,
   OpenApplicationRunnerDemand,
@@ -31,14 +33,17 @@ const LAUNCH_CONFIRMATION_ROUNDS = 2;
 
 type HeldLaunchOutcome = Readonly<{
   observed: LaunchObservation | undefined;
-  launchConfirmation?: LaunchConfirmation;
+  report?: LaunchConfirmationOutcome;
+  /** The probe step that failed or went unverified when no report exists; the state is unknown. */
+  probeFailure?: LaunchConfirmationProbeFailure;
   /** The launch has no process, or its recognized confirmation remains visible. */
   unanswered: boolean;
 }>;
 
 type HeldLaunchRound = Readonly<{
   observed: LaunchObservation | undefined;
-  launchConfirmation?: LaunchConfirmation;
+  report?: LaunchConfirmationOutcome;
+  probeFailure?: LaunchConfirmationProbeFailure;
   /** Whether an accept has run or been attempted; only an accept can change what the bridge sees. */
   acceptAttempted: boolean;
   confirmationStillPresent: boolean;
@@ -119,9 +124,13 @@ export function releaseSpeculativeRunner(
  * held URL, and the URL is handed over again and read once more. A launch still proven not running
  * afterwards fails the open with `launch_confirmation_unanswered` rather than returning green to a
  * session whose every later command then fails `app is not running`. A recognized prompt still
- * visible after a failed accept also fails the open, even if the app is running. A missing or
- * unrecognized prompt, or an unresolved URL owner, leaves the launch unchanged. An unresolved owner
- * spends both the 3-second presentation window and the bounded URL-owner lookup.
+ * visible after a failed accept also fails the open, even if the app is running. A missing prompt
+ * leaves the launch unchanged; an unrecognized prompt or an unresolved URL owner leaves it
+ * unchanged and reports `launchConfirmation: 'unanswered'` with its typed reason, because the
+ * prompt is on the screen the caller still has to answer. A step that failed or went unverified
+ * settles to the unknown prompt state, which the daemon turns into a check-with-`alert get`
+ * warning; `applyAttemptReport` owns that reporting rule and its one lookup exception. An
+ * unresolved owner spends both the 3-second presentation window and the bounded URL-owner lookup.
  */
 export async function settleAppleOpen(
   host: Pick<PlatformRuntimeHost, 'clock'>,
@@ -134,12 +143,13 @@ export async function settleAppleOpen(
     redispatchLaunchUrl?: () => Promise<void>;
   }>,
   timing: MutableOpenTiming,
-): Promise<LaunchConfirmation | undefined> {
+): Promise<LaunchConfirmationOutcome | LaunchConfirmationAbsent | undefined> {
   const startedAtMs = Date.now();
   const observe = async () =>
     await observeLaunchedApp(binding, input, localIosSimulator, launch.observation);
   let observed = await observe();
-  let launchConfirmation: LaunchConfirmation | undefined;
+  let report: LaunchConfirmationOutcome | undefined;
+  let probeFailure: LaunchConfirmationProbeFailure | undefined;
   const answer = launch.answerConfirmation;
   const held =
     answer && observed?.observation !== 'observable'
@@ -147,7 +157,8 @@ export async function settleAppleOpen(
       : undefined;
   if (held) {
     timing.runnerDemand = 'required';
-    launchConfirmation = held.launchConfirmation;
+    report = held.report;
+    probeFailure = held.probeFailure;
     observed = held.observed;
     if (held.unanswered) {
       throw new AppError(
@@ -171,7 +182,10 @@ export async function settleAppleOpen(
     }
   }
   timing.postOpenSettleDurationMs = Math.max(0, Date.now() - startedAtMs);
-  return launchConfirmation;
+  // `applyAttemptReport` keeps the two arms exclusive, so this picks the final state directly.
+  if (report) return report;
+  if (probeFailure) return { launchConfirmationProbeFailure: probeFailure };
+  return undefined;
 }
 
 /**
@@ -212,7 +226,8 @@ async function answerHeldLaunch(
   }
   return {
     observed: round.observed,
-    launchConfirmation: round.launchConfirmation,
+    report: round.report,
+    probeFailure: round.probeFailure,
     unanswered: acceptLeftTheUrlInFlight(round) || round.confirmationStillPresent,
   };
 }
@@ -226,24 +241,86 @@ async function answerConfirmationOnce(
   const confirmationStillPresent =
     attempt.outcome === 'unanswered' && attempt.reason === 'alert-still-present';
   const acceptAttempted = round.acceptAttempted || acceptWasAttempted(attempt);
-  const launchConfirmation =
-    attempt.outcome === 'accepted' ? ('accepted' as const) : round.launchConfirmation;
+  const reported = applyAttemptReport(round, attempt);
   if (!acceptAttempted) {
-    // Only an accept changes the device, so a read that found no prompt, an unrecognized prompt or
-    // an unresolved URL owner leaves the launch as the verdict before it already described it.
+    // Only an accept changes the device, so a read that found no prompt, an unrecognized prompt, an
+    // unresolved URL owner or a failed URL-owner lookup leaves the launch as the verdict before it
+    // already described it.
     return {
       observed: round.observed,
-      launchConfirmation,
+      ...reported,
       acceptAttempted,
       confirmationStillPresent,
     };
   }
   return {
     observed: await observe(),
-    launchConfirmation,
+    ...reported,
     acceptAttempted,
     confirmationStillPresent,
   };
+}
+
+/**
+ * What one attempt itself shows the settle: a confirmation it saw, the step whose failure left the
+ * prompt state unknown, or nothing. A failed URL-owner lookup shows `url-owner-unresolved`: the
+ * owner was never resolved, which is what the caller has to know.
+ */
+type AttemptSettlement =
+  | Readonly<{ seen: LaunchConfirmationOutcome }>
+  | Readonly<{ probeFailure: LaunchConfirmationProbeFailure }>
+  | Readonly<Record<string, never>>;
+
+function settleAttempt(attempt: LaunchConfirmationAttempt): AttemptSettlement {
+  switch (attempt.outcome) {
+    case 'accepted':
+      return { seen: { launchConfirmation: 'accepted' } };
+    case 'absent':
+      return {};
+    case 'unreadable':
+      if (attempt.step === 'url-owner') {
+        return {
+          seen: {
+            launchConfirmation: 'unanswered',
+            launchConfirmationReason: 'url-owner-unresolved',
+          },
+        };
+      }
+      return { probeFailure: attempt.step };
+    case 'unanswered':
+      if (attempt.reason === 'alert-still-present') return {};
+      return {
+        seen: { launchConfirmation: 'unanswered', launchConfirmationReason: attempt.reason },
+      };
+  }
+}
+
+/**
+ * The one rule mapping an answer attempt to what the settle reports. Every attempt states the
+ * latest the probe knows: a seen confirmation replaces the report, a step that failed or went
+ * unverified (`alert-read`, `alert-accept` or `runner`) replaces it with the unknown state, and a
+ * completed probe that saw nothing resolves the unknown and keeps any confirmation already seen —
+ * an accepted is a completed action the caller owns. The one exception to the failed-step rule is
+ * `url-owner`: that lookup ran and answered nothing usable, so it reports the seen outcome
+ * `url-owner-unresolved`. An `alert-still-present` attempt belongs to the failed-accept path,
+ * which fails the open outright.
+ */
+export function applyAttemptReport(
+  previous: Readonly<{
+    report?: LaunchConfirmationOutcome;
+    probeFailure?: LaunchConfirmationProbeFailure;
+  }>,
+  attempt: LaunchConfirmationAttempt,
+): Readonly<{
+  report?: LaunchConfirmationOutcome;
+  probeFailure?: LaunchConfirmationProbeFailure;
+}> {
+  const settled = settleAttempt(attempt);
+  if ('seen' in settled) return { report: settled.seen, probeFailure: undefined };
+  if ('probeFailure' in settled) {
+    return { report: undefined, probeFailure: settled.probeFailure };
+  }
+  return { report: previous.report, probeFailure: undefined };
 }
 
 /**

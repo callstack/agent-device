@@ -71,8 +71,19 @@ test('buildOpenResult reports an answered launch confirmation and omits one that
   };
 
   assert.equal(
-    buildOpenResult({ ...base, launchConfirmation: 'accepted' }).launchConfirmation,
+    buildOpenResult({ ...base, launchConfirmation: { launchConfirmation: 'accepted' } })
+      .launchConfirmation,
     'accepted',
   );
+  const unanswered = buildOpenResult({
+    ...base,
+    launchConfirmation: {
+      launchConfirmation: 'unanswered',
+      launchConfirmationReason: 'alert-unrecognized',
+    },
+  });
+  assert.equal(unanswered.launchConfirmation, 'unanswered');
+  assert.equal(unanswered.launchConfirmationReason, 'alert-unrecognized');
   assert.equal('launchConfirmation' in buildOpenResult(base), false);
+  assert.equal('launchConfirmationReason' in buildOpenResult(base), false);
 });

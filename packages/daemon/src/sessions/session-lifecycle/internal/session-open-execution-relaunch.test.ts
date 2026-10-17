@@ -2,7 +2,11 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  LaunchConfirmationAbsent,
+  LaunchConfirmationOutcome,
+  OpenApplicationInput,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -93,6 +97,7 @@ async function openRelaunch(params: {
   positionals?: string[];
   flags?: Record<string, unknown>;
   onOpenApplication?: (input: OpenApplicationInput) => Promise<void> | void;
+  openOutcome?: LaunchConfirmationOutcome | LaunchConfirmationAbsent;
 }) {
   const opened: OpenApplicationInput[] = [];
   const boundDevices: DeviceInfo[] = [];
@@ -109,7 +114,7 @@ async function openRelaunch(params: {
         openApplication: async (input: OpenApplicationInput) => {
           opened.push(input);
           await params.onOpenApplication?.(input);
-          return { appBundleId: input.appBundleId, timing: {} };
+          return { appBundleId: input.appBundleId, timing: {}, ...params.openOutcome };
         },
       },
     };
@@ -232,6 +237,61 @@ test('open <app> <url> --relaunch hands the lifecycle both positionals', async (
       relaunch: true,
       positionals: ['com.example.app', 'https://example.com/deal'],
     }),
+  ]);
+});
+
+test.each([
+  {
+    reason: 'alert-unrecognized' as const,
+    warning: /did not recognize \(alert-unrecognized\)[\s\S]*alert get[\s\S]*alert accept/,
+  },
+  {
+    reason: 'url-owner-unresolved' as const,
+    warning: /could not be resolved[\s\S]*alert accept/,
+  },
+])(
+  'open reports an unanswered $reason launch confirmation and appends its warning',
+  async ({ reason, warning }) => {
+    const sessionStore = makeSessionStore();
+    publishSession(sessionStore, 'ios-confirmation-session', IOS_SIMULATOR);
+    mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
+
+    const { response } = await openRelaunch({
+      sessionStore,
+      sessionName: 'ios-confirmation-session',
+      openOutcome: {
+        launchConfirmation: 'unanswered',
+        launchConfirmationReason: reason,
+      },
+    });
+
+    expect(response?.ok).toBe(true);
+    if (response?.ok !== true) throw new Error('open must answer an unanswered confirmation');
+    const data = response.data ?? {};
+    expect(data.launchConfirmation).toBe('unanswered');
+    expect(data.launchConfirmationReason).toBe(reason);
+    expect(data.warnings).toEqual([expect.stringMatching(warning)]);
+  },
+);
+
+test('open appends a probe-failure warning when the confirmation could not be read', async () => {
+  const sessionStore = makeSessionStore();
+  publishSession(sessionStore, 'ios-probe-session', IOS_SIMULATOR);
+  mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
+
+  const { response } = await openRelaunch({
+    sessionStore,
+    sessionName: 'ios-probe-session',
+    openOutcome: { launchConfirmationProbeFailure: 'alert-read' },
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok !== true) throw new Error('open must survive an unreadable probe');
+  const data = response.data ?? {};
+  expect('launchConfirmation' in data).toBe(false);
+  expect(data.launchConfirmationProbeFailure).toBe('alert-read');
+  expect(data.warnings).toEqual([
+    expect.stringMatching(/could not read whether iOS is asking[\s\S]*alert get/),
   ]);
 });
 

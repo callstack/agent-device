@@ -270,23 +270,45 @@ extension RunnerTests {
     return alert.buttons[index]
   }
 
+  /// The alert's own title: the first non-empty static text inside the alert that is neither a
+  /// button nor alert chrome, then the alert element's own label, then the first labelled
+  /// descendant that is not a button or chrome. An alert presents its copy as static text, so the
+  /// static-text read answers a root that carries host chrome whose accessibility label is not the
+  /// alert's title (a SpringBoard sheet over the Home Screen includes the page readout).
   private func preferredAlertTitle(_ element: XCUIElement, buttons: [XCUIElement]) -> String {
     let buttonLabels = Set(buttons.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
-    let descendants = element.descendants(matching: .any).allElementsBoundByIndex
-    for descendant in descendants {
-      let text = descendant.label.trimmingCharacters(in: .whitespacesAndNewlines)
-      if text.isEmpty ||
-        isGenericAlertLabel(text) ||
-        buttonLabels.contains(text.lowercased()) ||
-        descendant.elementType == .navigationBar ||
-        actionableTypes.contains(descendant.elementType)
-      {
+    let isButtonLabel: (String) -> Bool = { buttonLabels.contains($0.lowercased()) }
+    if let text = firstAlertText(safeElementsQuery { element.staticTexts.allElementsBoundByIndex }, isButtonLabel: isButtonLabel) {
+      return text
+    }
+    let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !label.isEmpty && !isGenericAlertLabel(label) {
+      return label
+    }
+    if let text = firstAlertText(
+      safeElementsQuery { element.descendants(matching: .any).allElementsBoundByIndex },
+      isButtonLabel: isButtonLabel
+    ) {
+      return text
+    }
+    return "Alert"
+  }
+
+  private func firstAlertText(
+    _ elements: [XCUIElement],
+    isButtonLabel: (String) -> Bool
+  ) -> String? {
+    for element in elements {
+      let text = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+      if text.isEmpty || isGenericAlertLabel(text) || isButtonLabel(text) {
+        continue
+      }
+      if element.elementType == .navigationBar || actionableTypes.contains(element.elementType) {
         continue
       }
       return text
     }
-    let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
-    return label.isEmpty || isGenericAlertLabel(label) ? "Alert" : label
+    return nil
   }
 
   private func isGenericAlertLabel(_ label: String) -> Bool {
