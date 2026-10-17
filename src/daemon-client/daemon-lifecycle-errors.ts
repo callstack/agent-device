@@ -1,14 +1,19 @@
 import type { DaemonIdentity } from '@agent-device/contracts/client';
 import {
   DAEMON_QUIESCE_REASONS,
-  resolveDaemonPaths,
+  type DaemonPaths,
   type DaemonQuiesceCensus,
 } from '@agent-device/daemon-contracts/daemon-resolution';
+import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { AppError } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
-import type { DaemonInfo } from './daemon-client-metadata.ts';
+import {
+  getDaemonMetadataState,
+  resolveDaemonStartupHint,
+  type DaemonInfo,
+} from './daemon-client-metadata.ts';
 import { resolveLocalDaemonCodeIdentity, type DaemonTakeoverCause } from './daemon-launch-spec.ts';
 
 // The four ways an explicit lifecycle stops short of a usable daemon. Callers branch on
@@ -58,15 +63,22 @@ export function daemonContendedError(): AppError {
 }
 
 export function daemonNotRunningError(stateDir: string, registered?: DaemonInfo): AppError {
-  const stateDirFlag =
-    stateDir === resolveDaemonPaths(undefined).baseDir
-      ? ''
-      : ` --state-dir ${shellQuoteIfNeeded(stateDir)}`;
   return new AppError('COMMAND_FAILED', 'No daemon is running for this state directory.', {
     reason: DAEMON_LIFECYCLE_REASONS.notRunning,
     stateDir,
     ...(registered ? { daemon: daemonIdentityOf(registered) } : {}),
-    hint: `Start one with a local agent-device command that uses the daemon (agent-device devices${stateDirFlag}, for example), or with ensureDaemon({ stateDir: ${JSON.stringify(stateDir)} }) from the SDK, before attaching.${registered ? ` The registered daemon (pid ${registered.pid}) does not answer; ${daemonStopCommand(stateDir)} clears it.` : ''}`,
+    hint: `Start one with a local agent-device command that uses the daemon (agent-device devices --state-dir ${shellQuoteIfNeeded(stateDir)}, for example), or with ensureDaemon({ stateDir: ${JSON.stringify(stateDir)} }) from the SDK, before attaching.${registered ? ` The registered daemon (pid ${registered.pid}) does not answer; ${daemonStopCommand(stateDir)} clears it.` : ''}`,
+  });
+}
+
+export function daemonRetirementUnconfirmedError(
+  retirement: Extract<DaemonRetirementResult, { status: 'retained' }>,
+  paths: DaemonPaths,
+): AppError {
+  return new AppError('COMMAND_FAILED', 'Daemon replacement could not be confirmed.', {
+    reason: 'daemon_retirement_unconfirmed',
+    retirement,
+    hint: retirement.error?.hint ?? resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
   });
 }
 

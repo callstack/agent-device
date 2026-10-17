@@ -11,7 +11,6 @@ import {
   assertDaemonPolicyMatches,
   observeLocalDaemon,
   resolveLocalDaemonSettings,
-  daemonRetirementUnconfirmedError,
   retireDaemonForTakeover,
   stopDaemonForTakeover,
   startLocalDaemon,
@@ -26,6 +25,7 @@ import {
   daemonIdentityOf,
   daemonDrainTimeoutError,
   daemonIncompatibleError,
+  daemonRetirementUnconfirmedError,
 } from './daemon-lifecycle-errors.ts';
 
 // A racing `ensureDaemon` in another process can retire or replace the daemon this call judged, or

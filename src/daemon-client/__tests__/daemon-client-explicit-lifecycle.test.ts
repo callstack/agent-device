@@ -4,10 +4,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  DAEMON_QUIESCE_COMMAND,
-  resolveDaemonPaths,
-} from '@agent-device/daemon-contracts/daemon-resolution';
+import { DAEMON_QUIESCE_COMMAND } from '@agent-device/daemon-contracts/daemon-resolution';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -42,7 +39,6 @@ import { sleep } from '@agent-device/host-kit/retry';
 import * as transport from '../daemon-client-transport.ts';
 import { sendToDaemon } from '../daemon-client.ts';
 import { ensureDaemon } from '../daemon-client-ensure.ts';
-import { daemonNotRunningError } from '../daemon-lifecycle-errors.ts';
 
 // The explicit lifecycle: what an attach client may never do, and what `ensureDaemon` may do only
 // through the daemon's own answer. Daemons here are loopback stand-ins registered by real children,
@@ -114,12 +110,6 @@ test('attach reports a missing daemon without starting one', async (t) => {
   assert.match(String(error.details?.hint), /agent-device devices --state-dir /);
   assert.equal(spawn.mock.calls.length, 0);
   assert.equal(fs.existsSync(paths.infoPath), false);
-});
-
-test('the not-running hint leaves out --state-dir for the default state directory', () => {
-  const error = daemonNotRunningError(resolveDaemonPaths(undefined).baseDir);
-
-  assert.match(String(error.details?.hint), /\(agent-device devices, for example\)/);
 });
 
 test('attach reports an incompatible daemon with both identities and leaves it running', async (t) => {
