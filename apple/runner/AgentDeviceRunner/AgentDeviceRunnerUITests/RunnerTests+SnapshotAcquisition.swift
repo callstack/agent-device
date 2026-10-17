@@ -40,9 +40,11 @@ extension RunnerTests {
   ) throws -> SnapshotTraversalContext? {
     let treeSliceBudget = treeCaptureSliceBudgetOverride ?? treeCaptureSliceBudget
     let slice = min(treeSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
+    let rootReadStartedAt = Date()
     guard let rootSnapshot = try captureSnapshotRootBounded(app, sliceSeconds: slice) else {
       return nil
     }
+    let rootReadDuration = Date().timeIntervalSince(rootReadStartedAt)
 
     // The viewport and the interface orientation are one hop: geometry that arrives in the device's
     // native space can only be placed relative to the app's own frame and rotation, and asking for
@@ -64,6 +66,7 @@ extension RunnerTests {
     return SnapshotTraversalContext(
       queryRoot: app,
       rootSnapshot: rootSnapshot,
+      rootReadDuration: rootReadDuration,
       viewport: viewport,
       keyboardBand: keyboardBand
     )
@@ -184,7 +187,7 @@ extension RunnerTests {
   func evaluateSnapshot(_ snapshot: XCUIElementSnapshot) -> SnapshotEvaluation {
     let label = aggregatedLabel(for: snapshot) ?? snapshot.label.trimmingCharacters(in: .whitespacesAndNewlines)
     let identifier = snapshot.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
-    let valueText = snapshotValueText(snapshot)
+    let valueText = Self.valueText(snapshot.value)
     return SnapshotEvaluation(
       label: label,
       identifier: identifier,
@@ -231,8 +234,9 @@ extension RunnerTests {
     }
   }
 
-  private func snapshotValueText(_ snapshot: XCUIElementSnapshot) -> String? {
-    guard let value = snapshot.value else { return nil }
+  /// An element's value as the node publishes it; blank reads as no value.
+  static func valueText(_ value: Any?) -> String? {
+    guard let value else { return nil }
     let text = String(describing: value).trimmingCharacters(in: .whitespacesAndNewlines)
     return text.isEmpty ? nil : text
   }
@@ -282,7 +286,7 @@ extension RunnerTests {
     if depth > 4 { return nil }
     let text = snapshot.label.trimmingCharacters(in: .whitespacesAndNewlines)
     if !text.isEmpty { return text }
-    if let valueText = snapshotValueText(snapshot) { return valueText }
+    if let valueText = Self.valueText(snapshot.value) { return valueText }
     for child in snapshot.children {
       if let childLabel = aggregatedLabel(for: child, depth: depth + 1) {
         return childLabel
@@ -294,13 +298,13 @@ extension RunnerTests {
   func appendCollapsedTabFallbackNodes(
     to nodes: inout [RawAXNode],
     containerSnapshot: XCUIElementSnapshot,
-    resolveElements: () -> [XCUIElement],
+    resolveCandidates: () -> [CollapsedTabCandidate],
     depth: Int,
     parentIndex: Int
   ) {
     let fallbackNodes = collapsedTabFallbackNodes(
       for: containerSnapshot,
-      resolveElements: resolveElements,
+      resolveCandidates: resolveCandidates,
       startingIndex: nodes.count,
       depth: depth,
       parentIndex: parentIndex
@@ -308,28 +312,134 @@ extension RunnerTests {
     nodes.append(contentsOf: fallbackNodes)
   }
 
+  /// Every descendant of `root` in its captured snapshot, without `root` itself.
+  static func snapshotDescendants(of root: XCUIElementSnapshot) -> [XCUIElementSnapshot] {
+    var descendants: [XCUIElementSnapshot] = []
+    var stack = Array(root.children.reversed())
+    while let snapshot = stack.popLast() {
+      descendants.append(snapshot)
+      stack.append(contentsOf: snapshot.children.reversed())
+    }
+    return descendants
+  }
+
+  /// One live element a collapsed tab container may adopt, as the matching query's predicate read it.
+  struct CollapsedTabCandidate {
+    let type: XCUIElement.ElementType
+    let frame: CGRect
+    let label: String
+    let identifier: String
+    let valueText: String?
+    let enabled: Bool
+    let focused: Bool
+    let selected: Bool
+  }
+
+  /// The live elements any collapsed tab container in this capture may adopt, read in one XCTest
+  /// query: `collapsedTabCandidatePredicate` copies each match's attributes while XCTest evaluates
+  /// it, so no match costs a further round trip. The query starts only while the time left before
+  /// `processingDeadline` covers what this capture's root tree read took; nil means it did not start.
+  @MainActor
+  func collapsedTabCandidates(
+    context: SnapshotTraversalContext,
+    processingDeadline: Date
+  ) -> [CollapsedTabCandidate]? {
+    let containerFrames = Self.snapshotDescendants(of: context.rootSnapshot)
+      .filter(isCollapsedTabContainer)
+      .map(\.frame)
+    var candidates: [CollapsedTabCandidate] = []
+    let predicate = Self.collapsedTabCandidatePredicate(containerFrames: containerFrames) { attributes in
+      candidates.append(self.collapsedTabCandidate(attributes))
+    }
+    guard
+      Self.xctestQueryCanStart(
+        deadline: processingDeadline,
+        now: Date(),
+        expectedCost: context.rootReadDuration
+      )
+    else {
+      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TAB_FALLBACK_QUERY_NOT_STARTED")
+      return nil
+    }
+    let matches = snapshotElementsQuery {
+      context.queryRoot.descendants(matching: .any).matching(predicate).allElementsBoundByIndex
+    }.elements
+    return matches.isEmpty ? [] : candidates
+  }
+
+  private func collapsedTabCandidate(_ attributes: XCUIElementAttributes) -> CollapsedTabCandidate {
+    CollapsedTabCandidate(
+      type: attributes.elementType,
+      frame: attributes.frame,
+      label: attributes.label.trimmingCharacters(in: .whitespacesAndNewlines),
+      identifier: attributes.identifier.trimmingCharacters(in: .whitespacesAndNewlines),
+      valueText: Self.valueText(attributes.value),
+      enabled: attributes.isEnabled,
+      focused: focusBool(attributes as! NSObject),
+      selected: attributes.isSelected
+    )
+  }
+
+  /// Matches an element some container in `containerFrames` may adopt: it has content
+  /// (`hasCollapsedTabContent`) and the type and geometry `isCollapsedTabCandidate` accepts. XCTest
+  /// evaluates it against each element's attributes while it resolves the query, and `matched`
+  /// receives the attributes of each element it accepts.
+  static func collapsedTabCandidatePredicate(
+    containerFrames: [CGRect],
+    matched: @escaping (XCUIElementAttributes) -> Void
+  ) -> NSPredicate {
+    NSPredicate { object, _ in
+      guard let attributes = object as? XCUIElementAttributes, hasCollapsedTabContent(attributes),
+        containerFrames.contains(where: {
+          isCollapsedTabCandidate(type: attributes.elementType, frame: attributes.frame, in: $0)
+        })
+      else {
+        return false
+      }
+      matched(attributes)
+      return true
+    }
+  }
+
+  /// The geometry and type a collapsed tab container's item has: a candidate type, smaller than the
+  /// container, and centered inside it.
+  static func isCollapsedTabCandidate(
+    type: XCUIElement.ElementType,
+    frame: CGRect,
+    in containerFrame: CGRect
+  ) -> Bool {
+    guard collapsedTabCandidateTypes.contains(type), !frame.isNull, !frame.isEmpty else {
+      return false
+    }
+    let area = max(CGFloat(1), frame.width * frame.height)
+    let containerArea = max(CGFloat(1), containerFrame.width * containerFrame.height)
+    return area < containerArea * 0.9 && containerFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
+  }
+
+  /// Whether an element names something an agent can address: a label, identifier or value that is
+  /// not blank. Candidate types carry no placeholder.
+  static func hasCollapsedTabContent(_ attributes: XCUIElementAttributes) -> Bool {
+    [attributes.label, attributes.identifier]
+      .contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+      || valueText(attributes.value) != nil
+  }
+
   private func collapsedTabFallbackNodes(
     for containerSnapshot: XCUIElementSnapshot,
-    resolveElements: () -> [XCUIElement],
+    resolveCandidates: () -> [CollapsedTabCandidate],
     startingIndex: Int,
     depth: Int,
     parentIndex: Int
   ) -> [RawAXNode] {
-    if !containerSnapshot.children.isEmpty { return [] }
-    // This fallback reads live element frames, which XCTest reports in the app's own space, and a
-    // collapsed tab container sits under the app's own window. `SnapshotGeometrySpace.normalized`
-    // keys rotation on ancestry, so these nodes never enter a declared native space and need no
-    // special case here; the containment and area rules below compare reported frames to each other.
-    guard shouldExpandCollapsedTabContainer(containerSnapshot) else { return [] }
+    guard isCollapsedTabContainer(containerSnapshot) else { return [] }
+    // Candidates are read from live elements, which XCTest reports in the app's own space, and a
+    // collapsed tab container sits under the app's own window. `SnapshotGeometrySpace.normalized` keys
+    // rotation on ancestry, so these nodes never enter a declared native space and need no special
+    // case here; `isCollapsedTabCandidate` compares reported frames to each other.
     let containerFrame = containerSnapshot.frame
-    if containerFrame.isNull || containerFrame.isEmpty { return [] }
-
-    // Collapsed tab containers should be rare, so a full descendant scan is acceptable once per
-    // snapshot as a fallback for XCTest omitting the tab children from the snapshot tree.
-    let elements = resolveElements()
-    let candidates = elements.compactMap { element in
+    let candidates = resolveCandidates().compactMap { candidate in
       collapsedTabCandidateNode(
-        element: element,
+        candidate: candidate,
         containerSnapshot: containerSnapshot,
         containerFrame: containerFrame
       )
@@ -362,67 +472,41 @@ extension RunnerTests {
   }
 
   private func collapsedTabCandidateNode(
-    element: XCUIElement,
+    candidate: CollapsedTabCandidate,
     containerSnapshot: XCUIElementSnapshot,
     containerFrame: CGRect
   ) -> RawAXNode? {
-    var node: RawAXNode?
-    let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
-      if !element.exists { return }
-      let elementType = element.elementType
-      if !Self.collapsedTabCandidateTypes.contains(elementType) { return }
-      let frame = element.frame
-      if frame.isNull || frame.isEmpty { return }
-      if frame.equalTo(containerFrame) { return }
-      let area = max(CGFloat(1), frame.width * frame.height)
-      let containerArea = max(CGFloat(1), containerFrame.width * containerFrame.height)
-      if area >= containerArea * 0.9 { return }
-      let center = CGPoint(x: frame.midX, y: frame.midY)
-      if !containerFrame.contains(center) { return }
-
-      let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
-      let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
-      let valueText = snapshotValueText(element)
-      let placeholder = elementPlaceholderText(element, type: elementType)
-      let hasContent = !label.isEmpty || !identifier.isEmpty || valueText != nil || placeholder != nil
-      if !hasContent { return }
-      if sameSemanticElement(
-        containerSnapshot: containerSnapshot,
-        elementType: elementType,
-        label: label,
-        identifier: identifier
-      ) {
-        return
-      }
-
-      // The containment and area rules above compared reported frames with each other; the node
-      // joins the tree carrying the frame the platform reported, and normalization places it.
-      node = RawAXNode(
-        index: 0,
-        type: elementTypeName(elementType),
-        label: label.isEmpty ? nil : label,
-        identifier: identifier.isEmpty ? nil : identifier,
-        value: valueText,
-        placeholder: placeholder,
-        rect: SnapshotRect(frame),
-        enabled: element.isEnabled,
-        focused: elementHasFocus(element) ? true : nil,
-        selected: element.isSelected ? true : nil,
-        hittable: false,
-        depth: 0,
-        parentIndex: nil,
-        hiddenContentAbove: nil,
-        hiddenContentBelow: nil
-      )
-    })
-    if let exceptionMessage {
-      NSLog(
-        "AGENT_DEVICE_RUNNER_SNAPSHOT_TAB_FALLBACK_IGNORED_EXCEPTION=%@",
-        exceptionMessage
-      )
+    if !Self.isCollapsedTabCandidate(type: candidate.type, frame: candidate.frame, in: containerFrame) {
       return nil
     }
-    return node
+    if sameSemanticElement(
+      containerSnapshot: containerSnapshot,
+      elementType: candidate.type,
+      label: candidate.label,
+      identifier: candidate.identifier
+    ) {
+      return nil
+    }
+
+    // The containment and area rules above compared reported frames with each other; the node
+    // joins the tree carrying the frame the platform reported, and normalization places it.
+    return RawAXNode(
+      index: 0,
+      type: elementTypeName(candidate.type),
+      label: candidate.label.isEmpty ? nil : candidate.label,
+      identifier: candidate.identifier.isEmpty ? nil : candidate.identifier,
+      value: candidate.valueText,
+      placeholder: nil,
+      rect: SnapshotRect(candidate.frame),
+      enabled: candidate.enabled,
+      focused: candidate.focused ? true : nil,
+      selected: candidate.selected ? true : nil,
+      hittable: false,
+      depth: 0,
+      parentIndex: nil,
+      hiddenContentAbove: nil,
+      hiddenContentBelow: nil
+    )
   }
 
   func snapshotHasFocus(_ snapshot: XCUIElementSnapshot) -> Bool {
@@ -453,22 +537,18 @@ extension RunnerTests {
     return snapshot.isSelected
   }
 
-  private func shouldExpandCollapsedTabContainer(_ snapshot: XCUIElementSnapshot) -> Bool {
+  /// A wide tab bar or segmented control that XCTest reports without children.
+  func isCollapsedTabContainer(_ snapshot: XCUIElementSnapshot) -> Bool {
+    if !snapshot.children.isEmpty { return false }
     let frame = snapshot.frame
     if frame.isNull || frame.isEmpty { return false }
     if frame.width < max(CGFloat(160), frame.height * 1.75) { return false }
     switch snapshot.elementType {
-    case .tabBar, .segmentedControl, .slider:
+    case .tabBar, .segmentedControl:
       return true
     default:
       return false
     }
-  }
-
-  private func snapshotValueText(_ element: XCUIElement) -> String? {
-    let text = String(describing: element.value ?? "")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    return text.isEmpty ? nil : text
   }
 
   private func sameSemanticElement(
@@ -519,7 +599,7 @@ extension RunnerTests {
   }
 
   /// Runs sweep queries in order until one reports AX unavailable, or until the next one could not
-  /// finish before `deadline` (`querySweepCanStartQuery`). A sweep stopped by the deadline reports
+  /// finish before `deadline` (`xctestQueryCanStart`). A sweep stopped by the deadline reports
   /// `.deadlineExhausted` rather than a truncation flag: what it collected is a partial tree, and
   /// only the caller that owns the tier decides whether that counts as an answer (#2781).
   static func runFlatInteractiveQueries<Query, Element>(
@@ -530,7 +610,7 @@ extension RunnerTests {
   ) -> (elements: [Element], outcome: SnapshotTierOutcome) {
     var elements: [Element] = []
     for query in queries {
-      if !querySweepCanStartQuery(deadline: deadline, now: now()) {
+      if !xctestQueryCanStart(deadline: deadline, now: now()) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_FLAT_FALLBACK_DEADLINE")
         return (elements, .deadlineExhausted)
       }
@@ -573,7 +653,7 @@ extension RunnerTests {
       if frame.isNull || frame.isEmpty { return }
       let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
       let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
-      let valueText = snapshotValueText(element)
+      let valueText = Self.valueText(element.value)
       let elementType = element.elementType
       let enabled = element.isEnabled
 

@@ -848,6 +848,31 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     }
   }
 
+  // Overlapping sibling buttons must not become children of an ordinary slider.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-wide-slider"]) {
+    UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(20, 20, 360, 31)];
+    slider.accessibilityLabel = @"Volume";
+    [self.view addSubview:slider];
+    NSArray<NSString *> *titles = @[ @"Left", @"Right" ];
+    for (NSUInteger i = 0; i < titles.count; i++) {
+      UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+      [button setTitle:titles[i] forState:UIControlStateNormal];
+      button.frame = CGRectMake(30 + i * 170, 20, 100, 30);
+      [self.view addSubview:button];
+    }
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-collapsed-tab-bar"]) {
+    UITabBar *tabBar = [[UITabBar alloc] initWithFrame:CGRectMake(20, 20, 360, 60)];
+    tabBar.items = @[
+      [[UITabBarItem alloc] initWithTitle:@"First tab" image:nil tag:0],
+      [[UITabBarItem alloc] initWithTitle:@"Second tab" image:nil tag:1],
+    ];
+    tabBar.isAccessibilityElement = YES;
+    tabBar.accessibilityLabel = @"Collapsed tabs";
+    [self.view addSubview:tabBar];
+  }
+
   BOOL markedButton = [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup"];
   if (markedButton || [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup-window"]) {
     UIButton *dismissRegion = [UIButton buttonWithType:UIButtonTypeSystem];
