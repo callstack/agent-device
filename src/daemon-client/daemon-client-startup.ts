@@ -1,6 +1,3 @@
-// The local daemon this client starts and observes: reading what a state dir already registered,
-// judging it against this client, and driving a launched daemon to readiness under the #3782
-// startup budget (ceiling, stall window, per-launch phase markers, typed failure reasons).
 import fs from 'node:fs';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { processLockHoldsDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';

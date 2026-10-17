@@ -1,7 +1,3 @@
-// The daemon a request reaches: which settings resolve to which daemon (local, remote, or a
-// private one-shot directory), the managed ensure that defers to the startup module, and the
-// per-request cleanup that owns one-shot replay lifetimes. Starting and judging a daemon lives in
-// `daemon-client-startup.ts`.
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonLifecycle, EnsureDaemonOptions } from '@agent-device/contracts/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
