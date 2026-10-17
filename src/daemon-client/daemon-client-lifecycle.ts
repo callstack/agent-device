@@ -354,24 +354,36 @@ function daemonRegistrationUnprovenError(
   });
 }
 
+export async function stopDaemonForTakeover(
+  existing: DaemonInfo,
+  paths: DaemonPaths,
+  mode: 'graceful' | 'force' = 'graceful',
+): Promise<DaemonRetirementResult> {
+  return await stopAndRetireDaemon({
+    paths: paths,
+    observed: { pid: existing.pid, startTime: existing.processStartTime ?? null },
+    mode,
+  });
+}
+
+export function daemonRetirementUnconfirmedError(
+  retirement: Extract<DaemonRetirementResult, { status: 'retained' }>,
+  paths: DaemonPaths,
+): AppError {
+  return new AppError('COMMAND_FAILED', 'Daemon replacement could not be confirmed.', {
+    reason: 'daemon_retirement_unconfirmed',
+    retirement,
+    hint: retirement.error?.hint ?? resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
+  });
+}
+
 export async function retireDaemonForTakeover(
   existing: DaemonInfo,
   paths: DaemonPaths,
   mode: 'graceful' | 'force' = 'graceful',
 ): Promise<void> {
-  const retirement = await stopAndRetireDaemon({
-    paths: paths,
-    observed: { pid: existing.pid, startTime: existing.processStartTime ?? null },
-    mode,
-  });
-  if (retirement.status === 'retained') {
-    throw new AppError('COMMAND_FAILED', 'Daemon replacement could not be confirmed.', {
-      reason: 'daemon_retirement_unconfirmed',
-      retirement,
-      hint:
-        retirement.error?.hint ?? resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
-    });
-  }
+  const retirement = await stopDaemonForTakeover(existing, paths, mode);
+  if (retirement.status === 'retained') throw daemonRetirementUnconfirmedError(retirement, paths);
 }
 
 /**

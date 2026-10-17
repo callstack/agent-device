@@ -4,17 +4,16 @@ import type {
   EnsureDaemonOptions,
 } from '@agent-device/contracts/client';
 import { waitForDaemonExit } from '@agent-device/daemon-contracts/daemon-process';
-import {
-  recoverAbandonedDaemonRegistration,
-  type DaemonRetirementResult,
-} from '@agent-device/daemon-contracts/daemon-registration-owner';
+import { recoverAbandonedDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   assertDaemonPolicyMatches,
   observeLocalDaemon,
   resolveLocalDaemonSettings,
+  daemonRetirementUnconfirmedError,
   retireDaemonForTakeover,
+  stopDaemonForTakeover,
   startLocalDaemon,
   type DaemonClientSettings,
   type EnsuredDaemon,
@@ -164,27 +163,18 @@ async function awaitDrainedDaemon(
     return;
   }
   if (await answersLivenessProbe(info)) throw await daemonDrainTimeoutError(info, settings);
-  try {
-    await retireDaemonForTakeover(info, settings.paths, 'force');
-  } catch (error) {
-    if (isRefusalToSignalNonDaemon(error)) throw await daemonDrainTimeoutError(info, settings);
-    throw error;
+  const retirement = await stopDaemonForTakeover(info, settings.paths, 'force');
+  if (retirement.status !== 'retained') return;
+  // The identity check could not prove the live process is the daemon it observed (an embedded host
+  // runs no daemon entry; a start time or command line may also be unreadable), so nothing was
+  // signaled.
+  if (
+    retirement.termination?.status === 'retained' &&
+    retirement.termination.reason === 'identity-unverified'
+  ) {
+    throw await daemonDrainTimeoutError(info, settings);
   }
-}
-
-/**
- * The identity check could not prove the live process is the daemon it observed (an embedded host
- * runs no daemon entry; a start time or command line may also be unreadable), so nothing was signaled.
- */
-function isRefusalToSignalNonDaemon(error: unknown): boolean {
-  if (!(error instanceof AppError) || error.details?.reason !== 'daemon_retirement_unconfirmed') {
-    return false;
-  }
-  const { termination } = error.details.retirement as Extract<
-    DaemonRetirementResult,
-    { status: 'retained' }
-  >;
-  return termination?.status === 'retained' && termination.reason === 'identity-unverified';
+  throw daemonRetirementUnconfirmedError(retirement, settings.paths);
 }
 
 /**

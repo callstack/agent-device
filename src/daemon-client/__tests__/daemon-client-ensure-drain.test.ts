@@ -194,6 +194,7 @@ test('a daemon still running past the deadline that answers no probe is force-re
   }
 });
 
+// A drain that never finishes while the daemon keeps serving: it accepted the request but is stuck.
 test('a daemon still running past the deadline that answers a probe is left alone', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir, paths } = stateDirAndPaths();
