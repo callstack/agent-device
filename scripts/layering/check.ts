@@ -144,7 +144,7 @@ import {
   checkPackageExportSurface,
   packageExportSurfaceSummary,
 } from './package-export-surface.ts';
-import { checkTestKitIsolation } from './test-kit-isolation.ts';
+import { checkPackageEntrySurfaces } from './package-entry-surface.ts';
 import { checkTestColocation, testColocationSummary } from './test-colocation.ts';
 import { checkDaemonLayers, DAEMON_ROOT } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
@@ -624,7 +624,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       context.ratchets.testOnlyExports,
       context.reference.testOnlyExports,
     ),
-    ...checkTestKitIsolation(
+    ...checkPackageEntrySurfaces(
       parseManifests(readTrackedPackageManifests(repoRoot)),
       context.allTypeScriptSources,
     ),

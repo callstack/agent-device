@@ -2,6 +2,11 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { ProviderScenarioRpcResult } from './harness.ts';
 
+export type JsonRpcResponseEnvelope = {
+  result?: DaemonResponse;
+  error?: { code: number; message: string; data?: Record<string, unknown> };
+};
+
 export function commandRequest(
   token: string,
   command: string,
@@ -26,7 +31,7 @@ export function commandRequest(
   };
 }
 
-export function responseToRpcResult(
+function responseToRpcResult(
   response: DaemonResponse,
   id: string,
   statusCode: number,
@@ -48,5 +53,21 @@ export function responseToRpcResult(
             data: response.error,
           },
         },
+  };
+}
+
+export function envelopeToRpcResult(
+  envelope: JsonRpcResponseEnvelope,
+  id: string | number,
+  statusCode: number,
+): ProviderScenarioRpcResult {
+  if (envelope.result) return responseToRpcResult(envelope.result, String(id), statusCode);
+  return {
+    statusCode,
+    json: {
+      jsonrpc: '2.0',
+      id,
+      error: envelope.error ?? { code: statusCode, message: '' },
+    },
   };
 }

@@ -7,7 +7,7 @@ import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { IOS_SIMULATOR, TVOS_SIMULATOR } from '@agent-device/test-kit';
+import { IOS_SIMULATOR, TVOS_SIMULATOR, createTestHostEnvironment } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   clearRequestCanceled,
@@ -29,6 +29,7 @@ for (const operation of ['allocate', 'release'] as const) {
     const finish = createControlLatch();
     const request = humanControlRequest(lease, `lease_${operation}`, []);
     const mutation = handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: request,
       sessionName: request.session,
       sessionStore: makeSessionStore('agent-device-held-provider-'),
@@ -61,6 +62,7 @@ test('lease_allocate answers with the lease id the request named', async () => {
   const registry = new LeaseRegistry();
   const leaseId = 'abcdef0123456789abcdef0123456789';
   const response = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: {
       token: 'test-token',
       session: 'default',
@@ -95,6 +97,7 @@ test('lease_release still releases a retainOnClose lease through the provider', 
   };
 
   const response = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: request,
     sessionName: 'default',
     sessionStore: makeSessionStore('agent-device-retained-release-'),
@@ -121,6 +124,7 @@ test('lease_release ends the sessions opened under the released lease', async ()
   const ended: string[] = [];
   const release = (leaseId: string) =>
     handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: {
         token: 'test-token',
         session: 'default',
@@ -163,6 +167,7 @@ test('lease_release refuses a host-allocated macos-app lease and keeps it', asyn
   };
   const run = (command: 'lease_release' | 'lease_heartbeat') =>
     handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: { token: 'test-token', session: 'default', command, positionals: [], meta },
       sessionName: 'default',
       sessionStore: makeSessionStore('agent-device-macos-app-release-'),
@@ -196,6 +201,7 @@ test('lease_allocate stores retainOnClose from the request meta', async () => {
   };
 
   const response = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: request,
     sessionName: 'default',
     sessionStore: makeSessionStore('agent-device-retained-allocate-'),
@@ -216,6 +222,7 @@ test('activation drains canceled provider allocation and its release cleanup', a
   request.meta = { ...request.meta, requestId };
   let providerReleased = false;
   const mutation = handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: request,
     sessionName: request.session,
     sessionStore: makeSessionStore('agent-device-held-canceled-provider-'),
@@ -276,6 +283,7 @@ test('a lease whose provider allocation outlasts its TTL is active when allocati
   let now = 0;
   const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 60_000 });
   const response = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: allocateRequest(),
     sessionName: 'lease-ttl-test',
     sessionStore: makeSessionStore('agent-device-slow-provider-'),
@@ -318,6 +326,7 @@ test('a lease allocated without a provider keeps the TTL it was created with', a
     defaultLeaseTtlMs: 60_000,
   });
   const response = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: allocateRequest(),
     sessionName: 'lease-ttl-test',
     sessionStore: makeSessionStore('agent-device-no-provider-'),
@@ -340,6 +349,7 @@ test("a refused repeat allocation keeps the run's live lease", async () => {
   let calls = 0;
   const allocate = async (req: DaemonRequest) =>
     await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req,
       sessionName: 'lease-ttl-test',
       sessionStore,
@@ -386,6 +396,7 @@ test('a repeat allocation canceled by its requester releases the reused lease', 
   let calls = 0;
   const allocate = async (req: DaemonRequest) =>
     await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req,
       sessionName: 'lease-ttl-test',
       sessionStore,
@@ -442,6 +453,7 @@ test('a tenant cannot allocate a macos-app lease', async () => {
   };
   await assert.rejects(
     handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: request,
       sessionName: request.session,
       sessionStore: makeSessionStore('agent-device-macos-app-allocate-'),
@@ -495,6 +507,7 @@ async function allocateAgainstInventory(
     },
     async () =>
       await handleLeaseCommands({
+        host: createTestHostEnvironment(),
         req: request,
         sessionName: request.session,
         sessionStore: makeSessionStore('agent-device-proxy-allocate-by-spec-'),
@@ -589,5 +602,141 @@ test("a proxy allocation naming another owner's lease id still picks and is refu
     ),
     (error: AppError) =>
       error.code === 'INVALID_ARGS' && error.details?.reason === 'LEASE_ID_IN_USE',
+  );
+});
+
+test('a lease request that names no cwd gives the provider the bound host cwd', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const seen: Array<string | undefined> = [];
+  const respond = async (cwd: string | undefined) => {
+    const request = humanControlRequest(lease, 'lease_heartbeat', []);
+    if (cwd) request.meta = { ...request.meta, cwd };
+    await handleLeaseCommands({
+      host: { env: {}, cwd: '/bound/host/cwd' },
+      req: request,
+      sessionName: request.session,
+      sessionStore: makeSessionStore('agent-device-lease-cwd-'),
+      leaseRegistry: registry,
+      leaseLifecycleProvider: {
+        heartbeat: async (_lease, context) => {
+          seen.push(context?.cwd);
+          return {};
+        },
+      },
+    });
+  };
+
+  await respond(undefined);
+  await respond('/client/sent/cwd');
+
+  assert.deepEqual(seen, ['/bound/host/cwd', '/client/sent/cwd']);
+});
+
+const RUNTIME_LESS_LEASES: readonly (readonly [string, Record<string, string>])[] = [
+  ['no provider', {}],
+  ['a backend and no provider', { leaseBackend: 'ios-instance' }],
+  ['the proxy routing identity', { leaseProvider: 'proxy' }],
+  ['the cloud remote profile', { leaseProvider: 'cloud' }],
+];
+
+for (const [label, scope] of RUNTIME_LESS_LEASES) {
+  test(`lease_allocate keeps a runtime-less logical lease with ${label}`, async () => {
+    const registry = new LeaseRegistry();
+    const response = await handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', ...scope },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-logical-lease-'),
+      leaseRegistry: registry,
+      providerRuntimeIds: ['browserstack'],
+    });
+    assert.equal(response?.ok, true);
+    assert.equal(registry.listActiveLeases().length, 1);
+  });
+}
+
+test('lease_allocate refuses a provider no registered runtime claims, before recording a lease', async () => {
+  const registry = new LeaseRegistry();
+  await assert.rejects(
+    handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'testmu' },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-unregistered-provider-'),
+      leaseRegistry: registry,
+      providerRuntimeIds: ['browserstack'],
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.equal(error.details?.provider, 'testmu');
+      assert.deepEqual(error.details?.registeredProviders, ['browserstack']);
+      return true;
+    },
+  );
+  assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+test('lease_allocate treats a daemon that reports no provider runtimes as having none registered', async () => {
+  await assert.rejects(
+    handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'browserstack' },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-no-runtimes-'),
+      leaseRegistry: new LeaseRegistry(),
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.equal(error.details?.provider, 'browserstack');
+      assert.deepEqual(error.details?.registeredProviders, []);
+      return true;
+    },
+  );
+});
+
+test('lease_allocate classifies the trimmed provider id and rejects a malformed one as INVALID_ARGS', async () => {
+  const allocate = async (leaseProvider: string, providerRuntimeIds: string[]) =>
+    await handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-provider-id-forms-'),
+      leaseRegistry: new LeaseRegistry(),
+      providerRuntimeIds,
+    });
+
+  assert.equal((await allocate(' testmu ', ['testmu']))?.ok, true);
+  await assert.rejects(
+    allocate('a b', ['testmu']),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
   );
 });

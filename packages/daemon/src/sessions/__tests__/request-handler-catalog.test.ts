@@ -116,6 +116,7 @@ test('lease handler executes commands owned by the lease route', async () => {
 
   for (const command of leaseCommands) {
     const response = await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: {
         command,
         token: 'test-token',
@@ -140,6 +141,7 @@ test('lease handler preserves device-aware lease fields', async () => {
   const leaseRegistry = new LeaseRegistry();
   const sessionStore = makeSessionStore('agent-device-lease-fields-');
   const allocateResponse = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: {
       command: INTERNAL_COMMANDS.leaseAllocate,
       token: 'test-token',
@@ -157,6 +159,7 @@ test('lease handler preserves device-aware lease fields', async () => {
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
+    providerRuntimeIds: ['fake-provider'],
   });
 
   assert.equal(allocateResponse?.ok, true);
@@ -166,6 +169,7 @@ test('lease handler preserves device-aware lease fields', async () => {
   assert.equal(allocateLease.leaseProvider, 'proxy');
 
   const heartbeatResponse = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: {
       command: INTERNAL_COMMANDS.leaseHeartbeat,
       token: 'test-token',
@@ -200,6 +204,7 @@ test('lease artifacts lists daemon inventory for proxy lease scopes', async () =
 
   try {
     const response = await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: proxyArtifactsRequest(),
       sessionName: 'catalog-test',
       sessionStore,
@@ -218,6 +223,7 @@ test('lease release calls provider hook using the released lease without heartbe
   const sessionStore = makeSessionStore('agent-device-lease-release-');
   const releaseCalls: string[] = [];
   const allocateResponse = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: {
       command: INTERNAL_COMMANDS.leaseAllocate,
       token: 'test-token',
@@ -234,11 +240,13 @@ test('lease release calls provider hook using the released lease without heartbe
     sessionName: 'catalog-test',
     sessionStore,
     leaseRegistry,
+    providerRuntimeIds: ['fake-provider'],
   });
   assert.equal(allocateResponse?.ok, true);
   const lease = readLeaseResponse(allocateResponse);
 
   const releaseResponse = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: {
       command: INTERNAL_COMMANDS.leaseRelease,
       token: 'test-token',
@@ -297,6 +305,7 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
 
   try {
     const response = await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req: {
         command: INTERNAL_COMMANDS.leaseAllocate,
         token: 'test-token',
@@ -315,6 +324,7 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
       sessionName: 'catalog-test',
       sessionStore,
       leaseRegistry,
+      providerRuntimeIds: ['fake-provider'],
       leaseLifecycleProvider: {
         allocate: async (_lease, context) => {
           observed = {
@@ -358,10 +368,12 @@ test('a lease allocated for a requester that left is released, not registered', 
     await assert.rejects(
       () =>
         handleLeaseCommands({
+          host: createTestHostEnvironment(),
           req: leaseAllocateRequest(requestId),
           sessionName: 'catalog-test',
           sessionStore,
           leaseRegistry,
+          providerRuntimeIds: ['fake-provider'],
           leaseLifecycleProvider: {
             allocate: async (lease) => {
               // The client disconnects mid-allocation; the provider finishes anyway.
@@ -406,10 +418,12 @@ test('a failed provider release after cancellation is reported as unreleased wit
     await assert.rejects(
       () =>
         handleLeaseCommands({
+          host: createTestHostEnvironment(),
           req: leaseAllocateRequest(requestId),
           sessionName: 'catalog-test',
           sessionStore,
           leaseRegistry,
+          providerRuntimeIds: ['fake-provider'],
           leaseLifecycleProvider: {
             allocate: async () => {
               markRequestCanceled(requestId);
@@ -452,10 +466,12 @@ test('a throwing provider release after cancellation is reported as unreleased, 
     await assert.rejects(
       () =>
         handleLeaseCommands({
+          host: createTestHostEnvironment(),
           req: leaseAllocateRequest(requestId),
           sessionName: 'catalog-test',
           sessionStore,
           leaseRegistry,
+          providerRuntimeIds: ['fake-provider'],
           leaseLifecycleProvider: {
             allocate: async () => {
               markRequestCanceled(requestId);

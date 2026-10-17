@@ -249,9 +249,13 @@ async function createClient(
   if (deps.createClient) return await deps.createClient(config);
   const { createAgentDeviceClient } = await import('../agent-device-client.ts');
   const { createEnsuredDaemonTransport } = await import('../daemon-client/daemon-client.ts');
+  const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
+  // One host per tool call: the ensuring transport and the client resolve the same daemon from it.
+  const host = captureHostEnvironment(process);
   // One client per tool call, so each call ensures the daemon it is about to use.
-  const ensuring = createEnsuredDaemonTransport();
+  const ensuring = createEnsuredDaemonTransport({ host });
   return createAgentDeviceClient(config, {
+    host,
     // The client builds the same request the daemon transport takes; its type only differs in the
     // session being optional, which `sendToDaemon` defaults.
     transport: async (req, context) =>

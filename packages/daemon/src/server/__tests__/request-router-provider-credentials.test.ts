@@ -25,6 +25,7 @@ test.for([
       token: 'test-token',
       sessionStore: makeSessionStore('agent-device-router-provider-credentials-store-'),
       leaseRegistry: new LeaseRegistry(),
+      providerRuntimeIds: ['limrun'],
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
       providerCredentials: providerCredentialsFixture(DAEMON_ENV, stateDir),
       leaseLifecycleProvider: {

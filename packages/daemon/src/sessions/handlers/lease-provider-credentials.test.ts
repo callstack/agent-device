@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
@@ -43,10 +44,12 @@ async function allocateWithDaemonCredentials(
   let allocations = 0;
   try {
     await handleLeaseCommands({
+      host: createTestHostEnvironment(),
       req,
       sessionName: req.session,
       sessionStore: makeSessionStore('agent-device-provider-credentials-'),
       leaseRegistry: registry,
+      providerRuntimeIds: [req.meta?.leaseProvider?.trim() ?? ''],
       providerCredentials,
       leaseLifecycleProvider: {
         allocate: async () => {
@@ -157,4 +160,15 @@ test('a lease compares the daemon fingerprint of the leased backend only', async
     ['limrun', 'ios-instance'],
     ['limrun', 'android-instance'],
   ]);
+});
+
+test('a trimmed provider id is compared against the daemon credentials of the trimmed provider', async () => {
+  const outcome = await allocateWithDaemonCredentials(
+    allocateRequest(' limrun ', shellFingerprint({ KEY: 'key-2' })),
+    providerCredentialsFixture({ KEY: 'key-1' }, STATE_DIR),
+  );
+
+  assert.equal(outcome.allocations, 0);
+  assert.equal(outcome.error?.details?.reason, 'provider-credentials-changed');
+  assert.equal(outcome.error?.details?.provider, 'limrun');
 });

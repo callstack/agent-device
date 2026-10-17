@@ -1,11 +1,14 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import http from 'node:http';
 import { createDaemonProxyServer, type DaemonProxyAuthenticate } from '@agent-device/proxy';
 import { buildHttpRpcPayload } from '../../../src/daemon-client/daemon-client-rpc.ts';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
-import { commandRequest, responseToRpcResult } from './harness-rpc.ts';
+import {
+  commandRequest,
+  envelopeToRpcResult,
+  type JsonRpcResponseEnvelope,
+} from './harness-rpc.ts';
 import { type ProviderScenarioHarness, type ProviderScenarioRpcResult } from './harness.ts';
 
 export type ProviderScenarioForwardedRequest = {
@@ -45,11 +48,6 @@ export type ProviderScenarioProxy = {
 export type ProviderScenarioProxyOptions =
   | { clientToken: string; authenticate?: never }
   | { clientToken?: never; authenticate: DaemonProxyAuthenticate };
-
-type JsonRpcResponseEnvelope = {
-  result?: DaemonResponse;
-  error?: { code: number; message: string; data?: Record<string, unknown> };
-};
 
 export async function createProviderScenarioProxy(
   daemon: ProviderScenarioHarness,
@@ -98,15 +96,7 @@ export async function createProviderScenarioProxy(
       const result = await requestRpc(authToken, payload);
       const envelope = result.json as JsonRpcResponseEnvelope;
       const id = String(payload.id);
-      if (envelope.result) return responseToRpcResult(envelope.result, id, result.statusCode);
-      return {
-        statusCode: result.statusCode,
-        json: {
-          jsonrpc: '2.0',
-          id,
-          error: envelope.error ?? { code: result.statusCode, message: '' },
-        },
-      };
+      return envelopeToRpcResult(envelope, id, result.statusCode);
     },
     close: async () => {
       if (closed) return;

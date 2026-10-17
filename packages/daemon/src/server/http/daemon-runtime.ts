@@ -181,7 +181,6 @@ export type DaemonRuntimeDeps = Readonly<{
     | 'createCommandSurface'
     | 'cloudArtifactProvider'
     | 'providerAppCatalog'
-    | 'providerRuntimeRequiredIds'
     | 'providerDeviceRuntimeScope'
   >;
 }>;

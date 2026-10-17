@@ -144,6 +144,9 @@ export async function runCli(
 }
 
 async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment): Promise<void> {
+  // One transport per run: its ensure-once state is shared by the materialization client and the
+  // command client, so a run ensures the daemon once.
+  const transport = resolveRunTransport(deps, host);
   const requestId = createRequestId();
   const version = readVersion();
   const debugEnabled = isDebugRequested(argv);
@@ -197,7 +200,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
           stateDir: ctx.daemonPaths.baseDir,
           flags: ctx.effectiveFlags,
         });
-        await resolveRemoteContext(ctx, deps);
+        await resolveRemoteContext(ctx, transport);
         registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
         if (command === 'cdp') {
           await exitAfterFlush(
@@ -220,7 +223,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
             flags: ctx.effectiveFlags,
             replayTestReporterRuntime,
             commandProgress,
-            transport: resolveRunTransport(deps, host),
+            transport,
           }),
         });
         await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
@@ -414,7 +417,10 @@ async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
   });
 }
 
-async function resolveRemoteContext(ctx: CliRunContext, deps: CliDeps): Promise<void> {
+async function resolveRemoteContext(
+  ctx: CliRunContext,
+  transport: CliDaemonTransport,
+): Promise<void> {
   if (ctx.command === 'batch') {
     if (ctx.positionals.length > 0) {
       throw new AppError('INVALID_ARGS', 'batch does not accept positional arguments.');
@@ -435,7 +441,7 @@ async function resolveRemoteContext(ctx: CliRunContext, deps: CliDeps): Promise<
   if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
     const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
       host: ctx.host,
-      transport: createClientDaemonTransport(resolveRunTransport(deps, ctx.host)),
+      transport: createClientDaemonTransport(transport),
     });
     const { materializeRemoteConnectionForCommand } =
       await import('./cli/commands/connection-runtime.ts');
