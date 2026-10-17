@@ -25,7 +25,7 @@ Re-evaluate those files against their remaining edges.
   It introduces no new dependency direction, moves no root composition into a package, and preserves the file's imports.
   If a proposal was infeasible, the row records that.
   No issue is filed to propose it again.
-- A path-keyed rule, for example R13's importer lists, R76's inventory, or R78's scope, describes today's seam.
+- A path-keyed rule, for example R13's importer lists, R76's path-family ban, or R78's scope, describes today's seam.
   It does not prove that a placement is best.
   If a row has only path evidence, mark it "retain for this batch — relocation requires coordinated ownership changes".
   A package cycle rejects the proposed direction.
@@ -157,7 +157,7 @@ They are not independent proof that the placement is optimal.
 | `packages/daemon-contracts/src/device-claim-recovery.ts` | keep (shared-below-both) | The owner-scoped reconciler recovers durable resources from a dead owner's state directory. Daemon `open`/startup and daemonless `device release --stale` both run it. It therefore belongs below both. Runtime recovery may reside in `daemon-contracts` only when both sides run it and root composition supplies only the gateway, per ADR 0019 section 1. The package depends on `capture-kit`. A reverse dependency forms a project-reference cycle through `selectors`. |
 | `src/daemon-policy-file.ts` | moved → `packages/daemon-contracts/src/daemon-policy-file.ts` | This shared daemon/client contract follows #2559 and #3288's `daemon-contracts` declaration. Rank-5 daemon-client dynamically imports it, so the spine requires a home below both. Package extraction supplies that physical home with manifest-owned exports. |
 | `src/daemon.ts` | keep | This is the `internal/daemon` bundle entry. Umbrella §4 keeps composition roots at the root. |
-| `src/platform-runtime-apple-runner-owner.ts` | retain for this batch | This is a `platform-runtime-*` composition seam. R13's exact-importer rule and ADR 0022's R76 inventory key on its path. Relocation requires coordinated changes to both declarations. The rules constrain the move without independently proving placement. |
+| `src/platform-runtime-apple-runner-owner.ts` | retain for this batch | This is a `platform-runtime-*` composition seam. R13's exact-importer rule and ADR 0022's R76 ban on the `src/platform-runtime-*.ts` family key on its path. Relocation requires coordinated changes to both declarations. The rules constrain the move without independently proving placement. |
 | `src/platform-runtime-daemon-lifecycle.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. Relocation is possible only with coordinated changes to those declarations. |
 | `src/platform-runtime-device-boot.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. |
 | `src/platform-runtime-resource-cleanup.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. |
