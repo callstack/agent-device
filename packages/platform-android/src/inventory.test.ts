@@ -77,6 +77,37 @@ test.each([
   },
 );
 
+const EMULATOR_CRASHDATA_BANNER =
+  'INFO    | Storing crashdata in: /tmp/user/emu-crash-34.2.16.db, detection is enabled for process: 98765';
+
+test.each([
+  ['only the crashdata banner', `${EMULATOR_CRASHDATA_BANNER}\n`, []],
+  [
+    'the crashdata banner beside AVD names',
+    `${EMULATOR_CRASHDATA_BANNER}\r\nPixel_9_Pro_XL\r\nwear-os.36\r\n`,
+    ['Pixel_9_Pro_XL', 'wear-os.36'],
+  ],
+] as const)(
+  'Android inventory lists only AVD names when emulator -list-avds prints %s',
+  async (_case, listAvdsStdout, expectedAvds) => {
+    const host = createHost(async (request) => {
+      if (request.executable === 'emulator') return result(listAvdsStdout);
+      if (request.args.join('\0') === 'devices\0-l') return result('List of devices attached\n');
+      throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+    });
+
+    const devices = await createAndroidInventory(host).discover(
+      { androidAvdSelection: 'include-stopped' },
+      scope,
+    );
+
+    assert.deepEqual(
+      devices.map((device) => device.id),
+      expectedAvds,
+    );
+  },
+);
+
 test.each([
   ['exits non-zero', async () => result('', 'error: closed', 1)],
   [

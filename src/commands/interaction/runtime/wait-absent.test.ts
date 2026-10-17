@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
-import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
+import { test, vi } from 'vitest';
+import type {
+  AgentDeviceBackend,
+  BackendCommandContext,
+  BackendSnapshotResult,
+} from '@agent-device/contracts/backend';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createFakeClock } from './__tests__/test-utils/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
+import { abortWith } from './__tests__/test-utils/abort-with.ts';
 
 const SELECTOR = 'label="Removed"';
 
@@ -50,6 +56,31 @@ function absentDevice(
     policy: localCommandPolicy(),
     clock: createFakeClock(),
   });
+}
+
+function cancelledAbsentDevice(params: {
+  firstSnapshot?: BackendSnapshotResult;
+  cancellation: AppError;
+}) {
+  let captures = 0;
+  const captureSnapshot = vi.fn(async (context: BackendCommandContext) => {
+    captures += 1;
+    if (captures === 1 && params.firstSnapshot) return params.firstSnapshot;
+    const signal = context.signal;
+    return await abortWith(signal, params.cancellation);
+  });
+  const clock = { now: () => 0, sleep: async (_durationMs: number) => {} };
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot,
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default' }]),
+    policy: localCommandPolicy(),
+    clock,
+  });
+  return { device, captureSnapshot };
 }
 
 async function waitAbsent(device: ReturnType<typeof createAgentDevice>, timeoutMs = 1000) {
@@ -221,4 +252,130 @@ test('wait absent preserves a final Android unreadable diagnostic when no valid 
     assert.equal(error.details?.readableCaptures, undefined);
     return true;
   });
+});
+
+test('strict wait absent reports capture-stalled when every capture stalls', async () => {
+  vi.useFakeTimers();
+  try {
+    const { device, captureSnapshot } = cancelledAbsentDevice({
+      cancellation: new AppError('COMMAND_FAILED', 'capture cancelled'),
+    });
+    const pending = waitAbsent(device, 20);
+    const failure = assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, WAIT_REASONS.captureStalled);
+      assert.equal(error.details?.captureStalled, true);
+      assert.equal(error.details?.readableCaptures, 0);
+      return true;
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+    await failure;
+    assert.equal(captureSnapshot.mock.calls.length, 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('strict wait absent keeps target-present evidence when a steady-state capture is cancelled', async () => {
+  vi.useFakeTimers();
+  try {
+    const { device, captureSnapshot } = cancelledAbsentDevice({
+      firstSnapshot: snapshot('Removed'),
+      cancellation: new AppError('COMMAND_FAILED', 'capture cancelled'),
+    });
+    const pending = waitAbsent(device, 20);
+    const failure = assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, WAIT_REASONS.targetPresent);
+      assert.equal(error.details?.readableCaptures, 1);
+      assert.equal(error.details?.readinessPhase, undefined);
+      return true;
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+    await failure;
+    assert.equal(captureSnapshot.mock.calls.length, 2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('strict wait absent preserves runner-restart exhaustion over an earlier present capture', async () => {
+  vi.useFakeTimers();
+  try {
+    const { device, captureSnapshot } = cancelledAbsentDevice({
+      firstSnapshot: snapshot('Removed'),
+      cancellation: new AppError('COMMAND_FAILED', 'request cancelled', {
+        runnerRestarted: true,
+        runnerRestartReason: 'runner_readiness_preflight_failed_before_command_send',
+      }),
+    });
+    const pending = waitAbsent(device, 20);
+    const failure = assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted);
+      assert.equal(error.details?.runnerRestarted, true);
+      assert.equal(error.details?.readableCaptures, 1);
+      assert.equal(error.details?.captureStalled, undefined);
+      return true;
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+    await failure;
+    assert.equal(captureSnapshot.mock.calls.length, 2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('strict wait absent keeps runner-restart exhaustion as the deadline reason', async () => {
+  vi.useFakeTimers();
+  try {
+    const { device, captureSnapshot } = cancelledAbsentDevice({
+      cancellation: new AppError('COMMAND_FAILED', 'request cancelled', {
+        runnerRestarted: true,
+        runnerRestartReason: 'runner_readiness_preflight_failed_before_command_send',
+      }),
+    });
+    const pending = waitAbsent(device, 20);
+    const failure = assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted);
+      assert.equal(error.details?.readableCaptures, 0);
+      return true;
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+    await failure;
+    assert.equal(captureSnapshot.mock.calls.length, 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('strict wait absent preserves readiness exhaustion over an earlier present capture', async () => {
+  vi.useFakeTimers();
+  try {
+    const { device, captureSnapshot } = cancelledAbsentDevice({
+      firstSnapshot: snapshot('Removed'),
+      cancellation: new AppError('COMMAND_FAILED', 'request cancelled', {
+        readinessPhase: 'target-discovery',
+      }),
+    });
+    const pending = waitAbsent(device, 20);
+    const failure = assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, WAIT_REASONS.readinessExhausted);
+      assert.equal(error.details?.readinessPhase, 'target-discovery');
+      assert.equal(error.details?.readableCaptures, 1);
+      return true;
+    });
+
+    await vi.advanceTimersByTimeAsync(20);
+    await failure;
+    assert.equal(captureSnapshot.mock.calls.length, 2);
+  } finally {
+    vi.useRealTimers();
+  }
 });

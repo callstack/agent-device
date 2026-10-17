@@ -335,6 +335,36 @@ test('runtime is absent fails closed for a sparse capture and preserves the last
   assert.equal((await sessions.get('default'))?.snapshot?.nodes[0]?.label, 'Initial');
 });
 
+test('runtime is absent fails closed for a quality-less legacy iOS root-only capture', async () => {
+  const legacyRootOnly = makeSnapshotState([{ index: 0, type: 'XCUIElementTypeApplication' }], {
+    backend: 'xctest',
+    producer: 'apple-runner',
+  });
+  const device = createSelectorDevice(legacyRootOnly);
+
+  await assert.rejects(
+    device.selectors.is({
+      session: 'default',
+      predicate: 'absent',
+      selector: 'label="Removed row"',
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'predicate_failed');
+      assert.equal(error.details?.observation, 'sparse');
+      assert.equal(error.details?.matches, 0);
+      assert.deepEqual(error.details?.snapshotQuality, {
+        state: 'sparse',
+        backend: 'tree',
+        reason: 'legacy iOS capture exposed only the application root',
+        reasonCode: 'sparse-tree',
+      });
+      return true;
+    },
+  );
+});
+
 test('runtime is absent fails closed for a truncated capture even with zero matches', async () => {
   const snapshot = makeSnapshotState([]);
   const device = createSelectorDevice(snapshot, {
@@ -439,6 +469,37 @@ test('runtime is admits an upper-case predicate and evaluates it as the normaliz
   assert.equal(text.predicate, 'text');
   assert.equal(text.pass, true);
   assert.equal(text.text, 'Greeting');
+});
+
+test('runtime is reports a mismatched text predicate as a typed command failure', async () => {
+  const device = createSelectorDevice(
+    makeSnapshotState([
+      {
+        index: 0,
+        type: 'XCUIElementTypeButton',
+        identifier: 'account_row',
+        label: 'Apple Account',
+      },
+    ]),
+  );
+
+  await assert.rejects(
+    device.selectors.is({
+      session: 'default',
+      predicate: 'text',
+      selector: 'id=account_row',
+      expectedText: 'Wrong Expected Text',
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.reason, 'predicate_failed');
+      assert.equal(error.details?.predicate, 'text');
+      assert.match(String(error.details?.predicateDetails), /expected="Wrong Expected Text"/);
+      assert.match(String(error.details?.predicateDetails), /actual="Apple Account"/);
+      return true;
+    },
+  );
 });
 
 test('runtime is still refuses a predicate that is not in the vocabulary', async () => {

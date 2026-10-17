@@ -3,7 +3,7 @@
 
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import type { SourceTreeReader } from '../../src/__tests__/eager-import-closure.fixtures.ts';
+import type { SourceTreeReader } from '@agent-device/test-kit';
 import { isProductionSourceFile } from '../layering/tracked-sources.ts';
 
 const WALKED_SOURCE = /^(?:src|packages\/[^/]+\/src)\/.*\.ts$/;

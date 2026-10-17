@@ -184,6 +184,53 @@ test('starts and finishes an Android Perfetto trace', async () => {
   );
 });
 
+test('retries a failed Perfetto pull without cleaning the device trace', async () => {
+  const remotePath = '/data/misc/perfetto-traces/agent-device-app.trace';
+  const capture = { ...androidCapture({ kind: 'perfetto', type: 'trace' }), remotePath };
+  const remoteTraces = new Set<string>();
+  let pullFails = true;
+  const pullFailure = new Error('Failed to pull Android perfetto artifact');
+  androidNative.startAndroidPerfettoTrace.mockImplementation(async () => {
+    remoteTraces.add(remotePath);
+    return capture;
+  });
+  androidNative.stopAndroidPerfettoTrace.mockImplementation(
+    async (_device: DeviceInfo, current: typeof capture, outPath: string) => {
+      if (pullFails) throw pullFailure;
+      expect(remoteTraces.has(current.remotePath)).toBe(true);
+      remoteTraces.delete(current.remotePath);
+      return {
+        ...current,
+        action: 'stop',
+        state: 'stopped',
+        outPath,
+        stoppedAt: 3,
+        durationMs: 2,
+        summary: { packets: 4 },
+      };
+    },
+  );
+  androidNative.cleanupAndroidNativePerfSession.mockImplementation(async (_device, current) => {
+    remoteTraces.delete(current.remotePath);
+  });
+
+  const started = await startAndroidPerfCapture(
+    device,
+    localRuntimeOwner('android'),
+    captureInput({ kind: 'perfetto', mode: 'trace' }),
+  );
+  const handle = started.pendingHandle.transfer();
+
+  await expect(handle.finish()).rejects.toBe(pullFailure);
+  expect(androidNative.cleanupAndroidNativePerfSession).not.toHaveBeenCalled();
+  expect(remoteTraces).toEqual(new Set([remotePath]));
+
+  pullFails = false;
+  await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
+  expect(remoteTraces).toEqual(new Set());
+  expect(androidNative.cleanupAndroidNativePerfSession).not.toHaveBeenCalled();
+});
+
 test('starts, retargets, stops, and reclaims an Apple xctrace capture through one live handle', async () => {
   const capture = appleCapture({ mode: 'trace', template: 'Animation Hitches' });
   appleXctrace.startAppleXctracePerfCapture.mockResolvedValue(capture);

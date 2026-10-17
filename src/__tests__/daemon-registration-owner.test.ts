@@ -10,7 +10,6 @@ import {
   recoverAbandonedDaemonRegistration,
   createOwnedReplayStateDir,
   DAEMON_STARTUP_EXIT_CODES,
-  launchDaemonProcess,
   type DaemonRetirementResult,
   type OwnedReplayStateDir,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
@@ -20,14 +19,18 @@ import {
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readRegisteredDaemonOwnership } from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
-import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
-import { spawnLegacyDaemonFixture } from './daemon-registration-owner.fixtures.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  devicesClientSettings,
+  launchDaemonProcess,
+  spawnLegacyDaemonFixture,
+} from './daemon-registration-owner.fixtures.ts';
 import {
   registeredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
 } from './test-utils/registered-daemon-fixture.ts';
-import { ensureDaemon, resolveClientSettings } from '../daemon-client/daemon-client-lifecycle.ts';
+import { ensureDaemon } from '../daemon-client/daemon-client-lifecycle.ts';
 import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -457,24 +460,12 @@ test('private retirement closes startup admission, joins the actual child and ne
   const ownedStateDir = createOwnedReplayStateDir();
   const paths = ownedStateDir.paths;
   const args = registeredDaemonFixtureArgs(paths, fields);
-  const launch = launchDaemonProcess({
-    env: process.env,
-    paths,
-    args,
-    serverMode: 'socket',
-    ownedStateDir,
-  });
+  const launch = launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir });
   let contender: ReturnType<typeof launchDaemonProcess> | undefined;
   try {
     assert.ok(launch.startTime);
     await waitForFixtureFile(paths.infoPath);
-    contender = launchDaemonProcess({
-      env: process.env,
-      paths,
-      args,
-      serverMode: 'socket',
-      ownedStateDir,
-    });
+    contender = launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir });
     assert.equal((await contender.exited).exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
     const input = {
       paths,
@@ -484,8 +475,7 @@ test('private retirement closes startup admission, joins the actual child and ne
     };
     const pending = stopAndRetireDaemon(input);
     assert.throws(
-      () =>
-        launchDaemonProcess({ env: process.env, paths, args, serverMode: 'socket', ownedStateDir }),
+      () => launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir }),
       (error: { details?: { reason?: string } }) =>
         error.details?.reason === 'daemon_startup_admission_closed',
     );
@@ -512,18 +502,11 @@ test('private retirement retains the directory while an earlier actual startup c
     entry,
     `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(ready)}, 'ready'); setInterval(() => {}, 1000);`,
   );
-  const first = launchDaemonProcess({
-    env: process.env,
-    paths,
-    args,
-    serverMode: 'socket',
-    ownedStateDir,
-  });
+  const first = launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir });
   let second: ReturnType<typeof launchDaemonProcess> | undefined;
   try {
     await waitForFixtureFile(ready);
     second = launchDaemonProcess({
-      env: process.env,
       paths,
       args: registeredDaemonFixtureArgs(paths, fields),
       serverMode: 'socket',
@@ -569,13 +552,7 @@ for (const [failure, reason, expectedSignals] of privateStartupFailures) {
       failure === 'missing-birth'
         ? vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null)
         : undefined;
-    const launch = launchDaemonProcess({
-      env: process.env,
-      paths,
-      args,
-      serverMode: 'socket',
-      ownedStateDir,
-    });
+    const launch = launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir });
     birthProbe?.mockRestore();
     let actualStartTime: string | null = null;
     let exitTimer: ReturnType<typeof setTimeout> | undefined;
@@ -663,7 +640,6 @@ test('private startup completion stays bounded without published birth proof and
   const paths = ownedStateDir.paths;
   const birthProbe = vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null);
   const launch = launchDaemonProcess({
-    env: process.env,
     paths,
     args: registeredDaemonFixtureArgs(paths, fields),
     serverMode: 'socket',
@@ -687,14 +663,7 @@ test('private startup completion stays bounded without published birth proof and
       startupJoinTimeoutMs: 0,
     });
     assert.throws(
-      () =>
-        launchDaemonProcess({
-          env: process.env,
-          paths,
-          args: [],
-          serverMode: 'socket',
-          ownedStateDir,
-        }),
+      () => launchDaemonProcess({ paths, args: [], serverMode: 'socket', ownedStateDir }),
       (error: { details?: { reason?: string } }) =>
         error.details?.reason === 'daemon_startup_admission_closed',
     );
@@ -741,7 +710,6 @@ for (const contents of [
     const evidencePath = `${sessionDir}/repair-tombstone.json`;
     fs.writeFileSync(evidencePath, contents);
     const launch = launchDaemonProcess({
-      env: process.env,
       paths,
       args: registeredDaemonFixtureArgs(paths, fields),
       serverMode: 'socket',
@@ -825,25 +793,11 @@ test('cutover refuses an already-running legacy daemon before signaling or chang
     );
     assert.ok(disposition, 'a new daemon must refuse an occupied legacy file');
     assert.equal(disposition.exitCode, DAEMON_STARTUP_EXIT_CODES.unproven);
-    await assert.rejects(
-      ensureDaemon(
-        resolveClientSettings(
-          {
-            session: 'default',
-            command: 'devices',
-            positionals: [],
-            flags: { stateDir: paths.baseDir },
-          },
-          undefined,
-          createTestHostEnvironment(),
-        ),
-      ),
-      (error: unknown) => {
-        assert.ok(error instanceof AppError);
-        assert.equal(error.details?.reason, 'daemon_registration_unproven');
-        return true;
-      },
-    );
+    await assert.rejects(ensureDaemon(devicesClientSettings(paths.baseDir)), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'daemon_registration_unproven');
+      return true;
+    });
     assert.equal(process.kill(legacy.pid, 0), true);
     assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), metadata);
     assert.equal(fs.readFileSync(paths.lockPath, 'utf8'), lock);
@@ -951,7 +905,6 @@ test.for(['different pid', 'different birth', 'joined child'] as const)(
     const paths = ownedStateDir.paths;
     const probe = vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null);
     const launch = launchDaemonProcess({
-      env: process.env,
       paths,
       args: registeredDaemonFixtureArgs(paths, fields),
       serverMode: 'socket',

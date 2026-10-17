@@ -2,7 +2,7 @@ import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { eagerClosureOf } from '../__tests__/eager-import-closure.fixtures.ts';
+import { eagerClosureOf } from '@agent-device/test-kit';
 
 const { captureLinuxSurfaceSnapshot, captureMacOsSurfaceSnapshot } = vi.hoisted(() => ({
   captureLinuxSurfaceSnapshot: vi.fn(),

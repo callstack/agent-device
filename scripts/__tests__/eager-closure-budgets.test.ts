@@ -6,7 +6,7 @@ import {
   eagerClosureGraphOf,
   statementTextsOf,
   topLevelStatementWeightsOf,
-} from '../../src/__tests__/eager-import-closure.fixtures.ts';
+} from '@agent-device/test-kit';
 import {
   baseProductionPathOf,
   createCommittedSourceTree,
@@ -45,7 +45,7 @@ import {
  * ADR-0019 requires platform-package façades to stay implementation-lazy and is explicit that a
  * startup threshold alone is not a substitute for preserving the loading shape: "the tracking
  * issue owns the exact probe and planted-red procedure." #1950 built the walker this file reuses
- * (`src/__tests__/eager-import-closure.fixtures.ts`, AST-level: static value edges plus top-level
+ * (`@agent-device/test-kit`, AST-level: static value edges plus top-level
  * dynamic
  * imports, type-only erased) and proved the planted-red procedure on one file. This is that
  * probe, generalized to every workspace-package entry surface plus designated hub modules, and

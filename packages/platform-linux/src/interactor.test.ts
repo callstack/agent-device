@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { createLinuxInteractor } from './interactor.ts';
-import { middleClickLinux, pressLinux, rightClickLinux } from './index.ts';
+import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { middleClickLinux, pressLinux, rightClickLinux, swipeLinux } from './index.ts';
 
 vi.mock('./index.ts', () => ({
   backLinux: vi.fn(),
@@ -36,4 +37,16 @@ test('Linux owns alternate buttons while the runtime binder owns primary series'
   assert.deepEqual(vi.mocked(rightClickLinux).mock.calls, [[10, 20]]);
   assert.deepEqual(vi.mocked(middleClickLinux).mock.calls, [[30, 40]]);
   assert.equal(vi.mocked(pressLinux).mock.calls.length, 0);
+});
+
+test('Linux executes a planned fling as one drag with the resolved duration', async () => {
+  const plan = buildGesturePlan(
+    { intent: 'fling', from: { x: 10, y: 20 }, to: { x: 110, y: 20 } },
+    { x: 0, y: 0, width: 200, height: 200 },
+    'linux',
+  );
+
+  await createLinuxInteractor().performGesture!(plan);
+
+  assert.deepEqual(vi.mocked(swipeLinux).mock.calls, [[10, 20, 110, 20, 100]]);
 });
