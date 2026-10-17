@@ -97,6 +97,8 @@ type ProviderScenarioDependencies = Partial<Omit<DaemonRuntimeDeps, 'requestRout
     providerRuntimes?: readonly ProviderDeviceRuntime[];
     platformRuntime?: ProviderScenarioPlatformRuntime;
     leaseTtlMs?: number;
+    /** Settings the daemon's host reads, on top of the isolated defaults. */
+    env?: Readonly<Record<string, string>>;
   };
 
 export async function createProviderScenarioHarness(
@@ -114,6 +116,7 @@ export async function createProviderScenarioHarness(
     AGENT_DEVICE_CLAIMS_DIR: process.env.AGENT_DEVICE_CLAIMS_DIR ?? path.join(testRoot, 'claims'),
     AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
     AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '3600000',
+    ...deps.env,
   };
   const {
     deviceInventoryProvider,
@@ -122,6 +125,7 @@ export async function createProviderScenarioHarness(
     platformRuntime,
     providerRuntimes,
     leaseTtlMs,
+    env: _env,
     requestPlatformProviders: configuredRequestPlatformProviders,
     androidAdbProvider,
     appleRunnerProvider,
