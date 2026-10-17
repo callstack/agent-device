@@ -127,10 +127,11 @@ async function replaceIncompatible(
   }
   const outcome = await quiesceOrRetireUnresponsive(info, settings);
   if (outcome === 'gone') return { kind: 'judge-again' };
-  if (outcome === 'draining') await awaitDrainedDaemon(info, startTime, settings);
+  const drained =
+    outcome === 'draining' ? await awaitDrainedDaemon(info, startTime, settings) : outcome;
   // A daemon force-retired for answering nothing is reported like an unreachable one: it was never
   // shown to be idle, so "incompatible" would overstate what happened to it.
-  const reason = outcome === 'retired' ? 'missing' : 'incompatible';
+  const reason = drained === 'retired' ? 'missing' : 'incompatible';
   return await start(settings, onStart, reason, daemonIdentityOf(info));
 }
 
@@ -149,7 +150,7 @@ async function awaitDrainedDaemon(
   info: DaemonInfo,
   startTime: string,
   settings: DaemonClientSettings,
-): Promise<void> {
+): Promise<'left' | 'retired'> {
   const { exited } = await waitForDaemonExit(
     { pid: info.pid, startTime },
     { timeoutMs: DRAIN_DEADLINE_MS, pollMs: DRAIN_POLL_MS },
@@ -160,11 +161,11 @@ async function awaitDrainedDaemon(
       paths: settings.paths,
       observed: { pid: info.pid, startTime },
     });
-    return;
+    return 'left';
   }
   if (await answersLivenessProbe(info)) throw await daemonDrainTimeoutError(info, settings);
   const retirement = await stopDaemonForTakeover(info, settings.paths, 'force');
-  if (retirement.status !== 'retained') return;
+  if (retirement.status !== 'retained') return 'retired';
   // The identity check could not prove the live process is the daemon it observed (an embedded host
   // runs no daemon entry; a start time or command line may also be unreadable), so nothing was
   // signaled.

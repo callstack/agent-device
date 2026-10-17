@@ -1,6 +1,7 @@
 import type { DaemonIdentity } from '@agent-device/contracts/client';
 import {
   DAEMON_QUIESCE_REASONS,
+  resolveDaemonPaths,
   type DaemonQuiesceCensus,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
@@ -57,12 +58,20 @@ export function daemonContendedError(): AppError {
 }
 
 export function daemonNotRunningError(stateDir: string, registered?: DaemonInfo): AppError {
+  const stateDirFlag =
+    stateDir === resolveDaemonPaths(undefined).baseDir
+      ? ''
+      : ` --state-dir ${shellQuoteIfNeeded(stateDir)}`;
   return new AppError('COMMAND_FAILED', 'No daemon is running for this state directory.', {
     reason: DAEMON_LIFECYCLE_REASONS.notRunning,
     stateDir,
     ...(registered ? { daemon: daemonIdentityOf(registered) } : {}),
-    hint: `Start one with a local agent-device command that uses the daemon (devices, for example), or with ensureDaemon({ stateDir: ${JSON.stringify(stateDir)} }) from the SDK, before attaching.${registered ? ` The registered daemon (pid ${registered.pid}) does not answer; ${daemonStopCommand(stateDir)} clears it.` : ''}`,
+    hint: `Start one with a local agent-device command that uses the daemon (agent-device devices${stateDirFlag}, for example), or with ensureDaemon({ stateDir: ${JSON.stringify(stateDir)} }) from the SDK, before attaching.${registered ? ` The registered daemon (pid ${registered.pid}) does not answer; ${daemonStopCommand(stateDir)} clears it.` : ''}`,
   });
+}
+
+export function isDaemonNotRunningError(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === DAEMON_LIFECYCLE_REASONS.notRunning;
 }
 
 export async function daemonIncompatibleError(params: {
