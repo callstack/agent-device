@@ -2,36 +2,43 @@
 
 ## Status
 
-Accepted (2026-10-07). Spike for #3278 (umbrella #3276). Every measurement is pinned to `d9959f510`,
-whose production tree is `7dda0c2bf`'s; the harness lives only at that commit
-([Deletion](#deletion)). No rule moves.
+Accepted (2026-10-07). This evaluation addresses #3278 under umbrella #3276.
+Every measurement refers to `d9959f510`, with the same production tree as `7dda0c2bf`.
+The harness exists only at that commit; see [Deletion](#deletion).
+No rule moves.
 
 ## Rules at a glance
 
-- R2, R4, R5, R6, R77, R78, R14 and R71 stay on the current engine. Neither dependency-cruiser 18.5
-  nor fallow 3.32 replaces them.
-- Graph-based checks share one normalized import model, today built by `parseImports` and
-  `resolveImportEdges`. Do not enforce a subset of them from a second, disagreeing import graph.
-- The model's implementation remains replaceable. Besides these eight rules, it must supply
-  resolved edges with value, type-only and dynamic kinds to R9/R10, R19, R73–R76 and
-  `scripts/depgraph/`; named symbols to R75; and raw specifier sites to R11 and R13. Eleven other
-  registry entries read source ASTs or text only, and one reads paths only.
-- Fix the demonstrated parser gap in #3293: `parseImports` misses TypeScript `import('x').T` type
-  positions (9 file pairs). It already parses an OXC AST for dynamic imports but scans static
-  imports with regexes; read both from that AST, `TSImportType` included, keeping symbol and
-  edge-kind semantics, rather than adding a second extractor.
-- Do not upgrade fallow to 3.x for `boundaries`; revisit on a [trigger](#revisit-triggers).
+- R2, R4, R5, R6, R77, R78, R14, and R71 retain the current engine.
+  Neither dependency-cruiser 18.5 nor fallow 3.32 replaces them.
+- Graph-based checks share one normalized import model, currently from `parseImports` and `resolveImportEdges`.
+  Do not enforce some checks through a second, inconsistent graph.
+- The model implementation remains replaceable.
+  In addition to these eight rules, it must supply these outputs:
+  - Resolved value, type-only, and dynamic edges for R9/R10, R19, R73–R76, and `scripts/depgraph/`.
+  - Named symbols for R75.
+  - Raw specifier sites for R11 and R13.
+  Eleven other registry entries read only source ASTs or text.
+  One reads only paths.
+- Fix #3293's demonstrated parser gap: `parseImports` misses TypeScript `import('x').T` type positions (nine file pairs).
+  `parseImports` already uses an OXC AST for dynamic imports but regexes for static imports.
+  Read both from that AST, including `TSImportType`.
+  Preserve symbol and edge-kind semantics.
+  Do not add a second extractor.
+- Do not upgrade fallow to 3.x for `boundaries`.
+  Revisit on a [trigger](#revisit-triggers).
 
 ## Measured
 
-The edge-set, parity, clean-tree and runtime numbers are the output of the spike harness run at
-`d9959f510`. Retrieve it with `git show d9959f510:scripts/layering/boundary-engine-spike.ts`, after
-`git fetch origin pull/3286/head` if the commit is not local; usage is in its header. It derives
-both engines' R5 and R6 rules from `model.ts`'s `RANKED_ZONES` and `zoneRank`, writes the other
-rules' paths inline (R77's from `RUNNER_SUBTREE`), runs only on exactly the tracked production tree
-(1,837 files, 41 zones), and gives recorded R6 and R78 edges to each engine's known-violations
-baseline. The deletion table and the `.fallowrc.json` field count are counts of files at the same
-commit.
+The harness run at `d9959f510` supplies edge-set, parity, clean-tree, and runtime measurements.
+If the commit is absent locally, first run `git fetch origin pull/3286/head`.
+Retrieve the harness with `git show d9959f510:scripts/layering/boundary-engine-spike.ts`.
+Its header gives usage.
+It derives both engines' R5/R6 rules from `model.ts`'s `RANKED_ZONES` and `zoneRank`.
+It declares other rules' paths inline, with R77 paths from `RUNNER_SUBTREE`.
+It runs only on exactly the tracked production tree: 1,837 files and 41 zones.
+It supplies recorded R6/R78 edges to each engine's known-violations baseline.
+The deletion table and the `.fallowrc.json` field count are counts of files at that commit.
 
 ### Edge-set diff against `resolveImportEdges`
 
@@ -43,21 +50,29 @@ commit.
 | kind disagreement | — | 46 pairs | 0 on value vs type |
 | dynamic kind | yes | yes, 46 pairs mislabelled | not represented |
 
-The 9 extra pairs are `import('./x').T` type positions custom misses; both engines are right.
+The nine extra pairs are `import('./x').T` type positions missed by the custom engine.
+Both replacement engines correctly detect them.
 
-The umbrella's 3.1.1 cross-check missed 88 dynamic and type-only edges; 18.5 misses none but
-mislabels 46 pairs (33 dynamic → type, 8 dynamic+type → type, 5 dynamic+value → value): its
-hardcoded `getDependencyUniqueKey` dedupes on `(specifier, moduleSystem, type-only flag)`, so
-`typeof import('./x').f` and `await import('./x')` keep whichever comes first.
+The umbrella's 3.1.1 cross-check missed 88 dynamic and type-only edges.
+Version 18.5 misses none of these edges but mislabels 46 pairs:
 
-fallow's value-versus-type split matches custom on every pair, with no dynamic kind. Its boundary
-check follows `export type *` barrels to the declaring module: the import
-`src/commands/cli-runner.ts → src/agent-device-client.ts` counts as `commands → client`, one more R6
-finding. Clean tree: custom 0, depcruise 10 (3 R6 survivors, 7 recorded R78 edges), fallow 11.
+- 33 dynamic → type.
+- 8 dynamic+type → type.
+- 5 dynamic+value → value.
+
+Its hardcoded `getDependencyUniqueKey` deduplicates by `(specifier, moduleSystem, type-only flag)`.
+Thus, `typeof import('./x').f` and `await import('./x')` retain whichever appears first.
+
+Fallow agrees with custom on value/type classification for every pair but has no dynamic kind.
+Its boundary check follows `export type *` barrels to the declaring module.
+`src/commands/cli-runner.ts → src/agent-device-client.ts` therefore counts as `commands → client`. This adds one more R6 finding.
+Clean-tree findings are custom 0, depcruise 10, and fallow 11.
+Depcruise's ten are three R6 survivors and seven recorded R78 edges.
 
 ### Planted-violation parity
 
-`pass` rows are the closest negative custom admits; ✗ is a missed `flag` or a flagged `pass`.
+`pass` rows are the nearest negative cases that custom permits.
+✗ means a missed `flag` or incorrectly flagged `pass`.
 
 | Plant | Expect | custom | depcruise | fallow |
 | --- | --- | --- | --- | --- |
@@ -85,17 +100,22 @@ finding. Clean tree: custom 0, depcruise 10 (3 R6 survivors, 7 recorded R78 edge
 | R14 non-TS file under `src/utils` | flag | ✓ | ✗ | ✗ |
 | R71 file under `src/replay` | flag | ✓ | ✓ | ✓ generic |
 
-_R78 no longer records edges: the client's direct imports are a flat ban in `LOGICAL_MODULE_POLICIES` (R10), and R78 now walks reachability from the CLI entries, so the "unrecorded" and "stale" rows describe the spike at its date, not the rules as shipped._
+_R78 no longer records edges._
+_The `LOGICAL_MODULE_POLICIES` client-import rule in R10 now prohibits direct daemon imports._
+_R78 follows reachability from CLI entries._
+_The "unrecorded" and "stale" rows describe the dated evaluation, not shipped rules._
 
-Custom prints `file:line`, rule id and hint (`report()` in `scripts/layering/check.ts`); depcruise
-the rule name and an authored comment, without a line. "Generic" means a fallow zone pair
-(`core → cli`) and a docs link, with no rule id or hint; R14 and R71 surface as "matches no zone".
-fallow's R77 rule pack carries an id, message and line. On the stale row, depcruise reports
-`summary.baselineStale: 1` and exits 0; fallow's `--fail-on-stale-baseline` exits 1.
+Custom `report()` in `scripts/layering/check.ts` prints `file:line`, rule ID, and hint.
+Depcruise prints rule name and an authored comment without a line.
+"Generic" denotes a fallow zone pair, such as `core → cli`, and a documentation link without rule ID or hint.
+R14/R71 appear as "matches no zone".
+Fallow's R77 rule pack supplies an ID, message, and line.
+For the stale row, depcruise reports `summary.baselineStale: 1` and exits 0.
+Fallow's `--fail-on-stale-baseline` exits 1.
 
 ### Runtime
 
-Medians of 5 runs after a warm-up, on a shared host (load average 9–17):
+These are medians from five runs after warm-up on a shared host with load average 9–17:
 
 | | custom | depcruise | fallow |
 | --- | --- | --- | --- |
@@ -105,8 +125,8 @@ Medians of 5 runs after a warm-up, on a shared host (load average 9–17):
 
 ### Lines deletable
 
-Rule plus test lines a full migration would delete. The resolver and the R4/R5/R6 pair helpers that
-`scripts/depgraph/` reads stay either way.
+A complete migration would delete the rule and test lines below.
+The resolver and the R4/R5/R6 pair helpers that `scripts/depgraph/` reads remain with either engine.
 
 | Rule | Code deleted | Lines | depcruise parity | fallow parity |
 | --- | --- | --- | --- | --- |
@@ -119,54 +139,71 @@ Rule plus test lines a full migration would delete. The resolver and the R4/R5/R
 | R14, R71 | `retired-paths-policy.ts` | 218 | TS only (R14 gap) | TS only, generic |
 | shared | registry, imports, success line in `check.ts` | ≈25 | | |
 
-About 1,224 lines, half of them tests; a migration adds a generator like the harness's
-`depcruiseConfig` and helpers (122 lines at `d9959f510`). An exact-edge R6 baseline also changes
-policy: it rejects swapping one inversion for another within a pair, which the per-pair count
-ratchet admits.
+Approximately 1,224 lines are deletable, half in tests.
+Migration adds a generator such as harness `depcruiseConfig` and helpers, which total 122 lines at `d9959f510`.
+An exact-edge R6 baseline also changes policy.
+It prohibits replacement of one inversion with another inside a pair.
+The current per-pair count ratchet permits that replacement.
 
 ## Decision
 
-Retain the current engine because the evaluated replacements do not provide sufficient semantic
-parity and net simplification. Graph-based checks share one normalized import model; its
-implementation remains replaceable. Continue replacing generic algorithms and compiler-enforceable
-rules with maintained tools. Fix the demonstrated parser gap.
+Retain the current engine, because the evaluated replacements lack sufficient semantic parity and net simplification.
+Graph-based checks share one normalized import model.
+Its implementation remains replaceable.
+Continue replacement of generic algorithms and compiler-enforceable rules with maintained tools.
+Fix the demonstrated parser gap.
 
-The semantic blockers are the correctness gaps in the parity table:
+The parity table identifies these correctness blockers:
 
-- **dependency-cruiser** deduplicates a file's dependencies on a key that omits the dynamic and
-  `import()`-type kinds. That mislabels 46 pairs and lets a lazy `import()` hide behind an
-  `import()` type of the same target, the R77 miss.
-- **fallow** has no dynamic-import kind, so it flags the lazy seams R5 admits and misses R77's
-  `import()`. Its rule packs skip files no entry point reaches, so it also misses an orphan runner
-  module.
+- **Dependency-cruiser** deduplicates without dynamic or `import()`-type kinds in the key.
+  It mislabels 46 pairs.
+  A same-target `import()` type can hide a lazy `import()`, which causes the R77 miss.
+- **Fallow** lacks a dynamic-import kind.
+  It flags the lazy seams that R5 permits and misses R77 `import()`.
+  Rule packs skip unreachable files and therefore miss an orphan runner module.
 
-Simplification is limited. dependency-cruiser matches custom on R2, R4, R5 and R71, where migration
-would delete about 430 lines. The shared model stays for its other consumers, so the gate would read
-two import graphs that disagree.
+Simplification is limited.
+Dependency-cruiser matches custom for R2, R4, R5, and R71, which would delete approximately 430 lines.
+Other consumers still need the shared model.
+The gate would therefore read two inconsistent graphs.
 
-The rest are migration costs, which would not decide the question on their own:
+These additional migration costs do not independently decide the outcome:
 
-- dependency-cruiser needs `typescript@<7` or `@swc/core` beside TypeScript 7 (+1.6 s), and a
-  wrapper that fails on `summary.baselineStale`. Its diagnostics carry no line.
-- fallow 3.x rejects the 73 `comment` fields in `.fallowrc.json`, and its boundary findings carry no
-  rule id or hint. It adds no measurable time and has the best stale gate.
-- R14 and R71 are filesystem-placement policies. A non-TS path under `src/utils` needs a path check
-  with either engine; that is not a failure of an import engine.
+- Dependency-cruiser needs `typescript@<7` or `@swc/core` beside TypeScript 7, with +1.6 s runtime.
+  It needs a wrapper that fails on `summary.baselineStale`.
+  Diagnostics lack a line.
+- Fallow 3.x rejects 73 `comment` fields in `.fallowrc.json`.
+  Boundary findings lack a rule ID and hint.
+  It adds no measurable runtime and provides the best stale-baseline gate.
+- R14/R71 govern filesystem placement.
+  Both engines still need a path check for non-TS paths under `src/utils`.
+  This is not an import-engine failure.
 
 ## Revisit triggers
 
-- dependency-cruiser keys deduplication on the dependency type.
-- fallow boundaries gain a dynamic-import kind, and its rule packs cover files no entry point
-  reaches.
-- An engine can supply the shared import model above to the existing consumers with less total
-  machinery than `parseImports` and `resolveImportEdges`. The source-only AST checks do not have to
-  change first.
+- Dependency-cruiser includes dependency type in its deduplication key.
+- Fallow boundaries gain a dynamic-import kind and rule packs cover unreachable files.
+- An engine can supply the shared import model above to the existing consumers with less total machinery than `parseImports` and `resolveImportEdges`.
+  Source-only AST checks do not need to change first.
 
 ## Deletion
 
-The harness is not in the tree. It imports internal symbols from six layering modules (`check.ts`,
-`model.ts`, `package-boundaries.ts`, `ratchet-reference.ts`, `apple-runner-host-port-policy.ts`,
-`tracked-sources.ts`), and no gate would keep it compiling: `tsconfig.json` does not include
-`scripts/layering/`, and fallow ignores it. The change that evaluates a revisit trigger retrieves
-the harness from `d9959f510`, ports it to the internals of its own tree, re-runs it, updates the
-tables here, and deletes any migrated rule's code listed in the deletion table.
+The harness is absent from the tree.
+It imports internals from six layering modules:
+
+- `check.ts`
+- `model.ts`
+- `package-boundaries.ts`
+- `ratchet-reference.ts`
+- `apple-runner-host-port-policy.ts`
+- `tracked-sources.ts`
+
+No gate would verify that it still compiles.
+`tsconfig.json` does not include `scripts/layering/`, and fallow ignores it.
+A change that evaluates a revisit trigger follows this sequence:
+
+1. Retrieve the harness from `d9959f510`.
+2. Adapt it to the current tree's internals.
+3. Run it again.
+4. Update these tables.
+5. Delete migrated rule code listed in the deletion table.

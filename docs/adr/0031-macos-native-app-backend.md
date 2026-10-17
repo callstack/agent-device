@@ -2,96 +2,118 @@
 
 ## Status
 
-Accepted (2026-10-03). Opt-in; XCTest stays the default app-session backend. Evidence gap: pointer
-event delivery was re-measured on 2026-10-05 (#3213); Electron, Catalyst, and wheel delivery with
-window fields are unmeasured.
+Accepted (2026-10-03). Native is opt-in; XCTest remains the default app-session backend.
+Pointer event delivery was measured again on 2026-10-05 (#3213).
+Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
 
 ## Rules at a glance
 
-1. `AGENT_DEVICE_MACOS_APP_BACKEND` selects the backend for macOS `app` sessions: `xctest`
-   (default) or `native`. It is a daemon setting read through `readMacOsAppBackend`: once by the
-   Apple runtime owner, on its first macOS device, and once per macOS interactor. Other Apple
-   devices never read it. An unknown value fails macOS sessions with `INVALID_ARGS`, never a
-   silent fallback.
-2. `macOsSurfaceBackend(surface, appBackend)` in `packages/contracts/src/session-surface.ts` is the
-   one routing decision. With `native`, the `app` surface is helper-routed exactly like
-   `frontmost-app`, `desktop`, and `menubar`.
-3. A native daemon never starts XCTest on macOS. `macOsNativeBackendFacts` refuses every macOS
-   operation only the runner serves (recording, `prepare`, `back`, press and hold, gestures and
-   their viewport) at admission, for every macOS session, with `UNSUPPORTED_OPERATION` and
-   `reason: 'unsupported-device-backend'`, the reason the physical-iOS XCTest backend uses.
-   `macOsNativeAppInteractor` is assembled member by member, so no runner-backed member reaches
-   it; an action that names no app is refused rather than handed to the runner.
-4. Pointer actions are accessibility actions only: `AXPress`, focus, value, selected text, or a
-   scroll bar value. Press and hold is refused at admission; double, secondary, and middle clicks
-   are refused by the interactor before the helper runs. A press or fill with no pressable
-   element, or a scroll with no settable scroll bar, is refused by the helper and carries its
-   `helperReason` under the same `reason`; that vocabulary is pinned by
-   `contracts/fixtures/macos-native-helper-outcomes.json`. Only keyboard text falls back to events
-   posted to the app's process.
-5. Snapshots of a Chromium-based session app (one shipping `chrome_100_percent.pak`) enable its
-   accessibility tree (`AXManualAccessibility`, else `AXEnhancedUserInterface`) before traversal.
-   Only the snapshot that turns the tree on waits for it (up to 1 s); a tree that does not
-   populate adds a snapshot warning. The tree stays on for the app's lifetime, as for any
-   assistive client. The app surface walks up to 48 levels deep and reports a deeper tree as
-   truncated; other helper surfaces keep 12.
-6. Screenshots capture the session app's front window by itself through ScreenCaptureKit.
+1. `AGENT_DEVICE_MACOS_APP_BACKEND` selects `xctest` (default) or `native` for macOS `app` sessions.
+   `readMacOsAppBackend` reads this daemon setting once for the Apple runtime owner's first macOS device and once per macOS interactor.
+   Other Apple devices never read it.
+   Unknown values fail macOS sessions with `INVALID_ARGS`, without silent fallback.
+2. `macOsSurfaceBackend(surface, appBackend)` in `packages/contracts/src/session-surface.ts` owns the single routing decision.
+   With `native`, the `app` surface is helper-routed exactly like `frontmost-app`, `desktop`, and `menubar`.
+3. A native daemon never starts XCTest on macOS.
+   For every macOS session, `macOsNativeBackendFacts` refuses every runner-only operation at admission:
+   - Recording.
+   - `prepare`.
+   - `back`.
+   - Press and hold.
+   - Gestures and their viewport.
+   Refusal uses `UNSUPPORTED_OPERATION` with `reason: 'unsupported-device-backend'`, as the physical-iOS XCTest backend does.
+   `macOsNativeAppInteractor` is assembled member by member, so no runner-backed member reaches it.
+   Actions without a named app are refused instead of sent to the runner.
+4. Pointer actions use only accessibility: `AXPress`, focus, value, selected text, or scroll bar value.
+   Admission refuses press and hold.
+   Before helper execution, the interactor refuses double, secondary, and middle clicks.
+   The helper refuses press/fill without a pressable element and scroll without a settable scroll bar.
+   It supplies `helperReason` under the same `reason`.
+   `contracts/fixtures/macos-native-helper-outcomes.json` pins this vocabulary.
+   Only keyboard text falls back to events posted to the app process.
+5. Before traversal, snapshots enable Chromium session-app accessibility through `AXManualAccessibility`, or `AXEnhancedUserInterface` if necessary.
+   A shipped `chrome_100_percent.pak` identifies these apps.
+   Only the snapshot that enables the tree waits for it, for at most 1 s.
+   If the tree does not populate, the snapshot adds a warning.
+   The tree remains enabled for the app lifetime, as with any assistive client.
+   App-surface traversal walks at most 48 levels deep and reports deeper trees as truncated.
+   Other helper surfaces retain 12 levels.
+6. Screenshots capture only the session app's front window through ScreenCaptureKit.
 
 ## Context
 
-The XCTest runner drives a macOS app through XCUIApplication, which puts the host in Automation
-Mode: a system overlay is shown and the runner moves the shared pointer. The macOS helper already
-read the accessibility tree for helper surfaces, and the session snapshot vocabulary is the same,
-so an app session can be served without a test session while the app stays behind the user's
-windows.
+XCTest drives a macOS app through XCUIApplication and puts the host in Automation Mode.
+Automation Mode shows a system overlay.
+The runner moves the shared pointer.
+The macOS helper already reads accessibility trees for helper surfaces with the same session snapshot vocabulary.
+It can therefore serve an app session without a test session while the app remains behind the user's windows.
 
 ## Decision details
 
-**Pointer delivery.** Events posted to a process with `CGEventPostToPid` were measured against
-Calculator (SwiftUI): mouse events were dropped whether the app was frontmost or in the background,
-and wheel events were dropped in the background, while every post reported success. Those events
-named no window. A re-measurement against a background AppKit, SwiftUI, and WKWebView fixture
-(#3213) found the window fields decide delivery, not the API: with the target window number in
-event field 51 and either field 58 or a window-local location (`CGEventSetWindowLocation`), the
-public `CGEventPostToPid` delivered click, double-click (click state in field 1), and secondary
-click to all three, 54 of 54, without activating the app or changing the frontmost app. Fields 51
-and 58 are undocumented. Drags and WKWebView button clicks were delivered only after a private
-focus-without-raise activation. Keyboard events were accepted by Calculator and by Electron apps in
-the background. A dropped post still reports success, and a fallback that cannot be observed to
-work would turn "nothing happened" into success, so pointer actions have no event fallback until
-an event path verifies its outcome.
+**Pointer delivery.**
+Initial `CGEventPostToPid` measurements used Calculator (SwiftUI) without window fields.
+Mouse events were dropped in foreground and background.
+Wheel events were dropped in background.
+Every post still reported success.
 
-**Target resolution.** The helper acts only on a point inside one of the session app's own on-screen
-windows (its menus and sheets included) and never on its menu bar, whose Apple menu acts for the whole Mac
-(Sleep, Lock Screen, Recent Items); other points are refused with `no-accessible-target`. It
-hit-tests inside the session app (other apps' windows above it do not answer) and walks at most four ancestors for a text input or a pressable control role.
-Chromium answers a hit test with wrapper groups that all claim `AXPress`, so when the chain names
-no control the helper picks the smallest such element whose frame contains the point, searching
-only the window the hit landed in (the app's front on-screen window when the hit names none). A
-group is pressed only when no control contains the point. Responses name the window acted in
-(`windowTitle`) when the window has an accessibility title. This resolves the same point the daemon computed from the snapshot node; the
-daemon dispatch paths and their ADR 0011 guarantees are unchanged.
+A second background measurement used AppKit, SwiftUI, and WKWebView fixtures (#3213).
+Window fields, not the API choice, determined delivery.
+The target window number occupied event field 51.
+Either field 58 or window-local `CGEventSetWindowLocation` supplied the remaining context.
+Public `CGEventPostToPid` delivered clicks, double-clicks with field 1 click state, and secondary clicks to all three fixtures.
+All 54 of 54 cases succeeded without app activation or frontmost-app change.
+Fields 51 and 58 are undocumented.
+Drags and WKWebView button clicks arrived only after private focus-without-raise activation.
+Calculator and Electron accepted background keyboard events.
 
-**Pointer dispatch, not element identity.** The daemon dispatches every platform by point, and
-the occlusion, offscreen, and parent-owned touch-point guarantees of ADR 0011 are decided on that
-point. Sending an element identity instead would be a new dispatch path with its own guarantee
-row, and an `AXUIElement` cannot outlive the one-shot helper process that resolved it, so an
-identity would be a tree path re-resolved against a tree that may have changed.
+A dropped post still reports success.
+An unverified event fallback would therefore report success when no action occurred.
+Pointer actions have no event fallback until an event path verifies its outcome.
 
-**Ghost cursor.** Each helper action draws its own pointer, glides onto the target from a short
-fixed offset, and pulses on delivery, so a person can follow the agent without losing the real
-pointer. It costs about 0.3 s per action and keeps no state between helper processes; a persistent
-pointer would need a long-lived helper. `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` disables it.
+**Target resolution.**
+The helper acts only inside the session app's own on-screen windows, including menus and sheets.
+It never acts on the app menu bar.
+The Apple menu affects the complete Mac through Sleep, Lock Screen, and Recent Items.
+Other points are refused with `no-accessible-target`.
+The helper hit-tests only the session app.
+Other apps' overlaid windows do not answer.
+It traverses at most four ancestors for a text input or pressable control role.
+
+Chromium hit tests return wrapper groups that all claim `AXPress`.
+If the chain names no control, the helper selects the smallest such element whose frame contains the point.
+The search covers only the hit window.
+If the hit names no window, it uses the app's front on-screen window.
+A group is pressed only if no control contains the point.
+If the window has an accessibility title, the response reports it as `windowTitle`.
+This resolves the same point computed from the snapshot node.
+Daemon dispatch paths and their ADR 0011 guarantees remain unchanged.
+
+**Pointer dispatch, not element identity.**
+Daemon dispatch uses points on every platform.
+ADR 0011 occlusion, offscreen, and parent-owned touch-point guarantees apply to that point.
+Element identity would create a new dispatch path with its own guarantee row.
+An `AXUIElement` cannot outlive the one-shot helper that resolves it.
+An identity would therefore be a tree path resolved again against a possibly changed tree.
+
+**Ghost cursor.**
+Each helper action draws a separate pointer.
+It moves to the target from a short fixed offset and pulses on delivery.
+A person can follow the agent without losing the real pointer.
+This costs approximately 0.3 s per action and retains no state between helper processes.
+A persistent pointer would require a long-lived helper.
+`AGENT_DEVICE_MACOS_GHOST_CURSOR=0` disables the ghost cursor.
 
 ## Rejected alternatives
 
-- **Suppressing Automation Mode.** `automationmodetool` removes the authentication prompt, not the
-  overlay, and the runner still owns the pointer.
-- **Private SkyLight event delivery** (`SLEventPostToPid`, focus-without-raise). Posting through
-  `SLEventPostToPid` delivered nothing the same fields did not deliver through the public
-  `CGEventPostToPid` (#3213). Focus-without-raise (`SLPSPostEventRecordTo`) made the target
-  AppKit-active while the frontmost app kept the user's keystrokes, and it was the only way drags
-  reached the fixture, but it is private API that can break with any macOS release.
-- **Native by default.** The accessibility path cannot express drags, holds, or double-clicks, and
-  apps with sparse accessibility trees still need the runner. Defaults change only with coverage
-  evidence across app frameworks.
+- **Suppress Automation Mode.**
+  `automationmodetool` removes the authentication prompt, not the overlay.
+  The runner still controls the pointer.
+- **Private SkyLight events through `SLEventPostToPid` or focus-without-raise.**
+  `SLEventPostToPid` delivered no additional events beyond public `CGEventPostToPid` with the same fields (#3213).
+  Focus-without-raise through `SLPSPostEventRecordTo` made the target AppKit-active while the frontmost app retained user keystrokes.
+  Only this approach delivered drags to the fixture.
+  However, the private API can break in any macOS release.
+- **Native by default.**
+  Accessibility cannot express drags, holds, or double-clicks.
+  Apps with sparse accessibility trees still require the runner.
+  Defaults change only with coverage evidence across app frameworks.

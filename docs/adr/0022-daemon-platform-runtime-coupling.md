@@ -2,147 +2,162 @@
 
 ## Status
 
-Accepted (2026-09-06). Implements the audit deliverables of issue #2278. The classification
-inventory and the structural no-regrowth checks are gate-enforced; this ADR records the decisions
-and points at the gates rather than restating the inventory.
+Accepted (2026-09-06). This ADR implements issue #2278's audit deliverables.
+Gates enforce the classification inventory and structural no-regrowth checks.
+The ADR records decisions and references gates instead of duplicating the inventory.
 
-Amended 2026-10-11 by #3431: the daemon-runtime composition edges this
-ADR classified (the gateway/diagnostics/resource-cleanup/lifecycle edges, the provider-runtime
-hubs, and the platform-services and claim-recovery dynamic edges) moved out of `packages/daemon/src/` into
-the process-root composition module `src/daemon-composition.ts`, which R76 does not see because it
-is no longer a daemon-zone importer. #3430 then routed the leaked selector-query edge
-(`packages/daemon/src/core/direct-ios-selector.ts`) through the request-bound runtime binding, so the R76
-inventory is empty; with nothing left to classify, the same change collapsed R76 to a plain ban on
-the coupling and deleted the classification machinery, per the rule's own kill criterion. The
-section-2 outcomes below remain the record of how each was classified.
+Amended 2026-10-11 by #3431.
+Daemon-runtime composition edges moved from `packages/daemon/src/` to process-root `src/daemon-composition.ts`:
+
+- Gateway, diagnostics, resource-cleanup, and lifecycle edges.
+- Provider-runtime hubs.
+- Dynamic platform-services and claim-recovery edges.
+
+R76 excludes that root module because it is outside the daemon zone.
+#3430 then moved the leaked `packages/daemon/src/core/direct-ios-selector.ts` query through the request-bound runtime binding.
+The R76 inventory became empty.
+With nothing left to classify, the same change reduced R76 to a plain ban on the coupling and deleted the classification machinery, per the rule's own kill criterion.
+Section 2 retains the classification outcomes. Git history retains the completed classification procedure.
+
+## Rules at a glance
+
+- R76 prohibits any production daemon import of the root platform-runtime family or of a root hub that reaches it.
+  The family is `src/platform-runtime.ts` and `src/platform-runtime-*.ts`.
+- Apple session observation uses neutral `AppleSessionObservation`.
+- Runtime lifecycle participation deepens through the existing lifecycle phases.
+  It must not use a generic hook bag.
+- Open-target plans/results remain separate from platform mechanics, with one construction path.
+- R75 fails when a handler file enters the state-shape set or the store-authority set and the merge-base set does not contain that file.
+  Handler files may leave these sets.
+- Route depth may collapse only pass-through or translation hops that the deletion test proves removable.
+  The only proven removable hop is `commands/runtime-types.ts`. It is the only endorsed collapse.
+  The ≤14 target is superseded.
 
 ## 1. Context
 
-The platform-package migration removed direct production dependencies from `packages/daemon/src/**` to
-concrete platform code (R65: zero such imports in every form). What it did not prove is that
-every remaining platform-aware responsibility belongs in the daemon. At the audit baseline
-(`658f822c`) nine daemon files held 13 production imports of root `src/platform-runtime-*.ts`
-composition modules; at the measurement commit (`27a97ee619`) the count is 14 edges across the
-same nine files (one file holds an import and a re-export of the same symbol).
+R65 prohibits every form of direct production dependency from `packages/daemon/src/**` to concrete platform code.
+The platform-package migration established this boundary.
+It did not prove that each remaining platform-aware responsibility belongs in the daemon.
+At baseline `658f822c`, nine daemon files had 13 production imports of root `src/platform-runtime-*.ts` composition modules.
+At measurement commit `27a97ee619`, those nine files had 14 edges.
+One file imports and re-exports the same symbol.
 
-`SessionState` write ownership was ratcheted (R7/R10), but broad state reads and `SessionStore`
-authority were not. The ADR 0019 hop trace recorded routes of ~24 files with no accepted budget
-or owning issue. #2278 audited all four concerns at `27a97ee619`.
+R7/R10 ratcheted `SessionState` write ownership.
+They did not ratchet broad state reads or `SessionStore` authority.
+The ADR 0019 trace recorded routes of approximately 24 files without an accepted budget or owning issue.
+#2278 audited all four concerns at `27a97ee619`.
 
 ## 2. Decision
 
-1. **Every daemon import of a root `src/platform-runtime-*.ts` module is classified as exactly
-   one of three categories** (retired by the 2026-10-12 amendment below: the inventory
-   `DAEMON_PLATFORM_RUNTIME_EDGES` in
-   [`scripts/layering/daemon-platform-runtime-inventory.ts`](../../scripts/layering/daemon-platform-runtime-inventory.ts)
-   is now empty, so the classification table and its symbol-drift and staleness passes are deleted
-   and R76 bans the coupling outright — any production `packages/daemon/src/**` import of the family or of a
-   root hub that reaches it is a violation. The categories and outcomes below remain the record of
-   how each edge was judged and retired):
-   - **Composition-essential** — assembling neutral runtime implementations at the process root.
-   - **Daemon-policy-essential** — request admission, session ownership, conflicts, locking,
-     cancellation, teardown ordering, artifact publication, or response/event semantics.
-   - **Leaked platform mechanics** — platform-family operations or state that should be owned
-     behind a deeper runtime interface or adapter; only this category creates implementation
-     work (child issues below).
-   The gate rule **R76 `daemon-platform-runtime-inventory`** (in `scripts/layering/check.ts`)
-   originally failed the layering check on any unclassified edge, on symbol-set drift between a
-   file and its inventory entry, and on stale entries; observed red against a planted unclassified
-   import before acceptance. Since the amendment it fails on any production daemon import of the
-   family or a hub that reaches it, in any static or dynamic form.
+1. **R76 prohibits daemon coupling to root platform-runtime modules.**
+   Any production `packages/daemon/src/**` import of the root platform-runtime family or of a root hub that reaches it violates R76.
+   This includes static and dynamic forms.
+   Git history retains the completed classification procedure.
+   The outcomes below retain its rationale.
 
-2. **Per-edge outcomes at `27a97ee619`.** Four edges are composition-essential and stay
-   (`daemon-runtime.ts` → `platform-runtime.ts` and → `platform-runtime-host-diagnostics.ts`;
-   `device-claim-owner-recovery.ts` → `platform-runtime.ts`;
-   `device-ready.ts` → `platform-runtime-device-ready.ts` — process-root assembly of the
-   composed gateway, host diagnostics, owner recovery, and device readiness). The remaining
-   nine edges identified as leaked platform mechanics have these owning interfaces or follow-ups:
-   - **Apple session observation** — the `AppleSessionObservation` contract supplies runner
-     liveness/session identity and the sole-foreground-app observation to recording health,
-     device refresh, and open-hint policy. Root composition supplies request-local inventory
-     and its error classifier; `packages/platform-apple` owns the probes. The three consumers
-     are daemon-policy-essential. Selector production and lifecycle participation stay separate.
-   - **#2333 (done)** — lifecycle participation of platform resource owners. The
-     `apple-runner-owner` and `operation-host` edges are retired; `daemon-runtime.ts` now holds
-     only the typed `PlatformOwnerLifecycle` contract (`packages/daemon/src/core/platform-owner-lifecycle.ts`),
-     composed at the root by `platform-runtime-daemon-lifecycle.ts`, which is the sole importer of
-     the Apple runner owner, the Android snapshot-helper and Web orphan cleanups, and legacy
-     app-log marker recovery. The `resource-cleanup` edge stays, reclassified
-     composition-essential and carrying only `platformResourceCleanup`.
-   - **Open-target planning (done, #2334)** — `platform-runtime-open-target.ts` keeps only the
-     neutral open plan/result surface (`resolveRequestedOpenSurface`, `validateOpenRelaunchTarget`,
-     `resolveSessionAppBundleIdForTarget`); Android package resolution
-     (`resolveAndroidPackageForOpen`, `inferAndroidPackageAfterOpen`) moved behind the Android
-     owning seam in `packages/platform-android`. `session-open-prepare.ts` consumes surface and
-     relaunch-target policy, `session-selector-dispatch.ts` consumes the app-bundle-identity
-     resolver; both edges are daemon-policy-essential, and the resolver stays the one
-     construction path for the open plan.
-   - **#2273/#2274 (done)** — the `direct-ios-selector.ts` → `queryAppleRuntimeSelector` edge is
-     retired. The live selector read is now the `querySelector` runtime operation on the
-     request-bound owner (`SelectorObservationRuntimeOperations`, declared CONDITIONAL on the
-     captured touch and gesture uses), so the off-screen rescue (#1542) executes on the binding
-     the command was already admitted for; no second selector producer was added.
+2. **Per-edge outcomes at `27a97ee619`.**
+   The audit retained four composition-essential edges for process-root assembly:
+   - `daemon-runtime.ts` → `platform-runtime.ts`: composed gateway.
+   - `daemon-runtime.ts` → `platform-runtime-host-diagnostics.ts`: host diagnostics.
+   - `device-claim-owner-recovery.ts` → `platform-runtime.ts`: owner recovery.
+   - `device-ready.ts` → `platform-runtime-device-ready.ts`: device readiness.
 
-3. **Session state and store authority are measured as a symbol-level overlay and ratcheted
-   on the handler-owned slice.** At `27a97ee619` the overlay is 112 `SessionState` shape edges
-   and 68 `SessionStore` authority edges repo-wide, of which 14 shape / 22 authority files are
-   handler-owned (`packages/daemon/src/{sessions,execution}/handlers/**`). Gate rule **R75 `session-authority-overlay`**
-   (reference measured via `measureRatchets` in `scripts/layering/ratchet-reference.ts`) holds
-   the handler-owned file sets at or under the merge-base: handler code may lose files from
-   either set, never gain them. The ratchet is added now that the edges are classified;
-   cross-module reads outside `packages/daemon/src/{sessions,execution}/handlers/**` are owned by the logical-module
-   declarations (R7/R10) and are not ratcheted here.
+   The audit identified the remaining nine edges as leaked platform mechanics. Their owning interfaces or follow-ups are below:
+   - **Apple session observation.**
+     `AppleSessionObservation` supplies runner liveness/session identity and the sole-foreground-app observation.
+     Recording health, device refresh, and open-hint policy consume it.
+     Root composition supplies request-local inventory and its error classifier.
+     `packages/platform-apple` owns the probes.
+     The three consumers are daemon-policy-essential.
+     Selector production and lifecycle participation remain separate.
+   - **#2333 (done): platform resource-owner lifecycle participation.**
+     The `apple-runner-owner` and `operation-host` edges are retired.
+     `daemon-runtime.ts` holds only typed `PlatformOwnerLifecycle` from `packages/daemon/src/core/platform-owner-lifecycle.ts`.
+     Root `platform-runtime-daemon-lifecycle.ts` composes it.
+     That module alone imports the Apple runner owner, Android snapshot-helper cleanup, Web orphan cleanup, and legacy app-log marker recovery.
+     The `resource-cleanup` edge stays. It is reclassified as composition-essential and carries only `platformResourceCleanup`.
+   - **Open-target planning (done, #2334).**
+     `platform-runtime-open-target.ts` retains only the neutral open plan/result surface:
+     - `resolveRequestedOpenSurface`
+     - `validateOpenRelaunchTarget`
+     - `resolveSessionAppBundleIdForTarget`
+     Android `resolveAndroidPackageForOpen` and `inferAndroidPackageAfterOpen` moved behind the Android owning seam in `packages/platform-android`.
+     `session-open-prepare.ts` consumes surface and relaunch-target policy.
+     `session-selector-dispatch.ts` consumes the app-bundle-identity resolver.
+     Both edges are daemon-policy-essential.
+     The resolver remains the single construction path for the open plan.
+   - **#2273/#2274 (done): selector query.**
+     The `direct-ios-selector.ts` → `queryAppleRuntimeSelector` edge is retired.
+     The live selector read is the `querySelector` runtime operation on the request-bound owner (`SelectorObservationRuntimeOperations`).
+     That operation is declared CONDITIONAL on the captured touch and gesture uses.
+     Off-screen rescue (#1542) thus uses the command's admitted binding.
+     The change added no second selector producer.
 
-4. **The entry-to-platform hop trace was re-run with hop roles**
-    (policy / orchestration / translation / adapter / pass-through + terminal) and a deletion
-    test per pass-through/translation hop. The updated artifact is
-    [`0023-end-state-hop-trace.md`](0023-end-state-hop-trace.md): 41 hops for `press`/Android and
-    47/49 per arm for the now dual-arm `snapshot`/iOS route (shared 30 + AX bridge 17 / runner
-    fallback 19). The deletion test proves a single distinct removable hop
-    (`commands/runtime-types.ts`); the request-spine guards (auth comparison, cancellation gate,
-    idle-reap timer reset, Android freshness guard/clear) are side-calls, not hops. The earlier
-    ≤14 target is superseded and not reachable without folding cross-cutting request-scope
-    wrappers, which the audit does not endorse.
+3. **Measure session state/store authority by symbol and ratchet the handler-owned portion.**
+   At `27a97ee619`, the repository overlay contains 112 `SessionState` shape edges and 68 `SessionStore` authority edges.
+   The handler-owned portion contains 14 shape files and 22 authority files under `packages/daemon/src/{sessions,execution}/handlers/**`.
+   R75 `session-authority-overlay` holds these file sets at or below the merge-base.
+   `measureRatchets` in `scripts/layering/ratchet-reference.ts` measures the reference.
+   Handlers may lose files from either set. They may never gain files.
+   The ratchet is added now that the edges are classified.
+   R7/R10 logical-module declarations own cross-module reads outside this handler path.
+   R75 does not ratchet those reads.
 
-5. **Per-audit-area decisions.** Apple session observation: consume the neutral
-   `AppleSessionObservation` contract. Runtime lifecycle participation: deepen through the existing lifecycle
-   phases, no generic hook bag (#2333). Open-target planning: separate plan/result from
-   platform mechanics, one construction path preserved. Session state/store authority:
-   keep the current access shape, ratchet the handler-owned slice (R75). Route depth: record the
-   re-traced routes; collapse only the proven pass-through hops (none undertaken in this
-   change).
+4. **The entry-to-platform hop trace was re-run with hop roles and deletion tests.**
+   Roles are policy, orchestration, translation, adapter, and pass-through, with a terminal marker.
+   Each pass-through/translation hop receives a deletion test.
+   [ADR 0023](0023-end-state-hop-trace.md) records 41 hops for `press`/Android and 47/49 per arm for `snapshot`/iOS.
+   The snapshot route shares 30 hops, then adds 17 for the AX bridge or 19 for the runner fallback.
+   Only one distinct hop is proven removable: `commands/runtime-types.ts`.
+   The request-spine guards are side-calls, not hops: auth comparison, cancellation gate, idle-reap timer reset, and Android freshness guard/clear.
+   The earlier ≤14 target is superseded.
+   It is not reachable without folding cross-cutting request-scope wrappers, and the audit does not endorse that folding.
+
+5. **Decisions by audit area.**
+   - Apple session observation consumes neutral `AppleSessionObservation`.
+   - Runtime lifecycle participation deepens through the existing lifecycle phases, with no generic hook bag (#2333).
+   - Open-target planning separates plan/result from platform mechanics and preserves one construction path.
+   - Session state/store authority retains its access structure and ratchets the handler-owned portion through R75.
+   - Route depth records the re-traced routes and collapses only the proven pass-through hops.
+     This change collapses none.
 
 ## 3. Rationale
 
-- **The inventory is a registry, not a prose copy.** #2278's 13 imports are a review inventory,
-  not 13 presumed violations; a neutral runtime interface may be the correct owning seam. A
-  machine-readable table with per-edge categories is the only form of the decision that the
-  layering gate can enforce, and it is the form that stays honest as edges move: drift and
-  staleness are failures, not warnings.
-- **Category 1 and 2 stay; category 3 deepens.** Splitting the nine leaked edges into three
-  child issues (instead of one refactor) keeps each independently reviewable and preserves the
-  existing behavior each surface depends on. The selector edge is deliberately not a child of
-  #2332: #2273/#2274 already own the selector seam, and a second producer would duplicate
-  snapshot-producer policy.
-- **R75 ratchets the handler slice, not the whole overlay.** The repo-wide 112/68 edge set
-  includes owning-module reads that are correct (session lifecycle reading session state).
-  Ratcheting the whole set would freeze legitimate movement; ratcheting the handler-owned set
-  targets the exact regression #2278 flagged — handlers accreting state shape and store
-  authority — and is the slice the fresh audit found unowned.
-- **The hop target is retired, not missed.** The 23/24 routes measured at `132ffe1da` grew to
-  41 / 47-49 because the request-scope wrapper layer, the AgentDevice command layer, the adb
-  host split, and the dual-arm snapshot capture all landed on the traced paths. Every retained
-  hop now carries a documented role and, for pass-through/translation hops, a kept-depth or
-  removable verdict; the single proven-removable hop is recorded as the only endorsed
-  collapse.
+- **The inventory was a registry, not a prose duplicate.**
+  #2278's 13 imports were review candidates, not presumed violations.
+  A neutral runtime interface can be the correct owning seam.
+  Only a machine-readable table with per-edge categories made the classification decision enforceable by the layering gate.
+  It detected changed edges through drift and staleness failures, not warnings.
+- **Categories 1 and 2 remain; category 3 needs deeper interfaces.**
+  Composition-essential edges assemble neutral implementations at the process root.
+  Daemon-policy-essential edges own request admission, session ownership, conflicts, locking, cancellation, teardown ordering, artifact publication, or response/event semantics.
+  Leaked platform mechanics are family operations or state that belong behind a deeper interface or adapter.
+  Only this third category required implementation work.
+  Three child issues for the nine leaked edges, instead of one refactor, keep each child issue independently reviewable.
+  They preserve the existing behavior that each surface depends on.
+  The selector edge is deliberately outside #2332.
+  #2273/#2274 already owned the selector seam; another producer would duplicate snapshot-producer policy.
+- **R75 ratchets handler files, not the complete overlay.**
+  The repository's 112/68 sets include correct owning-module reads, such as session lifecycle reads of session state.
+  A repository-wide ratchet would prevent legitimate movement.
+  The handler-owned ratchet targets the exact regression that #2278 flagged: handlers that accrete state shape and store authority.
+  The fresh audit found no owner for this portion.
+- **The hop target is retired, not missed.**
+  The routes measured at `132ffe1da` grew from 23/24 to 41 / 47-49.
+  New request-scope wrappers, the AgentDevice command layer, the adb host split, and dual-arm snapshot capture explain the growth.
+  All of these changes landed on the traced paths.
+  Every retained hop now has a documented role.
+  Each pass-through/translation hop also has a kept-depth or removable verdict.
+  The one proven removable hop is the only endorsed collapse.
 
 ## 4. Enforced by
 
-- R76 `daemon-platform-runtime-inventory` — since the 2026-10-12 amendment a plain ban on the
-  coupling rather than a classification table (the inventory is empty and its machinery is
-  deleted) — and R75 `session-authority-overlay` in `scripts/layering/check.ts` (both observed red
-  against planted violations before acceptance).
-- R7 `session-state-ownership` and the R10 merge-base ratchet for the owning-module slice.
-- R65 for the concrete-platform-import ban this audit builds on.
-- Child issues #2333 and #2334 landed (see §2.2); #2273/#2274 landed with the `querySelector`
-  runtime operation (see §2.2).
+- R76 `daemon-platform-runtime-inventory` in `scripts/layering/check.ts`.
+  Since the 2026-10-12 amendment, it prohibits coupling instead of maintaining a classification table.
+  The inventory is empty and its machinery is deleted.
+- R75 `session-authority-overlay` in `scripts/layering/check.ts`.
+  Both R75 and R76 failed against planted violations before acceptance.
+- R7 `session-state-ownership` and the R10 merge-base ratchet for owning modules.
+- R65, which prohibits concrete platform imports and supplies the basis for this audit.
+- Child issues #2333 and #2334 landed; see §2.2.
+  #2273/#2274 landed with the `querySelector` runtime operation; see §2.2.

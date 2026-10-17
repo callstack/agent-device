@@ -2,140 +2,172 @@
 
 ## Status
 
-Accepted (2026-09-20; the pose-settle rule amended 2026-09-21 under #2730; the touch-overlay
-export diagnosis corrected 2026-09-22 under #2707; the Android emulator pose added 2026-10-10). Covers iPhone Duo (iOS 27.1, `iPhone19,4`) and
-any Apple device that reports more than one integrated CoreDevice display, and, through the amendment below, foldable Android emulators.
+Accepted (2026-09-20).
+The pose-settle amendment is dated 2026-09-21 under #2730.
+The touch-overlay export diagnosis was corrected on 2026-09-22 under #2707.
+The Android emulator pose amendment is dated 2026-10-10.
+This ADR covers iPhone Duo (iOS 27.1, `iPhone19,4`) and Apple devices with more than one integrated CoreDevice display.
+The amendment below also covers foldable Android emulators.
 
-An iPhone Duo carries two integrated panels — Apple's **outer display** and **inner display** —
-and lights one of them at a time. Which one is lit is the device pose. Two independent facts
-follow, and this ADR keeps them separate: **which panel a capture must name**, and **what pose the
-device is in**. The first is answered by an official host API; the second only by inference.
+An iPhone Duo has Apple's **outer display** and **inner display**.
+It lights one panel at a time according to device pose.
+This ADR separates two facts: **which panel a capture must name** and **what pose the device is in**.
+An official host API answers the first question.
+Only inference answers the second question.
 
 ## Rules at a glance
 
 | Situation | Behavior |
 | --- | --- |
-| Any iOS simulator capture | Resolve the CoreDevice display table first; capture the panel the system currently lights |
-| Device has more than one integrated panel | Pass `--display=<panel name>` on every `simctl io screenshot`; never rely on the implicit default |
-| Panel power is ambiguous (zero or several lit panels) | Still name a panel — the `primary` one — emit `apple_display_capture_ambiguous`, and report the pose as `unknown` |
-| Device has one integrated panel | Keep the pre-panel behavior exactly: no display flag, no pose, unchanged scale probe |
-| Density normalization | Use the captured panel's own `pointScale`; a runner-fallback capture uses the pixels-per-point that capture reported about itself |
-| Pose must be reported | From panel power alone, report `closed`, `fully-open`, or `unknown`, and never narrower; `fold` reports the exact pose because it reads the hinge angle |
-| A pose change is requested | `agent-device fold <closed\|half-open\|open>`: send private HID inside the simulator (see headless amendment), then read the hinge angle back from CoreDevice until it agrees — for `half-open`, until two consecutive readings agree; refuse the pose if it never does |
-| The hinge reaches `half-open` but keeps moving | Refuse it as `fold-pose-unsettled` with the observed and previous angles: an angle inside the open interval is an observed category, not a pose the hinge holds |
-| An external display is attached | It is not a panel: it never makes the device multi-screen and never produces a pose |
-| CoreDevice cannot answer | Return an unresolved inventory and keep the single-panel capture path; a missing host feature is not a capture failure |
+| Any iOS simulator capture | First resolve the CoreDevice display table. Capture the panel that the system currently lights. |
+| More than one integrated panel | Pass `--display=<panel name>` on every `simctl io screenshot`. Never use the implicit default. |
+| Zero or multiple lit panels | Name the `primary` panel. Emit `apple_display_capture_ambiguous`. Report pose as `unknown`. |
+| One integrated panel | Preserve pre-panel behavior exactly: no display flag, no pose, unchanged scale probe. |
+| Density normalization | Use the captured panel's `pointScale`. For runner fallback, use that capture's reported pixels-per-point. |
+| Pose report | From panel power alone, report only `closed`, `fully-open`, or `unknown`, never a narrower pose. `fold` reports the exact pose because it reads the hinge angle. |
+| Pose request | `agent-device fold <closed\|half-open\|open>` sends private HID inside the simulator. Then it reads the hinge angle back from CoreDevice until the angle agrees. For `half-open`, two consecutive readings must agree. If the readings never agree, refuse the pose. |
+| The hinge reaches `half-open` but keeps moving | Refuse with `fold-pose-unsettled` and the observed and previous angles. An angle inside the open interval is an observed category, not a pose that the hinge holds. |
+| External display | It is not a panel. It creates neither multi-screen classification nor a pose. |
+| CoreDevice cannot answer | Return unresolved inventory. Preserve single-panel capture. An absent host feature is not a capture failure. |
 
 ## Contracts
 
-`packages/platform-apple/src/core/display-inventory.ts` owns the panel model and is the only
-reader of CoreDevice display info.
+`packages/platform-apple/src/core/display-inventory.ts` owns the panel model.
+It is the only reader of CoreDevice display information.
 
-- **Authority.** `xcrun devicectl device info displays --json-output` (`jsonVersion` 5) is the only
-  screen authority. It reports per panel: `name` (which `simctl io --display` also accepts),
-  `displayId`, `nativeSize`, `pointScale`, `currentOrientation`, `type`, `primary`, `active`, and
-  `backlightState`. It works for simulators (`reality: simulated`) and physical devices alike.
-- **Panel power.** `backlightState` is the authority and `active` is only a fallback, because
-  `active` is genuinely absent from real payloads: a single-panel iPhone 17 reports
-  `backlightState: activeOn` and no `active` key at all, so a parser keyed on `active` would call
-  that panel dark. The `BacklightState` union is `activeOn`, `inactiveOn`, `activeDimmed`, `off`,
-  `unknown`; the first three are lit. An unrecognized future case is `unknown`, not `dark`, because
-  guessing dark would aim a capture at a panel that may be showing nothing.
-- **Panel identity.** A device is multi-screen when it reports more than one `type: integrated`
-  panel. CoreDevice marks one panel `primary`; that panel is the outer display, because it is the
-  panel that stays lit while the device is closed. `primary` and the lit count are the whole model:
-  the inventory labels panels `outer`/`inner` nowhere, because no caller consumes a label — every
-  decision is made from `primary` plus panel power, and a name derived from array order or from
-  geometry would be a second source of truth ready to invert silently. When the primary panel is
-  also the largest, the `primary` attribute still decides and the conflict is emitted as
-  `apple_display_primary_geometry_conflict` rather than silently repaired by a geometry rule.
-- **Capture target.** `resolveAppleCaptureDisplay` returns a panel for every multi-panel device and
-  `undefined` only for a single-panel device or an unresolved inventory. When panel power identifies
-  exactly one lit panel that panel is named; otherwise the `primary` panel is named anyway,
-  `ambiguous` is set, and `apple_display_capture_ambiguous` is emitted. A multi-panel device never
-  receives a display-less capture, because the implicit default is precisely the black-and-exit-0
-  failure being fixed; naming a possibly-dark panel is a visible, diagnosable miss instead.
-- **No pose field.** Panel power cannot separate Apple's `UIHinge.Status.fullyOpen` from
-  `.partiallyOpen` — both leave the inner panel lit and the outer panel dark — so a derived pose
-  could only ever mean "not closed" while looking like a fact. The inventory therefore reports what
-  it measured (`primary`, panel power, geometry, orientation) and leaves pose to the app under test,
-  which can read `UIHinge.status` exactly. A caller that needs the pose asks the operator and
-  re-snapshots.
-- **No cache.** The probe runs per capture. Which panel is lit is precisely what an operator
-  changes by folding or opening the device, so a cached inventory would resume capturing the dark
-  panel — the exact failure being fixed. The probe runs under
-  `IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS` (5s), deliberately below the 20s screenshot deadline it
-  precedes, so a wedged CoreDevice cannot spend the capture's own budget; measured real cost is
-  0.16–0.26s against 4.93s for the screenshot.
+- **Authority.**
+  `xcrun devicectl device info displays --json-output` (`jsonVersion` 5) is the only screen authority.
+  It reports these per-panel values:
+  - `name`, also accepted by `simctl io --display`.
+  - `displayId`.
+  - `nativeSize`.
+  - `pointScale`.
+  - `currentOrientation`.
+  - `type`.
+  - `primary`.
+  - `active`.
+  - `backlightState`.
+  It works for simulators with `reality: simulated` and physical devices.
+- **Panel power.**
+  `backlightState` is authoritative. `active` is only a fallback because real payloads can omit it.
+  A single-panel iPhone 17 reports `backlightState: activeOn` without an `active` key.
+  An `active`-only parser would classify this panel as dark.
+  The `BacklightState` union contains `activeOn`, `inactiveOn`, `activeDimmed`, `off`, and `unknown`.
+  The first three mean lit.
+  An unrecognized future value means `unknown`, not dark.
+  An assumed dark state could select a panel without content.
+- **Panel identity.**
+  More than one `type: integrated` panel makes a device multi-screen.
+  CoreDevice marks one panel `primary`.
+  It is the outer display because it remains lit when the device closes.
+  The complete model uses `primary` and the lit count.
+  The inventory assigns no `outer`/`inner` labels because no caller consumes them.
+  Every decision uses `primary` and panel power.
+  Array order or geometry would create another authority that could silently invert identity.
+  If the primary panel is also largest, `primary` still decides.
+  In that case, emit `apple_display_primary_geometry_conflict`. Do not silently replace identity with a geometry rule.
+- **Capture target.**
+  `resolveAppleCaptureDisplay` returns a panel for every multi-panel device.
+  It returns `undefined` only for a single-panel device or unresolved inventory.
+  If exactly one panel is lit, name that panel.
+  Otherwise, name `primary`, set `ambiguous`, and emit `apple_display_capture_ambiguous`.
+  A multi-panel device never receives a capture without a display name.
+  The implicit default caused the black-image, exit-0 failure.
+  An explicitly named, possibly dark panel makes failure visible and diagnosable.
+- **No pose field.**
+  Panel power cannot distinguish Apple's `UIHinge.Status.fullyOpen` from `.partiallyOpen`.
+  Both light the inner panel and darken the outer panel.
+  A derived pose could therefore mean only "not closed", although it would appear factual.
+  The inventory reports measured `primary`, panel power, geometry, and orientation.
+  It leaves exact pose to the app under test through `UIHinge.status`.
+  If a caller needs pose, it asks the operator and takes another snapshot.
+- **No cache.**
+  The probe executes per capture.
+  An operator changes the lit panel through a fold or open action.
+  Cached inventory could resume capture of the dark panel and recreate the failure.
+  `IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS` limits the probe to 5s, below the subsequent 20s screenshot deadline.
+  Thus, an unresponsive CoreDevice cannot consume the capture's own budget.
+  Measured cost is 0.16–0.26s, compared with 4.93s for the screenshot.
 
 ## Why the default capture had to stop being implicit
 
-`simctl io screenshot` without `--display` picks the **highest** screen ID, not the primary panel.
-On a closed Duo that is the inner panel, which is dark. The command exits 0 and writes a valid PNG
-whose content is black, so every downstream consumer trusts a capture of nothing:
+Without `--display`, `simctl io screenshot` selects the **highest** screen ID, not the primary panel.
+On a closed Duo, this is the dark inner panel.
+It exits 0 with a valid black PNG. Every downstream consumer trusts that capture of nothing.
 
 | Capture path | Before | After |
 | --- | --- | --- |
 | `screenshot` on a closed Duo | 669x951 @1x, mean luma 0.09 (black) | 466x678 @1x, mean luma 65.8 (the lit outer panel) |
-| `screenshot` on an open Duo | 951x669 @1x, mean luma 241 (correct by luck: the highest screen ID is the lit inner panel) | 951x669 @1x naming `LCD-1` explicitly |
+| `screenshot` on an open Duo | 951x669 @1x, mean luma 241 (the highest screen ID happens to identify the lit inner panel) | 951x669 @1x naming `LCD-1` explicitly |
 | `screenshot` on iPhone 17 | 402x874 @1x, mean luma 104.9 | unchanged |
 
-This is the failure behind reports that the tool "picks the wrong screen" on iPhone Duo. It was
-never a selection problem: only the lit panel is capturable, so naming the lit panel is the whole
-fix, and no screen-selection flag is warranted.
+This explains reports that the tool "picks the wrong screen" on iPhone Duo.
+It was never a selection problem.
+Only the lit panel is capturable.
+Thus, the name of the lit panel is the whole fix, and a screen-selection flag is not warranted.
 
-`SIMULATOR_MAINSCREEN_SCALE` is likewise fixed to one panel while the captured panel can be the
-other, so density normalization now takes `pointScale` from the panel that was captured.
+`SIMULATOR_MAINSCREEN_SCALE` also refers to one fixed panel.
+A capture can use the other panel.
+Density normalization therefore uses the captured panel's `pointScale`.
 
 ### Runner capture follows the app's window (#2728)
 
-Naming the lit panel only helps a capture that asks CoreDevice. The runner captured
-`XCUIScreen.main`, one fixed panel, so a capture reached through the runner — the fallback when
-`simctl` fails, and every visual verification inside the runner — followed a panel chosen at build
-time instead of the app. The runner now resolves the app window first, reads the display off that
-same window instance, and encodes the capture upright, because the image handed back for a panel
-the system presents turned has its buffer sideways.
+A named lit panel helps only captures that ask CoreDevice.
+The runner previously captured the fixed `XCUIScreen.main` panel.
+This affected fallback after `simctl` failure and every runner visual verification.
+The selected panel depended on the build instead of the app.
+The runner now resolves the app window first and reads the display from that same window instance.
+It encodes the capture upright because a turned panel supplies a sideways buffer.
 
-The capture reports the display ID it used, the pixel size it encoded, and the pixels-per-point of
-that image, so density normalization reads the source it captured instead of applying a scale the
-host inferred. A runner that reports nothing measured nothing, and normalization keeps the pre-panel
-answer rather than borrowing a scale from a panel nobody captured. That payload is a cross-language
-contract, not a per-consumer cast: `packages/contracts/src/screen-capture-contract.ts` owns the read,
-the Swift struct owns the write, and those two types are the only declarations of the shape. The
-golden table `contracts/fixtures/screen-capture-metadata.json` carries the wire key and two measured
-poses for the vitest twin and the runner unit-test lane to decode through, so drift fails CI on both
-sides at once.
+The capture reports its display ID, encoded pixel size, and image pixels-per-point.
+Normalization uses this source metadata instead of a host-inferred scale.
+If the runner reports nothing, it measured nothing.
+In that case, normalization keeps its pre-panel result instead of borrowing a scale from a panel that nobody captured.
+This payload is a cross-language contract, not a consumer-specific cast.
+`packages/contracts/src/screen-capture-contract.ts` owns the read.
+The Swift struct owns the write.
+These are the only two declarations of its shape.
+`contracts/fixtures/screen-capture-metadata.json` supplies the wire key and two measured poses.
+The vitest twin and runner unit-test lane decode this golden table.
+Contract drift therefore fails CI on both sides.
 
-A capture asks the target app's window first and the system surface's window second. The home screen
-is SpringBoard's window, so a capture with no session app — or with one that is not running — still
-has a display that owns a window, and asking for it keeps the foldable rule intact: the answer is
-always a display a window actually occupies, never `XCUIScreen.main`, which on a Duo is the dark
-panel whenever the app is inside. A capture fails closed with a typed reason only when neither
-resolves a window. An app with no window is refused on the query's own `exists` answer as well as on
-its frame: a windowless app answers `frame` with `(0,0 0x0)` without raising, so geometry alone
-cannot say "no window".
+Capture first asks for the target app's window, then the system surface's window.
+SpringBoard owns the home-screen window.
+Thus, a session without an app, or with a stopped app, can still resolve a window's display.
+The result always names a display occupied by a window.
+It never defaults to `XCUIScreen.main`, which is dark on a Duo when the app uses the inner panel.
+A capture fails closed with a typed reason only when neither window resolves.
+The query uses both `exists` and frame evidence to refuse an app without a window.
+Such an app returns `(0,0 0x0)` from `frame` without an exception.
+Geometry alone cannot prove that no window exists.
 
-A visual *check* on an app's own transition is a different question, and the system surface's second
-answer would fabricate it. The `back` fallback's before/after comparison asks whether THIS app's
-screen changed under a leading tap the app itself received; two SpringBoard captures of the home
-screen are byte-identical no matter what the app did, so a system-surface sample would report
-"unchanged" for exactly the failure it is meant to catch. The check therefore observes the app's own
-resolved window and nothing else: an app that resolves no window reports the typed refusal as an
-unknown outcome, not as the false no-change a second process would produce (#2728).
+A visual check of the app's own transition requires different evidence.
+The `back` fallback compares before/after captures to determine whether this app changed after receiving a leading tap.
+Two SpringBoard home-screen captures are byte-identical regardless of the app's behavior.
+System-surface fallback would therefore report false "unchanged" evidence for the failure under test.
+The check observes only the app's own resolved window.
+If none resolves, typed refusal produces an unknown outcome instead of false no-change evidence from another process (#2728).
 
-Required and optional consumers of the same helper split on the frame they are owed. `screenshot` and
-`record start`'s bootstrap frame are required — the recording sizes its whole writer from that first
-image — and each names why the capture did not happen with the shared `APP_SCREEN_*` reason, so a
-no-window runtime is a typed failure and never a generic one. The keyboard stability pump and the
-recording pump keep a nil-tolerant frame, because a dropped frame between polls is normal and says
-nothing about which display a window is on (#2728).
+Required and optional helper consumers differ in their frame requirements.
+`screenshot` and the `record start` bootstrap frame require a capture.
+The recording writer takes its dimensions from that first image.
+Each uses the shared `APP_SCREEN_*` reason for capture failure.
+A runtime without a window therefore returns typed failure, never generic failure.
+Keyboard stability and recording pumps tolerate nil frames.
+An absent frame between polls is normal and supplies no display-identity evidence (#2728).
 
-Both answers are measured rather than assumed. A session with no app, and one whose app was terminated while still bound, answer the window query with `resolved=no`, and the capture that follows names the lit panel — on an unfolded Duo that is `LCD-1`, and the resulting home-screen image contains no black pixel. An app suspended by `home` keeps answering with a usable window, so it takes the first branch and still captures the panel it is on.
+Measurements confirm both branches.
+A session without an app and a bound session with a terminated app return `resolved=no` from the window query.
+The subsequent capture names the lit panel.
+On an unfolded Duo, it names `LCD-1`; the home-screen image contains no black pixel.
+An app suspended through `home` retains a usable window.
+It takes the first branch and captures its panel.
 
-`screenshot` is a runner-lifecycle command and skips the app-activation preflight, which left its
-app as the runner host process on a fresh runner — a process with no window at all. It resolves the
-requested bundle id for observation instead, and never activates an app to learn what it is
-foregrounded on. Measured on a live Duo through the runner route, one command with unchanged flags:
+`screenshot` is a runner-lifecycle command and skips app-activation preflight.
+On a fresh runner, this previously selected the runner host process, which has no window.
+It now resolves the requested bundle ID for observation.
+It never activates an app to determine its foreground display.
+A live Duo runner route measured these results with unchanged command flags:
 
 | Pose | Lit panel | Capture | Mean luma |
 | --- | --- | --- | --- |
@@ -143,185 +175,196 @@ foregrounded on. Measured on a live Duo through the runner route, one command wi
 | Half-open (hinge 130°) | `LCD-1` (ID 3) | 951x669 @1x | 214 |
 | Closed (hinge 0°) | `LCD` (ID 1) | 466x678 @1x | 177 |
 
-The closed row is the point: the same command followed the app onto the other panel without being
-told, and every row is real content where a main-screen capture of the unlit panel is black.
+The same command follows the app to the other panel in the closed pose without an explicit panel request.
+Each row captures content; main-screen capture of the unlit panel returns black.
 
 ## Amendment: headless simulator HID replaces Device Hub (2026-09-22)
 
-The guest HID experiment supersedes the Device Hub pose decision and its private-API rejection
-below. UI discovery and sidebar sections, and their outstanding evidence gaps, are historical.
-`fold` now runs a small Objective-C helper through `simctl spawn <udid>` with no Device Hub or
-host Accessibility requirement. `open` surfaces the standalone Simulator app after a cold boot and
-has no Device Hub option.
-The helper serializes `{provider: "com.apple.Virtualization.VirtualMachines", source:
-"hinge-slider-control", type: "range", value: angle}` with IOCFSerialize and dispatches a vendor
-HID event (usage page 0xff61, usage 0x5b, version 0) inside the simulator. Requested angles are
-0°, 130°, and 180°; half-open preserves the observed Book angle, without promising UI animation
-or orientation parity. CoreDevice readback and the half-open stability rule remain authoritative.
-This explicitly accepts the private HID dependency for simulator folding. The selected Xcode
-compiles the packaged source into a unique temporary directory per request; cleanup follows both
-success and failure. Build and dispatch are bounded and cancellable, with no UI fallback.
-Local headless tests verified all three poses, panel switching, and an inner-panel screenshot.
-Physical devices, logged-out hosts, and hosted CI are unverified; Duo coverage remains local.
-Absence of a public setter did not establish that Device Hub was required.
+The guest HID experiment supersedes the Device Hub pose decision and its private-API rejection.
+Git history retains that rejection, the obsolete UI discovery/sidebar process, and its evidence gaps.
+`fold` runs a small Objective-C helper through `simctl spawn <udid>`.
+It requires neither Device Hub nor host Accessibility.
+After a cold boot, `open` shows the standalone Simulator app.
+`open` has no Device Hub option.
+
+The helper uses IOCFSerialize for `{provider: "com.apple.Virtualization.VirtualMachines", source:
+"hinge-slider-control", type: "range", value: angle}`.
+Inside the simulator, it dispatches a vendor HID event with usage page 0xff61, usage 0x5b, and version 0.
+Requested angles are 0°, 130°, and 180°.
+Half-open preserves the observed Book angle without a promise of UI animation or orientation parity.
+CoreDevice readback and the half-open stability rule remain authoritative.
+
+This decision explicitly accepts private HID for simulator folds.
+The selected Xcode compiles packaged source into a unique temporary directory per request.
+Cleanup occurs after success and failure.
+Build and dispatch are bounded and cancellable, without UI fallback.
+Local headless tests verified all three poses, panel changes, and an inner-panel screenshot.
+Physical devices, logged-out hosts, and hosted CI remain unverified.
+Duo coverage remains local.
+An absent public setter did not prove that Device Hub was necessary.
 
 ### Timed hinge trajectories
 
-`fold` accepts either a preset or 2–64 `{atMs, angle}` keyframes. Times start at zero and increase
-strictly up to 60 seconds; angles stay in 0–180°. A single simulator process interpolates linearly
-against a monotonic clock at approximately 60Hz, skipping missed frames instead of extending the
-timeline. Equal angles express holds. Preparation and final verification are outside motion time.
-Cancellation sends SIGTERM to simctl before a bounded SIGKILL escalation, allowing it to terminate
-the guest helper. Abruptly killing simctl can orphan the animation. A live cancellation at two
-seconds removed the guest process and left 67.9° unchanged beyond the five-second deadline. No automatic reset
-runs on cancellation. Final custom angles require a readback within 0.5° and the existing interior
-stability check; category agreement alone is insufficient. Shared golden fixtures define native
-and TypeScript validation. Refs expire on successful or interrupted mutation through the existing
-fold request policy. Hosted Duo tests remain local-only.
+`fold` accepts a preset or 2–64 `{atMs, angle}` keyframes.
+Times start at zero and increase strictly to at most 60 seconds.
+Angles remain in 0–180°.
+One simulator process interpolates linearly against a monotonic clock at approximately 60Hz.
+It skips missed frames instead of extending the timeline.
+Equal angles express holds.
+Preparation and final verification occur outside motion time.
+Cancellation sends SIGTERM to simctl, followed by bounded SIGKILL escalation, so simctl can terminate the guest helper.
+Abrupt simctl termination can orphan the animation.
+Live cancellation at two seconds removed the guest process.
+The hinge angle stayed at 67.9° beyond the five-second deadline.
+Cancellation performs no automatic reset.
+Final custom angles require readback within 0.5° and the existing interior stability check.
+Category agreement alone is insufficient.
+Shared golden fixtures define native and TypeScript validation.
+Existing fold request policy expires refs on successful or interrupted mutation.
+Hosted Duo tests remain local-only.
 
 ## Pose control: Device Hub's control, CoreDevice's verdict
 
-`agent-device fold` sets the pose, and the split above still holds: the press is not evidence,
-the read-back is. The pieces, each of which was checked on the shipping 27.1 toolchain:
+`agent-device fold` sets the pose.
+The split above still holds: the press is not evidence, and the read-back is evidence.
+The headless HID amendment above replaces the Device Hub press.
+Git history retains the superseded Device Hub process.
 
-| Piece | Finding |
-| --- | --- |
-| Who sets the pose | Device Hub's `CoreDevicePopDeviceKitExtension` (the V68 device view with its `poses` action bar) hands a "vendor defined" orientation-control payload to `CoreDevicePopCoreDeviceExtension`, which sends it through CoreDevice's private HID channel. No CLI, `simctl`, `devicectl`, or XCUITest surface reaches that channel |
-| The public seam | The action bar's pose controls are ordinary `AXButton`s described `Closed`, `Book`, and `Open` in the Device Hub window; the simulated screen inside the same window is an `iOSContentGroup` with the app's own nodes. The earlier finding that the device surface exposes "zero accessibility nodes" was an artifact of System Events, which sees Device Hub with pid 0 because the app is launched through a trampoline; an `AXUIElement` built from the real pid works |
-| Reading the pose | `xcrun devicectl device motion hinge-angle --device <udid>` streams the hinge angle for the Duo simulator (`Range:0-180°`): Closed 0°, Book 130°, Open 180°. The stream does not end when `--session-timeout` elapses, so one read is bounded by devicectl's own `--timeout`, whose smallest accepted value is 5 seconds; the sample it printed before aborting itself is the reading |
-| Device identity | Device Hub titles the window `<name> – iOS 27.1`, which two simulators sharing a name cannot distinguish. Its sidebar rows carry `AXIdentifier` `TableRow.Device.<UDID>`, and setting `AXSelected` on a row switches the window to that device, so the row is `fold`'s only device handle — but a missing row plus a same-named twin's matching title skips the selection before any press, and the confirmation is by title too (see Accepted evidence gaps) |
-| No window | A simulator booted headlessly leaves Device Hub running with no window. LaunchServices cannot address the trampolined process by bundle id (`open -b`, `NSRunningApplication.activate` do nothing), but a `kAEReopenApplication` event sent to the pid restores the device window, the same event a Dock click sends |
+`xcrun devicectl device motion hinge-angle --device <udid>` streams the Duo simulator hinge angle over `Range:0-180°`.
+Measured presets are Closed 0°, Book 130°, and Open 180°.
+`--session-timeout` does not stop the stream.
+Each read therefore uses devicectl's own `--timeout`, whose minimum accepted value is 5 seconds.
+The sample printed before timeout is the reading.
+This read path was checked on the shipping 27.1 toolchain.
 
-The rule this yields: `closed` and `open` are the hinge's two end stops, so one read at the stop is
-the pose. Every other angle is `half-open`, including the ones a hinge sweeps through on its way
-somewhere else, so an angle in that open interval proves only the category — the pose is the hinge
-*resting* there, which two consecutive reads show by both classifying as `half-open` and agreeing
-within 0.5°. Each read takes the last sample the five-second stream printed, so a moving hinge is
-reported where it is now. The run that first exposed the animation — before the amendment below —
-read 175.1° one stream after pressing Book and 130° two streams later; the run recorded under the
-amended rule is in "Verified on a booted Duo". A budget that ends with the hinge at some other pose is
-refused as `fold-pose-unverified` with the angle CoreDevice still reports; one that ends on an
-unsettled `half-open` angle is refused as `fold-pose-unsettled` (see the amendment below). The
-response of a verified pose carries the angle and the lit panel's point
-size, because the point size is what tells an agent its refs are stale.
+`closed` and `open` are hinge end stops.
+One read at the stop proves the pose.
+Every other angle is `half-open`, including transient angles during movement.
+An interior angle proves only a category.
+A held pose requires two consecutive readings that both classify as `half-open` and differ by at most 0.5°.
+Each read uses the final sample from the five-second stream, so it reports the hinge's current position.
+Before the amendment, one run read 175.1° one stream after Book and 130° two streams later.
+"Verified on a booted Duo" records the amended-rule run.
 
-Requirements the command states in its own errors: Accessibility permission for the host
-(`accessibility-permission`), a running Device Hub (`fold` launches it in the background the way
-`open` does), a device window it can reopen (`device-hub-window-missing`), and a sidebar row for
-the UDID (otherwise `device-hub-identity-unconfirmed`). A single-panel simulator is refused before anything is
-pressed (`single-panel-device`), and the leaf fact refuses physical devices and every non-iPhone
-simulator OS.
+If the budget ends at another pose, refuse with `fold-pose-unverified` and CoreDevice's observed angle.
+If it ends at unsettled `half-open`, refuse with `fold-pose-unsettled`.
+A verified response includes the angle and lit panel's point size.
+That point size tells an agent its refs are stale.
 
-Window discovery reads `AXWindows` from every matching Device Hub process within one shared
-retry budget. These are application-wide windows; discovery does not click through monitors or
-move windows to the main display. A failed accessibility read retains its AX status and returns
-`device-hub-window-read-failed`, rather than masquerading as an empty window list. Only successful
-empty reads trigger a reopen. A matching UDID sidebar row is required before pressing, including
-when a window title already matches. An unrelated window does not stop attempts on other
-windows or empty processes. A hidden sidebar is revealed through that window’s own toolbar button;
-application-wide menus cannot redirect the action to another window. Sidebar reads and
-restoration use bounded AX calls. Cleanup is registered before a sidebar press, since an AX reply
-can time out after the action applied. Selection verifies the row's `AXSelected` state and the
-window title even after an uncertain reply. Discovery passes the proven row to selection instead
-of searching twice. Inconclusive candidates report `device-hub-identity-unconfirmed` with each
-candidate's outcome; exhausting the shared budget before finishing work reports
-`device-hub-discovery-timeout`. Neither claims a device is absent. Active host display IDs stay
-in discovery error details; display geometry does not participate in AX window selection.
+A single-panel simulator is refused before mutation with `single-panel-device`.
+The leaf fact refuses physical devices and every non-iPhone simulator OS.
 
 ## Amendment: an observed half-open angle is not a settled pose (issue #2730)
 
-The rule above first ended the other way: `half-open` was also reported when the four-read budget
-ran out while the hinge still read `half-open`, because a refusal was not allowed to name the pose
-that was asked for. That reasoning confuses an observed category with a completed pose change.
-`half-open` is an open interval, so a hinge travelling between the end stops passes through it on
-every fold; four readings that each land inside the interval and never agree describe a hinge in
-motion, and reporting them as a pose tells an agent the Book preset is on screen when nothing is at
-rest there. The interval rule also cannot pin a value: Device Hub's Book preset measures 130° on
-this iOS 27.1 Duo, which is one device's measurement, not the success condition — stability is.
+The former rule also reported `half-open` when the four-read budget ended while the hinge still read `half-open`.
+The reason was that a refusal was not allowed to name the requested pose.
+This confuses an observed category with a completed pose change.
+A hinge crosses the half-open interval on every movement between end stops.
+Four readings inside the interval without agreement describe motion, not a held Book preset.
+The interval also cannot specify one angle.
+The Device Hub Book preset measured 130° on this iOS 27.1 Duo.
+That measurement is device-specific; stability is the success condition.
 
-So `fold half-open` succeeds only on two consecutive readings that both classify as `half-open` and
-differ by at most 0.5°. Numerical proximity is not agreement when the pair straddles a category
-boundary: 179° is `open` and 178.8° is `half-open` although they differ by 0.2°, and those are two
-poses, not one resting hinge. A budget that ends on an unsettled `half-open` angle fails with
-`COMMAND_FAILED`, `details.reason: "fold-pose-unsettled"`, `requestedPose`, `observedPose`,
-`hingeAngleDegrees` and the previous reading, and says the hinge was observed half-open and did not
-settle — never that it failed to reach half-open, which its own observed pose refutes.
-`fold-pose-unverified` stays for a budget ending on another pose, and keeps classifying from that
-final sample alone: a hinge that passed through `half-open` on its way to the end stop is refused as
-unverified, because the pose it ended in is not the one that was asked for.
-The attempt count, the per-read timeout, cancellation, and the open/closed end-stop
-rule are unchanged: an unsettled fold costs the same four hinge streams it always did.
+`fold half-open` succeeds only when two consecutive readings classify as `half-open` and differ by at most 0.5°.
+Numerical proximity across a category boundary is insufficient.
+179° is `open`, while 178.8° is `half-open`.
+Their 0.2° difference does not prove one held pose.
+If the budget ends at unsettled `half-open`, fail with `COMMAND_FAILED` and these details:
 
-A first hinge read that returns no sample leaves the pose unconfirmed, whatever the cause: devicectl 651.13.5 (Xcode 27.1 RC build 27A9275) has no `device motion` subcommand, and an unreachable device prints no sample either. The HID command has already been delivered by then, so `fold` refuses with `fold-pose-dispatched-unverified`: sent, not confirmed, distinct from a pose the hinge contradicted. The read's own failure rides along as `hingeReadFailure`, so the cause is read from its stderr rather than assumed. When panel power decides a single lit panel, the error carries it as `screen` evidence; panel power cannot separate `half-open` from `open`, so it is never promoted to a verified pose. A no-sample read after an earlier sample is not this case and keeps its own reason.
+- `details.reason: "fold-pose-unsettled"`
+- `requestedPose`
+- `observedPose`
+- `hingeAngleDegrees`
+- The previous reading.
+
+The message says the hinge was observed half-open but did not settle.
+It never claims failure to reach half-open, which the observation disproves.
+`fold-pose-unverified` remains the reason when the budget ends at another pose.
+It classifies only the final sample.
+A hinge that passes through `half-open` and ends at an end stop is refused as unverified, because its final pose is not the requested pose.
+Attempt count, per-read timeout, cancellation, and open/closed end-stop rules remain unchanged.
+An unsettled fold still consumes four hinge streams.
+
+If the first hinge read returns no sample, the pose remains unconfirmed regardless of cause.
+For example, devicectl 651.13.5 in Xcode 27.1 RC build 27A9275 lacks `device motion`.
+An unreachable device also prints no sample.
+HID has already dispatched, so refusal uses `fold-pose-dispatched-unverified`.
+This distinguishes unconfirmed dispatch from an observed contradictory pose.
+`hingeReadFailure` retains the read failure.
+Its stderr supplies the cause instead of an assumption.
+If panel power identifies exactly one lit panel, the error includes `screen` evidence.
+Panel power cannot distinguish `half-open` from `open`, so the `screen` evidence is never promoted to a verified pose.
+A later no-sample read after an earlier sample retains its own reason.
 
 ## Pose is derived from panel power, and official control does not exist
 
-Apple ships fold state as an **app-side, read-only** API: `UIHinge.status`
-(`.closed`/`.partiallyOpen`/`.fullyOpen`) observed through `UIHingeInteraction`, and SwiftUI
-`DeviceHinge` / `.onHingeChange`, both `ios(27.1)`. There is no `UITraitCollection` trait for it.
+Apple's **app-side, read-only** API exposes `UIHinge.status` as `.closed`/`.partiallyOpen`/`.fullyOpen` through `UIHingeInteraction`.
+SwiftUI exposes `DeviceHinge` / `.onHingeChange`.
+Both require `ios(27.1)`.
+There is no `UITraitCollection` hinge trait.
 
-No **official** host-side control channel exists. Each candidate was checked against the shipping
-toolchain:
+No **official** host control channel exists.
+The shipping-toolchain investigation recorded these candidate results:
 
 | Candidate | Result |
 | --- | --- |
-| `simctl` subcommands | no `hinge`/`fold`/`pose` surface; no such token in the `simctl` binary or in `CoreSimulator.framework` |
-| `simctl io` | `screenshot`/`recordVideo` take `--display`; `screenConfig` sets `power` and `geometry` per screen — neither changes hinge state |
-| XCUITest | no hinge token in any `XCUIAutomation` header; `XCUIDeviceButton` is Home/VolumeUp/VolumeDown/Action/Camera only |
-| CoreDevice | `com.apple.coredevice.action.streamhingeangle`, `HingeAngleManager`, `DeviceHingeAngleSnapshot` and `HingeAngleStreamConfig` exist in `/Library/Developer/PrivateFrameworks/CoreDeviceUtilities.framework` (and `dtdeviceinfod`), but they **stream** an angle; the Duo reports no such feature, and `devicectl` exposes no CLI for it |
+| `simctl` subcommands | No `hinge`/`fold`/`pose` surface; No such token in the `simctl` binary or in `CoreSimulator.framework` |
+| `simctl io` | `screenshot`/`recordVideo` take `--display`; `screenConfig` sets `power` and `geometry` per screen — Neither changes hinge state. |
+| XCUITest | No hinge token in any `XCUIAutomation` header; `XCUIDeviceButton` is Home/VolumeUp/VolumeDown/Action/Camera only |
+| CoreDevice | `com.apple.coredevice.action.streamhingeangle`, `HingeAngleManager`, `DeviceHingeAngleSnapshot` and `HingeAngleStreamConfig` exist in `/Library/Developer/PrivateFrameworks/CoreDeviceUtilities.framework` (and `dtdeviceinfod`), They **stream** an angle. The Duo reports no such feature. `devicectl` exposes no CLI for it. |
 | `devicectl` | `device info displays` reports panel state only |
-| `Xcode.app` frameworks | no hinge reference in `Xcode.app/Contents/{SharedFrameworks,Frameworks}`, so Device Hub's own control is not a hinge API shipped inside Xcode |
+| `Xcode.app` frameworks | No hinge reference in `Xcode.app/Contents/{SharedFrameworks,Frameworks}`, Device Hub control is therefore not a hinge API shipped inside Xcode. |
 
-Two searches came back empty rather than negative, and are recorded as limits rather than refuted
-claims:
+Two searches came back empty, not negative. This ADR records them as limits, not as refuted claims:
 
-- The **simulator guest runtime** was not enumerated for a host-reachable control channel. Symbol
-  archaeology turned up a private SpringBoard service (`SBDisplayToolService`,
-  `com.apple.springboard.sbdisplay.service`) with `setPrimary:displayUUID:`,
-  `setBacklightState:displayUUID:` and `replayHingeSamplesWithOptions:path:`, plus
-  `SBContinuousFoldController` and a `com.apple.springboard.fold` notification. No client, launch
-  path, or invocation from this host was found, so it is an **unproven private lead** — not adopted,
-  and not a basis for any claim that pose control is possible.
-- Device Hub's control could live in a private framework outside `Xcode.app`. That would not make it
-  usable: it is still not an API.
+- The investigation did not enumerate the simulator guest runtime for a host-reachable control channel.
+  Symbol searches found private SpringBoard `SBDisplayToolService`, `com.apple.springboard.sbdisplay.service`, and these methods:
+  - `setPrimary:displayUUID:`
+  - `setBacklightState:displayUUID:`
+  - `replayHingeSamplesWithOptions:path:`
+  They also found `SBContinuousFoldController` and a `com.apple.springboard.fold` notification.
+  No client, launch path, or invocation from this host was found.
+  This is an **unproven private lead**, not an adopted mechanism or proof of possible pose control.
+- Device Hub's control could reside in a private framework outside `Xcode.app`.
+  That would still not provide a usable API.
 
-Consequences that are now policy: no private per-guest XPC channel is driven, because an undocumented
-hook is exactly the kind that breaks without notice; the one host control that exists is Device
-Hub's own, and `fold` drives it through the accessibility API and trusts only the CoreDevice
-read-back (see the section above). A pose derived from panel power alone is still documented to
-cover Apple's `fullyOpen` **and** `partiallyOpen` — panel power cannot separate them, so only the
-hinge angle or an in-app `UIHinge.status` read can.
+Panel-power-derived pose still covers Apple's `fullyOpen` **and** `partiallyOpen`.
+Only hinge-angle readback or in-app `UIHinge.status` distinguishes them.
 
 ## Refuted alternatives
 
-- **Pose commands backed by `simctl io screenConfig power`.** Rejected: it does not move
-  `UIHinge.status`, so the app under test would not behave as folded. It would produce green tests
-  of a state the device is not in.
-- **Pose commands backed by coordinate clicks on Device Hub.** Rejected: a coordinate press is
-  blind to which window and which device it lands on and needs Screen Recording to aim. The
-  accessibility press `fold` uses names the control, the window, and the device row, needs only
-  Accessibility permission, and is still not trusted on its own: the hinge read-back is.
-- **A `fold` that reports the pose it requested.** Rejected: the press is dispatched to whatever
-  Device Hub window is frontmost for that device, and a press on the wrong window succeeds
-  silently. Only the CoreDevice hinge angle says the device moved.
-- **Luma or content heuristics to pick the lit panel.** Rejected: a black screenshot is legitimate
-  content elsewhere, and the repo already forbids deciding on pixels when a typed fact exists.
-  CoreDevice reports `active`/`backlightState` directly.
-- **A `--screen outer|inner` flag.** Rejected as unnecessary: the inactive panel renders black, so
-  a non-active selection can only ever capture nothing. Revisit only when a device shows content on
-  two panels at once.
-- **Reading the device type's `capabilities.plist` for the panel table.** Rejected: `devicectl`
-  reports live panel state, which the plist cannot, and works identically on physical devices.
+- **Pose commands backed by `simctl io screenConfig power`: rejected.**
+  It does not change `UIHinge.status`.
+  The app would not behave as folded, and tests could pass for a state absent from the device.
+- **Pose commands backed by coordinate clicks on Device Hub: rejected.**
+  Coordinates cannot identify the target window/device and require Screen Recording for alignment.
+  The superseded accessibility approach named the control, window, and device row and required only Accessibility permission.
+  That approach still required hinge readback instead of trusting the press.
+- **A `fold` that reports the requested pose: rejected.**
+  A press on the wrong Device Hub window can silently succeed.
+  Only CoreDevice hinge-angle readback proves movement of the selected device.
+- **Luma or content heuristics for panel selection: rejected.**
+  Black screenshots can represent valid content.
+  Repository policy prohibits pixel-based decisions when typed facts exist.
+  CoreDevice directly reports `active`/`backlightState`.
+- **A `--screen outer|inner` flag: rejected as unnecessary.**
+  The inactive panel renders black, so its capture contains no content.
+  Revisit only when a device shows content on two panels simultaneously.
+- **The device type's `capabilities.plist` as panel inventory: rejected.**
+  It lacks the live panel state that `devicectl` reports.
+  `devicectl` also works identically on physical devices.
 
 ## Consequences for agents
 
-A pose change moves the app to a different panel with different point size, so refs and
-coordinates do not survive it. `agent-device help foldable` states this, `fold` says so in its own
-message, and agents fold to each pose a task names and re-snapshot rather than assume one.
+Pose changes move the app to a panel with a different point size.
+Refs and coordinates do not survive the change.
+`agent-device help foldable` and `fold`'s message state this requirement.
+Agents fold to each requested pose and take another snapshot instead of assuming pose.
 
-`simctl io recordVideo` has the same implicit-display default as `screenshot`, so recording names
-the lit panel through the same resolver. On an open Duo the 27.1 toolchain accepts the panel name
-and honors it per panel; sampled mean luma over the whole frame:
+`simctl io recordVideo` shares screenshot's implicit display default.
+Recording therefore names the lit panel through the same resolver.
+On an open Duo, the 27.1 toolchain accepts and honors the panel name.
+The measurements sample mean luma across the complete frame:
 
 | `recordVideo` argv | exported size | mean luma |
 | --- | --- | --- |
@@ -329,40 +372,43 @@ and honors it per panel; sampled mean luma over the whole frame:
 | `--display=LCD` (dark outer) | 1398x2034 | 0.00 |
 | no `--display` | 2006x2852 | 241.42 |
 
-`record start`/`record stop` exit 0 in both poses, and with `--hide-touches` the export keeps the
-captured geometry (`2006x2852`, mean luma 241.42). Without it, and before #2707 was fixed, the
-touch-overlay exporter lost the track geometry, and on a long clip the frames too.
+`record start`/`record stop` exit 0 in both poses.
+With `--hide-touches`, export preserves captured geometry: `2006x2852`, mean luma 241.42.
+Before #2707's fix, touch-overlay export without that flag lost track geometry and, on long clips, frames.
 
 ### The touch-overlay export lost geometry for any capture, not a rotated one (#2707)
 
-The trigger was the overlay drawing touch events, not panel rotation. The #2707 report measured this
-on an iPhone 17 simulator (iOS 27.0, non-rot90 panel), Xcode 27.1 beta: four seconds with no
-interaction exported `1206x2622` intact, ten seconds containing two taps exported `220x480`, and the
-same two taps under `--hide-touches` exported `1206x2622` with the screen content changing across
-frames. A 97-second recording with touches exported `480x220` at mean luma 0.00 throughout.
+Touch-event overlays caused the failure, not panel rotation.
+#2707 measured an iPhone 17 simulator with iOS 27.0, a non-rot90 panel, and Xcode 27.1 beta:
 
-An earlier draft of this section blamed the inner panel's `rot90` track. That was wrong and predated
-this matrix: every failing sample then available had merely been captured on that panel, and the one
-non-rotated sample that looked intact had contained no touches to draw. Feeding an untouched raw
-`simctl` capture straight into `recording-overlay.swift` just copies it through, which is why
-`--hide-touches` and an empty gesture list kept the capture intact — the collapse lived in the
-overlay export path, not the panel.
+- Four seconds without interaction exported intact `1206x2622`.
+- Ten seconds with two taps exported `220x480`.
+- The same taps with `--hide-touches` exported `1206x2622` with changing screen content.
+- A 97-second touched recording exported `480x220` with mean luma 0.00 throughout.
 
-The cause was the export preset, measured against a synthetic capture on this host: the burn-in is a
-full re-encode through `AVAssetExportSession`, and the default `medium` tier selected
-`AVAssetExportPresetMediumQuality`, a fixed-canvas preset that rescales the long edge to 480px — a
-`1206x2622` capture lands on `220x480`, a landscape capture on `480x220`. Only
-`AVAssetExportPresetHighestQuality` preserves arbitrary capture geometry, and the hardware encoder
-makes the full-resolution re-encode cheap: 90s at `1206x2622` re-encoded in ~1–2s, so `high` was
-never actually slower.
+The earlier attribution to the inner panel's `rot90` track was incorrect.
+All then-known failing samples used that panel.
+The apparently intact non-rotated sample had no touches.
+`recording-overlay.swift` copies untouched raw `simctl` capture through without changes.
+Thus, `--hide-touches` and an empty gesture list preserved capture.
+The failure belonged to overlay export, not the panel.
 
-`recording-overlay.swift` now always exports through the geometry-preserving preset at both quality
-tiers, so `--quality` no longer trades capture resolution away. It also verifies its own output
-before the caller adopts it — the composited track's resolved size must match the capture, and a
-track that went uniformly black while the raw had visible content is rejected — and on either failure
-it throws instead of publishing a broken file, so the overlay is dropped, the raw capture is kept,
-and the choice is reported on the `record stop` response as `overlayWarning`. Feeding the fixed tool
-the same synthetic captures re-measures the failing rows as matching `--hide-touches`:
+Synthetic capture measurements on this host identified the export preset as the cause.
+Overlay burn-in fully re-encodes through `AVAssetExportSession`.
+The default `medium` tier selected `AVAssetExportPresetMediumQuality`.
+This fixed-canvas preset reduces the long edge to 480px.
+It changes `1206x2622` to `220x480` and landscape capture to `480x220`.
+Only `AVAssetExportPresetHighestQuality` preserves arbitrary geometry.
+Hardware encoding makes full-resolution export inexpensive: approximately 1–2s for 90s at `1206x2622`.
+Thus, `high` was not slower.
+
+`recording-overlay.swift` now always exports through the geometry-preserving preset at both quality tiers.
+`--quality` no longer reduces capture resolution.
+Before adoption, it verifies that the composited track's resolved size matches the capture.
+It also rejects uniformly black output when the raw capture had visible content.
+Either failure throws instead of publishing the output.
+The caller drops the overlay, retains raw capture, and reports `overlayWarning` on `record stop`.
+The same synthetic captures now match `--hide-touches`:
 
 | Overlay | Interactions | Exported size (before → after) | Black? |
 | --- | --- | --- | --- |
@@ -370,198 +416,212 @@ the same synthetic captures re-measures the failing rows as matching `--hide-tou
 | default | taps + scroll, landscape source | `480x220` → source size | no |
 | `--hide-touches` | two taps | `1206x2622` → `1206x2622` | no |
 
-The `after` column is this host's offline synthetic harness, which reproduces the collapse and
-confirms the fix preserves geometry. The completion condition's on-device re-measure of these rows on
-a non-rot90 target and on the Duo inner panel is carried by `test/integration/recording-overlay.test.ts`,
-a device-lane case gated behind `AGENT_DEVICE_RECORDING_E2E` that compares a touched export to a
-`--hide-touches` control, asserts the same track size, and asserts the overlay actually drew.
+The `after` column comes from this host's offline synthetic harness.
+It reproduces the failure and confirms preserved geometry after the fix.
+`test/integration/recording-overlay.test.ts` carries the on-device completion measurements for a non-rot90 target and Duo inner panel.
+`AGENT_DEVICE_RECORDING_E2E` enables this device-lane case.
+It compares touched export with a `--hide-touches` control.
+It asserts equal track size and verifies that the overlay drew touches.
 
-The device-lane test reads each export's transform-applied size back through AVFoundation —
-`test/integration/support/recording-inspect.swift` reports `renderWidth`/`renderHeight` from the same
-`resolvedRenderSize` the overlay tool uses — so a `rot90` panel is compared upright rather than on its
-sideways coding grid, and no second MP4 geometry parser is added to the shipped packages.
+The device test reads transform-applied export dimensions through AVFoundation.
+`test/integration/support/recording-inspect.swift` reports `renderWidth`/`renderHeight` through the overlay tool's same `resolvedRenderSize`.
+Thus, `rot90` comparison uses upright geometry instead of the sideways encoded grid.
+Shipped packages gain no second MP4 geometry parser.
 
-A quarter-turn transform can leave the upright frame outside a zero-origin composition canvas.
-The Duo inner capture has a `2006x2852` natural size and transform `[0, 1, -1, 0, 0, 0]`, which
-places its upright `2852x2006` bounds at `x=-2852`. Applying that transform without translating the
-bounds into the render canvas clips the source content and trips the compositor's all-black check
-(#2774). The overlay now derives its render size and origin translation from the same transformed
-bounds. Native export regressions cover an identity transform and both translated and
-negative-origin quarter turns, asserting upright source content, unchanged geometry, and drawn
-touches.
+A quarter-turn transform can place the upright frame outside a zero-origin composition canvas.
+Duo inner capture has natural size `2006x2852` and transform `[0, 1, -1, 0, 0, 0]`.
+Its upright `2852x2006` bounds start at `x=-2852`.
+Without translation into the render canvas, the transform clips content and triggers the all-black check (#2774).
+The overlay derives render size and origin translation from the same transformed bounds.
+Native export regressions cover identity, translated quarter turns, and negative-origin quarter turns.
+They assert upright content, unchanged geometry, and drawn touches.
 
 ## Verified on a booted Duo
 
-Closed pose: `screenshot` moved from `669x951` luma 0.09 to `466x678` luma 65.8; a tap on Safari's
-address field at `(191, 620)` opened the keyboard; and on the `examples/test-app` dev build a
-41-node `snapshot -i`, a tap that dismissed the dev-menu sheet at `(345, 301)`, and a Catalog-tab tap
-at `(128, 626)` that settled `+19 -15`.
+In the closed pose, `screenshot` changed from `669x951` at luma 0.09 to `466x678` at luma 65.8.
+A Safari address-field tap at `(191, 620)` opened the keyboard.
+The `examples/test-app` dev build produced a 41-node `snapshot -i`.
+A tap at `(345, 301)` dismissed the dev-menu sheet.
+A Catalog-tab tap at `(128, 626)` settled `+19 -15`.
 
-Open pose, after an operator opened the device: the capture names `LCD-1` at `951x669 @1x`,
-`snapshot -i` returns Safari's nodes on that surface, `tap @e4` resolves to `(590, 478)` inside it,
-and text sent with `type` is found again by `find text` — hit testing and read-back both follow the
-lit panel. A ref issued before the fold is refused afterwards as an expired frame rather than
-replayed at the new point size, which is the pose-change rule working as designed.
+After an operator opened the device, capture explicitly named `LCD-1` at `951x669 @1x`.
+`snapshot -i` returned Safari nodes on that surface.
+`tap @e4` resolved inside it at `(590, 478)`.
+`find text` found text sent through `type`.
+Hit tests and readback therefore followed the lit panel.
+A pre-fold ref was refused as an expired frame instead of replayed at the new point size.
 
-Half-open pose under the amended settle rule, on a booted iPhone Duo (iOS 27.1) at this PR's head:
-`fold open` reported 180° on its end-stop reading, and `fold half-open` from that open pose reported
-130° naming `LCD-1` at `669x951pt`. The hinge was travelling when the press landed and still came to
-rest inside the interval, so requiring a settled pair did not lose the Book preset. A
-`devicectl device motion hinge-angle` stream read afterwards reported `Angle:130,0° Velocity:+0,0°/s`
-— the hinge is where the pair rule said it was. The run's session was closed and its daemon stopped
-afterwards.
+The amended settle rule was verified on a booted iPhone Duo with iOS 27.1 at that PR's head.
+`fold open` reported an end-stop reading of 180°.
+From that pose, `fold half-open` reported 130° and `LCD-1` at `669x951pt`.
+The moving hinge settled inside the interval.
+The two-reading requirement therefore preserved the Book preset.
+A subsequent `devicectl device motion hinge-angle` stream printed `Angle:130,0° Velocity:+0,0°/s`.
+This confirmed the settled pair's result.
+The session closed and its daemon stopped after the run.
 
 ## Which XCTest capture surface sees the lit panel
 
-#2727 measured every `XCUIScreenshotProviding` surface a runner can reach against the `simctl io
-screenshot --display=<panel>` capture of the panel CoreDevice reports lit, on iPhone Duo (iOS 27.1,
-Xcode 27.1 beta) closed at hinge 0° and open at 180°, with a 130° session on different app content
-as the corroboration run and iPhone 17 (iOS 27.0) as the single-panel control. Poses came from the
-hinge read-back, not from the pose that was requested — the amendment above is why that is the only
-defensible source: the first two inner-panel sessions were booked as open and both read back 130°,
-so they are recorded here as corroboration and the settled 180° session carries the table. A
-different app screen was shown per session, so neither panel could be mistaken for the other by
-content, and the app was left untouched between the oracle and the runner capture, so a luma gap is
-a source difference rather than a content one. Mean luma comes from a 48x48 resample; panel
-identity comes from CoreDevice's `displayId` and pixel agreement from comparing decoded pixels, so
-no claim here rests on luma. Captured dimensions are PNG header dimensions, which is the panel's
-native geometry — the capture's own orientation presents some of them turned.
+#2727 compared every runner-reachable `XCUIScreenshotProviding` surface against `simctl io screenshot --display=<panel>` for CoreDevice's lit panel.
+The targets were iPhone Duo with iOS 27.1 and Xcode 27.1 beta, closed at 0° and open at 180°.
+A 130° session with different app content corroborated results.
+An iPhone 17 with iOS 27.0 served as the single-panel control.
+Hinge readback determined pose, not the requested preset. The amendment above makes hinge readback the only defensible source for these recorded poses.
+Two initial inner-panel sessions requested open but read back 130°.
+They therefore serve as corroboration; the settled 180° session supplies the table.
+
+Each session showed a different app screen to distinguish panel content.
+The app remained unchanged between the reference and runner captures.
+Thus, luma differences reflect sources rather than content changes.
+Mean luma uses a 48x48 resample.
+CoreDevice `displayId` supplies identity, and decoded-pixel comparison supplies agreement.
+No claim here depends on luma.
+PNG headers supply captured dimensions in native panel geometry.
+Capture orientation presents some images turned.
 
 | Capture surface | Outer panel lit (closed) | Inner panel lit (open, 180°) | Verdict |
 | --- | --- | --- | --- |
 | `simctl` capture of the lit panel | `1398x2034`, luma 221.86 | `2853x2007`, luma 192.02 | reference |
-| `XCUIScreen.main.screenshot()` | `1398x2034`, luma 221.90 | `1398x2034`, **luma 0.00** | Names the outer panel in every pose, so it is correct only while that panel is lit |
-| `XCUIApplication.screenshot()` | `1398x2034`, luma 221.90 | `2006x2852`, **luma 0.00** | Inner geometry, outer content: follows `app.screen`, which stays pinned to panel `1` |
-| `XCUIScreen.screens[i].screenshot()` | its own panel | its own panel | Correct per object; naming the panel is the caller's job, never a default |
+| `XCUIScreen.main.screenshot()` | `1398x2034`, luma 221.90 | `1398x2034`, **luma 0.00** | Names the outer panel in every pose. Correct only when that panel is lit. |
+| `XCUIApplication.screenshot()` | `1398x2034`, luma 221.90 | `2006x2852`, **luma 0.00** | Inner geometry, outer content. Follows `app.screen`, fixed to panel `1`. |
+| `XCUIScreen.screens[i].screenshot()` | its own panel | its own panel | Correct per object. The caller must name the panel; there is no default. |
 | Resolved `window.screenshot()` | `1398x2034`, luma 221.90, 0 of 2,843,532 pixels differing from that panel's own screen capture | `2006x2852`, luma 192.03, 142 of 5,721,112 pixels differing by at most one per channel | **Captures the display the window is on in every pose** |
-| `window.screenshot()` with no prior `frame` read | not run | identical to the row above, 0 pixels differing | The element resolves its own snapshot; the frame-first rule belongs to the identity read below, not to the capture |
-| `element.screenshot()` | `566x168` crop of a `188.67x56` pt cell | `168x1061` crop of a `353.67x56` pt cell | Correct; the crop is taken in the panel's native geometry, so it is turned relative to the element's frame |
+| `window.screenshot()` with no prior `frame` read | not run | identical to the row above, 0 pixels differing | The element resolves its own snapshot. The frame-first rule applies only to the identity read below. |
+| `element.screenshot()` | `566x168` crop of a `188.67x56` pt cell | `168x1061` crop of a `353.67x56` pt cell | Correct. The crop uses native panel geometry and is turned relative to the element frame. |
 
-The 130° corroboration session reproduced every verdict on the inner panel, including the black
-`XCUIScreen.main`, the black application capture, and the window capture matching its panel's own
-screen capture to within 187 pixels of 5,721,112 at content luma 236.91. So a window capture is the
-same pixels as the screen capture of the panel its window sits on, and it is the only full-panel
-surface measured that needed no pose knowledge. `element.screenshot()` followed the fold too, but
-returns one element rather than a panel.
+The 130° session reproduced every inner-panel verdict.
+`XCUIScreen.main` and application captures were black.
+Window capture matched the panel screen capture within 187 pixels of 5,721,112 at content luma 236.91.
+Window capture therefore produces the pixels of its window's display.
+It is the only measured full-panel surface that required no pose knowledge.
+`element.screenshot()` also followed the fold but returned only one element.
 
-Four facts the capture path cannot read off the image:
+The image cannot establish these four facts:
 
-- **Identity, and how little of it is declared.** `XCUIScreen.h` declares `screens` and
-  `mainScreen` alone, and documents `mainScreen` as "the primary screen of the device", so naming
-  the outer panel in every pose is the documented behavior and not a malfunction. `displayID`,
-  `scale`, and `bounds` answered KVC on every screen measured while `frame` and `name` raised
-  `NSUnknownKeyException`, but none of those keys appears in any XCTest header in this toolchain:
-  the identity read is as undocumented as the one #2724 already relies on for gesture routing, and
-  #2728 inherits that breakage risk whichever way it goes. It should reuse #2724's resolved-display
-  read rather than open a third route to the same private key. The ordering #2724 recorded held
-  here: `app.screen` and an unresolved window reported `displayID` `1` while the app was visibly on
-  panel `3`, and the resolved window reported `3`. `XCUIScreen` carries no panel-power fact and no
-  `displayWithID:` lookup, so a panel is chosen by filtering `XCUIScreen.screens` and
-  `backlightState` stays CoreDevice's. - **Geometry.** The capture carries the panel's own scale
-  (measured `3`, equal to that panel's CoreDevice `pointScale`) in the panel's *native* geometry
-  rather than the interface orientation: on the `rot90` inner panel the PNG is `2006x2852` with the
-  landscape content rotated inside it and the `UIImage` carrying capture orientation raw value `3`,
-  whose display size transposes the panel, where `simctl` exports the same panel `2853x2007`
-  upright. The runner's production encoder and `XCUIScreenshot`'s produce 0 differing pixels for
-  one capture from `358,402` and `328,181` encoded bytes, so the turn belongs to the capture and
-  not to an encoder. Rotating is not enough to compare the two: the raw canvas is `2006x2852` and
-  `simctl`'s `2853x2007`, a pixel apart on each axis. The shipped encoder draws the capture upright
-  at that image's own logical size and scale, which pays the rotation and takes no crop: the one-pixel
-  difference stays, because stretching it to CoreDevice's nominal panel box would invent pixels the
-  capture never held (#2741). - **Overlays.** A screen capture and a window capture are both display
-  captures — the second cropped to the window — so the software keyboard, a SpringBoard-hosted
-  permission alert, and the status bar all appear in either. It cuts the other way as well: that
-  alert's own window
-  resolved to `displayID` `3`, the dark panel in the closed pose, and capturing it yielded a black
-  `668x950` crop indistinguishable from any capture of a dark panel. Whether a system window on the
-  *lit* panel captures was not measured, so a system surface is verified on the app's panel, not
-  through its window. - **Unresolved window.** Asking an element that does not exist for screenshot
-  data raises `Element Window (First Match) cannot request screenshot data because it does not
-  exist` instead of capturing anything, but that is the element route only: `XCUIAutomation` also
-  contains `Could not resolve displayID for snapshot %@; falling back to main display (id %lld)`,
-  so an internal snapshot-to-display resolution failure can reach the main display silently. A
-  helper therefore resolves the window itself and reports its own typed reason, and does not treat
-  that message text as the contract. Defaulting to `XCUIScreen.main` on that path would be this
-  ADR's original bug, renamed.
+- **Identity and declaration limits.**
+  `XCUIScreen.h` declares only `screens` and `mainScreen`.
+  It describes `mainScreen` as "the primary screen of the device".
+  Selection of the outer panel in every pose is therefore documented behavior.
+  On all measured screens, KVC answered `displayID`, `scale`, and `bounds`.
+  `frame` and `name` raised `NSUnknownKeyException`.
+  No XCTest header in this toolchain declares these keys.
+  This identity read has the same undocumented dependency as #2724's gesture routing.
+  #2728 inherits that breakage risk with either choice.
+  It should reuse #2724's resolved-display read instead of adding a third path to the private key.
+  The ordering from #2724 reproduced here.
+  `app.screen` and an unresolved window reported `displayID` `1` while the app visibly occupied panel `3`.
+  The resolved window reported `3`.
+  `XCUIScreen` supplies neither panel power nor a `displayWithID:` lookup.
+  Selection filters `XCUIScreen.screens`; CoreDevice retains `backlightState` authority.
+- **Geometry.**
+  Capture reports its panel's scale, measured as `3`, equal to CoreDevice `pointScale`.
+  Geometry is native, not interface-oriented.
+  On the `rot90` inner panel, the PNG is `2006x2852` with landscape content rotated inside it.
+  The `UIImage` capture orientation has raw value `3`, whose display size transposes the panel.
+  `simctl` exports the same panel upright as `2853x2007`.
+  Production runner encoding and `XCUIScreenshot` encoding produce 0 different pixels from one capture, despite `358,402` versus `328,181` encoded bytes.
+  The rotation therefore belongs to capture, not encoding.
+  Rotation alone cannot equalize the images: raw `2006x2852` and `simctl` `2853x2007` differ by one pixel per axis.
+  The shipped encoder draws upright at the image's own logical size and scale, without a crop.
+  It preserves the one-pixel difference.
+  Stretching to nominal CoreDevice dimensions would invent pixels absent from capture (#2741).
+- **Overlays.**
+  Screen capture and window capture both capture a display; window capture crops it to the window.
+  Both include the software keyboard, SpringBoard permission alerts, and status bar.
+  However, that alert's own window resolved to `displayID` `3`, the dark panel in the closed pose.
+  Its capture returned a black `668x950` crop, indistinguishable from other dark-panel captures.
+  The investigation did not measure a system window on the lit panel.
+  System-surface verification therefore uses the app's panel instead of the system window.
+- **Unresolved window.**
+  A nonexistent element raises `Element Window (First Match) cannot request screenshot data because it does not exist` for screenshot requests.
+  This refusal belongs only to the element route.
+  `XCUIAutomation` also contains `Could not resolve displayID for snapshot %@; falling back to main display (id %lld)`.
+  An internal snapshot-to-display failure can therefore silently select the main display.
+  The helper resolves the window itself and reports its own typed reason.
+  It does not use that message text as a contract.
+  A default to `XCUIScreen.main` would recreate the original failure.
 
-On the single-panel control every surface agreed: one screen, `1206x2622`, `rot0`, upright crops, no
-rotation to repair. A window-resolved source changes nothing there except that its identity becomes
-explicit.
+Every surface agreed on the single-panel control: one screen, `1206x2622`, `rot0`, upright crops, and no rotation correction.
+A window-resolved source changes only explicit identity there.
 
 ## Interaction display and viewport
 
-On an unfolded Duo, `XCUIApplication.frame` reports the inner panel in native portrait
-coordinates (669x951), while the app window and its controls report landscape coordinates
-(951x669). The iOS capture viewport and synthesized gesture reference frame therefore come
-from the resolved app window. Normalizing against the application frame rotates an already
-oriented window; inverting that normalization alone does not produce native digitizer coordinates.
-The measured inner-panel button row in `contracts/fixtures/window-coordinate-space.json` maps
-window (476,226) to native digitizer (226,475).
+On an unfolded Duo, `XCUIApplication.frame` reports inner-panel native portrait coordinates, 669x951.
+The app window and controls report landscape coordinates, 951x669.
+The iOS capture viewport and synthesized gesture reference frame therefore use the resolved app window.
+Normalization against the application frame rotates an already-oriented window.
+Inversion of that normalization alone does not produce native digitizer coordinates.
+The measured inner-panel button row in `contracts/fixtures/window-coordinate-space.json` maps window (476,226) to native digitizer (226,475).
 
-Synthesized gesture records use `initWithName:displayID:interfaceOrientation:` and the resolved
-window's `screen.displayID`. Reading the window frame must precede reading its screen: an
-unresolved element can still report the main screen. `app.screen` is not the display authority
-for interactions on this device. Coordinate-based XCTest actions also originate at the resolved
-window, so long presses and coordinate fallbacks carry its display identity.
+Synthesized gesture records use `initWithName:displayID:interfaceOrientation:` and the resolved window's `screen.displayID`.
+The window frame read must precede its screen read.
+An unresolved element can still report the main screen.
+`app.screen` is not authoritative for interaction display on this device.
+Coordinate-based XCTest actions also originate at the resolved window.
+Long presses and coordinate fallbacks therefore retain its display identity.
 
-CoreDevice remains the capture-panel authority for host screenshots and recordings. Gesture
-routing follows the window hosting the target app, without a hard-coded panel ID or cached pose.
-Verification must observe a fresh app-visible outcome: event synthesis success and
-`TouchEventsCompleted` alone do not prove a hit. On iOS 27.1, explicit inner-panel events reach
-UIKit; the silent misses investigated here came from the default outer-display route and the
-incorrect viewport, not an inner-panel delivery prohibition.
+CoreDevice remains authoritative for host screenshot and recording panels.
+Gesture routes follow the target app's window without a fixed panel ID or cached pose.
+Verification must observe a fresh app-visible outcome.
+Event synthesis success and `TouchEventsCompleted` alone do not prove a hit.
+On iOS 27.1, explicit inner-panel events reach UIKit.
+The silent misses investigated here came from default outer-display routes and incorrect viewports, not a prohibition on inner-panel delivery.
 
 ## Accepted evidence gaps
 
-- **Runner capture on a physical foldable.** The runner resolves the app's own display and was
-  verified across the open, half-open, and closed poses on a simulated Duo, but the same route on a
-  physical foldable was never exercised.
-- **Runner observation paths that sample a frame.** Keyboard settling, screen recording, and the
-  navigation fallback now take their frame from the display owning a window and each states in
-  `runner.log` what it looked at. Keyboard settling and the navigation fallback were each watched
-  once while serving a lit panel — `AGENT_DEVICE_RUNNER_KEYBOARD_STABILITY samples=3 captured=3
-  settled=yes` behind a `returnKeyType="done"` field, and
-  `AGENT_DEVICE_RUNNER_IN_APP_BACK_VISUAL_VERIFICATION ... changed=no` as the no-change control
-  (#2741) — and neither was watched while the pose changed underneath it. Screen recording was never
-  watched: a pose change mid-recording still changes the captured display under a writer sized from
-  the first frame, and that mismatch was never exercised.
-- **Desktop capture paths.** The two `#if os(macOS)` siblings of the `screenshot` capture in
-  `RunnerTests+CommandExecution.swift` keep capturing the desktop screen, which also reaches the
-  screen through Screen Capture Kit in `AgentDeviceMacOSHelper`; only the iOS branches changed
-  target, and the desktop behavior stays unmeasured here.
-
-- **Quarter-turn detection.** Both Duo panels report
-  `currentOrientation: rot90`, and no available path rotates a foldable, so the orientation half of
-  the inventory is carried but never exercised against a changed value. - **Pose control on a
-  second Device Hub instance.** Discovery checks every matching process, but simultaneous Xcodes
-  and the secondary-display fold matrix remain unverified on live hardware. - **A hinge that
-  settles slowly.** Four reads is twenty seconds of streams, and a Duo that needs longer to come to
-  rest inside `half-open` is now refused where the superseded rule would have reported a pose.
-  Every Duo run observed for this change settled inside the budget; no simulator that needs longer
-  was seen, so the budget stays as it is rather than growing on a hypothesis.
-
-- **Pose control when two simulators share a name.** The earlier title-only fallback could press
-  a different Duo when the intended device's row was unavailable; hinge verification refused the
-  result only after the other device had moved. Discovery now requires the UDID row, and selection
-  confirms `AXSelected` as well as the window title before pressing. Live wrong-UDID refusal and
-  hidden-sidebar recovery were checked; the simultaneous same-name simulator matrix remains open.
-- **Physical foldables.** Device Hub poses simulators only; the leaf fact refuses a physical device,
-  and the hinge stream on one was not exercised.
+- **Runner capture on a physical foldable.**
+  The app-display route was verified on simulated Duo open, half-open, and closed poses.
+  The same route remains untested on physical foldables.
+- **Runner frame observations.**
+  Keyboard settling, screen recording, and navigation fallback now sample the display that owns a window.
+  Each records its observation in `runner.log`.
+  Keyboard settling was observed once on a lit panel behind a `returnKeyType="done"` field:
+  `AGENT_DEVICE_RUNNER_KEYBOARD_STABILITY samples=3 captured=3 settled=yes`.
+  Navigation fallback was observed once on a lit panel as the no-change control (#2741):
+  `AGENT_DEVICE_RUNNER_IN_APP_BACK_VISUAL_VERIFICATION ... changed=no`.
+  Neither was observed during a pose change.
+  Screen recording was never observed.
+  A mid-recording pose change moves capture to another display under a writer sized from the first frame.
+  This mismatch remains untested.
+- **Desktop capture paths.**
+  Two `#if os(macOS)` screenshot siblings in `RunnerTests+CommandExecution.swift` still capture the desktop screen.
+  `AgentDeviceMacOSHelper` also reaches it through Screen Capture Kit.
+  Only iOS branches changed target.
+  Desktop behavior remains unmeasured here.
+- **Quarter-turn detection.**
+  Both Duo panels report `currentOrientation: rot90`.
+  No available path rotates a foldable.
+  Inventory therefore carries orientation without a test against changed orientation.
+- **A slowly settled hinge.**
+  Four reads consume twenty seconds of streams.
+  A Duo that takes longer to settle inside `half-open` is refused.
+  The former rule would have reported pose.
+  Every Duo run observed for this change settled within budget.
+  No slower simulator was observed, so the budget remains unchanged rather than increasing for an unobserved case.
+- **Physical foldables.**
+  The leaf fact refuses a physical device.
+  The hinge stream was never exercised on a physical device.
 
 ## Android emulators (amendment, 2026-10-10)
 
-The same `fold` command poses a foldable Android emulator, with the two facts of this ADR kept
-apart in the same way. There is no host display authority to consult: the emulator console's
-`posture <id>` moves the hinge sensor to the angle the AVD profile defines for the posture (0°, 90°,
-180° on the Pixel folds; 15°, 90°, 165° on the generic "7.6in Foldable"), and the pose is verified
-by polling `cmd device_state print-state` until the guest commits the posture's own device state
-(`CLOSED`, `HALF_OPENED`, `OPENED`), which is what `WindowManager`'s `FoldingFeature` derives from;
-the hinge sensor is read back for the reported angle, not judged. A `half-open` Android pose is
-therefore 90° on every profile seen so far, where the Duo's is 130°.
+The same `fold` command poses a foldable Android emulator.
+It keeps the two facts of this ADR separate in the same way: which panel a capture must name and what pose the device is in.
+There is no host display authority.
+Emulator-console `posture <id>` sets the hinge sensor to the profile's angle:
 
-Folding to the cover display can raise the keyguard (Android's "continue using apps on fold"
-setting, which emulator images do not honour); `fold` dismisses it, because every later capture
-would otherwise read the lock screen instead of the app. A profile that lists none of those device
-states has no hinge and is refused as `single-panel-device`, the typed reason a single-panel
-simulator gets. Keyframes and panel geometry stay Apple-only: the console poses only fixed
-postures, and Android reports the app window on its next snapshot rather than a panel.
+- Pixel folds: 0°, 90°, 180°.
+- Generic "7.6in Foldable": 15°, 90°, 165°.
+
+Verification polls `cmd device_state print-state` until the guest commits the posture's `CLOSED`, `HALF_OPENED`, or `OPENED` state.
+`WindowManager` derives `FoldingFeature` from this state.
+Hinge-sensor readback supplies the reported angle; it does not determine success.
+All observed Android profiles use 90° for half-open; Duo uses 130°.
+
+A fold to the cover display can show keyguard.
+Emulator images do not honor Android's "continue using apps on fold" setting.
+`fold` dismisses keyguard so later captures show the app instead of the lock screen.
+A profile that lists none of these device states has no hinge.
+It is refused as `single-panel-device`, the same typed reason as a single-panel simulator.
+Keyframes and panel geometry remain Apple-only.
+The emulator console supports only fixed postures.
+Android reports the app window on the next snapshot instead of a panel.
