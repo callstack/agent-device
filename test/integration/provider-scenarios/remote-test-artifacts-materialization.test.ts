@@ -16,11 +16,11 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 import {
-  createProviderScenarioProxy,
   createProviderScenarioHarness,
   withProviderScenarioResource,
   withProviderScenarioTempDir,
 } from './harness.ts';
+import { createProviderScenarioProxy } from './harness-proxy.ts';
 
 const PROXY_TOKEN = 'remote-test-artifacts-proxy-token';
 

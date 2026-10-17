@@ -11,10 +11,12 @@ import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import {
   createProviderScenarioHarness,
-  createProviderScenarioProxy,
-  type ProviderScenarioForwardedRequest,
   type ProviderScenarioHarness,
 } from './harness.ts';
+import {
+  createProviderScenarioProxy,
+  type ProviderScenarioForwardedRequest,
+} from './harness-proxy.ts';
 import {
   createAppleRunnerProviderFromTranscript,
   createRecordingAppleToolProvider,

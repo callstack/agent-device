@@ -11,10 +11,10 @@ import {
 } from '@agent-device/remote/daemon-artifacts';
 import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import {
-  createProviderScenarioProxy,
   withProviderScenarioResource,
   withProviderScenarioTempDir,
 } from './harness.ts';
+import { createProviderScenarioProxy } from './harness-proxy.ts';
 import { FAKE_PROVIDER, createFakeProviderWorld } from './provider-device-runtime.fixtures.ts';
 
 const TENANT = 'local-proxy-tenant';

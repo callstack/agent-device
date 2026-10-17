@@ -6,7 +6,8 @@ import { test, vi } from 'vitest';
 import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
-import { createProviderScenarioHarness, createProviderScenarioProxy } from './harness.ts';
+import { createProviderScenarioHarness } from './harness.ts';
+import { createProviderScenarioProxy } from './harness-proxy.ts';
 
 const PROXY_TOKEN = 'proxy-token';
 /** An explicit plain session keeps colons in the diagnostics route segment. */
