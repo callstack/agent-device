@@ -13,6 +13,8 @@ export type AndroidAlertButton = {
   x: number;
   y: number;
   role: AlertButtonRole;
+  /** The node's resource id — the backend-owned fact that can rank a grant's role. */
+  identifier: string;
 };
 
 type AndroidAlertSource = Extract<AlertSource, 'permission' | 'native-dialog' | 'system-dialog'>;
@@ -86,25 +88,50 @@ function isReachableAlertNode(node: RawSnapshotNode): boolean {
 }
 
 /**
- * Android's acting policy on the shared choice boundary: the action's role-named button chosen by
- * the declared preference table (a multi-grant permission sheet's "While using the app" outranks
- * "Only this time"); else, for dismiss, the first neutral button (Android dialogs commonly name
- * the leaving path only neutrally); else, for accept, a single-button dialog's only affirmative
- * path. Two choices that tie on one entry (the same label at two points, or two id-classified
- * grants the vocabulary cannot rank) refuse at the shared boundary rather than resolving by tree
- * order — the driver turns that refusal into a Back key for dismiss, or a typed refusal.
+ * Android's acting policy on the shared choice boundary: the action's role-named button chosen
+ * by declared preference — the permissioncontroller grant ids first (foreground-only over
+ * always over one-time, whatever language their labels are in), the shared label vocabulary
+ * where no grant id exists; else, for dismiss, the first neutral button (Android dialogs
+ * commonly name the leaving path only neutrally); else, for accept, a single-button dialog's
+ * only affirmative path. Two choices that tie on one rank (the same label or the same grant id
+ * at two points) or a candidate no rank source reaches refuse at the shared boundary rather
+ * than resolving by tree order — the driver turns that refusal into a Back key for dismiss, or
+ * a typed refusal.
  */
 export function chooseAndroidAlertButton(
   buttons: AndroidAlertButton[],
   action: 'accept' | 'dismiss',
 ): AndroidAlertButton | null {
-  const exact = selectRankedAlertButtonByRole(buttons, action);
+  const exact = selectRankedAlertButtonByRole(buttons, action, rankAndroidAlertButtonById);
   if (exact) return exact;
   if (action === 'dismiss') {
     return buttons.find((button) => button.role === 'neutral') ?? null;
   }
   // Single-button Android dialogs commonly expose the only affirmative path as OK.
   return buttons.length === 1 ? (buttons[0] ?? null) : null;
+}
+
+/**
+ * The permissioncontroller grant ids in the order Android's own dialog prefers them: a lasting
+ * foreground grant over an always grant over a one-time grant. Earlier entries outrank later
+ * ones; a lower number wins. These ids reach production on every grant sheet: they are the same
+ * `permission_allow` ids the platform-id classifier already reads (and the ids main tapped),
+ * stable across locales while their labels are not.
+ */
+const ANDROID_GRANT_ID_RANKS: readonly RegExp[] = [
+  /(?:^|:)id\/permission_allow_foreground_only(?:_button)?$/i,
+  /(?:^|:)id\/permission_allow(?:_all_time|_always)?(?:_button)?$/i,
+  /(?:^|:)id\/permission_allow_one_time(?:_button)?$/i,
+];
+
+/**
+ * The backend-owned rank of a button named by a grant id — the label-independent preference the
+ * resource id states. Deny ids carry no declared order (their labels rank them), and any other
+ * id ranks nothing here.
+ */
+function rankAndroidAlertButtonById(button: AndroidAlertButton): number | null {
+  const index = ANDROID_GRANT_ID_RANKS.findIndex((pattern) => pattern.test(button.identifier));
+  return index === -1 ? null : index;
 }
 
 function findAndroidAlertNodes(nodes: RawSnapshotNode[]): {
@@ -180,6 +207,7 @@ function findAlertButtons(nodes: RawSnapshotNode[]): AndroidAlertButton[] {
       x: point.x,
       y: point.y,
       role: classifyAndroidAlertButton(node, label),
+      identifier: node.identifier ?? '',
     });
   }
   return buttons;

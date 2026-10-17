@@ -48,17 +48,7 @@ export {
   resetAndroidAdbShellProtocolProbes,
 } from './adb-shell-protocol.ts';
 export { runAndroidAdb, runAndroidExecOut, runAndroidShell, sleep } from './adb.ts';
-export {
-  handleAndroidAlert,
-  runTreeAlertAction,
-  type AndroidAlertResult,
-  type TreeAlertButton,
-  type TreeAlertCandidate,
-  type TreeAlertDriver,
-  type TreeAlertObservation,
-  type TreeAlertPress,
-  type TreeAlertResult,
-} from './alert.ts';
+export { handleAndroidAlert, type AndroidAlertResult } from './alert.ts';
 export {
   classifyAndroidAlertIdentifier,
   findAndroidAlertCandidate,

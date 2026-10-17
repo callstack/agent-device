@@ -50,4 +50,29 @@ describe('selectRankedAlertButtonByRole', () => {
   it('returns null when no button carries the role', () => {
     expect(selectRankedAlertButtonByRole([button('Settings')], 'accept')).toBeNull();
   });
+
+  it('orders candidates the label table cannot read by the backend rank it supplies', () => {
+    // The localized-sheet shape at the shared boundary: both labels are outside the vocabulary,
+    // and the backend's own fact (here, a grant-id rank) is the only order the pair has. The
+    // boundary must use it instead of refusing a pair the owning backend can order.
+    type RankedButton = Button & { id: string };
+    const idRanks: Record<string, number> = { 'id/fg': 0, 'id/once': 1 };
+    const rankById = (button: RankedButton): number | null => idRanks[button.id] ?? null;
+    const buttons: RankedButton[] = [
+      { label: 'Solo esta vez', role: 'accept', id: 'id/once' },
+      { label: 'Mientras la app est\u00e1 en uso', role: 'accept', id: 'id/fg' },
+    ];
+    expect(selectRankedAlertButtonByRole(buttons, 'accept', rankById)?.id).toBe('id/fg');
+  });
+
+  it('still refuses when the backend rank reaches neither of a multi-candidate pair', () => {
+    // The closest negative: the ranker exists but names nothing for these buttons, so the
+    // label fallback leaves an unranked candidate and the refusal stands.
+    type RankedButton = Button & { id: string };
+    const buttons: RankedButton[] = [
+      { label: 'Mientras la app est\u00e1 en uso', role: 'accept', id: 'vendor/a' },
+      { label: 'Solo esta vez', role: 'accept', id: 'vendor/b' },
+    ];
+    expect(selectRankedAlertButtonByRole(buttons, 'accept', () => null)).toBeNull();
+  });
 });

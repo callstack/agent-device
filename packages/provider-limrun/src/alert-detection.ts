@@ -7,7 +7,7 @@ import {
 } from '@agent-device/contracts/alert-contract';
 import { centerOfRect, type Rect } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
-import type { TreeAlertObservation } from '@agent-device/platform-android/mechanics';
+import type { TreeAlertObservation } from '@agent-device/capture-kit/alert-tree-driver';
 import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapshot.ts';
 
 /**

@@ -32,9 +32,12 @@ export const ALERT_NOT_FOUND_REASON = 'alert-not-found';
 export const ALERT_BUTTON_NOT_FOUND_RUNNER_CODE = 'ALERT_BUTTON_NOT_FOUND';
 
 /**
- * The acting leg's window closed after the alert resolved but before the press could be sent.
- * Typed so a caller can tell "the sheet was there and we refused to press late" from absence or
- * an unresolvable capture — the press was never dispatched.
+ * The acting leg's confirm budget ran out after a press landed without settling whether the
+ * alert is gone: the dialog was seen standing again after the press ("did not dismiss"), or no
+ * post-press read ever resolved to an answer ("could not be confirmed"). Typed so a caller can
+ * tell "a press went out and the screen never proved it worked" from absence or an
+ * unresolvable capture. The lookup never answers with it — a budget ends its loop, it does not
+ * cancel a started capture — so a quiet screen is always `alert-not-found`.
  */
 export const ALERT_WINDOW_EXPIRED_REASON = 'alert-window-expired';
 
@@ -55,13 +58,15 @@ export type AlertCapture<TCandidate> =
   | { kind: 'undecided' };
 
 /**
- * The one button label vocabulary every tree-based alert backend classifies with, declared as a
- * per-role preference table: each entry names one English label (regex only for spelling
- * variants of the *same* label), earlier entries outrank later ones, so a sheet offering several
- * grants resolves by declared preference ("while using the app" over "only this time") instead
- * of tree order. English-only, matching the untranslated device locale the alert lanes are
- * validated against; a localized button classifies `neutral`, so acting legs refuse on the
- * button-undecided reason rather than guessing at a translation.
+ * The one alert button label vocabulary every tree-based alert backend classifies with,
+ * declared as a per-role preference table: each entry names one English label (regex only for
+ * spelling variants of the *same* label), earlier entries outrank later ones, so a sheet
+ * offering several grants resolves by declared preference ("while using the app" over "only
+ * this time") instead of tree order. The table ranks labels, not buttons it cannot read: a
+ * backend owning a fact no label carries — Android's permission-grant ids — supplies its own
+ * rank per candidate, and the label table ranks only where the backend declares nothing.
+ * Buttons neither the vocabulary nor a backend rank reaches stay neutral, and acting legs
+ * refuse on the button-undecided reason rather than guessing at a translation.
  */
 const ACCEPT_LABEL_PREFERENCES: readonly RegExp[] = [
   /^allow while using (?:the )?app$/i,
@@ -111,8 +116,8 @@ export function classifyAlertButtonRole(label: string): AlertButtonRole {
 }
 
 /**
- * A role-named button's place in the declared preference table, or null when its role came from
- * something other than the vocabulary (Android id classifiers, localized labels).
+ * A role-named button's place in the declared preference table, or null when its label carries
+ * no vocabulary entry (localized grants, unnamed choices).
  */
 function alertButtonPreferenceRank(label: string, role: 'accept' | 'dismiss'): number | null {
   const index = LABEL_PREFERENCES[role].findIndex((pattern) => pattern.test(label.trim()));
@@ -120,21 +125,28 @@ function alertButtonPreferenceRank(label: string, role: 'accept' | 'dismiss'): n
 }
 
 /**
- * The one choice boundary for a shared choice: pick the action's role candidates by the declared
- * preference table. A single candidate wins outright. Several resolve only when every one of
- * them carries a vocabulary rank and one rank outscores the rest: a mix of ranked and
- * id-classified grants cannot be ordered by the table, so it names no single physical button and
- * is refused rather than resolved by tree order or by one side's label happening to be known.
+ * The one choice boundary for a shared choice: pick the action's role candidates by declared
+ * preference. Each candidate's rank comes from the owning backend first — a backend may own
+ * facts a label cannot carry, like Android's permission-grant ids — and from the label
+ * vocabulary only where the backend declares nothing. A single candidate wins outright.
+ * Several resolve only when every one of them carries a rank and one rank outscores the rest:
+ * a mix where any candidate stays unranked cannot be ordered by any table, so it names no
+ * single physical button and is refused rather than resolved by tree order or by one side's
+ * label happening to be known.
  */
 export function selectRankedAlertButtonByRole<
   TButton extends Readonly<{ role: AlertButtonRole; label: string }>,
->(buttons: readonly TButton[], role: 'accept' | 'dismiss'): TButton | null {
+>(
+  buttons: readonly TButton[],
+  role: 'accept' | 'dismiss',
+  backendRank?: (button: TButton) => number | null,
+): TButton | null {
   const matching = buttons.filter((button) => button.role === role);
   if (matching.length === 1) return matching[0] ?? null;
   if (matching.length === 0) return null;
   const ranked = matching.map((button) => ({
     button,
-    rank: alertButtonPreferenceRank(button.label, role),
+    rank: backendRank?.(button) ?? alertButtonPreferenceRank(button.label, role),
   }));
   if (ranked.some((entry) => entry.rank === null)) return null;
   ranked.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));

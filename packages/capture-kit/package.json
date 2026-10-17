@@ -18,6 +18,10 @@
       "types": "./src/snapshot/android-replacement-surface-occlusion.ts",
       "default": "./src/snapshot/android-replacement-surface-occlusion.ts"
     },
+    "./alert-tree-driver": {
+      "types": "./src/alert-tree-driver.ts",
+      "default": "./src/alert-tree-driver.ts"
+    },
     "./app-log-durable-resource": {
       "types": "./src/capture-admission/app-log-durable-resource.ts",
       "default": "./src/capture-admission/app-log-durable-resource.ts"
