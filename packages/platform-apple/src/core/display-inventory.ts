@@ -1,5 +1,6 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
@@ -45,6 +46,11 @@ export type AppleDisplayInventory = {
    * single-screen behavior and never route through a display selector.
    */
   multiScreen: boolean;
+  /**
+   * The panel a multi-panel capture names. Absent on a multi-panel device when
+   * neither panel power nor CoreDevice `primary` identifies a panel: list order is
+   * not identity, so the capture refuses instead.
+   */
   activeDisplay?: AppleDeviceDisplay;
   /**
    * True on a multi-panel device whose lit panel could not be decided, so the
@@ -258,7 +264,7 @@ export function buildInventory(displays: AppleDeviceDisplay[]): AppleDisplayInve
   // choice is the highest screen ID, which is exactly how a foldable capture comes
   // back all black and exits 0. When panel power is ambiguous the primary panel is
   // named explicitly and the ambiguity is reported, not hidden.
-  const captureDisplay = decided ? litPanels[0]! : (primaryPanel ?? litPanels[0] ?? panels[0]!);
+  const captureDisplay = decided ? litPanels[0]! : primaryPanel;
   const ambiguous = !decided || primaryPanel === undefined;
   if (ambiguous) {
     emitDiagnostic({
@@ -267,19 +273,26 @@ export function buildInventory(displays: AppleDeviceDisplay[]): AppleDisplayInve
       data: {
         reason: primaryPanel === undefined ? 'no-primary-panel' : 'lit-panel-count',
         litPanelCount: litPanels.length,
-        capturedDisplay: captureDisplay.name,
-        hint: 'Panel power did not identify exactly one lit panel, so the capture names the primary panel without claiming to know which panel the device is showing. Read the device pose from the app under test with UIHinge.status.',
+        ...(captureDisplay
+          ? {
+              capturedDisplay: captureDisplay.name,
+              hint: 'Panel power did not identify exactly one lit panel, so the capture names the primary panel without claiming to know which panel the device is showing. Read the device pose from the app under test with UIHinge.status.',
+            }
+          : { hint: UNIDENTIFIED_PANEL_HINT }),
       },
     });
   }
   return {
     displays: panels,
     multiScreen: true,
-    activeDisplay: captureDisplay,
+    ...(captureDisplay ? { activeDisplay: captureDisplay } : {}),
     ambiguous,
     unresolved: false,
   };
 }
+
+const UNIDENTIFIED_PANEL_HINT =
+  'CoreDevice reported no primary panel and panel power did not identify exactly one lit panel. Run `xcrun devicectl device info displays --device <udid>`, then retry after one panel reports a lit backlightState.';
 
 /**
  * Sanity-checks the panel geometry against a foldable's shape.
@@ -315,8 +328,9 @@ function warnWhenPrimaryPanelIsNotTheSmallest(panels: AppleDeviceDisplay[]): voi
  * `simctl io screenshot` without `--display` silently picks the highest screen
  * ID, which on a closed foldable is the *dark* inner panel: the capture succeeds
  * and comes back black. A multi-panel device therefore always names a display
- * explicitly — even when panel power is ambiguous — and only a genuinely
- * single-panel device (or an unreadable toolchain) keeps the historic argv.
+ * explicitly — even when panel power is ambiguous — or refuses when CoreDevice
+ * identifies no panel. Only a genuinely single-panel device (or an unreadable
+ * toolchain) keeps the historic argv.
  */
 export async function resolveAppleCaptureDisplay(
   device: DeviceInfo,
@@ -336,7 +350,17 @@ export async function resolveAppleCaptureTarget(
   const inventory = await queryAppleDisplayInventory(device, options);
   if (inventory.unresolved) return {};
   if (inventory.multiScreen) {
-    return inventory.activeDisplay ? { display: inventory.activeDisplay } : {};
+    if (inventory.activeDisplay) return { display: inventory.activeDisplay };
+    throw new AppError(
+      'COMMAND_FAILED',
+      `CoreDevice did not identify which panel of ${device.name} to capture`,
+      {
+        deviceId: device.id,
+        reason: 'capture-panel-unidentified',
+        litPanelCount: inventory.displays.filter((display) => display.power === 'lit').length,
+        hint: UNIDENTIFIED_PANEL_HINT,
+      },
+    );
   }
   // Only a built-in panel is the screen simctl captures; an attached display says nothing about it.
   const panel = inventory.displays.find((entry) => entry.integrated);

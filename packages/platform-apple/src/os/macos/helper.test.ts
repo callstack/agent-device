@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { macOsHelperSurface } from '@agent-device/contracts/session';
+import { AppError } from '@agent-device/kernel/errors';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
 import { readFileSync } from 'node:fs';
 import {
@@ -16,6 +17,7 @@ import {
 const desktop = macOsHelperSurface('desktop', 'xctest')!;
 const menubar = macOsHelperSurface('menubar', 'xctest')!;
 const frontmostApp = macOsHelperSurface('frontmost-app', 'xctest')!;
+const nativeApp = macOsHelperSurface('app', 'native')!;
 
 test('macOS helper snapshot passes cancellation to the helper process', async () => {
   const controller = new AbortController();
@@ -241,6 +243,51 @@ test('macOS helper screenshot argv carries only --out and --surface', async () =
   assert.deepEqual(receivedArgs, ['screenshot', '--out', '/tmp/out.png', '--surface', 'desktop']);
 });
 
+for (const hint of [
+  'The front window is unavailable to screen capture. If it is opening or closing, retry after it settles.',
+  undefined,
+]) {
+  test(`a helper refusal carries its details and hint through untouched (${hint === undefined ? 'no hint' : 'with hint'})`, async () => {
+    const provider = createLocalAppleToolProvider({
+      macosHelper: {
+        run: async () => ({
+          exitCode: 1,
+          stdout: JSON.stringify({
+            ok: false,
+            error: {
+              message:
+                "screenshot could not capture the app's front window: ScreenCaptureKit does not offer it",
+              details: {
+                reason: 'front-window-not-shareable',
+                bundleId: 'com.apple.TextEdit',
+                frontWindowId: '4242',
+                ...(hint ? { hint } : {}),
+              },
+            },
+          }),
+          stderr: '',
+        }),
+      },
+    });
+
+    const error = await withAppleToolProvider(provider, async () =>
+      runMacOsScreenshotAction('/tmp/out.png', {
+        surface: nativeApp,
+        bundleId: 'com.apple.TextEdit',
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      ),
+    );
+
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.reason, 'front-window-not-shareable');
+    assert.equal(error.details?.frontWindowId, '4242');
+    assert.equal(error.details?.hint, hint);
+  });
+}
+
 test('helper entry points accept only an owner-routed surface', () => {
   // Never invoked: each directive fails typecheck once its entry point widens back to an
   // unbranded or optional surface.
@@ -268,7 +315,10 @@ test('the helper vocabulary matches the table the Swift helper is held to', () =
       ),
       'utf8',
     ),
-  ) as { refusalReasons: string[]; deliveryMechanisms: string[] };
+  ) as {
+    refusalReasons: string[];
+    deliveryMechanisms: string[];
+  };
   assert.deepEqual([...MACOS_HELPER_REFUSAL_REASONS], fixture.refusalReasons);
   assert.deepEqual([...MACOS_DELIVERY_MECHANISMS], fixture.deliveryMechanisms);
 });

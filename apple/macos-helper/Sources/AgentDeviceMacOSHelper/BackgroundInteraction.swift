@@ -206,7 +206,7 @@ func scrollInBackground(
   guard isVertical || direction == "left" || direction == "right" else {
     throw HelperError.invalidArgs("scroll requires --direction <up|down|left|right>")
   }
-  guard let frame = frontWindowFrame(pid: app.processIdentifier) else {
+  guard let frame = try frontWindowFrame(pid: app.processIdentifier) else {
     throw HelperError.commandFailed(
       "scroll could not resolve an on-screen window",
       details: ["reason": "window-not-found", "bundleId": app.bundleIdentifier ?? ""]
@@ -306,10 +306,7 @@ private func perform(_ target: PressTarget) -> BackgroundDeliveryMechanism? {
 /// own on-screen windows, its menus and sheets included, and never on a menu bar element: the app
 /// owns its menu bar's window too, so the window check alone does not exclude it.
 private func requireAppWindowPoint(_ point: CGPoint, app: NSRunningApplication) throws {
-  guard
-    let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
-      as? [[String: Any]]
-  else {
+  guard let info = appWindowInfo() else {
     throw refusal(.noAccessibleTarget, "the app's on-screen windows could not be read", app: app)
   }
   let inAppWindow = info.contains { entry in
@@ -363,13 +360,14 @@ private func pressSearchChain(from hit: AXUIElement) -> [AXUIElement] {
 
 /// The one window a point action may act in: the window the app's hit test landed in, else the
 /// app's front on-screen window. A fallback target never comes from a window behind it, and the
-/// response names the window so the host can check it.
+/// response names the window so the host can check it. The caller's `requireAppWindowPoint` has
+/// already read the window list, so a list that turned unreadable here is treated as no window.
 private func actionWindow(app: NSRunningApplication, hit: AXUIElement?) -> AXUIElement? {
   if let hit {
     if role(of: hit) == "AXWindow" { return hit }
     if let window = elementAttribute(hit, attribute: kAXWindowAttribute as String) { return window }
   }
-  guard let front = frontWindowFrame(pid: app.processIdentifier) else { return nil }
+  guard let front = try? frontWindowFrame(pid: app.processIdentifier) else { return nil }
   return windows(of: AXUIElementCreateApplication(app.processIdentifier)).first { window in
     guard let rect = rectAttribute(window) else { return false }
     return abs(rect.x - front.minX) < 1 && abs(rect.y - front.minY) < 1
@@ -482,39 +480,57 @@ private func numberAttribute(_ element: AXUIElement, attribute: String) -> Doubl
   return number.doubleValue
 }
 
-private struct OnScreenWindow {
+struct OnScreenWindow {
   let number: Int
   let bounds: CGRect
+  let sharingState: Int?
 }
 
-/// The pid's normal-layer windows, front to back. Bounds and owners need no Screen Recording
-/// permission; only titles do.
-private func onScreenWindows(pid: pid_t) -> [OnScreenWindow] {
-  guard
-    let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
-      as? [[String: Any]]
-  else {
-    return []
-  }
-  return info.compactMap { entry in
+/// Only normal-layer windows qualify; app-modal alerts at level 8 are excluded.
+let frontWindowLayer = 0
+
+/// The pid's visible, nonempty normal-layer windows, front to back.
+func onScreenWindows(pid: pid_t, windowInfo: [[String: Any]]) -> [OnScreenWindow] {
+  windowInfo.compactMap { entry in
     guard (entry[kCGWindowOwnerPID as String] as? Int32) == pid,
-      (entry[kCGWindowLayer as String] as? Int) == 0,
+      (entry[kCGWindowLayer as String] as? Int) == frontWindowLayer,
+      (entry[kCGWindowIsOnscreen as String] as? Bool) == true,
+      let alpha = entry[kCGWindowAlpha as String] as? Double, alpha > 0,
       let number = entry[kCGWindowNumber as String] as? Int,
       let boundsDict = entry[kCGWindowBounds as String] as? NSDictionary,
-      let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary)
+      let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary),
+      bounds.width > 0, bounds.height > 0
     else {
       return nil
     }
-    return OnScreenWindow(number: number, bounds: bounds)
+    return OnScreenWindow(
+      number: number, bounds: bounds, sharingState: entry[kCGWindowSharingState as String] as? Int)
   }
 }
 
-func frontWindowNumber(pid: pid_t) -> Int? {
-  onScreenWindows(pid: pid).first?.number
+func appWindowInfo() -> [[String: Any]]? {
+  CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+    as? [[String: Any]]
 }
 
-private func frontWindowFrame(pid: pid_t) -> CGRect? {
-  onScreenWindows(pid: pid).first?.bounds
+/// The app's front on-screen window: frontmost among its eligible windows, or nil when it has
+/// none. A window list that cannot be read is a refusal, not an empty list: the caller must not
+/// report "no window" for a WindowServer it could not ask.
+func frontWindow(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> OnScreenWindow? {
+  guard let windowInfo else {
+    throw HelperError.commandFailed(
+      "the app's on-screen windows could not be read",
+      details: [
+        "reason": "window-list-unreadable",
+        "hint": "The app's on-screen window list could not be read. Retry the command.",
+      ]
+    )
+  }
+  return onScreenWindows(pid: pid, windowInfo: windowInfo).first
+}
+
+func frontWindowFrame(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> CGRect? {
+  try frontWindow(pid: pid, windowInfo: windowInfo)?.bounds
 }
 
 private let returnVirtualKey: CGKeyCode = 36

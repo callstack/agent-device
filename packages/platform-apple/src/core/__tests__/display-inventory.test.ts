@@ -266,15 +266,26 @@ describe('buildInventory', () => {
     }
   });
 
-  test('names a capture even when no panel reports primary', () => {
+  test('names the sole lit panel when no panel reports primary', () => {
     const inventory = buildInventory([
-      { ...outerPanel, primary: false },
+      { ...outerPanel, power: 'dark', primary: false },
       { ...innerPanel, power: 'lit', primary: false },
     ]);
     assert.equal(inventory.multiScreen, true);
     assert.equal(inventory.ambiguous, true);
-    // A capture is still named: never the implicit black-producing default.
-    assert.ok(inventory.activeDisplay);
+    assert.equal(inventory.activeDisplay?.name, 'LCD-1');
+  });
+
+  test('names no panel when neither primary nor power identifies one', () => {
+    for (const power of ['lit', 'dark', 'unknown'] as const) {
+      const inventory = buildInventory([
+        { ...outerPanel, power, primary: false },
+        { ...innerPanel, power, primary: false },
+      ]);
+      assert.equal(inventory.multiScreen, true);
+      assert.equal(inventory.ambiguous, true);
+      assert.equal(inventory.activeDisplay, undefined, power);
+    }
   });
 
   test('keeps choosing the lit panel when a third panel is present', () => {
@@ -474,6 +485,58 @@ describe('resolveAppleCaptureTarget', () => {
     const target = await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR);
     assert.equal(target.display?.name, 'LCD-1');
     assert.equal(target.displayRotation, undefined);
+  });
+
+  /** The closed-Duo payload with each panel's `primary` flag and backlight replaced. */
+  function duoReporting(panels: Record<number, { primary: boolean; backlightState: string }>) {
+    return JSON.stringify({
+      result: {
+        displays: IPHONE_DUO_CLOSED.result.displays.map((entry) => ({
+          ...entry,
+          ...panels[entry.displayId],
+        })),
+      },
+    });
+  }
+
+  test('names the primary panel when panel power is ambiguous', async () => {
+    mockReadHostTextFile.mockResolvedValue(
+      duoReporting({
+        1: { primary: true, backlightState: 'activeOn' },
+        3: { primary: false, backlightState: 'activeOn' },
+      }),
+    );
+    assert.equal((await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR)).display?.name, 'LCD');
+  });
+
+  test('names the sole lit panel when no panel reports primary', async () => {
+    mockReadHostTextFile.mockResolvedValue(
+      duoReporting({
+        1: { primary: false, backlightState: 'off' },
+        3: { primary: false, backlightState: 'activeOn' },
+      }),
+    );
+    assert.equal((await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR)).display?.name, 'LCD-1');
+  });
+
+  test('refuses instead of picking a panel by list order when no fact identifies one', async () => {
+    for (const backlightState of ['activeOn', 'off', 'futureState']) {
+      mockReadHostTextFile.mockResolvedValue(
+        duoReporting({
+          1: { primary: false, backlightState },
+          3: { primary: false, backlightState },
+        }),
+      );
+      await assert.rejects(
+        resolveAppleCaptureTarget(IOS_TEST_SIMULATOR),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'COMMAND_FAILED' &&
+          error.details?.reason === 'capture-panel-unidentified' &&
+          typeof error.details?.hint === 'string',
+        backlightState,
+      );
+    }
   });
 
   test('reports nothing when CoreDevice cannot be asked', async () => {

@@ -278,7 +278,7 @@ export const foldableHelpTopic = {
 A foldable Apple device (iPhone Duo) carries two integrated panels, which Apple calls the outer display and the inner display. Only one is lit at a time, and which one is lit is the device pose.
 
 Screens are handled for you:
-  Each iOS simulator capture resolves the CoreDevice display table, captures the lit panel explicitly, and normalizes density with that panel's own point scale. Do not add a screen flag to the normal loop; there is none, because the lit panel is always the only capturable one: the dark panel yields an all-black PNG.
+  Each iOS simulator capture resolves the CoreDevice display table, selects the sole lit panel when power identifies it, and normalizes density with that panel's own point scale. There is no screen flag. When panel power names no single lit panel, the capture names CoreDevice's primary panel, which may be dark and yield an all-black PNG. Check the pose with UIHinge.status before trusting that capture. With no primary panel either, capture fails with COMMAND_FAILED and reason capture-panel-unidentified rather than pick a panel by list order.
   The two panels are different sizes (iPhone Duo: 466x678 points closed on the outer panel, 669x951 open on the inner). A pose change therefore invalidates every ref and coordinate. Re-snapshot after any pose change and never carry coordinates or refs across one.
   Check which panel is lit before trusting a geometry claim: agent-device screenshot reports its point size, and 466x678 versus 669x951 says which panel you captured.
 

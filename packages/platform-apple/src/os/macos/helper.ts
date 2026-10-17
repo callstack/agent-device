@@ -354,6 +354,8 @@ async function runMacOsHelper<T extends Record<string, unknown>>(
     parsed && !parsed.ok
       ? (parsed.error?.message ?? `macOS helper exited with code ${result.exitCode}`)
       : stdout || result.stderr.trim() || `macOS helper exited with code ${result.exitCode}`;
+  // The helper's `details` carry its typed `reason` and, where a remedy exists, its `hint`;
+  // `normalizeError` reads `details.hint`, so the refusal reaches the agent untouched.
   // exec-guard-allow: the message is already built from the helper's JSON error
   // envelope (or its output); a stderr excerpt would only degrade it, and the
   // throw is reachable at exit 0 when the envelope reports ok=false.
