@@ -112,6 +112,8 @@ test('iOS simulator recording reports host contention and recovers through the f
         appleSimulatorScreenRecordingTransport: () => recordingTransport,
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
       });
+      // The recording finalizer and Swift helper still read PATH and the cache from the process
+      // (capture-kit and the root helpers move to the host in #3777), so the scenario sets both.
       const previousPath = process.env.PATH;
       const previousSwiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
       process.env.PATH = tmpDir;

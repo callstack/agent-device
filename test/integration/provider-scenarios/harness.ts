@@ -148,7 +148,7 @@ export async function createProviderScenarioHarness(
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
-      env: process.env,
+      env: input.host.env,
       assertShutdownAllowed: input.assertShutdownAllowed,
       providerRuntimes: configuredRuntimes,
       providerModules,
