@@ -27,9 +27,9 @@ export {
   type RunnerXctestrunCacheKind,
 } from './runner-cache.ts';
 export {
-  IOS_RUNNER_CONTAINER_BUNDLE_IDS,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerAppBundleId,
+  resolveRunnerContainerBundleIds,
   resolveRunnerDerivedPath,
 } from './runner-cache-metadata.ts';
 export {

@@ -19,4 +19,4 @@ export {
   type AppleRunnerProvider,
 } from './runner-provider.ts';
 export { buildRunnerSequenceCommand, parseRunnerSequenceResult } from './runner-sequence.ts';
-export { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from './runner-cache-metadata.ts';
+export { resolveRunnerContainerBundleIds } from './runner-cache-metadata.ts';

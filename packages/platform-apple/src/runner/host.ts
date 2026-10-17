@@ -58,6 +58,7 @@ export type AppleRunnerHost = Pick<
   | 'requireExecSuccess'
   | 'isCommandTimeoutError'
   | 'commandDeveloperDir'
+  | 'commandHostEnvironment'
 > &
   Pick<typeof HostDiagnostics, 'emitDiagnostic' | 'withDiagnosticTimer'> &
   Pick<typeof HostRetry, 'retryWithPolicy' | 'isEnvTruthy'> &
@@ -158,6 +159,7 @@ export const runCmdBackground = delegate('runCmdBackground');
 export const requireExecSuccess = delegate('requireExecSuccess');
 export const isCommandTimeoutError = delegate('isCommandTimeoutError');
 export const commandDeveloperDir = delegate('commandDeveloperDir');
+export const commandHostEnvironment = delegate('commandHostEnvironment');
 export const shellQuote = delegate('shellQuote');
 export const emitDiagnostic = delegate('emitDiagnostic');
 export const withDiagnosticTimer = delegate('withDiagnosticTimer');
