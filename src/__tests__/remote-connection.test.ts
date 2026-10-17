@@ -1,4 +1,3 @@
-import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { withCapturedStdoutAsync } from './test-utils/stream-capture.ts';
@@ -26,11 +25,11 @@ import {
   connectCommand,
   connectionCommand,
   disconnectCommand,
-} from '../cli/commands/connection.ts';
+  materializeRemoteConnectionForCommand,
+} from './test-utils/host-bound-commands.ts';
 import { writeGeneratedRemoteConfig } from '../cli/connection/generated-config.ts';
 import {
   hasDeferredMetroConfig,
-  materializeRemoteConnectionForCommand,
   CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
   PROXY_REMOTE_LEASE_TTL_MS,
 } from '../cli/commands/connection-runtime.ts';
@@ -79,7 +78,6 @@ test('connect auto-generates a local session and writes minimal remote state', a
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: true,
@@ -115,7 +113,6 @@ test('connect proxy writes normal remote state with generated non-secret profile
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: ['proxy'],
       flags: {
         json: true,
@@ -164,7 +161,6 @@ test('connect daemon-base-url shortcut uses proxy profile for direct proxy URLs'
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: true,
@@ -197,7 +193,6 @@ test('connect proxy scopes generated client identity by explicit session', async
   for (const session of ['agent-a', 'agent-b']) {
     await withCapturedStdoutAsync(async () => {
       await connectCommand({
-        host: createTestHostEnvironment(),
         positionals: ['proxy'],
         flags: {
           json: true,
@@ -227,7 +222,6 @@ test('connect proxy notice distinguishes safe inventory from lease allocation', 
 
   const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: ['proxy'],
       flags: {
         json: false,
@@ -282,7 +276,6 @@ test('connect proxy rejects remote-config and unknown provider combinations', as
   await assert.rejects(
     async () =>
       await connectCommand({
-        host: createTestHostEnvironment(),
         positionals: ['proxy'],
         flags: {
           json: true,
@@ -299,7 +292,6 @@ test('connect proxy rejects remote-config and unknown provider combinations', as
   await assert.rejects(
     async () =>
       await connectCommand({
-        host: createTestHostEnvironment(),
         positionals: ['wat'],
         flags: {
           json: true,
@@ -329,7 +321,6 @@ test('connect reports deferred Metro runtime preparation when remote config has 
 
   const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: false,
@@ -380,7 +371,6 @@ test('connection status re-emits the deferred Metro command scoped to the named 
   );
 
   await connectCommand({
-    host: createTestHostEnvironment(),
     positionals: [],
     flags: {
       json: true,
@@ -399,7 +389,6 @@ test('connection status re-emits the deferred Metro command scoped to the named 
 
   const stdout = await withCapturedStdoutAsync(async () => {
     await connectionCommand({
-      host: createTestHostEnvironment(),
       positionals: ['status'],
       flags: {
         json: true,
@@ -443,7 +432,6 @@ test('connect without a session creates a fresh connection without replacing the
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: connectFlags,
       client: createTestClient(),
@@ -453,7 +441,6 @@ test('connect without a session creates a fresh connection without replacing the
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: connectFlags,
       client: createTestClient(),
@@ -483,7 +470,6 @@ test('connect missing scope errors mention remote config or flags', async () => 
   await assert.rejects(
     async () =>
       await connectCommand({
-        host: createTestHostEnvironment(),
         positionals: [],
         flags: {
           json: true,
@@ -502,7 +488,6 @@ test('connect missing scope errors mention remote config or flags', async () => 
   await assert.rejects(
     async () =>
       await connectCommand({
-        host: createTestHostEnvironment(),
         positionals: [],
         flags: {
           json: true,
@@ -541,7 +526,6 @@ test('deferred materialization allocates lease and prepares Metro for open', asy
   let observedBridgeScope: { tenantId: string; runId: string; leaseId: string } | undefined;
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'open',
     flags: {
       json: true,
@@ -612,7 +596,6 @@ test('proxy open resolves device key before allocating lease', async () => {
   const allocate = recordedLeaseAllocate({ leaseId: 'abc123abc123abc1', backend: 'ios-instance' });
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'open',
     flags: {
       json: true,
@@ -681,7 +664,6 @@ test.each(['install', 'uninstall'])('proxy %s allocates a lease first', async (c
   });
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command,
     flags: {
       json: true,
@@ -732,7 +714,6 @@ test('artifacts command reuses the stored cloud lease without allocating', async
   });
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'artifacts',
     flags: {
       json: true,
@@ -785,7 +766,6 @@ test('cloud webdriver connection allocates and heartbeats with extended lease TT
   let allocateRequest: Parameters<AgentDeviceClient['leases']['allocate']>[0] | undefined;
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'screenshot',
     flags: { ...baseFlags },
     client: createTestClient({
@@ -808,7 +788,6 @@ test('cloud webdriver connection allocates and heartbeats with extended lease TT
 
   let heartbeatRequest: Parameters<AgentDeviceClient['leases']['heartbeat']>[0] | undefined;
   await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'screenshot',
     flags: { ...baseFlags },
     client: createTestClient({
@@ -851,7 +830,6 @@ test('proxy commands without active device lease fail before allocation', async 
   await assert.rejects(
     async () =>
       await materializeRemoteConnectionForCommand({
-        host: createTestHostEnvironment(),
         command: 'snapshot',
         flags: {
           json: true,
@@ -894,7 +872,6 @@ test('direct remote-config materialization creates state and prepares Metro for 
   let observedBridgeScope: { tenantId: string; runId: string; leaseId: string } | undefined;
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'open',
     flags: {
       json: true,
@@ -960,7 +937,6 @@ test('deferred materialization prepares Metro for batch when a step opens an app
   });
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'batch',
     flags: {
       json: true,
@@ -1023,7 +999,6 @@ test('deferred materialization re-prepares runtime when explicit Metro overrides
   let prepareRequest: Parameters<AgentDeviceClient['metro']['prepare']>[0] | undefined;
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'open',
     flags: {
       json: true,
@@ -1090,7 +1065,6 @@ test('cdp remote materialization prepares Metro runtime for bridge target discov
   let prepareRequest: Parameters<AgentDeviceClient['metro']['prepare']>[0] | undefined;
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'cdp',
     positionals: ['target', 'list'],
     flags: {
@@ -1152,7 +1126,6 @@ test('cdp remote materialization skips Metro runtime for non-target commands', a
 
   try {
     const materialized = await materializeRemoteConnectionForCommand({
-      host: createTestHostEnvironment(),
       command: 'cdp',
       positionals: ['memory', 'usage', 'sample'],
       flags: {
@@ -1195,7 +1168,6 @@ test('cdp remote materialization skips Metro runtime without public CDP url', as
 
   try {
     const materialized = await materializeRemoteConnectionForCommand({
-      host: createTestHostEnvironment(),
       command: 'cdp',
       positionals: ['target', 'list'],
       flags: {
@@ -1250,7 +1222,6 @@ test('deferred materialization heartbeats an existing lease before dispatch', as
   let allocateCount = 0;
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'apps',
     flags: {
       json: true,
@@ -1316,7 +1287,6 @@ test('deferred materialization allocates pending lease for devices', async () =>
   let allocateCount = 0;
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'devices',
     flags: {
       json: true,
@@ -1390,7 +1360,6 @@ test('deferred provider materialization forwards provider profile fields to leas
   });
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'open',
     flags: {
       json: true,
@@ -1443,7 +1412,6 @@ test('deferred materialization reallocates when the persisted lease is inactive'
   });
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'apps',
     flags: {
       json: true,
@@ -1501,7 +1469,6 @@ test('deferred materialization preserves auth failures from lease allocation', a
   await assert.rejects(
     async () =>
       await materializeRemoteConnectionForCommand({
-        host: createTestHostEnvironment(),
         command: 'apps',
         flags: {
           json: true,
@@ -1546,7 +1513,6 @@ test('deferred materialization does not require a lease backend for close', asyn
   });
 
   const materialized = await materializeRemoteConnectionForCommand({
-    host: createTestHostEnvironment(),
     command: 'close',
     flags: {
       json: true,
@@ -1596,7 +1562,6 @@ test('connect requires force when compatible scope changes platform', async () =
   await assert.rejects(
     async () =>
       await connectCommand({
-        host: createTestHostEnvironment(),
         positionals: [],
         flags: {
           json: true,
@@ -1640,7 +1605,6 @@ test('connect requires force when the daemon endpoint changes', async () => {
   await assert.rejects(
     async () =>
       await connectCommand({
-        host: createTestHostEnvironment(),
         positionals: [],
         flags: {
           json: true,
@@ -1688,7 +1652,6 @@ test('connect --force stops replaced Metro companion after state is updated', as
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: forceConnectFlags({
         stateDir,
@@ -1737,7 +1700,6 @@ test('connect --force without a session does not replace the active generated co
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: forceConnectFlags({
         stateDir,
@@ -1779,7 +1741,6 @@ test("connect --force releases the previous lease with the previous connection's
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: forceConnectFlags({
         stateDir,
@@ -1808,7 +1769,6 @@ test('connect --force skips releasing the previous lease when its token cannot b
 
   const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: forceConnectFlags({
         json: false,
@@ -1843,7 +1803,6 @@ test('connect --force does not misclassify an env-sourced new token as the previ
 
   const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       // No daemonAuthToken flag: the ambient token above flows in purely
       // through the environment, matching production's resolution chain.
@@ -1891,7 +1850,6 @@ test('connect --force does not treat a re-pointed config path’s token as the p
 
   const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: forceConnectFlags({ json: false, stateDir, remoteConfig: remoteConfigPath }),
       client: createTestClient({ release: release.stub }),
@@ -1927,7 +1885,6 @@ test('connect --force does not trust an unchanged profile token for a CLI-overri
 
   const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: forceConnectFlags({
         json: false,
@@ -1967,7 +1924,6 @@ test('connect --force still releases with a rotated credential when the config k
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: forceConnectFlags({ stateDir, remoteConfig: newRemoteConfigPath }),
       client: createTestClient({ release: release.stub }),
@@ -1996,7 +1952,6 @@ test('connect --force reuses the ambient token to release the previous lease whe
 
   await withCapturedStdoutAsync(async () => {
     await connectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: forceConnectFlags({
         stateDir,
@@ -2042,7 +1997,6 @@ test('disconnect tolerates prior close and removes local connection state', asyn
   let handled = false;
   await withCapturedStdoutAsync(async () => {
     handled = await disconnectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: true,
@@ -2091,7 +2045,6 @@ test('disconnect after connect-only cleanup stays local when no session resource
 
   await withCapturedStdoutAsync(async () => {
     await disconnectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: false,
@@ -2133,7 +2086,6 @@ test('disconnect without a session uses active connection state', async () => {
 
   await withCapturedStdoutAsync(async () => {
     await disconnectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: true,
@@ -2179,7 +2131,6 @@ test('disconnect human output surfaces provider release warnings and artifact li
 
   const output = await withCapturedStdoutAsync(async () => {
     await disconnectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: false,
@@ -2258,7 +2209,6 @@ test('disconnect releases proxy lease with provider client and device metadata',
 
   await withCapturedStdoutAsync(async () => {
     await disconnectCommand({
-      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: true,
@@ -2291,7 +2241,6 @@ test('connection status reports missing state without daemon calls', async () =>
   let handled = false;
   await withCapturedStdoutAsync(async () => {
     handled = await connectionCommand({
-      host: createTestHostEnvironment(),
       positionals: ['status'],
       flags: {
         json: true,
@@ -2326,7 +2275,6 @@ test('connection status reports active connection state', async () => {
 
   const output = await withCapturedStdoutAsync(async () => {
     await connectionCommand({
-      host: createTestHostEnvironment(),
       positionals: ['status'],
       flags: {
         json: true,
