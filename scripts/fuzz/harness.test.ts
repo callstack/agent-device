@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { LANE_ENVELOPE_SCHEMA_VERSION } from '../lib/lane-envelope.ts';
+import { LANE_ENVELOPE_SCHEMA_VERSION } from '@agent-device/test-kit';
 import { CASE_GENERATION_INPUTS } from './envelope.ts';
 import { runCases } from './execute.ts';
 import { checkCase } from './invariant.ts';

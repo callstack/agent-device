@@ -1,4 +1,5 @@
 export { createAgentDeviceClient } from '../agent-device-client.ts';
+export { ensureDaemon } from './ensure-daemon.ts';
 export { createLocalArtifactAdapter } from '../io.ts';
 export {
   AppError,
@@ -14,6 +15,12 @@ export { isUnreadableCaptureContentError } from '@agent-device/contracts/android
 // `ReturnType<typeof createAgentDeviceClient>` and `Awaited<ReturnType<...>>`, and typed the
 // nodes a snapshot returns by hand.
 export type * from '../client/client-types.ts';
+export type {
+  DaemonConnection,
+  DaemonIdentity,
+  DaemonLifecycle,
+  EnsureDaemonOptions,
+} from '@agent-device/contracts/client';
 // Two results `client-types.ts` imports for its signatures without re-exporting them.
 export type {
   AgentArtifactsResult,

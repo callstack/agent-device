@@ -17,7 +17,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
-import { laneEnvelope } from '../lib/lane-envelope.ts';
+import { laneEnvelope } from '@agent-device/test-kit';
 import { COVERAGE_CAPTURE_ENV } from './coverage-reporter.mjs';
 import {
   assertCoveragePolicy,

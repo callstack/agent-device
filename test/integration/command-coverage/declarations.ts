@@ -1,5 +1,4 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '@agent-device/daemon/testing/session-observability/__tests__/session-audio.coverage';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from '../../../src/__tests__/install-source.coverage.ts';
 import { ANDROID_LIFECYCLE_CONTRACT_EVIDENCE } from '../provider-scenarios/android-lifecycle.coverage.ts';
 import {
@@ -15,6 +14,7 @@ import {
 } from './entries.ts';
 import {
   ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
+  ANDROID_AUDIO_CONTRACT_EVIDENCE,
   ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE,
   ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,

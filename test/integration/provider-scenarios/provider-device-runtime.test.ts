@@ -29,6 +29,34 @@ test('Provider-backed scenario composes lease, inventory, dispatch, and port rev
   });
 }, 15_000);
 
+test('provider session retains the allocated device and lease for implicit commands', async () => {
+  await withProviderScenarioResource(createFakeProviderWorld, async ({ daemon, runtime }) => {
+    const lease = await allocateFakeProviderLease(daemon);
+    assertRpcOk(
+      await daemon.callCommand('open', ['com.example.demo'], leaseFlags(lease.leaseId), {
+        meta: leaseMeta(lease.leaseId),
+      }),
+    );
+
+    const sessions = await daemon.client().sessions.list();
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0]?.device.id, runtime.deviceIdForLease(lease.leaseId));
+
+    const click = await daemon.callCommand('click', ['10', '20']);
+    assertRpcOk(click);
+    assert.deepEqual(
+      runtime.calls.filter((call) => call.type === 'tap').map((call) => call.deviceId),
+      [runtime.deviceIdForLease(lease.leaseId)],
+    );
+
+    assertRpcOk(await daemon.callCommand('close'));
+    assert.deepEqual(
+      runtime.calls.filter((call) => call.type === 'lease.release').map((call) => call.leaseId),
+      [lease.leaseId],
+    );
+  });
+}, 15_000);
+
 test('provider-owned iOS simulators relaunch without local CoreSimulator refresh', async () => {
   await withProviderScenarioResource(
     async () => await createFakeProviderWorld('ios'),
@@ -88,6 +116,7 @@ test('provider lease allocation fails when the daemon lacks the requested runtim
     );
     const error = assertRpcError(
       response,
+      500,
       'UNSUPPORTED_OPERATION',
       /Provider "limrun" is not available in this daemon runtime/,
     );
@@ -134,7 +163,7 @@ async function runFakeProviderScenario(
       flags: leaseFlags(lease.leaseId),
       meta: leaseMeta(lease.leaseId),
     });
-    assertFakeProviderScenarioResult(daemon, runtime, lease, appPath);
+    assertFakeProviderScenarioResult(runtime, lease, appPath);
   });
 }
 
@@ -221,15 +250,11 @@ function expectedPortReverseData(leaseId: string): Record<string, unknown> {
 }
 
 function assertFakeProviderScenarioResult(
-  daemon: Awaited<ReturnType<typeof createProviderScenarioHarness>>,
   runtime: FakeProviderDeviceRuntime,
   lease: DeviceLease,
   appPath: string,
 ): void {
   const deviceId = runtime.deviceIdForLease(lease.leaseId);
-  const session = daemon.session();
-  assert.equal(session?.device.id, deviceId);
-  assert.equal(session?.lease?.leaseId, lease.leaseId);
   assert.deepEqual(
     runtime.calls.find((call) => call.type === 'install'),
     {

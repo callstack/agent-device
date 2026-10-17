@@ -15,7 +15,7 @@ import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
 import {
-  createDaemonTransport,
+  createEnsuredDaemonTransport,
   resolveRunTransport,
   sendToDaemon,
 } from './daemon-client/daemon-client.ts';
@@ -67,11 +67,6 @@ type CliDaemonRequest = Parameters<CliDaemonTransport>[0];
 type CliDaemonTransportOptions = Parameters<CliDaemonTransport>[1];
 type ClientDaemonRequest = Parameters<AgentDeviceDaemonTransport>[0];
 
-const DEFAULT_CLI_DEPS: CliDeps = {
-  sendToDaemon,
-  transportForHost: createDaemonTransport,
-};
-
 const printHumanError = (
   err: AppError | NormalizedError,
   options: { showDetails?: boolean } = {},
@@ -82,6 +77,28 @@ const printJson = (
   result: { success: true; data?: unknown } | { success: false; error: NormalizedError },
 ): Promise<void> =>
   import('./commands/output/json.ts').then(({ printJson: write }) => write(result));
+
+const DEFAULT_CLI_DEPS: CliDeps = {
+  sendToDaemon: createEnsuredDaemonTransport({ onReplaced: writeDaemonReplacedNotice }),
+  transportForHost: (host) =>
+    createEnsuredDaemonTransport({ host, onReplaced: writeDaemonReplacedNotice }),
+};
+
+function writeDaemonReplacedNotice(replaced: {
+  stateDir: string;
+  previous: { pid: number; version?: string };
+  reason: 'incompatible' | 'unreachable';
+}): void {
+  const { stateDir, previous, reason } = replaced;
+  const identity = previous.version
+    ? `pid ${previous.pid}, v${previous.version}`
+    : `pid ${previous.pid}`;
+  process.stderr.write(
+    reason === 'unreachable'
+      ? `Replaced unreachable daemon (${identity}) in ${stateDir}.\n`
+      : `Replaced idle daemon (${identity}) in ${stateDir}: it did not match this client.\n`,
+  );
+}
 
 const METRO_RUNTIME_OVERRIDE_FLAG_KEYS = new Set<FlagKey>([
   'launchUrl',

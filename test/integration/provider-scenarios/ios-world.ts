@@ -236,7 +236,6 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
   });
 
   const daemon = await createProviderScenarioHarness({
-    platformRuntime: true,
     appleRunnerProvider: () => appleRunnerProvider,
     appleToolProvider: () => appleTool.provider,
     deviceInventoryProvider: async (request) => {
@@ -406,7 +405,6 @@ export async function createIosPhysicalReinstallWorld(): Promise<IosPhysicalRein
   const daemon = await createProviderScenarioHarness({
     appleToolProvider: () => appleTool.provider,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE],
-    platformRuntime: true,
   });
   const { tempRoot, appPath } = createDemoIosApp(
     'agent-device-provider-scenario-ios-physical-deploy-',

@@ -37,6 +37,12 @@ type SendRequestOptions = {
    * canceled-request error. An abort is never a timeout: it never reaches `handleRequestTimeout`.
    */
   signal?: AbortSignal;
+  /**
+   * What a timed-out request may do to the daemon. `retire-unresponsive`, the default, lets the
+   * liveness probe retire a daemon that answers nothing; `none` leaves every daemon alone, which is
+   * how an attach client and the quiesce request itself time out.
+   */
+  timeoutRecovery?: 'retire-unresponsive' | 'none';
 };
 
 /**
@@ -384,6 +390,7 @@ export async function sendRequest(
     throw await handleRequestTimeout({
       info,
       statePaths,
+      retireUnresponsive: options.timeoutRecovery !== 'none',
       ...timeoutRequestContext(req, isRemoteDaemon(info), expiredBudget),
     });
   }
@@ -687,7 +694,10 @@ function requestTimeoutError(timeoutMs: number, requestId: string | undefined): 
 
 // The fields a timed-out request is described by, read once so a socket and an HTTP timeout cannot
 // describe the same request differently.
-type TimeoutRequestFields = Omit<Parameters<typeof handleRequestTimeout>[0], 'info' | 'statePaths'>;
+type TimeoutRequestFields = Omit<
+  Parameters<typeof handleRequestTimeout>[0],
+  'info' | 'statePaths' | 'retireUnresponsive'
+>;
 
 function timeoutRequestContext(
   req: DaemonWireRequest,

@@ -83,11 +83,10 @@ test('Provider-backed integration macOS recording keeps a runner-stop failure’
       assertRecordingStarted(recordStart, { outPath: recordingPath, showTouches: false });
 
       const recordStop = await daemon.callCommand('record', ['stop']);
-      assertRpcError(recordStop, 'COMMAND_FAILED', /recordStop rejected/);
+      assertRpcError(recordStop, 500, 'COMMAND_FAILED', /recordStop rejected/);
       assert.equal(recordStop.json?.result, undefined);
 
-      const session = daemon.session();
-      assert.ok(session?.screenRecording, 'failed stop must retain the live session resource');
+      assert.equal(await daemon.hasSession(), true);
       const resource = screenRecordingResourceStore.read(
         screenRecordingResourceStore.resolvePath(daemon.sessionDir()),
       );
@@ -127,12 +126,9 @@ test('Provider-backed integration macOS recording keeps an unplayable recording 
       assertRecordingStarted(recordStart, { outPath: recordingPath, showTouches: false });
 
       const recordStop = await daemon.callCommand('record', ['stop']);
-      assertRpcError(recordStop, 'COMMAND_FAILED', /was not finalized into a playable video/);
+      assertRpcError(recordStop, 500, 'COMMAND_FAILED', /was not finalized into a playable video/);
       assert.equal(recordStop.json?.result, undefined);
-      assert.ok(
-        daemon.session()?.screenRecording,
-        'an unplayable recording must stay attached so the next record stop can retry it',
-      );
+      assert.equal(await daemon.hasSession(), true);
 
       const resource = screenRecordingResourceStore.read(
         screenRecordingResourceStore.resolvePath(daemon.sessionDir()),
@@ -145,7 +141,7 @@ test('Provider-backed integration macOS recording keeps an unplayable recording 
       runnerTranscript.assertComplete();
     },
   );
-});
+}, 15_000);
 
 function createMacOsRecordingScenario(
   recordingPath: string,

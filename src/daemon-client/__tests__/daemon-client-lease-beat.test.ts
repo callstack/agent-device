@@ -581,6 +581,8 @@ describe('buildUploadLeaseHeartbeat', () => {
     host: { env: process.env, cwd: process.cwd() },
     paths: resolveDaemonPaths('/tmp/agent-device-upload-lease'),
     transportPreference: 'socket' as const,
+    daemonLifecycle: 'managed' as const,
+    retireIncompatibleContender: true,
     serverMode: 'socket' as const,
   };
 

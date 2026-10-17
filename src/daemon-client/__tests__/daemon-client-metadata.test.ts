@@ -52,3 +52,14 @@ test('a registration this version did not write reads back unreported', () => {
     assert.equal(readDaemonInfo(infoPath)?.codeOrigin, undefined);
   }
 });
+
+test('a daemon record without capabilities reads as a daemon with none', () => {
+  const [, infoPath] = scratchStateDir();
+  fs.writeFileSync(infoPath, JSON.stringify({ httpPort: 41_234, token: 'legacy', pid: 1 }));
+  assert.deepEqual(readDaemonInfo(infoPath)?.capabilities, []);
+  fs.writeFileSync(
+    infoPath,
+    JSON.stringify({ httpPort: 41_234, token: 'new', pid: 1, capabilities: ['quiesce', 'future'] }),
+  );
+  assert.deepEqual(readDaemonInfo(infoPath)?.capabilities, ['quiesce']);
+});

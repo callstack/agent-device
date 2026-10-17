@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
+  DAEMON_CAPABILITIES,
   resolveDaemonPaths,
   resolveDaemonServerMode,
 } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -43,7 +44,11 @@ import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn } from '../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
-import { createDaemonIdleReap } from '../../sessions/server/daemon-idle-reap.ts';
+import {
+  createDaemonIdleReap,
+  createDaemonQuiesce,
+  daemonShuttingDownResponse,
+} from '../../sessions/server/daemon-idle-reap.ts';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
@@ -635,16 +640,24 @@ async function startDaemonRuntimeOnHost(
     env,
   });
 
-  const handleRequest: DaemonInvokeFn = async (req) => {
-    if (shuttingDown)
-      return {
-        ok: false,
-        error: {
-          code: 'COMMAND_FAILED',
-          message: 'Daemon is shutting down.',
-          details: { reason: 'daemon_shutting_down' },
-        },
-      };
+  // The quiesce request is answered before dispatch and never joins `inFlightRequests`, so the
+  // count it reads needs no allowance for it. The servers listen and `daemon.json` is published
+  // before `shutdown` exists, and a daemon answers `draining` only once it has a drain path to run.
+  let startingUp = true;
+  const quiesce = createDaemonQuiesce({
+    token,
+    identity: { pid: daemonIdentity.pid, processStartTime: daemonIdentity.startTime },
+    sessionStore,
+    leaseRegistry,
+    inFlightRequestCount: () => inFlightRequests.size,
+    startingUp: () => startingUp,
+    drain: () => {
+      void shutdown();
+    },
+  });
+
+  const handleRequest: DaemonInvokeFn = quiesce.admit(async (req) => {
+    if (shuttingDown) return daemonShuttingDownResponse();
     idleReap.cancel();
     const dispatch = dispatchRequest(req);
     inFlightRequests.add(dispatch);
@@ -659,7 +672,7 @@ async function startDaemonRuntimeOnHost(
       // the reaper's view of a session's deadline identical to the lock-guarded one.
       sessionIdleExpiry.noteSessionsChanged();
     }
-  };
+  });
 
   const openDaemonServers = async (): Promise<{
     servers: DaemonServer[];
@@ -726,6 +739,7 @@ async function startDaemonRuntimeOnHost(
       codeOrigin: daemonCodeOrigin,
       codeSignature: daemonCodeSignature,
       policyDigest: daemonPolicy?.digest,
+      capabilities: DAEMON_CAPABILITIES,
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
@@ -938,6 +952,8 @@ async function startDaemonRuntimeOnHost(
       { host, requestEnv: undefined },
       async () => await shutdownOnHost(shutdownOptions),
     );
+
+  startingUp = false;
 
   if (options.registerProcessHandlers !== false) {
     process.on('SIGINT', () => {

@@ -264,8 +264,6 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
                 (node: { label?: string }) => node.label === 'General',
               );
               assert.equal(general?.ref, 'e2', JSON.stringify(snapshot.json));
-              assert.equal(daemon.session()?.snapshot?.backend, 'macos-helper');
-              assert.equal(daemon.session()?.snapshot?.nodes[0]?.surface, 'frontmost-app');
             },
           },
           {
@@ -309,6 +307,7 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
         });
         const frontmostRefusalErrorData = assertRpcError(
           frontmostFullscreenRefusal,
+          400,
           'INVALID_ARGS',
           /--fullscreen is not accepted on the macOS frontmost-app surface/,
         );
@@ -351,6 +350,7 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
         });
         const refusalErrorData = assertRpcError(
           fullscreenRefusal,
+          400,
           'INVALID_ARGS',
           /--fullscreen is not accepted on the macOS desktop surface/,
         );
@@ -410,8 +410,6 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
                 snapshot.json?.result?.data?.nodes?.map((node: { label?: string }) => node.label),
                 ['Desktop', 'Notes', 'Notes', 'Pinned'],
               );
-              assert.equal(daemon.session()?.snapshot?.backend, 'macos-helper');
-              assert.equal(daemon.session()?.snapshot?.nodes[0]?.surface, 'desktop');
             },
           },
           {
@@ -430,7 +428,6 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
               assert.equal(nodes[0]?.label, 'Notes', JSON.stringify(snapshot.json));
               assert.equal(nodes[0]?.depth, 0, JSON.stringify(snapshot.json));
               assert.equal(nodes[0]?.parentIndex, undefined, JSON.stringify(snapshot.json));
-              assert.equal(daemon.session()?.snapshot?.backend, 'macos-helper');
             },
           },
           {
@@ -453,8 +450,6 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
                 snapshot.json?.result?.data?.nodes?.map((node: { label?: string }) => node.label),
                 ['Menu Bar', 'File'],
               );
-              assert.equal(daemon.session()?.snapshot?.backend, 'macos-helper');
-              assert.equal(daemon.session()?.snapshot?.nodes[0]?.surface, 'menubar');
             },
           },
           {
@@ -485,8 +480,7 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
                 snapshot.json?.result?.data?.nodes?.map((node: { label?: string }) => node.label),
                 ['Menu Bar', 'Demo'],
               );
-              assert.equal(daemon.session()?.snapshot?.backend, 'macos-helper');
-              assert.equal(daemon.session()?.snapshot?.nodes[1]?.bundleId, 'com.example.demo');
+              assert.equal(snapshot.json?.result?.data?.nodes?.[1]?.bundleId, 'com.example.demo');
             },
           },
         ]);

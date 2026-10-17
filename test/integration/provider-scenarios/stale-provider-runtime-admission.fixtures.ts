@@ -1,112 +1,44 @@
-import { composedPlatformServicesFixture } from '../../../src/__tests__/daemon-composition/platform-services-fixture.ts';
-import fs from 'node:fs';
-import path from 'node:path';
-import { vi } from 'vitest';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import type { DeviceRuntimeGateway, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import type { RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { handleAppDeploymentCommand } from '@agent-device/daemon/testing/handlers/session-app-deployment';
-import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
-import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createComposedPlatformRuntimeGateway } from '../../../src/platform-runtime-gateway.ts';
-
-function createProviderDeploymentAdmission(params: {
-  runtime: ProviderDeviceRuntime;
-  module: PlatformRuntimeProviderModule;
-  device: DeviceInfo;
-}) {
-  const localLoad = vi.fn(async () => {
-    throw new Error('provider-owned device must not load a local runtime');
-  });
-  const gateway = createComposedPlatformRuntimeGateway({
-    modules: new Map([['android', { family: 'android', loadRuntime: localLoad }]]),
-    loadHost: async () => ({}) as PlatformRuntimeHost,
-    providerRuntimes: [params.runtime],
-    providerModules: [{ runtime: params.runtime, module: params.module }],
-  });
-  let inspectedFacts: RuntimeFacts<PlatformRuntimeOperations> | undefined;
-  const inspectFacts = vi.fn(async (device: DeviceInfo) => {
-    inspectedFacts = await gateway.inspectFacts(device);
-    return inspectedFacts;
-  });
-  const bind = vi.fn(
-    async (...args: Parameters<DeviceRuntimeGateway<PlatformRuntimeOperations>['bind']>) =>
-      await gateway.bind(...args),
-  );
-  const bindings = createRequestRuntimeBindings({
-    dispatchLedger: createRequestDispatchLedger(),
-    gateway: { inspectFacts, bind, shutdown: async () => {} },
-    scope: {
-      signal: new AbortController().signal,
-      diagnostics: { emit: () => {} },
-      progress: { report: () => {} },
-    },
-    admitDeviceClaim: async () => {},
-  });
-  return {
-    bindings,
-    inspectFacts,
-    bind,
-    localLoad,
-    facts: () => inspectedFacts,
-    close: async () => {
-      await bindings[Symbol.asyncDispose]();
-      await gateway.shutdown();
-    },
-  };
-}
 
 export async function inspectProviderDeploymentAdmission(params: {
   runtime: ProviderDeviceRuntime;
   module: PlatformRuntimeProviderModule;
   device: DeviceInfo;
-}) {
-  const admission = createProviderDeploymentAdmission(params);
-  const sessionStore = makeSessionStore('agent-device-provider-admission-');
-  const appDirectory = mkdtempForTestSync('agent-device-provider-app-');
-  const appPath = path.join(appDirectory, 'demo.apk');
-  fs.writeFileSync(appPath, 'fixture');
+}): Promise<RuntimeFacts<PlatformRuntimeOperations>> {
+  const localLoadCalls: string[] = [];
+  const gateway = createComposedPlatformRuntimeGateway({
+    modules: new Map([
+      [
+        'android',
+        {
+          family: 'android',
+          loadRuntime: async () => {
+            localLoadCalls.push('android');
+            throw new Error('provider-owned device must not load a local runtime');
+          },
+        },
+      ],
+    ]),
+    loadHost: async () => ({}) as PlatformRuntimeHost,
+    providerRuntimes: [params.runtime],
+    providerModules: [{ runtime: params.runtime, module: params.module }],
+  });
 
   try {
-    sessionStore.publish('default', {
-      name: 'default',
-      createdAt: 1,
-      actions: [],
-      device: params.device,
-    });
-    const response = await handleAppDeploymentCommand({
-      platformServices: composedPlatformServicesFixture(),
-      req: {
-        token: 'test',
-        session: 'default',
-        command: 'install',
-        positionals: [appPath],
-        flags: {},
-      },
-      command: 'install',
-      sessionName: 'default',
-      sessionStore,
-      inspectFacts: admission.bindings.inspectFacts,
-      bindDevice: admission.bindings.bindDevice,
-    });
-    const facts = admission.facts();
-    if (!facts) throw new Error('Expected provider facts inspection');
-    return {
-      response,
-      facts,
-      inspectFactCalls: admission.inspectFacts.mock.calls.length,
-      bindCalls: admission.bind.mock.calls.length,
-      localLoadCalls: admission.localLoad.mock.calls.length,
-    };
+    const facts = await gateway.inspectFacts(params.device);
+    if (localLoadCalls.length > 0) {
+      throw new Error('provider-owned facts inspection loaded a local runtime');
+    }
+    return facts;
   } finally {
-    await admission.close();
-    fs.rmSync(appDirectory, { recursive: true, force: true });
+    await gateway.shutdown();
   }
 }

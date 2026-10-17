@@ -11,7 +11,7 @@ import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
 
 // #1596: a CLI command that finds its recorded daemon unreachable replaces it
-// (`Replacing daemon (pid N, vX) in <state-dir>: unreachable`) and retries
+// (`Replaced unreachable daemon (pid N, vX) in <state-dir>.`) and retries
 // against a fresh one. Three field runs died with zero further agent actions
 // immediately after that replace plus a SESSION_NOT_FOUND (the fresh daemon
 // has no sessions yet, which is expected). This file locks down that a
@@ -52,7 +52,7 @@ test('daemon replace mid-command returns a structured, parseable error and exits
 
     assert.equal(result.status, 1, formatUnexpected('exit code', result));
     assert.ok(
-      result.stderr.includes('Replacing daemon') && result.stderr.includes('unreachable'),
+      result.stderr.includes('Replaced unreachable daemon'),
       formatUnexpected('takeover notice on stderr', result),
     );
     assert.ok(result.json, formatUnexpected('parseable JSON stdout', result));

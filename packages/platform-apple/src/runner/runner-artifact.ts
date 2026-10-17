@@ -21,8 +21,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 import { logChunk } from './runner-io.ts';
 import {
+  runnerLaunchLogClassificationDetails,
   runnerSimulatorSetFailureDetails,
-  simulatorSetDestinationNotFoundMessage,
   xcodebuildDestinationArgs,
 } from './runner-device-set.ts';
 import {
@@ -925,11 +925,15 @@ async function buildRunnerXctestrun(
     if (isRequestCanceledError(error)) throw error;
     const appErr =
       error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
-    const simulatorSet = runnerSimulatorSetFailureDetails(device);
-    // The reason and the hint beside it come from one classifier (#2680), so the reason a caller
-    // switches on can never disagree with the advice it is handed.
-    const { reason, hint, matched } = classifyRunnerStartupFailure(
-      new AppError(appErr.code, appErr.message, { ...appErr.details, ...simulatorSet }),
+    const publishedSimulatorSet = runnerSimulatorSetFailureDetails(device);
+    // The reason, the hint, and any cause named in the message all come from one classifier (#2680), so
+    // the reason a caller switches on can never disagree with the advice or the sentence beside it.
+    const classificationDetails = runnerLaunchLogClassificationDetails(device);
+    const { reason, hint, messageSuffix, matched } = classifyRunnerStartupFailure(
+      new AppError(appErr.code, appErr.message, {
+        ...appErr.details,
+        ...classificationDetails,
+      }),
     );
     const hostDeadlineHit = isCommandTimeoutError(appErr);
     // `startupRuleMatched` travels with the verdict: this wrapper buries the tool's text a level too
@@ -937,21 +941,15 @@ async function buildRunnerXctestrun(
     // alone (#2690 review). The device's own state is attached further out, by the startup catch that
     // can see this build and the launch after it.
     const message = 'xcodebuild build-for-testing failed';
-    throw new AppError(
-      'COMMAND_FAILED',
-      reason === 'simulator_set_destination_not_found'
-        ? simulatorSetDestinationNotFoundMessage(message, device, simulatorSet)
-        : message,
-      {
-        reason,
-        error: appErr.message,
-        details: appErr.details,
-        logPath: options.logPath,
-        hint,
-        startupRuleMatched: matched,
-        startupHostDeadlineHit: hostDeadlineHit,
-        ...simulatorSet,
-      },
-    );
+    throw new AppError('COMMAND_FAILED', messageSuffix ? `${message}: ${messageSuffix}` : message, {
+      reason,
+      error: appErr.message,
+      details: appErr.details,
+      logPath: options.logPath,
+      hint,
+      startupRuleMatched: matched,
+      startupHostDeadlineHit: hostDeadlineHit,
+      ...publishedSimulatorSet,
+    });
   }
 }

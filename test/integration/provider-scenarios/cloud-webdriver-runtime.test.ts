@@ -2,17 +2,12 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'vitest';
-import {
-  clearRequestAbortRegistration,
-  markRequestCanceled,
-  registerRequestAbort,
-} from '@agent-device/host-kit/request';
+import { test, vi } from 'vitest';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import type { CloudArtifact } from '@agent-device/contracts/observability';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import { createExpiredProviderLeaseReleaser } from '@agent-device/daemon/testing/provider-lease-expiry';
 import { assertRpcOk } from './assertions.ts';
 import {
   createProviderScenarioHarness,
@@ -192,26 +187,25 @@ test('packaged Cloud WebDriver orientation surfaces a provider failure instead o
 }, 15_000);
 
 test('packaged Cloud WebDriver expiry releases the live provider session', async () => {
-  await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
-    const lease = await allocateWebDriverLease(world.daemon);
-    const releaser = createExpiredProviderLeaseReleaser({
-      leaseLifecycleProvider: world.providers.leaseLifecycleProvider,
-      providerRuntimeIds: world.providers.providerRuntimeIds,
-      recoverableProviderIds: world.providers.recoverableProviderIds,
-    });
-
-    try {
-      await releaser.release(lease);
-      assert.equal(
-        world.server.calls.some(
-          (call) => call.method === 'DELETE' && call.path === '/wd/hub/session/wd-1',
-        ),
-        true,
-      );
-    } finally {
-      releaser.shutdown();
-    }
-  });
+  let now = Date.now();
+  const dateSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+  try {
+    await withProviderScenarioResource(
+      async () => await createCloudWebDriverWorld({ leaseTtlMs: 5_000 }),
+      async (world) => {
+        const lease = await allocateWebDriverLease(world.daemon);
+        now = lease.expiresAt + 1;
+        await waitForLeaseExpiry(world.server);
+        assert.ok(
+          world.server.calls.some(
+            (call) => call.method === 'DELETE' && call.path === '/wd/hub/session/wd-1',
+          ),
+        );
+      },
+    );
+  } finally {
+    dateSpy.mockRestore();
+  }
 }, 15_000);
 
 // #2509: on a screen that never goes idle — a looping onboarding video — the driver's
@@ -223,17 +217,17 @@ test('packaged Cloud WebDriver expiry releases the live provider session', async
 test('packaged Cloud WebDriver cancels an abandoned source capture and keeps its session', async () => {
   await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
     const { daemon, server } = world;
-    const requestId = 'cloud-webdriver-cancelled-source';
     const lease = await openWebDriverSession(daemon);
-    const registration = registerRequestAbort(requestId);
     server.sourceBehavior = 'never';
+    const controller = new AbortController();
 
     try {
-      const capture = daemon.callCommand('snapshot', [], leaseFlags(lease.leaseId), {
-        meta: { ...leaseMeta(lease.leaseId), requestId },
+      const capture = daemon.client().capture.snapshot({
+        signal: controller.signal,
+        ...leaseClientOptions(lease.leaseId),
       });
       await waitForSourceRequest(server);
-      markRequestCanceled(requestId);
+      controller.abort();
 
       // Bounded on purpose: the bug was that this never returned at all, and a
       // regression should fail here with its reason rather than as a test timeout.
@@ -242,8 +236,10 @@ test('packaged Cloud WebDriver cancels an abandoned source capture and keeps its
         3_000,
         'the abandoned capture was still running after its client hung up',
       );
-      assert.notEqual(canceled.json?.error, undefined, 'an abandoned capture must not succeed');
-      assert.equal(canceled.json?.error?.data?.details?.reason, 'request_canceled');
+      assert.fail(`an aborted capture unexpectedly succeeded: ${JSON.stringify(canceled)}`);
+    } catch (error) {
+      assert.equal(isRequestCanceledError(error), true);
+      await waitForSourceAbort(server);
       assert.equal(
         sourceCalls(server)[0]?.signal?.aborted,
         true,
@@ -262,7 +258,7 @@ test('packaged Cloud WebDriver cancels an abandoned source capture and keeps its
         assertRpcOk(shot);
       });
     } finally {
-      clearRequestAbortRegistration(registration);
+      controller.abort();
     }
   });
 }, 20_000);
@@ -290,7 +286,27 @@ async function waitForSourceRequest(server: FakeWebDriverServer): Promise<void> 
   assert.ok(sourceCalls(server).length > 0, 'the driver never received a page-source request');
 }
 
-async function createCloudWebDriverWorld() {
+async function waitForSourceAbort(server: FakeWebDriverServer): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (sourceCalls(server)[0]?.signal?.aborted) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail('the client abort did not reach the WebDriver page-source request');
+}
+
+async function waitForLeaseExpiry(server: FakeWebDriverServer): Promise<void> {
+  for (let attempt = 0; attempt < 250; attempt += 1) {
+    if (
+      server.calls.some((call) => call.method === 'DELETE' && call.path === '/wd/hub/session/wd-1')
+    ) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.fail('expired lease did not release the live WebDriver session');
+}
+
+async function createCloudWebDriverWorld(params: { leaseTtlMs?: number } = {}) {
   const server = await FakeWebDriverServer.start();
   const runtimes = createBundledCloudWebDriverRuntimes({
     env: {
@@ -313,11 +329,11 @@ async function createCloudWebDriverWorld() {
     ...providers,
     deviceInventorySource: providers.deviceInventorySource!,
     platformRuntime: { providerRuntimes: runtimes, providerModules },
+    ...(params.leaseTtlMs === undefined ? {} : { leaseTtlMs: params.leaseTtlMs }),
   });
   return {
     daemon,
     server,
-    providers,
     close: async () => {
       await Promise.allSettled(runtimes.map(async (runtime) => await runtime.shutdown()));
       await daemon.close();
@@ -642,5 +658,25 @@ function leaseMeta(leaseId?: string): DaemonWireRequest['meta'] {
     leaseProvider: WEBDRIVER_PROVIDER,
     deviceKey: 'webdriver-android-a',
     clientId: 'client-a',
+  };
+}
+
+function leaseClientOptions(leaseId: string) {
+  return {
+    platform: 'android' as const,
+    target: 'mobile' as const,
+    tenant: 'team-a',
+    runId: 'run-a',
+    leaseId,
+    leaseBackend: 'android-instance' as const,
+    leaseProvider: WEBDRIVER_PROVIDER,
+    deviceKey: 'webdriver-android-a',
+    clientId: 'client-a',
+    device: 'Google Pixel 8',
+    providerApp: 'bs://app-id',
+    providerOsVersion: '14.0',
+    providerProject: 'agent-device',
+    providerBuild: 'run-a',
+    providerSessionName: leaseId,
   };
 }

@@ -20,10 +20,10 @@
 
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { SessionRef } from '@agent-device/daemon/testing/session-state';
-import type { SessionStore } from '@agent-device/daemon/testing/session-store';
-import { resolveRequestExecutionLockPlan } from '@agent-device/daemon/testing/request-binding';
-import { shouldLockSessionExecution } from '@agent-device/daemon/testing/daemon-command-registry';
+import type { SessionRef } from '../../../src/core/session-state.ts';
+import type { SessionStore } from '../../../src/core/session-store.ts';
+import { resolveRequestExecutionLockPlan } from '../../../src/server/request-binding.ts';
+import { shouldLockSessionExecution } from '../../../src/core/daemon-command-registry.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 

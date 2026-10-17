@@ -39,7 +39,6 @@ test('generic scoped iOS physical runner recording fails closed without local fa
         },
       });
       const daemon = await createProviderScenarioHarness({
-        platformRuntime: true,
         appleRunnerProvider: () =>
           createAppleRunnerProviderFromTranscript(runnerTranscript, 'ios.runner'),
         appleToolProvider: () => appleTool.provider,
@@ -106,7 +105,6 @@ test('iOS simulator recording reports host contention and recovers through the f
         },
       };
       const daemon = await createProviderScenarioHarness({
-        platformRuntime: true,
         appleRunnerProvider: () => appleRunnerProvider,
         appleToolProvider: () => appleTool.provider,
         appleSimulatorScreenRecordingTransport: () => recordingTransport,
@@ -137,7 +135,10 @@ test('iOS simulator recording reports host contention and recovers through the f
         assert.equal(busyStart.json?.error?.data?.details?.exitCode, 16);
         assert.match(busyStart.json?.error?.data?.hint ?? '', /record stop/);
         assert.match(busyStart.json?.error?.data?.hint ?? '', /CoreSimulator/);
-        assert.equal(daemon.session()?.screenRecording, undefined);
+        assert.equal(
+          fs.existsSync(path.join(daemon.sessionDir(), 'screen-recording.resource.json')),
+          false,
+        );
         assert.equal(fs.existsSync(recordingPath), false);
 
         const recordStart = await daemon.callCommand(

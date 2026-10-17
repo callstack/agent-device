@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { changePlugin, listPlugins } from '@agent-device/plugins/store';
+import { PROVIDER_PLUGIN_POLICY } from '../../provider-plugin-policy.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -16,7 +17,12 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
     );
   }
   if (action !== 'list' && name) {
-    await changePlugin(action as 'add' | 'update' | 'remove', name, process.env);
+    await changePlugin(
+      action as 'add' | 'update' | 'remove',
+      name,
+      process.env,
+      PROVIDER_PLUGIN_POLICY.reservedProviders,
+    );
   }
   const plugins = listPlugins(process.env);
   await writeCommandOutput(flags, { plugins, restartRequired: action !== 'list' }, () =>

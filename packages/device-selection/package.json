@@ -35,5 +35,8 @@
       "types": "./src/inventory-gateways.fixtures.ts",
       "default": "./src/inventory-gateways.fixtures.ts"
     }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
   }
 }

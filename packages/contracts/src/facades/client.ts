@@ -34,7 +34,11 @@ export type {
   AgentDeviceIdentifiers,
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,
+  DaemonConnection,
+  DaemonIdentity,
+  DaemonLifecycle,
   DeviceCommandBaseOptions,
+  EnsureDaemonOptions,
 } from '../client-connection.ts';
 export type {
   AgentDeviceCapabilitiesResult,

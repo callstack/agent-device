@@ -2,34 +2,35 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
-import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../../../src/client/client-types.ts';
+import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
+import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import {
-  createRequestHandler,
-  type RequestRouterDeps,
-} from '@agent-device/daemon/testing/request-router';
+  startDaemonRuntime,
+  type ComposeDaemonRuntimeDeps,
+  type DaemonRuntimeDeps,
+} from '@agent-device/daemon';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { resolveSessionDir } from '@agent-device/daemon-contracts/session-artifact-paths';
+import {
+  buildHttpRpcPayload,
+  handleDaemonHttpResponseBody,
+} from '../../../src/daemon-client/daemon-client-rpc.ts';
+import { commandRequest, responseToRpcResult } from './harness-rpc.ts';
+import { createDaemonRuntimeDeps } from '../../../src/daemon-composition.ts';
 import {
   createPlatformRuntimeGateway,
   createRequestPlatformProviders,
-  androidObservation,
   type PlatformProviderResolvers,
 } from '../../../src/platform-runtime.ts';
-import { createClaimRecoveryGateway } from '../../../src/platform-runtime-claim-recovery.ts';
-import { createDaemonPlatformServices } from '../../../src/platform-runtime-daemon-services.ts';
-import { platformResourceCleanup } from '../../../src/platform-runtime-resource-cleanup.ts';
-import { readDaemonProviderCredentials } from '../../../src/provider-credential-fingerprint.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
-import { trackDownloadableArtifact } from '@agent-device/daemon/testing/artifact-tracking';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { DaemonInvokeFn } from '@agent-device/daemon';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { runCmdBackground } from '@agent-device/host-kit/command';
-import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.fixtures.ts';
 import type {
   DeviceInventoryProvider,
@@ -40,24 +41,9 @@ import {
   createTestDeviceInventoryGateways,
   createTestDeviceInventoryGatewaysFromProvider,
 } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { createHostDiagnostics } from '../../../src/platform-runtime-host-diagnostics.ts';
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';
-import { isActiveProviderDevice } from '../../../src/provider-device-runtime.ts';
-import { installProviderDeviceAdmission } from '@agent-device/daemon/testing/provider-device-admission';
-import { installInteractorResolution } from '@agent-device/daemon/testing/interactor-resolution';
-import { getInteractor } from '../../../src/core/interactors.ts';
-import { unavailableDeviceRuntimeGateway } from '@agent-device/daemon/testing/__tests__/support/unavailable-device-runtime-gateway';
 
-import { openWebSessionNames } from '@agent-device/daemon/testing/web-session-names';
-import { testCreateCommandSurface } from '../../../src/__tests__/daemon-composition/command-surface-fixture.ts';
-
-// Match daemon composition (src/daemon-composition.ts): the daemon decides on provider
-// ownership through its own admission seam, which root composition installs.
-installProviderDeviceAdmission({ isActive: (device) => isActiveProviderDevice(device) });
-installInteractorResolution({ resolve: getInteractor });
-
-const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';
 const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
   recursive: true,
   force: true,
@@ -66,6 +52,11 @@ const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
 } as const;
 
 export type ProviderScenarioRpcResult = { statusCode: number; json: any };
+
+type JsonRpcResponseEnvelope = {
+  result?: DaemonResponse;
+  error?: { code: number; message: string; data?: Record<string, unknown> };
+};
 
 export type ProviderScenarioHarness = {
   callCommand: (
@@ -80,12 +71,11 @@ export type ProviderScenarioHarness = {
     },
   ) => Promise<ProviderScenarioRpcResult>;
   client: () => AgentDeviceClient;
-  /** The scenario daemon's request boundary, for mounting it behind a real HTTP server. */
-  handleRequest: DaemonInvokeFn;
+  hasSession: (session?: string) => Promise<boolean>;
+  baseUrl: string;
+  httpPort: number;
   token: string;
-  session: (name?: string) => SessionState | undefined;
   sessionDir: (name?: string) => string;
-  publishSession: (name: string, session: SessionState) => void;
   close: () => Promise<void>;
 };
 
@@ -93,43 +83,46 @@ export type ClosableProviderScenarioResource = {
   close: () => Promise<void> | void;
 };
 
-export type ProviderScenarioPlatformRuntime =
-  | boolean
-  | Readonly<{
-      providerRuntimes: readonly ProviderDeviceRuntime[];
-      providerModules: readonly PlatformRuntimeProviderRegistration[];
-    }>;
+export type ProviderScenarioPlatformRuntime = Readonly<{
+  providerRuntimes: readonly ProviderDeviceRuntime[];
+  providerModules: readonly PlatformRuntimeProviderRegistration[];
+}>;
+
+type ProviderScenarioDependencies = Partial<Omit<DaemonRuntimeDeps, 'requestRouter'>> &
+  Partial<DaemonRuntimeDeps['requestRouter']> &
+  Partial<PlatformProviderResolvers> &
+  (
+    | { deviceInventoryProvider: DeviceInventoryProvider; deviceInventorySource?: never }
+    | { deviceInventorySource: ProviderDeviceInventorySource; deviceInventoryProvider?: never }
+  ) & {
+    providerRuntimes?: readonly ProviderDeviceRuntime[];
+    platformRuntime?: ProviderScenarioPlatformRuntime;
+    leaseTtlMs?: number;
+  };
 
 export async function createProviderScenarioHarness(
-  deps: Partial<Omit<RequestRouterDeps, 'deviceInventoryGateways'>> &
-    Partial<PlatformProviderResolvers> &
-    (
-      | { deviceInventoryProvider: DeviceInventoryProvider; deviceInventorySource?: never }
-      | { deviceInventorySource: ProviderDeviceInventorySource; deviceInventoryProvider?: never }
-    ) & {
-      /**
-       * Eager provider ownership metadata used only to build explicit provider registrations for
-       * a scenario. It is intentionally not forwarded as ambient router policy.
-       */
-      providerRuntimes?: readonly ProviderDeviceRuntime[];
-      platformRuntime?: ProviderScenarioPlatformRuntime;
-    },
+  deps: ProviderScenarioDependencies,
 ): Promise<ProviderScenarioHarness> {
-  const sessionDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-provider-scenario-session-'),
-  );
-  const sessionStore = new SessionStore(sessionDir);
-  const ownedProcessRecords = createOwnedProcessRecordStore({
-    stateDir: path.dirname(sessionDir),
-    sessionsDir: sessionDir,
-    resolveSessionDir: (sessionId) => sessionStore.resolveSessionDir(sessionId),
-  });
+  const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-provider-scenario-'));
+  const stateDir = path.join(testRoot, 'state');
+  const daemonPaths = resolveDaemonPaths(stateDir);
+  const env: NodeJS.ProcessEnv = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    TMPDIR: process.env.TMPDIR,
+    AGENT_DEVICE_STATE_DIR: stateDir,
+    // A scenario that seeds claims for its daemon names the directory through the process.
+    AGENT_DEVICE_CLAIMS_DIR: process.env.AGENT_DEVICE_CLAIMS_DIR ?? path.join(testRoot, 'claims'),
+    AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+    AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '3600000',
+  };
   const {
     deviceInventoryProvider,
     deviceInventorySource,
     deviceRuntimeGateway: configuredDeviceRuntimeGateway,
-    platformRuntime = true,
+    platformRuntime,
     providerRuntimes,
+    leaseTtlMs,
     requestPlatformProviders: configuredRequestPlatformProviders,
     androidAdbProvider,
     appleRunnerProvider,
@@ -139,110 +132,211 @@ export async function createProviderScenarioHarness(
     vegaToolProvider,
     webProvider,
     appleSimulatorScreenRecordingTransport,
-    providerCredentials = readDaemonProviderCredentials({}, path.dirname(sessionDir)),
-    ...routerDeps
+    ...dependencyOverrides
   } = deps;
-  const platformRuntimeOptions =
-    typeof platformRuntime === 'object'
-      ? platformRuntime
-      : {
-          // Provider runtime mechanics remain implementation-lazy, but their owner metadata is
-          // present before the first facts admission. This matches daemon composition and makes
-          // a missing provider module fail closed instead of falling back to host tooling.
-          providerRuntimes: providerRuntimes ?? [],
-          providerModules: createProviderPlatformRuntimeRegistrations(providerRuntimes ?? []),
-        };
-  const deviceRuntimeGateway =
-    configuredDeviceRuntimeGateway ??
-    (platformRuntime
-      ? createPlatformRuntimeGateway({
-          ...platformRuntimeOptions,
-          sessionsDir: sessionDir,
-          ownedProcesses: ownedProcessRecords,
-          resolveSessionArtifacts: (sessionId) => ({
-            outputPath: sessionStore.resolveAppLogPath(sessionId),
-            pidPath: sessionStore.resolveAppLogPidPath(sessionId),
-          }),
+  if (leaseTtlMs !== undefined) env.AGENT_DEVICE_LEASE_TTL_MS = String(leaseTtlMs);
+
+  let scopedAppleToolProvider: AppleToolProvider | undefined;
+  const composeDeps: ComposeDaemonRuntimeDeps = async (input) => {
+    const rootDeps = await createDaemonRuntimeDeps(input);
+    const configuredRuntimes = platformRuntime?.providerRuntimes ?? providerRuntimes ?? [];
+    const providerModules =
+      platformRuntime?.providerModules ??
+      createProviderPlatformRuntimeRegistrations(configuredRuntimes);
+    const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
+      assertShutdownAllowed: input.assertShutdownAllowed,
+      providerRuntimes: configuredRuntimes,
+      providerModules,
+      sessionsDir: input.sessionsDir,
+      ownedProcesses: rootDeps.ownedProcessRecords,
+      resolveSessionArtifacts: input.resolveSessionArtifacts,
+    });
+    const deviceRuntimeGateway = configuredDeviceRuntimeGateway
+      ? Object.freeze({
+          ...defaultDeviceRuntimeGateway,
+          ...configuredDeviceRuntimeGateway,
+          applicationLifecycle:
+            configuredDeviceRuntimeGateway.applicationLifecycle ??
+            defaultDeviceRuntimeGateway.applicationLifecycle,
         })
-      : unavailableDeviceRuntimeGateway);
-  const requestHandler = createRequestHandler({
-    host: { env: process.env, cwd: process.cwd() },
-    createCommandSurface: testCreateCommandSurface,
-    logPath: path.join(os.tmpdir(), 'agent-device-provider-scenario-daemon.log'),
-    token: PROVIDER_SCENARIO_TOKEN,
-    sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    deviceInventoryGateways: deviceInventorySource
+      : defaultDeviceRuntimeGateway;
+    const deviceInventoryGateways = deviceInventorySource
       ? createTestDeviceInventoryGateways({ provider: deviceInventorySource })
-      : createTestDeviceInventoryGatewaysFromProvider(deviceInventoryProvider),
-    deviceRuntimeGateway,
-    trackDownloadableArtifact,
-    // Match daemon composition (src/daemon-composition.ts): doctor's host-scoped
-    // diagnostics are injected at the root, so the harness composes them the same way.
-    hostDiagnostics: createHostDiagnostics(),
-    androidObservation,
-    platformResourceCleanup,
-    platformServices: createDaemonPlatformServices(),
-    claimRecoveryGateway: createClaimRecoveryGateway,
-    requestPlatformProviders:
+      : createTestDeviceInventoryGatewaysFromProvider(deviceInventoryProvider);
+    const trackedAppleToolProvider = appleToolProvider
+      ? (context: Parameters<NonNullable<PlatformProviderResolvers['appleToolProvider']>>[0]) => {
+          scopedAppleToolProvider = appleToolProvider(context);
+          return scopedAppleToolProvider;
+        }
+      : undefined;
+    const requestPlatformProviders =
       configuredRequestPlatformProviders ??
       createRequestPlatformProviders({
         providers: {
           androidAdbProvider,
           appleRunnerProvider,
           appleRunnerScreenRecordingTransport,
-          appleToolProvider,
+          appleToolProvider: trackedAppleToolProvider,
           linuxToolProvider,
           vegaToolProvider,
           webProvider,
           appleSimulatorScreenRecordingTransport,
         },
         defaultWebProvider: {
-          stateDir: path.dirname(sessionDir),
-          openWebSessionNames: () => openWebSessionNames(sessionStore),
-          ownedProcessRecords,
+          stateDir: input.baseDir,
+          openWebSessionNames: input.openWebSessionNames,
+          ownedProcessRecords: rootDeps.ownedProcessRecords,
         },
+      });
+    return Object.freeze({
+      ...rootDeps,
+      ...dependencyOverrides,
+      providerDeviceRuntimes: configuredRuntimes,
+      deviceRuntimeGateway,
+      requestRouter: Object.freeze({
+        ...rootDeps.requestRouter,
+        ...dependencyOverrides,
+        deviceInventoryGateways,
+        requestPlatformProviders,
       }),
-    providerCredentials,
-    ...routerDeps,
-  });
-  const handleRequest: typeof requestHandler = async (request) => {
-    // #1802: a raw `callCommand('replay', [path])` stands in for a client request, and every
-    // request that reaches a daemon carries the script sources the CLIENT read.
-    const response = await requestHandler(await withClientReplayScriptSources(request));
-    assertNoInternalChromeProvenance(response);
-    return response;
+    }) as DaemonRuntimeDeps;
   };
 
-  const transport: AgentDeviceDaemonTransport = async (req) =>
-    await handleRequest({
-      token: PROVIDER_SCENARIO_TOKEN,
-      session: req.session ?? 'default',
-      command: req.command,
-      positionals: req.positionals,
-      input: req.input,
-      flags: req.flags,
-      runtime: req.runtime,
-      meta: req.meta as DaemonWireRequest['meta'],
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>>;
+  try {
+    runtime = await startDaemonRuntime({
+      host: createTestHostEnvironment({ env }),
+      registerProcessHandlers: false,
+      stdout: { write: () => undefined },
+      stderr: { write: () => undefined },
+      exit: () => undefined,
+      composeDeps,
     });
+  } catch (error) {
+    await removeProviderScenarioTempDir(testRoot);
+    throw error;
+  }
+  if (!runtime?.httpPort) {
+    await removeProviderScenarioTempDir(testRoot);
+    throw new Error('Provider scenario daemon did not start an HTTP server');
+  }
+  const httpPort = runtime.httpPort;
+  const baseUrl = `http://127.0.0.1:${httpPort}`;
+  const transport: AgentDeviceDaemonTransport = async (request, context) => {
+    const wireRequest: DaemonWireRequest = {
+      ...request,
+      token: context?.authToken ?? runtime.token,
+      session: request.session ?? 'default',
+    };
+    const payload = buildHttpRpcPayload(wireRequest, { includeTokenParam: true });
+    const { body } = await postProviderScenarioRpc({
+      port: httpPort,
+      token: wireRequest.token,
+      payload,
+      signal: context?.signal,
+    });
+    return await new Promise<DaemonResponse>((resolve, reject) => {
+      handleDaemonHttpResponseBody(body, {
+        info: {
+          transport: 'http',
+          httpPort,
+          token: wireRequest.token,
+          pid: process.pid,
+        },
+        req: wireRequest,
+        stateDir,
+        resolve,
+        reject,
+      });
+    });
+  };
+  const client = createAgentDeviceClient({ daemonAuthToken: runtime.token }, { transport });
+  let closed = false;
 
   return {
-    callCommand: async (command, positionals = [], flags = {}, options = {}) =>
-      responseToRpcResult(
-        await handleRequest(commandRequest(command, positionals, flags, options)),
-        `direct-${command}-${Date.now()}`,
-      ),
-    client: () => createAgentDeviceClient({}, { transport }),
-    handleRequest,
-    token: PROVIDER_SCENARIO_TOKEN,
-    session: (name = 'default') => sessionStore.get(name),
-    sessionDir: (name = 'default') => sessionStore.resolveSessionDir(name),
-    publishSession: (name, session) => sessionStore.publish(name, session),
+    callCommand: async (command, positionals = [], flags = {}, options = {}) => {
+      const request = await withClientReplayScriptSources(
+        commandRequest(runtime.token, command, positionals, flags, options),
+      );
+      const payload = buildHttpRpcPayload(request, { includeTokenParam: true });
+      const { statusCode, body } = await postProviderScenarioRpc({
+        port: httpPort,
+        token: runtime.token,
+        payload,
+      });
+      const envelope = JSON.parse(body) as JsonRpcResponseEnvelope;
+      if (envelope.result) assertNoInternalChromeProvenance(envelope.result);
+      if (envelope.result) {
+        return responseToRpcResult(envelope.result, String(payload.id), statusCode);
+      }
+      return {
+        statusCode,
+        json: {
+          jsonrpc: '2.0',
+          id: payload.id,
+          error: envelope.error ?? { code: statusCode, message: '' },
+        },
+      };
+    },
+    client: () => client,
+    hasSession: async (name = 'default') =>
+      (await client.sessions.list()).some((session) => session.name === name),
+    baseUrl,
+    httpPort: runtime.httpPort,
+    token: runtime.token,
+    sessionDir: (name = 'default') => resolveSessionDir(daemonPaths.sessionsDir, name),
     close: async () => {
-      await deviceRuntimeGateway.shutdown();
-      await removeProviderScenarioTempDir(sessionDir);
+      if (closed) return;
+      closed = true;
+      if (scopedAppleToolProvider) {
+        const { withAppleToolProvider } =
+          await import('@agent-device/platform-apple/tool-provider');
+        await withAppleToolProvider(scopedAppleToolProvider, async () => await runtime?.shutdown());
+      } else {
+        await runtime?.shutdown();
+      }
+      await removeProviderScenarioTempDir(testRoot);
     },
   };
+}
+
+async function postProviderScenarioRpc(params: {
+  port: number;
+  token: string;
+  payload: ReturnType<typeof buildHttpRpcPayload>;
+  signal?: AbortSignal;
+}): Promise<{ statusCode: number; body: string }> {
+  const body = JSON.stringify(params.payload);
+  return await new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: params.port,
+        path: '/rpc',
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${params.token}`,
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+        },
+        signal: params.signal,
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer | string) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        response.on('end', () => {
+          resolve({
+            statusCode: response.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString('utf8'),
+          });
+        });
+      },
+    );
+    request.on('error', reject);
+    request.end(body);
+  });
 }
 
 export async function withProviderScenarioResource<
@@ -325,50 +419,6 @@ function atom(type: string, payload = Buffer.alloc(0)): Buffer {
   header.writeUInt32BE(8 + payload.length, 0);
   header.write(type, 4, 4, 'latin1');
   return Buffer.concat([header, payload]);
-}
-
-function commandRequest(
-  command: string,
-  positionals: string[] = [],
-  flags: DaemonWireRequest['flags'] = {},
-  options: {
-    input?: DaemonWireRequest['input'];
-    meta?: DaemonWireRequest['meta'];
-    runtime?: DaemonWireRequest['runtime'];
-    session?: string;
-  } = {},
-): DaemonWireRequest {
-  return {
-    token: PROVIDER_SCENARIO_TOKEN,
-    session: options.session ?? 'default',
-    command,
-    positionals,
-    input: options.input,
-    flags,
-    runtime: options.runtime,
-    meta: options.meta,
-  };
-}
-
-function responseToRpcResult(response: DaemonResponse, id: string): ProviderScenarioRpcResult {
-  return {
-    statusCode: 200,
-    json: response.ok
-      ? {
-          jsonrpc: '2.0',
-          id,
-          result: { data: response.data ?? {} },
-        }
-      : {
-          jsonrpc: '2.0',
-          id,
-          error: {
-            code: -32000,
-            message: response.error.message,
-            data: response.error,
-          },
-        },
-  };
 }
 
 function assertNoInternalChromeProvenance(response: DaemonResponse): void {

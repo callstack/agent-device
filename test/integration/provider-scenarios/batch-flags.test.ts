@@ -14,19 +14,19 @@ test('Provider-backed integration batch rejects boundary flag values through the
         batchOnError: 'continue' as never,
         batchSteps: [{ command: 'wait', positionals: ['1'] }],
       });
-      assertRpcError(unsupportedOnError, 'INVALID_ARGS', /Unsupported batch on-error mode/);
+      assertRpcError(unsupportedOnError, 400, 'INVALID_ARGS', /Unsupported batch on-error mode/);
 
       const invalidMaxSteps = await daemon.callCommand('batch', [], {
         batchMaxSteps: 0,
         batchSteps: [{ command: 'wait', positionals: ['1'] }],
       });
-      assertRpcError(invalidMaxSteps, 'INVALID_ARGS', /Invalid batch max-steps: 0/);
+      assertRpcError(invalidMaxSteps, 400, 'INVALID_ARGS', /Invalid batch max-steps: 0/);
 
       const nonIntegerMaxSteps = await daemon.callCommand('batch', [], {
         batchMaxSteps: 1.5,
         batchSteps: [{ command: 'wait', positionals: ['1'] }],
       });
-      assertRpcError(nonIntegerMaxSteps, 'INVALID_ARGS', /Invalid batch max-steps: 1\.5/);
+      assertRpcError(nonIntegerMaxSteps, 400, 'INVALID_ARGS', /Invalid batch max-steps: 1\.5/);
 
       const exceedsMaxSteps = await daemon.callCommand('batch', [], {
         batchMaxSteps: 1,
@@ -35,7 +35,7 @@ test('Provider-backed integration batch rejects boundary flag values through the
           { command: 'wait', positionals: ['1'] },
         ],
       });
-      assertRpcError(exceedsMaxSteps, 'INVALID_ARGS', /batch has 2 steps; max allowed is 1/);
+      assertRpcError(exceedsMaxSteps, 400, 'INVALID_ARGS', /batch has 2 steps; max allowed is 1/);
     },
   );
 });

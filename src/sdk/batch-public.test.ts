@@ -20,8 +20,10 @@ test('public batch entrypoint exports daemon-compatible orchestration helpers', 
 
   const response = await runBatch(req, 'resolved-session', async (stepReq) => {
     seenCommands.push(stepReq.command);
+    // The wire field pins the resolved address; the step flag names a session only when the
+    // caller did (#3674).
     assert.equal(stepReq.session, 'resolved-session');
-    assert.equal(stepReq.flags?.session, 'resolved-session');
+    assert.equal(stepReq.flags?.session, undefined);
     if (stepReq.command === 'open') {
       assert.equal(stepReq.flags?.platform, 'ios');
       assert.equal(stepReq.flags?.udid, 'sim-1');

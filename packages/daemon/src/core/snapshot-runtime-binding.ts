@@ -154,7 +154,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
   const { ref, session, device } = await resolveSessionDevice(
     sessionStore,
     sessionName,
-    req.flags,
+    req,
     params.sessionRef,
   );
   if (
