@@ -114,6 +114,25 @@ export function describeUnfinishedShutdownWork(report: ShutdownReport): string[]
   return lines;
 }
 
+/**
+ * Waits for the runtime to close and writes what it left unfinished to `stderr`. Whoever started the
+ * close (a signal, the idle reap, a quiesce), this is the one place the executable learns of it, and
+ * the registration may be held on purpose, so a clean close writes nothing and any other says why.
+ */
+export async function reportDaemonClose(params: {
+  closed: Promise<ShutdownReport>;
+  stderr: WritableOutput;
+}): Promise<{ failed: boolean }> {
+  try {
+    const report = await params.closed;
+    for (const line of describeUnfinishedShutdownWork(report)) params.stderr.write(`${line}\n`);
+    return { failed: false };
+  } catch (error) {
+    params.stderr.write(`Daemon shutdown error: ${normalizeError(error).message}\n`);
+    return { failed: true };
+  }
+}
+
 export type ProviderRuntimeDisposal = Readonly<{
   /** Disposes every provider runtime once; later calls return the first call's result. */
   dispose(): Promise<ShutdownReport['plugins']>;

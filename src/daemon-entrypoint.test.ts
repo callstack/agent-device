@@ -6,7 +6,11 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { startDaemonRuntime, type DaemonRuntimeController } from '@agent-device/daemon';
+import {
+  reportDaemonClose,
+  startDaemonRuntime,
+  type DaemonRuntimeController,
+} from '@agent-device/daemon';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
@@ -458,4 +462,44 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
+});
+
+test('the executable writes a close that left work unfinished to stderr, and a clean close nothing', async () => {
+  const closedReport = {
+    providerReleases: { completed: [], pending: [], unknown: [] },
+    requests: { drained: 0, abandoned: 0 },
+    runners: { stopped: [], handedOff: [] },
+    sessions: { closed: 0, failed: 0 },
+    plugins: { disposed: [], failed: [], pending: [] },
+  };
+  const clean: string[] = [];
+  const unfinished: string[] = [];
+  const failed: string[] = [];
+
+  assert.deepEqual(
+    await reportDaemonClose({
+      closed: Promise.resolve(closedReport),
+      stderr: { write: (chunk) => clean.push(chunk) },
+    }),
+    { failed: false },
+  );
+  assert.deepEqual(
+    await reportDaemonClose({
+      closed: Promise.resolve({ ...closedReport, requests: { drained: 0, abandoned: 1 } }),
+      stderr: { write: (chunk) => unfinished.push(chunk) },
+    }),
+    { failed: false },
+  );
+  assert.deepEqual(
+    await reportDaemonClose({
+      closed: Promise.reject(new Error('close blew up')),
+      stderr: { write: (chunk) => failed.push(chunk) },
+    }),
+    { failed: true },
+  );
+
+  assert.deepEqual(clean, []);
+  assert.equal(unfinished.length, 1);
+  assert.match(unfinished[0] ?? '', /1 request\(s\) ignored cancellation/);
+  assert.match(failed.join(''), /Daemon shutdown error: close blew up/);
 });
