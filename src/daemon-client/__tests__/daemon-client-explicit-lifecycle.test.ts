@@ -345,6 +345,7 @@ test('ensureDaemon tells a daemon that is still starting up apart from a busy on
     assert.equal(error.details?.reason, 'daemon-busy');
     assert.equal(error.details?.startingUp, true);
     assert.match(String(error.details?.hint), /still starting up\. Retry in a moment/);
+    assert.match(String(error.details?.hint), /agent-device daemon stop --state-dir /);
     assert.equal(isProcessAlive(child.pid), true);
     assert.equal(spawn.mock.calls.length, 0);
   } finally {

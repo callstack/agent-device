@@ -52,7 +52,8 @@ export type EnsureDaemonOptions = {
    * usable daemon was registered; `incompatible` means a daemon this client cannot use was
    * replaced after it agreed to leave. `previous` is the daemon that was replaced, when there was
    * one: a `missing` start with a `previous` replaced a registered daemon that answered nothing,
-   * either unreachable or hung and force-retired.
+   * either unreachable or hung and force-retired, or one that agreed to leave but outlasted its drain
+   * and was force-retired.
    */
   onStart?: (reason: 'missing' | 'incompatible', previous?: DaemonIdentity) => void;
 };
