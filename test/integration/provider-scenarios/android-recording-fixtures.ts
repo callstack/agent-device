@@ -25,7 +25,7 @@ export async function stopAndroidRecording(
  * The daemon's host for an Android recording scenario: no real tool on its PATH, so the Swift
  * helpers cannot compile, and a Swift cache of its own.
  */
-export function androidRecordingHostEnv(tmpDir: string): Readonly<Record<string, string>> {
+function androidRecordingHostEnv(tmpDir: string): Readonly<Record<string, string>> {
   return { PATH: tmpDir, AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'swift-cache') };
 }
 
