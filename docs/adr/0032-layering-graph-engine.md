@@ -38,7 +38,7 @@ It derives both engines' R5/R6 rules from `model.ts`'s `RANKED_ZONES` and `zoneR
 It declares other rules' paths inline, with R77 paths from `RUNNER_SUBTREE`.
 It runs only on exactly the tracked production tree: 1,837 files and 41 zones.
 It supplies recorded R6/R78 edges to each engine's known-violations baseline.
-The deletion table and `.fallowrc.json` field count also refer to files at that commit.
+The deletion table and the `.fallowrc.json` field count are counts of files at that commit.
 
 ### Edge-set diff against `resolveImportEdges`
 
