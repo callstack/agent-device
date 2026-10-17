@@ -22,7 +22,10 @@ import {
   contextFromFlags as contextFromFlagsWithLog,
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
-import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
+import {
+  resolveCallerScopeRoot,
+  resolveEffectiveSessionName,
+} from '../sessions/session-routing.ts';
 import {
   assertRequestLeaseAdmissionPreflight,
   scopeRequestSession,
@@ -262,8 +265,10 @@ export async function createRequestExecutionScope(params: {
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
       env: params.host.env,
       command,
+      sessionName,
       dispatchLedger,
       workspace: scopedReq.meta?.cwd ?? params.host.cwd,
+      callerCwd: scopedReq.meta?.cwd,
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
@@ -400,8 +405,10 @@ export async function createRequestExecutionScope(params: {
 function createRequestDeviceAccess(params: {
   env: EnvMap;
   command: string;
+  sessionName: string;
   dispatchLedger: RequestDispatchLedger;
   workspace: string;
+  callerCwd: string | undefined;
   stateDir: string;
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> | undefined;
   platformRequestScope: PlatformRequestScope | undefined;
@@ -418,7 +425,10 @@ function createRequestDeviceAccess(params: {
   const claimAdmission = createDeviceClaimAdmission({
     policy: resolveCommandDeviceClaimPolicy(params.command),
     command: params.command,
+    session: params.sessionName,
     workspace: params.workspace,
+    callerCwd: params.callerCwd,
+    resolveScopeRoot: resolveCallerScopeRoot,
     stateDir: params.stateDir,
     env: params.env,
     reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({

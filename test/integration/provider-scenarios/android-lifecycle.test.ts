@@ -314,7 +314,7 @@ async function runAndroidSetupAndInstallWorkflow(
   world: AndroidSettingsWorld,
   client: AgentDeviceClient,
 ): Promise<void> {
-  const { daemon, apkPath, aabPath, manifestApkPath, selection, tempRoot } = world;
+  const { daemon, apkPath, aabPath, manifestApkPath, selection } = world;
 
   const devices = await client.devices.list({ platform: 'android' });
   assert.equal(devices.length, 1);
@@ -430,45 +430,37 @@ async function runAndroidSetupAndInstallWorkflow(
   assert.equal(push.action, 'com.example.demo.PUSH');
   assert.equal(push.extrasCount, 3);
 
-  const pushPayloadPath = path.join(tempRoot, 'payload.json');
-  fs.writeFileSync(
-    pushPayloadPath,
-    JSON.stringify({
-      action: 'com.example.demo.FILE_PUSH',
-      extras: { source: 'relative-file' },
-    }),
-    'utf8',
-  );
-  const filePush = await daemon.callCommand(
-    'push',
-    ['com.example.demo', './payload.json'],
-    selection,
-    {
-      meta: { cwd: tempRoot },
-    },
-  );
-  assert.equal(filePush.json.result.data.package, 'com.example.demo');
-  assert.equal(filePush.json.result.data.action, 'com.example.demo.FILE_PUSH');
-  assert.equal(filePush.json.result.data.extrasCount, 1);
-
-  const bracePayloadPath = path.join(tempRoot, '{payload}.json');
-  fs.writeFileSync(
-    bracePayloadPath,
-    JSON.stringify({
-      action: 'com.example.demo.BRACE_PUSH',
-      extras: { source: 'brace-file' },
-    }),
-    'utf8',
-  );
-  const braceFilePush = await daemon.callCommand(
-    'push',
-    ['com.example.demo', './{payload}.json'],
-    selection,
-    { meta: { cwd: tempRoot } },
-  );
-  assert.equal(braceFilePush.json.result.data.package, 'com.example.demo');
-  assert.equal(braceFilePush.json.result.data.action, 'com.example.demo.BRACE_PUSH');
-  assert.equal(braceFilePush.json.result.data.extrasCount, 1);
+  // #3345: coverage pairs the routed session with the workspace a claim records. The client
+  // calls above sent no cwd, so their open claim records the daemon-side fallback workspace —
+  // this checkout — at the routed `default` address. These pushes state their provenance
+  // explicitly: sessionExplicit joins that address, and their cwd — a checkout child directory,
+  // chosen so the relative payloads resolve against it — canonicalizes to that recorded
+  // workspace. A foreign cwd refuses even under the same session name: the copyable-address rule.
+  fs.mkdirSync(path.join(process.cwd(), '.tmp'), { recursive: true });
+  const callerWorkspace = fs.mkdtempSync(path.join(process.cwd(), '.tmp', 'push-'));
+  try {
+    for (const [payloadFile, action, source] of [
+      ['payload.json', 'com.example.demo.FILE_PUSH', 'relative-file'],
+      ['{payload}.json', 'com.example.demo.BRACE_PUSH', 'brace-file'],
+    ] as const) {
+      fs.writeFileSync(
+        path.join(callerWorkspace, payloadFile),
+        JSON.stringify({ action, extras: { source } }),
+        'utf8',
+      );
+      const pushed = await daemon.callCommand(
+        'push',
+        ['com.example.demo', `./${payloadFile}`],
+        selection,
+        { meta: { cwd: callerWorkspace, sessionExplicit: true } },
+      );
+      assert.equal(pushed.json.result.data.package, 'com.example.demo');
+      assert.equal(pushed.json.result.data.action, action);
+      assert.equal(pushed.json.result.data.extrasCount, 1);
+    }
+  } finally {
+    fs.rmSync(callerWorkspace, { recursive: true, force: true });
+  }
 
   const clipboard = await client.command.clipboard({ action: 'read', ...selection });
   if (clipboard.action !== 'read') throw new Error('expected clipboard read result');

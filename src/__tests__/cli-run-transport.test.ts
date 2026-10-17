@@ -14,6 +14,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+class ProcessExit extends Error {}
+
 test('a CLI run builds one transport, shared by the remote-materialization client and the command client', async () => {
   const { root, home, project } = makeTempWorkspace();
   const stateDir = path.join(root, 'state');
@@ -56,28 +58,29 @@ test('a CLI run builds one transport, shared by the remote-materialization clien
     ) satisfies DaemonResponse;
   });
   const host = { env: { HOME: home, PATH: process.env.PATH }, cwd: project };
-  vi.spyOn(process, 'exit').mockImplementation((() => {
-    throw new Error('exit');
+  const exitCodes: Array<number | undefined> = [];
+  vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    exitCodes.push(code);
+    throw new ProcessExit();
   }) as never);
   vi.spyOn(process.stdout, 'write').mockReturnValue(true);
   vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
-  // The run ends through the stubbed process.exit; any other failure is kept to explain a miss below.
-  let failure: unknown;
-  await runCli(
-    ['open', '--state-dir', stateDir, '--json'],
-    { sendToDaemon: vi.fn(), transportForHost },
-    host,
-  ).catch((error: unknown) => {
-    failure = error;
-  });
-  const cause = failure instanceof Error && failure.message !== 'exit' ? failure.message : 'none';
+  try {
+    // A successful run returns without exiting; a failure that exits or throws fails the test.
+    await runCli(
+      ['open', '--state-dir', stateDir, '--json'],
+      { sendToDaemon: vi.fn(), transportForHost },
+      host,
+    ).catch((error: unknown) => {
+      if (!(error instanceof ProcessExit)) throw error;
+    });
 
-  assert.ok(
-    commands.includes('lease_allocate'),
-    `materialization ran: ${commands.join(',')}; failure: ${cause}`,
-  );
-  assert.ok(commands.length > 1, 'the command client sent through the same transport');
-  assert.equal(transportForHost.mock.calls.length, 1);
-  fs.rmSync(root, { recursive: true, force: true });
+    assert.deepEqual(exitCodes, [], 'the run completed without exiting');
+    assert.ok(commands.includes('lease_allocate'), `materialization ran: ${commands.join(',')}`);
+    assert.ok(commands.length > 1, 'the command client sent through the same transport');
+    assert.equal(transportForHost.mock.calls.length, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -111,12 +111,13 @@ export async function createProviderScenarioHarness(
     PATH: process.env.PATH,
     HOME: process.env.HOME,
     TMPDIR: process.env.TMPDIR,
-    AGENT_DEVICE_STATE_DIR: stateDir,
     // A scenario that seeds claims for its daemon names the directory through the process.
     AGENT_DEVICE_CLAIMS_DIR: process.env.AGENT_DEVICE_CLAIMS_DIR ?? path.join(testRoot, 'claims'),
-    AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
     AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '3600000',
     ...deps.env,
+    // Set last: the harness reads its own state dir and transport back from these.
+    AGENT_DEVICE_STATE_DIR: stateDir,
+    AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
   };
   const {
     deviceInventoryProvider,
