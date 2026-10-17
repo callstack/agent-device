@@ -30,8 +30,8 @@
       "default": "./src/device-boot.ts"
     },
     "./helper-runtime-state": {
-      "types": "./src/helper-runtime-state.ts",
-      "default": "./src/helper-runtime-state.ts"
+      "types": "./src/adb-shell-protocol.ts",
+      "default": "./src/adb-shell-protocol.ts"
     },
     "./mechanics": {
       "types": "./src/mechanics.ts",

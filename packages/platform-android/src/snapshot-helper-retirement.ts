@@ -1,4 +1,4 @@
-import { helperRuntimeSlot } from './helper-runtime-state.ts';
+import { helperRuntimeSlot } from './adb-shell-protocol.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellFragment } from '@agent-device/kernel/device-shell';

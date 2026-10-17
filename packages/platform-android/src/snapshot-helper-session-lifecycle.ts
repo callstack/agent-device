@@ -1,4 +1,3 @@
-import { helperRuntimeSlot } from './helper-runtime-state.ts';
 /**
  * Who owns the device's UiAutomation right now, and how that ownership starts and ends.
  *
@@ -14,6 +13,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   androidAdbForwardsDeviceExitStatus,
+  helperRuntimeSlot,
   resetAndroidAdbShellProtocolProbes,
 } from './adb-shell-protocol.ts';
 import type {
