@@ -6,6 +6,7 @@ import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 bindTestCommandHost();
 
 const gateway = createPlatformRuntimeGateway({
+  env: process.env,
   resolveSessionArtifacts: () => ({
     outputPath: '/sessions/gesture-admission/app.log',
     pidPath: '/sessions/gesture-admission/app-log.pid',

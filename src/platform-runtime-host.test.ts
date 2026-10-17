@@ -25,7 +25,7 @@ vi.mock('@agent-device/platform-apple/tool-provider', () => {
 import { createDeviceInventoryHost } from './platform-runtime-host.ts';
 
 test('inventory host loads scoped Apple mechanics only on first Apple tool use', async () => {
-  const host = createDeviceInventoryHost();
+  const host = createDeviceInventoryHost(process.env);
   const signal = new AbortController().signal;
 
   expect(toolchains.appleEvaluations).toBe(0);

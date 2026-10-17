@@ -62,6 +62,7 @@ const shutdownLoaders = {
 
 test('operation host composes the shared lazy Apple-tool and toolchain capabilities', () => {
   const host = createPlatformRuntimeHost({
+    env: process.env,
     sessionsDir: '/tmp/sessions',
     resolveSessionArtifacts: () => ({
       outputPath: '/tmp/sessions/one/app.log',

@@ -1,3 +1,4 @@
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type {
   DeviceInventoryHost,
   HostOperatingSystem,
@@ -14,7 +15,7 @@ import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.t
 import { runCmd, whichCmd, commandHostEnvironment } from '@agent-device/host-kit/command';
 import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
 
-export function createDeviceInventoryHost(): DeviceInventoryHost {
+export function createDeviceInventoryHost(env: Readonly<EnvMap>): DeviceInventoryHost {
   return Object.freeze({
     commands: Object.freeze({
       which: async (executable: string) =>
@@ -35,7 +36,7 @@ export function createDeviceInventoryHost(): DeviceInventoryHost {
       },
     }),
     appleTools: createAppleToolHost(),
-    toolchains: createHostToolchainPreparer(),
+    toolchains: createHostToolchainPreparer(env),
     files: Object.freeze({
       isExecutable: async (candidate: string) => await isExecutable(candidate),
       createTemporaryTextFile: async (options: { prefix: string; suffix: string }) =>

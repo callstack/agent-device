@@ -28,7 +28,7 @@ vi.mock('@agent-device/platform-harmonyos', () => {
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
 
 test('toolchain host loads and prepares only the selected family', async () => {
-  const host = createHostToolchainPreparer();
+  const host = createHostToolchainPreparer(process.env);
 
   expect(toolchains).toEqual({
     androidEvaluations: 0,

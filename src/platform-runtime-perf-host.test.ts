@@ -47,6 +47,7 @@ test('the composed Android perf operation reports an unavailable ADB memory samp
   adb.calls.length = 0;
   const sessionsDir = mkdtempForTestSync('platform-runtime-perf-host-');
   const gateway = createPlatformRuntimeGateway({
+    env: process.env,
     sessionsDir,
     resolveSessionArtifacts: (sessionId) => ({
       outputPath: `${sessionsDir}/${sessionId}/app.log`,
