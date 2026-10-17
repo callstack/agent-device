@@ -95,7 +95,7 @@ vi.mock('../runner-startup-transport.ts', async () => {
 });
 
 import { abortAllIosRunnerSessions, ensureRunnerSession } from '../runner-session.ts';
-import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../runner-xctestrun.ts';
+import { resolveRunnerContainerBundleIds } from '../runner-xctestrun.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 const TEST_OWNER_START_TIME = 'fixed-test-owner-start-time';
@@ -223,7 +223,7 @@ test('stale bundle uninstalls start concurrently', async () => {
   // Both container bundle uninstalls must be in flight before either resolves;
   // against the sequential pre-fix loop this wait times out with one gate held.
   await vi.waitFor(() =>
-    assert.equal(uninstallGates.length, IOS_RUNNER_CONTAINER_BUNDLE_IDS.length),
+    assert.equal(uninstallGates.length, resolveRunnerContainerBundleIds(process.env).length),
   );
   for (const resolve of uninstallGates) {
     resolve({ exitCode: 0, stdout: '', stderr: '' });

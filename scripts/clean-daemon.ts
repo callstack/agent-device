@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { withCommandHost } from '@agent-device/host-kit/command';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readRegisteredDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import {
@@ -39,7 +41,10 @@ if (retirement.status === 'retained') {
 if (retirement.status === 'retired') {
   const { cleanupRunnerLeasesForOwner } =
     await import('@agent-device/platform-apple/runner/operations');
-  await cleanupRunnerLeasesForOwner(retirement.termination.identity);
+  await withCommandHost(
+    { host: captureHostEnvironment(process), requestEnv: undefined },
+    async () => await cleanupRunnerLeasesForOwner(retirement.termination.identity),
+  );
 }
 
 if (process.argv.includes(PRUNE_DEV_FLAG)) {

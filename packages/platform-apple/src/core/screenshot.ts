@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { copyHostFile } from '@agent-device/host-kit/host-file';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
@@ -23,7 +24,7 @@ import {
 } from './config.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
 import {
-  IOS_RUNNER_CONTAINER_BUNDLE_IDS,
+  resolveRunnerContainerBundleIds,
   type AppleRunnerCommandOptions,
 } from '../runner/index.ts';
 import { prepareSimulatorStatusBarForScreenshot } from './screenshot-status-bar.ts';
@@ -297,7 +298,7 @@ async function copyRunnerScreenshotFromSimulator(
     lastError = cachedCopy.error;
     iosSimulatorRunnerContainerCache.delete(device.id);
   }
-  for (const bundleId of IOS_RUNNER_CONTAINER_BUNDLE_IDS) {
+  for (const bundleId of resolveRunnerContainerBundleIds(commandHostEnvironment().env)) {
     const containerResult = await runSimctlForDevice(
       device,
       ['get_app_container', device.id, bundleId, 'data'],

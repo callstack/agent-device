@@ -17,7 +17,6 @@ import { PROVIDER_SCENARIO_IOS_DEVICE, PROVIDER_SCENARIO_IOS_SIMULATOR } from '.
 import {
   createProviderIosSimulatorRecordingProcess,
   createProviderScenarioHarness,
-  restoreEnv,
   withProviderScenarioTempDir,
 } from './harness.ts';
 import {
@@ -112,13 +111,6 @@ test('iOS simulator recording reports host contention and recovers through the f
         appleSimulatorScreenRecordingTransport: () => recordingTransport,
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
       });
-      // capture-kit's recording finalizer still reads PATH and the Swift cache from the process
-      // (#3777 moves capture-kit to the host), so the scenario sets both there as well.
-      const previousPath = process.env.PATH;
-      const previousSwiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
-      process.env.PATH = tmpDir;
-      process.env.AGENT_DEVICE_SWIFT_CACHE_DIR = path.join(tmpDir, 'swift-cache');
-
       try {
         const open = await daemon.callCommand('open', ['com.apple.Preferences'], {
           platform: 'ios',
@@ -199,8 +191,6 @@ test('iOS simulator recording reports host contention and recovers through the f
         );
       } finally {
         await daemon.close();
-        restoreEnv('PATH', previousPath);
-        restoreEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', previousSwiftCacheDir);
       }
     },
   );

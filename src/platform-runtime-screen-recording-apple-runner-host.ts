@@ -106,6 +106,7 @@ export async function captureAppleClockAnchor(
 }
 
 export async function isAppleRunnerBundleId(bundleId: string): Promise<boolean> {
-  const { IOS_RUNNER_CONTAINER_BUNDLE_IDS } = await import('@agent-device/platform-apple/runner');
-  return IOS_RUNNER_CONTAINER_BUNDLE_IDS.includes(bundleId);
+  const { resolveRunnerContainerBundleIds } = await import('@agent-device/platform-apple/runner');
+  const { commandHostEnvironment } = await import('@agent-device/host-kit/command');
+  return resolveRunnerContainerBundleIds(commandHostEnvironment().env).includes(bundleId);
 }

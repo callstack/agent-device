@@ -183,12 +183,15 @@ test('proxy enforces public-only Maestro HTTP policy on a local daemon', async (
       const url = request.positionals[0] ?? '';
       return {
         ok: true,
-        data: await executeRunScriptHttpRequest({
-          method: 'GET',
-          url,
-          headers: {},
-          publicNetworkOnly: request.internal?.publicNetworkOnly === true,
-        }),
+        data: await executeRunScriptHttpRequest(
+          {
+            method: 'GET',
+            url,
+            headers: {},
+            publicNetworkOnly: request.internal?.publicNetworkOnly === true,
+          },
+          env,
+        ),
       };
     },
   });

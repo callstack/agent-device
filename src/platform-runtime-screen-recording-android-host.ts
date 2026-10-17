@@ -6,6 +6,7 @@ import type {
 } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { type ShellWord, shellFragment, shellQuote } from '@agent-device/kernel/device-shell';
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { isPlayableVideo } from '@agent-device/capture-kit/recording-video';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
@@ -107,7 +108,8 @@ export async function createAndroidScreenRecordingTransport(
       });
       return {
         ...result,
-        playable: result.exitCode === 0 && (await isPlayableVideo(outputPath)),
+        playable:
+          result.exitCode === 0 && (await isPlayableVideo(outputPath, commandHostEnvironment())),
       };
     },
     remove: async (remotePath, signal) =>

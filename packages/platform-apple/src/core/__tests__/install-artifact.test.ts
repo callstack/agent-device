@@ -20,7 +20,7 @@ test('prepareIosInstallArtifact resolves a multi-payload IPA by a bundle-name hi
   await withMultiPayloadIpa([{ name: 'Alpha' }, { name: 'Beta' }], async (ipaPath) => {
     const prepared = await prepareIosInstallArtifact(
       { kind: 'path', path: ipaPath },
-      { appIdentifierHint: 'beta' },
+      { environment: process.env, appIdentifierHint: 'beta' },
     );
     try {
       assert.equal(path.basename(prepared.installablePath), 'Beta.app');
@@ -36,7 +36,7 @@ test('prepareIosInstallArtifact resolves a multi-payload IPA by a dotted bundle-
   await withMultiPayloadIpa([{ name: 'Alpha' }, { name: 'Beta' }], async (ipaPath) => {
     const prepared = await prepareIosInstallArtifact(
       { kind: 'path', path: ipaPath },
-      { appIdentifierHint: 'COM.Example.Alpha' },
+      { environment: process.env, appIdentifierHint: 'COM.Example.Alpha' },
     );
     try {
       assert.equal(path.basename(prepared.installablePath), 'Alpha.app');
@@ -57,7 +57,7 @@ test('prepareIosInstallArtifact lists the available bundles when a dotted hint m
       async () =>
         await prepareIosInstallArtifact(
           { kind: 'path', path: ipaPath },
-          { appIdentifierHint: 'com.example.gamma' },
+          { environment: process.env, appIdentifierHint: 'com.example.gamma' },
         ),
       (error: unknown) =>
         error instanceof AppError &&
@@ -72,7 +72,11 @@ test('prepareIosInstallArtifact lists the available bundles when a dotted hint m
 test('prepareIosInstallArtifact lists the available bundles when a hint-free multi-payload IPA fails', async () => {
   await withMultiPayloadIpa([{ name: 'Alpha' }, { name: 'Beta' }], async (ipaPath) => {
     await assert.rejects(
-      async () => await prepareIosInstallArtifact({ kind: 'path', path: ipaPath }),
+      async () =>
+        await prepareIosInstallArtifact(
+          { kind: 'path', path: ipaPath },
+          { environment: process.env },
+        ),
       /Pass an app identifier or bundle name matching one of: Alpha\.app \(com\.example\.alpha\), Beta\.app \(com\.example\.beta\)/,
     );
   });
@@ -89,7 +93,7 @@ test('prepareIosInstallArtifact keeps a non-dotted hint a name-only match', asyn
         async () =>
           await prepareIosInstallArtifact(
             { kind: 'path', path: ipaPath },
-            { appIdentifierHint: 'beta-app' },
+            { environment: process.env, appIdentifierHint: 'beta-app' },
           ),
         /none matched "beta-app"/,
       );

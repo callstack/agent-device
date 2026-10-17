@@ -11,7 +11,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   runAppleRunnerCommand: runnerClient.run,
 }));
 vi.mock('@agent-device/platform-apple/runner', () => ({
-  IOS_RUNNER_CONTAINER_BUNDLE_IDS: ['com.callstack.agentdevice.runner'],
+  resolveRunnerContainerBundleIds: () => ['com.callstack.agentdevice.runner'],
 }));
 
 const simulator = {

@@ -2,7 +2,7 @@ import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import type { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
@@ -80,7 +80,10 @@ async function runMetroPrepareThroughTimeout(projectRoot: string): Promise<AppEr
   });
   vi.stubGlobal('fetch', fetchMock);
   vi.useFakeTimers();
-  const preparePromise = prepareMetroRuntime(metroPrepareInput(projectRoot));
+  const preparePromise = prepareMetroRuntime(
+    metroPrepareInput(projectRoot),
+    createTestHostEnvironment(),
+  );
   const expectedFailure = assert.rejects(
     preparePromise,
     /React Native dev server did not become ready at http:\/\/127\.0\.0\.1:8081\/status within 30000ms/,

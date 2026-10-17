@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import { runCmd } from '@agent-device/host-kit/command';
 import { Deadline } from '@agent-device/host-kit/retry';
@@ -45,36 +46,48 @@ export function startRecordingOverlayBudget(): Deadline {
  */
 const HELPER_EXIT_GRACE_MS = 5_000;
 
-let overlayScriptPath: string | undefined;
-let exportSupportScriptPath: string | undefined;
+// The working-directory fallback in the search makes a resolved script path specific to the host's
+// directory, so each directory keeps its own.
+const overlayScriptPaths = new Map<string, string>();
+const exportSupportScriptPaths = new Map<string, string>();
 
-function getOverlayScriptPath(): string {
-  overlayScriptPath ??= resolveRecordingScriptPath('recording-overlay.swift', findProjectRoot());
-  return overlayScriptPath;
+function resolveCachedScriptPath(
+  cache: Map<string, string>,
+  scriptName: string,
+  host: HostEnvironment,
+): string {
+  let resolved = cache.get(host.cwd);
+  if (resolved === undefined) {
+    resolved = resolveRecordingScriptPath(scriptName, findProjectRoot(), host.cwd);
+    cache.set(host.cwd, resolved);
+  }
+  return resolved;
 }
 
-function getExportSupportScriptPath(): string {
-  exportSupportScriptPath ??= resolveRecordingScriptPath(
-    'RecordingExportSupport.swift',
-    findProjectRoot(),
-  );
-  return exportSupportScriptPath;
+function getOverlayScriptPath(host: HostEnvironment): string {
+  return resolveCachedScriptPath(overlayScriptPaths, 'recording-overlay.swift', host);
+}
+
+function getExportSupportScriptPath(host: HostEnvironment): string {
+  return resolveCachedScriptPath(exportSupportScriptPaths, 'RecordingExportSupport.swift', host);
 }
 
 async function exportProcessedVideo(params: {
+  host: HostEnvironment;
   videoPath: string;
   scriptPath: string;
   scriptArgs: string[];
   commandDescription: string;
   deadline: Deadline;
 }): Promise<void> {
-  const { videoPath, scriptPath, scriptArgs, commandDescription, deadline } = params;
+  const { host, videoPath, scriptPath, scriptArgs, commandDescription, deadline } = params;
   const outputPath = temporarySiblingVideoPath(videoPath);
   let exportOverran = false;
   try {
     const executablePath = await compileSwiftSourceFile({
+      host,
       sourcePath: scriptPath,
-      extraSourcePaths: [getExportSupportScriptPath()],
+      extraSourcePaths: [getExportSupportScriptPath(host)],
       // `runCmd` reads a timeout of 0 as none.
       timeoutMs: Math.max(1, deadline.remainingMs()),
     });
@@ -98,13 +111,13 @@ async function exportProcessedVideo(params: {
           '--timeout-ms',
           String(Math.round(exportMs)),
         ],
-        { timeoutMs: helperMs, env: buildSwiftToolEnv() },
+        { timeoutMs: helperMs, env: buildSwiftToolEnv(host.env) },
       );
     } catch (error) {
       exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
       throw error;
     }
-    await waitForPlayableVideo(outputPath, { deadline });
+    await waitForPlayableVideo(outputPath, { host, deadline });
     if (deadline.isExpired()) {
       exportOverran = true;
       throw new AppError(
@@ -148,6 +161,7 @@ function temporarySiblingVideoPath(videoPath: string): string {
 }
 
 export async function overlayRecordingTouches(params: {
+  host: HostEnvironment;
   videoPath: string;
   telemetryPath: string;
   exportQuality?: RecordingExportQuality;
@@ -164,8 +178,9 @@ export async function overlayRecordingTouches(params: {
     targetLabel = 'recording',
   } = params;
   await exportProcessedVideo({
+    host: params.host,
     videoPath,
-    scriptPath: getOverlayScriptPath(),
+    scriptPath: getOverlayScriptPath(params.host),
     scriptArgs: [
       '--events',
       telemetryPath,
