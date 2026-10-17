@@ -6,8 +6,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
-import java.util.function.Consumer;
-import java.util.function.IntFunction;
 
 /**
  * Reads a bounded group of children concurrently and retains their traversal order.
@@ -19,6 +17,14 @@ import java.util.function.IntFunction;
  * or failure, so no worker outlives the parent node it is reading.
  */
 final class AccessibilityReadBatch<T> implements AutoCloseable {
+  interface Reader<T> {
+    T read(int index);
+  }
+
+  interface Releaser<T> {
+    void release(T value);
+  }
+
   static final int MAX_READS = 8;
   private static final ExecutorService READERS =
       Executors.newFixedThreadPool(
@@ -30,16 +36,16 @@ final class AccessibilityReadBatch<T> implements AutoCloseable {
           });
 
   private final List<FutureTask<T>> reads = new ArrayList<>();
-  private final Consumer<T> release;
+  private final Releaser<T> release;
 
-  AccessibilityReadBatch(int start, int count, IntFunction<T> read, Consumer<T> release) {
+  AccessibilityReadBatch(int start, int count, Reader<T> read, Releaser<T> release) {
     if (count < 1 || count > MAX_READS) {
       throw new IllegalArgumentException("Accessibility read batch must contain 1 to 8 reads");
     }
     this.release = release;
     for (int offset = 0; offset < count; offset += 1) {
       int index = start + offset;
-      FutureTask<T> task = new FutureTask<>(() -> read.apply(index));
+      FutureTask<T> task = new FutureTask<>(() -> read.read(index));
       reads.add(task);
       READERS.execute(task);
     }
@@ -60,7 +66,7 @@ final class AccessibilityReadBatch<T> implements AutoCloseable {
         continue;
       }
       if (node != null) {
-        release.accept(node);
+        release.release(node);
       }
     }
   }
