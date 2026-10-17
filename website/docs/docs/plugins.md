@@ -58,6 +58,8 @@ To support `agent-device connect example`, declare `agentDevicePlugin.connection
 
 If the provider reads credentials from the environment, list the variables in `agentDevicePlugin.credentialVariables`, for example `["EXAMPLE_USERNAME", "EXAMPLE_ACCESS_KEY"]`. A local daemon keeps the values it started with; when the shell holds different ones, the first command that allocates a lease refuses with reason `provider-credentials-changed` until the daemon is stopped. Core reads this list from the manifest without loading the plugin, and treats a whitespace-only value as unset.
 
+A lease that names a provider this daemon has no runtime for refuses with `UNSUPPORTED_OPERATION` and reason `provider-not-registered`, before any lease is recorded. The error lists the registered providers; restart the daemon with the provider's plugin installed. Leases with no provider, `proxy`, and `cloud` need no provider runtime.
+
 Return `connection` alongside the runtime or WebDriver options. Its `resolve({ flags, env, cwd, stateDir })` callback validates provider flags and returns `{ profile, extraFlags? }`; `profile.leaseProvider` must match the manifest. Core supplies connection identity, session defaults, Metro settings, and persists the profile. Its async `verify({ flags, env })` callback returns the provider verification result. These callbacks run without allocating a device and their temporary runtimes are shut down afterwards.
 
 Bundle the plugin implementation and ship ready-to-run ESM: installation disables lifecycle scripts. Bundle shared implementation helpers with the plugin; `AppError` carries a shared brand so core preserves its code and details across package copies. Import types with `import type` to keep them out of the runtime dependency graph.

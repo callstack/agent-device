@@ -30,7 +30,10 @@ vi.mock('./platform-runtime.ts', () => ({
 
 vi.mock('./provider-device-runtimes.ts', () => ({
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
+  createDaemonProviderRuntimeComposition: async () => ({
+    runtimes: [{ provider: 'browserstack', ownsDevice: () => false }],
+    platformModules: [],
+  }),
 }));
 
 test('daemon startup compares lease credentials with its own startup environment', async () => {

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import {
   createProviderScenarioHarness,
@@ -89,28 +90,24 @@ test('provider-owned iOS simulators relaunch without local CoreSimulator refresh
   );
 });
 
-test('provider lease allocation fails when the daemon lacks the requested runtime', async () => {
+test('provider lease allocation is refused when no registered runtime claims the provider', async () => {
+  const leaseRegistry = new LeaseRegistry();
   const daemon = await createProviderScenarioHarness({
     providerRuntimeIds: [FAKE_PROVIDER],
-    providerRuntimeRequiredIds: ['limrun'],
+    leaseRegistry,
     deviceInventoryProvider: async () => null,
   });
   try {
     const response = await daemon.callCommand(
       'lease_allocate',
       [],
-      {
-        platform: 'ios',
-        tenant: 'team-a',
-        runId: 'run-a',
-        leaseProvider: 'limrun',
-      },
+      { platform: 'ios', tenant: 'team-a', runId: 'run-a', leaseProvider: 'testmu' },
       {
         meta: {
           tenantId: 'team-a',
           runId: 'run-a',
           leaseBackend: 'ios-instance',
-          leaseProvider: 'limrun',
+          leaseProvider: 'testmu',
         },
       },
     );
@@ -118,9 +115,14 @@ test('provider lease allocation fails when the daemon lacks the requested runtim
       response,
       500,
       'UNSUPPORTED_OPERATION',
-      /Provider "limrun" is not available in this daemon runtime/,
+      /Provider "testmu" is not available in this daemon runtime/,
     );
+    const details = error.details as Record<string, unknown>;
+    assert.equal(details.reason, 'provider-not-registered');
+    assert.equal(details.provider, 'testmu');
+    assert.deepEqual(details.registeredProviders, [FAKE_PROVIDER]);
     assert.match(String(error.hint), /Restart the daemon/);
+    assert.deepEqual(leaseRegistry.listActiveLeases(), []);
   } finally {
     await daemon.close();
   }
@@ -129,7 +131,6 @@ test('provider lease allocation fails when the daemon lacks the requested runtim
 test('proxy lease allocation remains daemon-local when direct runtimes are configured', async () => {
   const daemon = await createProviderScenarioHarness({
     providerRuntimeIds: [FAKE_PROVIDER],
-    providerRuntimeRequiredIds: ['limrun'],
     deviceInventoryProvider: async () => null,
   });
   try {

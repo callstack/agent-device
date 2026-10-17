@@ -4,6 +4,7 @@ import {
   findMissingProxyLeaseFields,
   isInactiveLeaseError,
   leaseDeviceKey,
+  leaseProviderRequiringRuntime,
   leaseScopeFromOptions,
   leaseScopeFromRequest,
   leaseScopeToAllocateRequest,
@@ -288,4 +289,16 @@ test('parseLeaseDeviceKey reads back every field leaseDeviceKey writes', () => {
   for (const malformed of [undefined, '', 'ios', 'ios:SIM-001', 'ios:mobile:', ':mobile:id']) {
     assert.equal(parseLeaseDeviceKey(malformed), undefined, `${malformed} is not a device key`);
   }
+});
+
+test('leaseProviderRequiringRuntime exempts only provider-less, proxy, and cloud leases', () => {
+  assert.equal(leaseProviderRequiringRuntime({}), undefined);
+  assert.equal(leaseProviderRequiringRuntime({ leaseBackend: 'ios-instance' }), undefined);
+  assert.equal(leaseProviderRequiringRuntime({ leaseProvider: 'proxy' }), undefined);
+  assert.equal(leaseProviderRequiringRuntime({ leaseProvider: 'cloud' }), undefined);
+  assert.equal(leaseProviderRequiringRuntime({ leaseProvider: 'testmu' }), 'testmu');
+  assert.equal(
+    leaseProviderRequiringRuntime({ leaseProvider: 'Cloud', leaseBackend: 'ios-instance' }),
+    'Cloud',
+  );
 });

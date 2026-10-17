@@ -47,6 +47,7 @@ async function allocateWithDaemonCredentials(
       sessionName: req.session,
       sessionStore: makeSessionStore('agent-device-provider-credentials-'),
       leaseRegistry: registry,
+      providerRuntimeIds: [req.meta?.leaseProvider ?? ''],
       providerCredentials,
       leaseLifecycleProvider: {
         allocate: async () => {

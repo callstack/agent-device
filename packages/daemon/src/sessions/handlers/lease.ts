@@ -24,6 +24,7 @@ import {
 } from '../../core/lease-context.ts';
 import {
   leaseDeviceKey,
+  leaseProviderRequiringRuntime,
   leaseScopeToAllocateRequest,
   leaseScopeToHeartbeatRequest,
   leaseScopeToReleaseRequest,
@@ -45,7 +46,6 @@ type LeaseHandlerArgs = {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
-  providerRuntimeRequiredIds?: readonly string[];
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -59,7 +59,6 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     sessionStore,
     leaseRegistry,
     providerRuntimeIds,
-    providerRuntimeRequiredIds,
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
@@ -81,11 +80,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     }
     case 'lease_allocate': {
       assertTenantMayAllocate(leaseScope.leaseBackend);
-      assertProviderRuntimeAvailable(
-        leaseScope.leaseProvider,
-        providerRuntimeIds,
-        providerRuntimeRequiredIds,
-      );
+      assertProviderRuntimeRegistered(leaseScope, providerRuntimeIds ?? []);
       assertProviderCredentialsUnchanged(
         leaseScope,
         req.meta?.providerCredentialFingerprint,
@@ -334,25 +329,19 @@ function leaseLifecycleContext(req: DaemonRequest): LeaseLifecycleContext {
   };
 }
 
-function assertProviderRuntimeAvailable(
-  provider: string | undefined,
-  providerRuntimeIds: readonly string[] | undefined,
-  providerRuntimeRequiredIds: readonly string[] | undefined,
+function assertProviderRuntimeRegistered(
+  leaseScope: LeaseScope,
+  registeredProviders: readonly string[],
 ): void {
-  if (
-    !provider ||
-    providerRuntimeIds === undefined ||
-    providerRuntimeRequiredIds === undefined ||
-    !providerRuntimeRequiredIds.includes(provider) ||
-    providerRuntimeIds.includes(provider)
-  ) {
-    return;
-  }
+  const provider = leaseProviderRequiringRuntime(leaseScope);
+  if (provider === undefined || registeredProviders.includes(provider)) return;
   throw new AppError(
     'UNSUPPORTED_OPERATION',
     `Provider "${provider}" is not available in this daemon runtime.`,
     {
+      reason: 'provider-not-registered',
       provider,
+      registeredProviders: [...registeredProviders],
       hint: `Restart the daemon with ${provider} configured, then retry lease allocation.`,
     },
   );
