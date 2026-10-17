@@ -848,16 +848,17 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     }
   }
 
-  // A native slider wide enough to read as a collapsed tab container, with two buttons over it.
+  // A native slider wide enough to read as a collapsed tab container, with two buttons over it. It
+  // sits above the crowded rows, inside both an iPhone screen and the iPhone Duo inner display.
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-wide-slider"]) {
-    UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(20, 800, 360, 31)];
+    UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(20, 20, 360, 31)];
     slider.accessibilityLabel = @"Volume";
     [self.view addSubview:slider];
     NSArray<NSString *> *titles = @[ @"Left", @"Right" ];
     for (NSUInteger i = 0; i < titles.count; i++) {
       UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
       [button setTitle:titles[i] forState:UIControlStateNormal];
-      button.frame = CGRectMake(30 + i * 170, 800, 100, 30);
+      button.frame = CGRectMake(30 + i * 170, 20, 100, 30);
       [self.view addSubview:button];
     }
   }

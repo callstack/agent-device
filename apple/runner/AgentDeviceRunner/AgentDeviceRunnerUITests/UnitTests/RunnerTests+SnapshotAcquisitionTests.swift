@@ -31,14 +31,14 @@ private final class ElementAttributesFixture: NSObject, XCUIElementSnapshot {
 }
 
 extension RunnerTests {
-  private static let wideSliderFrame = CGRect(x: 20, y: 800, width: 360, height: 31)
+  private static let containerFrame = CGRect(x: 20, y: 800, width: 360, height: 31)
 
   @MainActor
   func testCollapsedTabCandidatePredicateMatchesLabeledCandidatesCenteredInAContainer() {
     var matched: [String] = []
     let predicate = Self.collapsedTabCandidatePredicate(containerFrames: [
       CGRect(x: 0, y: 0, width: 400, height: 50),
-      Self.wideSliderFrame,
+      Self.containerFrame,
     ]) { matched.append($0.label) }
 
     XCTAssertTrue(predicate.evaluate(with: ElementAttributesFixture(.button, CGRect(x: 30, y: 800, width: 100, height: 30), label: "Left")))
@@ -52,12 +52,12 @@ extension RunnerTests {
     // wrapper centered on it, both too large; an unlabeled view over it; a non-candidate type over
     // it; and a candidate overlapping it with its center outside.
     var matched: [String] = []
-    let predicate = Self.collapsedTabCandidatePredicate(containerFrames: [Self.wideSliderFrame]) {
+    let predicate = Self.collapsedTabCandidatePredicate(containerFrames: [Self.containerFrame]) {
       matched.append($0.label)
     }
     let item = CGRect(x: 30, y: 800, width: 100, height: 30)
 
-    XCTAssertFalse(predicate.evaluate(with: ElementAttributesFixture(.other, Self.wideSliderFrame, label: "Volume")))
+    XCTAssertFalse(predicate.evaluate(with: ElementAttributesFixture(.other, Self.containerFrame, label: "Volume")))
     XCTAssertFalse(predicate.evaluate(with: ElementAttributesFixture(.other, CGRect(x: 0, y: 515, width: 400, height: 600), label: "Sheet")))
     XCTAssertFalse(predicate.evaluate(with: ElementAttributesFixture(.other, item, label: "  ")))
     XCTAssertFalse(predicate.evaluate(with: ElementAttributesFixture(.image, item, label: "Left")))
