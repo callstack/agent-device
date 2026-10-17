@@ -240,6 +240,7 @@ export async function createProviderScenarioHarness(
     });
     return await new Promise<DaemonResponse>((resolve, reject) => {
       handleDaemonHttpResponseBody(body, {
+        host: createTestHostEnvironment(),
         info: {
           transport: 'http',
           httpPort,

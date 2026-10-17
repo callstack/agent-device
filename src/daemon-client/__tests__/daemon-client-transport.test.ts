@@ -9,6 +9,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { test, vi } from 'vitest';
 import * as hostTransport from '@agent-device/host-kit/transport';
@@ -40,6 +41,7 @@ function sendWithStaleInstance(port: number, timeoutMs: number) {
     'auto',
     resolveDaemonPaths('/tmp/agent-device-instance-retry-test'),
     timeoutMs,
+    { host: createTestHostEnvironment() },
   );
 }
 
@@ -497,6 +499,7 @@ test.for(['timeout', 'reset'] as const)(
             'http',
             paths,
             mode === 'timeout' ? 40 : 1_000,
+            { host: createTestHostEnvironment() },
           ),
         ),
         (error: unknown) => {

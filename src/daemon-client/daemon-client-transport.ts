@@ -25,10 +25,13 @@ import {
 import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readVersion } from '@agent-device/host-kit/version';
 
 type ResolvedDaemonTransport = 'socket' | 'http';
 type SendRequestOptions = {
+  /** The host whose working directory and environment this request's client-side work reads. */
+  host: HostEnvironment;
   onProgress?: RequestProgressSink;
   /**
    * The caller's per-request cancellation (#3178). Aborted at or before a send attempt, nothing
@@ -378,7 +381,7 @@ export async function sendRequest(
   preference: DaemonTransportPreference,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
-  options: SendRequestOptions = {},
+  options: SendRequestOptions,
 ): Promise<DaemonResponse> {
   try {
     return await sendRequestWithFallback(info, req, preference, statePaths, timeoutMs, options);
@@ -402,7 +405,7 @@ async function sendRequestWithFallback(
   preference: DaemonTransportPreference,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
-  options: SendRequestOptions = {},
+  options: SendRequestOptions,
 ): Promise<DaemonResponse> {
   const transport = chooseTransport(info, preference);
   const deadline = typeof timeoutMs === 'number' ? performance.now() + timeoutMs : undefined;
@@ -777,6 +780,7 @@ async function sendHttpRequest(
         info,
         req,
         stateDir: statePaths.baseDir,
+        host: options.host,
         resolve: resolveOnce,
         reject: rejectOnce,
       });

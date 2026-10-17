@@ -86,7 +86,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
     connection: connectionMetadata,
     daemon: context.daemon,
   });
-  const verification = await verifyResolvedConnectProvider(resolved);
+  const verification = await verifyResolvedConnectProvider(resolved, commandHostEnvironment().env);
   const state = buildConnectedState({
     flags: connectFlags,
     scope,

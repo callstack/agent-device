@@ -1,4 +1,3 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-schema';
 import { AppError } from '@agent-device/kernel/errors';
@@ -20,9 +19,9 @@ export function resolveLimrunConnectProfile(options: {
   flags: CliFlags;
   stateDir: string;
   cwd: string;
-  env?: EnvMap;
+  env: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
-  const env = options.env ?? commandHostEnvironment().env;
+  const { env } = options;
   const profile = buildLimrunRemoteProfile({ flags: options.flags, cwd: options.cwd, env });
   const credentials = readLimrunCredentials(env);
   const platform = limrunPlatformForLeaseBackend(profile.leaseBackend) ?? 'android';

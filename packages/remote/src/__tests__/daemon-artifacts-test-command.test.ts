@@ -5,6 +5,7 @@
  * command: the client resolves the real local artifacts root itself and redirects the daemon to
  * a temp path it owns, exactly as it already does for `screenshot`/`record start`.
  */
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'vitest';
@@ -29,6 +30,7 @@ test('a remote daemon redirects an explicit --artifacts-dir to a temp path it ow
     testRequest('remote-device-artifacts/ad-test'),
     REMOTE,
     NO_CANCELLATION,
+    createTestHostEnvironment(),
   );
 
   const redirected = (prepared.flags as Record<string, unknown> | undefined)?.artifactsDir;
@@ -45,6 +47,7 @@ test('a remote daemon redirects the default artifacts directory too', async () =
     testRequest(undefined),
     REMOTE,
     NO_CANCELLATION,
+    createTestHostEnvironment(),
   );
 
   const redirected = (prepared.flags as Record<string, unknown> | undefined)?.artifactsDir;
@@ -61,6 +64,7 @@ test('a remote daemon leaves an already-absolute --artifacts-dir as the download
     testRequest('/ci/artifacts/ad-test'),
     REMOTE,
     NO_CANCELLATION,
+    createTestHostEnvironment(),
   );
 
   const redirected = (prepared.flags as Record<string, unknown> | undefined)?.artifactsDir;
@@ -73,6 +77,7 @@ test('a local daemon leaves --artifacts-dir untouched', async () => {
     testRequest('remote-device-artifacts/ad-test'),
     LOCAL,
     NO_CANCELLATION,
+    createTestHostEnvironment(),
   );
 
   assert.equal(

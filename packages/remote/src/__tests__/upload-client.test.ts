@@ -61,6 +61,7 @@ test('uploadArtifact returns preflight uploadId without uploading bytes on cache
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -104,6 +105,7 @@ test('uploadArtifact uploads with hash headers after preflight cache miss', asyn
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -143,6 +145,7 @@ test('uploadArtifact falls back to upload when preflight is unsupported', async 
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -191,6 +194,7 @@ test('uploadArtifact falls back to upload when preflight fails', async () => {
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -244,6 +248,7 @@ test('uploadArtifact follows up to five upload redirects', async () => {
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -296,6 +301,7 @@ test('uploadArtifact fails cleanly on the sixth upload redirect', async () => {
     await assert.rejects(
       async () =>
         await uploadArtifact({
+          env: process.env,
           localPath: artifactPath,
           baseUrl: server.baseUrl,
           token: TEST_TOKEN,
@@ -359,6 +365,7 @@ test('uploadArtifact falls back to legacy upload when direct upload exceeds redi
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -441,6 +448,7 @@ test('uploadArtifact uses direct upload ticket and finalize flow', async () => {
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -529,6 +537,7 @@ test.each([
 
     try {
       const uploadId = await uploadArtifact({
+        env: process.env,
         localPath: artifactPath,
         baseUrl: server.baseUrl,
         token: TEST_TOKEN,
@@ -611,6 +620,7 @@ test('uploadArtifact resumes a direct upload from the server-reported offset', a
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -712,6 +722,7 @@ test('uploadArtifact re-preflights and resumes after an interrupted direct uploa
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -784,6 +795,7 @@ test('uploadArtifact preflights and legacy-uploads compressed app bundle directo
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: appPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
@@ -830,6 +842,7 @@ test('uploadArtifact disables macOS AppleDouble entries when archiving app bundl
       },
       async () =>
         await uploadArtifact({
+          env: process.env,
           localPath: appPath,
           baseUrl: server.baseUrl,
           token: TEST_TOKEN,
@@ -883,6 +896,7 @@ test('uploadArtifact uploads APK, AAB, and IPA files without wrapping them', asy
 
     try {
       await uploadArtifact({
+        env: process.env,
         localPath: artifactPath,
         baseUrl: server.baseUrl,
         token: TEST_TOKEN,
@@ -917,7 +931,13 @@ test.each([
       const localPath = createTempFile('app.apk', `${flow}-payload`);
       for (const leaseId of ['lease-1', undefined]) {
         leases = new Map();
-        await uploadArtifact({ localPath, baseUrl: server.baseUrl, token: TEST_TOKEN, leaseId });
+        await uploadArtifact({
+          env: process.env,
+          localPath,
+          baseUrl: server.baseUrl,
+          token: TEST_TOKEN,
+          leaseId,
+        });
         const expected = routes.map((route) => [route, route === unleased ? undefined : leaseId]);
         assert.deepEqual([...leases], expected);
       }

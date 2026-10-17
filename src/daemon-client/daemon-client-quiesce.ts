@@ -49,7 +49,7 @@ export async function requestDaemonQuiesce(
       'auto',
       settings.paths,
       QUIESCE_TIMEOUT_MS,
-      { timeoutRecovery: 'none' },
+      { host: settings.host, timeoutRecovery: 'none' },
     );
   } catch (error) {
     if (isDaemonTransportUnavailableError(error) || isConnectionFailure(error)) return 'gone';
