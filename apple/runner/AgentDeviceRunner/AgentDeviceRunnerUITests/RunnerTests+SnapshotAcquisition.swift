@@ -352,7 +352,7 @@ extension RunnerTests {
       candidates.append(self.collapsedTabCandidate(attributes))
     }
     guard
-      Self.querySweepCanStartQuery(
+      Self.xctestQueryCanStart(
         deadline: processingDeadline,
         now: Date(),
         expectedCost: context.rootReadDuration
@@ -599,7 +599,7 @@ extension RunnerTests {
   }
 
   /// Runs sweep queries in order until one reports AX unavailable, or until the next one could not
-  /// finish before `deadline` (`querySweepCanStartQuery`). A sweep stopped by the deadline reports
+  /// finish before `deadline` (`xctestQueryCanStart`). A sweep stopped by the deadline reports
   /// `.deadlineExhausted` rather than a truncation flag: what it collected is a partial tree, and
   /// only the caller that owns the tier decides whether that counts as an answer (#2781).
   static func runFlatInteractiveQueries<Query, Element>(
@@ -610,7 +610,7 @@ extension RunnerTests {
   ) -> (elements: [Element], outcome: SnapshotTierOutcome) {
     var elements: [Element] = []
     for query in queries {
-      if !querySweepCanStartQuery(deadline: deadline, now: now()) {
+      if !xctestQueryCanStart(deadline: deadline, now: now()) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_FLAT_FALLBACK_DEADLINE")
         return (elements, .deadlineExhausted)
       }

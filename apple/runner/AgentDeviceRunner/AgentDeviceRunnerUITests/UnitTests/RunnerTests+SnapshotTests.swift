@@ -190,20 +190,20 @@ extension RunnerTests {
     XCTAssertLessThanOrEqual(clock, sliceDeadline, "no started query may outlive the tier slice")
 
     XCTAssertTrue(
-      Self.querySweepCanStartQuery(deadline: sliceDeadline, now: sliceDeadline.addingTimeInterval(-0.2))
+      Self.xctestQueryCanStart(deadline: sliceDeadline, now: sliceDeadline.addingTimeInterval(-0.2))
     )
     XCTAssertFalse(
-      Self.querySweepCanStartQuery(deadline: sliceDeadline, now: sliceDeadline.addingTimeInterval(-0.05))
+      Self.xctestQueryCanStart(deadline: sliceDeadline, now: sliceDeadline.addingTimeInterval(-0.05))
     )
-    XCTAssertFalse(Self.querySweepCanStartQuery(deadline: sliceDeadline, now: sliceDeadline))
+    XCTAssertFalse(Self.xctestQueryCanStart(deadline: sliceDeadline, now: sliceDeadline))
   }
 
   func testCollapsedTabQueryStartsOnlyWhileTheSliceCoversItsExpectedCost() {
     let now = Date(timeIntervalSinceReferenceDate: 1_000)
 
-    XCTAssertTrue(Self.querySweepCanStartQuery(deadline: now.addingTimeInterval(2), now: now, expectedCost: 2))
+    XCTAssertTrue(Self.xctestQueryCanStart(deadline: now.addingTimeInterval(2), now: now, expectedCost: 2))
     XCTAssertFalse(
-      Self.querySweepCanStartQuery(deadline: now.addingTimeInterval(1.9), now: now, expectedCost: 2),
+      Self.xctestQueryCanStart(deadline: now.addingTimeInterval(1.9), now: now, expectedCost: 2),
       "a query expected to outlast the slice must not start"
     )
   }

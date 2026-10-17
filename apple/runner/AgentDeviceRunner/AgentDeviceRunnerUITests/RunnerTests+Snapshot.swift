@@ -149,7 +149,7 @@ extension RunnerTests {
   /// Whether a query started at `now` and expected to take `expectedCost` can still finish before
   /// `deadline`. XCTest cannot cancel a query once it starts; the least admitted cost is a sweep
   /// query's.
-  static func querySweepCanStartQuery(deadline: Date, now: Date, expectedCost: TimeInterval = 0) -> Bool {
+  static func xctestQueryCanStart(deadline: Date, now: Date, expectedCost: TimeInterval = 0) -> Bool {
     deadline.timeIntervalSince(now) >= max(flatInteractiveQueryBudget, expectedCost)
   }
 
@@ -477,7 +477,7 @@ extension RunnerTests {
     let flatElements = flatInteractiveElements(app: app, deadline: deadline)
     var outcome = flatElements.outcome
     for element in flatElements.elements {
-      if !Self.querySweepCanStartQuery(deadline: deadline, now: Date()) {
+      if !Self.xctestQueryCanStart(deadline: deadline, now: Date()) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_FLAT_FALLBACK_DEADLINE")
         outcome = .deadlineExhausted
         break
