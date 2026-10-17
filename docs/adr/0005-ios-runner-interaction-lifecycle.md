@@ -63,7 +63,7 @@ The record is written only after the `runnerFatal` check.
 Thus, sparse AX-fallback snapshots and `runnerFatal` payloads never refresh it.
 Snapshots and other read-only responses never count as a health signal.
 
-This narrow skip is permitted because it meets the preflight-reduction precondition in the Consequences section:
+This narrow skip is permitted now, because the preflight-reduction precondition in the Consequences section is met:
 
 - Coordinate-first activation removed the command-induced teardown trigger.
 - The lifecycle status journal plus the status-before-invalidate recovery is the teardown-surviving status surface.
