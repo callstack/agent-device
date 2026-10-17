@@ -1,6 +1,5 @@
 import { ensureAppLogPath } from '@agent-device/capture-kit/app-log-files';
 import fs from 'node:fs';
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import path from 'node:path';
 import {
   openVerifiedFileForAppend,
@@ -27,8 +26,8 @@ export function getAppLogPathMetadata(outPath: string): {
   }
 }
 
-export function appendAppLogMarker(outPath: string, marker: string): void {
-  ensureAppLogPath(outPath, commandHostEnvironment().env);
+export function appendAppLogMarker(outPath: string, marker: string, env: NodeJS.ProcessEnv): void {
+  ensureAppLogPath(outPath, env);
   const line = `[agent-device][mark][${new Date().toISOString()}] ${marker.trim() || 'marker'}\n`;
   const descriptor = openVerifiedFileForAppend(outPath);
   try {

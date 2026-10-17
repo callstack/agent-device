@@ -1,14 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import {
-  assertThrowsAppError,
-  bindTestCommandHost,
-  mkdtempForTestSync,
-} from '@agent-device/test-kit';
+import { assertThrowsAppError, mkdtempForTestSync } from '@agent-device/test-kit';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
-
-bindTestCommandHost();
 
 // Pinned as a literal on purpose — see the note in packages/host-kit/src/internal/verified-file.test.ts.
 const NOT_REGULAR_FILE_HINT =
@@ -18,7 +12,7 @@ test('marker and clear operations keep app-log file ownership in the daemon', ()
   const root = mkdtempForTestSync('agent-device-app-log-files-');
   const outPath = path.join(root, 'session', 'app.log');
 
-  appendAppLogMarker(outPath, 'checkpoint');
+  appendAppLogMarker(outPath, 'checkpoint', process.env);
   fs.writeFileSync(`${outPath}.1`, 'rotated');
 
   expect(fs.readFileSync(outPath, 'utf8')).toMatch(/\[agent-device\]\[mark\].* checkpoint/);
@@ -50,7 +44,7 @@ test.each(['metadata', 'mark', 'clear'] as const)(
     assertThrowsAppError(
       () => {
         if (operation === 'metadata') getAppLogPathMetadata(outPath);
-        else if (operation === 'mark') appendAppLogMarker(outPath, 'checkpoint');
+        else if (operation === 'mark') appendAppLogMarker(outPath, 'checkpoint', process.env);
         else clearAppLogFiles(outPath);
       },
       { code: 'COMMAND_FAILED', message: expectedMessage, hint: NOT_REGULAR_FILE_HINT },
