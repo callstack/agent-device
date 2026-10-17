@@ -63,7 +63,7 @@ export async function handleAppDeploymentCommand(params: {
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { host, req, command, sessionName, sessionStore } = params;
+  const { req, command, sessionName, sessionStore } = params;
   const ref = sessionStore.lookup(sessionName);
   const session = ref?.session;
   const flags = req.flags ?? {};
@@ -76,7 +76,7 @@ export async function handleAppDeploymentCommand(params: {
   try {
     const appPath = uploadedArtifactId
       ? prepareUploadedArtifact(uploadedArtifactId, req.meta?.tenantId)
-      : expandSessionPath(target.appPathInput, host.cwd);
+      : expandSessionPath(target.appPathInput, params.host.cwd);
     if (!fs.existsSync(appPath)) {
       return errorResponse('INVALID_ARGS', `App binary not found: ${appPath}`);
     }
@@ -115,7 +115,7 @@ export async function handleAppDeploymentCommand(params: {
 export async function handlePushNotificationCommand(
   params: RuntimeCommandHandlerParams,
 ): Promise<DaemonResponse> {
-  const { host, req, sessionName, sessionStore } = params;
+  const { req, sessionName, sessionStore } = params;
   const ref = sessionStore.lookup(sessionName);
   const session = ref?.session;
   const flags = req.flags ?? {};
@@ -131,7 +131,7 @@ export async function handlePushNotificationCommand(
     );
   }
   const payload = await readNotificationPayload(
-    resolvePushPayload(payloadArg, req.meta?.cwd ?? host.cwd),
+    resolvePushPayload(payloadArg, req.meta?.cwd ?? params.host.cwd),
   );
   const device = await resolveCommandDevice({
     session,
