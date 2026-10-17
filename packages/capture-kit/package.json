@@ -22,10 +22,6 @@
       "types": "./src/capture-admission/app-log-durable-resource.ts",
       "default": "./src/capture-admission/app-log-durable-resource.ts"
     },
-    "./app-log-live-handle": {
-      "types": "./src/app-log-live-handle.ts",
-      "default": "./src/app-log-live-handle.ts"
-    },
     "./app-log-files": {
       "types": "./src/capture-admission/app-log-files.ts",
       "default": "./src/capture-admission/app-log-files.ts"

@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import { expect, test, vi } from 'vitest';
 import {
   clearRequestCanceled,
@@ -16,6 +15,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import {
+  createTestAppLogLiveHandle,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
@@ -172,7 +172,7 @@ function request(positionals: string[]) {
 function makeGateway(disposeError?: Error) {
   const owner = localRuntimeOwner('android');
   const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
-  const handle = createAppLogLiveHandle({
+  const handle = createTestAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
     finish: async () => ({
       status: 'completed',

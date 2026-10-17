@@ -1,5 +1,4 @@
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
-import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import fs from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -13,6 +12,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
+  createTestAppLogLiveHandle,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
@@ -345,7 +345,7 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
     status: 'cleaned',
   }));
   const start = vi.fn<AppLogRuntimeOperations['appLogStart']>(async (input) => {
-    const handle = createAppLogLiveHandle({
+    const handle = createTestAppLogLiveHandle({
       inspect: () => ({
         backend: 'ios-simulator',
         state: 'active',

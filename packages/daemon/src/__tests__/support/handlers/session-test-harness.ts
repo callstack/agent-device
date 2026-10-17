@@ -1,9 +1,8 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import { isMacOs } from '@agent-device/kernel/device';
 import { legacyDispatchCapture } from '../legacy-snapshot-capture-fixture.ts';
 import { expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { AppLogLiveState } from '@agent-device/contracts/app-log-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
@@ -202,7 +201,7 @@ export function makeTestAppLogResource(
   },
 ): NonNullable<SessionState['appLog']> {
   const outputPath = options.outputPath ?? '/tmp/app.log';
-  const handle = createAppLogLiveHandle({
+  const handle = createTestAppLogLiveHandle({
     inspect: () => ({
       backend: options.backend,
       state: options.state ?? 'active',

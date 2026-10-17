@@ -1,5 +1,4 @@
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
-import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,6 +11,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
+  createTestAppLogLiveHandle,
   mkdtempForTestSync,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from '@agent-device/test-kit';
@@ -42,7 +42,7 @@ test('reconciles the dead owner session resources through their exact runtime ow
     }),
   );
   const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
-  const handle = createAppLogLiveHandle({
+  const handle = createTestAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'recovering', startedAt: 1 }),
     finish: async () => ({
       status: 'completed',

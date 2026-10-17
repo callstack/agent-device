@@ -1,5 +1,4 @@
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
-import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import fs from 'node:fs';
@@ -8,7 +7,7 @@ import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import {
   flushDaemonStartupDiagnostics,
@@ -114,7 +113,7 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
     await cleanupReleased;
     return { status: 'cleaned' as const };
   });
-  const handle = createAppLogLiveHandle({
+  const handle = createTestAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
     finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
     forceCleanup,

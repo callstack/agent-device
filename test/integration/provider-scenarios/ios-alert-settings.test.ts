@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
@@ -10,7 +9,10 @@ import {
   type RuntimeFacts,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
+import {
+  createTestAppLogLiveHandle,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+} from '@agent-device/test-kit';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { applePlugin } from '@agent-device/platform-apple';
@@ -257,7 +259,7 @@ function createRecordingPlatformRuntimeGateway(params: {
                   },
                 };
               })());
-            const handle = createAppLogLiveHandle({
+            const handle = createTestAppLogLiveHandle({
               inspect: () => ({
                 backend: 'ios-simulator',
                 state: 'active',
