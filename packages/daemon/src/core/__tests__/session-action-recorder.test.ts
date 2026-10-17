@@ -7,7 +7,11 @@ import { isSessionRecording } from '../session-script-publication-capability.ts'
  * (`selector-recording.test.ts` covers which commands set `interactiveObservation`).
  */
 import { test, expect } from 'vitest';
-import { isInteractiveObservation, recordActionEntry, type RecordActionEntry } from '../session-action-recorder.ts';
+import {
+  isInteractiveObservation,
+  recordActionEntry,
+  type RecordActionEntry,
+} from '../session-action-recorder.ts';
 import { authoringPublication, makeIosSession } from '../../__tests__/support/session-factories.ts';
 
 test.each([
