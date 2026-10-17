@@ -38,6 +38,7 @@ import {
   isClaimOwnedByThisDaemon,
   resolveExistingClaim,
   settleVerifiedOrphanedClaim,
+  type DeviceClaimAcquirerKind,
   type DeviceClaimReconciler,
 } from './device-claim-settlement.ts';
 import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
@@ -157,14 +158,11 @@ export async function acquireTransientDeviceClaim(params: {
       // Only a record that states its kind can take part in a kind decision. A migrated record
       // states none, and `isClaimOwnedByThisDaemon` matches pid plus start time — which two
       // processes can share once a start time is unreadable — so coverage has to refuse rather
-      // than assume an old record was not some other owner's command claim (#3345).
+      // than assume an old record was not some other owner's command claim (#3345). A live claim
+      // of any other kind — another session's or a command's, including one labeled exactly like
+      // this command — refuses here, because renewing it would hand this request a token it
+      // never took.
       if (claimKind !== 'open-session') {
-        return { status: 'conflict', conflict: existing };
-      }
-      // A session literally named this command's label is not this command's claim either:
-      // below, `claimHeldDevice` matches holders by the session string it is handed, and
-      // renewing that claim would hand this request the open session's release token.
-      if (existing.claim.session === transientDeviceClaimSession(params.command)) {
         return { status: 'conflict', conflict: existing };
       }
     }
@@ -196,9 +194,12 @@ async function claimHeldDevice(params: {
 }): Promise<DeviceClaimAcquireResult> {
   const { deviceKey, identity } = params;
   const owner = readCurrentOwnerIdentity();
+  const claimOwnerKind: DeviceClaimAcquirerKind =
+    params.transientCommand === undefined ? 'open-session' : 'transient-command';
   const existing = await resolveExistingClaim({
     ...params,
     owner,
+    claimOwnerKind,
   });
   if (existing.status === 'conflict') return existing;
   if (existing.status === 'held') return { status: 'acquired', ownership: existing.ownership };
@@ -218,7 +219,7 @@ async function claimHeldDevice(params: {
     ownerToken: crypto.randomUUID(),
     createdAtMs: now,
     updatedAtMs: now,
-    claimOwnerKind: params.transientCommand === undefined ? 'open-session' : 'transient-command',
+    claimOwnerKind,
     ...(params.transientCommand === undefined ? {} : { transientCommand: params.transientCommand }),
   };
   writeDeviceClaim(claim);
