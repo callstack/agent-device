@@ -9,7 +9,7 @@ import { LeaseRegistry } from '../resources/lease-registry.ts';
 import { runRequestHandlerChain } from './request-handler-chain.ts';
 import { getDaemonRouteOwnerFiles } from '@agent-device/command-registry/owner-files';
 import type { DaemonRequest } from '../index.ts';
-import { eagerClosureOf, LINUX_DEVICE } from '@agent-device/test-kit';
+import { bindTestCommandHost, eagerClosureOf, LINUX_DEVICE } from '@agent-device/test-kit';
 import { buildGesturePlan, singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import { makeIosSession, makeSession } from '../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../__tests__/support/store-factory.ts';
@@ -31,7 +31,6 @@ import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { createTouchCommandSurface } from '../__tests__/support/touch-command-surface-fake.ts';
-import { bindTestCommandHost } from '@agent-device/test-kit';
 
 bindTestCommandHost();
 const testCreateCommandSurface = createTouchCommandSurface();
