@@ -35,6 +35,16 @@ test('Android inventory parsers preserve device, AVD-name, and TV detection sema
   assert.equal(parseAndroidFeatureListForTv('feature:android.hardware.type.television'), true);
 });
 
+test('Android AVD list parser keeps AVD names and drops emulator log lines', () => {
+  assert.deepEqual(
+    parseAndroidAvdList(
+      'INFO    | Storing crashdata in: /tmp/user/emu-crash-34.2.16.db, detection is enabled for process: 98765\r\n' +
+        'Pixel_9_Pro_XL\r\nwear-os.36\r\nWARNING | unrelated log line\r\n',
+    ),
+    ['Pixel_9_Pro_XL', 'wear-os.36'],
+  );
+});
+
 test('Android description parser reads the model and OS version lines and skips unset props', () => {
   assert.deepEqual(parseAndroidDeviceDescription('sdk_gphone16k_arm64\r\n17\r\n'), {
     model: 'sdk_gphone16k_arm64',

@@ -216,6 +216,15 @@ test('an Android open activates the test IME after the launch dispatch when requ
   expect(calls.slice(0, 2)).toEqual(['open:com.example.app', 'activate-test-ime']);
 });
 
+test('an Android open leaves the real keyboard in place when test IME activation is disabled', async () => {
+  const { calls, lifecycle } = createLifecycle();
+
+  await lifecycle.openApplication(openInput({ enableTestIme: false }));
+
+  expect(calls).toContain('open:com.example.app');
+  expect(calls).not.toContain('activate-test-ime');
+});
+
 test('an Android app open returns only after the launched app observation settles', async () => {
   let finishCapture: () => void = () => {};
   const { calls, lifecycle } = createLifecycle({

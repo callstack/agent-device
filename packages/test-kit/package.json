@@ -17,6 +17,7 @@
     }
   },
   "devDependencies": {
-    "fast-check": "^4.9.0"
+    "fast-check": "^4.9.0",
+    "oxc-parser": "^0.146.0"
   }
 }

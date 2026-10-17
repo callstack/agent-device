@@ -4,6 +4,7 @@ import type {
   DaemonCommandSurface,
   DaemonSnapshotOptions,
 } from '@agent-device/contracts/daemon-command-surface';
+import { publicSnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 
 /**
  * The `CreateDaemonCommandSurface` port as the daemon-policy suites need it. Router and handler
@@ -74,49 +75,73 @@ export const fakeCreateCommandSurface: CreateDaemonCommandSurface = async () => 
  * the result stays out of the daemon suites: a snapshot returns the backend's tree, and a diff
  * returns an empty comparison whose only informative field is whether it initialized the baseline.
  */
-export const forwardingCreateCommandSurface: CreateDaemonCommandSurface = async (config) => {
-  const captureIntoSession = async (options: DaemonSnapshotOptions) => {
-    const name = options.session ?? 'default';
-    const session = await config.sessions?.get(name);
-    const captured = await config.backend.captureSnapshot?.(
-      { session: name, requestId: options.requestId, signal: options.signal ?? config.signal },
-      {
-        interactiveOnly: options.interactiveOnly,
-        depth: options.depth,
-        scope: options.scope,
-        raw: options.raw,
-      },
-    );
-    const stored = captured?.snapshot ?? {
-      nodes: [],
-      createdAt: Date.now(),
-      backend: 'android' as const,
+function createForwardingCommandSurface(
+  options: {
+    includeCaptureAnnotations?: boolean;
+  } = {},
+): CreateDaemonCommandSurface {
+  return async (config) => {
+    const captureIntoSession = async (captureOptions: DaemonSnapshotOptions) => {
+      const name = captureOptions.session ?? 'default';
+      const session = await config.sessions?.get(name);
+      const captured = await config.backend.captureSnapshot?.(
+        {
+          session: name,
+          requestId: captureOptions.requestId,
+          signal: captureOptions.signal ?? config.signal,
+        },
+        {
+          interactiveOnly: captureOptions.interactiveOnly,
+          depth: captureOptions.depth,
+          scope: captureOptions.scope,
+          raw: captureOptions.raw,
+        },
+      );
+      const stored = captured?.snapshot ?? {
+        nodes: [],
+        createdAt: Date.now(),
+        backend: 'android' as const,
+      };
+      await config.sessions?.set({
+        ...(session ?? { name }),
+        name: session?.name ?? name,
+        snapshot: stored,
+      });
+      const annotations =
+        options.includeCaptureAnnotations && captured
+          ? publicSnapshotCaptureAnnotations(captured)
+          : {};
+      return {
+        nodes: stored.nodes as never,
+        hadBaseline: session?.snapshot !== undefined,
+        annotations,
+      };
     };
-    await config.sessions?.set({
-      ...(session ?? { name }),
-      name: session?.name ?? name,
-      snapshot: stored,
-    });
-    return { nodes: stored.nodes as never, hadBaseline: session?.snapshot !== undefined };
-  };
-  return {
-    ...fakeCommandSurface,
-    signal: config.signal,
-    capture: {
-      ...fakeCommandSurface.capture,
-      snapshot: async (options) => {
-        const { nodes } = await captureIntoSession(options);
-        return { nodes };
+    return {
+      ...fakeCommandSurface,
+      signal: config.signal,
+      capture: {
+        ...fakeCommandSurface.capture,
+        snapshot: async (captureOptions) => {
+          const { nodes, annotations } = await captureIntoSession(captureOptions);
+          return { nodes, ...annotations };
+        },
+        diffSnapshot: async (captureOptions) => {
+          const { hadBaseline } = await captureIntoSession(captureOptions);
+          return {
+            mode: 'snapshot',
+            baselineInitialized: !hadBaseline,
+            summary: { additions: 0, removals: 0, unchanged: 0 },
+            lines: [],
+          };
+        },
       },
-      diffSnapshot: async (options) => {
-        const { hadBaseline } = await captureIntoSession(options);
-        return {
-          mode: 'snapshot',
-          baselineInitialized: !hadBaseline,
-          summary: { additions: 0, removals: 0, unchanged: 0 },
-          lines: [],
-        };
-      },
-    },
+    };
   };
-};
+}
+
+export const forwardingCreateCommandSurface: CreateDaemonCommandSurface =
+  createForwardingCommandSurface();
+
+export const forwardingCreateCommandSurfaceWithAnnotations: CreateDaemonCommandSurface =
+  createForwardingCommandSurface({ includeCaptureAnnotations: true });
