@@ -201,10 +201,13 @@ its owner: the route owner-file claims sit beside the per-command claims in
 `@agent-device/command-registry/owner-files`, and the wire request and response types come from
 `@agent-device/contracts/command` and `@agent-device/kernel/contracts`.
 
-The package now exports exactly `.`. The layering entry-surface rule pins that export to
-`src/index.ts` and rejects `export *` there; R83 reports no daemon test-only exports. Package tests
-import internal subjects relatively, while composed root tests reach the daemon through
-`startDaemonRuntime` from the package entry. R11 owns resolution of workspace package specifiers.
+The transitional `./testing/` entries are gone, last of them behind the consumers that moved off
+them in [#3728](https://github.com/callstack/agent-device/pull/3728),
+[#3733](https://github.com/callstack/agent-device/pull/3733), and
+[#3742](https://github.com/callstack/agent-device/pull/3742).
+`scripts/layering/package-entry-surface.ts` owns the surface under R83, so this document states the
+decision and not the check. Package tests import their subject relatively; composed root tests reach
+the daemon through `startDaemonRuntime` from the entry.
 
 ## Refuted alternatives
 

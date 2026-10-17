@@ -1,4 +1,14 @@
-// Catches extra package entries and star re-exports on test-kit and daemon.
+// Catches: a pinned package entry growing a sibling subpath, pointing somewhere other than its
+//   declared entry file, or re-exporting a module's whole surface with `export *`. test-kit is the
+//   one home of test helpers shared across packages, so a second entry there publishes a fixture's
+//   surface into every test's import graph. The daemon's entry is its package boundary and the one
+//   place a barrel is allowed, so a subpath or a star re-export there publishes the daemon graph
+//   under an unowned name (ADR 0033).
+// Evidence: both packages held the shape by hand until now; test-kit's single entry and the
+//   daemon's `.` are each asserted by the same declaration.
+// Cost: one pass over the pinned manifests and their entry sources.
+// Kill criterion: a maintainer decision that a pinned package may expose subpath entries or a star
+//   re-export from its entry.
 //
 // Part of R83 package-export-surface. The dependency, import and reference-cycle half is the
 // shared walk in package-isolation.ts under TEST_KIT_ISOLATION.
