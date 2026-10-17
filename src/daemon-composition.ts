@@ -155,7 +155,6 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
         ).createCommandSurfaceAgentDevice(config),
       cloudArtifactProvider: providerRuntimeProviders.cloudArtifactProvider,
       providerAppCatalog: providerRuntimeProviders.providerAppCatalog,
-      providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
       providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
     }),
   });

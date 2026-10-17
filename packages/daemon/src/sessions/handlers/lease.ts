@@ -15,6 +15,7 @@ import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   leaseReleaseRequestFor,
   normalizeLeaseBackend,
+  normalizeLeaseProvider,
   type ReleaseLeaseRequest,
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
@@ -25,6 +26,7 @@ import {
 } from '../../core/lease-context.ts';
 import {
   leaseDeviceKey,
+  leaseProviderRequiringRuntime,
   leaseScopeToAllocateRequest,
   leaseScopeToHeartbeatRequest,
   leaseScopeToReleaseRequest,
@@ -47,7 +49,6 @@ type LeaseHandlerArgs = {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
-  providerRuntimeRequiredIds?: readonly string[];
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -61,7 +62,6 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     sessionStore,
     leaseRegistry,
     providerRuntimeIds,
-    providerRuntimeRequiredIds,
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
@@ -83,13 +83,12 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     }
     case 'lease_allocate': {
       assertTenantMayAllocate(leaseScope.leaseBackend);
-      assertProviderRuntimeAvailable(
-        leaseScope.leaseProvider,
-        providerRuntimeIds,
-        providerRuntimeRequiredIds,
-      );
+      // The registry stores the trimmed, validated id, so every admission check reads that id:
+      // " testmu " names testmu, and a malformed id is INVALID_ARGS as everywhere else.
+      const leaseProvider = normalizeLeaseProvider(leaseScope.leaseProvider);
+      assertProviderRuntimeRegistered(leaseProvider, providerRuntimeIds ?? []);
       assertProviderCredentialsUnchanged(
-        leaseScope,
+        { leaseProvider, leaseBackend: leaseScope.leaseBackend },
         req.meta?.providerCredentialFingerprint,
         providerCredentials,
       );
@@ -336,25 +335,19 @@ function leaseLifecycleContext(req: DaemonRequest, host: HostEnvironment): Lease
   };
 }
 
-function assertProviderRuntimeAvailable(
-  provider: string | undefined,
-  providerRuntimeIds: readonly string[] | undefined,
-  providerRuntimeRequiredIds: readonly string[] | undefined,
+function assertProviderRuntimeRegistered(
+  leaseProvider: string | undefined,
+  registeredProviders: readonly string[],
 ): void {
-  if (
-    !provider ||
-    providerRuntimeIds === undefined ||
-    providerRuntimeRequiredIds === undefined ||
-    !providerRuntimeRequiredIds.includes(provider) ||
-    providerRuntimeIds.includes(provider)
-  ) {
-    return;
-  }
+  const provider = leaseProviderRequiringRuntime({ leaseProvider });
+  if (provider === undefined || registeredProviders.includes(provider)) return;
   throw new AppError(
     'UNSUPPORTED_OPERATION',
     `Provider "${provider}" is not available in this daemon runtime.`,
     {
+      reason: 'provider-not-registered',
       provider,
+      registeredProviders: [...registeredProviders],
       hint: `Restart the daemon with ${provider} configured, then retry lease allocation.`,
     },
   );

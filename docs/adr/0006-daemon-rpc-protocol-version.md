@@ -103,8 +103,14 @@ refuses with `daemon-busy` and reopens admission in that same step. Otherwise it
 it joins neither the in-flight count nor the command registry.
 
 The daemon accepts a quiesce only when it can prove its own start time and the request names both
-the pid and that start time; a daemon that cannot is never addressed. A client never signals a
-daemon that did not accept one, except to retire it after it answered `draining`.
+the pid and that start time; a daemon that cannot is never addressed.
+
+After `draining` the client signals nothing and waits, up to a bounded deadline, for the daemon to
+exit by itself and release its registration: the daemon runs its own shutdown, which a signal would
+cut short. Only a daemon still running at the deadline that also fails its liveness probes is
+force-retired, and only when its command line proves it is a daemon process. A daemon that still
+answers is left alone and the call fails with `daemon-drain-timeout`. A client never signals a
+daemon that did not accept a quiesce, except an unreachable one it retires deliberately.
 
 The census counts what the contract names and nothing else. A resumable upload still streaming and
 a host-administration human-control hold that names no lease are outside it, the same boundary

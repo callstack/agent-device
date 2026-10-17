@@ -133,7 +133,6 @@ export type RequestRouterDeps = {
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   providerRuntimeIds?: readonly string[];
-  providerRuntimeRequiredIds?: readonly string[];
   providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
@@ -165,7 +164,6 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger(),
     hostDiagnostics,
     providerRuntimeIds,
-    providerRuntimeRequiredIds,
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
@@ -357,7 +355,6 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       leaseRegistry,
       leaseLifecycleProvider,
       providerRuntimeIds,
-      providerRuntimeRequiredIds,
       providerCredentials,
       cloudArtifactProvider,
       endSessionsForLease,

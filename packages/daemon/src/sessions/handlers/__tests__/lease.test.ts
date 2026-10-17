@@ -632,3 +632,111 @@ test('a lease request that names no cwd gives the provider the bound host cwd', 
 
   assert.deepEqual(seen, ['/bound/host/cwd', '/client/sent/cwd']);
 });
+
+const RUNTIME_LESS_LEASES: readonly (readonly [string, Record<string, string>])[] = [
+  ['no provider', {}],
+  ['a backend and no provider', { leaseBackend: 'ios-instance' }],
+  ['the proxy routing identity', { leaseProvider: 'proxy' }],
+  ['the cloud remote profile', { leaseProvider: 'cloud' }],
+];
+
+for (const [label, scope] of RUNTIME_LESS_LEASES) {
+  test(`lease_allocate keeps a runtime-less logical lease with ${label}`, async () => {
+    const registry = new LeaseRegistry();
+    const response = await handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', ...scope },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-logical-lease-'),
+      leaseRegistry: registry,
+      providerRuntimeIds: ['browserstack'],
+    });
+    assert.equal(response?.ok, true);
+    assert.equal(registry.listActiveLeases().length, 1);
+  });
+}
+
+test('lease_allocate refuses a provider no registered runtime claims, before recording a lease', async () => {
+  const registry = new LeaseRegistry();
+  await assert.rejects(
+    handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'testmu' },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-unregistered-provider-'),
+      leaseRegistry: registry,
+      providerRuntimeIds: ['browserstack'],
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.equal(error.details?.provider, 'testmu');
+      assert.deepEqual(error.details?.registeredProviders, ['browserstack']);
+      return true;
+    },
+  );
+  assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+test('lease_allocate treats a daemon that reports no provider runtimes as having none registered', async () => {
+  await assert.rejects(
+    handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider: 'browserstack' },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-no-runtimes-'),
+      leaseRegistry: new LeaseRegistry(),
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.equal(error.details?.provider, 'browserstack');
+      assert.deepEqual(error.details?.registeredProviders, []);
+      return true;
+    },
+  );
+});
+
+test('lease_allocate classifies the trimmed provider id and rejects a malformed one as INVALID_ARGS', async () => {
+  const allocate = async (leaseProvider: string, providerRuntimeIds: string[]) =>
+    await handleLeaseCommands({
+      host: createTestHostEnvironment(),
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseProvider },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-provider-id-forms-'),
+      leaseRegistry: new LeaseRegistry(),
+      providerRuntimeIds,
+    });
+
+  assert.equal((await allocate(' testmu ', ['testmu']))?.ok, true);
+  await assert.rejects(
+    allocate('a b', ['testmu']),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+});

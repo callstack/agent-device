@@ -173,6 +173,7 @@ test('artifacts refuses a provider session returned after a canceled allocation 
         sessionName: 'artifact-test',
         sessionStore: world.sessionStore,
         leaseRegistry: world.leaseRegistry,
+        providerRuntimeIds: [CLOUD_PROVIDER],
         leaseLifecycleProvider: world.lifecycle,
       }),
       isRequestCanceledError,
@@ -256,6 +257,7 @@ async function allocateLease(world: World, tenantId: string, runId: string): Pro
     sessionName: 'artifact-test',
     sessionStore: world.sessionStore,
     leaseRegistry: world.leaseRegistry,
+    providerRuntimeIds: [CLOUD_PROVIDER],
     leaseLifecycleProvider: world.lifecycle,
   });
   assert.equal(response?.ok, true);
@@ -276,6 +278,7 @@ async function releaseLease(world: World, lease: DeviceLease): Promise<void> {
     sessionName: 'artifact-test',
     sessionStore: world.sessionStore,
     leaseRegistry: world.leaseRegistry,
+    providerRuntimeIds: [CLOUD_PROVIDER],
     leaseLifecycleProvider: world.lifecycle,
   });
   assert.equal(response?.ok, true);

@@ -6,15 +6,17 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readVersion } from '@agent-device/host-kit/version';
+import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { resolveLocalDaemonCodeIdentity, type DaemonTakeoverCause } from './daemon-launch-spec.ts';
 
-// The three ways an explicit lifecycle stops short of a usable daemon. Callers branch on
+// The four ways an explicit lifecycle stops short of a usable daemon. Callers branch on
 // `details.reason`, so each reason is one constant here and the messages are free to change.
 const DAEMON_LIFECYCLE_REASONS = {
   notRunning: 'daemon-not-running',
   incompatible: 'daemon-incompatible',
   busy: DAEMON_QUIESCE_REASONS.busy,
+  drainTimeout: 'daemon-drain-timeout',
 } as const;
 
 export function daemonIdentityOf(info: DaemonInfo): DaemonIdentity {
@@ -77,6 +79,23 @@ export async function daemonIncompatibleError(params: {
     client: await readClientIdentity(),
     hint: `Stop it with ${daemonStopCommand(stateDir)}, then retry. SDK clients call ensureDaemon() to start a compatible one.`,
   });
+}
+
+export async function daemonDrainTimeoutError(
+  info: DaemonInfo,
+  settings: Pick<DaemonClientSettings, 'paths'>,
+): Promise<AppError> {
+  const stateDir = settings.paths.baseDir;
+  return new AppError(
+    'COMMAND_FAILED',
+    'The daemon accepted the request to leave but is still running.',
+    {
+      reason: DAEMON_LIFECYCLE_REASONS.drainTimeout,
+      stateDir,
+      daemon: daemonIdentityOf(info),
+      hint: `It was not signaled. Retry once it has exited, or stop it deliberately with ${daemonStopCommand(stateDir)}.`,
+    },
+  );
 }
 
 export function daemonBusyError(
