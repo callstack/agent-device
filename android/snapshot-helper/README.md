@@ -51,6 +51,11 @@ invocations can pass `0` when immediate capture during ongoing animation is pref
 acquisition has a separate 500 ms stabilization bound that is used only when no root is available or
 an active/focused window is temporarily missing its root; complete captures pay no additional wait.
 
+Child reads run in batches of up to eight on a shared worker pool. This lets Android serve
+multiple accessibility requests between animation frames on busy apps. XML retains depth-first
+child order and the same depth/node limits. Each capture still clears the accessibility cache;
+results are not reused across captures.
+
 ## One-Shot Modes
 
 Passing `-e mode snapshot|viewport|gesture` selects what a single instrumentation run does; `snapshot`

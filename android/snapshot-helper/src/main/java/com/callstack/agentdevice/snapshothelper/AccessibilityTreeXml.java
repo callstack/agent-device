@@ -112,20 +112,26 @@ final class AccessibilityTreeXml {
     }
 
     xml.append(">");
-    for (int index = 0; index < childCount; index += 1) {
-      if (stats.nodeCount >= maxNodes) {
-        stats.truncated = true;
-        break;
+    int index = 0;
+    while (index < childCount && stats.nodeCount < maxNodes) {
+      int count = Math.min(
+          AccessibilityReadBatch.MAX_READS, Math.min(childCount - index, maxNodes - stats.nodeCount));
+      int offset = 0;
+      try (AccessibilityReadBatch<AccessibilityNodeInfo> children =
+          new AccessibilityReadBatch<>(
+              index, count, childIndex -> AccessibilityNodeReads.child(node, childIndex),
+              AccessibilityNodeInfo::recycle)) {
+        for (; offset < count && stats.nodeCount < maxNodes; offset += 1) {
+          AccessibilityNodeInfo child = children.get(offset);
+          if (child != null) {
+            appendNode(xml, child, index + offset, depth + 1, maxDepth, maxNodes, stats, null);
+          }
+        }
       }
-      AccessibilityNodeInfo child = AccessibilityNodeReads.child(node, index);
-      if (child == null) {
-        continue;
-      }
-      try {
-        appendNode(xml, child, index, depth + 1, maxDepth, maxNodes, stats, null);
-      } finally {
-        child.recycle();
-      }
+      index += offset;
+    }
+    if (index < childCount) {
+      stats.truncated = true;
     }
     xml.append("</node>");
   }
