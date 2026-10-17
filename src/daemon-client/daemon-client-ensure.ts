@@ -142,8 +142,9 @@ async function replaceIncompatible(
  *
  * Only a daemon still alive after the deadline is escalated, and only if it answers no liveness
  * probe. A retirement signals only a process whose command line is a daemon entry (see
- * `stopDaemonProcess`), so an embedded host registered by some other process is never signaled
- * here: it ends in `daemon-drain-timeout` instead.
+ * `stopDaemonProcess`), so a process whose identity cannot be proven to be a daemon, such as an
+ * embedded host registered by some other process, is never signaled here: it ends in
+ * `daemon-drain-timeout` instead.
  */
 async function awaitDrainedDaemon(
   info: DaemonInfo,
@@ -171,7 +172,10 @@ async function awaitDrainedDaemon(
   }
 }
 
-/** The daemon-process identity check refused to signal a live process that is not a daemon entry. */
+/**
+ * The identity check could not prove the live process is the daemon it observed (an embedded host
+ * runs no daemon entry; a start time or command line may also be unreadable), so nothing was signaled.
+ */
 function isRefusalToSignalNonDaemon(error: unknown): boolean {
   if (!(error instanceof AppError) || error.details?.reason !== 'daemon_retirement_unconfirmed') {
     return false;
