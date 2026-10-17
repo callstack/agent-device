@@ -201,16 +201,10 @@ its owner: the route owner-file claims sit beside the per-command claims in
 `@agent-device/command-registry/owner-files`, and the wire request and response types come from
 `@agent-device/contracts/command` and `@agent-device/kernel/contracts`.
 
-Root tests that still drive daemon internals reach them through transitional `./testing/`
-entries: named `./testing/<module>` entries for production modules, named `./testing/<fixture>`
-entries, and per fixture folder a `./testing/<dir>/*` pattern. Each batch of tests that moves into
-`packages/daemon/src`, where they import their subject relatively, deletes the entries it frees.
-R11 refuses any `./testing/` import from a non-test file, so root production code cannot import
-a module the package publishes for tests (a package test double reached through the boundary is
-production code depending on a fake). `resolveWorkspaceSpecifier` (layering model) owns Node's
-exports semantics — the layering edges, the depgraph, mutation ownership, and R11's named-surface
-check call it, and the Stryker alias table orders its Vite first-match list to resolve in exactly
-its order — so every lane gives a specifier the module id Node's exports resolution gives it.
+The package now exports exactly `.`. The layering entry-surface rule pins that export to
+`src/index.ts` and rejects `export *` there; R83 reports no daemon test-only exports. Package tests
+import internal subjects relatively, while composed root tests reach the daemon through
+`startDaemonRuntime` from the package entry. R11 owns resolution of workspace package specifiers.
 
 ## Refuted alternatives
 

@@ -1,12 +1,4 @@
-// Catches: `@agent-device/test-kit` growing a second entry, a star re-export, or a dependency on
-//   the code it exists to test. test-kit is the one home of test helpers shared across packages and
-//   every helper is a named export of its single entry, so a fixture that needs a platform,
-//   provider, daemon or root module's code is a test of that package and belongs in it.
-// Evidence: the single-entry test-kit loads every helper eagerly, so a second entry or a star
-//   re-export would publish a module's whole surface into every test's import graph.
-// Cost: one pass over the tracked manifests and test-kit's entry.
-// Kill criterion: a maintainer decision that test-kit may expose subpath entries or depend on
-//   platform, provider, daemon or root code.
+// Catches extra package entries and star re-exports on test-kit and daemon.
 //
 // Part of R83 package-export-surface. The dependency, import and reference-cycle half is the
 // shared walk in package-isolation.ts under TEST_KIT_ISOLATION.
@@ -21,6 +13,13 @@ import {
 
 const TEST_KIT_DIR = TEST_KIT_ISOLATION.dir;
 const TEST_KIT_ENTRY = './src/index.ts';
+const DAEMON_DIR = 'packages/daemon';
+const DAEMON_PACKAGE = '@agent-device/daemon';
+
+const ENTRY_SURFACES = [
+  { packageName: TEST_KIT_PACKAGE, dir: TEST_KIT_DIR, entry: TEST_KIT_ENTRY },
+  { packageName: DAEMON_PACKAGE, dir: DAEMON_DIR, entry: './src/index.ts' },
+] as const;
 
 function stringLeaves(value: unknown): string[] {
   if (typeof value === 'string') return [value];
@@ -32,48 +31,59 @@ function violation(file: string, message: string, line = 1): LayeringViolation {
   return { rule: PACKAGE_EXPORT_SURFACE_RULE, file, line, message };
 }
 
-/**
- * The shape of the one shared test package: a single `.` entry that names its exports, plus the
- * shared isolation walk (no platform, provider, daemon or root package reached directly, through
- * other packages or by import; no package it reaches declaring it back).
- */
-export function checkTestKitIsolation(
+/** Keeps test-kit and daemon on one named public entry; test-kit also runs the isolation walk. */
+export function checkPackageEntrySurfaces(
   manifests: ParsedManifests,
   sources: ReadonlyMap<string, string>,
 ): LayeringViolation[] {
-  const violations: LayeringViolation[] = [];
   const testKitFile = `${TEST_KIT_DIR}/package.json`;
-  const testKit = manifests.get(testKitFile);
-  if (!testKit) return violations;
+  const violations = ENTRY_SURFACES.flatMap((entrySurface) =>
+    checkEntrySurface(entrySurface, manifests, sources),
+  );
+  if (manifests.has(testKitFile)) {
+    violations.push(...checkPackageIsolation(manifests, sources, TEST_KIT_ISOLATION));
+  }
+  return violations;
+}
 
-  const exported = (testKit.exports as Record<string, unknown> | undefined) ?? {};
+function checkEntrySurface(
+  entrySurface: (typeof ENTRY_SURFACES)[number],
+  manifests: ParsedManifests,
+  sources: ReadonlyMap<string, string>,
+): LayeringViolation[] {
+  const manifestFile = `${entrySurface.dir}/package.json`;
+  const manifest = manifests.get(manifestFile);
+  if (!manifest) return [];
+
+  const violations: LayeringViolation[] = [];
+  const exported = (manifest.exports as Record<string, unknown> | undefined) ?? {};
   const exportKeys = Object.keys(exported);
   const entryTargets = stringLeaves(exported['.']);
   if (
     exportKeys.length !== 1 ||
     exportKeys[0] !== '.' ||
     entryTargets.length === 0 ||
-    entryTargets.some((target) => target !== TEST_KIT_ENTRY)
+    entryTargets.some((target) => target !== entrySurface.entry)
   ) {
     violations.push(
       violation(
-        testKitFile,
-        `${TEST_KIT_PACKAGE} exports exactly "." and every condition of it is ${TEST_KIT_ENTRY} ` +
-          `(found ${exportKeys.join(', ') || 'none'} -> ${entryTargets.join(', ') || 'nothing'}): a ` +
-          `shared helper is a named export of src/index.ts, not a subpath.`,
+        manifestFile,
+        `${entrySurface.packageName} exports exactly "." and every condition of it is ` +
+          `${entrySurface.entry} (found ${exportKeys.join(', ') || 'none'} -> ` +
+          `${entryTargets.join(', ') || 'nothing'}).`,
       ),
     );
   }
-  violations.push(...checkPackageIsolation(manifests, sources, TEST_KIT_ISOLATION));
 
-  const entrySource = sources.get(`${TEST_KIT_DIR}/src/index.ts`);
+  const entryFile = `${entrySurface.dir}/src/index.ts`;
+  const entrySource = sources.get(entryFile);
   const starExport = entrySource === undefined ? null : /^[ \t]*export\s*\*/m.exec(entrySource);
   if (entrySource !== undefined && starExport) {
     const line = entrySource.slice(0, starExport.index).split('\n').length;
     violations.push(
       violation(
-        `${TEST_KIT_DIR}/src/index.ts`,
-        `${TEST_KIT_PACKAGE} names every export explicitly: \`export *\` would publish a module's whole surface.`,
+        entryFile,
+        `${entrySurface.packageName} names every export explicitly: \`export *\` is forbidden.`,
         line,
       ),
     );
