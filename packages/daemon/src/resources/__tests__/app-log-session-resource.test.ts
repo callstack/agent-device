@@ -8,9 +8,10 @@ import {
   createAppLogLiveHandleFromFinish,
   createAppLogStartResult,
   createDurableResourceEnvelope,
+  createAppLogLiveHandle,
 } from '@agent-device/capture-kit';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
-import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
@@ -433,7 +434,7 @@ test.each(['rebuild', 'retire', 'replace-resource'] as const)(
         result: { backend: 'android' as const, outputPath: '/tmp/app.log', completedAt: 2 },
       };
     });
-    const handle = createTestAppLogLiveHandle({
+    const handle = createAppLogLiveHandle({
       inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
       finish,
       forceCleanup: async () => ({ status: 'cleaned' }),
@@ -510,7 +511,7 @@ function makeStartResult(
   envelopeDevice?: Parameters<typeof createDurableResourceEnvelope>[0]['device'],
 ) {
   const forceCleanup = vi.fn(async () => cleanup);
-  const handle = createTestAppLogLiveHandle({
+  const handle = createAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
     finish: async () => ({
       status: 'completed',

@@ -3,7 +3,6 @@
 // '@agent-device/test-kit', never from a file path.
 
 export { assertRejectsAppError, assertThrowsAppError } from './app-error.ts';
-export { createTestAppLogLiveHandle } from './app-log-live-handle.ts';
 export {
   BOUNDARY_COMMAND_CLASSES,
   BOUNDARY_FAULT_MATRIX,

@@ -11,9 +11,8 @@ import {
   localRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { createDurableResourceEnvelope, createAppLogLiveHandle } from '@agent-device/capture-kit';
 import {
-  createTestAppLogLiveHandle,
   mkdtempForTestSync,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from '@agent-device/test-kit';
@@ -395,7 +394,7 @@ function createHandle(
     status: 'cleaned',
   })),
 ) {
-  return createTestAppLogLiveHandle({
+  return createAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'recovering', startedAt: 1 }),
     finish: async () => ({
       status: 'completed',

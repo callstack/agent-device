@@ -12,7 +12,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { BLACK, RED, WHITE, paintPng, solidPng } from '../png-pixels.fixtures.ts';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
-import { bindTestCommandHost } from '../host-environment.fixtures.ts';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { decodePng } from '../png.ts';
 import { mp4Atom, mp4MovieHeader } from './mp4.fixtures.ts';
 import { writeDecodedFrames, type StubFrame } from './contact-sheet.fixtures.ts';

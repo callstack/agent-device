@@ -7,7 +7,7 @@ import {
 } from './contact-sheet-report.ts';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
-import { bindTestCommandHost } from '../host-environment.fixtures.ts';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { solidPng } from '../png-pixels.fixtures.ts';
 import { writeDecodedFrames, type StubFrame } from './contact-sheet.fixtures.ts';
 import { extractRecordingFrames } from './contact-sheet-frames.ts';

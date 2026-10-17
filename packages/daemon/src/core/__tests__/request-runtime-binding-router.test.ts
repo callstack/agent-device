@@ -13,9 +13,12 @@ import {
   localRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import {
-  createTestAppLogLiveHandle,
+  createAppLogStartResult,
+  createDurableResourceEnvelope,
+  createAppLogLiveHandle,
+} from '@agent-device/capture-kit';
+import {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
@@ -172,7 +175,7 @@ function request(positionals: string[]) {
 function makeGateway(disposeError?: Error) {
   const owner = localRuntimeOwner('android');
   const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
-  const handle = createTestAppLogLiveHandle({
+  const handle = createAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
     finish: async () => ({
       status: 'completed',

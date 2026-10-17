@@ -49,20 +49,32 @@ test("the runner is spawned detached onto its own log file, not onto this proces
   assert.equal(args[args.indexOf('-derivedDataPath') + 1], '/tmp/runner-derived');
 });
 
-test('the detached runner gets its environment and working directory as plain values', () => {
-  mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
-  const host = { env: { FROM_HOST: 'yes' }, cwd: '/tmp/host-cwd' };
-  appleRunnerTestHost.update({ hostEnvironment: () => host });
+test('the detached runner starts in the bound host environment and directory, not the process', async () => {
+  const root = mkdtempForTestSync('runner-launch-host-');
+  const bin = path.join(root, 'bin');
+  const cwd = path.join(root, 'cwd');
+  const evidence = path.join(root, 'evidence.txt');
+  fs.mkdirSync(bin);
+  fs.mkdirSync(cwd);
+  fs.writeFileSync(
+    path.join(bin, 'xcodebuild'),
+    '#!/bin/sh\nprintf "%s\\n%s\\n" "$FROM_HOST" "$PWD" > "$EVIDENCE"\n',
+    { mode: 0o755 },
+  );
+  appleRunnerTestHost.update({
+    runCmdBackground: appleRunnerTestHost.defaults().runCmdBackground,
+    hostEnvironment: () => ({ env: { PATH: bin, FROM_HOST: 'yes', EVIDENCE: evidence }, cwd }),
+  });
 
-  launchRunnerProcess({
+  const launched = launchRunnerProcess({
     device: IOS_SIMULATOR,
     xctestrunPath: '/tmp/runner.xctestrun',
     derivedPath: '/tmp/runner-derived',
     logPath: runnerLogPath(),
   });
+  await launched.wait;
 
-  const options = mockRunCmdBackground.mock.calls[0]?.[2] as { env?: unknown; cwd?: string };
-  assert.deepEqual({ env: options.env, cwd: options.cwd }, host);
+  assert.equal(fs.readFileSync(evidence, 'utf8'), `yes\n${fs.realpathSync(cwd)}\n`);
 });
 
 test('test-without-building resolves a scoped-set simulator in its own set', () => {

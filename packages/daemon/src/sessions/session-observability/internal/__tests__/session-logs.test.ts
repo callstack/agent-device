@@ -12,11 +12,14 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
-  createTestAppLogLiveHandle,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
-import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import {
+  createAppLogStartResult,
+  createDurableResourceEnvelope,
+  createAppLogLiveHandle,
+} from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -345,7 +348,7 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
     status: 'cleaned',
   }));
   const start = vi.fn<AppLogRuntimeOperations['appLogStart']>(async (input) => {
-    const handle = createTestAppLogLiveHandle({
+    const handle = createAppLogLiveHandle({
       inspect: () => ({
         backend: 'ios-simulator',
         state: 'active',

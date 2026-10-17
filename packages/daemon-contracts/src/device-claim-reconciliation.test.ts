@@ -3,7 +3,7 @@ import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-r
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { createDurableResourceEnvelope, createAppLogLiveHandle } from '@agent-device/capture-kit';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type DeviceRuntimeGateway,
@@ -11,7 +11,6 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
-  createTestAppLogLiveHandle,
   mkdtempForTestSync,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from '@agent-device/test-kit';
@@ -42,7 +41,7 @@ test('reconciles the dead owner session resources through their exact runtime ow
     }),
   );
   const forceCleanup = vi.fn(async () => ({ status: 'cleaned' as const }));
-  const handle = createTestAppLogLiveHandle({
+  const handle = createAppLogLiveHandle({
     inspect: () => ({ backend: 'android', state: 'recovering', startedAt: 1 }),
     finish: async () => ({
       status: 'completed',

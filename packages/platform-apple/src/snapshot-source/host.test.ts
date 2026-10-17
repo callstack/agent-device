@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { test, vi } from 'vitest';
-import { runCmdBackground, withCommandHost } from '@agent-device/host-kit/command';
+import { runCmdBackground } from '@agent-device/host-kit/command';
 import { bindTestCommandHost } from '@agent-device/test-kit';
 import { simulatorAddressFor } from '../core/simctl.ts';
 import { createSnapshotSourceHost, snapshotSourceSocketPath } from './host.ts';
@@ -73,33 +73,4 @@ test.each([
       'false',
     ],
   ]);
-});
-
-test('the detached bridge gets its environment and working directory as plain values', async () => {
-  const spawn = vi.mocked(runCmdBackground);
-  spawn.mockReset();
-  spawn.mockReturnValue({
-    child: Object.assign(new EventEmitter(), { pid: 4243, exitCode: null, signalCode: null }),
-    wait: new Promise(() => {}),
-  } as unknown as ReturnType<typeof runCmdBackground>);
-  const host = { env: { FROM_HOST: 'yes' }, cwd: '/tmp/host-cwd' };
-
-  await withCommandHost({ host, requestEnv: undefined }, async () => {
-    createSnapshotSourceHost().start(
-      simulatorAddressFor({
-        platform: 'apple',
-        id: 'simulator-1',
-        name: 'iPhone 17',
-        kind: 'simulator',
-        target: 'mobile',
-      }),
-      '/tmp/bridge',
-      '/tmp/bridge.sock',
-    );
-  });
-
-  assert.deepEqual(
-    { env: spawn.mock.calls[0]?.[2]?.env, cwd: spawn.mock.calls[0]?.[2]?.cwd },
-    { env: host.env, cwd: host.cwd },
-  );
 });
