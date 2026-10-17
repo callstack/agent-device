@@ -159,9 +159,20 @@ test('runChecks passes the selector change set to Vitest related', async () => {
     changedFiles,
   });
   assert.equal(code, 0);
+  // The measured test file also brings the test-file size ratchet's own test along: it reads
+  // files as text, so the module graph Vitest walks never reaches it (#3787).
   assert.deepEqual(
     executed.find((command) => command.includes('related')),
-    ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles],
+    [
+      'pnpm',
+      'exec',
+      'vitest',
+      'related',
+      '--run',
+      '--passWithNoTests',
+      ...changedFiles,
+      'scripts/__tests__/test-file-size-ratchet.test.ts',
+    ],
   );
 });
 

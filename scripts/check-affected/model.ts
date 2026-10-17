@@ -21,6 +21,10 @@
 
 import { WIRE_SURFACE_FILES } from '../../test/wire-compat/surface.ts';
 import { deviceLaneOwnership } from './device-lanes.ts';
+import {
+  isTestFileSizeRatchetMeasured,
+  TEST_FILE_SIZE_RATCHET_TEST_FILE,
+} from '../lib/test-file-size-ratchet-scope.ts';
 
 // The canonical gate universe. Every gate CI runs is one of these — including the
 // ones that drive their own runner (fuzz, mutation, the Maestro differential) and
@@ -365,6 +369,46 @@ const replayCompatOwnership: OwnershipRule = ({ file }) => {
 // `ledger.json` needs the rule for the second reason `.ad` corpus data does:
 // a non-.ts file under test/ resolves to `format` alone and would fail open.
 // (`scripts/wire-compat/` needs no branch — all of scripts/ already fails open.)
+// The test-file size ratchet (scripts/__tests__/test-file-size-ratchet.test.ts) reads test files
+// as TEXT: it walks the tree and counts lines, so it imports nothing the diff touches and is
+// invisible to the module graph `vitest-related` walks (#3787). A measured file therefore selects
+// the ratchet's own test through the related run, with the changed file named as the trigger.
+// Composing on the two rules that select `vitest-related` keeps the reason on files that already
+// reach the related run: a measured file no rule can place (a `.test.mjs` under `test/`) keeps
+// failing open, and this rule cannot narrow or widen any file's plan. `vitestRelatedRunFiles`
+// still carries the ratchet into the run for those files.
+function reachesRelatedRun(facts: FileFacts, input: SelectInput): boolean {
+  return (
+    vitestRelatedOwnership(facts, input).length > 0 ||
+    workspacePackageOwnership(facts, input).length > 0
+  );
+}
+
+const testFileSizeRatchetOwnership: OwnershipRule = (facts, input) =>
+  isTestFileSizeRatchetMeasured(facts.file) && reachesRelatedRun(facts, input)
+    ? [
+        reason(
+          'vitest-related',
+          facts.file,
+          'own:test-file-size-ratchet',
+          'the test-file size ratchet counts this file as text the module graph never reaches',
+        ),
+      ]
+    : [];
+
+// The files `vitest-related` receives: the change set, plus the ratchet's own test when any
+// changed file is measured. The ratchet test runs itself instead of being added twice.
+export function vitestRelatedRunFiles(changedFiles: readonly string[]): string[] {
+  const files = [...changedFiles];
+  if (
+    !files.includes(TEST_FILE_SIZE_RATCHET_TEST_FILE) &&
+    files.some((file) => isTestFileSizeRatchetMeasured(file))
+  ) {
+    files.push(TEST_FILE_SIZE_RATCHET_TEST_FILE);
+  }
+  return files;
+}
+
 const daemonWireCompatOwnership: OwnershipRule = ({ file }) => {
   if (!file.startsWith('test/wire-compat/') && !WIRE_SURFACE_FILES.includes(file)) return [];
   return [
@@ -612,6 +656,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   platformPackageScenarioOwnership,
   nodeIntegrationOwnership,
   macosCoverageOwnership,
+  testFileSizeRatchetOwnership,
   testAppOwnership,
   replayCompatOwnership,
   daemonWireCompatOwnership,

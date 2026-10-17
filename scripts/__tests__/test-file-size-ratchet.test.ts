@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { walkFiles } from '../lib/walk-files.ts';
+import {
+  isTestFileSizeRatchetMeasured,
+  TEST_FILE_SIZE_RATCHET_ROOTS,
+  TEST_FILE_SIZE_RATCHET_TRIPWIRE_LINES as TRIPWIRE_LINES,
+} from '../lib/test-file-size-ratchet-scope.ts';
 import { runCmdSync } from '@agent-device/host-kit/command';
 
 /**
@@ -24,20 +29,7 @@ import { runCmdSync } from '@agent-device/host-kit/command';
  *   the merge-base; delete this file when that holds.
  */
 
-const TRIPWIRE_LINES = 1_000;
-
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..');
-const TEST_ROOTS = ['src', 'packages', 'test', 'scripts'];
-const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist', 'dist-types', '.tmp']);
-const TEST_FILE = /\.test\.(?:ts|tsx|mjs)$/;
-
-function isTestFile(file: string): boolean {
-  if (!TEST_FILE.test(file)) return false;
-  return !path
-    .relative(REPO_ROOT, file)
-    .split(path.sep)
-    .some((part) => SKIPPED_DIRECTORIES.has(part));
-}
 
 /** Line count as `wc -l` reports it: newline characters. */
 function countLines(file: string): number {
@@ -139,8 +131,10 @@ function ratchetFindings(
 
 test('no test file over the tripwire is longer than at the merge-base, and no new file crosses it', () => {
   const measured = new Map<string, number>();
-  for (const root of TEST_ROOTS) {
-    for (const file of walkFiles(path.join(REPO_ROOT, root), isTestFile)) {
+  for (const root of TEST_FILE_SIZE_RATCHET_ROOTS) {
+    for (const file of walkFiles(path.join(REPO_ROOT, root), (candidate) =>
+      isTestFileSizeRatchetMeasured(candidate, REPO_ROOT),
+    )) {
       measured.set(path.relative(REPO_ROOT, file).split(path.sep).join('/'), countLines(file));
     }
   }

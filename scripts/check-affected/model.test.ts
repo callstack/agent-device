@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { assertCatalogComplete, CHECK_CATALOG, resolveCommand } from './checks.ts';
 import { ALL_CHECKS, selectChecks, type CheckId, type SelectInput } from './model.ts';
+import { TEST_FILE_SIZE_RATCHET_TEST_FILE } from '../lib/test-file-size-ratchet-scope.ts';
 
 function plan(changedFiles: string[], extra: Partial<SelectInput> = {}) {
   return selectChecks({
@@ -16,6 +17,13 @@ function plan(changedFiles: string[], extra: Partial<SelectInput> = {}) {
 
 function ids(changedFiles: string[]): CheckId[] {
   return plan(changedFiles).checks;
+}
+
+// The file list the `vitest-related` command actually receives for a changeset.
+function relatedRunFiles(changedFiles: string[]): string[] {
+  const related = CHECK_CATALOG.find((entry) => entry.id === 'vitest-related')!;
+  const command = resolveCommand(related, {}, 'origin/main', changedFiles);
+  return command.slice(command.indexOf('--passWithNoTests') + 1);
 }
 
 test('production source selects static/build gates and delegates tests to Vitest', () => {
@@ -293,6 +301,62 @@ test('a non-.ts fixture under an owned root fails open (format alone is not owne
   assert.equal(result.failOpen, true);
   assert.deepEqual(result.checks, [...ALL_CHECKS]);
   assert.equal(result.failOpenReasons[0]?.rule, 'ambiguous-path');
+});
+
+test('a measured test file selects the size ratchet with the triggering file as its reason (#3787)', () => {
+  // The ratchet counts test-file lines as text, so it imports nothing the diff touches and the
+  // module graph never reaches it (#3787). A changed measured file must add the ratchet's own
+  // test to the related run, and the reason must name the file that triggered it.
+  const trigger = 'packages/platform-apple/src/lifecycle.test.ts';
+  const result = plan([trigger]);
+  assert.equal(result.failOpen, false, trigger);
+  assert.deepEqual(
+    result.reasons.filter((reason) => reason.rule === 'own:test-file-size-ratchet'),
+    [
+      {
+        check: 'vitest-related',
+        path: trigger,
+        rule: 'own:test-file-size-ratchet',
+        detail:
+          'the test-file size ratchet counts this file as text the module graph never reaches',
+      },
+    ],
+  );
+  // All three measured extensions trigger it.
+  for (const file of [
+    'src/replay/session.test.ts',
+    'packages/daemon/src/handlers.test.tsx',
+    'test/ci/trusted-fixture-artifact.test.mjs',
+  ]) {
+    assert.deepEqual(
+      relatedRunFiles([file]),
+      [file, TEST_FILE_SIZE_RATCHET_TEST_FILE],
+      `${file} must add the ratchet test`,
+    );
+  }
+  // Editing the ratchet test itself runs it once, not twice.
+  assert.deepEqual(relatedRunFiles([TEST_FILE_SIZE_RATCHET_TEST_FILE]), [
+    TEST_FILE_SIZE_RATCHET_TEST_FILE,
+  ]);
+});
+
+test('a change the size ratchet does not measure adds nothing to the related run (#3787)', () => {
+  for (const file of [
+    // The closest negatives: production source beside a measured twin, a support module whose
+    // directory only looks like a test, a test file outside the measured roots, and build output.
+    'packages/platform-apple/src/lifecycle.ts',
+    'src/__tests__/test-utils/session.ts',
+    'examples/test-app/security/image-size-security.test.mjs',
+    'packages/kernel/dist/lifecycle.test.ts',
+    'src/generated/node_modules/dep/lifecycle.test.ts',
+  ]) {
+    assert.deepEqual(relatedRunFiles([file]), [file], `${file} must not add the ratchet test`);
+    assert.deepEqual(
+      plan([file]).reasons.filter((reason) => reason.rule === 'own:test-file-size-ratchet'),
+      [],
+      `${file} must not contribute a ratchet reason`,
+    );
+  }
 });
 
 test('a frozen replay-compat corpus script selects the unit lane and the provenance verifier', () => {

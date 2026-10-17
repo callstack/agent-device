@@ -9,7 +9,7 @@
 // workflows by scripts/gate/model.ts, so the "GitHub-authoritative" claim an
 // agent reads before skipping a check locally cannot go stale.
 
-import { ALL_CHECKS, type CheckId } from './model.ts';
+import { ALL_CHECKS, vitestRelatedRunFiles, type CheckId } from './model.ts';
 
 export type CheckKind =
   | { readonly type: 'script'; readonly script: string }
@@ -193,7 +193,15 @@ export function resolveCommand(
   changedFiles: readonly string[] = [],
 ): string[] {
   if (spec.kind.type === 'vitest-related') {
-    return ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles];
+    return [
+      'pnpm',
+      'exec',
+      'vitest',
+      'related',
+      '--run',
+      '--passWithNoTests',
+      ...vitestRelatedRunFiles(changedFiles),
+    ];
   }
   const { script } = spec.kind;
   if (!(script in scripts)) {
