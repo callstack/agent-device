@@ -505,16 +505,22 @@ extension RunnerTests {
             return (nil, .completed)
           }
           keyboardBand = context.keyboardBand
+          let processingSlice = min(self.treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow))
+          let processingDeadline = Date().addingTimeInterval(processingSlice)
           let tree = try self.runMainThreadWork(
             "tree_processing",
-            timeout: min(self.treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
+            timeout: processingSlice,
             timeoutError: self.snapshotMainThreadTimeoutError("processing tree snapshot")
           ) {
             hint.isRaw
-              ? try self.rawTreeSnapshotAcquisition(context: context, hint: hint)
-              : try self.recursiveTreeSnapshotAcquisition(context: context, hint: hint)
+              ? (try self.rawTreeSnapshotAcquisition(context: context, hint: hint), .completed)
+              : try self.recursiveTreeSnapshotAcquisition(
+                context: context,
+                hint: hint,
+                processingDeadline: processingDeadline
+              )
           }
-          return (tree, .completed)
+          return (tree.acquisition, tree.outcome)
         case .querySweep:
           let sliceDeadline = Self.querySweepSliceDeadline(startedAt: Date(), planDeadline: deadline)
           let sweep = try self.runMainThreadWork(

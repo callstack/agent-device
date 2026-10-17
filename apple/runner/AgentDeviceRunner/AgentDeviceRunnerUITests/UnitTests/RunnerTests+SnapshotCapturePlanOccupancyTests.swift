@@ -70,6 +70,37 @@ private final class RunnerSlowSweepQueryStub: NSObject {
   }
 }
 
+/// Per-run state for `RunnerSlowRootSnapshotStub`: the swizzled IMP cannot capture the original
+/// implementation or a test-local flag.
+private enum RunnerSlowRootSnapshotGate {
+  /// Longer than half the plan deadline the test passes, so whatever slice is left after the root
+  /// read is shorter than the read itself, while the real read still has most of `delay` to finish.
+  static let delay: TimeInterval = 3
+  static var original: IMP?
+  static var delayed = false
+}
+
+/// Stands in for `-[XCUIElement snapshotWithError:]` so the capture's root read, the plan's first
+/// tree snapshot, takes at least `RunnerSlowRootSnapshotGate.delay` and then reads the real tree.
+private final class RunnerSlowRootSnapshotStub: NSObject {
+  @objc(snapshotWithError:)
+  func snapshot() throws -> XCUIElementSnapshot {
+    if !RunnerSlowRootSnapshotGate.delayed {
+      RunnerSlowRootSnapshotGate.delayed = true
+      Thread.sleep(forTimeInterval: RunnerSlowRootSnapshotGate.delay)
+    }
+    typealias Read = @convention(c) (
+      AnyObject, Selector, AutoreleasingUnsafeMutablePointer<NSError?>?
+    ) -> XCUIElementSnapshot?
+    let read = unsafeBitCast(RunnerSlowRootSnapshotGate.original, to: Read.self)
+    var error: NSError?
+    guard let snapshot = read(self, #selector(XCUIElement.snapshot), &error) else {
+      throw error ?? NSError(domain: "AgentDeviceRunner.tests", code: 2)
+    }
+    return snapshot
+  }
+}
+
 extension RunnerTests {
   /// The Bluesky feed shape: the tree XPC grinds past its slice. The plan must recover through
   /// private AX without queueing the query sweep behind the abandoned XPC, and a fresh process's
@@ -445,6 +476,60 @@ extension RunnerTests {
     XCTAssertEqual(quality.reasonCode, "budget")
   }
 
+  /// A childless tab bar makes the tree tier run the collapsed tab query, and a slow root read leaves too
+  /// little of the processing slice for it to start. The plan must treat that tree as a tier that
+  /// ran out of time and move on, not accept the truncated tree as a healthy capture.
+  func testPlanMovesPastATreeTierWhoseCollapsedTabQueryCannotStart() throws {
+    guard
+      let snapshotMethod = class_getInstanceMethod(
+        XCUIApplication.self,
+        #selector(XCUIElement.snapshot)
+      ),
+      let stubMethod = class_getInstanceMethod(
+        RunnerSlowRootSnapshotStub.self,
+        #selector(RunnerSlowRootSnapshotStub.snapshot)
+      )
+    else {
+      XCTFail("unable to install the slow root snapshot stub")
+      return
+    }
+    app.launchArguments = ["--agent-device-crowded-screen", "--agent-device-collapsed-tab-bar"]
+    app.launch()
+    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
+    let captureTarget = MainActor.assumeIsolated {
+      mainOwned.app = app
+      mainOwned.bundleId = "com.callstack.agentdevice.runner.collapsed-tab-query-test"
+      return takeSnapshotCaptureTarget(app: app)
+    }
+    snapshotXCTestPenaltyWarmupExemption.isPending = false
+    clearSnapshotXCTestChannelPenalty(reason: "test-setup")
+    RunnerSlowRootSnapshotGate.delayed = false
+    RunnerSlowRootSnapshotGate.original = method_setImplementation(
+      snapshotMethod,
+      method_getImplementation(stubMethod)
+    )
+    defer {
+      if let original = RunnerSlowRootSnapshotGate.original {
+        method_setImplementation(snapshotMethod, original)
+      }
+      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
+      MainActor.assumeIsolated {
+        invalidateCachedTarget(reason: "unit_test_cleanup")
+      }
+      app.terminate()
+    }
+
+    let payload = try runDeferredPlanOffMain(
+      target: captureTarget,
+      deadline: Date().addingTimeInterval(2 * RunnerSlowRootSnapshotGate.delay - 0.2)
+    )
+
+    XCTAssertTrue(RunnerSlowRootSnapshotGate.delayed, "the plan read the root tree through the stub")
+    let quality = try XCTUnwrap(payload.snapshotQuality)
+    XCTAssertEqual(quality.reasonCode, "budget", "the tree tier ran out of its processing slice")
+    XCTAssertNotEqual(quality.state, .healthy, "a tree without its collapsed tab items is not healthy")
+  }
+
   private func launchPenalizedPrivateAXBlindTarget(bundleId: String) throws -> SnapshotCaptureTarget {
     app.launchArguments = ["--agent-device-selector-read-regression"]
     app.launch()
@@ -475,6 +560,7 @@ extension RunnerTests {
   /// returns its payload; `afterPlan` runs on that queue once the plan has answered.
   private func runDeferredPlanOffMain(
     target: SnapshotCaptureTarget,
+    deadline: Date = Date().addingTimeInterval(20),
     afterPlan: @escaping () -> Void = {}
   ) throws -> DataPayload {
     final class ResultBox {
@@ -490,7 +576,7 @@ extension RunnerTests {
           target: target,
           options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
           terminal: .sparseWithFatalOnAXFailure,
-          deadline: Date().addingTimeInterval(20)
+          deadline: deadline
         )
       } catch {
         box.error = error
