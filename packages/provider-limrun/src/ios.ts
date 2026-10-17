@@ -406,6 +406,35 @@ class LimrunIosInteractor implements Interactor {
     const { setLimrunIosSetting } = await import('./ios-settings.ts');
     return await setLimrunIosSetting(this.session, setting, state, appId, options);
   }
+
+  /**
+   * The four alert legs observe through the same element-tree capture the snapshot rides and act
+   * through the same point tap every touch operation rides; `alert.ts` holds the host-root rule
+   * that separates a system alert from the app's own dialog. Loaded on the alert path like the
+   * other seam modules to keep this provider's declared import-time closure budget.
+   */
+  async readAlert(options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
+    const { handleLimrunIosAlert } = await import('./alert.ts');
+    return await handleLimrunIosAlert(this.session.client, 'get', options);
+  }
+
+  async awaitAlert(options?: {
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  }): Promise<Record<string, unknown>> {
+    const { handleLimrunIosAlert } = await import('./alert.ts');
+    return await handleLimrunIosAlert(this.session.client, 'wait', options);
+  }
+
+  async acceptAlert(options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
+    const { handleLimrunIosAlert } = await import('./alert.ts');
+    return await handleLimrunIosAlert(this.session.client, 'accept', options);
+  }
+
+  async dismissAlert(options?: { signal?: AbortSignal }): Promise<Record<string, unknown>> {
+    const { handleLimrunIosAlert } = await import('./alert.ts');
+    return await handleLimrunIosAlert(this.session.client, 'dismiss', options);
+  }
 }
 
 async function prepareLimrunIosAsset(

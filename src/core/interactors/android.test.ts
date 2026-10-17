@@ -98,6 +98,22 @@ test('a device-only session releases the helper after fill and scroll', async ()
   });
 });
 
+test('alert reads ride the session-scope helper, not a per-probe cold start', async () => {
+  // The executed Android smoke failure: an alert probe without the session scope cold-started
+  // the snapshot helper inside the window that bounds the probe, so the post-press confirm read
+  // was aborted before the device answered. Alert captures scope like every other read.
+  snapshotAndroidMock.mockResolvedValue(makeAndroidSnapshotCapture([]));
+  const interactor = createAndroidInteractor(device, undefined, {
+    appBundleId: 'com.example.app',
+  });
+
+  if (!interactor.readAlert) throw new Error('Android interactor must expose readAlert');
+  await interactor.readAlert();
+
+  const options = snapshotAndroidMock.mock.lastCall?.[1];
+  expect(options?.helperSessionScope).toBe('daemon-session');
+});
+
 test('a transient snapshot reaches the Android capture with its settle deadline', async () => {
   snapshotAndroidMock.mockResolvedValue(makeAndroidSnapshotCapture([]));
 

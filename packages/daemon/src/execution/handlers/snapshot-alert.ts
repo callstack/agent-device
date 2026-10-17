@@ -3,7 +3,9 @@ import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import {
   type AlertAction,
   DEFAULT_ALERT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
+  MAX_ALERT_WINDOW_MS,
 } from '@agent-device/contracts/alert-contract';
+import { AppError } from '@agent-device/kernel/errors';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import {
   alertAcceptUse,
@@ -151,7 +153,7 @@ export async function handleAlertCommand(
     session?.trace?.outPath,
   );
   const data = await bound.execute({
-    timeoutMs: parseTimeout(req.positionals?.[1]) ?? DEFAULT_TIMEOUT_MS,
+    timeoutMs: alertWaitTimeoutMs(action, req.positionals?.[1]),
     ...alertTarget(session),
     execution: runtimeExecutionFromContext(context),
   });
@@ -178,4 +180,22 @@ function alertTarget(
 function normalizeAlertAction(action: string | undefined): AlertAction {
   if (action === 'accept' || action === 'dismiss' || action === 'wait') return action;
   return 'get';
+}
+
+/**
+ * The `alert wait` budget before it reaches any leg. Past the contract's window ceiling the
+ * budget cannot be armed as a timer at all, so the command refuses the argument instead of
+ * starting a wait that would misfire; the driver's own default remains the last line for
+ * budgets that arrive by other routes.
+ */
+function alertWaitTimeoutMs(action: AlertAction, rawTimeout: string | undefined): number {
+  const timeoutMs = parseTimeout(rawTimeout) ?? DEFAULT_TIMEOUT_MS;
+  if (action === 'wait' && timeoutMs > MAX_ALERT_WINDOW_MS) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `alert wait timeoutMs exceeds the maximum of ${MAX_ALERT_WINDOW_MS} ms`,
+      { hint: 'Pass a shorter timeout, or run repeated alert waits.' },
+    );
+  }
+  return timeoutMs;
 }

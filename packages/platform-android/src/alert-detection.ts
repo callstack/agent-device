@@ -1,14 +1,20 @@
 import { centerOfRect, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { AlertInfo, AlertSource } from '@agent-device/contracts/alert-contract';
+import {
+  type AlertButtonRole,
+  classifyAlertButtonRole,
+  type AlertInfo,
+  type AlertSource,
+  selectRankedAlertButtonByRole,
+} from '@agent-device/contracts/alert-contract';
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
-
-type AndroidAlertButtonRole = 'accept' | 'dismiss' | 'neutral';
 
 export type AndroidAlertButton = {
   label: string;
   x: number;
   y: number;
-  role: AndroidAlertButtonRole;
+  role: AlertButtonRole;
+  /** The node's resource id — the backend-owned fact that can rank a grant's role. */
+  identifier: string;
 };
 
 type AndroidAlertSource = Extract<AlertSource, 'permission' | 'native-dialog' | 'system-dialog'>;
@@ -43,10 +49,6 @@ const ANDROID_ALERT_BUTTON_ID_PATTERN = /^android:id\/button[123]$/i;
 const ANDROID_PERMISSION_ID_PATTERN = /(?:^|:)id\/permission_/i;
 const ANDROID_BLOCKING_DIALOG_PATTERN =
   /\b(?:is(?:n't| not) responding|keeps stopping|has stopped|close app|app info)\b/i;
-const ACCEPT_LABEL_PATTERN =
-  /^(?:ok|allow|allow all|while using the app|only this time|yes|continue|save|confirm|turn on|open settings)$/i;
-const DISMISS_LABEL_PATTERN =
-  /^(?:cancel|deny|don.t allow|don’t allow|not now|no|dismiss|close|close app|later|skip)$/i;
 
 export function classifyAndroidAlertIdentifier(
   identifier: string | null,
@@ -85,18 +87,51 @@ function isReachableAlertNode(node: RawSnapshotNode): boolean {
   return !isSnapshotNodeInteractionBlocked(node);
 }
 
+/**
+ * Android's acting policy on the shared choice boundary: the action's role-named button chosen
+ * by declared preference — the permissioncontroller grant ids first (foreground-only over
+ * always over one-time, whatever language their labels are in), the shared label vocabulary
+ * where no grant id exists; else, for dismiss, the first neutral button (Android dialogs
+ * commonly name the leaving path only neutrally); else, for accept, a single-button dialog's
+ * only affirmative path. Two choices that tie on one rank (the same label or the same grant id
+ * at two points) or a candidate no rank source reaches refuse at the shared boundary rather
+ * than resolving by tree order — the driver turns that refusal into a Back key for dismiss, or
+ * a typed refusal.
+ */
 export function chooseAndroidAlertButton(
   buttons: AndroidAlertButton[],
   action: 'accept' | 'dismiss',
 ): AndroidAlertButton | null {
-  const role = action === 'accept' ? 'accept' : 'dismiss';
-  const exact = buttons.find((button) => button.role === role);
+  const exact = selectRankedAlertButtonByRole(buttons, action, rankAndroidAlertButtonById);
   if (exact) return exact;
   if (action === 'dismiss') {
     return buttons.find((button) => button.role === 'neutral') ?? null;
   }
   // Single-button Android dialogs commonly expose the only affirmative path as OK.
   return buttons.length === 1 ? (buttons[0] ?? null) : null;
+}
+
+/**
+ * The permissioncontroller grant ids in the order Android's own dialog prefers them: a lasting
+ * foreground grant over an always grant over a one-time grant. Earlier entries outrank later
+ * ones; a lower number wins. These ids reach production on every grant sheet: they are the same
+ * `permission_allow` ids the platform-id classifier already reads (and the ids main tapped),
+ * stable across locales while their labels are not.
+ */
+const ANDROID_GRANT_ID_RANKS: readonly RegExp[] = [
+  /(?:^|:)id\/permission_allow_foreground_only(?:_button)?$/i,
+  /(?:^|:)id\/permission_allow(?:_all_time|_always)?(?:_button)?$/i,
+  /(?:^|:)id\/permission_allow_one_time(?:_button)?$/i,
+];
+
+/**
+ * The backend-owned rank of a button named by a grant id — the label-independent preference the
+ * resource id states. Deny ids carry no declared order (their labels rank them), and any other
+ * id ranks nothing here.
+ */
+function rankAndroidAlertButtonById(button: AndroidAlertButton): number | null {
+  const index = ANDROID_GRANT_ID_RANKS.findIndex((pattern) => pattern.test(button.identifier));
+  return index === -1 ? null : index;
 }
 
 function findAndroidAlertNodes(nodes: RawSnapshotNode[]): {
@@ -153,35 +188,39 @@ function findSystemDialogNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
 }
 
 function findAlertButtons(nodes: RawSnapshotNode[]): AndroidAlertButton[] {
-  const seen = new Set<string>();
+  const seenPhysicalButtons = new Set<string>();
   const buttons: AndroidAlertButton[] = [];
   for (const node of nodes) {
     const label = readNodeText(node);
     if (!label || !node.rect || !isButtonLike(node)) continue;
     const normalized = label.trim().toLowerCase();
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
+    if (!normalized) continue;
     const point = centerOfRect(node.rect);
+    // Two nodes over one center are the one physical button (uiautomator commonly nests it);
+    // the same label at two centers is two buttons, and the shared choice boundary refuses —
+    // collapsing them here would hand the first one back as if the capture had named it.
+    const physicalButton = `${normalized}|${point.x}|${point.y}`;
+    if (seenPhysicalButtons.has(physicalButton)) continue;
+    seenPhysicalButtons.add(physicalButton);
     buttons.push({
       label,
       x: point.x,
       y: point.y,
       role: classifyAndroidAlertButton(node, label),
+      identifier: node.identifier ?? '',
     });
   }
   return buttons;
 }
 
-function classifyAndroidAlertButton(node: RawSnapshotNode, label: string): AndroidAlertButtonRole {
+function classifyAndroidAlertButton(node: RawSnapshotNode, label: string): AlertButtonRole {
   const identifier = node.identifier ?? '';
   const roleFromId = classifyAndroidAlertButtonById(identifier);
   if (roleFromId) return roleFromId;
-  if (ACCEPT_LABEL_PATTERN.test(label.trim())) return 'accept';
-  if (DISMISS_LABEL_PATTERN.test(label.trim())) return 'dismiss';
-  return 'neutral';
+  return classifyAlertButtonRole(label);
 }
 
-function classifyAndroidAlertButtonById(identifier: string): AndroidAlertButtonRole | null {
+function classifyAndroidAlertButtonById(identifier: string): AlertButtonRole | null {
   if (/(?:^|:)id\/button1$/i.test(identifier)) return 'accept';
   if (/(?:^|:)id\/button2$/i.test(identifier)) return 'dismiss';
   if (/(?:^|:)id\/button3$/i.test(identifier)) return 'neutral';

@@ -474,6 +474,8 @@ export type Interactor = {
  */
 export type AlertInteractorOptions = {
   timeoutMs?: number;
+  /** The daemon request's cancellation; owners whose transport can abort thread it into the legs. */
+  signal?: AbortSignal;
   appBundleId?: string;
   surface?: SessionSurface;
 };

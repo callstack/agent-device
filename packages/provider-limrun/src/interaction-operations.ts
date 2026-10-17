@@ -268,22 +268,18 @@ export function limrunClipboardOperationFacts(
   });
 }
 
-const alertUnavailableIos = unavailableFact(
-  'unsupported-provider-mode',
-  'Limrun iOS direct sessions do not expose alert inspection yet.',
-);
-
 /**
  * `alert` splits like every other interaction leaf: the Android leg rides the local family's own
  * interactor factory, which reads the same accessibility dump it always did; the iOS direct
- * session has no XCUITest runner to read a sheet from, so all four legs refuse together.
+ * session reads system alerts out of the same element-tree capture its snapshot rides and presses
+ * their buttons through the same touch seam (issue #3349), so all four legs are available on
+ * both legs of a live session.
  */
 export function limrunAlertOperationFacts(
-  device: DeviceInfo,
+  _device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
-  const cell =
-    liveSessionUnavailable ?? (device.platform === 'android' ? available : alertUnavailableIos);
+  const cell = liveSessionUnavailable ?? available;
   return Object.freeze({
     ...alertRuntimeOperationFacts({ read: cell, wait: cell, accept: cell, dismiss: cell }),
   });
