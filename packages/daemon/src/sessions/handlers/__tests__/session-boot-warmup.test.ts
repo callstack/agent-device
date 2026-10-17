@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import {
   makeSessionStore,
@@ -24,6 +24,7 @@ test('boot leaves Apple keep-hot policy inside the platform runtime', async () =
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

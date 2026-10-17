@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts';
 /**
@@ -189,6 +189,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
   // --- The agent finalizes: `close --save-script` (the real handler, not a
   // direct writer call) commits the now-COMPLETE healed `.ad`. ---
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -254,6 +255,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
   // The agent walks away: a plain `close` (no --save-script) reaches the
   // still repair-armed session — Fix 1/2's "abort/discard", not a commit.
   const abandonedCloseResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -435,6 +437,7 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   const before = fs.readFileSync(path.join(root, 'flow.healed.ad'), 'utf8');
 
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
     sessionName,
@@ -469,6 +472,7 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   // Retry with an explicit path commits cleanly — exactly ONE terminal close.
   const retryPath = path.join(root, 'flow.promoted.ad');
   const retry = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

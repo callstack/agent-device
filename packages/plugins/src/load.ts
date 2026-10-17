@@ -3,34 +3,47 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import { installedPlugins } from './store.ts';
-import {
-  resolvePluginEntry,
-  assertUniquePluginProviders,
-  RESERVED_PLUGIN_PROVIDERS,
-} from './manifest.ts';
+import { resolvePluginEntry, assertUniquePluginProviders } from './manifest.ts';
 import { createPluginHost, type ProviderPluginHost } from './host.ts';
 import type { PluginConnection } from './connection.ts';
-import type { CloudWebDriverProviderOptions } from '@agent-device/provider-webdriver/plugin';
 
-type ProviderPluginRegistration = Readonly<{
+export type ProviderPluginRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
   platformModule: PlatformRuntimeProviderModule;
   connection?: PluginConnection;
 }>;
 
+export type PluginFactoryContext = Readonly<{
+  plugin: Readonly<{ name: string; provider: string }>;
+  host: ProviderPluginHost;
+}>;
+
+/**
+ * What the composing root decides for every load: provider ids a plugin may not claim, and how to
+ * turn a factory result that is not itself a registration into one. `adaptFactoryResult` returns
+ * undefined for a result it does not own, which the loader then validates as a registration.
+ */
+export type PluginLoadPolicy = Readonly<{
+  reservedProviders: readonly string[];
+  adaptFactoryResult(
+    result: unknown,
+    context: PluginFactoryContext,
+  ): ProviderPluginRegistration | undefined | Promise<ProviderPluginRegistration | undefined>;
+}>;
+
 export async function loadProviderPlugins(
   env: NodeJS.ProcessEnv,
-  reservedProviders: readonly string[],
+  policy: PluginLoadPolicy,
   onlyProvider?: string,
 ): Promise<ProviderPluginRegistration[]> {
   const plugins = installedPlugins(env);
-  assertUniquePluginProviders(plugins, reservedProviders);
+  assertUniquePluginProviders(plugins, policy.reservedProviders);
   const registrations: ProviderPluginRegistration[] = [];
   try {
     for (const plugin of plugins.filter(
       (plugin) => onlyProvider === undefined || plugin.agentDevicePlugin.provider === onlyProvider,
     )) {
-      const registration = await instantiateProviderPlugin(plugin, env);
+      const registration = await instantiateProviderPlugin(plugin, env, policy);
       registrations.push(registration);
       validateProviderPlugin(registration, plugin);
     }
@@ -44,9 +57,10 @@ export async function loadProviderPlugins(
 export async function withPluginConnection<T>(
   provider: string,
   env: NodeJS.ProcessEnv,
+  policy: PluginLoadPolicy,
   runConnection: (connection: PluginConnection) => Promise<T>,
 ): Promise<T> {
-  const registrations = await loadProviderPlugins(env, RESERVED_PLUGIN_PROVIDERS, provider);
+  const registrations = await loadProviderPlugins(env, policy, provider);
   try {
     const connection = registrations.find(
       (entry) => entry.runtime.provider === provider,
@@ -62,6 +76,7 @@ export async function withPluginConnection<T>(
 async function instantiateProviderPlugin(
   plugin: ReturnType<typeof installedPlugins>[number],
   env: NodeJS.ProcessEnv,
+  policy: PluginLoadPolicy,
 ): Promise<ProviderPluginRegistration> {
   const module = await import(
     pathToFileURL(resolvePluginEntry(plugin.directory, plugin.agentDevicePlugin.entry)).href
@@ -69,46 +84,16 @@ async function instantiateProviderPlugin(
   if (typeof module.default !== 'function')
     throw new AppError('INVALID_ARGS', `Plugin must export a default factory: ${plugin.name}`);
   const host = createPluginHost(env, plugin.selection.options);
-  const result = await (
-    module.default as (
-      host: ProviderPluginHost,
-    ) =>
-      | ProviderPluginRegistration
-      | { webDriver: CloudWebDriverProviderOptions; connection?: PluginConnection }
-      | Promise<
-          | ProviderPluginRegistration
-          | { webDriver: CloudWebDriverProviderOptions; connection?: PluginConnection }
-        >
-  )(host);
-  let registration: ProviderPluginRegistration;
-  if (isWebDriverPluginResult(result)) {
-    if (result.webDriver?.provider !== plugin.agentDevicePlugin.provider) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `WebDriver plugin provider does not match its declaration: ${plugin.name}`,
-      );
-    }
-    const { createCloudWebDriverRuntime } = await import('@agent-device/provider-webdriver/plugin');
-    const runtime = await createCloudWebDriverRuntime({
-      ...result.webDriver,
-      clientVersion: host.clientVersion,
-    });
-    registration = {
-      runtime,
-      platformModule: runtime.platformRuntimeModule,
-      connection: result.connection,
-    };
-  } else registration = result;
+  const result: unknown = await (module.default as (host: ProviderPluginHost) => unknown)(host);
+  const registration =
+    (await policy.adaptFactoryResult(result, {
+      plugin: { name: plugin.name, provider: plugin.agentDevicePlugin.provider },
+      host,
+    })) ?? (result as ProviderPluginRegistration);
   if (!registration?.runtime || typeof registration.runtime.shutdown !== 'function') {
     throw new AppError('INVALID_ARGS', `Plugin must return a provider runtime: ${plugin.name}`);
   }
   return registration;
-}
-
-function isWebDriverPluginResult(
-  result: unknown,
-): result is { webDriver: CloudWebDriverProviderOptions; connection?: PluginConnection } {
-  return typeof result === 'object' && result !== null && 'webDriver' in result;
 }
 
 function validateProviderPlugin(

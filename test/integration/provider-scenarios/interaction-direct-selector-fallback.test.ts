@@ -171,7 +171,7 @@ test('Provider-backed integration maestro replay dispatch keeps runner AMBIGUOUS
     const click = await daemon.callCommand('click', ['label="Continue"'], {
       maestro: { allowNonHittableCoordinateFallback: true },
     });
-    assertRpcError(click, 'AMBIGUOUS_MATCH', /matched multiple/);
+    assertRpcError(click, 500, 'AMBIGUOUS_MATCH', /matched multiple/);
   });
 });
 
@@ -201,7 +201,7 @@ test(
       const click = await daemon.callCommand('click', ['label="Continue"'], {
         maestro: { allowNonHittableCoordinateFallback: true },
       });
-      assertRpcError(click, 'ELEMENT_OFFSCREEN', /resolved off-screen/);
+      assertRpcError(click, 500, 'ELEMENT_OFFSCREEN', /resolved off-screen/);
     });
   },
   PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,

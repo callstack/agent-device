@@ -3,7 +3,11 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
@@ -117,6 +121,7 @@ async function openRelaunch(params: {
     };
   };
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

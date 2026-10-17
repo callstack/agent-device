@@ -108,7 +108,6 @@ test('web provider is scoped through the request router and dispatch path', asyn
 
   const harness = await createProviderScenarioHarness({
     deviceInventoryProvider: async () => [WEB_DESKTOP_DEVICE],
-    platformRuntime: true,
     webProvider: ({ device, session }) => {
       calls.push(`scope:${session?.name ?? 'none'}:${device.id}`);
       return webProvider;
@@ -139,7 +138,6 @@ test('web provider is scoped through the request router and dispatch path', asyn
         label: 'main',
         rect: { x: 0, y: 0, width: 320, height: 240 },
         depth: 0,
-        parentIndex: undefined,
         ref: 'e1',
         kind: 'section',
       },
@@ -252,7 +250,6 @@ test('non-dense browser refs survive snapshot storage and routed fill and click'
       async () => {
         const harness = await createProviderScenarioHarness({
           deviceInventoryProvider: async () => [WEB_DESKTOP_DEVICE],
-          platformRuntime: true,
           webProvider: () => provider,
         });
         try {

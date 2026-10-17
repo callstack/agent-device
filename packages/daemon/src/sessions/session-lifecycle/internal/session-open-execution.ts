@@ -1,4 +1,4 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   resolveSessionRequestLogPath,
   resolveSessionRunnerLogPath,
@@ -147,9 +147,10 @@ function buildStartupPerfSample(
 export async function renewOpenSessionClaim(
   device: DeviceInfo,
   ownership: DeviceClaimSessionOwnership | undefined,
+  env: HostEnvironment['env'],
 ): Promise<DaemonResponse | undefined> {
   if (!ownership) return undefined;
-  const renewal = await renewDeviceClaim(ownership, commandHostEnvironment().env);
+  const renewal = await renewDeviceClaim(ownership, env);
   if (renewal.status === 'renewed') return undefined;
   if (renewal.conflict) return buildDeviceClaimConflictError(device, renewal.conflict);
   return errorResponse(
@@ -405,6 +406,7 @@ function findNewSessionDeviceConflict(params: {
 }
 
 async function acquireDeviceClaimForOwner(params: {
+  host: HostEnvironment;
   req: DaemonRequest;
   device: DeviceInfo;
   owner: OpenApplicationRuntime['owner'];
@@ -429,9 +431,9 @@ async function acquireDeviceClaimForOwner(params: {
       return await acquireDeviceClaim({
         device,
         session: sessionName,
-        workspace: req.meta?.cwd ?? commandHostEnvironment().cwd,
+        workspace: req.meta?.cwd ?? params.host.cwd,
         stateDir: sessionStore.resolveDaemonStateDir(),
-        env: commandHostEnvironment().env,
+        env: params.host.env,
         reconcileOrphanedDeviceClaim,
         observeDeviceBoot: platformServices.deviceBootObservation,
       });
@@ -439,6 +441,7 @@ async function acquireDeviceClaimForOwner(params: {
 }
 
 export async function openNewSessionWithDeviceClaim(params: {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -475,6 +478,7 @@ export async function openNewSessionWithDeviceClaim(params: {
   if (conflict) return { type: 'response', response: conflict };
 
   const ownerClaim = await acquireDeviceClaimForOwner({
+    host: params.host,
     req,
     device,
     owner: lifecycle.owner,
@@ -497,6 +501,7 @@ export async function openNewSessionWithDeviceClaim(params: {
       effects,
       sessionName,
       sessionStore,
+      env: params.host.env,
     });
   try {
     requireOpenSessionAdmission(sessionStore, sessionName, undefined);
@@ -518,7 +523,7 @@ export async function openNewSessionWithDeviceClaim(params: {
     // Stamping here is what covers a boot preparation caused for this very open; from
     // `completeOpenCommand` on, a relaunch-close or a runtime-hint write may already have touched the
     // app, so a failure from that point cannot prove ownership was never established.
-    const reclaimed = await renewOpenSessionClaim(device, deviceClaim);
+    const reclaimed = await renewOpenSessionClaim(device, deviceClaim, params.host.env);
     if (reclaimed) return { type: 'response', response: reclaimed };
     effects.mayHaveStarted = true;
     const requestedPositionals = req.positionals ?? [];
@@ -562,15 +567,16 @@ async function rollbackNewSessionClaim(params: {
   effects: NewSessionOpenEffects;
   sessionName: string;
   sessionStore: SessionStore;
+  env: HostEnvironment['env'];
 }): Promise<void> {
-  const { ownership, effects, sessionName, sessionStore } = params;
+  const { ownership, effects, sessionName, sessionStore, env } = params;
   if (!ownership) return;
   if (!effects.mayHaveStarted) {
-    await clearDeviceClaim(ownership, commandHostEnvironment().env);
+    await clearDeviceClaim(ownership, env);
     return;
   }
   if (sessionStore.get(sessionName)?.deviceClaim?.ownerToken === ownership.ownerToken) return;
-  const outcome = await abandonDeviceClaim(ownership, commandHostEnvironment().env);
+  const outcome = await abandonDeviceClaim(ownership, env);
   emitDiagnostic({
     level: 'warn',
     phase: 'device_claim_open_effects_unconfirmed',

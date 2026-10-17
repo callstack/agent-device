@@ -20,16 +20,6 @@ import { interactionCliOutputFormatters } from '../../src/commands/interaction/o
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { openCliOutput } from '../../src/commands/management/output.ts';
 import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
-import { buildAmbiguousMatchError } from '@agent-device/daemon/testing/selector-match-errors';
-import { refMutationAdmissionResponse } from '@agent-device/daemon/testing/interaction/index';
-import { buildDeviceInUseBySessionError } from '@agent-device/daemon/testing/session-recovery-hints';
-import { buildDeviceClaimConflictError } from '@agent-device/daemon/testing/device/device-claim-conflict';
-import {
-  activateCompleteRefFrame,
-  readRefMutationFrame,
-} from '@agent-device/daemon/testing/ref-frame';
-import { resolveRefStalenessWarning } from '@agent-device/daemon/testing/session-snapshot';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,
@@ -42,6 +32,7 @@ import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
 import { printHumanError } from '../../src/commands/output/error.ts';
 import { formatSnapshotText } from '../../src/commands/output/snapshot.ts';
+import { captureHelpConformanceErrorRoutes } from '../../test/integration/provider-scenarios/help-conformance-error-routes.ts';
 
 // The production renderer behind each captured sample in
 // scripts/help-conformance-sample-outputs.mjs, as data rather than as one test
@@ -107,6 +98,13 @@ function assertErrorResponse(
   what: string,
 ): asserts response is ErrorResponse {
   if (!response || response.ok) throw new Error(`${what} must be an error response`);
+}
+
+let daemonErrorSampleResponses: ReturnType<typeof captureHelpConformanceErrorRoutes> | undefined;
+
+function getDaemonErrorSampleResponses() {
+  daemonErrorSampleResponses ??= captureHelpConformanceErrorRoutes();
+  return daemonErrorSampleResponses;
 }
 
 export const SAMPLE_PRODUCERS: SampleProducer[] = [
@@ -361,92 +359,46 @@ export const SAMPLE_PRODUCERS: SampleProducer[] = [
   },
   {
     name: 'DEVICE_IN_USE_SAMPLE',
-    producer: 'the real session-open by-session conflict producer',
+    producer: 'the session-open by-session conflict producer',
     sample: DEVICE_IN_USE_SAMPLE,
-    render: () => {
-      // An explicitly named session is stored under its own name, so address === name here.
-      const owningSession = { address: 'checkout', session: { name: 'checkout' } as SessionState };
-      const device = { id: 'SIM-001', name: 'iPhone 17 Pro' } as Parameters<
-        typeof buildDeviceInUseBySessionError
-      >[1];
-      const response = buildDeviceInUseBySessionError(owningSession, device);
+    render: async () => {
+      const responses = await getDaemonErrorSampleResponses();
+      const response = responses.deviceInUse;
       assertErrorResponse(response, 'the by-session conflict');
-      return renderErrorResponse(response);
+      return await renderErrorResponse(response);
     },
   },
   {
     name: 'DEVICE_CLAIM_IN_USE_SAMPLE',
-    producer: 'the enforced cross-daemon device-claim conflict producer',
+    producer: 'the enforced device-claim conflict producer',
     sample: DEVICE_CLAIM_IN_USE_SAMPLE,
-    render: () => {
-      const response = buildDeviceClaimConflictError(
-        {
-          platform: 'android',
-          id: 'emulator-5554',
-          name: 'Pixel',
-          kind: 'emulator',
-        },
-        {
-          fileName: 'claim.json',
-          deviceKey: 'local:android:none:emulator-5554',
-          classification: 'live',
-          claim: {
-            schemaVersion: 2,
-            deviceKey: 'local:android:none:emulator-5554',
-            device: {
-              family: 'android',
-              id: 'emulator-5554',
-              name: 'Pixel',
-              kind: 'emulator',
-            },
-            session: 'checkout',
-            workspace: '/worktrees/checkout',
-            stateDir: '/state/checkout',
-            ownerPid: 4242,
-            ownerStartTime: 'start',
-            ownerToken: 'token',
-            createdAtMs: 1,
-            updatedAtMs: 1,
-          },
-        },
-      );
+    render: async () => {
+      const responses = await getDaemonErrorSampleResponses();
+      const response = responses.deviceClaimInUse;
       assertErrorResponse(response, 'the enforced device-claim conflict');
-      return renderErrorResponse(response);
+      return await renderErrorResponse(response);
     },
   },
   {
     name: 'STALE_REF_SAMPLE',
-    producer: 'the real ADR 0014 admission rejection and staleness hint',
+    producer: 'the ADR 0014 stale-ref admission producer',
     sample: STALE_REF_SAMPLE,
-    render: () => {
-      const session = { snapshotGeneration: 7 } as SessionState;
-      // Pin the epoch in the frame itself, as a real published namespace does, so the
-      // sample exercises the frame epoch rather than the pre-frame fallback.
-      activateCompleteRefFrame(session);
-      const response = refMutationAdmissionResponse({
-        session,
-        ref: '@e12',
-        mintedGeneration: 5,
-        staleRefsWarning: resolveRefStalenessWarning({ session, ref: '@e12', mintedGeneration: 5 }),
-        frame: readRefMutationFrame({ session, ref: '@e12', mintedGeneration: 5 }),
-      });
+    render: async () => {
+      const responses = await getDaemonErrorSampleResponses();
+      const response = responses.staleRef;
       assertErrorResponse(response, 'a superseded pin');
-      return renderErrorResponse(response);
+      return await renderErrorResponse(response);
     },
   },
   {
     name: 'AMBIGUOUS_MATCH_SAMPLE',
-    producer: 'the real find producer and the default hint',
+    producer: 'the find ambiguous-match error producer',
     sample: AMBIGUOUS_MATCH_SAMPLE,
-    render: () => {
-      const matches = [
-        { ref: 'e2', type: 'Button', label: 'Follow' },
-        { ref: 'e5', type: 'Button', label: 'Follow' },
-        { ref: 'e9', type: 'Button', label: 'Follow' },
-      ] as Parameters<typeof buildAmbiguousMatchError>[0];
-      const response = buildAmbiguousMatchError(matches, 'text', 'Follow');
+    render: async () => {
+      const responses = await getDaemonErrorSampleResponses();
+      const response = responses.ambiguousMatch;
       assertErrorResponse(response, 'an ambiguous find');
-      return renderErrorResponse(response);
+      return await renderErrorResponse(response);
     },
   },
   {

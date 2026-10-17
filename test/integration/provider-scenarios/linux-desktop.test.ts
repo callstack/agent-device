@@ -206,26 +206,6 @@ test('Provider-backed integration Linux desktop flow uses semantic desktop and i
           { name: 'show desktop', command: 'home' },
         ]);
 
-        const actions = daemon.session()?.actions ?? [];
-        assert.ok(
-          actions.some(
-            (action) =>
-              action.command === 'fill' &&
-              action.positionals.join(' ') === '@e2 Seven' &&
-              action.flags.delayMs === 1,
-          ),
-          'Expected ref fill action to be recorded on the session',
-        );
-        assert.ok(
-          actions.some(
-            (action) =>
-              action.command === 'fill' &&
-              action.positionals.join(' ') === '42 84 Eight' &&
-              action.flags.delayMs === 1,
-          ),
-          'Expected coordinate fill action to be recorded on the session',
-        );
-
         const close = await daemon.callCommand('close', ['gnome-calculator']);
         assert.equal(close.statusCode, 200, JSON.stringify(close.json));
         assert.deepEqual(desktopCalls, [

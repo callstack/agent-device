@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
@@ -81,6 +81,7 @@ test('a failed platform close retains the device claim and reports it', async ()
         let caught: unknown;
         try {
           await handleSessionCommands({
+            host: createTestHostEnvironment(),
             createCommandSurface: fakeCreateCommandSurface,
             platformServices: daemonPlatformServicesFixture(),
             req: {
@@ -197,6 +198,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
         let caught: unknown;
         try {
           await handleSessionCommands({
+            host: createTestHostEnvironment(),
             createCommandSurface: fakeCreateCommandSurface,
             platformServices: daemonPlatformServicesFixture(),
             req: {
@@ -285,6 +287,7 @@ test('a successful close clears the device claim', async () => {
     sessionStore.publish(sessionName, session);
 
     const response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -333,6 +336,7 @@ test('targeted close preserves the platform-close AppError and still runs later 
 
   await expect(
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       lifecycleOperationsLoader: loader,
@@ -387,6 +391,7 @@ test('targeted close surfaces a required pre-close failure from the lifecycle po
 
   await expect(
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       lifecycleOperationsLoader: loader,

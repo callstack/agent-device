@@ -93,6 +93,7 @@ async function runStateCommand(
   });
   try {
     const handlerParams = {
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: 'default',

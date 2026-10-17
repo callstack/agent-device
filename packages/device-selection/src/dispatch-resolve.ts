@@ -104,6 +104,11 @@ export async function resolveTargetDeviceSelection(
   const diagnosticData = {
     platform: inventoryRequest.platform,
     target: flags.target,
+    // The selector the resolution was asked for, echoed for recovery lanes whose whole job is
+    // re-resolving one stated device: which udid was requested and which simulator set was
+    // scoped must be visible in the request log without debug-only dumps.
+    ...(inventoryRequest.udid ? { udid: inventoryRequest.udid } : {}),
+    ...(iosSimulatorSetPath ? { iosSimulatorSetPath } : {}),
     cacheHit: false,
   };
   return await withDiagnosticTimer(

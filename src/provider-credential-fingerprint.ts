@@ -4,7 +4,7 @@ import { cloudWebDriverProviderDeclaration } from '@agent-device/provider-webdri
 import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { readLimrunCredentialValues } from './provider-limrun-credentials.ts';
-import { RESERVED_PLUGIN_PROVIDERS } from '@agent-device/plugins/manifest';
+import { RESERVED_PLUGIN_PROVIDERS } from './provider-plugin-policy.ts';
 import { installedPlugins } from '@agent-device/plugins/store';
 
 type CredentialValues = Readonly<Record<string, string | undefined>>;

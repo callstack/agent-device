@@ -43,13 +43,15 @@ export function runnerSimulatorSetFailureDetails(
 }
 
 /**
- * Names the simulator and the scoped set behind a `simulator_set_destination_not_found`, and the Xcode
- * when this process has read its version.
+ * Supplies the classification details for one device's launch to `classifyRunnerStartupFailure`.
+ * Besides the scoped set and the Xcode version this process already read, it carries the simulator ID
+ * needed to describe a missing destination.
+ *
+ * This is an input shape, not a published shape: callers spread it into the error they classify and
+ * publish only {@link runnerSimulatorSetFailureDetails} beside their failure.
  */
-export function simulatorSetDestinationNotFoundMessage(
-  message: string,
+export function runnerLaunchLogClassificationDetails(
   device: DeviceInfo,
-  details: RunnerSimulatorSetFailureDetails,
-): string {
-  return `${message}: xcodebuild found no simulator ${device.id} in simulator set ${details.simulatorSetPath}${details.xcodeVersion === undefined ? '' : ` with Xcode ${details.xcodeVersion}`}`;
+): RunnerSimulatorSetFailureDetails & { simulatorUdid: string } {
+  return { ...runnerSimulatorSetFailureDetails(device), simulatorUdid: device.id };
 }

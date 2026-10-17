@@ -22,6 +22,7 @@ import {
   collectZones,
   findValueImportCycles,
   parseImports,
+  parseModuleMockSpecifiers,
   resolveImportEdges,
   unclassifiedZones,
 } from './model.ts';
@@ -792,4 +793,67 @@ test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', ()
     ),
   );
   assert.equal(largestTypeCycleSize(valueCycle), 2);
+});
+
+test('parseModuleMockSpecifiers reads every Vitest mock-family call with a literal module', () => {
+  const source = [
+    "vi.mock('a', () => ({}));",
+    'vi.mock("b");',
+    'vi.mock(`c`, () => ({}));',
+    "vi.doMock('d');",
+    "vi.unmock('e');",
+    'vi.doUnmock(`f`);',
+    "await vi.importActual<typeof import('g')>('h');",
+    "await vi.importMock('i');",
+    "vi['mock']('j');",
+    "vi[`doMock`]('k');",
+    "vi?.mock('l');",
+    "vitest.mock('m');",
+    "vi.mock(('n' as string));",
+  ].join('\n');
+  assert.deepEqual(
+    parseModuleMockSpecifiers(source),
+    [
+      ['a', 1],
+      ['b', 2],
+      ['c', 3],
+      ['d', 4],
+      ['e', 5],
+      ['f', 6],
+      ['h', 7],
+      ['i', 8],
+      ['j', 9],
+      ['k', 10],
+      ['l', 11],
+      ['m', 12],
+      ['n', 13],
+    ].map(([spec, line]) => ({ spec, line })),
+  );
+  assert.deepEqual(parseModuleMockSpecifiers('\n\nvi.mock(\n  `multi`,\n);'), [
+    { spec: 'multi', line: 3 },
+  ]);
+});
+
+test('parseModuleMockSpecifiers ignores comments, unrelated objects and non-literal arguments', () => {
+  const source = [
+    "// vi.mock('commented');",
+    "/* vi.doMock('block') */",
+    'const text = "vi.mock(\'in-string\')";',
+    "other.mock('unrelated');",
+    "vi.fn('not-a-module-api');",
+    "vi.mockObject('not-a-module-api');",
+    "vi.spyOn('not-a-module-api');",
+    "vi.mocked('not-a-module-api');",
+    "vi[method]('computed-member');",
+    'vi.mock(`interpolated-${name}`);',
+    'vi.mock(variable);',
+    'vi.mock();',
+    "vi.mock(import('dynamic-form'));",
+    "vi.mock.mockReset('nested');",
+  ].join('\n');
+  assert.deepEqual(parseModuleMockSpecifiers(source), []);
+});
+
+test('parseModuleMockSpecifiers rejects malformed source instead of returning partial sites', () => {
+  assert.throws(() => parseModuleMockSpecifiers("vi.mock('a'"), SyntaxError);
 });

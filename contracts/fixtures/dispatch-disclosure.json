@@ -108,6 +108,12 @@
     "dispatched": "no"
   },
   {
+    "id": "daemon.route.named-session-refusal",
+    "producer": "daemon",
+    "trigger": "a command naming a session this daemon does not hold and no device selector: requireNamedSessionHoldsDevice refuses with SESSION_NOT_FOUND and details.reason named_session_not_found before any device is listed or resolved",
+    "dispatched": "no"
+  },
+  {
     "id": "daemon.route.find-type-refused-after-focus",
     "producer": "daemon",
     "trigger": "find <q> type: the focus tap returned, then the typeText send was refused before send (no); the request reports unknown with details.dispatchedSteps 1",

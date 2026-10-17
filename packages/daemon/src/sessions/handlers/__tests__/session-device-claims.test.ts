@@ -9,6 +9,7 @@ import {
   mkdtempForTestSync,
   pinOwnProcessStartTime,
   bindTestCommandHost,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
@@ -149,6 +150,7 @@ test('failed local open before device setup rolls its device claim back', async 
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -178,6 +180,7 @@ test('failed local open after dispatch retains its device claim for recovery', a
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -210,6 +213,7 @@ test('failed local runtime-hint setup retains its device claim before open dispa
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -238,6 +242,7 @@ test('failed local open response rolls its device claim back', async () => {
   mockResolveTargetDevice.mockResolvedValue(android);
 
   const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -265,6 +270,7 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   markRequestCanceled(requestId);
   try {
     const timedOut = await handleOpenCommand({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -286,6 +292,7 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   assert.equal(store.get('suite:1-gesture-pan-duration:attempt-1'), undefined);
 
   const retry = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -319,6 +326,7 @@ test('cancellation after local device setup retains the device claim for recover
 
   try {
     const response = await handleOpenCommand({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -351,6 +359,7 @@ test('provider-owned open creates no host-local device claim from its selected o
   mockDispatch.mockResolvedValue(undefined);
 
   const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -390,6 +399,7 @@ test('a foreign live claim rejects open before platform preparation or mutation'
   if (acquired.status !== 'acquired') return;
 
   const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -447,6 +457,7 @@ test('local close clears its matching device claim after teardown', async () => 
   mockDispatch.mockResolvedValue(undefined);
 
   const response = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: { command: 'close', token: 'test', session: 'close-claim', positionals: [], flags: {} },
     sessionName: 'close-claim',
@@ -493,6 +504,7 @@ test('#1391: a close-time script save failure still clears the device claim and 
   let thrown: unknown;
   try {
     await handleCloseCommand({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: {
         command: 'close',
@@ -568,6 +580,7 @@ test('an open under a macos-app lease holds only its app, beside other claims on
   });
 
   const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

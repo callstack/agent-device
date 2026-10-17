@@ -21,7 +21,7 @@ import {
   RUNNER_CACHE_RECOVERY_HINT,
   runnerConnectFailureDetails,
   shouldRetryRunnerConnectError,
-  type IosRunnerDeviceStates,
+  type RunnerStartupFailureReason,
 } from './runner-error-classification.ts';
 import {
   type RunnerCommand,
@@ -39,10 +39,11 @@ export type RunnerConnectionSession = Pick<
   | 'readLogTail'
   | 'device'
   | 'runnerLogPath'
+  | 'state'
 >;
 import {
+  runnerLaunchLogClassificationDetails,
   runnerSimulatorSetFailureDetails,
-  simulatorSetDestinationNotFoundMessage,
 } from './runner-device-set.ts';
 import { canFallBackFromUsbmux, postRunnerCommandOverRoute } from './runner-transport.ts';
 
@@ -149,11 +150,12 @@ export async function waitForRunner(
   }
   throw withRunnerWriteEvidence(
     buildRunnerConnectError({
+      device,
       port,
       url: route.url,
       logPath,
       lastError,
-      deviceStates: session?.startupDeviceStates,
+      session,
     }),
     commandMayHaveBeenWritten,
   );
@@ -217,6 +219,7 @@ async function attemptRunnerConnection(params: {
 
 async function ensureRunnerAttemptCanStart(params: {
   endpoint: RunnerEndpoint;
+  route: RunnerCommandRoute;
   timeoutMs: number;
   logPath?: string;
   session?: RunnerConnectionSession;
@@ -235,6 +238,28 @@ async function ensureRunnerAttemptCanStart(params: {
       logPath: params.logPath,
     });
   }
+  // A launch whose log already names a cause the classifier calls terminal will never serve a
+  // command, and its child may stay alive to the deadline, so without this the request waits out the
+  // whole connect budget before reaching the failure that names the cause (#3449). The verdict is the
+  // classifier's over the tail — this adds no matching of its own — and it is acted on only when the
+  // table says a retry cannot help, which is the same predicate the retry loop applies to errors.
+  // Checked while the session has yet to answer: once a runner has answered, its log is no longer
+  // evidence about a boot that demonstrably succeeded. Bounded to the tail an error would quote, read
+  // from this generation's offset, and no child process is spawned for it.
+  const session = params.session;
+  if (session?.state !== 'starting') return;
+  const launchLogOutput = session.readLogTail?.(RUNNER_EARLY_EXIT_LOG_TAIL_BYTES) ?? '';
+  if (!launchLogOutput) return;
+  const terminalError = buildRunnerConnectError({
+    device: session.device,
+    port: params.endpoint.port,
+    url: params.route.url,
+    logPath: params.logPath,
+    lastError: null,
+    session,
+    launchLogOutput,
+  });
+  if (!shouldRetryRunnerConnectError(terminalError)) throw terminalError;
 }
 
 async function tryPrimaryRunnerRoute(params: {
@@ -395,31 +420,80 @@ export function resolveRunnerEarlyExitHint(
   return `${bootFailureHint(classified)} ${RUNNER_CACHE_RECOVERY_HINT}`;
 }
 
+/** The cause a runner launch log names, in the shape both connect-stage failures publish. */
+type RunnerLaunchLogCause = Readonly<{
+  message: string;
+  reason: RunnerStartupFailureReason;
+  hint: string;
+}>;
+
+/**
+ * The cause readable from the launch output when the runner never served a command, if any. Which
+ * outputs carry a cause, what it is called, and what the sentence beside it says are all decided by the
+ * classifier's rows: this reads the tail's verdict and folds the row's own words into the message, so
+ * reason, message and hint cannot disagree about which cause this was (#3449). No cause is claimed for
+ * anything no row named: the boot-failure classification owns those.
+ */
+function resolveRunnerLaunchLogCause(params: {
+  message: string;
+  output: string;
+  device: DeviceInfo;
+}): RunnerLaunchLogCause | undefined {
+  const classified = classifyRunnerStartupFailure(
+    new AppError('COMMAND_FAILED', params.message, {
+      stderr: params.output,
+      ...runnerLaunchLogClassificationDetails(params.device),
+    }),
+  );
+  if (!classified.messageSuffix) return undefined;
+  return {
+    message: `${params.message}: ${classified.messageSuffix}`,
+    reason: classified.reason,
+    hint: classified.hint,
+  };
+}
+
 function buildRunnerConnectError(params: {
+  device: DeviceInfo;
   port: number;
   url: string | null;
   logPath?: string;
   lastError: unknown;
-  deviceStates?: IosRunnerDeviceStates;
+  session?: RunnerConnectionSession;
+  /** The launch tail already read for this decision; read here when it is absent. */
+  launchLogOutput?: string;
 }): AppError {
-  const { port, url, logPath, lastError, deviceStates } = params;
+  const { device, port, url, logPath, lastError, session } = params;
   const message = 'Runner did not accept connection';
-  const error = new AppError('COMMAND_FAILED', message, {
+  const launchLogCause = resolveRunnerLaunchLogCause({
+    message,
+    output:
+      params.launchLogOutput ?? session?.readLogTail?.(RUNNER_EARLY_EXIT_LOG_TAIL_BYTES) ?? '',
+    device,
+  });
+  const error = new AppError('COMMAND_FAILED', launchLogCause?.message ?? message, {
     port,
     url,
-    logPath,
+    // A cause read from the launch log has to name the file the reader can check it against; the
+    // request's own log is not necessarily that file (#2681).
+    logPath: launchLogCause ? (session?.runnerLogPath ?? logPath) : logPath,
     lastError: lastError ? String(lastError) : undefined,
-    reason: classifyBootFailure({
-      error: lastError,
-      message,
-      context: { platform: 'ios', phase: 'connect' },
-    }),
-    hint: bootFailureHint('IOS_RUNNER_CONNECT_TIMEOUT'),
+    reason:
+      launchLogCause?.reason ??
+      classifyBootFailure({
+        error: lastError,
+        message,
+        context: { platform: 'ios', phase: 'connect' },
+      }),
+    hint: launchLogCause?.hint ?? bootFailureHint('IOS_RUNNER_CONNECT_TIMEOUT'),
     ...runnerConnectFailureDetails('runner_connect_refused'),
   });
   // The other way the connect stage gives up: `xcodebuild` is still alive at the deadline. It gets
   // the same enrichment as the early exit below (#2683).
-  return enrichRunnerStartupFailureWithDeviceStates(error, deviceStates) as AppError;
+  return enrichRunnerStartupFailureWithDeviceStates(
+    error,
+    session?.startupDeviceStates,
+  ) as AppError;
 }
 
 export async function buildRunnerEarlyExitError(params: {
@@ -440,37 +514,26 @@ export async function buildRunnerEarlyExitError(params: {
     context: { platform: 'ios', phase: 'connect' },
   });
   const simulatorSet = runnerSimulatorSetFailureDetails(session.device);
-  const setDestination = classifyRunnerStartupFailure(
-    new AppError('COMMAND_FAILED', message, { stderr: output, ...simulatorSet }),
-  );
-  const setDestinationMissing = setDestination.reason === 'simulator_set_destination_not_found';
+  const launchLogCause = resolveRunnerLaunchLogCause({ message, output, device: session.device });
   // exec-guard-allow: xcodebuild can exit 0 and still count as an early exit;
   // the trio is nested tool context under `xcodebuild`, classified into
   // `reason`/`hint` above — not a process-exit wrap.
-  const error = new AppError(
-    'COMMAND_FAILED',
-    setDestinationMissing
-      ? simulatorSetDestinationNotFoundMessage(message, session.device, simulatorSet)
-      : message,
-    {
-      port,
-      // The quote always comes from the runner's own file, so that is the file the error has to name;
-      // pointing at the request's log would advertise a file that does not contain what is quoted (#2681).
-      logPath: session.runnerLogPath ?? logPath,
-      xcodebuild: {
-        exitCode: result.exitCode,
-        // One merged file since #2681: the tail is reported under `stderr`, which is where readers
-        // already look, next to the file it came from.
-        stderr: output,
-      },
-      reason: setDestinationMissing ? setDestination.reason : reason,
-      hint: setDestinationMissing
-        ? setDestination.hint
-        : resolveRunnerEarlyExitHint(message, output, output, reason),
-      ...simulatorSet,
-      ...runnerConnectFailureDetails('xcodebuild_exited_early'),
+  const error = new AppError('COMMAND_FAILED', launchLogCause?.message ?? message, {
+    port,
+    // The quote always comes from the runner's own file, so that is the file the error has to name;
+    // pointing at the request's log would advertise a file that does not contain what is quoted (#2681).
+    logPath: session.runnerLogPath ?? logPath,
+    xcodebuild: {
+      exitCode: result.exitCode,
+      // One merged file since #2681: the tail is reported under `stderr`, which is where readers
+      // already look, next to the file it came from.
+      stderr: output,
     },
-  );
+    reason: launchLogCause?.reason ?? reason,
+    hint: launchLogCause?.hint ?? resolveRunnerEarlyExitHint(message, output, output, reason),
+    ...simulatorSet,
+    ...runnerConnectFailureDetails('xcodebuild_exited_early'),
+  });
   // The build catch is not the only way a runner stops before serving a command. A locked phone lets
   // the build finish and kills `xcodebuild test-without-building` instead, so nothing reaches that
   // catch and the disk-image state read before the build would be dropped. Same enrichment, applied

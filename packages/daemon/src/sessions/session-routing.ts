@@ -12,6 +12,7 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionScope } from '@agent-device/contracts/session';
 import { SessionStore } from '../core/session-store.ts';
+import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
 import {
   listSessionSelectorConflicts,
   type SessionSelectorConflict,
@@ -43,7 +44,7 @@ export function resolveEffectiveSessionName(
   options: ImplicitSessionRoutingOptions = {},
 ): string {
   const requested = req.session || DEFAULT_SESSION_NAME;
-  if (hasExplicitSessionFlag(req)) return requested;
+  if (namesSessionExplicitly(req)) return requested;
   const scope = resolveSessionScope(req);
   if (scope.kind === 'cwd') {
     return resolveImplicitWorkspaceSession(req, sessionStore, scope.id, options);
@@ -74,7 +75,7 @@ export function resolveSessionScope(req: DaemonWireRequest): SessionScope {
     return { kind: 'tenant', id: tenantId };
   }
   if (
-    hasExplicitSessionFlag(req) ||
+    namesSessionExplicitly(req) ||
     (req.session || DEFAULT_SESSION_NAME) !== DEFAULT_SESSION_NAME
   ) {
     return { kind: 'named-local' };
@@ -104,12 +105,6 @@ export function isImplicitSessionScopeConflict(req: DaemonRequest, session: Sess
   const scope = resolveImplicitSessionScope(req);
   if (!scope || session.sessionScope?.kind !== 'cwd') return false;
   return session.sessionScope.id !== scope.id;
-}
-
-export function hasExplicitSessionFlag(req: DaemonWireRequest): boolean {
-  if (req.meta?.sessionExplicit === true) return true;
-  const value = (req.flags as CommandFlags | undefined)?.session;
-  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function formatScopedSessionName(scopeId: string, sessionName: string): string {

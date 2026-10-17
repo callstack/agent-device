@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { LogBackend } from '@agent-device/contracts/observability';
@@ -44,6 +45,7 @@ import {
 } from '@agent-device/kernel/contracts';
 
 export type SessionObservabilityCommandInput = {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;

@@ -8,6 +8,7 @@ import {
   mkdtempForTestSync,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   WEB_DESKTOP_DEVICE,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import {
   makeAndroidSession,
@@ -62,6 +63,7 @@ async function projectAndroidCapabilities(sessionName: string) {
     providerMode: 'local',
   });
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -146,6 +148,7 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -191,6 +194,7 @@ test('capabilities excludes network when the runtime fact is unavailable', async
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -237,6 +241,7 @@ test('capabilities includes apps for the available HarmonyOS runtime fact', asyn
     async (request) => (request.platform === 'harmonyos' ? [harmonyDevice] : []),
     async () =>
       await handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -317,6 +322,7 @@ test.each(APPS_UNAVAILABLE_CAPABILITY_CASES)(
     });
 
     const response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -353,6 +359,7 @@ test('capabilities excludes appstate when its runtime fact is unavailable', asyn
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -388,6 +395,7 @@ test('capabilities excludes appstate when its readiness fact is unavailable', as
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -465,6 +473,7 @@ test.each([
       async () => [device],
       async () =>
         await handleSessionCommands({
+          host: createTestHostEnvironment(),
           createCommandSurface: fakeCreateCommandSurface,
           platformServices: daemonPlatformServicesFixture(),
           req: {
@@ -503,6 +512,7 @@ test('capabilities accepts a stopped Android AVD placeholder for explicit platfo
     async (request) => (request.platform === 'android' ? [stoppedAvd] : []),
     async () =>
       await handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {

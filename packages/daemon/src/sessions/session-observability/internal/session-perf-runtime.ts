@@ -1,4 +1,4 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import path from 'node:path';
@@ -47,6 +47,7 @@ import {
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type PerfRuntimeHandlerParams = Readonly<{
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -144,10 +145,7 @@ async function executeAdmittedPerfPlan(
         appId: session.appBundleId,
         kind: plan.request.kind,
         outPath: plan.request.outPath
-          ? expandSessionPath(
-              plan.request.outPath,
-              params.req.meta?.cwd ?? commandHostEnvironment().cwd,
-            )
+          ? expandSessionPath(plan.request.outPath, params.req.meta?.cwd ?? params.host.cwd)
           : undefined,
         artifactsDir: path.join(
           params.sessionStore.ensureSessionDir(params.sessionName),
@@ -180,10 +178,7 @@ async function executeAdmittedPerfPlan(
       const data = await runtime.operations.perfProfileReport({
         appId: session.appBundleId,
         kind: plan.request.kind,
-        tracePath: expandSessionPath(
-          tracePath,
-          params.req.meta?.cwd ?? commandHostEnvironment().cwd,
-        ),
+        tracePath: expandSessionPath(tracePath, params.req.meta?.cwd ?? params.host.cwd),
         outPath,
         template: plan.request.template ?? (last?.kind === 'xctrace' ? last.template : undefined),
         profile: last,
@@ -270,7 +265,7 @@ async function stopPerfCapture(
   if (mismatchMessage) return errorResponse('INVALID_ARGS', mismatchMessage);
   if (request.outPath) {
     capture.handle.setOutputPath(
-      expandSessionPath(request.outPath, params.req.meta?.cwd ?? commandHostEnvironment().cwd),
+      expandSessionPath(request.outPath, params.req.meta?.cwd ?? params.host.cwd),
     );
   }
   const completion = await finishLivePerfCapture({
@@ -403,7 +398,7 @@ function resolveNativeOutPath(
   fallbackFileName: string,
 ): string {
   if (requestedPath)
-    return expandSessionPath(requestedPath, params.req.meta?.cwd ?? commandHostEnvironment().cwd);
+    return expandSessionPath(requestedPath, params.req.meta?.cwd ?? params.host.cwd);
   return path.join(
     params.sessionStore.ensureSessionDir(params.sessionName),
     `${timestampToken()}-${fallbackFileName}`,

@@ -382,6 +382,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       'centerOfRect',
       'createAgentDeviceClient',
       'createLocalArtifactAdapter',
+      'ensureDaemon',
       'isAgentDeviceError',
       'isUnreadableCaptureContentError',
       'normalizeAgentDeviceError',

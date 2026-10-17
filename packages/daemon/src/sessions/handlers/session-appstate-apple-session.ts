@@ -1,14 +1,20 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
 import {
+  isApplePlatform,
   isMacOs,
   isIosFamily,
   publicPlatformString,
   type DeviceInfo,
+  type PlatformSelector,
 } from '@agent-device/kernel/device';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import { errorResponse } from '@agent-device/kernel/contracts';
-import { asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  asAppError,
+  isRequestCanceledError,
+  namedSessionNotFoundDetails,
+} from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
@@ -29,6 +35,30 @@ const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'iOS appstate requires an active session on the target device. Run open first (for example: open --session sim --platform ios --device "<name>" <app>).';
 const MACOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'macOS appstate requires an active session on the target device. Run open first (for example: open --session macos --platform macos "System Settings").';
+
+/**
+ * The refusal for an appstate whose session the daemon does not hold. Every Apple selector —
+ * `apple`, `ios`, or `macos` — answers appstate only from an open session and its runner, so the
+ * "omit --session" route they would otherwise be pointed at just reaches the session-required
+ * refusal. Send them straight to opening the session.
+ */
+export function appStateSessionNotFoundResponse(
+  sessionName: string,
+  platform: PlatformSelector | undefined,
+): DaemonResponse {
+  if (isApplePlatform(platform)) {
+    return errorResponse(
+      'SESSION_NOT_FOUND',
+      `No active session "${sessionName}". Run open with --session ${sessionName} first.`,
+      namedSessionNotFoundDetails(sessionName),
+    );
+  }
+  return errorResponse(
+    'SESSION_NOT_FOUND',
+    `No active session "${sessionName}". Run open with --session ${sessionName} first, or omit --session to query by device selector.`,
+    namedSessionNotFoundDetails(sessionName),
+  );
+}
 
 /**
  * Apple platforms answer appstate from a session and its runner, never from a bare device query:

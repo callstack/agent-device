@@ -66,6 +66,7 @@ const HINT_FOR_REASON: Record<RunnerStartupFailureReason, string> = {
   signing_provisioning_profile_missing: 'AGENT_DEVICE_IOS_PROVISIONING_PROFILE',
   signing_unspecified: 'Automatic Signing',
   devtools_security_developer_mode_disabled: 'DevToolsSecurity -enable',
+  simulator_service_hub_unavailable: 'xcode-select -s',
   simulator_set_destination_not_found: '-DVTSimulatorSetLocation',
   // Both device remedies are owned by `core/devicectl.ts` and travel on the device report, so this
   // table quotes them instead of restating them; `runner-device-readiness.test.ts` is where the

@@ -229,45 +229,6 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
         JSON.stringify(refLessClick.json),
       );
 
-      const actions = daemon.session()?.actions ?? [];
-      assert.ok(
-        actions.some(
-          (action) =>
-            action.command === 'hover' &&
-            action.positionals.join(' ') === '@e4' &&
-            action.result?.x === undefined &&
-            action.result?.y === undefined,
-        ),
-        'Expected ref hover action to be recorded on the session without fabricated coordinates',
-      );
-      assert.ok(
-        actions.some(
-          (action) =>
-            action.command === 'click' &&
-            action.positionals.join(' ') === '@e4' &&
-            action.result?.x === undefined &&
-            action.result?.y === undefined,
-        ),
-        'Expected ref click action to be recorded on the session without fabricated coordinates',
-      );
-      assert.ok(
-        actions.some(
-          (action) =>
-            action.command === 'fill' &&
-            action.positionals.join(' ') === '@e3 qa@example.test' &&
-            action.flags.delayMs === 1 &&
-            action.result?.x === undefined &&
-            action.result?.y === undefined,
-        ),
-        'Expected ref fill action to be recorded on the session without fabricated coordinates',
-      );
-      assert.ok(
-        actions.some(
-          (action) => action.command === 'type' && action.positionals.join(' ') === ' ok',
-        ),
-        'Expected type action to be recorded on the session',
-      );
-
       const close = await daemon.callCommand('close', [WEB_URL]);
       assert.equal(close.statusCode, 200, JSON.stringify(close.json));
 

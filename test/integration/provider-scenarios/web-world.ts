@@ -128,7 +128,6 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
   };
 
   const daemon = await createProviderScenarioHarness({
-    platformRuntime: true,
     webProvider: () => provider,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_WEB],
   });

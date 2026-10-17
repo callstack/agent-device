@@ -3,6 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   LINUX_DEVICE,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type {
@@ -47,6 +48,7 @@ test('doctor app checks retain runtime admission failures as a failed target-app
   });
 
   const response = await handleDoctorCommand({
+    host: createTestHostEnvironment(),
     hostDiagnostics: hostDiagnosticsFixture(),
     req: {
       token: 't',
@@ -145,6 +147,7 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
   });
 
   const response = await handleDoctorCommand({
+    host: createTestHostEnvironment(),
     hostDiagnostics: hostDiagnosticsFixture(),
     req: {
       token: 't',

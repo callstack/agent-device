@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -56,6 +56,7 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: request(command),
@@ -115,6 +116,7 @@ test('open routes only its lifecycle input through the public facade', async () 
   expect(Object.keys(forwarded ?? {}).sort()).toEqual(
     [
       'bindDevice',
+      'host',
       'createCommandSurface',
       'inspectFacts',
       'logPath',
@@ -142,6 +144,7 @@ test('close routes only its lifecycle input through the public facade', async ()
   expect(Object.keys(forwarded ?? {}).sort()).toEqual(
     [
       'bindDevice',
+      'host',
       'inspectFacts',
       'leaseLifecycleProvider',
       'leaseRegistry',

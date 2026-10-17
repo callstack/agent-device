@@ -594,7 +594,7 @@ test.for(['default', 'private replay'] as const)(
     if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
     const http = await startHttpDaemonFixture({ devices: [], sessionActive: false });
     const defaultPaths = resolveDaemonPaths(mkdtempForTestSync('daemon-missed-birth-'));
-    const ensure = vi.spyOn(lifecycle, 'ensureDaemon');
+    const ensure = vi.spyOn(lifecycle, 'ensureManagedDaemon');
     let paths: DaemonPaths | undefined;
     let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
     let now = Date.now();

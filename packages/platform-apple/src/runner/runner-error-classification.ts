@@ -109,6 +109,15 @@ const hasRunnerConnectFailureReason =
   (details) =>
     details.runnerConnectFailureReason === reason;
 /**
+ * The terminal verdict of a runner launch whose cause the launch output itself names — the simulator
+ * service this macOS refused to load, or a scoped-set destination this Xcode cannot resolve. It keys on
+ * the reason the launch paths publish, never on the tool sentence they quote, so foreign text carrying
+ * Xcode's own wording cannot, on its own, mark a failure terminal.
+ */
+const hasLaunchLogCauseFailure: RunnerErrorDetailsMatch = (details) =>
+  details.reason === SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON ||
+  details.reason === SIMULATOR_SET_DESTINATION_NOT_FOUND_REASON;
+/**
  * The preflight marks whatever it was waiting on when it stopped, and one of the things it waits on
  * is a caller that stopped waiting. A canceled request is not a wedged runner: the restart this
  * marker authorises would boot a runner for a command nobody is going to send again. Every abort in
@@ -179,6 +188,7 @@ export const RUNNER_STARTUP_FAILURE_REASONS = [
   'signing_provisioning_profile_missing',
   'signing_unspecified',
   'devtools_security_developer_mode_disabled',
+  'simulator_service_hub_unavailable',
   'simulator_set_destination_not_found',
   ...RUNNER_DEVICE_READINESS_FAILURE_REASONS,
   'build_failed_unclassified',
@@ -189,6 +199,32 @@ export type RunnerStartupFailureReason = (typeof RUNNER_STARTUP_FAILURE_REASONS)
 /** The device-readiness subset, typed from the one list above. */
 export type RunnerDeviceReadinessFailureReason =
   (typeof RUNNER_DEVICE_READINESS_FAILURE_REASONS)[number];
+
+/**
+ * The reason for a simulator runner launch whose service hub the host macOS refused to load. macOS
+ * gates `DTServiceHub` behind a version-restriction entitlement, so an Xcode older than the macOS it
+ * runs on cannot bless the simulator service at all: every launch fails the same way until the host
+ * selects an Xcode that supports its macOS. AMFI's refusal is visible only as the bless line in the
+ * launch output, which is why the row keys on that phrase and why no host-side preflight exists.
+ */
+const SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON: RunnerStartupFailureReason =
+  'simulator_service_hub_unavailable';
+
+/**
+ * The reason for a scoped-set launch whose simulator this Xcode cannot resolve. The set is named on the
+ * command, so a launch that finds no matching destination fails identically on every retry.
+ */
+const SIMULATOR_SET_DESTINATION_NOT_FOUND_REASON: RunnerStartupFailureReason =
+  'simulator_set_destination_not_found';
+
+/**
+ * The bless refusal, in the two phrases Xcode writes on one line: the client that failed and the
+ * bless it failed to perform.
+ */
+const SIMULATOR_SERVICE_HUB_BLESS_MATCH = [
+  'dtservicehubclient',
+  'failed to bless service hub',
+] as const;
 
 /**
  * The reason a startup failure carries when no rule proves a cause. Its hint is deliberately the
@@ -213,6 +249,18 @@ type RunnerErrorRule = {
   buildFailure?: {
     reason: RunnerStartupFailureReason;
     hint: string;
+    /**
+     * The cause this row names inside the sentence the caller publishes, in the words the tool itself
+     * used. A row that carries it is a cause the startup paths can name from the launch output alone,
+     * so this module stays the only text matcher: a failure site deciding which causes deserve their own
+     * sentence would be a second classifier. Rows without it travel as a reason beside the caller's
+     * sentence.
+     *
+     * `details` is what the caller handed the classifier, so a row naming a per-launch fact reads it from
+     * there ({@link runnerLaunchLogClassificationDetails}). Returning undefined when a fact is missing
+     * leaves the caller's sentence standing.
+     */
+    messageSuffix?: (details: AppErrorDetails) => string | undefined;
   };
 };
 
@@ -283,6 +331,23 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
       details: hasRunnerConnectFailureReason('xcodebuild_exited_early'),
     },
     verdicts: { retryable: false, connectRetry: false, artifactSuspect: false },
+  },
+  {
+    // The terminal reading of every cause a launch log can name: a simulator service this macOS refuses
+    // to load, or a scoped-set destination this Xcode cannot resolve. Neither is cured by a connect
+    // retry, a session restart, or a rebuilt artifact, and this row has to precede the generic
+    // `runner_connect_refused` row to say so on a connect-shaped failure carrying one of them. It keys
+    // on the reason the launch paths publish, never on the tool sentence they quote, so foreign text
+    // wearing Xcode's own wording cannot mark a failure terminal on its own.
+    reason: 'runner_launch_log_cause',
+    match: { code: 'COMMAND_FAILED', details: hasLaunchLogCauseFailure },
+    verdicts: {
+      retryable: false,
+      connectRetry: false,
+      restartBeforeSend: false,
+      restartAfterReadinessPreflight: false,
+      artifactSuspect: false,
+    },
   },
   {
     // A device still mid-attachment is not a runner we can talk to yet, and waiting on
@@ -391,6 +456,27 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     buildFailure: {
       reason: 'simulator_set_destination_not_found',
       hint: 'Check that the simulator still exists in the --ios-simulator-device-set this error names (`xcrun simctl --set <set> list devices`). If it does, the Xcode this error names no longer honors -DVTSimulatorSetLocation, so use a simulator in the default set.',
+      messageSuffix: (details) =>
+        typeof details.simulatorSetPath === 'string' && typeof details.simulatorUdid === 'string'
+          ? `xcodebuild found no simulator ${details.simulatorUdid} in simulator set ${details.simulatorSetPath}${typeof details.xcodeVersion === 'string' ? ` with Xcode ${details.xcodeVersion}` : ''}`
+          : undefined,
+    },
+  },
+  {
+    // macOS validates Xcode's `DTServiceHub` against a version-restriction entitlement and refuses a
+    // build older than itself (AMFI: "disallowed without correct
+    // com.apple.private.amfi.version-restriction entitlement version"), so no launch of this Xcode's
+    // simulator service can succeed on this host. Both phrases are Xcode's own sentence and meet on
+    // the same line of the launch output; the domain names the client, the complaint names the bless.
+    reason: 'simulator_service_hub_bless_refused',
+    match: {
+      toolTextLineIncludesAll: SIMULATOR_SERVICE_HUB_BLESS_MATCH,
+    },
+    verdicts: {},
+    buildFailure: {
+      reason: SIMULATOR_SERVICE_HUB_UNAVAILABLE_REASON,
+      hint: 'This Xcode cannot start its simulator service on this macOS: macOS refuses to load its DTServiceHub. Select an Xcode that supports this macOS on the daemon host (`xcode-select -s /Applications/Xcode.app`, or DEVELOPER_DIR=/Applications/Xcode.app for the daemon process), then retry. Updating Xcode is the fix; restarting the runner or clearing derived data cannot change it.',
+      messageSuffix: () => 'this Xcode cannot start its simulator service on this macOS',
     },
   },
   {
@@ -722,7 +808,12 @@ export function classifyRunnerStartupFailure(error: unknown): RunnerStartupClass
       const buildFailure = rule.buildFailure;
       if (!buildFailure) continue;
       if (matchesRunnerErrorRule(error, rule.match)) {
-        return { reason: buildFailure.reason, hint: buildFailure.hint, matched: true };
+        return {
+          reason: buildFailure.reason,
+          hint: buildFailure.hint,
+          messageSuffix: buildFailure.messageSuffix?.(error.details ?? {}),
+          matched: true,
+        };
       }
     }
   }
@@ -742,6 +833,12 @@ export function classifyRunnerStartupFailure(error: unknown): RunnerStartupClass
 export type RunnerStartupClassification = Readonly<{
   reason: RunnerStartupFailureReason;
   hint: string;
+  /**
+   * The cause in the tool's own words, when the matched row declares one ({@link RunnerErrorRule}). A
+   * caller publishing a sentence about this failure appends it, so the words naming the cause come from
+   * the same row that named the reason — never from a failure site choosing its own phrasing.
+   */
+  messageSuffix?: string;
   /**
    * False only when no rule row matched at all. The catch that publishes this verdict carries it on
    * `details.startupRuleMatched`, which is the half a caller cannot recover from the reason alone.

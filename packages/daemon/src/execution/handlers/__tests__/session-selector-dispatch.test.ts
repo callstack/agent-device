@@ -31,7 +31,11 @@ import {
 import type { SessionState } from '../../../core/session-state.ts';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { refFrameState } from '../../../core/ref-frame.ts';
-import { createUnavailableRuntimeFactsForTest, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createUnavailableRuntimeFactsForTest,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
@@ -85,6 +89,7 @@ test.each(['rebuild', 'retire'] as const)(
         [Symbol.asyncDispose]: async () => {},
       };
       const running = handleSessionCommands({
+        host: createTestHostEnvironment(),
         createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
@@ -187,6 +192,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   // dismiss mutates the device → frame expires.
   const dismissRef = sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -209,6 +215,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   sessionStore.retire(dismissRef);
   sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -254,6 +261,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
   sessionStore.publish(sessionName, makeSession(sessionName, device));
   await expect(
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -277,6 +285,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
 test('keyboard requires an active session or explicit device selector', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -306,6 +315,7 @@ test('keyboard dismiss requires active iOS session for explicit selectors', asyn
   const sessionStore = makeSessionStore();
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

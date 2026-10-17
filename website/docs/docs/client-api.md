@@ -31,6 +31,7 @@ Entry points for driving devices from Node.js:
 
 - `agent-device`
   - `createAgentDeviceClient(options?)`
+  - `ensureDaemon(options?)`
   - `createLocalArtifactAdapter(options?)`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
   - `isUnreadableCaptureContentError(error)`: true when an Android helper capture found no readable
@@ -39,6 +40,7 @@ Entry points for driving devices from Node.js:
     platform, backend, and mechanism failure.
   - `centerOfRect(rect)`
   - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
+  - types: `DaemonLifecycle`, `EnsureDaemonOptions`, `DaemonConnection`, `DaemonIdentity`
   - types: every option and result type of the client's methods, among them `AppOpenOptions`,
     `AppOpenResult`, `CaptureSnapshotOptions`, `CaptureSnapshotResult`, `CaptureScreenshotResult`,
     `PressOptions`
@@ -83,6 +85,41 @@ if ('cloudArtifacts' in result) {
   }
 }
 ```
+
+## Daemon lifecycle
+
+A client talks to one local daemon per state directory. `daemonLifecycle` says who owns that daemon.
+
+| Mode | What the client does with the daemon |
+| --- | --- |
+| `'managed'` (default) | Starts a missing daemon, replaces one that does not match the client, and retires an unresponsive one after a timeout. |
+| `'attach'` | Connects to the running daemon. Never starts, replaces or stops one, even after a timeout. |
+
+`'managed'` stays the default until 0.22. Use `'attach'` when your code, or another process, owns the daemon, and call `ensureDaemon()` to start or replace it deliberately:
+
+```ts
+import { createAgentDeviceClient, ensureDaemon } from 'agent-device';
+
+const stateDir = './.my-app/agent-device-state';
+
+await ensureDaemon({
+  stateDir,
+  onStart: (reason, previous) => console.log(`started a daemon: ${reason}`, previous),
+});
+const client = createAgentDeviceClient({ stateDir, daemonLifecycle: 'attach' });
+```
+
+`ensureDaemon()` starts a daemon when none runs. It replaces a daemon that does not match the client only if that daemon holds no work: no request in flight, no session, no repair session and no live lease. A resumable upload still streaming and a host human-control hold that names no lease are not counted, so a replacement can end them. Otherwise it fails and leaves the daemon alone. Two cases retire a daemon without that proof, because it cannot be asked: a registered daemon that answers nothing on any transport, and one that times out on the quiesce request and then fails repeated liveness probes. It returns `{ stateDir, daemon, started }`; `daemon` holds the pid, version and code identity, and no credentials. `onStart` runs when the call started a daemon: `'incompatible'` when it replaced a daemon that agreed to leave, with that daemon as `previous`, and `'missing'` otherwise. A `'missing'` start that also has a `previous` replaced a registered daemon that answered nothing.
+
+These failures carry a typed `error.details.reason`:
+
+| Reason | Meaning |
+| --- | --- |
+| `daemon-not-running` | An `'attach'` client found no daemon to connect to. Call `ensureDaemon()`. |
+| `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. Stop it with `agent-device daemon stop --state-dir <path>`, then call `ensureDaemon()`. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
+| `daemon-busy` | `ensureDaemon()` found an incompatible daemon that still holds work. `details` counts `inFlightRequests`, `sessions`, `repairSessions` and `leases`. Wait for them to end and retry. |
+
+`ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` never starts or stops a local daemon in either mode, and `daemonLifecycle` does not change `daemonTransport` or `daemonServerMode`.
 
 ## Device cloud sessions
 

@@ -84,3 +84,29 @@ the gap and its reason instead of implying coverage. See `test/wire-compat/READM
 Legacy remote daemons without `rpcProtocolVersion` remain reachable. This keeps the first release of
 the proxy compatible with older HTTP daemons, but it means absence of the marker is not proof of
 compatibility.
+
+## Daemon capabilities and quiesce
+
+A daemon on the local state directory publishes `capabilities` in `daemon.json`. This is the
+command-level metadata the decision above prefers to a protocol bump. A daemon that predates a
+capability omits it, so a client treats absence as "cannot do this" and never infers it from the
+package version.
+
+`quiesce` is how a client replaces an incompatible daemon without destroying other clients' work.
+The client sends `daemon_quiesce` with the daemon token and the pid and start time recorded in
+`daemon.json`. The daemon checks the token and that it is that instance, refuses a request that
+reached it as a remote-origin one, then closes admission and counts what it holds in a single
+synchronous step: requests in flight, sessions, repair sessions and live leases, and whether the
+daemon is still starting up (`startingUp`), because before that it has no drain path. Any of them
+refuses with `daemon-busy` and reopens admission in that same step. Otherwise it answers
+`draining`, keeps admission closed, and shuts down. The request is answered before dispatch, so
+it joins neither the in-flight count nor the command registry.
+
+The daemon accepts a quiesce only when it can prove its own start time and the request names both
+the pid and that start time; a daemon that cannot is never addressed. A client never signals a
+daemon that did not accept one, except to retire it after it answered `draining`.
+
+The census counts what the contract names and nothing else. A resumable upload still streaming and
+a host-administration human-control hold that names no lease are outside it, the same boundary
+idle reap draws, so a quiesce can end them. A daemon started with an HTTP auth hook marks every
+HTTP request remote-origin and so refuses a quiesce over HTTP; the socket transport is unaffected.

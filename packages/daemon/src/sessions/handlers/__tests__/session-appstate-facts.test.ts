@@ -2,7 +2,11 @@ import { test, expect } from 'vitest';
 import * as path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { createUnavailableRuntimeFactsForTest, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createUnavailableRuntimeFactsForTest,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import {
   handleSessionCommands,
@@ -38,6 +42,7 @@ test('appstate refuses unavailable provider facts before binding the device', as
   sessionStore.publish('default', makeSession('default', { device: staleDevice }));
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: async () => {
       throw new Error('appstate must refuse before loading a command surface');
     },

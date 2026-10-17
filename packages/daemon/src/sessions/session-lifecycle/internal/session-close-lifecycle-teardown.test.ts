@@ -3,7 +3,11 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CloseApplicationFinalizationInput } from '@agent-device/contracts/application-lifecycle-runtime';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -90,6 +94,7 @@ async function closeSession(params: {
     };
   };
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     platformResourceCleanup,

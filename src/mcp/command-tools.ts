@@ -248,7 +248,15 @@ async function createClient(
 ): Promise<AgentDeviceClient> {
   if (deps.createClient) return await deps.createClient(config);
   const { createAgentDeviceClient } = await import('../agent-device-client.ts');
-  return createAgentDeviceClient(config);
+  const { createEnsuredDaemonTransport } = await import('../daemon-client/daemon-client.ts');
+  // One client per tool call, so each call ensures the daemon it is about to use.
+  const ensuring = createEnsuredDaemonTransport();
+  return createAgentDeviceClient(config, {
+    // The client builds the same request the daemon transport takes; its type only differs in the
+    // session being optional, which `sendToDaemon` defaults.
+    transport: async (req, context) =>
+      await ensuring(req as Parameters<typeof ensuring>[0], context),
+  });
 }
 
 async function runCommand(

@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
@@ -45,6 +46,7 @@ async function runDoctorWithSessionDevice(device: DeviceInfo): Promise<DaemonRes
     {},
     async () =>
       await handleDoctorCommand({
+        host: createTestHostEnvironment(),
         req: {
           token: 't',
           session: 'doctor-session',
@@ -75,6 +77,7 @@ async function runSessionlessDoctor(
     inventory,
     async () =>
       await handleDoctorCommand({
+        host: createTestHostEnvironment(),
         req: { token: 't', session: 'default', command: 'doctor', positionals: [], flags },
         sessionName: 'default',
         sessionStore: makeSessionStore('agent-device-doctor-warmup-'),

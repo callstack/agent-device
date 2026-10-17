@@ -3,19 +3,6 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 
-import {
-  CLOUD_WEBDRIVER_PROVIDERS,
-  type CloudWebDriverKnownProviderName,
-} from '@agent-device/provider-webdriver/providers';
-
-/** The one list of provider ids plugins cannot claim: connect routes and bundled runtimes. */
-export const RESERVED_PLUGIN_PROVIDERS: readonly (
-  | 'cloud'
-  | 'proxy'
-  | 'limrun'
-  | CloudWebDriverKnownProviderName
-)[] = ['cloud', 'proxy', ...Object.values(CLOUD_WEBDRIVER_PROVIDERS), 'limrun'];
-
 const PROVIDER_PLUGIN_API_VERSION = 1;
 type PluginManifest = {
   name: string;

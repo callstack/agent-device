@@ -291,6 +291,7 @@ export async function createRequestExecutionScope(params: {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
         try {
           await cleanupExpiredLeasedSession({
+            env: params.host.env,
             sessionName,
             sessionStore,
             leaseRegistry,
@@ -304,6 +305,7 @@ export async function createRequestExecutionScope(params: {
               }),
           });
           scopedReq = admitRequestLeaseForLockedScope({
+            env: params.host.env,
             req: scopedReq,
             sessionName,
             sessionStore,
@@ -660,6 +662,7 @@ export type LeaseSessionEnd = Readonly<{
 }>;
 
 export function createLeaseSessionEnd(params: {
+  env: HostEnvironment['env'];
   sessionStore: SessionStore;
   executionLocks: Map<string, Promise<unknown>>;
   teardownSession: SessionTeardown;
@@ -685,6 +688,7 @@ export function createLeaseSessionEnd(params: {
                 sessionStore,
                 teardownSession,
                 reason,
+                params.env,
               );
             },
           ),

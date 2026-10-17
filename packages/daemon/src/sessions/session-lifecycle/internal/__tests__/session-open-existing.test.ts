@@ -15,7 +15,7 @@ import {
 import { resolveOpenTargetFixture } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 
 const mockResolveOpenTarget = vi.mocked(resolveOpenTargetFixture);
@@ -59,6 +59,7 @@ test('open on existing iOS session refreshes unavailable simulator by name', asy
 
   const response = await withMockedPlatform('darwin', async () =>
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -119,6 +120,7 @@ test('open on existing Android session preserves a comparable freshness baseline
   mockDispatch.mockResolvedValue(undefined);
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -228,6 +230,7 @@ test.each([
     mockResolveOpenTarget.mockResolvedValueOnce(resolved);
 
     const response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -286,6 +289,7 @@ test('open app and URL on existing iOS device session keeps app context', async 
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -324,6 +328,7 @@ test('open reports a platform surface refusal as an INVALID_ARGS response', asyn
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture({ resolveRequestedOpenSurface }),
     req: {
@@ -373,6 +378,7 @@ test('open on existing macOS frontmost-app session carries the stored surface wi
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

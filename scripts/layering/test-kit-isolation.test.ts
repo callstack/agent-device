@@ -1,9 +1,9 @@
-// The shape of test-kit (R83): one entry, built only on packages below its consumers, no platform,
-// provider, daemon or root package reached directly or transitively, and no package it reaches
-// declaring it back.
+// The shape of test-kit (R83): a single entry that names its exports, plus the shared isolation
+// walk (package-isolation.test.ts) composed under its policy.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { parseManifests } from './package-isolation.ts';
 import { checkTestKitIsolation } from './test-kit-isolation.ts';
 
 type Manifest = Record<string, unknown>;
@@ -47,7 +47,7 @@ const SOURCE = new Map([
 ]);
 
 function check(overrides: Record<string, Manifest> = {}, sources = SOURCE) {
-  return checkTestKitIsolation(workspace(overrides), sources);
+  return checkTestKitIsolation(parseManifests(workspace(overrides)), sources);
 }
 
 test('the test-kit shape holds: one entry, built only on packages below it', () => {
@@ -94,127 +94,8 @@ test('every condition of the "." entry must point at src/index.ts', () => {
   assert.deepEqual(check({ 'test-kit': { exports: { '.': './src/index.ts' } } }), []);
 });
 
-test('test-kit may not depend on a platform, provider, daemon or root package, in any field', () => {
-  for (const name of [
-    '@agent-device/platform-apple',
-    '@agent-device/provider-limrun',
-    '@agent-device/testmu',
-    '@agent-device/daemon',
-    'agent-device',
-  ]) {
-    for (const field of [
-      'dependencies',
-      'devDependencies',
-      'optionalDependencies',
-      'peerDependencies',
-    ]) {
-      const found = check({ 'test-kit': { [field]: { [name]: 'workspace:*' } } });
-      assert.equal(found.length, 1, `${name} in ${field}`);
-      assert.match(found[0]!.message, /belongs in it/);
-    }
-  }
-});
-
-test('a provider published under a non-provider name is forbidden by its directory', () => {
-  const found = check({
-    'test-kit': { dependencies: { '@agent-device/testmu': 'workspace:*' } },
-  });
+test('the shared isolation walk runs under the test-kit policy', () => {
+  const found = check({ 'test-kit': { dependencies: { '@agent-device/daemon': 'workspace:*' } } });
   assert.equal(found.length, 1);
-  assert.match(found[0]!.message, /test-kit -> @agent-device\/testmu/);
-  // A lookalike name outside those directories is an ordinary package.
-  assert.deepEqual(
-    check({ 'test-kit': { dependencies: { '@agent-device/proxy': 'workspace:*' } } }),
-    [],
-  );
-});
-
-test('a forbidden package reached through another package is refused with its path', () => {
-  const found = check({
-    kernel: { dependencies: { '@agent-device/contracts': 'workspace:*' } },
-    contracts: { optionalDependencies: { '@agent-device/platform-apple': 'workspace:*' } },
-  });
-  assert.equal(found.length, 1);
-  assert.match(
-    found[0]!.message,
-    /test-kit -> @agent-device\/kernel -> @agent-device\/contracts -> @agent-device\/platform-apple/,
-  );
-});
-
-test('a package test-kit reaches directly or transitively cannot declare test-kit', () => {
-  const direct = check({
-    kernel: { devDependencies: { '@agent-device/test-kit': 'workspace:*' } },
-  });
-  assert.equal(direct.length, 1);
-  assert.equal(direct[0]!.file, 'packages/kernel/package.json');
-  assert.match(direct[0]!.message, /project-reference cycle/);
-
-  const transitive = check({
-    kernel: { dependencies: { '@agent-device/contracts': 'workspace:*' } },
-    contracts: { optionalDependencies: { '@agent-device/test-kit': 'workspace:*' } },
-  });
-  assert.equal(transitive.length, 1);
-  assert.equal(transitive[0]!.file, 'packages/contracts/package.json');
-  assert.match(
-    transitive[0]!.message,
-    /test-kit -> @agent-device\/kernel -> @agent-device\/contracts -> @agent-device\/test-kit/,
-  );
-});
-
-test('a package outside test-kit reach may declare test-kit', () => {
-  assert.deepEqual(
-    check({ proxy: { devDependencies: { '@agent-device/test-kit': 'workspace:*' } } }),
-    [],
-  );
-});
-
-test('test-kit may not import a platform, provider, daemon or root module, or reach out of its directory', () => {
-  for (const specifier of [
-    '@agent-device/platform-android',
-    '@agent-device/platform-apple/runner',
-    '@agent-device/provider-limrun/connection',
-    '@agent-device/testmu/connection-verification',
-    '@agent-device/daemon/testing/context',
-    '@agent-device/daemon',
-    'agent-device/commands',
-    '../../../src/platform-runtime-gateway.ts',
-    '../../kernel/src/errors.ts',
-  ]) {
-    const found = check(
-      {},
-      new Map([['packages/test-kit/src/a.ts', `import { x } from '${specifier}';`]]),
-    );
-    assert.equal(found.length, 1, specifier);
-    assert.equal(found[0]!.file, 'packages/test-kit/src/a.ts');
-  }
-  // A sibling inside its own directory, and a lookalike package name, are fine.
-  assert.deepEqual(
-    check(
-      {},
-      new Map([
-        [
-          'packages/test-kit/src/a.ts',
-          "import { b } from './b.ts';\nimport { c } from '@agent-device/daemon-contracts/device-claims';",
-        ],
-      ]),
-    ),
-    [],
-  );
-});
-
-test('the shared import walk applies: a vi.mock literal reaches a forbidden package too', () => {
-  const found = check(
-    {},
-    new Map([
-      [
-        'packages/test-kit/src/a.ts',
-        "import { vi } from 'vitest';\nvi.mock('@agent-device/platform-apple/runner', () => ({}));",
-      ],
-    ]),
-  );
-  assert.equal(found.length, 1);
-  assert.equal(found[0]!.line, 2);
-});
-
-test('a repo without a test-kit package has nothing to isolate', () => {
-  assert.deepEqual(checkTestKitIsolation(new Map(), new Map()), []);
+  assert.match(found[0]!.message, /test-kit -> @agent-device\/daemon/);
 });

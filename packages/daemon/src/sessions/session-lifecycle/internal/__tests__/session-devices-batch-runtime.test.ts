@@ -25,7 +25,11 @@ import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 bindTestCommandHost();
 
@@ -44,6 +48,7 @@ async function runDevices(
     { local: async () => inventory },
     async () =>
       await handleSessionInventoryCommands({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         req: { token: 't', session: 'default', command: 'devices', positionals: [], flags },
         sessionName: 'default',
@@ -358,7 +363,9 @@ test('batch step pins nested requests to the resolved session', async () => {
   );
 
   expect(response.ok).toBe(true);
-  expect(seenSessions).toEqual([{ session: 'resolved-session', flagSession: 'resolved-session' }]);
+  // The wire address stays pinned to the resolved session. The step flag carries it only when the
+  // caller named a session (#3674): an unconditional stamp would read as caller-provened.
+  expect(seenSessions).toEqual([{ session: 'resolved-session', flagSession: undefined }]);
 });
 
 test('close clears retained materialized install paths bound to the session', async () => {
@@ -393,6 +400,7 @@ test('close clears retained materialized install paths bound to the session', as
   mockCleanupRetainedMaterializedPaths.mockImplementation(realCleanup);
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },

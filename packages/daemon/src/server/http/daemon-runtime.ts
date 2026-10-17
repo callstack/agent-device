@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
+  DAEMON_CAPABILITIES,
   resolveDaemonPaths,
   resolveDaemonServerMode,
 } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -52,7 +53,11 @@ import {
 } from './server-shutdown.ts';
 import type { DaemonInvokeFn } from '../../core/daemon-request.ts';
 import type { SessionRef } from '../../core/session-state.ts';
-import { createDaemonIdleReap } from '../../sessions/server/daemon-idle-reap.ts';
+import {
+  createDaemonIdleReap,
+  createDaemonQuiesce,
+  daemonShuttingDownResponse,
+} from '../../sessions/server/daemon-idle-reap.ts';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
@@ -463,7 +468,7 @@ async function startDaemonRuntimeOnHost(
     });
   };
 
-  const shutdownClaimLedger = createDaemonShutdownClaimLedger();
+  const shutdownClaimLedger = createDaemonShutdownClaimLedger(env);
 
   const teardownDaemonSession = async (ref: SessionRef): Promise<boolean> => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
@@ -535,6 +540,7 @@ async function startDaemonRuntimeOnHost(
   };
 
   const leaseSessionEnd = createLeaseSessionEnd({
+    env,
     sessionStore,
     executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
     teardownSession: settleIdleExpiredSession,
@@ -547,6 +553,7 @@ async function startDaemonRuntimeOnHost(
   };
 
   const sessionIdleExpiry = createSessionIdleExpiry({
+    env,
     sessionStore,
     idleExpiryMs: resolveSessionIdleExpiryMs(env),
     executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
@@ -585,16 +592,24 @@ async function startDaemonRuntimeOnHost(
     leaseSessionEnd.cancel();
   });
 
-  const handleRequest: DaemonInvokeFn = async (req) => {
-    if (shuttingDown)
-      return {
-        ok: false,
-        error: {
-          code: 'COMMAND_FAILED',
-          message: 'Daemon is shutting down.',
-          details: { reason: 'daemon_shutting_down' },
-        },
-      };
+  // The quiesce request is answered before dispatch and never joins `inFlightRequests`, so the
+  // count it reads needs no allowance for it. The servers listen and `daemon.json` is published
+  // before `shutdown` exists, and a daemon answers `draining` only once it has a drain path to run.
+  let startingUp = true;
+  const quiesce = createDaemonQuiesce({
+    token,
+    identity: { pid: daemonIdentity.pid, processStartTime: daemonIdentity.startTime },
+    sessionStore,
+    leaseRegistry,
+    inFlightRequestCount: () => inFlightRequests.size,
+    startingUp: () => startingUp,
+    drain: () => {
+      void close();
+    },
+  });
+
+  const handleRequest: DaemonInvokeFn = quiesce.admit(async (req) => {
+    if (shuttingDown) return daemonShuttingDownResponse();
     idleReap.cancel();
     const dispatch = runtimeContext.run(() => dispatchRequest(req));
     inFlightRequests.add(dispatch);
@@ -609,7 +624,7 @@ async function startDaemonRuntimeOnHost(
       // the reaper's view of a session's deadline identical to the lock-guarded one.
       sessionIdleExpiry.noteSessionsChanged();
     }
-  };
+  });
 
   const openDaemonServers = async (): Promise<{
     servers: DaemonServer[];
@@ -676,6 +691,7 @@ async function startDaemonRuntimeOnHost(
       codeOrigin: daemonCodeOrigin,
       codeSignature: daemonCodeSignature,
       policyDigest: daemonPolicy?.digest,
+      capabilities: DAEMON_CAPABILITIES,
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
@@ -960,6 +976,8 @@ async function startDaemonRuntimeOnHost(
     }
     return closing;
   };
+
+  startingUp = false;
 
   return {
     httpPort,

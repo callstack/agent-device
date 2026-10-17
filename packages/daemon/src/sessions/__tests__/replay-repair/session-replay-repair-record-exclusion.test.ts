@@ -20,7 +20,11 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  *   completely unchanged.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   resolveRunnerAppBundleId: vi.fn(),
@@ -242,6 +246,7 @@ test('diagnostic get/is reads mid-repair are excluded from the healed script by 
 
   // --- Finalize: `close --save-script` commits the healed `.ad`. ---
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -321,6 +326,7 @@ test("a --record'ed diagnostic read lands in the healed script (the diverged-ste
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'get', 'click']);
 
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

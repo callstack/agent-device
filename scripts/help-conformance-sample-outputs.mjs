@@ -85,9 +85,9 @@ Detected an overly complex or slow accessibility tree. Fell back to the private-
 // DEVICE_IN_USE from buildDeviceInUseBySessionError
 // (packages/daemon/src/core/session-recovery-hints.ts) — the parity test drives that exact producer.
 export const DEVICE_IN_USE_SAMPLE = {
-  command: `agent-device press 'label="Place order"' --settle`,
+  command: 'agent-device open https://example.test --platform web --session default',
   output: `Error (DEVICE_IN_USE): Device is already in use by session "checkout".
-Hint: Run agent-device session list to inspect active sessions. To reuse this device, rerun the command with --session checkout. To open a new session on this device, first run agent-device close --session checkout.`,
+Hint: Run agent-device session list to inspect active sessions. To reuse this device, rerun the command with --session checkout. To open a new session on this device, first run agent-device close --session checkout. To wait for the device to free up, run the same open with --wait <ms>.`,
 };
 
 // Enforced cross-daemon device claim conflict from
@@ -105,9 +105,9 @@ Hint: Inspect the owner with: agent-device device status --platform android --se
 // `~s5` pin at the boundary (interaction-touch-targets.ts), so the message
 // names the plain ref; the hint is the precise resolveRefStalenessWarning.
 export const STALE_REF_SAMPLE = {
-  command: 'agent-device press @e12~s5 --settle',
-  output: `Error (COMMAND_FAILED): Ref @e12 was minted from a superseded snapshot generation
-Hint: Ref @e12 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.`,
+  command: 'agent-device press @e2~s5',
+  output: `Error (COMMAND_FAILED): Ref @e2 was minted from a superseded snapshot generation
+Hint: Ref @e2 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.`,
 };
 
 // AMBIGUOUS_MATCH from buildAmbiguousMatchError (packages/daemon/src/execution/selector-match-errors.ts)

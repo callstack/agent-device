@@ -7,7 +7,7 @@ import path from 'node:path';
 
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { expectOkData, makeSessionStore } from './session-test-suite.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('../../../core/snapshot-interactor-capture.ts', () => ({
@@ -23,6 +23,7 @@ test('test --json marks a typed live device claim as infrastructure without retr
 
   let attempts = 0;
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -72,6 +73,7 @@ test('test --json retries DEVICE_IN_USE without typed device-claim provenance', 
 
   let attempts = 0;
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

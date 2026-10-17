@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeIosAppSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { assertRpcOk } from './assertions.ts';
@@ -17,7 +16,23 @@ test.each([
   ['replay', 'text'],
 ] as const)('Apple %s %s captures like is when native queries fail', async (command, target) => {
   const commands: string[] = [];
-  const appleTool = createRecordingAppleToolProvider();
+  const appleTool = createRecordingAppleToolProvider({
+    simctl: async (args) => {
+      if (args[0] === 'list') {
+        return {
+          stdout: JSON.stringify({
+            devices: {
+              'iOS 18.5': [{ udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id, state: 'Booted' }],
+            },
+          }),
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      if (args[0] === 'launch') return { stdout: '', stderr: '', exitCode: 0 };
+      throw new Error(`Unexpected Apple simulator call: ${args.join(' ')}`);
+    },
+  });
   const daemon = await createProviderScenarioHarness({
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
     appleToolProvider: () => appleTool.provider,
@@ -54,11 +69,13 @@ test.each([
       },
     }),
   });
-  daemon.publishSession('default', {
-    ...makeIosAppSession('default'),
-    device: PROVIDER_SCENARIO_IOS_SIMULATOR,
-  });
   try {
+    await daemon.client().apps.open({
+      app: 'com.example.demo',
+      platform: 'ios',
+      udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+    });
+    commands.length = 0;
     const flags = { platform: 'ios' as const };
     assert.equal(
       assertRpcOk(await daemon.callCommand('is', ['visible', 'id="LANDMARK_A"'], flags)).pass,
@@ -84,7 +101,9 @@ test.each([
     );
     assert.deepEqual(
       commands,
-      target === 'selector' ? ['snapshot', 'snapshot'] : ['snapshot', 'findText', 'snapshot'],
+      target === 'selector'
+        ? ['snapshot', 'snapshot', 'snapshot']
+        : ['snapshot', 'snapshot', 'findText', 'snapshot'],
     );
   } finally {
     await daemon.close();

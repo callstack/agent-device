@@ -15,15 +15,21 @@ import { IOS_SIMULATOR } from './device-fixtures.ts';
  *
  * - `captured` — `output` was pasted from a run, and `command` plus `xcodeVersion` (from
  *   `xcodebuild -version`) were recorded with it by `.device-evidence/CHECKLIST-runner-failures.md`.
+ * - `reported-log-excerpt` — `output` was pasted from a `runner.log` someone else ran, and the
+ *   versions in `xcodeVersion` are the ones that reporter stated. No `command` and no checklist row:
+ *   the host that produced it is not reachable from here, which is also why no run on this machine
+ *   can promote such an entry to `captured`.
  * - `shipped-sniff-trigger` — the substrings a rule matches are the ones shipped in
  *   `resolveSigningFailureHint` before #2680, which is evidence xcodebuild can emit them. The
  *   sentence around them is ours, so `command` and `xcodeVersion` stay unrecorded.
  * - `invented-shape` — no shipped trigger and no capture. The entry exists to exercise a rule and
  *   makes no claim about wording xcodebuild prints.
  *
- * Until Phase B captures the real runs, every entry is `unobserved` for `xcodeVersion` and carries
- * no `command`: an invocation we did not run is not provenance. Nothing in the classifier reads
- * these fields; they exist so a reason can be traced to an observation instead of to a guess.
+ * The two kinds with no observation behind the invocation — `shipped-sniff-trigger` and
+ * `invented-shape` — are `unobserved` for `xcodeVersion` and carry no `command`: an invocation we did
+ * not run is not provenance. `captured` records both, and `reported-log-excerpt` records the version
+ * its reporter stated and no command. Nothing in the classifier reads these fields; they exist so a
+ * reason can be traced to an observation instead of to a guess.
  *
  * Blocked on the host, not unexamined. One Phase B run on `thymikee-iphone` / Xcode 26.2 settled the
  * shape question these rows were held on — `No profiles for '<id>' were found` arrives as one long
@@ -44,6 +50,7 @@ import { IOS_SIMULATOR } from './device-fixtures.ts';
 
 export type RunnerStartupFailureSite =
   | 'build-for-testing'
+  | 'launch-test-without-building'
   | 'host-dev-tools-security'
   | 'device-readiness';
 
@@ -109,7 +116,7 @@ export type RunnerStartupFailureFixture = Readonly<{
   command?: string;
   /** `xcodebuild -version` recorded from that run, or `unobserved`. */
   xcodeVersion: string;
-  provenance: 'captured' | 'shipped-sniff-trigger' | 'invented-shape';
+  provenance: 'captured' | 'reported-log-excerpt' | 'shipped-sniff-trigger' | 'invented-shape';
   /** The tool's own stdout/stderr. */
   output: string;
   /** The argv the exec reported, which is never evidence of a cause (#2680). */
@@ -389,6 +396,19 @@ export const RUNNER_STARTUP_FAILURE_FIXTURES: readonly RunnerStartupFailureFixtu
     output: '"developerModeStatus" : "enabled",\n"ddiServicesAvailable" : false,\n',
     deviceReport: { developerMode: 'enabled', developerDiskImage: 'unavailable' },
     note: 'The decisive pairing, and the one #2682 used to answer with Developer Mode advice: the toggle is on and only the image is down. It is NOT a pre-build refusal (#2683 review): iOS 17+ mounts the image on demand during build and launch, so this report has to survive to a failure — which is what `unclassified-build-on-device-with-image-down` records. The enabled half is captured on some devices; a device waiting on device support has not been captured.',
+  },
+  {
+    id: 'simulator-service-hub-bless-refused',
+    reason: 'simulator_service_hub_unavailable',
+    site: 'launch-test-without-building',
+    xcodeVersion: 'Xcode 26.6 / Build version 17F113',
+    provenance: 'reported-log-excerpt',
+    output:
+      '2026-10-15 10:23:41.112 xcodebuild[40217:166902] [MT] iOSSimulator: <DVTiOSDevice (0x1234), iPhone, 26.5 (23F770a), abcdef0123456789abcdef0123456789abcdef01> unable to connect to "com.apple.instruments.deviceservice.lockdown"\n' +
+      '(Error Domain=DVTiPhoneSimulatorErrorDomain Code=-1 "DTServiceHubClient failed to bless service hub for simulator iPhone (abcdef0123456789abcdef0123456789abcdef01)" UserInfo={NSLocalizedDescription=DTServiceHubClient failed to bless service hub for simulator iPhone (abcdef0123456789abcdef0123456789abcdef01), NSUnderlyingError=0x1234 {Error Domain=DTServiceHubClient Code=1 "\'localDeviceConnectionWithError:\' failed but didn\'t provide an error."}})\n' +
+      '** TEST EXECUTE FAILED **\n' +
+      '** BUILD INTERRUPTED **\n',
+    note: 'Reported on #3449 from two hosts (macOS 27.2 with Xcode 26.6, macOS 27.2 with Xcode 26.5), pasted from `runner.log`. The issue quotes the bless line and the `DTServiceHubClient` line with their middles elided; the device description, the pids and pointers, and the repeated `NSLocalizedDescription` are filled in with placeholders in the shape Xcode writes, and `** BUILD INTERRUPTED **` is the line the report says follows. The row keys on the two phrases it quotes verbatim. Not inducible here: it needs an Xcode older than the host macOS supports, and the AMFI refusal behind it is in the kernel log (`com.apple.DTServiceHub disallowed without correct com.apple.private.amfi.version-restriction entitlement version`).',
   },
   {
     id: 'devtools-security-disabled',

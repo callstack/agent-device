@@ -77,7 +77,11 @@ import {
   makeSessionStore,
   noopInvoke,
 } from './session-open-runtime.fixtures.ts';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 bindTestCommandHost();
 
@@ -134,6 +138,7 @@ test('open runtime payload replaces stored session runtime atomically', async ()
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -215,6 +220,7 @@ test('open runtime payload clears stale applied transport hints before launch', 
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -268,6 +274,7 @@ test('open runtime payload rejects invalid metro port before app launch', async 
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -310,6 +317,7 @@ test('open runtime payload rejects malformed runtime objects without mutating se
   mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -355,6 +363,7 @@ test('open runtime payload does not persist replacement when launch fails', asyn
 
   await expect(
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -398,6 +407,7 @@ test('a first open keeps both positionals so the deep link still reaches the app
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -444,6 +454,7 @@ test('open reports the launch confirmation its platform answered', async () => {
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -497,6 +508,7 @@ function invokeHeldOpen(
   req?: Partial<DaemonRequest>,
 ) {
   return handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -681,6 +693,7 @@ async function openIosApp(params: {
   mockResolveTargetDevice.mockResolvedValue(makeAppleSimulator());
   const { loader } = lifecycleOperationsSpy({ openApplication: params.openApplication });
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     lifecycleOperationsLoader: loader,
@@ -709,6 +722,7 @@ async function openAndroidApp(params: {
   );
   const { loader } = lifecycleOperationsSpy({ openApplication });
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     lifecycleOperationsLoader: loader,
@@ -836,6 +850,7 @@ test.each([
     const { loader } = lifecycleOperationsSpy({ prepareApplicationOpen });
 
     const response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       lifecycleOperationsLoader: loader,
@@ -881,6 +896,7 @@ async function openReportingObservation(
   };
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     lifecycleOperationsLoader: loader,

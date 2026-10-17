@@ -5,7 +5,11 @@ const ensured = vi.hoisted(() => ({ settings: undefined as unknown }));
 
 vi.mock('./daemon-client-lifecycle.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./daemon-client-lifecycle.ts')>()),
-  ensureDaemon: async (settings: unknown) => {
+  ensureManagedDaemon: async (settings: unknown) => {
+    ensured.settings = settings;
+    throw new Error('stop before talking to a daemon');
+  },
+  observeLocalDaemon: async (settings: unknown) => {
     ensured.settings = settings;
     throw new Error('stop before talking to a daemon');
   },

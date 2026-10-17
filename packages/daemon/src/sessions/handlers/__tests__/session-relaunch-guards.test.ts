@@ -11,13 +11,14 @@ import {
 } from '../../../__tests__/support/handlers/session-test-harness.ts';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { makeTestScreenRecordingResource } from '../../../__tests__/support/screen-recording-live-handle.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 
 test('open --relaunch fails without app when no session exists', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -64,6 +65,7 @@ test('open on in-use device returns DEVICE_IN_USE before readiness checks', asyn
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -120,6 +122,7 @@ test('open on device owned by recording session returns recording recovery hint'
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -156,6 +159,7 @@ async function openRelaunch(params: {
   flags: Record<string, unknown>;
 }) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture({
       validateOpenRelaunchTarget: params.validateOpenRelaunchTarget,

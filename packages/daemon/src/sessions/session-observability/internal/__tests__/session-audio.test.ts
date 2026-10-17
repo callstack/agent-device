@@ -27,7 +27,6 @@ import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio
 import { audioProbeDurableResource } from '@agent-device/capture-kit/audio-probe-session-resource';
 import type { SessionStore } from '../../../../core/session-store.ts';
 import { handleSessionObservabilityCommands } from '../../index.ts';
-import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../__tests__/session-audio.coverage.ts';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 
 async function runAudio(
@@ -299,7 +298,7 @@ test('audio probe starts host helper for iOS simulator audio', async () => {
   assert.ok(sessionStore.get('ios-sim')?.audioProbe);
 });
 
-test(ANDROID_AUDIO_CONTRACT_EVIDENCE.testName, async () => {
+test('audio probe starts host helper for Android emulator audio', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   const session = makeAndroidSession('android');
   sessionStore.publish('android', session);

@@ -14,6 +14,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import {
   createTestAppLogLiveHandle,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -300,6 +301,7 @@ async function runLogs(
   throwIfCanceled?: () => void,
 ) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'logs', positionals, flags },

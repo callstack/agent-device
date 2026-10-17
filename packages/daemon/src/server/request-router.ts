@@ -349,6 +349,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     const { dispatchLedger } = lockedScope;
     const requestScope = createPlatformRequestScope(lockedScope.req);
     const handlerResponse = await runRequestHandlerChain({
+      host,
       req: lockedScope.req,
       sessionName: lockedScope.sessionName,
       logPath: lockedScope.logPath,

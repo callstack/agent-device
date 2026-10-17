@@ -27,6 +27,7 @@ import {
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
   bindTestCommandHost,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 
 bindTestCommandHost();
@@ -48,6 +49,7 @@ async function runDevices(): Promise<DaemonResponse | null> {
     flags: {},
   };
   return handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',

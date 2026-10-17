@@ -2,8 +2,8 @@
 //
 // A scheduled lane goes dark quietly: it can stop running, or fail for weeks, while PR CI stays
 // green. Freshness monitoring therefore needs one machine-readable record per run — green runs
-// included. This module only maps the lane's own facts onto `scripts/lib/lane-envelope.ts`; the
-// envelope shape itself is cross-lane and lives there.
+// included. This module maps the lane's own facts onto the cross-lane envelope contract in
+// `@agent-device/test-kit`.
 //
 // `error` (a crash, or config the harness could not parse) is reported as `result: 'fail'` with
 // `data.stage: 'error'`: the shared contract deliberately has two results, and a lane that could
@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { laneEnvelope } from '../lib/lane-envelope.ts';
+import { laneEnvelope } from '@agent-device/test-kit';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import type { FuzzFailure } from './invariant.ts';
 

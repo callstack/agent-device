@@ -144,6 +144,7 @@ test('provider transport refuses a fold before any runner traffic', async () => 
     calls.runner.length = 0;
     assertRpcError(
       await daemon.callCommand('fold', ['open'], request.flags, request),
+      500,
       'UNSUPPORTED_OPERATION',
       /fold/,
     );

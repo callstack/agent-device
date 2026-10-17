@@ -3,13 +3,8 @@ import http from 'node:http';
 import { test } from 'vitest';
 import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { buildHttpRpcPayload } from '../../../src/daemon-client/daemon-client-rpc.ts';
-import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit';
+import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   CloudWebDriverTestServer,
@@ -57,13 +52,8 @@ test('lease_allocate over HTTP prepares the BrowserStack session end to end', as
       deviceInventorySource: providers.deviceInventorySource!,
       platformRuntime: { providerRuntimes: runtimes, providerModules },
     });
-    const httpServer = await createDaemonHttpServer({
-      token: harness.token,
-      handleRequest: harness.handleRequest,
-    });
 
     try {
-      const port = await listenOnLoopback(httpServer);
       const envelope = buildHttpRpcPayload(
         {
           token: harness.token,
@@ -92,7 +82,7 @@ test('lease_allocate over HTTP prepares the BrowserStack session end to end', as
         { includeTokenParam: false },
       );
 
-      const body = await postRpc(port, harness.token, envelope);
+      const body = await postRpc(harness.httpPort, harness.token, envelope);
       assert.equal(body.status, 200);
       assert.equal(body.rpc.error, undefined, `rpc error: ${JSON.stringify(body.rpc.error)}`);
       assert.ok(
@@ -115,7 +105,6 @@ test('lease_allocate over HTTP prepares the BrowserStack session end to end', as
         },
       });
     } finally {
-      await closeLoopbackServer(httpServer);
       await harness.close();
       await Promise.allSettled(runtimes.map(async (runtime) => await runtime.shutdown()));
     }

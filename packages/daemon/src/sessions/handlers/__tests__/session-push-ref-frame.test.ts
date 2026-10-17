@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import type { InspectDeviceRuntimeFacts } from '../../../core/request-runtime-binding.ts';
@@ -94,6 +94,7 @@ async function dispatchPush(params: {
     flags: {},
   };
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req,

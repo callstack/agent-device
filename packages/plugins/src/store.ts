@@ -10,11 +10,7 @@ import {
   resolveUserConfigPath,
 } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import {
-  readPluginManifest,
-  assertUniquePluginProviders,
-  RESERVED_PLUGIN_PROVIDERS,
-} from './manifest.ts';
+import { readPluginManifest, assertUniquePluginProviders } from './manifest.ts';
 
 type PluginSelection = {
   installation: string;
@@ -142,8 +138,8 @@ async function stagePlugin(
 export async function changePlugin(
   action: PluginAction,
   input: string,
-  env: NodeJS.ProcessEnv = process.env,
-  reservedProviders: readonly string[] = RESERVED_PLUGIN_PROVIDERS,
+  env: NodeJS.ProcessEnv,
+  reservedProviders: readonly string[],
 ): Promise<void> {
   const { name, version } = parsePluginRequest(action, input);
   const configPath = resolveUserConfigPath(env);

@@ -215,7 +215,7 @@ test('Provider-backed integration scroll down that never moves a hidden-content 
 
       const callsBeforeScroll = runnerTranscript.calls.length;
       const scroll = await daemon.callCommand('scroll', ['down']);
-      const errorData = assertRpcError(scroll, 'COMMAND_FAILED', /scroll down moved nothing/);
+      const errorData = assertRpcError(scroll, 500, 'COMMAND_FAILED', /scroll down moved nothing/);
       assert.equal(
         errorData.details && (errorData.details as Record<string, unknown>).reason,
         'scroll_no_progress',

@@ -1,26 +1,17 @@
-/**
- * #2246: the download half of the fix. The daemon's artifact transport already tar's a
- * directory artifact on the fly (`artifact-tracking.ts`'s `ensureDirectoryArchive`) — this test
- * is the first to exercise that path all the way through `downloadRemoteArtifact` on the client,
- * which used to only ever write a response body straight to one file (screenshot/recording).
- * `test`'s suite artifacts are a whole directory tree, so the client must detect the
- * `application/gzip` directory-archive response and extract it instead.
- */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { downloadRemoteArtifact } from '../daemon-artifacts.ts';
 import {
-  cleanupDownloadableArtifact,
-  trackDownloadableArtifact,
-} from '@agent-device/daemon/testing/artifact-tracking';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import { downloadRemoteArtifact } from '@agent-device/remote/daemon-artifacts';
+  createArtifactDownloadServer,
+  createDirectoryArtifactArchive,
+} from './support/artifact-download-fixtures.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
 
@@ -30,7 +21,7 @@ test('downloadRemoteArtifact extracts a directory artifact into the caller-local
   if (await skipWhenLoopbackUnavailable(t, 'remote test-artifacts directory download coverage'))
     return;
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-test-artifacts-'));
+  const tempDir = mkdtempForTestSync('agent-device-remote-test-artifacts-');
   // Mirrors what the daemon actually produces: `<remote temp root>/<suiteInvocationId>/...`.
   const daemonSuiteDir = path.join(tempDir, 'daemon-side', SUITE_INVOCATION_ID);
   const attemptDir = path.join(daemonSuiteDir, 'qa-flows__open-grid-settings.ad', 'attempt-1');
@@ -50,17 +41,9 @@ test('downloadRemoteArtifact extracts a directory artifact into the caller-local
   fs.mkdirSync(callerArtifactsRoot, { recursive: true });
   fs.writeFileSync(path.join(callerArtifactsRoot, 'previous-run-marker.txt'), 'keep me');
 
-  const artifactId = trackDownloadableArtifact({
-    artifactPath: daemonSuiteDir,
-    artifactType: 'test-artifacts',
-    fileName: SUITE_INVOCATION_ID,
-  });
-  const server = await createDaemonHttpServer({
-    token: 'daemon-token',
-    handleRequest: async () => {
-      throw new Error('not exercised: this test only hits the /artifacts route');
-    },
-  });
+  const artifactId = 'directory-artifact';
+  const archive = await createDirectoryArtifactArchive(daemonSuiteDir);
+  const server = createArtifactDownloadServer(new Map([[artifactId, archive]]));
 
   try {
     const port = await listenOnLoopback(server);
@@ -100,7 +83,6 @@ test('downloadRemoteArtifact extracts a directory artifact into the caller-local
       'keep me',
     );
   } finally {
-    cleanupDownloadableArtifact(artifactId);
     await closeLoopbackServer(server);
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -110,19 +92,12 @@ test('a failed directory download leaves the caller-local artifacts root untouch
   if (await skipWhenLoopbackUnavailable(t, 'remote test-artifacts directory download coverage'))
     return;
 
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-remote-test-artifacts-fail-'),
-  );
+  const tempDir = mkdtempForTestSync('agent-device-remote-test-artifacts-fail-');
   const callerArtifactsRoot = path.join(tempDir, 'remote-device-artifacts', 'ad-test');
   fs.mkdirSync(callerArtifactsRoot, { recursive: true });
   fs.writeFileSync(path.join(callerArtifactsRoot, 'previous-run-marker.txt'), 'keep me');
 
-  const server = await createDaemonHttpServer({
-    token: 'daemon-token',
-    handleRequest: async () => {
-      throw new Error('not exercised: this test only hits the /artifacts route');
-    },
-  });
+  const server = createArtifactDownloadServer(new Map());
 
   try {
     const port = await listenOnLoopback(server);
@@ -157,9 +132,7 @@ test('a directory artifact containing a symlink is rejected, not extracted', asy
   if (await skipWhenLoopbackUnavailable(t, 'remote test-artifacts directory download coverage'))
     return;
 
-  const tempDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-remote-test-artifacts-evil-'),
-  );
+  const tempDir = mkdtempForTestSync('agent-device-remote-test-artifacts-evil-');
   // A remote (possibly compromised) daemon returning an archive with a symlink entry — the
   // real-world shape `extractArchiveSafely` guards against, since raw `tar xzf` would otherwise
   // follow it wherever it points on extraction.
@@ -177,17 +150,9 @@ test('a directory artifact containing a symlink is rejected, not extracted', asy
   );
   fs.mkdirSync(callerArtifactsRoot, { recursive: true });
 
-  const artifactId = trackDownloadableArtifact({
-    artifactPath: daemonSuiteDir,
-    artifactType: 'test-artifacts',
-    fileName: SUITE_INVOCATION_ID,
-  });
-  const server = await createDaemonHttpServer({
-    token: 'daemon-token',
-    handleRequest: async () => {
-      throw new Error('not exercised: this test only hits the /artifacts route');
-    },
-  });
+  const artifactId = 'unsafe-directory-artifact';
+  const archive = await createDirectoryArtifactArchive(daemonSuiteDir);
+  const server = createArtifactDownloadServer(new Map([[artifactId, archive]]));
 
   try {
     const port = await listenOnLoopback(server);
@@ -207,7 +172,6 @@ test('a directory artifact containing a symlink is rejected, not extracted', asy
 
     assert.equal(fs.existsSync(path.join(callerArtifactsRoot, SUITE_INVOCATION_ID)), false);
   } finally {
-    cleanupDownloadableArtifact(artifactId);
     await closeLoopbackServer(server);
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

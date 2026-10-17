@@ -67,6 +67,12 @@ export const ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence
     [C.viewport],
     'rejects an unavailable exact-owner fact before binding',
   );
+export const ANDROID_AUDIO_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'packages/daemon/src/sessions/session-observability/internal/__tests__/session-audio.test.ts',
+    [C.audio],
+    'audio probe starts host helper for Android emulator audio',
+  );
 
 export const TVOS_REMOTE_TEST_NAME =
   'Provider-backed integration tvOS remote flow maps navigation commands to runner remote presses';

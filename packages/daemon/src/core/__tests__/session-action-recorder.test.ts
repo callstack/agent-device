@@ -7,7 +7,7 @@ import { isSessionRecording } from '../session-script-publication-capability.ts'
  * (`selector-recording.test.ts` covers which commands set `interactiveObservation`).
  */
 import { test, expect } from 'vitest';
-import { recordActionEntry } from '../session-action-recorder.ts';
+import { recordActionEntry, type RecordActionEntry } from '../session-action-recorder.ts';
 import { authoringPublication, makeIosSession } from '../../__tests__/support/session-factories.ts';
 
 test('an observation-only action is excluded while repair-armed and no --record is given', () => {
@@ -62,6 +62,38 @@ test('an observation-only action records normally outside a repair-armed session
   });
   expect(action).toBeDefined();
   expect(session.actions.map((a) => a.command)).toEqual(['is']);
+});
+
+test('ordinary action history preserves authored commands, positionals, and replay flags', () => {
+  const session = makeIosSession('default');
+  const entries = [
+    { command: 'hover', positionals: ['@e4'], flags: {}, result: {} },
+    { command: 'click', positionals: ['@e4'], flags: {}, result: {} },
+    {
+      command: 'fill',
+      positionals: ['@e3', 'qa@example.test'],
+      flags: { delayMs: 1 },
+      result: {},
+    },
+    { command: 'type', positionals: [' ok'], flags: {}, result: {} },
+    { command: 'pan', positionals: ['195', '320'], flags: { pointerCount: 2 }, result: {} },
+    { command: 'tv-remote', positionals: ['select'], flags: {}, result: {} },
+    { command: 'fold', positionals: [], flags: { keyframes: 'fold.json' }, result: {} },
+    {
+      command: 'trigger-app-event',
+      positionals: ['screenshot_taken'],
+      flags: {},
+      result: {},
+    },
+    { command: 'back', positionals: [], flags: {}, result: {} },
+    { command: 'home', positionals: [], flags: {}, result: {} },
+  ] satisfies RecordActionEntry[];
+
+  for (const entry of entries) recordActionEntry(session, entry);
+
+  expect(
+    session.actions.map(({ command, positionals, flags }) => ({ command, positionals, flags })),
+  ).toEqual(entries.map(({ command, positionals, flags }) => ({ command, positionals, flags })));
 });
 
 test('a mutating action is never excluded, repair-armed or not', () => {
@@ -119,6 +151,19 @@ test('--no-record still takes precedence over an observation-only action, repair
     result: {},
     interactiveObservation: true,
   });
+  expect(action).toBeUndefined();
+  expect(session.actions).toHaveLength(0);
+});
+
+test('--no-record suppresses a mutating coordinate press from action history', () => {
+  const session = makeIosSession('default');
+  const action = recordActionEntry(session, {
+    command: 'press',
+    positionals: ['50', '60'],
+    flags: { noRecord: true },
+    result: { x: 50, y: 60 },
+  });
+
   expect(action).toBeUndefined();
   expect(session.actions).toHaveLength(0);
 });

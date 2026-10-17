@@ -2,6 +2,8 @@
 
 import type {
   DaemonLockPolicy,
+  DaemonServerMode,
+  DaemonTransportPreference,
   DaemonRequest,
   DaemonResponse,
   LeaseBackend,
@@ -15,8 +17,58 @@ import type {
   RemoteConnectionProfileFields,
 } from './remote-config-fields.ts';
 
+/**
+ * Who owns the daemon on a client's state directory.
+ *
+ * - `managed`: the client starts a missing daemon and replaces an incompatible one itself, and may
+ *   retire a hung one after a timeout. This is the default until 0.22.
+ * - `attach`: the client only connects to the daemon registered in the state directory. It never
+ *   starts, replaces or kills one. A missing daemon fails with `details.reason: 'daemon-not-running'`
+ *   and an incompatible one with `'daemon-incompatible'`; `ensureDaemon()` is the explicit way to
+ *   start or replace one.
+ *
+ * Independent of `daemonTransport`, `daemonServerMode` and `daemonBaseUrl`: a remote connection
+ * never starts or retires a local daemon in either mode.
+ */
+export type DaemonLifecycle = 'attach' | 'managed';
+
+/** What a client can learn about a daemon without talking to it: how it identifies itself on disk. */
+export type DaemonIdentity = {
+  pid: number;
+  version?: string;
+  /** `installed` for a published package, `checkout` for a source tree. */
+  codeOrigin?: 'installed' | 'checkout';
+  codeSignature?: string;
+  processStartTime?: string;
+};
+
+export type EnsureDaemonOptions = {
+  /** The state directory the daemon owns; defaults to `AGENT_DEVICE_STATE_DIR`, then the user default. */
+  stateDir?: string;
+  daemonTransport?: DaemonTransportPreference;
+  daemonServerMode?: DaemonServerMode;
+  /**
+   * Called when this call started a daemon, before `ensureDaemon` returns. `missing` means no
+   * usable daemon was registered; `incompatible` means a daemon this client cannot use was
+   * replaced after it agreed to leave. `previous` is the daemon that was replaced, when there was
+   * one: a `missing` start with a `previous` replaced a registered daemon that answered nothing,
+   * either unreachable or hung and force-retired.
+   */
+  onStart?: (reason: 'missing' | 'incompatible', previous?: DaemonIdentity) => void;
+};
+
+/** A reachable local daemon. It carries no credentials. */
+export type DaemonConnection = {
+  stateDir: string;
+  daemon: DaemonIdentity;
+  /** True when this call started the daemon. */
+  started: boolean;
+};
+
 export type AgentDeviceDaemonTransportContext = {
   authToken?: string;
+  /** How this request treats the local daemon; `managed` when omitted. */
+  daemonLifecycle?: DaemonLifecycle;
   /**
    * Cancels this one in-flight request. A built-in transport that sees an abort destroys the
    * request's connection, which makes the daemon mark the request canceled; the promise rejects
@@ -33,6 +85,8 @@ export type AgentDeviceDaemonTransport = (
 
 export type AgentDeviceClientConfig = RemoteConnectionProfileFields &
   CloudProviderProfileFields & {
+    /** See `DaemonLifecycle`. */
+    daemonLifecycle?: DaemonLifecycle;
     session?: string;
     lockPolicy?: DaemonLockPolicy;
     lockPlatform?: PlatformSelector;

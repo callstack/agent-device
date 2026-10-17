@@ -287,6 +287,7 @@ test('Provider-backed integration Android record start retains completed evidenc
             serial: PROVIDER_SCENARIO_ANDROID.id,
             recordingScope: 'device',
           }),
+          500,
           'DEVICE_IN_USE',
           /another recorder is writing/,
         );
@@ -348,6 +349,7 @@ test('Provider-backed integration Android record start refuses completed evidenc
             serial: PROVIDER_SCENARIO_ANDROID.id,
             recordingScope: 'device',
           }),
+          500,
           'DEVICE_IN_USE',
           /its recorder is writing/,
         );
@@ -391,7 +393,7 @@ test('Provider-backed integration Android corrupt descriptor is retained without
       seedAndroidRecordingResource(daemon, manifest, { descriptor: { malformed: true } });
       try {
         const stopped = await stopAndroidRecording(daemon);
-        assertRpcError(stopped, 'COMMAND_FAILED', /cannot be reattached/);
+        assertRpcError(stopped, 500, 'COMMAND_FAILED', /cannot be reattached/);
         assert.equal(
           calls.some((args) => args[1]?.includes('agent-device-recording-active.json')),
           false,
@@ -429,6 +431,7 @@ test('Provider-backed integration Android cleanup-only recovery terminalizes bef
       try {
         assertRpcError(
           await stopAndroidRecording(daemon),
+          500,
           'COMMAND_FAILED',
           /launch was interrupted/,
         );

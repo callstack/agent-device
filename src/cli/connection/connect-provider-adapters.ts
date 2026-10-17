@@ -16,6 +16,7 @@ import { profileToCliFlags } from '../remote-config-flags.ts';
 import { isConnectProviderName, type ConnectProvider } from './provider-policy.ts';
 import { bundledCloudWebDriverConnection } from '../../provider-webdriver.ts';
 import { withPluginConnection } from '@agent-device/plugins/load';
+import { PROVIDER_PLUGIN_POLICY } from '../../provider-plugin-policy.ts';
 import type { PluginConnection } from '@agent-device/plugins/connection';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
@@ -88,7 +89,9 @@ async function withProviderConnection<T>(
   run: (connection: PluginConnection) => Promise<T>,
 ): Promise<T> {
   const bundled = bundledCloudWebDriverConnection(provider, env);
-  return bundled ? await run(bundled) : await withPluginConnection(provider, env, run);
+  return bundled
+    ? await run(bundled)
+    : await withPluginConnection(provider, env, PROVIDER_PLUGIN_POLICY, run);
 }
 
 export async function resolveConnectProviderProfile(options: {

@@ -3,7 +3,15 @@ import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { createGraph, genDFS, getStronglyConnectedComponents, getSubgraph } from '@statelyai/graph';
 import { parseSync } from 'oxc-parser';
-import { destructuredDynamicImportBindings, visitAst } from './layering-ast.ts';
+import {
+  asNode,
+  destructuredDynamicImportBindings,
+  memberName,
+  nodeList,
+  propertyName,
+  visitAst,
+  type AstNode,
+} from './layering-ast.ts';
 import { declaredRootModuleZone } from './root-module-zones.ts';
 import {
   importGraphFromResolvedEdges,
@@ -294,6 +302,135 @@ export function parseImports(source: string): ImportEdge[] {
         left.start - right.start,
     )
     .map(({ edge }) => edge);
+}
+
+const MODULE_MOCK_RECEIVERS = new Set(['vi', 'vitest']);
+// Vitest's module-path-taking APIs: every member of `vi` whose first argument names a module.
+const MODULE_MOCK_METHODS = new Set([
+  'mock',
+  'doMock',
+  'unmock',
+  'doUnmock',
+  'importActual',
+  'importMock',
+]);
+const EXPRESSION_WRAPPERS = new Set([
+  'ChainExpression',
+  'ParenthesizedExpression',
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSTypeAssertion',
+]);
+
+/** Local names a file binds to Vitest's `vi`/`vitest` (`apis`) or to the whole module (`namespaces`). */
+type VitestBindings = { apis: ReadonlySet<string>; namespaces: ReadonlySet<string> };
+
+function unwrapExpression(node: unknown): AstNode | undefined {
+  let current = asNode(node);
+  while (current !== undefined && EXPRESSION_WRAPPERS.has(current.type as string)) {
+    current = asNode(current.expression);
+  }
+  return current;
+}
+
+function memberKey(member: AstNode): string | undefined {
+  return member.computed === true ? literalSpecifier(member.property) : memberName(member);
+}
+
+/**
+ * Value bindings from top-level `import ... from 'vitest'` declarations: `{ vi as x }` and
+ * `{ vitest as x }` name the mock API, `* as ns` names a namespace whose `vi`/`vitest` members are
+ * the mock API. Type-only declarations and specifiers bind no value, and every other export or
+ * module binds nothing here.
+ */
+function vitestImportBindings(program: unknown): VitestBindings {
+  const apis = new Set<string>();
+  const namespaces = new Set<string>();
+  for (const statement of nodeList(asNode(program)?.body)) {
+    const declaration = asNode(statement);
+    if (
+      declaration?.type !== 'ImportDeclaration' ||
+      declaration.importKind === 'type' ||
+      literalSpecifier(declaration.source) !== 'vitest'
+    ) {
+      continue;
+    }
+    for (const entry of nodeList(declaration.specifiers)) {
+      const specifier = asNode(entry);
+      const local = asNode(specifier?.local)?.name;
+      if (specifier === undefined || specifier.importKind === 'type' || typeof local !== 'string') {
+        continue;
+      }
+      if (specifier.type === 'ImportNamespaceSpecifier') namespaces.add(local);
+      else if (MODULE_MOCK_RECEIVERS.has(propertyName(specifier.imported) ?? '')) apis.add(local);
+    }
+  }
+  return { apis, namespaces };
+}
+
+/**
+ * The global names `vi` and `vitest` always count, and so does every name `vitestImportBindings`
+ * found, wherever it appears in the file: a local that shadows an imported alias is still read as
+ * the mock API. That over-reports a rare shadowed name and never misses a mock call.
+ */
+function isMockApiReceiver(node: unknown, bindings: VitestBindings): boolean {
+  const receiver = unwrapExpression(node);
+  if (receiver?.type === 'Identifier') {
+    const name = receiver.name as string;
+    return MODULE_MOCK_RECEIVERS.has(name) || bindings.apis.has(name);
+  }
+  if (receiver?.type !== 'MemberExpression') return false;
+  const owner = unwrapExpression(receiver.object);
+  const key = memberKey(receiver);
+  return (
+    owner?.type === 'Identifier' &&
+    bindings.namespaces.has(owner.name as string) &&
+    key !== undefined &&
+    MODULE_MOCK_RECEIVERS.has(key)
+  );
+}
+
+function mockCallMethod(callee: unknown, bindings: VitestBindings): string | undefined {
+  const member = unwrapExpression(callee);
+  if (member?.type !== 'MemberExpression') return undefined;
+  if (!isMockApiReceiver(member.object, bindings)) return undefined;
+  const method = memberKey(member);
+  return method !== undefined && MODULE_MOCK_METHODS.has(method) ? method : undefined;
+}
+
+/**
+ * Module specifiers named by Vitest mock-family calls (`vi.mock('x')`, `vi.doMock`, `vi.unmock`,
+ * `vi.importActual`, `vi.importMock`, ...), with their 1-based lines. The loader resolves and
+ * instantiates the named module under test just as an `import` would, yet `parseImports` never
+ * sees a call expression. Only a literal first argument counts — a quoted string or a template
+ * without substitutions; `vi.mock(import('x'))` is already a dynamic `ImportExpression` edge.
+ *
+ * The receiver is the global `vi`/`vitest`, a name a top-level `import { vi as x } from 'vitest'`
+ * binds to either, or a member `vi`/`vitest` of a `import * as ns from 'vitest'` namespace. Only
+ * those import declarations are resolved, and a recognized name counts everywhere in the file. A
+ * value copied through a variable or a destructuring, reached through `globalThis`, `require` or
+ * a dynamic import, or called through `.call`/`.apply` or a comma expression is not followed.
+ */
+export function parseModuleMockSpecifiers(source: string): { spec: string; line: number }[] {
+  const parsed = parseSync('layering-mocks.ts', source);
+  if (parsed.errors.length > 0) {
+    throw new SyntaxError(
+      `Cannot parse mocks: ${parsed.errors.map(({ message }) => message).join('; ')}`,
+    );
+  }
+  const bindings = vitestImportBindings(parsed.program);
+  const sites: { spec: string; line: number }[] = [];
+  visitAst(parsed.program, (node) => {
+    if (node.type !== 'CallExpression') return;
+    if (mockCallMethod(node.callee, bindings) === undefined) return;
+    const args = node.arguments;
+    const spec = Array.isArray(args) ? literalSpecifier(args[0]) : undefined;
+    if (spec !== undefined) {
+      sites.push({ spec, line: sourceLine(source, node.start as number | undefined) });
+    }
+  });
+  return sites;
 }
 
 export function topFolder(file: string): string {

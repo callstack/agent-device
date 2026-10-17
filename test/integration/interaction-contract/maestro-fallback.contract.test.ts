@@ -130,7 +130,7 @@ test(
       ],
       async (daemon) => {
         const click = await daemon.callCommand('click', ['label=Explore'], MAESTRO_FLAGS);
-        assertRpcError(click, 'ELEMENT_OFFSCREEN', /no tappable frame/);
+        assertRpcError(click, 500, 'ELEMENT_OFFSCREEN', /no tappable frame/);
       },
     );
   },

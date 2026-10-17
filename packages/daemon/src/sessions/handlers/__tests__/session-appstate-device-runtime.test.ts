@@ -7,6 +7,7 @@ import { withTestDeviceInventory } from '@agent-device/device-selection/inventor
 import {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   bindTestCommandHost,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
@@ -45,6 +46,7 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
     },
     async () =>
       await handleAppStateCommand({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
@@ -168,6 +170,7 @@ test('appstate rejects a missing readiness fact even when appState is available'
     { local: async () => [device] },
     async () =>
       await handleAppStateCommand({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
@@ -266,6 +269,7 @@ test('sessionless Android appstate inspects once, binds once, and preserves oper
     { local: async () => [device] },
     async () =>
       await handleAppStateCommand({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',

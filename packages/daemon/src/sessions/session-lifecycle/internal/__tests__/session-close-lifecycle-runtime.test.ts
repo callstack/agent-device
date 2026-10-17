@@ -24,7 +24,11 @@ import {
   clearRuntimeHintsFixture,
   dispatchApplicationLifecycleEffect,
 } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 bindTestCommandHost();
 
@@ -63,6 +67,7 @@ async function close(params: {
   bindDevice?: Parameters<typeof handleSessionCommands>[0]['bindDevice'];
 }) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: closeRequest(params.sessionName, params.positionals ?? [], params.internal),
