@@ -462,7 +462,8 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     check: 'macos-helper',
     rule: 'own:macos-helper',
     detail: 'macOS helper is a separate Swift package build',
-    owns: (file) => file.startsWith('apple/macos-helper/'),
+    owns: (file) =>
+      file.startsWith('apple/macos-helper/') || file.startsWith('apple/macos-helper-tests/'),
   },
   {
     check: 'mcp-metadata',

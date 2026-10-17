@@ -28,7 +28,7 @@ private struct HelperOutcomesFixture: Decodable {
   let deliveryMechanisms: [String]
 }
 
-/// `#filePath` is `<repo>/apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/<file>`.
+/// `#filePath` is `<repo>/apple/macos-helper-tests/Tests/AgentDeviceMacOSHelperTests/<file>`.
 private let repoRoot = URL(fileURLWithPath: #filePath)
   .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
   .deletingLastPathComponent().deletingLastPathComponent()
