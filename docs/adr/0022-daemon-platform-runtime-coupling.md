@@ -29,9 +29,8 @@ Section 2 retains the classification outcomes. Git history retains the completed
 - Open-target plans/results remain separate from platform mechanics, with one construction path.
 - R75 fails when a handler file enters the state-shape set or the store-authority set and the merge-base set does not contain that file.
   Handler files may leave these sets.
-- Route depth may collapse only a hop that the deletion test proves removable.
-  The deletion test applies to each pass-through or translation hop.
-  At `27a97ee619`, the only proven removable hop is the pass-through hop `commands/runtime-types.ts`.
+- Route depth may collapse only pass-through or translation hops that the deletion test proves removable.
+  The only proven removable hop is `commands/runtime-types.ts`. It is the only endorsed collapse.
   The ≤14 target is superseded.
 
 ## 1. Context
