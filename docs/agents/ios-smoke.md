@@ -65,6 +65,15 @@ Keep unreadable classification and bounded clearing in their owning policy tests
 
 Read the live entry point's environment contract before running it.
 Build a current Release fixture with embedded JavaScript for simulator smoke verification.
+If a headless simulator minimizes its software keyboard, inspect its runtime setting:
+
+```sh
+xcrun simctl spawn <udid> defaults read com.apple.keyboard.preferences AutomaticMinimizationEnabled
+xcrun simctl spawn <udid> defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false
+```
+
+The iOS workflow sets this before fixture smoke.
+For local verification, record the prior value and restore it afterward.
 Run the changed scenario through the checked-in smoke entry point and preserve its coverage and failure artifacts.
 Record the source SHA, device, command, and semantic result under [device verification](device-verification.md).
 For regressions, prove the test fails without the fix using [isolated experiments](test-experiments.md).

@@ -165,13 +165,7 @@ jobs:
       - name: Build CLI used by every smoke step
         run: pnpm gate build
 
-      # Preflight and every step below deliberately share one AGENT_DEVICE_STATE_DIR: the prepared
-      # runner lives in the daemon this step leaves running, and a per-step state dir would rebuild it
-      # per step. That also means this daemon outlives the step and can be superseded while it lives,
-      # which used to make its 5-minute idle reap delete the metadata of the daemon then serving
-      # clients (#3087). It now removes daemon.json only when the file names its own pid and process
-      # start time, so a recycled pid cannot be mistaken for the owner, and the reap costs nothing
-      # but a daemon.log line.
+      # Reuse the prepared daemon and runner through the shared AGENT_DEVICE_STATE_DIR.
       - name: Preflight iOS runner through public CLI
         run: |
           pnpm clean:daemon
@@ -214,6 +208,7 @@ jobs:
           AGENT_DEVICE_IOS_E2E_TIER: smoke
           AGENT_DEVICE_IOS_UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
         run: |
+          xcrun simctl spawn "$AGENT_DEVICE_IOS_UDID" defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false
           node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
 
       - name: Assert simulator automation preserved host focus
