@@ -16,6 +16,7 @@ import {
 import { currentDaemonCodeSignature } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import {
   busy,
+  createDaemonLeaver,
   draining,
   launchesFreshDaemonAt as launchSeamAnswersAt,
   okResult,
@@ -232,13 +233,15 @@ test('ensureDaemon ignores a remote base URL in the environment', async (t) => {
 test('ensureDaemon replaces an incompatible idle daemon through a fenced quiesce request', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir, paths } = stateDirAndPaths();
-  const stale = await startScriptedDaemon(draining);
+  const leaver = createDaemonLeaver();
+  const stale = await startScriptedDaemon(draining, { afterRpc: leaver.leave });
   const fresh = await startScriptedDaemon(okResult({}));
   const { child, info } = await registerDaemon(paths, {
     httpPort: stale.port,
     version: '0.0.0-stale',
     capabilities: ['quiesce'],
   });
+  leaver.pid = child.pid;
   launchesFreshDaemonAt(paths, fresh.port);
   const started: Array<[string, { pid: number; version?: string } | undefined]> = [];
 
@@ -432,12 +435,17 @@ const instanceMismatch = {
 test('a live daemon on another transport is quiesced, never killed as unreachable', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir, paths } = stateDirAndPaths();
-  const live = await startScriptedSocketDaemon({ ok: true, data: { outcome: 'draining' } });
+  const leaver = createDaemonLeaver();
+  const live = await startScriptedSocketDaemon(
+    { ok: true, data: { outcome: 'draining' } },
+    { afterCommand: leaver.leave },
+  );
   const fresh = await startScriptedDaemon(okResult({}));
   const { child } = await registerDaemon(paths, {
     socketPort: live.port,
     capabilities: ['quiesce'],
   });
+  leaver.pid = child.pid;
   launchesFreshDaemonAt(paths, fresh.port);
   const started: string[] = [];
 
@@ -486,13 +494,15 @@ test('a live daemon on another transport is left alone when it cannot be asked t
 test('ensureDaemon judges again after the daemon it addressed turned out to be gone', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir, paths } = stateDirAndPaths();
-  const stale = await startScriptedDaemon(draining);
+  const leaver = createDaemonLeaver();
+  const stale = await startScriptedDaemon(draining, { afterRpc: leaver.leave });
   const fresh = await startScriptedDaemon(okResult({}));
-  await registerDaemon(paths, {
+  const { child } = await registerDaemon(paths, {
     httpPort: stale.port,
     version: '0.0.0-stale',
     capabilities: ['quiesce'],
   });
+  leaver.pid = child.pid;
   launchesFreshDaemonAt(paths, fresh.port);
   const actualSend = transport.sendRequest;
   vi.spyOn(transport, 'sendRequest').mockResolvedValueOnce(instanceMismatch);
@@ -566,7 +576,8 @@ test('ensureDaemon does not start a daemon over one it could not confirm retired
 test('ensureDaemon quiesces an incompatible daemon that wins a startup race instead of retiring it', async (t) => {
   if (!(await withLoopback(t))) return;
   const { stateDir, paths } = stateDirAndPaths();
-  const stale = await startScriptedDaemon(draining);
+  const leaver = createDaemonLeaver();
+  const stale = await startScriptedDaemon(draining, { afterRpc: leaver.leave });
   const fresh = await startScriptedDaemon(okResult({}));
   const barrier = path.join(paths.baseDir, 'contender-barrier');
   fs.mkdirSync(paths.baseDir, { recursive: true });
@@ -586,6 +597,7 @@ test('ensureDaemon quiesces an incompatible daemon that wins a startup race inst
       },
       undefined,
     );
+    leaver.pid = winner.pid;
     // Released whether or not the winner published, so the launched child never waits forever.
     const release = () => fs.writeFileSync(barrier, 'go');
     void waitForRegisteredDaemonFixture(paths, winner).then(release, release);

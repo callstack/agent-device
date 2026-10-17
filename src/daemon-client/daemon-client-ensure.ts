@@ -3,6 +3,8 @@ import type {
   DaemonIdentity,
   EnsureDaemonOptions,
 } from '@agent-device/contracts/client';
+import { waitForDaemonExit } from '@agent-device/daemon-contracts/daemon-process';
+import { recoverAbandonedDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -20,6 +22,7 @@ import type { DaemonInfo } from './daemon-client-metadata.ts';
 import {
   DAEMON_CONTENDED_REASON,
   daemonIdentityOf,
+  daemonDrainTimeoutError,
   daemonIncompatibleError,
 } from './daemon-lifecycle-errors.ts';
 
@@ -28,6 +31,11 @@ import {
 // a short wait, for as long as a drain can take.
 const ENSURE_ATTEMPTS = 40;
 const JUDGE_AGAIN_DELAY_MS = 250;
+// How long a daemon that accepted a quiesce request gets to finish leaving. Its own shutdown is
+// bounded in phases (server close, session and lease teardown, provider release), so this is the
+// longest a healthy drain can take with margin, not a polling interval.
+const DRAIN_DEADLINE_MS = 60_000;
+const DRAIN_POLL_MS = 250;
 const UNRESPONSIVE_PROBES = 3;
 const UNRESPONSIVE_PROBE_GAP_MS = 200;
 
@@ -106,7 +114,9 @@ async function replaceIncompatible(
   onStart: EnsureDaemonOptions['onStart'],
 ): Promise<EnsureStep> {
   // A daemon that predates the capability cannot say whether it is idle, so it is never replaced.
-  if (!info.capabilities?.includes('quiesce')) {
+  // One without a recorded start time cannot be addressed by the fence, so it cannot accept either.
+  const startTime = info.processStartTime;
+  if (!info.capabilities?.includes('quiesce') || !startTime) {
     throw await daemonIncompatibleError({
       info,
       mismatch: 'no-quiesce',
@@ -115,11 +125,42 @@ async function replaceIncompatible(
   }
   const outcome = await quiesceOrRetireUnresponsive(info, settings);
   if (outcome === 'gone') return { kind: 'judge-again' };
-  if (outcome === 'draining') await retireDaemonForTakeover(info, settings.paths);
+  if (outcome === 'draining') await awaitDrainedDaemon(info, startTime, settings);
   // A daemon force-retired for answering nothing is reported like an unreachable one: it was never
   // shown to be idle, so "incompatible" would overstate what happened to it.
   const reason = outcome === 'retired' ? 'missing' : 'incompatible';
   return await start(settings, onStart, reason, daemonIdentityOf(info));
+}
+
+/**
+ * Waits for a daemon that accepted the quiesce request to finish leaving, and signals nothing while
+ * it does. A healthy drain runs its own teardown (plugin disposal, lease finalization, registration
+ * cleanup), which a signal would cut short or, on Windows, skip entirely.
+ *
+ * Only a daemon still alive after the deadline is escalated, and only if it answers no liveness
+ * probe. A retirement signals only a process whose command line is a daemon entry (see
+ * `stopDaemonProcess`), so an embedded host registered by some other process is never signaled
+ * here: it ends in `daemon-drain-timeout` instead.
+ */
+async function awaitDrainedDaemon(
+  info: DaemonInfo,
+  startTime: string,
+  settings: DaemonClientSettings,
+): Promise<void> {
+  const { exited } = await waitForDaemonExit(
+    { pid: info.pid, startTime },
+    { timeoutMs: DRAIN_DEADLINE_MS, pollMs: DRAIN_POLL_MS },
+  );
+  if (exited) {
+    // The daemon removes its own registration; this only clears what a crashed drain left behind.
+    await recoverAbandonedDaemonRegistration({
+      paths: settings.paths,
+      observed: { pid: info.pid, startTime },
+    });
+    return;
+  }
+  if (await answersLivenessProbe(info)) throw await daemonDrainTimeoutError(info, settings);
+  await retireDaemonForTakeover(info, settings.paths, 'force');
 }
 
 /**

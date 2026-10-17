@@ -24,9 +24,24 @@ export type ScriptedDaemon = {
   rpcRequests: Record<string, any>[];
 };
 
+/**
+ * What a daemon does once it has answered a quiesce with `draining`: it leaves by itself, running
+ * its own registration cleanup. The registered child stands in for the daemon process, so
+ * `leave` makes it exit the way a finished drain does, without the client signaling anything.
+ */
+export function createDaemonLeaver(): { pid?: number; leave: () => void } {
+  const leaver: { pid?: number; leave: () => void } = {
+    leave: () => {
+      if (leaver.pid !== undefined) process.kill(leaver.pid, 'SIGTERM');
+    },
+  };
+  return leaver;
+}
+
 /** Answers `/health` and answers every `/rpc` with the one JSON-RPC `result` it was given. */
 export async function startScriptedDaemon(
   result: Record<string, unknown>,
+  options: { afterRpc?: () => void } = {},
 ): Promise<ScriptedDaemon> {
   const rpcCommands: string[] = [];
   const rpcRequests: Record<string, any>[] = [];
@@ -43,7 +58,7 @@ export async function startScriptedDaemon(
       rpcRequests.push(rpc);
       rpcCommands.push(String(rpc.params?.command));
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result }));
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result }), () => options.afterRpc?.());
     });
   });
   return { server, port: await listenOnLoopback(server), rpcCommands, rpcRequests };
@@ -52,6 +67,7 @@ export async function startScriptedDaemon(
 /** A socket-only stand-in: one JSON line in, the scripted response out. */
 export async function startScriptedSocketDaemon(
   response: Record<string, unknown>,
+  options: { afterCommand?: () => void } = {},
 ): Promise<{ server: net.Server; port: number; commands: string[] }> {
   const commands: string[] = [];
   const server = net.createServer((socket) => {
@@ -62,7 +78,7 @@ export async function startScriptedSocketDaemon(
       buffered += chunk;
       if (!buffered.includes('\n')) return;
       commands.push(String((JSON.parse(buffered) as { command?: unknown }).command));
-      socket.write(`${JSON.stringify(response)}\n`);
+      socket.write(`${JSON.stringify(response)}\n`, () => options.afterCommand?.());
     });
   });
   return { server, port: await listenOnLoopback(server), commands };

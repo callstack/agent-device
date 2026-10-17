@@ -6,6 +6,7 @@ import { isProcessAlive } from '@agent-device/host-kit/process';
 import { finishRegisteredDaemonFixtures } from '../../__tests__/test-utils/registered-daemon-fixture.ts';
 import {
   busy,
+  createDaemonLeaver,
   draining,
   launchesFreshDaemonAt,
   okResult,
@@ -78,13 +79,15 @@ test('the first request ensures a missing daemon once and every request attaches
 test('an idle incompatible daemon is replaced, and the replacement is reported', async (t) => {
   if (!(await supportsLoopbackBind())) return t.skip('loopback listeners are not permitted');
   const { stateDir, paths } = stateDirAndPaths();
-  const stale = await startScriptedDaemon(draining);
+  const leaver = createDaemonLeaver();
+  const stale = await startScriptedDaemon(draining, { afterRpc: leaver.leave });
   const fresh = await startScriptedDaemon(okResult({}));
   const { child } = await registerDaemon(paths, {
     httpPort: stale.port,
     version: '0.0.0-stale',
     capabilities: ['quiesce'],
   });
+  leaver.pid = child.pid;
   launchesFreshDaemonAt(spawn, paths, fresh.port);
   const { sent, transport } = recordingTransport();
   const replaced: Array<{ stateDir: string; pid: number; reason: string }> = [];
