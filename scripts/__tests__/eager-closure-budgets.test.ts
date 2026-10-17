@@ -760,7 +760,8 @@ test('every approved closure addition names an existing module with its issue an
   for (const row of APPROVED_CLOSURE_ADDITIONS) {
     expect(fs.existsSync(absolute(row.module)), `${row.module} no longer exists`).toBe(true);
     expect(row.issue).toMatch(/^#\d+$/);
-    expect(row.owner.length).toBeGreaterThan(0);
+    expect(row.reason.trim().length).toBeGreaterThan(0);
+    expect(row.owner.trim().length).toBeGreaterThan(0);
   }
 });
 

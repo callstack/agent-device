@@ -69,6 +69,26 @@ test('a module a maintainer approved is excused from the count, and only that mo
   );
 });
 
+test('an approved module that only renames a base module excuses nothing', () => {
+  const graph = (...files: string[]) => new Map(files.map((file) => [`/r/${file}`, null]));
+  const weights = (...files: string[]) => new Map(files.map((file) => [`/r/${file}`, 1]));
+  const evidence = closureGrowthEvidence({
+    baseGraph: graph('entry.ts', 'old.ts'),
+    headGraph: graph('entry.ts', 'moved.ts', 'extra.ts'),
+    baseWeights: weights('entry.ts', 'old.ts'),
+    headWeights: weights('entry.ts', 'moved.ts', 'extra.ts'),
+    headStatementTexts: new Map(),
+    baseTree: { exists: () => false },
+    renamedBaseToHead: new Map([['/r/old.ts', '/r/moved.ts']]),
+    approvedModules: new Set(['/r/moved.ts']),
+  });
+
+  expect(evidence.approvedAddedCount, 'moved.ts was already in the base closure as old.ts').toBe(0);
+  expect(classifyGrowth('x.ts', evidence), 'the unrelated addition still fails').toMatch(
+    /evaluates 3 modules.*merge-base evaluated 2/,
+  );
+});
+
 // --- the split tolerance (#2469) -------------------------------------------------------------
 // The no-growth rule counts modules, and a split of a hub module is count growth with no new
 // eager work -- which made extracting any module inside a gated closure impossible (ADR 0027).

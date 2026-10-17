@@ -115,8 +115,12 @@ export function closureGrowthEvidence(params: {
   return {
     baseCount: baseGraph.size,
     headCount: headGraph.size,
+    // Renames are canonicalized first: an approved module that is a rename of a base module is
+    // not an addition.
     approvedAddedCount: [...headGraph.keys()].filter(
-      (headFile) => approvedModules.has(headFile) && !baseGraph.has(headFile),
+      (headFile) =>
+        approvedModules.has(headFile) &&
+        !baseGraph.has(baseOfRenamedHead.get(headFile) ?? headFile),
     ).length,
     baseWeight: sum(baseGraph.keys(), baseWeights),
     headWeight: sum(headGraph.keys(), headWeights),
