@@ -513,7 +513,7 @@ function buildReplayDivergenceScreenRefs(
 /**
  * Decision 1's candidate machinery reused READ-ONLY over the shared capture.
  * Ranking: identity-component strength (id > role+label > label > other),
- * then recorded scroll region, then document order.
+ * then recorded scroll region for a verified `target-v1` annotation, then document order.
  */
 function collectReplayDivergenceSuggestions(params: {
   action: ReplayReportAction;
