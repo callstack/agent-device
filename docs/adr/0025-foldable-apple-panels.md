@@ -225,6 +225,9 @@ Hosted Duo tests remain local-only.
 
 ## Pose control: Device Hub's control, CoreDevice's verdict
 
+`agent-device fold` sets the pose.
+The split above still holds: the press is not evidence, and the read-back is evidence.
+The headless HID amendment above replaces the Device Hub press.
 Git history retains the superseded Device Hub process.
 
 `xcrun devicectl device motion hinge-angle --device <udid>` streams the Duo simulator hinge angle over `Range:0-180°`.
