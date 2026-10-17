@@ -127,6 +127,26 @@ function endsWithoutNewline(file: string): boolean {
 }
 
 /**
+ * Establishes a fresh record for this launch at `startupPhasesPath`, before the producer's first
+ * marker. A per-pid file names its writer, not its lifetime: if both the client and the daemon of
+ * an old launch died before either cleanup ran and the host later reuses that pid, the old record
+ * is still on disk, and only this new writer can tell a same-name file apart from its own record.
+ * It therefore empties its own pid's record before appending; no caller claims or resets a file
+ * named for another pid. A refused reset follows the marker contract: reported, never fatal, and
+ * a later append cannot silently mix lifetimes because the reset ran first when it could run.
+ */
+export function claimDaemonStartupPhasesFile(
+  startupPhasesPath: string,
+  reportFailure?: (error: NormalizedError) => void,
+): void {
+  try {
+    fs.rmSync(startupPhasesPath, { force: true });
+  } catch (error) {
+    reportFailure?.(normalizeError(error));
+  }
+}
+
+/**
  * Removes one startup's marker file. The writer calls it once its own startup completes; the client
  * that launched a process calls it once that process's exit is joined. Both callers can prove no
  * other writer can still append to this file, which is what the pid-specific name encodes.
