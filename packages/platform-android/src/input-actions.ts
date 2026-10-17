@@ -10,6 +10,7 @@ import {
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-types';
 import {
+  type ScrollContainerTarget,
   type ScrollReleaseBehavior,
   DEFAULT_MOBILE_SCROLL_DURATION_MS,
 } from '@agent-device/contracts/scroll-command';
@@ -220,7 +221,8 @@ export async function scrollAndroid(
     pixels?: number;
     durationMs?: number;
     releaseBehavior?: ScrollReleaseBehavior;
-  } & AndroidHelperSessionOptions,
+  } & ScrollContainerTarget &
+    AndroidHelperSessionOptions,
 ): Promise<Record<string, unknown>> {
   // The viewport read and the gesture are two helper calls one command apart: giving the read the
   // command's session scope keeps both on the same instrumentation.
@@ -234,6 +236,9 @@ export async function scrollAndroid(
     pixels: options?.pixels,
     referenceWidth: swipeSurface.viewport.width,
     referenceHeight: swipeSurface.viewport.height,
+    ...(options?.containerRect === undefined
+      ? {}
+      : { container: relativeToViewport(options.containerRect, swipeSurface.viewport) }),
   });
   const scrollPlan = {
     ...relativePlan,
@@ -273,6 +278,11 @@ export async function scrollAndroid(
     ...(options?.durationMs !== undefined ? { durationMs } : {}),
     ...backend,
   };
+}
+
+/** The planner works in the swipe surface's zero-origin frame; snapshot rects are absolute. */
+function relativeToViewport(rect: Rect, viewport: Rect): Rect {
+  return { ...rect, x: rect.x - viewport.x, y: rect.y - viewport.y };
 }
 
 /**

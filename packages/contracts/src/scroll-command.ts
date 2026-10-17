@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { SettleObservation } from './interaction.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
+import type { Rect } from '@agent-device/kernel/snapshot';
 
 export const SCROLL_DURATION_MAX_MS = 10_000;
 export const DEFAULT_MOBILE_SCROLL_DURATION_MS = 300;
@@ -38,13 +39,24 @@ export type ScrollTimingOptions = {
 
 export type ScrollCommandOptions = ScrollDistanceOptions & ScrollTimingOptions;
 
-export type ScrollExecutionOptions = ScrollCommandOptions & {
-  releaseBehavior?: ScrollReleaseBehavior;
+/**
+ * The scroll container the caller resolved from the current tree, in the snapshot's absolute space.
+ * An owner that plans its own swipe keeps both endpoints inside it (#2714); an owner without that
+ * planner ignores it.
+ */
+export type ScrollContainerTarget = {
+  containerRect?: Rect;
 };
 
-export type ResolvedScrollExecutionOptions = ScrollCommandOptions & {
-  releaseBehavior: ScrollReleaseBehavior;
-};
+export type ScrollExecutionOptions = ScrollCommandOptions &
+  ScrollContainerTarget & {
+    releaseBehavior?: ScrollReleaseBehavior;
+  };
+
+export type ResolvedScrollExecutionOptions = ScrollCommandOptions &
+  ScrollContainerTarget & {
+    releaseBehavior: ScrollReleaseBehavior;
+  };
 
 export function resolveScrollExecutionOptions(
   options: ScrollCommandOptions,

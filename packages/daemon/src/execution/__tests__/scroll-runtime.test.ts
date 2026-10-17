@@ -786,3 +786,70 @@ test('bound scroll will not bill an unread earlier gesture to the scroll it is d
   assert.equal(result.movement, 'unobserved');
   assert.equal(captures.calls(), 0);
 });
+
+/**
+ * The container a directional swipe is planned inside (#2714): read off the same current tree the
+ * movement claim compares against, before the gesture, and never off a tree that may no longer be
+ * the screen.
+ */
+async function containerHandedToOwner(
+  positionals: string[],
+  session: SessionState,
+  flags?: CommandFlags,
+): Promise<unknown> {
+  const calls: ScrollCall[] = [];
+  await runScroll(
+    positionals,
+    {},
+    {
+      scroll: async (direction, options) => {
+        calls.push({ direction, options });
+        return { ...OBSERVED_SWIPE };
+      },
+    },
+    { session, ...(flags === undefined ? {} : { flags }) },
+  );
+  const [call] = calls;
+  assert.ok(call && calls.length === 1, `expected one scroll, got ${calls.length}`);
+  return (call.options as { containerRect?: unknown }).containerRect;
+}
+
+test.each<[string, CommandFlags | undefined]>([
+  ['an observed scroll', undefined],
+  ['a --settle scroll', { settle: true }],
+])('bound scroll hands %s the container resolved from the current tree', async (_, flags) => {
+  const containerRect = await containerHandedToOwner(
+    ['down', '0.75'],
+    sessionWithStoredScreen(automationScreen(0)),
+    flags,
+  );
+
+  assert.deepEqual(containerRect, SCREEN_CONTAINER);
+});
+
+test('bound scroll hands no container from a tree that predates the last mutation', async () => {
+  const session = sessionWithStoredScreen(automationScreen(0));
+  expireRefFrame(session);
+
+  assert.equal(await containerHandedToOwner(['down', '0.75'], session), undefined);
+});
+
+test('bound scroll hands no container for a horizontal swipe the edge analyzer cannot place', async () => {
+  const containerRect = await containerHandedToOwner(
+    ['left'],
+    sessionWithStoredScreen(automationScreen(0)),
+  );
+
+  assert.equal(containerRect, undefined);
+});
+
+test('bound scroll hands no container to a desktop owner that never synthesizes a swipe', async () => {
+  const session = makeMacOsSession('scroll-desktop');
+  session.snapshot = buildSnapshotState(
+    { nodes: automationScreen(0), backend: 'xctest', producer: 'apple-runner' },
+    undefined,
+  );
+  activateCompleteRefFrame(session);
+
+  assert.equal(await containerHandedToOwner(['down', '0.75'], session), undefined);
+});

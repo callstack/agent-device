@@ -134,6 +134,67 @@ test('scrollAndroid swipes the whole window when no IME window is on screen', as
   });
 });
 
+function swipeSpan(result: Record<string, unknown>): [number, number] {
+  const ys = [Number(result.y1), Number(result.y2)];
+  return [Math.min(...ys), Math.max(...ys)];
+}
+
+function strictlyInsideRows(span: [number, number], rect: { y: number; height: number }): boolean {
+  // Android bounds are half-open: `y + height` is the first row the container does not own.
+  return span[0] > rect.y && span[1] < rect.y + rect.height;
+}
+
+test.each(['down', 'up'] as const)(
+  'scrollAndroid keeps a %s swipe inside a list with a footer below it and reports the shortened span',
+  async (direction) => {
+    // A window below the status bar, holding a list between a tall header and a footer: the
+    // unclamped 0.8 swipe would start on the header or the footer, so the gesture is shortened to
+    // rows the list owns (#2714).
+    const offsetWindow = { x: 0, y: 136, width: 1080, height: 2264 };
+    const list = { x: 0, y: 436, width: 1080, height: 1500 };
+    await withFakeAdb(helperRouteAdb(offsetWindow), async ({ device }) => {
+      const unclamped = await scrollAndroid(device, direction, { amount: 0.8 });
+      const result = await scrollAndroid(device, direction, { amount: 0.8, containerRect: list });
+      const span = swipeSpan(result);
+
+      assert.ok(swipeSpan(unclamped)[0] < list.y, 'the fixture must start outside the list');
+      assert.ok(swipeSpan(unclamped)[1] >= list.y + list.height, 'and end below it');
+      assert.ok(strictlyInsideRows(span, list), `swipe ${span} leaves the list`);
+      assert.equal(Number(result.y1) > Number(result.y2), direction === 'down');
+      assert.equal(result.pixels, span[1] - span[0]);
+      assert.equal(result.requestedPixels, unclamped.pixels);
+    });
+  },
+);
+
+test('scrollAndroid keeps the swipe inside a container that runs under the keyboard', async () => {
+  // The keyboard clip alone keeps the frame's top, so a long swipe would start on the header above
+  // the list; the container and the clip together leave only the list above the keys.
+  const list = { x: 0, y: 400, width: 1080, height: 1880 };
+  await withFakeAdb(
+    helperRouteAdb({ ...PORTRAIT_WINDOW, keyboard: LOWER_HALF_KEYBOARD }),
+    async ({ device }) => {
+      const result = await scrollAndroid(device, 'up', { amount: 0.8, containerRect: list });
+      const [top, bottom] = swipeSpan(result);
+
+      assert.equal(result.keyboardAvoided, true);
+      assert.ok(top > list.y, `swipe start ${top} is on the list's top edge or above it`);
+      assert.ok(bottom <= LOWER_HALF_KEYBOARD.y, `swipe endpoint ${bottom} landed on the keyboard`);
+      assert.equal(result.pixels, bottom - top);
+    },
+  );
+});
+
+test('scrollAndroid leaves a swipe that already fits its container unchanged', async () => {
+  const list = { x: 0, y: 100, width: 1080, height: 2100 };
+  await withFakeAdb(helperRouteAdb({ ...PORTRAIT_WINDOW }), async ({ device }) => {
+    const unclamped = await scrollAndroid(device, 'down', { pixels: 600 });
+    const result = await scrollAndroid(device, 'down', { pixels: 600, containerRect: list });
+
+    assert.deepEqual(result, unclamped);
+  });
+});
+
 test('scrollAndroid refuses rather than flinging into a keyboard that owns the window', async () => {
   // A landscape IME leaves 40px of a 900px window: a swipe there reads as a stuck surface, so the
   // command refuses with its own typed reason instead of the generic no-progress stop.
