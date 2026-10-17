@@ -72,12 +72,6 @@ export async function assertWebViewRemoteContent(context: LiveContext): Promise<
     `WebView snapshot must disclose the XCTest fallback for remote content: ${JSON.stringify(snapshot)}`,
   );
 
-  await runStep(context, 'restore fixture home after WebView lab', [
-    'open',
-    context.appId,
-    '--relaunch',
-  ]);
-  await assertWaitText(context, 'Agent Device Tester');
   verifyBehavior(
     context,
     'webview-remote-content',

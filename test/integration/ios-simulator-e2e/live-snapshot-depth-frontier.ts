@@ -82,12 +82,6 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     `raw --depth 1 exceeded the acquisition frontier: ${JSON.stringify(rawDepthOne)}`,
   );
 
-  await runStep(context, 'restore fixture home after visible-depth capture', [
-    'open',
-    context.appId,
-    '--relaunch',
-  ]);
-  await assertWaitText(context, 'Agent Device Tester');
   verifyBehavior(
     context,
     'regular-visible-depth-frontier',

@@ -217,13 +217,6 @@ export async function assertColdDeepLinkNavigation(context: LiveContext): Promis
     'cold-start-deep-link-navigation',
     'launchApp(clearState) removed a seeded data canary, rendered the stored deep route and payload, and continued into the fixture catalog',
   );
-
-  await runStep(context, 'restore home after deep-link contract', [
-    'open',
-    context.appId,
-    '--relaunch',
-  ]);
-  await assertWaitText(context, FIXTURE_HOME_TITLE);
 }
 
 async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
