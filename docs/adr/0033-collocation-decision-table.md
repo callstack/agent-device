@@ -22,7 +22,7 @@ Re-evaluate those files against their remaining edges.
   Most candidates belong to a consumer's detected community because they are shared foundations.
   The table records valid ownership locations, often the existing locations.
 - A move counts only when the target has a real seam.
-  It introduces no new dependency direction, moves no root composition into a package, and preserves the file's imports.
+  A real seam means that the move adds no new dependency direction, pulls no root composition into a package, and keeps the file's own imports unchanged.
   If a proposal was infeasible, the row records that.
   No issue is filed to propose it again.
 - A path-keyed rule, for example R13's importer lists, R76's path-family ban, or R78's scope, describes today's seam.
@@ -43,7 +43,7 @@ Re-evaluate those files against their remaining edges.
 | `src/capture-admission/screen-recording-admission-ledger.ts` | keep (proposed move rejected) | The same direction is rejected. Capture-kit's screen-recording session resource and stop-recovery consume it. |
 | `src/durable-json.ts` | keep (proposed move rejected) | Managed-allocation already imports this capture-kit module. Reversal forms a package cycle unless that import disappears first. Contracts beside `json.ts` was also rejected: under R18, contracts holds wire vocabulary, not durable-descriptor validation mechanics. Three managed-allocation `record-*` consumers explain the community coupling and can remain. |
 | `src/snapshot/snapshot-evidence.ts` | keep | This is snapshot-capture mechanics. The daemon-dominated community represents consumers. A daemon-server home would force every platform and provider to depend on the daemon zone for capture evidence. |
-| `src/snapshot/snapshot-freshness/index.ts` | keep | This is platform-neutral freshness policy. Capture-kit, platforms, and daemon currently import it downward. |
+| `src/snapshot/snapshot-freshness/index.ts` | keep | The reason for the row above applies. This is platform-neutral freshness policy. All its consumers, capture-kit itself, platforms, and daemon, import it downward today. |
 | `src/snapshot/touch-reference-frame.ts` | keep | Interaction and capture share these snapshot-geometry mechanics. Only capture-kit is below both. |
 
 ### contracts
@@ -61,7 +61,7 @@ All its consumers occupy one zone that already owns the operations represented b
 | `src/app-events.ts` | keep | Commands, daemon, and platforms share this event vocabulary. |
 | `src/app-state.ts` | keep | Many zones consume this app-state vocabulary. Any consumer-side home would place it above other consumers. |
 | `src/device-boot.ts` | keep | Device-selection, platforms, and daemon-server consume this boot-phase vocabulary. |
-| `src/facades/device.ts` | keep | This published contracts facade defines the package boundary. It is not movable implementation content. |
+| `src/facades/device.ts` | keep | This is the published facade of the contracts package. Facades are the package boundary, not movable content. |
 | `src/interaction-guarantees.ts` | keep | AGENTS.md names this declaration site for interaction dispatch paths and guarantee cells under ADR 0011. Cross-language golden tables in `contracts/fixtures/` bind it to this package. |
 | `src/managed-device-allocation.ts` | move (batch 1, landed in #3287; package removed 2026-10-10) → `packages/managed-allocation` | Only managed-allocation and its dependent daemon composition consume this port and vocabulary; see [ADR 0021](0021-host-simlock-managed-device-allocation.md) §3. No other contracts file or zone imports it. Types therefore belong beside their implementing operations. |
 | `src/wait-runtime-plan.ts` | keep | Command-registry and daemon-server share it. Both are spine zones; contracts is the only seam below them. |
@@ -100,7 +100,7 @@ All its consumers occupy one zone that already owns the operations represented b
 
 | File | Decision | Reason |
 | --- | --- | --- |
-| `src/runner-owner-facade.ts` | keep | This is the ADR 0005 runner-owner seam. R13 owns platform composition exports. The root importer is the designated host. |
+| `src/runner-owner-facade.ts` | keep | This is the ADR 0005 runner-owner seam. R13 owns the platform package's composition exports. The root importer is the designated host. |
 | `src/runner/legacy-xctest-device-set.ts` | keep | Runner-internal legacy device-set parsers reside beside their runner. |
 | `src/simulator-boot.ts` | keep | ADR 0009 assigns simulator boot mechanics to the platform. The kernel device model and xctestrun preparation must remain synchronized with them in this package. |
 
@@ -108,7 +108,7 @@ All its consumers occupy one zone that already owns the operations represented b
 
 | File | Decision | Reason |
 | --- | --- | --- |
-| `src/daemon-port/session-test-shard-devices.ts` | keep | This daemon-port adapter already colocates its shard enumeration binding. The `replay-test` scheduler deliberately never enumerates hardware. A move toward that zone would break the port. |
+| `src/daemon-port/session-test-shard-devices.ts` | keep | This file is already collocated. It is the daemon-port adapter that binds shard enumeration. The `replay-test` scheduler deliberately never enumerates hardware. A move toward that zone would break the port. |
 
 ### selectors
 
@@ -135,8 +135,8 @@ The complete `daemon-contracts` zone resides in `packages/daemon-contracts`, beh
 Folders and packages derive these zones, so moved files no longer need `ROOT_MODULE_ZONES` rows.
 
 The remaining shared daemon/client file, `provider-credential-fingerprint.ts`, follows #2559's decision.
-That decision moved shared contracts **to the process root** to remove client imports of `packages/daemon/src/`.
-The `client-side` logical-module policy prohibits those imports from these consumers:
+That decision moved shared contracts **to the process root** so that the client stops all imports of `packages/daemon/src/`.
+The `client-side` logical-module policy prohibits every edge into `packages/daemon/src/` from these consumers:
 
 - CLI.
 - Typed client.
@@ -154,15 +154,15 @@ They are not independent proof that the placement is optimal.
 | File | Decision | Reason |
 | --- | --- | --- |
 | `src/daemon-diagnostics-scope.ts` | moved → `packages/daemon-contracts/src/daemon-diagnostics-scope.ts` ([#3297](https://github.com/callstack/agent-device/pull/3297) into `src/daemon-contracts/`, then the package extraction) | The complete zone resides in `packages/daemon-contracts`. Its directory derives zone ownership without per-file `ROOT_MODULE_ZONES` rows. An internal rename therefore needs no ownership-table edit. |
-| `packages/daemon-contracts/src/device-claim-recovery.ts` | keep (shared-below-both) | The owner-scoped reconciler recovers durable resources from a dead owner's state directory. Daemon `open`/startup and daemonless `device release --stale` both run it. It therefore belongs below both. Runtime recovery may reside in `daemon-contracts` only when both sides run it and root composition supplies only the gateway, per ADR 0019 section 1. The package depends on `capture-kit`. A reverse dependency forms a project-reference cycle through `selectors`. |
+| `packages/daemon-contracts/src/device-claim-recovery.ts` | keep (shared-below-both) | The owner-scoped claim reconciler recovers durable resources from a dead owner's state directory. Daemon `open`/startup and daemonless `device release --stale` both run it. It therefore belongs below both. Runtime recovery may reside in `daemon-contracts` only when both sides run it and root composition supplies only the gateway, per ADR 0019 section 1. The package depends on `capture-kit`. Capture-kit cannot depend back on it, because that dependency forms a project-reference cycle through `selectors`. |
 | `src/daemon-policy-file.ts` | moved → `packages/daemon-contracts/src/daemon-policy-file.ts` | This shared daemon/client contract follows #2559 and #3288's `daemon-contracts` declaration. Rank-5 daemon-client dynamically imports it, so the spine requires a home below both. Package extraction supplies that physical home with manifest-owned exports. |
 | `src/daemon.ts` | keep | This is the `internal/daemon` bundle entry. Umbrella §4 keeps composition roots at the root. |
 | `src/platform-runtime-apple-runner-owner.ts` | retain for this batch | This is a `platform-runtime-*` composition seam. R13's exact-importer rule and ADR 0022's R76 ban on the `src/platform-runtime-*.ts` family key on its path. Relocation requires coordinated changes to both declarations. The rules constrain the move without independently proving placement. |
 | `src/platform-runtime-daemon-lifecycle.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. Relocation is possible only with coordinated changes to those declarations. |
 | `src/platform-runtime-device-boot.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. |
 | `src/platform-runtime-resource-cleanup.ts` | retain for this batch | The same path-keyed R13/ADR 0022 seam applies. |
-| `src/provider-credential-fingerprint.ts` | keep (type extracted) | Like `daemon-policy-file.ts`, this shared daemon/client contract follows #2559. #3288 declares its zone beside provider composition that consumes fingerprinted credentials. Daemon extraction PR 6 moved only `DaemonProviderCredentials` to `packages/daemon-contracts` at `./provider-credentials`, below both consumers. The implementation remains here because it reads the installed-plugin manifest. |
-| `src/provider-limrun-runtime.ts` | keep | The proposed provider-limrun destination has no seam. Its constructor builds the root dependency factory `src/sdk/limrun-runtime-dependencies.ts`, which is the ADR 0019 composition seam. This loads the root adb-host binder, core Android interactor, and platform-runtime app-state helpers, all prohibited package imports. Moving the class also moves composition and therefore requires design changes. |
+| `src/provider-credential-fingerprint.ts` | keep (type extracted) | Like `daemon-policy-file.ts`, this shared daemon/client contract follows #2559. #3288 declares its zone beside the provider composition that reads the credentials this file fingerprints. Daemon extraction PR 6 moved only the `DaemonProviderCredentials` declaration to `packages/daemon-contracts` at `./provider-credentials`. This is the same shared-below-both landing as the policy file. The implementation remains here because it reads the installed-plugin manifest. |
+| `src/provider-limrun-runtime.ts` | keep | The proposed provider-limrun destination has no seam. Its constructor builds the root dependency factory `src/sdk/limrun-runtime-dependencies.ts`, which is the ADR 0019 composition seam. This loads the root adb-host binder, core Android interactor, and platform-runtime app-state helpers, all prohibited package imports. Moving the class also moves that composition. That is a design change, not a move. |
 | `src/request-progress-protocol.ts` | moved → `packages/daemon-contracts/src/request-progress-protocol.ts` | This follows #2559's shared-contract decision. The client reads it statically through `daemon-client-progress.ts`; the server reads it through `packages/daemon/src/server/`. Only shared placement and wire-compat ledgers constrain it. #3288 declared `daemon-contracts`; extraction made it physical and moved wire-ledger keys with it. Contracts was rejected because R18 excludes envelope validation mechanics. |
 | `src/runtime-command-surface.ts` | moved → `src/command-runtime/runtime-command-surface.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | The command-surface binding resides beside `runtime-factory.ts` as one assembly group. Their folder derives `command-runtime` ownership. `topFolder` replaces per-file `ROOT_MODULE_ZONES` declarations. |
 | `src/runtime-factory.ts` | moved → `src/command-runtime/runtime-factory.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | The runtime assembly folder derives `command-runtime` ownership without per-file `ROOT_MODULE_ZONES` declarations. |
@@ -172,7 +172,7 @@ They are not independent proof that the placement is optimal.
 | File | Decision | Reason |
 | --- | --- | --- |
 | `src/sdk/limrun.ts` | keep | This file is the published `agent-device/limrun` facade. `tsdown.config.ts` builds it as the bundle entry, and `package.json#exports` ships `dist/src/limrun.js`. A published facade cannot reside in a private workspace package. |
-| `src/sdk/limrun-runtime-types.ts` | keep | This public session-type refinement is the provider session with the platform `AndroidAdbProvider` types swapped in. It exists because the published surface differs from the package-internal surface, whose identical names it `Omit`s. A provider-limrun home requires renamed or dual-exported internal types. That requires design changes, not only a move. |
+| `src/sdk/limrun-runtime-types.ts` | keep | This public session-type refinement is the provider session with the platform `AndroidAdbProvider` types swapped in. It exists because the published surface differs from the package-internal surface, whose identical names it `Omit`s. A provider-limrun home requires renamed or dual-exported internal types. That is a design change, not a move. |
 
 ## Batch 1 (this decision's companion PR)
 
@@ -186,8 +186,8 @@ The decision table retains ownership rationale.
 ## The daemon package's export surface
 
 `@agent-device/daemon` has one entry, `.`, at `packages/daemon/src/index.ts`.
-It explicitly re-exports named values/types used by process-root composition and platform-runtime modules.
-These include `startDaemonRuntime` and required types.
+It explicitly re-exports, by name, what the daemon process root uses.
+These are `startDaemonRuntime` and the types that the root's composition and platform-runtime modules name.
 It has no `export *`.
 This package boundary is the only permitted barrel.
 Layer folders contain no barrels.
