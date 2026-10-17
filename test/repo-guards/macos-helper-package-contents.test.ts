@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { test } from 'vitest';
 import { readMacosHelperTestTargets } from '../../scripts/size-report-package.mjs';
 
@@ -30,12 +30,13 @@ function declaredTargetNames(manifest: string, kind: 'target' | 'executableTarge
 }
 
 function packedPaths(): string[] {
-  const stdout = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+  // runCmdSync resolves `npm` through the PATH extensions a Windows checkout needs; a bare
+  // execFileSync('npm', ...) there dies on ENOENT for npm.cmd.
+  const result = runCmdSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
     cwd: repoRoot,
-    encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  const parsed = JSON.parse(stdout);
+  const parsed = JSON.parse(result.stdout);
   const pack: { files?: { path?: unknown }[] } = Array.isArray(parsed) ? parsed[0] : parsed;
   return pack.files?.map((entry) => String(entry.path)) ?? [];
 }

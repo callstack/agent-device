@@ -101,8 +101,15 @@ export function assertPublishPackageContents(entries, options = {}) {
   if (shippedSwiftTests.length > 0) {
     throw new Error(`npm pack includes macOS helper test sources: ${shippedSwiftTests.join(', ')}`);
   }
-  // Read the target list from the same manifest the pack ships, so the pack and the manifest can
-  // never drift onto different target sets. A pack without the manifest ships no helper at all.
+  // Helper sources without the manifest are not a buildable Swift package, so a dropped
+  // `files` entry that ships Sources but not Package.swift must fail here, not on the user's
+  // machine. With the manifest present, read the target list from it — the pack and the
+  // manifest can then never drift onto different target sets.
+  if (paths.some((entryPath) => entryPath.startsWith('apple/macos-helper/Sources/'))) {
+    if (!paths.includes('apple/macos-helper/Package.swift')) {
+      throw new Error('npm pack ships macOS helper sources without its Package.swift');
+    }
+  }
   if (paths.includes('apple/macos-helper/Package.swift')) {
     const manifestSource =
       options.macosHelperManifestSource ??
