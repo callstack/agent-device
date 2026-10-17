@@ -1,14 +1,8 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import type { CliFlags } from '@agent-device/contracts/command';
-import {
-  bindTestCommandHost,
-  mkdtempForTestSync,
-  writeMetroSessionFixture,
-} from '@agent-device/test-kit';
+import { mkdtempForTestSync, writeMetroSessionFixture } from '@agent-device/test-kit';
 import { runReactDevtoolsCommand } from './react-devtools.ts';
-
-bindTestCommandHost();
 
 afterEach(() => {
   vi.restoreAllMocks();

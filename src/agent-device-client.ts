@@ -69,7 +69,6 @@ import {
 } from '@agent-device/kernel/record';
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
-import { withCommandHost } from '@agent-device/host-kit/command';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createLeaseClient } from './client/lease-client.ts';
@@ -84,25 +83,26 @@ export function createAgentDeviceClient(
   const transport = deps.transport ?? createDaemonTransport(host);
   // A typo in a JSON or JS config must not fall through to the default and manage a daemon.
   readDaemonLifecycle(config.daemonLifecycle);
-  // The dev-server helpers read their environment from the command host; this client's host owns it.
-  const inHost = async <T>(fn: () => Promise<T> | T): Promise<T> =>
-    await withCommandHost({ host, requestEnv: undefined }, async () => await fn());
+  // The dev-server helpers take the client's host explicitly.
   const prepareMetroRuntime = (input: Parameters<typeof devServer.prepareMetroRuntime>[0]) =>
-    inHost(() => devServer.prepareMetroRuntime(input));
-  const reloadMetro = (input: Parameters<typeof devServer.reloadMetro>[0]) =>
-    inHost(() => devServer.reloadMetro(input));
-  const clearMetroSessionHintsQuietly = (
-    options: Parameters<typeof devServer.clearMetroSessionHintsQuietly>[0],
-  ) => inHost(() => devServer.clearMetroSessionHintsQuietly(options));
+    devServer.prepareMetroRuntime(input, host);
+  const { reloadMetro } = devServer;
+  const withHost = <Options extends { session: string }>(options: Options) => ({
+    ...options,
+    host,
+  });
+  const clearMetroSessionHintsQuietly = (options: { session: string; stateDir?: string }) =>
+    devServer.clearMetroSessionHintsQuietly(withHost(options));
   const recordPreparedMetroSession = (
-    ...args: Parameters<typeof devServer.recordPreparedMetroSession>
-  ) => inHost(() => devServer.recordPreparedMetroSession(...args));
+    options: { session: string; stateDir?: string },
+    result: Parameters<typeof devServer.recordPreparedMetroSession>[1],
+  ) => devServer.recordPreparedMetroSession(withHost(options), result);
   const recordOpenedMetroSession = (
-    ...args: Parameters<typeof devServer.recordOpenedMetroSession>
-  ) => inHost(() => devServer.recordOpenedMetroSession(...args));
-  const readMetroSessionRuntime = (
-    options: Parameters<typeof devServer.readMetroSessionRuntime>[0],
-  ) => inHost(() => devServer.readMetroSessionRuntime(options));
+    options: { session: string; stateDir?: string },
+    input: Parameters<typeof devServer.recordOpenedMetroSession>[1],
+  ) => devServer.recordOpenedMetroSession(withHost(options), input);
+  const readMetroSessionRuntime = (options: { session: string; stateDir?: string }) =>
+    devServer.readMetroSessionRuntime(withHost(options));
 
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the

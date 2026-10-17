@@ -2,10 +2,8 @@ import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { AppError } from '@agent-device/kernel/errors';
-
-bindTestCommandHost();
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
@@ -98,6 +96,8 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
     vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
 
     const stagingFirst = await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -108,6 +108,8 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
       consumerKey: 'session-a',
     });
     const stagingSecond = await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -118,6 +120,8 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
       consumerKey: 'session-b',
     });
     const prod = await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -196,6 +200,8 @@ test('launchUrl changes force a companion respawn for the same profile', async (
     vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
 
     const first = await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -206,6 +212,8 @@ test('launchUrl changes force a companion respawn for the same profile', async (
       consumerKey: 'session-a',
     });
     const second = await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -241,6 +249,7 @@ test('spawned companion uses neutral env names', async () => {
     );
 
     await ensureMetroCompanion({
+      cwd: process.cwd(),
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -282,6 +291,8 @@ test('state sentinel exists before spawning companion worker', async () => {
     );
 
     const spawned = await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -438,6 +449,8 @@ test('a companion whose stop was refused keeps its state and is not replaced by 
     vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(RETAINED_ON_TERM);
 
     const failure = (await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -481,6 +494,8 @@ test('a half-spawned companion whose stop cannot be confirmed keeps its record',
     }) as typeof fs.writeFileSync);
 
     const failure = (await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -498,6 +513,8 @@ test('a half-spawned companion whose stop cannot be confirmed keeps its record',
     // second companion beside the one that refused to die.
     vi.mocked(stopProcessAndConfirmExit).mockClear();
     const retry = (await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
@@ -541,6 +558,8 @@ test('legacy state without bridge scope is stopped before respawn', async () => 
     vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
 
     const spawned = await ensureMetroCompanion({
+      cwd: process.cwd(),
+      env: process.env,
       projectRoot,
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',

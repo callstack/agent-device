@@ -8,15 +8,13 @@ import path from 'node:path';
 import { prepareMetroRuntime, reloadMetro } from './index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  bindTestCommandHost,
   closeLoopbackServer,
   mkdtempForTestSync,
   writeFakeMetroNpx,
   findFreeMetroPort,
   stopTestMetroProcess,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
-
-bindTestCommandHost();
 
 const TEST_TOKEN = 'agent-device-proxy-test-token';
 
@@ -51,18 +49,21 @@ for (const { configFileName, commandName } of [
 
     let pid = 0;
     try {
-      const result = await prepareMetroRuntime({
-        projectRoot,
-        publicBaseUrl: `http://127.0.0.1:${metroPort}`,
-        metroPort,
-        reuseExisting: false,
-        installDependenciesIfNeeded: false,
-        env: {
-          ...process.env,
-          AGENT_DEVICE_TEST_NPX_ARGS_FILE: argsFile,
-          PATH: `${binDir}:${process.env.PATH || ''}`,
+      const result = await prepareMetroRuntime(
+        {
+          projectRoot,
+          publicBaseUrl: `http://127.0.0.1:${metroPort}`,
+          metroPort,
+          reuseExisting: false,
+          installDependenciesIfNeeded: false,
+          env: {
+            ...process.env,
+            AGENT_DEVICE_TEST_NPX_ARGS_FILE: argsFile,
+            PATH: `${binDir}:${process.env.PATH || ''}`,
+          },
         },
-      });
+        createTestHostEnvironment(),
+      );
 
       pid = result.pid;
       assert.equal(result.kind, 'repack');
@@ -106,18 +107,21 @@ test('prepareMetroRuntime maps kind=expo to the virtual-metro-entry bundle URL',
 
   let pid = 0;
   try {
-    const result = await prepareMetroRuntime({
-      projectRoot,
-      kind: 'expo',
-      publicBaseUrl: `http://127.0.0.1:${metroPort}`,
-      metroPort,
-      reuseExisting: false,
-      installDependenciesIfNeeded: false,
-      env: {
-        ...process.env,
-        PATH: `${binDir}:${process.env.PATH || ''}`,
+    const result = await prepareMetroRuntime(
+      {
+        projectRoot,
+        kind: 'expo',
+        publicBaseUrl: `http://127.0.0.1:${metroPort}`,
+        metroPort,
+        reuseExisting: false,
+        installDependenciesIfNeeded: false,
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH || ''}`,
+        },
       },
-    });
+      createTestHostEnvironment(),
+    );
     pid = result.pid;
 
     assert.equal(result.kind, 'expo');
@@ -156,18 +160,21 @@ test('prepareMetroRuntime keeps index.bundle for non-expo kinds', async () => {
 
   let pid = 0;
   try {
-    const result = await prepareMetroRuntime({
-      projectRoot,
-      kind: 'react-native',
-      publicBaseUrl: `http://127.0.0.1:${metroPort}`,
-      metroPort,
-      reuseExisting: false,
-      installDependenciesIfNeeded: false,
-      env: {
-        ...process.env,
-        PATH: `${binDir}:${process.env.PATH || ''}`,
+    const result = await prepareMetroRuntime(
+      {
+        projectRoot,
+        kind: 'react-native',
+        publicBaseUrl: `http://127.0.0.1:${metroPort}`,
+        metroPort,
+        reuseExisting: false,
+        installDependenciesIfNeeded: false,
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH || ''}`,
+        },
       },
-    });
+      createTestHostEnvironment(),
+    );
     pid = result.pid;
 
     assert.equal(
@@ -207,17 +214,20 @@ test('prepareMetroRuntime detects the package manager from an ancestor lockfile 
 
   let pid = 0;
   try {
-    const result = await prepareMetroRuntime({
-      projectRoot,
-      publicBaseUrl: `http://127.0.0.1:${metroPort}`,
-      metroPort,
-      reuseExisting: false,
-      installDependenciesIfNeeded: true,
-      env: {
-        ...process.env,
-        PATH: `${binDir}:${process.env.PATH || ''}`,
+    const result = await prepareMetroRuntime(
+      {
+        projectRoot,
+        publicBaseUrl: `http://127.0.0.1:${metroPort}`,
+        metroPort,
+        reuseExisting: false,
+        installDependenciesIfNeeded: true,
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH || ''}`,
+        },
       },
-    });
+      createTestHostEnvironment(),
+    );
     pid = result.pid;
 
     assert.equal(result.packageManager, 'yarn');
@@ -249,15 +259,18 @@ test('prepareMetroRuntime install failure hints at --no-install-deps and the det
 
   await assert.rejects(
     () =>
-      prepareMetroRuntime({
-        projectRoot,
-        publicBaseUrl: 'http://127.0.0.1:9',
-        installDependenciesIfNeeded: true,
-        env: {
-          ...process.env,
-          PATH: `${binDir}:${process.env.PATH || ''}`,
+      prepareMetroRuntime(
+        {
+          projectRoot,
+          publicBaseUrl: 'http://127.0.0.1:9',
+          installDependenciesIfNeeded: true,
+          env: {
+            ...process.env,
+            PATH: `${binDir}:${process.env.PATH || ''}`,
+          },
         },
-      }),
+        createTestHostEnvironment(),
+      ),
     (error) => {
       assert.ok(error instanceof AppError);
       const hint = error.details?.hint;
@@ -291,15 +304,18 @@ test('prepareMetroRuntime detects bun from the text bun.lock lockfile', async ()
 
   await assert.rejects(
     () =>
-      prepareMetroRuntime({
-        projectRoot,
-        publicBaseUrl: 'http://127.0.0.1:9',
-        installDependenciesIfNeeded: true,
-        env: {
-          ...process.env,
-          PATH: `${binDir}:${process.env.PATH || ''}`,
+      prepareMetroRuntime(
+        {
+          projectRoot,
+          publicBaseUrl: 'http://127.0.0.1:9',
+          installDependenciesIfNeeded: true,
+          env: {
+            ...process.env,
+            PATH: `${binDir}:${process.env.PATH || ''}`,
+          },
         },
-      }),
+        createTestHostEnvironment(),
+      ),
     (error) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.packageManager, 'bun');
@@ -334,15 +350,18 @@ test('prepareMetroRuntime lockfile walk-up stops at the repo root instead of ado
 
   await assert.rejects(
     () =>
-      prepareMetroRuntime({
-        projectRoot,
-        publicBaseUrl: 'http://127.0.0.1:9',
-        installDependenciesIfNeeded: true,
-        env: {
-          ...process.env,
-          PATH: `${binDir}:${process.env.PATH || ''}`,
+      prepareMetroRuntime(
+        {
+          projectRoot,
+          publicBaseUrl: 'http://127.0.0.1:9',
+          installDependenciesIfNeeded: true,
+          env: {
+            ...process.env,
+            PATH: `${binDir}:${process.env.PATH || ''}`,
+          },
         },
-      }),
+        createTestHostEnvironment(),
+      ),
     (error) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.packageManager, 'npm');
@@ -356,11 +375,14 @@ test('prepareMetroRuntime lockfile walk-up stops at the repo root instead of ado
 test('prepareMetroRuntime rejects incomplete proxy configuration', async () => {
   await assert.rejects(
     () =>
-      prepareMetroRuntime({
-        publicBaseUrl: 'https://sandbox.example.test',
-        proxyBaseUrl: 'https://proxy.example.test',
-        env: {},
-      }),
+      prepareMetroRuntime(
+        {
+          publicBaseUrl: 'https://sandbox.example.test',
+          proxyBaseUrl: 'https://proxy.example.test',
+          env: {},
+        },
+        createTestHostEnvironment(),
+      ),
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
@@ -369,10 +391,13 @@ test('prepareMetroRuntime rejects incomplete proxy configuration', async () => {
 
   await assert.rejects(
     () =>
-      prepareMetroRuntime({
-        publicBaseUrl: 'https://sandbox.example.test',
-        env: { AGENT_DEVICE_METRO_BEARER_TOKEN: TEST_TOKEN },
-      }),
+      prepareMetroRuntime(
+        {
+          publicBaseUrl: 'https://sandbox.example.test',
+          env: { AGENT_DEVICE_METRO_BEARER_TOKEN: TEST_TOKEN },
+        },
+        createTestHostEnvironment(),
+      ),
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
@@ -381,12 +406,15 @@ test('prepareMetroRuntime rejects incomplete proxy configuration', async () => {
 
   await assert.rejects(
     () =>
-      prepareMetroRuntime({
-        publicBaseUrl: 'https://sandbox.example.test',
-        proxyBaseUrl: 'https://proxy.example.test',
-        proxyBearerToken: TEST_TOKEN,
-        env: {},
-      }),
+      prepareMetroRuntime(
+        {
+          publicBaseUrl: 'https://sandbox.example.test',
+          proxyBaseUrl: 'https://proxy.example.test',
+          proxyBearerToken: TEST_TOKEN,
+          env: {},
+        },
+        createTestHostEnvironment(),
+      ),
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
@@ -397,11 +425,14 @@ test('prepareMetroRuntime rejects incomplete proxy configuration', async () => {
 test('prepareMetroRuntime falls back to daemon auth token for proxy auth', async () => {
   await assert.rejects(
     () =>
-      prepareMetroRuntime({
-        publicBaseUrl: 'https://sandbox.example.test',
-        proxyBaseUrl: 'https://proxy.example.test',
-        env: { AGENT_DEVICE_DAEMON_AUTH_TOKEN: TEST_TOKEN },
-      }),
+      prepareMetroRuntime(
+        {
+          publicBaseUrl: 'https://sandbox.example.test',
+          proxyBaseUrl: 'https://proxy.example.test',
+          env: { AGENT_DEVICE_DAEMON_AUTH_TOKEN: TEST_TOKEN },
+        },
+        createTestHostEnvironment(),
+      ),
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
@@ -412,11 +443,14 @@ test('prepareMetroRuntime falls back to daemon auth token for proxy auth', async
 test('prepareMetroRuntime honors metro bearer token env for proxy auth', async () => {
   await assert.rejects(
     () =>
-      prepareMetroRuntime({
-        publicBaseUrl: 'https://sandbox.example.test',
-        proxyBaseUrl: 'https://proxy.example.test',
-        env: { AGENT_DEVICE_METRO_BEARER_TOKEN: TEST_TOKEN },
-      }),
+      prepareMetroRuntime(
+        {
+          publicBaseUrl: 'https://sandbox.example.test',
+          proxyBaseUrl: 'https://proxy.example.test',
+          env: { AGENT_DEVICE_METRO_BEARER_TOKEN: TEST_TOKEN },
+        },
+        createTestHostEnvironment(),
+      ),
     (error) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&

@@ -10,7 +10,7 @@ import type {
 } from '@agent-device/contracts/remote';
 import fs from 'node:fs';
 import path from 'node:path';
-import { commandHostEnvironment, runCmdSync, runCmdDetached } from '@agent-device/host-kit/command';
+import { runCmdSync, runCmdDetached } from '@agent-device/host-kit/command';
 import {
   confirmedProcessStopDetails,
   describeUnconfirmedProcessStop,
@@ -28,6 +28,7 @@ import type {
   MetroRuntimeHints,
 } from './metro-types.ts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { resolveUserPath } from '@agent-device/host-kit/file';
 
@@ -66,6 +67,7 @@ type MetroProcessResult = {
 
 type ResolvedMetroPrepareSettings = {
   env: EnvSource;
+  cwd: string;
   projectRoot: string;
   kind: ResolvedMetroKind;
   repackBundler: RepackBundlerKind | null;
@@ -709,8 +711,8 @@ function resolveMetroLogPath(
 
 function resolveMetroPrepareSettings(
   input: PrepareMetroRuntimeOptions,
+  host: HostEnvironment,
 ): ResolvedMetroPrepareSettings {
-  const host = commandHostEnvironment();
   const env = input.env ?? host.env;
   const cwd = host.cwd;
   const projectRoot = resolvePath(input.projectRoot ?? cwd, env, cwd);
@@ -740,6 +742,7 @@ function resolveMetroPrepareSettings(
 
   return {
     env,
+    cwd,
     projectRoot,
     kind,
     repackBundler,
@@ -935,6 +938,7 @@ async function configureProxyBridgeViaCompanion(
       profileKey: normalizeOptionalString(input.companionProfileKey),
       consumerKey: normalizeOptionalString(input.companionConsumerKey),
       env: settings.env as NodeJS.ProcessEnv,
+      cwd: settings.cwd,
     });
     companionLogPath = companion.logPath;
   } catch (error) {
@@ -998,9 +1002,10 @@ function writeMetroRuntimeFile(
 }
 
 export async function prepareMetroRuntime(
-  input: PrepareMetroRuntimeOptions = {},
+  input: PrepareMetroRuntimeOptions,
+  host: HostEnvironment,
 ): Promise<PrepareMetroRuntimeResult> {
-  const settings = resolveMetroPrepareSettings(input);
+  const settings = resolveMetroPrepareSettings(input, host);
   const dependencyInstall = settings.installProjectDeps
     ? installDependenciesIfNeeded(settings.projectRoot, settings.env)
     : { installed: false as const };
