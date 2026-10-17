@@ -88,9 +88,13 @@ function fields(httpPort: number) {
 function spawnUnregisteredDaemonChild(
   paths: DaemonPaths,
   options: Parameters<typeof runCmdDetachedMonitored>[2],
+  emitStartupMarkers = false,
 ): ReturnType<typeof runCmdDetachedMonitored> {
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
+  // When asked, the child records its phases through the real protocol, into the file named for
+  // its own pid, exactly as the daemon entry does.
+  if (emitStartupMarkers) fs.writeFileSync(path.join(paths.baseDir, 'emit-startup-markers'), 'on');
   return spawnRegisteredDaemonFixture(paths, fields(1), options);
 }
 
@@ -121,15 +125,22 @@ async function realPause(ms = 5) {
   await actualRetry.sleep(ms);
 }
 
+async function awaitFile(file: string) {
+  for (let attempt = 0; !fs.existsSync(file); attempt += 1) {
+    assert.ok(attempt < 400, `fixture did not publish ${file}`);
+    await actualRetry.sleep(10);
+  }
+}
+
 test('a daemon slower than the retired 15 s budget starts successfully while it keeps progressing', async (t) => {
   if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
   const http = await startHttpDaemonFixture({ devices: [] });
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-slow-success-'));
-  const markerPath = resolveDaemonStartupPhasesPath(paths.baseDir);
   // Virtual time: the client waits ~20 s of startup — past the retired 15 s deadline — in real
   // milliseconds. The clock stands still while the real fixture child is still booting (marker
   // timestamps must come from this launch), and a progress marker every ~6 virtual seconds keeps
-  // the wait outside the 60 s stall window.
+  // the wait outside the 60 s stall window. Markers go to this launch's own pid-named file, which
+  // is where a real daemon writes them.
   const startedAt = Date.now();
   const now = { value: startedAt };
   vi.spyOn(Date, 'now').mockImplementation(() => now.value);
@@ -151,7 +162,11 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
     }
     if (now.value - spawned.at < 20_000) {
       now.value += 2_000;
-      if (polls % 3 === 0) recordDaemonStartupMarker(markerPath, 'lock-acquired');
+      if (polls % 3 === 0 && spawned.child)
+        recordDaemonStartupMarker(
+          resolveDaemonStartupPhasesPath(paths.baseDir, spawned.child.pid),
+          'lock-acquired',
+        );
       if (now.value - spawned.at >= 20_000)
         fs.rmSync(path.join(paths.baseDir, 'defer-publication'), { force: true });
       return await realPause();
@@ -240,6 +255,15 @@ test('a live daemon that publishes no startup marker is retired as stalled befor
     assert.equal(startupPhases(failure).spawned, 0);
     assert.match(String(failure.details?.hint), /AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS/);
     assert.equal(spawn.mock.calls.length, 1, 'a stalled daemon is not retried');
+    // #3782 residue rule: the retired launch's exit was joined, so its marker file is removed —
+    // a startup the client owned must leave no evidence behind. The prefix check is name-agnostic
+    // so no marker-file shape can pass by accident.
+    await (child?.exited ?? Promise.resolve());
+    assert.deepEqual(
+      fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases')),
+      [],
+      'a joined startup must sweep its own phase-marker file',
+    );
   } finally {
     await (child?.exited ?? Promise.resolve());
   }
@@ -251,12 +275,11 @@ test('a live daemon that keeps progressing but never registers fails at the env 
   const now = { value: started };
   vi.spyOn(Date, 'now').mockImplementation(() => now.value);
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-ceiling-'));
-  const markerPath = resolveDaemonStartupPhasesPath(paths.baseDir);
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
   let booted = false;
   const spawned = { at: 0 };
   spawn.mockImplementation((_command, _args, options) => {
-    child = spawnUnregisteredDaemonChild(paths, options);
+    child = spawnUnregisteredDaemonChild(paths, options, true);
     spawned.at = now.value;
     return child;
   });
@@ -267,12 +290,10 @@ test('a live daemon that keeps progressing but never registers fails at the env 
       booted = fs.existsSync(path.join(paths.baseDir, 'registration-held'));
       if (!booted) return await realPause();
     }
-    if (now.value - started < 30_000) {
-      now.value += 1_000;
-      // A progress marker every 10 virtual seconds: always inside the 60 s stall window, so only
-      // the ceiling can stop this wait.
-      if (polls % 10 === 0) recordDaemonStartupMarker(markerPath, 'lock-acquired');
-    }
+    // The real child has published its own `lock-acquired` marker: progress this wait keeps
+    // extending is the daemon's, not the test's. Virtual time advances 1 s per poll; the 30 s
+    // env ceiling stops the wait well before the 60 s stall window can.
+    if (now.value - started < 30_000) now.value += 1_000;
     await realPause();
   });
   try {
@@ -289,6 +310,85 @@ test('a live daemon that keeps progressing but never registers fails at the env 
     );
     assert.match(String(failure.details?.hint), /AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS/);
   } finally {
+    await (child?.exited ?? Promise.resolve());
+  }
+});
+
+test("a startup progressed by a fresh launch is not judged stalled by an earlier launch's leftover markers", async () => {
+  // F1 (#3782): a reused state dir still holds the phase record a dead earlier startup wrote. The
+  // fresh launch records its own progress through the real protocol, from its own process. The
+  // shared-record reader kept the earliest occurrence per phase, so the older record hid the fresh
+  // launch's `lock-acquired` from the failure details entirely — the exact loss of attribution that
+  // turns a progressing startup into an empty observation and a false stall. The state dir must
+  // also sweep what its own launches leave behind.
+  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '30000');
+  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-stale-history-'));
+  fs.mkdirSync(paths.baseDir, { recursive: true });
+  // The leftover launch: a real daemon-shaped child that records its phase, is SIGTERMed before
+  // publishing, and leaves its record behind exactly as a crashed startup would.
+  fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
+  fs.writeFileSync(path.join(paths.baseDir, 'emit-startup-markers'), 'on');
+  const leftover = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' });
+  await awaitFile(path.join(paths.baseDir, 'registration-held'));
+  process.kill(leftover.pid, 'SIGTERM');
+  await leftover.exited;
+  const leftoverRecords = () =>
+    fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases'));
+  assert.ok(
+    leftoverRecords().length > 0,
+    'the leftover launch must have left a real daemon-written marker record',
+  );
+
+  const started = Date.now();
+  const now = { value: started };
+  vi.spyOn(Date, 'now').mockImplementation(() => now.value);
+  let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
+  let booted = false;
+  fs.rmSync(path.join(paths.baseDir, 'registration-held'), { force: true });
+  spawn.mockImplementation((_command, _args, options) => {
+    child = spawnUnregisteredDaemonChild(paths, options, true);
+    return child;
+  });
+  pause.mockImplementation(async () => {
+    if (!booted) {
+      booted = fs.existsSync(path.join(paths.baseDir, 'registration-held'));
+      if (!booted) return await realPause();
+    }
+    // The 30 s env ceiling stops this wait before the 60 s stall window can; the fresh child's own
+    // `lock-acquired` marker is the only progress evidence and must reach the failure record.
+    if (now.value - started < 30_000) now.value += 1_000;
+    await realPause();
+  });
+  try {
+    const failure = await expectStartupFailure(sendToDaemon(request(paths)));
+    assert.equal(failure.details?.reason, 'startup-ceiling');
+    const phases = startupPhases(failure);
+    assert.equal(
+      typeof phases['lock-acquired'],
+      'number',
+      'the fresh launch must observe its own marker despite the older record',
+    );
+    await (child?.exited ?? Promise.resolve());
+    assert.ok(
+      !leftoverRecords().some((entry) => entry.includes(String(child?.pid))),
+      "the joined exit must sweep this launch's own marker file",
+    );
+    // A new registration owner sweeps the leftover record of a provably dead launch.
+    const cleaner = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' });
+    try {
+      await awaitFile(path.join(paths.baseDir, 'registration-held'));
+      assert.deepEqual(
+        leftoverRecords(),
+        [],
+        "acquiring the registration sweeps every dead launch's marker record",
+      );
+    } finally {
+      process.kill(cleaner.pid, 'SIGTERM');
+      await cleaner.exited;
+    }
+  } finally {
+    // The client's own retirement (or the sweep test's SIGTERM) already stopped this child; the
+    // hermetic signal guard refuses any signal the worker did not need to send.
     await (child?.exited ?? Promise.resolve());
   }
 });
