@@ -78,6 +78,42 @@ export type ShutdownReport = {
   };
 };
 
+/**
+ * The lines that say what a close left unfinished, for the executable to write where the operator
+ * looks (stderr is the daemon log for a detached daemon). A clean close yields none.
+ */
+export function describeUnfinishedShutdownWork(report: ShutdownReport): string[] {
+  const lines: string[] = [];
+  if (report.requests.abandoned > 0) {
+    lines.push(
+      `Daemon shutdown: ${report.requests.abandoned} request(s) ignored cancellation and may still be running; the daemon registration stays held until this process exits.`,
+    );
+  }
+  for (const provider of report.plugins.pending) {
+    lines.push(
+      `Daemon shutdown: plugin ${provider} was still shutting down when the budget ran out.`,
+    );
+  }
+  for (const failure of report.plugins.failed) {
+    lines.push(
+      `Daemon shutdown: plugin ${failure.provider} failed to shut down: ${failure.error.message}`,
+    );
+  }
+  const { pending, unknown } = report.providerReleases;
+  if (pending.length > 0) {
+    lines.push(`Daemon shutdown: provider lease release still pending for ${pending.join(', ')}.`);
+  }
+  if (unknown.length > 0) {
+    lines.push(
+      `Daemon shutdown: provider lease release outcome unknown for ${unknown.join(', ')}.`,
+    );
+  }
+  if (report.sessions.failed > 0) {
+    lines.push(`Daemon shutdown: ${report.sessions.failed} session(s) failed to tear down.`);
+  }
+  return lines;
+}
+
 export type ProviderRuntimeDisposal = Readonly<{
   /** Disposes every provider runtime once; later calls return the first call's result. */
   dispose(): Promise<ShutdownReport['plugins']>;

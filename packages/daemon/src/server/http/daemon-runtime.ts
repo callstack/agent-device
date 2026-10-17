@@ -830,10 +830,9 @@ async function startDaemonRuntimeOnHost(
     clearTimeout(deadlineTimer);
     abandonedRequests = outcome === 'drained' ? 0 : inFlightRequests.size;
     if (abandonedRequests > 0) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'daemon_shutdown_requests_abandoned',
-        data: { abandoned: abandonedRequests, budgetMs: requestDrainTimeoutMs },
+      await emitDaemonDiagnostic(logPath, 'daemon_shutdown_requests_abandoned', {
+        abandoned: abandonedRequests,
+        budgetMs: requestDrainTimeoutMs,
       });
     }
     return { drained: total - abandonedRequests, abandoned: abandonedRequests };

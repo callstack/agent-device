@@ -1,4 +1,5 @@
 export { daemonStartupExitCode, startDaemonRuntime } from './server/http/daemon-runtime.ts';
+export { describeUnfinishedShutdownWork } from './server/http/server-shutdown.ts';
 export type {
   ComposeDaemonRuntimeDeps,
   DaemonRuntimeController,

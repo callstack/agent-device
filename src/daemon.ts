@@ -1,5 +1,9 @@
 import { asAppError } from '@agent-device/kernel/errors';
-import { daemonStartupExitCode, startDaemonRuntime } from '@agent-device/daemon';
+import {
+  daemonStartupExitCode,
+  describeUnfinishedShutdownWork,
+  startDaemonRuntime,
+} from '@agent-device/daemon';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 
 // The executable owns the process: signals, fatal-error handlers and the exit code. The runtime
@@ -30,10 +34,16 @@ async function runDaemon(): Promise<void> {
   process.on('unhandledRejection', (reason) =>
     failFatally(reason instanceof Error ? reason : new Error(String(reason))),
   );
-  await runtime.closed.catch((error: unknown) => {
+  const report = await runtime.closed.catch((error: unknown) => {
     process.stderr.write(`Daemon shutdown error: ${asAppError(error).message}\n`);
     exitCode = 1;
+    return undefined;
   });
+  // Unfinished work is written for every close, whoever started it: a signal, the idle reap or a
+  // quiesce. The registration may be held on purpose, and this is the only record of why.
+  for (const line of report ? describeUnfinishedShutdownWork(report) : []) {
+    process.stderr.write(`${line}\n`);
+  }
   process.exit(exitCode);
 }
 

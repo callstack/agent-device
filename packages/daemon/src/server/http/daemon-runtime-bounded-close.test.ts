@@ -10,6 +10,7 @@ import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { providerCredentialsFixture } from '../../__tests__/support/provider-credentials-fixture.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
+import { describeUnfinishedShutdownWork, type ShutdownReport } from './server-shutdown.ts';
 
 const silent = { stderr: { write: () => {} }, stdout: { write: () => {} } };
 
@@ -57,12 +58,14 @@ test('a request that ignores cancellation is abandoned at the drain budget and k
       params: { command: 'devices', meta: { requestId: 'hung-1' } },
     }),
   }).catch(() => undefined);
-  await vi.waitFor(() => expect(reached).toHaveBeenCalled());
+  await vi.waitFor(() => expect(reached).toHaveBeenCalled(), { timeout: 10_000 });
 
   const report = await runtime.close();
 
   expect(report.requests).toEqual({ drained: 0, abandoned: 1 });
   expect(fs.existsSync(paths.infoPath)).toBe(true);
+  // A close nobody scoped for diagnostics (a signal, the idle reap) still leaves its record.
+  expect(fs.readFileSync(paths.logPath, 'utf8')).toContain('daemon_shutdown_requests_abandoned');
   await hung;
 });
 
@@ -87,4 +90,37 @@ test('a plugin that never finishes shutting down is reported pending at the budg
 
   expect(report.plugins).toEqual({ disposed: ['done'], failed: [], pending: ['stuck'] });
   expect(report.requests).toEqual({ drained: 0, abandoned: 0 });
+});
+
+const cleanReport: ShutdownReport = {
+  providerReleases: { completed: [], pending: [], unknown: [] },
+  requests: { drained: 0, abandoned: 0 },
+  runners: { stopped: [], handedOff: [] },
+  sessions: { closed: 0, failed: 0 },
+  plugins: { disposed: [], failed: [], pending: [] },
+};
+
+test('a clean close leaves nothing to report and an unfinished one names each piece of work', () => {
+  expect(describeUnfinishedShutdownWork(cleanReport)).toEqual([]);
+
+  const lines = describeUnfinishedShutdownWork({
+    ...cleanReport,
+    providerReleases: { completed: [], pending: ['lease-a'], unknown: ['lease-b'] },
+    requests: { drained: 1, abandoned: 2 },
+    sessions: { closed: 0, failed: 1 },
+    plugins: {
+      disposed: [],
+      pending: ['stuck'],
+      failed: [{ provider: 'broken', error: { code: 'UNKNOWN', message: 'refused' } }],
+    },
+  });
+
+  expect(lines).toEqual([
+    expect.stringContaining('2 request(s) ignored cancellation'),
+    expect.stringContaining('plugin stuck was still shutting down'),
+    expect.stringContaining('plugin broken failed to shut down: refused'),
+    expect.stringContaining('lease release still pending for lease-a'),
+    expect.stringContaining('outcome unknown for lease-b'),
+    expect.stringContaining('1 session(s) failed to tear down'),
+  ]);
 });
