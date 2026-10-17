@@ -201,7 +201,7 @@ export async function captureHelpConformanceErrorRoutes(): Promise<{
         { session: 'default' },
       ),
       'DEVICE_IN_USE',
-      423,
+      500,
       'session owns the selected web device',
     );
 
