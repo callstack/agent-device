@@ -75,4 +75,33 @@ describe('selectRankedAlertButtonByRole', () => {
     ];
     expect(selectRankedAlertButtonByRole(buttons, 'accept', () => null)).toBeNull();
   });
+
+  it('lets the backend rank decide a pair the label table would order the other way', () => {
+    // Both sources know these labels, and they conflict: the label table prefers
+    // "While using the app" (position 1) over "Only this time" (position 15), while the
+    // backend ranks them 2 and 0. The owning backend's fact is the authority — the label
+    // table ranks only where the backend declares nothing.
+    type RankedButton = Button & { id: string };
+    const idRanks: Record<string, number> = { 'id/once': 0, 'id/fg': 2 };
+    const rankById = (button: RankedButton): number | null => idRanks[button.id] ?? null;
+    const buttons: RankedButton[] = [
+      { label: 'While using the app', role: 'accept', id: 'id/fg' },
+      { label: 'Only this time', role: 'accept', id: 'id/once' },
+    ];
+    expect(selectRankedAlertButtonByRole(buttons, 'accept', rankById)?.id).toBe('id/once');
+  });
+
+  it('refuses a pair whose ranks come from different sources rather than comparing scales', () => {
+    // A backend id-rank and a label-table position are numbers on unrelated scales: id-rank 2
+    // (a one-time grant) says nothing against label position 3 ("Always allow"). The pair is
+    // not orderable by any table, so it is refused, never resolved by whichever number is
+    // smaller.
+    type RankedButton = Button & { id: string };
+    const rankById = (button: RankedButton): number | null => (button.id === 'id/once' ? 2 : null);
+    const buttons: RankedButton[] = [
+      { label: 'Only this time', role: 'accept', id: 'id/once' },
+      { label: 'Always allow', role: 'accept', id: 'no/rank' },
+    ];
+    expect(selectRankedAlertButtonByRole(buttons, 'accept', rankById)).toBeNull();
+  });
 });

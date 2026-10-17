@@ -129,10 +129,11 @@ function alertButtonPreferenceRank(label: string, role: 'accept' | 'dismiss'): n
  * preference. Each candidate's rank comes from the owning backend first — a backend may own
  * facts a label cannot carry, like Android's permission-grant ids — and from the label
  * vocabulary only where the backend declares nothing. A single candidate wins outright.
- * Several resolve only when every one of them carries a rank and one rank outscores the rest:
- * a mix where any candidate stays unranked cannot be ordered by any table, so it names no
- * single physical button and is refused rather than resolved by tree order or by one side's
- * label happening to be known.
+ * Several resolve only when every one of them carries a rank AND all ranks come from the same
+ * source: backend ids and label positions are different scales, and an id-rank 2 (a one-time
+ * grant) says nothing against a label-position 3 ("Always allow"). A mix of sources cannot be
+ * ordered by any table, so it names no single physical button and is refused rather than
+ * resolved by tree order or by one side's number happening to be smaller.
  */
 export function selectRankedAlertButtonByRole<
   TButton extends Readonly<{ role: AlertButtonRole; label: string }>,
@@ -144,11 +145,16 @@ export function selectRankedAlertButtonByRole<
   const matching = buttons.filter((button) => button.role === role);
   if (matching.length === 1) return matching[0] ?? null;
   if (matching.length === 0) return null;
-  const ranked = matching.map((button) => ({
-    button,
-    rank: backendRank?.(button) ?? alertButtonPreferenceRank(button.label, role),
-  }));
+  const ranked = matching.map((button) => {
+    const fromBackend = backendRank?.(button) ?? null;
+    return {
+      button,
+      rank: fromBackend ?? alertButtonPreferenceRank(button.label, role),
+      source: fromBackend !== null ? ('backend' as const) : ('label' as const),
+    };
+  });
   if (ranked.some((entry) => entry.rank === null)) return null;
+  if (ranked.some((entry) => entry.source !== ranked[0]?.source)) return null;
   ranked.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
   const [first, second] = ranked;
   if (!first || (second && second.rank === first.rank)) return null;

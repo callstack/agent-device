@@ -188,12 +188,15 @@ test('a grant id outside the declared ranks keeps the refusal against a known la
       'com.android.permissioncontroller:id/permission_message',
     ),
     button(2, 'Allow', 'permission_allow_button', { x: 32, y: 1420 }, true),
+    // A vendor fork's own id, written as the vendor ships it: the fixture does not prefix it
+    // with the platform controller's id home (that prefix is what makes a real controller id),
+    // and the identifier pattern still reads it as a permission node.
     button(
       3,
       'Always allow and sync',
       'com.vendor.permission:id/permission_allow_always_and_sync_button',
       { x: 32, y: 1490 },
-      true,
+      false,
     ),
     button(4, 'Deny', 'permission_deny_button', { x: 32, y: 1560 }, true),
   ]);

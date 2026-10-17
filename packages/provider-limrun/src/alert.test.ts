@@ -137,6 +137,126 @@ describe('wait budget', () => {
     await expect(handleLimrunIosAlert(client, 'wait')).rejects.toThrow('websocket closed');
   });
 
+  it('ends the leg on cancellation only when the capture transport dies with it', async () => {
+    // The accepted capability limit, tested rather than assumed. The Limrun client exposes no
+    // abort on `elementTree`, so a caller cancel cannot unstart or cut a capture already in
+    // flight: awaiting it keeps the leg open (the caller's own request ends at the daemon; this
+    // promise is detached work no seam may fake-abort). What does end the leg is the transport
+    // route the SDK does have — an instance teardown that fails the pending call — and the
+    // driver reports that as the shared cancellation, never as a broken backend.
+    const caller = new AbortController();
+    let settled = 'pending';
+    let rejectCapture: ((error: unknown) => void) | undefined;
+    let markCaptureStarted!: () => void;
+    const captureStarted = new Promise<void>((resolve) => {
+      markCaptureStarted = resolve;
+    });
+    const client = {
+      elementTree: vi.fn(() => {
+        markCaptureStarted();
+        return new Promise((_resolve, reject) => {
+          rejectCapture = reject;
+        });
+      }) as unknown as LimrunIosAlertClient['elementTree'],
+      tap: vi.fn(async () => {}),
+    } satisfies LimrunIosAlertClient;
+    const leg = handleLimrunIosAlert(client, 'get', { signal: caller.signal });
+    leg.then(
+      () => {
+        settled = 'resolved';
+      },
+      () => {
+        settled = 'rejected';
+      },
+    );
+    await captureStarted;
+    // Canceled, and the in-flight capture with no abort still holds the leg open.
+    caller.abort();
+    await Promise.resolve();
+    expect(settled).toBe('pending');
+
+    // The instance/session teardown route: the pending call fails, the leg ends, and it ends as
+    // the caller's cancellation — not as a transport failure.
+    rejectCapture?.(new Error('websocket closed'));
+    await expect(leg).rejects.toMatchObject({
+      details: { reason: 'request_canceled' },
+    });
+  });
+
+  it('reports a press-cancelled acting leg as dispatched: unknown even when the tap answers after the cancel', async () => {
+    // The tap transport has no abort either: the cancel can arrive while `tap()` is pending and
+    // the promise simply RESOLVE anyway. A resolved press after a cancel still says "the device
+    // may have the tap" — the leg must answer `dispatched: unknown`, never a confirmation or a
+    // clean cancellation.
+    let resolveTap: (() => void) | undefined;
+    let markTapStarted!: () => void;
+    const tapStarted = new Promise<void>((resolve) => {
+      markTapStarted = resolve;
+    });
+    const trees: Array<ReturnType<typeof limrunAttAlertTree>> = [limrunAttAlertTree()];
+    const client = {
+      elementTree: vi.fn(async () => {
+        // Lookup resolves the alert; a confirm read would see it gone — the cancel must end
+        // the leg before that read is ever started.
+        const next =
+          trees.length > 0 ? (trees.shift() ?? limrunAppScreenTree()) : limrunAppScreenTree();
+        return [next] as unknown as ReturnType<LimrunIosAlertClient['elementTree']>;
+      }),
+      tap: vi.fn(() => {
+        markTapStarted();
+        return new Promise<void>((resolve) => {
+          resolveTap = resolve;
+        });
+      }),
+    } satisfies LimrunIosAlertClient;
+
+    const caller = new AbortController();
+    const leg = handleLimrunIosAlert(client, 'accept', { signal: caller.signal });
+    leg.catch(() => {});
+    await tapStarted;
+    caller.abort();
+    resolveTap?.();
+
+    await expect(leg).rejects.toMatchObject({
+      details: { reason: 'request_canceled', dispatched: 'unknown' },
+    });
+    // Exactly one dispatch attempt, never a replay: the leg died with the cancel, not with a
+    // second press or a confirm that contradicts what the caller already withdrew.
+    expect(client.tap).toHaveBeenCalledTimes(1);
+  });
+
+  it('honors a cancel that arrives while a straddling lookup probe is in flight: no press starts', async () => {
+    // The probe the cancel rode finished anyway (the budget rule) — but its alert answer is NOT
+    // acted on once the caller withdrew the action: the leg refuses at the pre-press boundary
+    // with the clean cancellation and dispatched: no, and no tap is ever attempted.
+    let resolveCapture: ((value: unknown) => void) | undefined;
+    let markCaptureStarted!: () => void;
+    const captureStarted = new Promise<void>((resolve) => {
+      markCaptureStarted = resolve;
+    });
+    const held = {
+      elementTree: vi.fn(() => {
+        markCaptureStarted();
+        return new Promise((resolve) => {
+          resolveCapture = resolve;
+        });
+      }) as unknown as LimrunIosAlertClient['elementTree'],
+      tap: vi.fn(async () => {}),
+    } satisfies LimrunIosAlertClient;
+
+    const caller = new AbortController();
+    const leg = handleLimrunIosAlert(held, 'accept', { signal: caller.signal });
+    leg.catch(() => {});
+    await captureStarted;
+    caller.abort();
+    resolveCapture?.([limrunAttAlertTree()]);
+
+    await expect(leg).rejects.toMatchObject({
+      details: { reason: 'request_canceled', dispatched: 'no' },
+    });
+    expect(held.tap).toHaveBeenCalledTimes(0);
+  });
+
   it('consumes a confirm capture that answers past its window deadline', async () => {
     // The same rule after the press: the first confirm probe started inside the confirm budget,
     // so it finishes and its answer decides. The Limrun WebSocket client cannot abort an
