@@ -324,7 +324,7 @@ A failing `replay`/`test` step returns a structured `REPLAY_DIVERGENCE` error. T
 
 - **`step`** — the 1-based plan index and its source file/line (through Maestro `runFlow` includes).
 - **`screen`** — a fresh post-failure snapshot digest with actionable refs, or `unavailable` with a reason/hint when capture failed or was sparse (never a stale tree).
-- **`suggestions`** — up to 5 ranked, re-resolved candidates for the failing selector (id match ranks above role+label, which ranks above label-only), each with a `basis` you can inspect before acting. Equally strong candidates in the recorded scroll region rank first; document order breaks remaining ties.
+- **`suggestions`** — up to 5 ranked, re-resolved candidates for the failing selector (id match ranks above role+label, which ranks above label-only), each with a `basis` you can inspect before acting. For a verified `target-v1` annotation, equally strong candidates in the recorded scroll region rank first; document order breaks remaining ties.
 - **`resume`** — whether and how to continue without re-running the script from the top.
 
 ```jsonc

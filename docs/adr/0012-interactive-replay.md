@@ -23,7 +23,7 @@ The registries and tests named there are the living source of truth.
 
 1. **`--update` never rewrites.**
    The candidate machinery of heal only ranks the bounded `suggestions` list inside a divergence report.
-   The order is identity components, then the same `scrollRegion`, then document order.
+   The order is identity components, then the same `scrollRegion` for a verified `target-v1` annotation, then document order.
    The list is deduplicated by node.
    No unattended repair path exists.
 2. **Every element resolution discloses how it resolved.**
@@ -98,7 +98,7 @@ They do not act unattended.
 
 1. Candidates that satisfy more identity components rank first.
    A recorded-id match precedes a role+label match. A role+label match precedes a label-only match.
-2. Among equal candidates, candidates in the same `scrollRegion` as recorded rank before candidates in other regions.
+2. For a verified `target-v1` annotation, equally strong candidates in the recorded `scrollRegion` rank before candidates in other regions.
 3. Document order resolves the remaining ties.
 
 Suggestions are deduplicated by node.
