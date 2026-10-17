@@ -2,10 +2,20 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { makeIosSession, makeMacOsSession } from '../../__tests__/support/session-factories.ts';
 import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+import { AppError } from '@agent-device/kernel/errors';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { assertRequestLeaseAdmission } from '../request-admission.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { ProviderAppCatalog } from '@agent-device/contracts/device';
+
+// The message names the missing field; the remediation pointer lives in the
+// AppError hint, which normalizeError keeps for callers.
+function missingLeaseIdError(error: unknown): boolean {
+  assert.ok(error instanceof AppError);
+  assert.equal(error.message, 'tenant isolation requires lease id.');
+  assert.equal(error.details?.hint, 'Allocate a lease with leases.allocate and pass its leaseId.');
+  return true;
+}
 
 const limrunAppCatalog: ProviderAppCatalog = {
   supports: (provider) => provider === 'limrun',
@@ -61,7 +71,7 @@ test('close on a lease-less but stored tenant-isolated session still requires a 
         registry,
         session,
       ),
-    /tenant isolation requires lease id/,
+    missingLeaseIdError,
   );
 });
 
@@ -84,7 +94,7 @@ test('close with an app target still requires a lease id even with no lease anyw
         registry,
         undefined,
       ),
-    /tenant isolation requires lease id/,
+    missingLeaseIdError,
   );
 });
 
@@ -123,7 +133,7 @@ test('non-close commands on a tenant-isolated session still require a lease id',
         registry,
         undefined,
       ),
-    /tenant isolation requires lease id/,
+    missingLeaseIdError,
   );
 });
 
@@ -143,7 +153,7 @@ test.each(['bogus', 'proxy', 'browserstack'])(
           registry,
           undefined,
         ),
-      /tenant isolation requires lease id/,
+      missingLeaseIdError,
     );
   },
 );

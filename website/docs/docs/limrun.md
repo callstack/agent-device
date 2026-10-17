@@ -97,6 +97,36 @@ const runtime = new LimrunRuntime({
 
 To drive existing instances, pass `instances: { ios: { apiUrl, token } }` (Android also takes `adbUrl`), with or without `apiKey`. The runtime never creates or deletes instances for a platform listed there.
 
+A provider that reaches a harness-owned instance through the Node.js client allocates a Limrun lease in `acquire` and releases that same lease in `release`. Put the returned `lease.leaseId` on the client scope, and pass that same id to `leases.release`. Start the daemon with the instance URL and token (`LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN`). `leases.allocate` attaches to that instance. `leases.release` returns `{ released, provider }`. Neither call creates or deletes the instance. Allocate with `retainOnClose: true` because the provider releases the lease itself: without it, a session `close` before `release` ends the lease and `leases.release` returns `released: false`. A retained lease still expires after its `ttlMs`, so keep heartbeating it between sessions.
+
+```ts
+import { createAgentDeviceClient } from 'agent-device';
+
+const scope = {
+  tenant: 'limrun',
+  runId: process.env.GITHUB_RUN_ID ?? 'local-run',
+  leaseBackend: 'ios-instance',
+  leaseProvider: 'limrun',
+} as const;
+
+const provider = {
+  acquire: async (req: { slot: string }) => {
+    const lease = await createAgentDeviceClient({ session: `lease-${req.slot}` }).leases.allocate({
+      ...scope,
+      platform: 'ios',
+      retainOnClose: true,
+    });
+    return {
+      id: lease.leaseId,
+      client: { ...scope, leaseId: lease.leaseId, sessionIsolation: 'tenant' as const },
+    };
+  },
+  release: async (lease: { id: string }) => {
+    await createAgentDeviceClient({}).leases.release({ ...scope, leaseId: lease.id });
+  },
+};
+```
+
 After allocating a lease, call `runtime.getDeviceSession(device)` to get the allocated device's capabilities: app inventory, foreground state where Limrun exposes it, key input, bounded log reads, recording, remote asset installation, and the interactor. On Android it also exposes agent-device's `AndroidAdbProvider` for helpers and reversible port forwarding. On iOS it exposes a typed `simctl` execution handle so your bridge can own runner lifecycle and launch policy. The runtime does not expose raw Limrun clients.
 
 ## Get artifacts and troubleshoot
