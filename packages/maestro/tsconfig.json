@@ -17,7 +17,6 @@
     { "path": "../host-kit" },
     { "path": "../kernel" },
     { "path": "../provision-kit" },
-    { "path": "../selectors" },
-    { "path": "../test-kit" }
+    { "path": "../selectors" }
   ]
 }

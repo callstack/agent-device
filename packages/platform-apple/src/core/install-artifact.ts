@@ -14,6 +14,7 @@ import {
   noteInstallArtifactArchiveDepth,
   withInstallArtifactArchiveScope,
 } from '@agent-device/provision-kit/install-artifact-archive-context';
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { materializeInstallablePath } from '@agent-device/provision-kit/install-source';
 import {
   makeHostTemporaryDirectory,
@@ -62,6 +63,7 @@ async function prepareIosInstallArtifactInScope(
       (stat.isFile() && candidatePath.toLowerCase().endsWith('.ipa')),
     installableLabel: 'iOS installable (.app or .ipa)',
     signal: options?.signal,
+    environment: commandHostEnvironment().env,
   });
 
   let resolved: Awaited<ReturnType<typeof resolveIosInstallablePath>> | undefined;

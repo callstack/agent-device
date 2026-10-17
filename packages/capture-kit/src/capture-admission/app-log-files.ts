@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { lstatIfPresent, NOT_REGULAR_FILE_HINT } from '@agent-device/host-kit/file';
 
@@ -13,10 +12,7 @@ export type AppLogRotationConfig = Readonly<{
 }>;
 
 /** Shared lower-level file policy for daemon markers and runtime output sinks. */
-export function ensureAppLogPath(
-  outPath: string,
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
-): void {
+export function ensureAppLogPath(outPath: string, env: NodeJS.ProcessEnv): void {
   const directory = path.dirname(outPath);
   if (!fs.existsSync(directory)) fs.mkdirSync(directory, { recursive: true });
   assertAppLogFileIsNotSymbolicLink(outPath);

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
 import { materializeInstallablePath } from '@agent-device/provision-kit/install-source';
 import * as manifest from './manifest.ts';
@@ -20,6 +21,7 @@ export async function prepareAndroidInstallArtifact(
       stat.isFile() && isAndroidInstallablePath(candidatePath),
     installableLabel: 'Android installable (.apk or .aab)',
     signal: options?.signal,
+    environment: commandHostEnvironment().env,
   });
   try {
     const identity =

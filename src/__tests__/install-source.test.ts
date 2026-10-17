@@ -26,8 +26,10 @@ import {
 import { prepareIosInstallArtifact } from '@agent-device/platform-apple/install-artifact';
 import { AppError } from '@agent-device/kernel/errors';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
-import { mkdtempForTest } from '@agent-device/test-kit';
+import { bindTestCommandHost, mkdtempForTest } from '@agent-device/test-kit';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';
+
+bindTestCommandHost();
 
 test('validateDownloadSourceUrl rejects localhost and private literal addresses by default', async () => {
   await assert.rejects(
@@ -140,6 +142,7 @@ test(
         source: { kind: 'path', path: archivePath },
         isInstallablePath: (candidatePath, stat) => stat.isFile() && candidatePath.endsWith('.apk'),
         installableLabel: 'Android installable (.apk or .aab)',
+        environment: process.env,
       });
 
       try {
@@ -170,6 +173,7 @@ test('materializeInstallablePath extracts tar.gz archives', async () => {
       source: { kind: 'path', path: archivePath },
       isInstallablePath: (candidatePath, stat) => stat.isFile() && candidatePath.endsWith('.apk'),
       installableLabel: 'Android installable (.apk or .aab)',
+      environment: process.env,
     });
 
     try {

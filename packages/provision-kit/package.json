@@ -44,7 +44,6 @@
     }
   },
   "devDependencies": {
-    "@agent-device/test-kit": "workspace:*",
     "ipaddr.js": "^2.5.0",
     "undici": "7.29.1"
   }

@@ -12,6 +12,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
+  bindTestCommandHost,
   createTestAppLogLiveHandle,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   createTestHostEnvironment,
@@ -47,6 +48,8 @@ type RuntimeHarness = ReturnType<typeof createRuntimeHarness>;
 
 let runtime: RuntimeHarness;
 let admissionLedger: AppLogAdmissionLedger;
+
+bindTestCommandHost();
 
 beforeEach(() => {
   runtime = createRuntimeHarness();
