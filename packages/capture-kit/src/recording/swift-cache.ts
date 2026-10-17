@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd } from '@agent-device/host-kit/command';
+import { commandHostEnvironment, runCmd } from '@agent-device/host-kit/command';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import {
   acquireProcessLock,
@@ -48,7 +48,7 @@ export function resolveRecordingScriptPath(
   scriptName: string,
   projectRoot: string,
   moduleDir = path.dirname(fileURLToPath(import.meta.url)),
-  cwd = process.cwd(),
+  cwd = commandHostEnvironment().cwd,
 ): string {
   const scriptCandidates = buildRecordingScriptPathCandidates(
     scriptName,
@@ -69,8 +69,10 @@ export function resolveRecordingScriptPath(
   });
 }
 
-export function buildSwiftToolEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const root = getSwiftCacheRoot();
+export function buildSwiftToolEnv(
+  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
+): NodeJS.ProcessEnv {
+  const root = getSwiftCacheRoot(env);
   const homePath = path.join(root, 'home');
   const moduleCachePath = path.join(root, 'module-cache');
   fs.mkdirSync(homePath, { recursive: true });
@@ -136,8 +138,8 @@ export async function compileSwiftSourceText(params: {
   return executablePath;
 }
 
-function getSwiftCacheRoot(): string {
-  const configured = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR?.trim();
+function getSwiftCacheRoot(env: NodeJS.ProcessEnv = commandHostEnvironment().env): string {
+  const configured = env.AGENT_DEVICE_SWIFT_CACHE_DIR?.trim();
   if (configured) {
     return path.resolve(configured);
   }

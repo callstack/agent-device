@@ -2,6 +2,9 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
+import { bindTestCommandHost } from '../../host-environment.fixtures.ts';
+
+bindTestCommandHost();
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const fs = await import('node:fs');

@@ -2,6 +2,9 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
+import { bindTestCommandHost } from '../host-environment.fixtures.ts';
+
+bindTestCommandHost();
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -13,7 +16,7 @@ vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   }),
 }));
 
-import { runCmd } from '@agent-device/host-kit/command';
+import { runCmd, withCommandHost } from '@agent-device/host-kit/command';
 import {
   buildRecordingScriptPathCandidates,
   compileSwiftSourceFile,
@@ -278,4 +281,25 @@ test('recording script candidates include packaged dist apple-runner source', ()
   const firstExisting = candidates.find((candidate) => fs.existsSync(candidate));
 
   expect(firstExisting).toBe(scriptPath);
+});
+
+test('the cache root and tool environment come from the command host, not the process', async () => {
+  const hostCacheDir = path.join(tmpDir, 'host-cache');
+
+  const executablePath = await withCommandHost(
+    {
+      host: {
+        env: { AGENT_DEVICE_SWIFT_CACHE_DIR: hostCacheDir, FROM_HOST: 'yes' },
+        cwd: tmpDir,
+      },
+      requestEnv: undefined,
+    },
+    async () => await compileSwiftSourceText({ source: 'print("host")', cacheName: 'host-helper' }),
+  );
+
+  expect(path.dirname(executablePath)).toBe(path.join(hostCacheDir, 'bin'));
+  expect(mockRunCmd.mock.calls[0]?.[2]?.env).toMatchObject({
+    FROM_HOST: 'yes',
+    HOME: path.join(hostCacheDir, 'home'),
+  });
 });

@@ -7,9 +7,12 @@ import {
 } from './contact-sheet-report.ts';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
+import { bindTestCommandHost } from '../host-environment.fixtures.ts';
 import { solidPng } from '../png-pixels.fixtures.ts';
 import { writeDecodedFrames, type StubFrame } from './contact-sheet.fixtures.ts';
 import { extractRecordingFrames } from './contact-sheet-frames.ts';
+
+bindTestCommandHost();
 
 vi.mock(import('@agent-device/host-kit/command'), async (importOriginal) => ({
   ...(await importOriginal()),

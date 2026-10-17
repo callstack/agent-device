@@ -48,12 +48,7 @@ function markWorkerUnavailable(reason: string): void {
   workerUnavailable = true;
   if (warnedWorkerUnavailable) return;
   warnedWorkerUnavailable = true;
-  // Worker failures can surface outside a diagnostics scope (e.g. daemon
-  // startup pre-warm), so pair the scoped diagnostic with a process warning.
   emitDiagnostic({ level: 'warn', phase: 'png_worker_unavailable', data: { reason } });
-  process.emitWarning(
-    `PNG worker unavailable, falling back to in-process PNG processing: ${reason}`,
-  );
 }
 
 function handleWorkerMessage(message: PngWorkerResponse): void {
@@ -110,7 +105,9 @@ function obtainWorker(): Worker | null {
     return null;
   }
   try {
+    // The worker decodes and encodes bytes it is sent; it needs none of the host's environment.
     const created = new Worker(modulePath, {
+      env: {},
       execArgv: modulePath.endsWith('.ts') ? ['--experimental-strip-types'] : [],
     });
     created.on('message', handleWorkerMessage);

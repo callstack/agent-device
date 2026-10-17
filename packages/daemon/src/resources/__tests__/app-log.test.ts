@@ -1,8 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { assertThrowsAppError, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  assertThrowsAppError,
+  bindTestCommandHost,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
+
+bindTestCommandHost();
 
 // Pinned as a literal on purpose — see the note in packages/host-kit/src/internal/verified-file.test.ts.
 const NOT_REGULAR_FILE_HINT =
