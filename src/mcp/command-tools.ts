@@ -45,6 +45,7 @@ export type ToolResult = {
 type CommandToolExecutorDeps = {
   createClient?: (
     config: AgentDeviceClientConfig,
+    ingress: { recordSource: 'explicit' | 'default' },
   ) => AgentDeviceClient | Promise<AgentDeviceClient>;
   runCommand?: (
     client: AgentDeviceClient,
@@ -185,7 +186,11 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       const config = readMcpToolConfig(resolvedInput);
       const commandInput = stripMcpConfigFields(resolvedInput);
       const pinnedInput = refPins.pinInput(name, commandInput, config.client.stateDir);
-      const client = await createClient(deps, config.client);
+      const client = await createClient(
+        deps,
+        config.client,
+        input.record === true ? 'explicit' : 'default',
+      );
       try {
         const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
@@ -245,13 +250,15 @@ export const commandToolExecutor = createCommandToolExecutor();
 async function createClient(
   deps: CommandToolExecutorDeps,
   config: AgentDeviceClientConfig,
+  recordSource: 'explicit' | 'default',
 ): Promise<AgentDeviceClient> {
-  if (deps.createClient) return await deps.createClient(config);
+  if (deps.createClient) return await deps.createClient(config, { recordSource });
   const { createAgentDeviceClient } = await import('../agent-device-client.ts');
   const { createEnsuredDaemonTransport } = await import('../daemon-client/daemon-client.ts');
   // One client per tool call, so each call ensures the daemon it is about to use.
   const ensuring = createEnsuredDaemonTransport();
   return createAgentDeviceClient(config, {
+    recordSource,
     // The client builds the same request the daemon transport takes; its type only differs in the
     // session being optional, which `sendToDaemon` defaults.
     transport: async (req, context) =>

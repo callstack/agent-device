@@ -26,6 +26,8 @@ export type MaestroRuntimeFlags = {
 };
 
 export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
+  /** Per-action recording opt-in established before project defaults lose their provenance. */
+  recordingIntent?: 'explicit-record';
   batchSteps?: DaemonBatchStep[];
   clearAppState?: boolean;
   launchArgs?: string[];

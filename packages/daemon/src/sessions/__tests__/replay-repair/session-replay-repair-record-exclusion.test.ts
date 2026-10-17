@@ -301,7 +301,7 @@ test.each(['get', 'snapshot'])(
     ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
       command,
       positionals: command === 'get' ? ['attrs', '@e7'] : [],
-      flags: { record: true },
+      flags: { record: true, recordingIntent: 'explicit-record' },
       result: { selectorChain: ['id="save-v2"'] },
       interactiveObservation: true,
     });

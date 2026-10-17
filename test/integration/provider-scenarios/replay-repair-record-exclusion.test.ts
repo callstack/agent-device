@@ -134,13 +134,21 @@ async function assertRepairSegmentReadExclusion(params: {
   });
   assertRpcOk(diagnosticRead);
 
-  // (b) The corrective read (the wave-3 E3 shape: the diverged step is itself
-  //     a read), forced into the heal with `--record`.
-  const correctiveRead = await daemon.callCommand('get', ['text', SEARCH_SELECTOR], {
+  const defaultRecordRead = await daemon.callCommand('get', ['text', SEARCH_SELECTOR], {
     ...selection,
     record: true,
   });
-  assertRpcOk(correctiveRead);
+  assertRpcOk(defaultRecordRead);
+
+  // (b) The corrective read (the wave-3 E3 shape: the diverged step is itself
+  //     a read), forced into the heal with `--record`.
+  await daemon.client().interactions.get({
+    format: 'text',
+    selector: SEARCH_SELECTOR,
+    ...selection,
+    record: true,
+  });
+
 
   // (c) `--record` and `--no-record` are opposite intents for one action.
   const conflictingFlags = await daemon.callCommand('get', ['text', SEARCH_SELECTOR], {

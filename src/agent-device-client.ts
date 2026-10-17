@@ -82,7 +82,7 @@ import { createRequestGuard } from './daemon-client/daemon-client-transport.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
-  deps: { transport?: AgentDeviceDaemonTransport } = {},
+  deps: { transport?: AgentDeviceDaemonTransport; recordSource?: 'explicit' | 'default' } = {},
 ): AgentDeviceClient {
   const transport = deps.transport ?? sendToDaemon;
   // A typo in a JSON or JS config must not fall through to the default and manage a daemon.
@@ -113,7 +113,7 @@ export function createAgentDeviceClient(
       command,
       positionals,
       ...(input ? { input } : {}),
-      flags: buildRequestFlags(merged, metadataFlags),
+      flags: buildRequestFlags(merged, metadataFlags, deps.recordSource),
       runtime: merged.runtime,
       meta: { ...buildMeta(merged), requestId },
     };

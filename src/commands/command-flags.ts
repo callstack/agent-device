@@ -128,10 +128,14 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
 export function buildRequestFlags(
   options: InternalRequestOptions,
   metadataFlags: Partial<CommandFlags> | undefined,
+  recordSource: 'explicit' | 'default' = 'explicit',
 ): CommandFlags {
   return {
     ...buildFlags(options),
     ...metadataFlags,
+    ...(options.record === true && recordSource === 'explicit'
+      ? { recordingIntent: 'explicit-record' as const }
+      : {}),
   };
 }
 

@@ -315,7 +315,7 @@ function buildOptimizedActions(
     if (
       action.command === 'snapshot' &&
       action.publicationIntent !== 'authored' &&
-      !(repairArmed && action.flags.record === true)
+      !(repairArmed && action.publicationIntent === 'explicit-record')
     ) {
       continue;
     }

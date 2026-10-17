@@ -132,7 +132,11 @@ test.each(['authored', 'explicit-record'] as const)(
       positionals: [],
       flags:
         intent === 'explicit-record'
-          ? { record: true, snapshotInteractiveOnly: true }
+          ? {
+              record: true,
+              recordingIntent: 'explicit-record' as const,
+              snapshotInteractiveOnly: true,
+            }
           : { snapshotInteractiveOnly: true },
       ...(intent === 'authored' ? { internal: { replayPlanStep: true } } : {}),
     };
@@ -156,6 +160,7 @@ test('a boundary-sliced script still strips diagnostic snapshot actions', () => 
     actions: [
       action({ command: 'open', positionals: ['Demo'] }),
       action({ command: 'snapshot', positionals: [] }),
+      action({ command: 'snapshot', positionals: [], flags: { record: true } }),
       action({ command: 'click', positionals: ['label="Save"'] }),
     ],
   });
@@ -869,7 +874,7 @@ test.each([
   { record: true, replayPlanStep: false },
   { record: true, replayPlanStep: true },
 ])(
-  'ordinary authoring strips snapshots with record=$record and replayPlanStep=$replayPlanStep',
+  'ordinary authoring retains only authored snapshots with record=$record and replayPlanStep=$replayPlanStep',
   ({ record, replayPlanStep }) => {
     const root = mkdtempForTestSync('agent-device-script-writer-authoring-snapshot-');
     const writer = new SessionScriptWriter(path.join(root, 'sessions'));
@@ -879,11 +884,17 @@ test.each([
     recordActionEntry(session, {
       command: 'snapshot',
       positionals: [],
-      flags: { record, snapshotInteractiveOnly: true },
+      flags: {
+        record,
+        recordingIntent: record ? 'explicit-record' : undefined,
+        snapshotInteractiveOnly: true,
+      },
       interactiveObservation: !replayPlanStep,
     });
 
     const { parsed } = writeAndParse(writer, session);
-    expect(parsed.actions.map((entry) => entry.command)).toEqual(['open']);
+    expect(parsed.actions.map((entry) => entry.command)).toEqual(
+      replayPlanStep ? ['open', 'snapshot'] : ['open'],
+    );
   },
 );

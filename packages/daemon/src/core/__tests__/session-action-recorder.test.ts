@@ -38,25 +38,28 @@ test.each([
   },
 );
 
-test('an observation-only action is excluded while repair-armed and no --record is given', () => {
-  const session = makeIosSession('default', {
-    scriptPublication: {
-      kind: 'repair',
-      status: 'armed',
-      target: { kind: 'default', force: false },
-      boundary: 0,
-    },
-  });
-  const action = recordActionEntry(session, {
-    command: 'get',
-    positionals: ['attrs', 'id="save"'],
-    flags: {},
-    result: {},
-    interactiveObservation: true,
-  });
-  expect(action).toBeUndefined();
-  expect(session.actions).toHaveLength(0);
-});
+test.each([{}, { record: true }])(
+  'an observation is excluded without explicit intent, flags=%j',
+  (flags) => {
+    const session = makeIosSession('default', {
+      scriptPublication: {
+        kind: 'repair',
+        status: 'armed',
+        target: { kind: 'default', force: false },
+        boundary: 0,
+      },
+    });
+    const action = recordActionEntry(session, {
+      command: 'get',
+      positionals: ['attrs', 'id="save"'],
+      flags,
+      result: {},
+      interactiveObservation: true,
+    });
+    expect(action).toBeUndefined();
+    expect(session.actions).toHaveLength(0);
+  },
+);
 
 test('--record forces an observation-only action through while repair-armed', () => {
   const session = makeIosSession('default', {
@@ -70,13 +73,13 @@ test('--record forces an observation-only action through while repair-armed', ()
   const action = recordActionEntry(session, {
     command: 'get',
     positionals: ['attrs', 'id="save"'],
-    flags: { record: true },
+    flags: { record: true, recordingIntent: 'explicit-record' },
     result: {},
     interactiveObservation: true,
   });
   expect(action).toBeDefined();
   expect(action?.flags.record).toBe(true);
-  expect(action?.publicationIntent).toBeUndefined();
+  expect(action?.publicationIntent).toBe('explicit-record');
   expect(session.actions.map((a) => a.command)).toEqual(['get']);
 });
 
