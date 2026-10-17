@@ -123,11 +123,13 @@ function readScopedMetroSessionRuntime(scope: MetroSessionScope): SessionRuntime
 export function readMetroSessionRuntime(
   options: MetroSessionOptions,
 ): SessionRuntimeHints | undefined {
+  let scope: MetroSessionScope;
   try {
-    return readScopedMetroSessionRuntime(resolveMetroSessionScope(options));
+    scope = resolveMetroSessionScope(options);
   } catch {
     return undefined;
   }
+  return readScopedMetroSessionRuntime(scope);
 }
 
 function runtimeServerUrl(runtime: SessionRuntimeHints | undefined): string | undefined {
