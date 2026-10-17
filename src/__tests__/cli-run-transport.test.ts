@@ -62,13 +62,21 @@ test('a CLI run builds one transport, shared by the remote-materialization clien
   vi.spyOn(process.stdout, 'write').mockReturnValue(true);
   vi.spyOn(process.stderr, 'write').mockReturnValue(true);
 
+  // The run ends through the stubbed process.exit; any other failure is kept to explain a miss below.
+  let failure: unknown;
   await runCli(
     ['open', '--state-dir', stateDir, '--json'],
     { sendToDaemon: vi.fn(), transportForHost },
     host,
-  ).catch(() => undefined);
+  ).catch((error: unknown) => {
+    failure = error;
+  });
+  const cause = failure instanceof Error && failure.message !== 'exit' ? failure.message : 'none';
 
-  assert.ok(commands.includes('lease_allocate'), `materialization ran: ${commands.join(',')}`);
+  assert.ok(
+    commands.includes('lease_allocate'),
+    `materialization ran: ${commands.join(',')}; failure: ${cause}`,
+  );
   assert.ok(commands.length > 1, 'the command client sent through the same transport');
   assert.equal(transportForHost.mock.calls.length, 1);
   fs.rmSync(root, { recursive: true, force: true });
