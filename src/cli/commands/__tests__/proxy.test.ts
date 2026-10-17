@@ -10,6 +10,7 @@ import {
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
+  bindTestCommandHost,
 } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
@@ -45,6 +46,8 @@ vi.mock('../shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput })
 
 import { proxyCommand, renderProxyStartup } from '../proxy.ts';
 import type { AgentDeviceClient } from '../../../agent-device-client.ts';
+
+bindTestCommandHost();
 
 // The proxy command never reads the client; a typed stub that throws on any access proves it
 // without the `{} as never` blind cast.

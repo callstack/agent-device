@@ -58,7 +58,7 @@ import {
   type DaemonCommandName,
 } from './commands/command-projection.ts';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
-import { sendToDaemon } from './daemon-client/daemon-client.ts';
+import { createDaemonTransport } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   prepareMetroRuntime,
@@ -85,8 +85,8 @@ export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
   deps: { transport?: AgentDeviceDaemonTransport; host?: HostEnvironment } = {},
 ): AgentDeviceClient {
-  const transport = deps.transport ?? sendToDaemon;
   const host = deps.host ?? captureHostEnvironment(process);
+  const transport = deps.transport ?? createDaemonTransport(host);
 
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the

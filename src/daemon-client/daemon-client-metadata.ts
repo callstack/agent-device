@@ -4,7 +4,6 @@ import { isProcessPid } from '@agent-device/host-kit/process';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 
 import {
-  resolveDaemonPaths,
   type DaemonPaths,
   type DaemonServerMode,
 } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -94,10 +93,7 @@ export function isRemoteDaemon(info: DaemonInfo): boolean {
 
 export function resolveDaemonStartupHint(
   state: { hasInfo: boolean; hasLock: boolean },
-  paths: Pick<DaemonPaths, 'infoPath' | 'lockPath'> = resolveDaemonPaths(
-    process.env.AGENT_DEVICE_STATE_DIR,
-    { cwd: process.cwd() },
-  ),
+  paths: Pick<DaemonPaths, 'infoPath' | 'lockPath'>,
 ): string {
   const artifacts = [state.hasInfo ? paths.infoPath : null, state.hasLock ? paths.lockPath : null]
     .filter(Boolean)

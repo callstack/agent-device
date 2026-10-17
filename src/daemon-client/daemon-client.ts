@@ -3,6 +3,8 @@ import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { AgentDeviceDaemonTransportContext } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import {
   createRequestId,
   emitDiagnostic,
@@ -26,9 +28,37 @@ type DaemonTransportOptions = AgentDeviceDaemonTransportContext & {
   onProgress?: RequestProgressSink;
 };
 
+/** The released default: a process-level client, which reads the process's own host. */
 export async function sendToDaemon(
   req: Omit<DaemonRequest, 'token'>,
   options: DaemonTransportOptions = {},
+): Promise<DaemonResponse> {
+  return await sendToDaemonOnHost(req, options, captureHostEnvironment(process));
+}
+
+/** A transport whose every read of the environment and working directory is `host`'s. */
+export function createDaemonTransport(host: HostEnvironment) {
+  return async (
+    req: Omit<DaemonRequest, 'token'>,
+    options: DaemonTransportOptions = {},
+  ): Promise<DaemonResponse> => await sendToDaemonOnHost(req, options, host);
+}
+
+/** The transport one run uses: host-bound when its deps can build one, else the injected one. */
+export function resolveRunTransport(
+  deps: {
+    sendToDaemon: typeof sendToDaemon;
+    transportForHost?: (host: HostEnvironment) => typeof sendToDaemon;
+  },
+  host: HostEnvironment,
+): typeof sendToDaemon {
+  return deps.transportForHost?.(host) ?? deps.sendToDaemon;
+}
+
+async function sendToDaemonOnHost(
+  req: Omit<DaemonRequest, 'token'>,
+  options: DaemonTransportOptions,
+  host: HostEnvironment,
 ): Promise<DaemonResponse> {
   const { resolveClientSettings, ensureDaemon, attachSessionAddressHints } =
     await import('./daemon-client-lifecycle.ts');
@@ -45,6 +75,7 @@ export async function sendToDaemon(
   const settings = resolveClientSettings(
     requestWithoutAuthFlag,
     options.authToken ?? flagAuthToken,
+    host,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
@@ -70,7 +101,7 @@ export async function sendToDaemon(
         options.signal,
       ),
   );
-  writeInstallInProgressNotice(requestWithoutAuthFlag.command);
+  writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
 
   const request = buildTransportRequest(
     requestWithoutAuthFlag,
@@ -78,7 +109,8 @@ export async function sendToDaemon(
     info,
     requestId,
     debug,
-    await readLocalProviderCredentialFingerprint(requestWithoutAuthFlag, info),
+    await readLocalProviderCredentialFingerprint(requestWithoutAuthFlag, info, host.env),
+    host.env,
   );
   emitDiagnostic({
     level: 'info',
@@ -119,6 +151,7 @@ function buildTransportRequest(
   requestId: string,
   debug: boolean,
   providerCredentialFingerprint: string | undefined,
+  env: Readonly<EnvMap>,
 ): DaemonRequest {
   return {
     ...request,
@@ -127,7 +160,7 @@ function buildTransportRequest(
     token: info.token,
     meta: {
       ...buildTransportRequestMeta(request, preparedRemoteRequest, requestId, debug),
-      ...buildLocalHostEnvMeta(info),
+      ...buildLocalHostEnvMeta(info, env),
       providerCredentialFingerprint,
     },
   };
@@ -138,19 +171,21 @@ function buildTransportRequest(
 async function readLocalProviderCredentialFingerprint(
   request: Omit<DaemonRequest, 'token'>,
   info: DaemonInfo,
+  env: Readonly<EnvMap>,
 ): Promise<string | undefined> {
   if (isRemoteDaemon(info) || request.command !== 'lease_allocate') return undefined;
   const { leaseProvider: provider, leaseBackend } = leaseScopeFromRequest(request);
   if (!provider) return undefined;
   const { providerCredentialFingerprint } = await import('../provider-credential-fingerprint.ts');
-  return providerCredentialFingerprint(provider, process.env, leaseBackend);
+  return providerCredentialFingerprint(provider, env, leaseBackend);
 }
 
 // A developer dir is a path on the client's host, so only a local daemon can use it.
 function buildLocalHostEnvMeta(
   info: DaemonInfo,
+  env: Readonly<EnvMap>,
 ): Pick<NonNullable<DaemonRequest['meta']>, 'developerDir'> {
-  const developerDir = process.env.DEVELOPER_DIR;
+  const developerDir = env.DEVELOPER_DIR;
   if (isRemoteDaemon(info)) return { developerDir: undefined };
   return developerDir !== undefined ? { developerDir } : {};
 }
@@ -258,8 +293,8 @@ async function performDaemonRequestWithCleanup(
   return finalResponse;
 }
 
-function writeInstallInProgressNotice(command: string | undefined): void {
-  if (!isInstallLikeCommand(command) || process.stderr.isTTY !== true || process.env.CI) return;
+function writeInstallInProgressNotice(command: string | undefined, env: Readonly<EnvMap>): void {
+  if (!isInstallLikeCommand(command) || process.stderr.isTTY !== true || env.CI) return;
   process.stderr.write(
     command === PUBLIC_COMMANDS.reinstall ? 'Reinstalling...\n' : 'Installing...\n',
   );
