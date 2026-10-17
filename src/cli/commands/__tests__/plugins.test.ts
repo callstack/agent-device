@@ -175,5 +175,5 @@ test('plugins list says when the daemon record cannot be used instead of hiding 
   fs.writeFileSync(path.join(stateDir, 'daemon.json'), '{not json');
   const text = await listPluginsAsText(home, stateDir);
   assert.match(text, /No provider plugins installed\./);
-  assert.match(text, /daemon record for .* is (unreadable|invalid), so its providers are unknown/);
+  assert.match(text, /daemon record for .* is invalid, so its providers are unknown/);
 });
