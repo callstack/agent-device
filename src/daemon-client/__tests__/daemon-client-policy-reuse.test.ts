@@ -69,7 +69,10 @@ test('a caller naming a policy refuses a running daemon that enforces a differen
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'DAEMON_POLICY_MISMATCH');
         assert.equal(error.details?.daemonPolicyDigest, otherDigest);
-        assert.equal(error.details?.expectedPolicyDigest, loadDaemonPolicy(process.env, process.cwd())?.digest);
+        assert.equal(
+          error.details?.expectedPolicyDigest,
+          loadDaemonPolicy(process.env, process.cwd())?.digest,
+        );
         return true;
       },
     );
