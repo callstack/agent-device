@@ -3,15 +3,34 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
-import { changePlugin, installedPlugins, listPlugins } from './store.ts';
-import { pluginHome, selectPlugin, writePlugin } from '@agent-device/test-kit';
+import { changePlugin, legacyStoreManifests, listPlugins } from './store.ts';
+import {
+  pluginHome,
+  selectPlugin,
+  selectV2Plugin,
+  v2RegistrationSource,
+  writePlugin,
+} from '@agent-device/test-kit';
 
 vi.mock('@agent-device/host-kit/command', () => ({ runCmd: vi.fn() }));
 afterEach(() => vi.mocked(runCmd).mockReset());
 
 const packageName = '@example/provider';
 function readPluginConfig(env: NodeJS.ProcessEnv) {
-  return JSON.parse(fs.readFileSync(path.join(env.AGENT_DEVICE_HOME!, 'config.json'), 'utf8'));
+  const file = path.join(env.AGENT_DEVICE_HOME!, 'config.json');
+  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+}
+
+function installedPlugins(env: NodeJS.ProcessEnv) {
+  const home = env.AGENT_DEVICE_HOME!;
+  return Object.entries(readPluginConfig(env).plugins ?? {}).map(([name, selection]) => {
+    const { installation, options } = selection as { installation: string; options?: unknown };
+    return {
+      name,
+      selection: { installation, options },
+      directory: path.join(home, 'plugins', installation, 'node_modules', name),
+    };
+  });
 }
 
 function installFixture(name = packageName, apiVersion = 1, provider = 'example') {
@@ -104,16 +123,15 @@ test('invalid package sources and damaged selections fail before invoking npm', 
     path.join(home, 'config.json'),
     JSON.stringify({ plugins: { one: { installation: '../other' } } }),
   );
-  assert.throws(() => installedPlugins(env), { code: 'INVALID_ARGS' });
-  assert.equal(listPlugins(env)[0]?.compatible, false);
+  assert.equal((await listPlugins(env, []))[0]?.compatible, false);
   await changePlugin('remove', 'one', env, []);
-  assert.deepEqual(listPlugins(env), []);
+  assert.deepEqual(await listPlugins(env, []), []);
   fs.writeFileSync(
     path.join(home, 'config.json'),
     JSON.stringify({ plugins: { UPPERCASE: null } }),
   );
   await changePlugin('remove', 'UPPERCASE', env, []);
-  assert.deepEqual(listPlugins(env), []);
+  assert.deepEqual(await listPlugins(env, []), []);
   assert.equal(vi.mocked(runCmd).mock.calls.length, 0);
 });
 
@@ -150,6 +168,39 @@ test('broken siblings do not block pinned updates or unrelated additions', async
     assert.deepEqual(readPluginConfig(env).plugins!.broken, config.plugins!.broken);
     installFixture('other', 1, 'other');
     await changePlugin('add', 'other', env, []);
-    assert.throws(() => installedPlugins(env), { code: 'INVALID_ARGS' });
+    const listed = await listPlugins(env, []);
+    assert.deepEqual(
+      listed.map(({ name, compatible }) => [name, compatible]),
+      [
+        ['@example/provider', true],
+        ['broken', false],
+        ['other', true],
+      ],
+    );
   }
+});
+
+test('a package that declares the v1 manifest and exports ./agent-device still supplies its manifest', () => {
+  const { home, env } = pluginHome();
+  const directory = selectV2Plugin(home, 'dual', v2RegistrationSource('dual'), {
+    manifest: {
+      agentDevicePlugin: {
+        apiVersion: 1,
+        provider: 'dual',
+        entry: './plugin.mjs',
+        credentialVariables: ['DUAL_KEY'],
+      },
+    },
+  });
+  selectV2Plugin(home, 'v2-only', v2RegistrationSource('v2-only'));
+  assert.deepEqual(
+    legacyStoreManifests(env).map((manifest) => manifest.agentDevicePlugin.credentialVariables),
+    [['DUAL_KEY']],
+  );
+
+  // An installation that holds another package supplies nothing under this selection's name.
+  const manifestPath = path.join(directory, 'package.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, name: 'someone-else' }));
+  assert.deepEqual(legacyStoreManifests(env), []);
 });

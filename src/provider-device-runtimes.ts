@@ -1,147 +1,51 @@
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
 import type {
-  PlatformRuntimeHost,
-  PlatformRuntimeOwner,
-  PlatformRuntimeProviderModule,
-} from '@agent-device/contracts/platform-runtime-operations';
+  PluginCleanupOutcome,
+  PluginInventoryEntry,
+} from '@agent-device/contracts/plugin-inventory';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
-import { asAppError, type AppError } from '@agent-device/kernel/errors';
-import {
-  BUNDLED_CLOUD_WEBDRIVER_PROVIDER_IDS,
-  bundledCloudWebDriverRuntimes,
-} from './provider-webdriver.ts';
-import { readLimrunCredentials, type LimrunCredentials } from './provider-limrun-credentials.ts';
+import { builtinProviderCandidates } from './builtin-provider-plugins.ts';
+import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
 
 export type DefaultProviderDeviceRuntimeEnv = NodeJS.ProcessEnv;
 
-export const DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: readonly string[] = Object.freeze([
-  ...BUNDLED_CLOUD_WEBDRIVER_PROVIDER_IDS,
-  'limrun' satisfies typeof LIMRUN_PROVIDER,
-]);
-
-export type DefaultProviderRuntimeComposition = Readonly<{
+export type ProviderRuntimeComposition = Readonly<{
   runtimes: readonly ProviderDeviceRuntime[];
   platformModules: readonly PlatformRuntimeProviderRegistration[];
-  /** Providers left out because their environment configuration is invalid; the rest still load. */
-  skipped?: readonly Readonly<{ provider: string; error: AppError }>[];
+  /** Every plugin the registry saw, built-in or not, active or failed. */
+  inventory: readonly PluginInventoryEntry[];
+  /** Shuts down every registered runtime and runs its plugin's cleanup; the one cleanup owner. */
+  shutdown(): Promise<readonly PluginCleanupOutcome[]>;
 }>;
 
 /**
- * Extracts eager provider-owner metadata without loading a provider implementation. Both the
- * daemon composition and integration harnesses use this one classification so a provider-owned
- * device can never silently select a local lifecycle runtime merely because its registration was
- * forgotten at a call site.
+ * The daemon's providers from one registry: built-in providers, then the plugin store. A plugin
+ * that cannot register is listed in the inventory; the others still register.
  */
-export function createProviderPlatformRuntimeRegistrations(
-  runtimes: readonly ProviderDeviceRuntime[],
-): readonly PlatformRuntimeProviderRegistration[] {
-  return Object.freeze(
-    runtimes.flatMap((runtime) =>
-      hasPlatformRuntimeModule(runtime)
-        ? [{ runtime, module: providerPlatformRuntimeModule(runtime) }]
-        : [],
-    ),
-  );
-}
-
 export async function createDaemonProviderRuntimeComposition(
   env: DefaultProviderDeviceRuntimeEnv = process.env,
-): Promise<DefaultProviderRuntimeComposition> {
-  const bundled = await createDefaultProviderRuntimeComposition(env);
-  try {
-    const [{ loadProviderPlugins }, { PROVIDER_PLUGIN_POLICY }] = await Promise.all([
-      import('@agent-device/plugins/load'),
-      import('./provider-plugin-policy.ts'),
+): Promise<ProviderRuntimeComposition> {
+  // This daemon's sources: the built-in providers, then the plugin store. A host that embeds the
+  // daemon picks its own candidates; the registry takes whatever candidates it is given.
+  const [{ resolveProviderPlugins, startProviderRegistry }, { storePluginCandidates }] =
+    await Promise.all([
+      import('@agent-device/plugins/registry'),
+      import('@agent-device/plugins/store'),
     ]);
-    const plugins = await loadProviderPlugins(env, PROVIDER_PLUGIN_POLICY);
-    return Object.freeze({
-      ...bundled,
-      runtimes: Object.freeze([...bundled.runtimes, ...plugins.map(({ runtime }) => runtime)]),
-      platformModules: Object.freeze([
-        ...bundled.platformModules,
-        ...plugins.map(({ runtime, platformModule }) => ({ runtime, module: platformModule })),
-      ]),
-    });
-  } catch (error) {
-    await Promise.allSettled(bundled.runtimes.map(async (runtime) => await runtime.shutdown()));
-    throw error;
-  }
-}
-
-export async function createDefaultProviderRuntimeComposition(
-  env: DefaultProviderDeviceRuntimeEnv = process.env,
-): Promise<DefaultProviderRuntimeComposition> {
-  const runtimes = bundledCloudWebDriverRuntimes(env);
-  const platformModules = [...createProviderPlatformRuntimeRegistrations(runtimes)];
-  let limrunCredentials: LimrunCredentials | undefined;
-  try {
-    limrunCredentials = readLimrunCredentials(env);
-  } catch (error) {
-    return Object.freeze({
-      runtimes,
-      platformModules: Object.freeze(platformModules),
-      skipped: [{ provider: 'limrun', error: asAppError(error) }],
-    });
-  }
-  if (!limrunCredentials) {
-    return Object.freeze({ runtimes, platformModules: Object.freeze(platformModules) });
-  }
-
-  const [limrunRuntime, dependencies] = await Promise.all([
-    import('@agent-device/provider-limrun'),
-    import('./sdk/limrun-runtime-dependencies.ts'),
+  const resolved = await resolveProviderPlugins([
+    ...builtinProviderCandidates(env),
+    ...(await storePluginCandidates(env)),
   ]);
-  const registration = limrunRuntime.createLimrunRuntime(
-    limrunCredentials,
-    dependencies.createLimrunRuntimeDependencies(),
-    { includePlatformModule: true },
-  );
+  const registry = await startProviderRegistry(resolved, env, PROVIDER_PLUGIN_POLICY);
   return Object.freeze({
-    runtimes: Object.freeze([...runtimes, registration.runtime]),
-    platformModules: Object.freeze([
-      ...platformModules,
-      { runtime: registration.runtime, module: registration.platformModule },
-    ]),
-  });
-}
-
-type ProviderRuntimeWithPlatformModule = ProviderDeviceRuntime &
-  Readonly<{
-    owner: PlatformRuntimeProviderModule['owner'];
-    loadRuntime(host: PlatformRuntimeHost): Promise<PlatformRuntimeOwner>;
-  }>;
-
-function hasPlatformRuntimeModule(
-  runtime: ProviderDeviceRuntime,
-): runtime is ProviderRuntimeWithPlatformModule {
-  if (!('owner' in runtime) || !('loadRuntime' in runtime)) return false;
-  const owner = runtime.owner;
-  return (
-    typeof runtime.loadRuntime === 'function' &&
-    isProviderRuntimeOwner(owner) &&
-    owner.provider === runtime.provider
-  );
-}
-
-function isProviderRuntimeOwner(owner: unknown): owner is PlatformRuntimeProviderModule['owner'] {
-  return (
-    typeof owner === 'object' &&
-    owner !== null &&
-    'kind' in owner &&
-    owner.kind === 'provider-runtime' &&
-    'provider' in owner &&
-    typeof owner.provider === 'string' &&
-    'instance' in owner &&
-    typeof owner.instance === 'string'
-  );
-}
-
-function providerPlatformRuntimeModule(
-  runtime: ProviderRuntimeWithPlatformModule,
-): PlatformRuntimeProviderModule {
-  return Object.freeze({
-    owner: runtime.owner,
-    loadRuntime: async (host) => await runtime.loadRuntime(host),
+    runtimes: Object.freeze(registry.registrations.map(({ runtime }) => runtime)),
+    platformModules: Object.freeze(
+      registry.registrations.map(({ runtime, platformModule }) => ({
+        runtime,
+        module: platformModule,
+      })),
+    ),
+    inventory: registry.inventory,
+    shutdown: registry.close,
   });
 }

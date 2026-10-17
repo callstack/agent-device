@@ -1,16 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { RESERVED_PLUGIN_PROVIDERS } from '../provider-plugin-policy.ts';
-import {
-  DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
-  createDefaultProviderRuntimeComposition,
-  createDaemonProviderRuntimeComposition,
-} from '../provider-device-runtimes.ts';
+import { createDaemonProviderRuntimeComposition } from '../provider-device-runtimes.ts';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   pluginHome,
   registrationSource,
   selectPlugin,
-  webDriverPluginSource,
+  selectV2Plugin,
 } from '@agent-device/test-kit';
 
 test('daemon composition registers installed provider runtimes and their lazy platform modules', async () => {
@@ -23,31 +20,30 @@ test('daemon composition registers installed provider runtimes and their lazy pl
     composition.platformModules.find(({ runtime }) => runtime === plugin)?.module.owner.provider,
     'example',
   );
-  await Promise.all(composition.runtimes.map((runtime) => runtime.shutdown()));
+  await composition.shutdown();
 });
 
-test('daemon composition registers a WebDriver plugin through the shared runtime', async () => {
+test('built-in providers register ahead of the store and an unconfigured Limrun still claims its id', async () => {
   const { home, env } = pluginHome();
-  selectPlugin(home, 'example', 'example', webDriverPluginSource('example'));
+  selectPlugin(home, 'example', 'example', registrationSource('example'));
   const composition = await createDaemonProviderRuntimeComposition(env);
-  const plugin = composition.runtimes.find((runtime) => runtime.provider === 'example');
-  assert.ok(plugin);
-  assert.equal(
-    composition.platformModules.find(({ runtime }) => runtime === plugin)?.module.owner.provider,
-    'example',
+
+  assert.deepEqual(
+    composition.runtimes.map((runtime) => runtime.provider),
+    ['browserstack', 'aws-device-farm', 'example'],
   );
-  await Promise.all(composition.runtimes.map((runtime) => runtime.shutdown()));
+  assert.deepEqual(
+    composition.inventory.map(({ provider, source, state }) => [provider, source, state]),
+    [
+      ['browserstack', 'builtin', 'active'],
+      ['aws-device-farm', 'builtin', 'active'],
+      ['example', 'store', 'active'],
+    ],
+  );
+  await composition.shutdown();
 });
 
-test('bundled composition stays independent of configured plugins and reserves all builtin IDs', async () => {
-  const { home, env } = pluginHome();
-  selectPlugin(home, 'example', 'example', 'throw new Error("must not evaluate");');
-  const composition = await createDefaultProviderRuntimeComposition(env);
-  assert.ok(composition.runtimes.every(({ provider }) => provider !== 'example'));
-  await Promise.all(composition.runtimes.map((runtime) => runtime.shutdown()));
-});
-
-test('daemon composition skips Limrun for a partial instance set and still loads every other provider', async () => {
+test('daemon composition records Limrun as failed for a partial instance set and still loads every other provider', async () => {
   const { home, env } = pluginHome();
   selectPlugin(home, 'example', 'example', registrationSource('example'));
   const composition = await createDaemonProviderRuntimeComposition({
@@ -57,56 +53,72 @@ test('daemon composition skips Limrun for a partial instance set and still loads
     LIM_ANDROID_INSTANCE_TOKEN: 'android-instance-token',
   });
 
-  const providers = composition.runtimes.map((runtime) => runtime.provider);
-  assert.deepEqual(providers, ['browserstack', 'aws-device-farm', 'example']);
-  assert.equal(composition.skipped?.[0]?.provider, 'limrun');
-  assert.equal(composition.skipped?.[0]?.error.code, 'INVALID_ARGS');
-  assert.match(composition.skipped?.[0]?.error.message ?? '', /LIM_ANDROID_INSTANCE_ADB_URL/);
-  await Promise.all(composition.runtimes.map((runtime) => runtime.shutdown()));
+  assert.deepEqual(
+    composition.runtimes.map((runtime) => runtime.provider),
+    ['browserstack', 'aws-device-farm', 'example'],
+  );
+  const limrun = composition.inventory.find(({ provider }) => provider === 'limrun');
+  assert.equal(limrun?.state, 'failed');
+  assert.equal(limrun?.error?.code, 'INVALID_ARGS');
+  assert.match(limrun?.error?.message ?? '', /LIM_ANDROID_INSTANCE_ADB_URL/);
+  await composition.shutdown();
 });
 
-test('daemon composition rejects builtin provider IDs before evaluating plugins', async () => {
+test('a plugin claiming a built-in provider ID is recorded as failed and the built-in keeps the ID', async () => {
   for (const provider of ['limrun', 'browserstack', 'aws-device-farm']) {
     const { home, env } = pluginHome();
     selectPlugin(home, 'example', provider, 'throw new Error("must not evaluate");');
-    await assert.rejects(createDaemonProviderRuntimeComposition(env), { code: 'INVALID_ARGS' });
+    const composition = await createDaemonProviderRuntimeComposition(env);
+    const plugin = composition.inventory.find(({ package: name }) => name === 'example');
+    assert.equal(plugin?.state, 'failed');
+    assert.equal(plugin?.error?.reason, 'duplicate_provider');
+    // An unconfigured Limrun claims its id without registering a runtime.
+    assert.equal(
+      composition.runtimes.filter((runtime) => runtime.provider === provider).length,
+      provider === 'limrun' ? 0 : 1,
+    );
+    await composition.shutdown();
   }
 });
 
-test('default provider runtimes skip Limrun when only the removed API key alias is configured', async () => {
-  const { runtimes, platformModules } = await createDefaultProviderRuntimeComposition({
-    LIM_API_KEY: 'lim_test_key',
-  });
+test('Limrun stays unregistered when only the removed API key alias is configured', async () => {
+  const { env } = pluginHome();
+  const { runtimes, platformModules, inventory, shutdown } =
+    await createDaemonProviderRuntimeComposition({
+      ...env,
+      LIM_API_KEY: 'lim_test_key',
+    });
 
   assert.equal(
     runtimes.some((runtime) => runtime.provider === 'limrun'),
     false,
   );
+  assert.equal(
+    inventory.some(({ provider }) => provider === 'limrun'),
+    false,
+  );
   assertPlatformModuleCoverage(runtimes, platformModules);
-  await Promise.all(runtimes.map(async (runtime) => await runtime.shutdown()));
+  await shutdown();
 });
 
-test('default provider runtimes load Limrun when a Limrun API key is configured', async () => {
-  const { runtimes, platformModules } = await createDefaultProviderRuntimeComposition({
+test('Limrun registers when a Limrun API key is configured', async () => {
+  const { env } = pluginHome();
+  const { runtimes, platformModules, shutdown } = await createDaemonProviderRuntimeComposition({
+    ...env,
     LIMRUN_API_KEY: 'lim_test_key',
   });
 
-  assert.equal(
-    runtimes.some((runtime) => runtime.provider === 'limrun'),
-    true,
-  );
   const limrun = runtimes.find((runtime) => runtime.provider === 'limrun');
-  assert.equal(limrun ? 'loadRuntime' in limrun : true, false);
-  assertPlatformModuleCoverage(runtimes, platformModules, [limrun!]);
-  assert.equal(
-    platformModules.some(({ runtime }) => runtime === limrun),
-    true,
-  );
-  await Promise.all(runtimes.map(async (runtime) => await runtime.shutdown()));
+  assert.ok(limrun);
+  assert.equal('loadRuntime' in limrun, false);
+  assertPlatformModuleCoverage(runtimes, platformModules, [limrun]);
+  await shutdown();
 });
 
-test('default provider runtimes load Limrun for an existing instance without an API key', async () => {
-  const { runtimes, platformModules } = await createDefaultProviderRuntimeComposition({
+test('Limrun registers for an existing instance without an API key', async () => {
+  const { env } = pluginHome();
+  const { runtimes, platformModules, shutdown } = await createDaemonProviderRuntimeComposition({
+    ...env,
     LIM_IOS_INSTANCE_URL: 'https://region.limrun.example/v1/ios_x/api',
     LIM_IOS_INSTANCE_TOKEN: 'ios-instance-token',
   });
@@ -114,7 +126,7 @@ test('default provider runtimes load Limrun for an existing instance without an 
   const limrun = runtimes.find((runtime) => runtime.provider === 'limrun');
   assert.ok(limrun);
   assertPlatformModuleCoverage(runtimes, platformModules, [limrun]);
-  await Promise.all(runtimes.map(async (runtime) => await runtime.shutdown()));
+  await shutdown();
 });
 
 function assertPlatformModuleCoverage(
@@ -136,7 +148,29 @@ function assertPlatformModuleCoverage(
   }
 }
 
-test('every bundled provider runtime is reserved from plugins', () => {
-  for (const provider of DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS)
-    assert.ok((RESERVED_PLUGIN_PROVIDERS as readonly string[]).includes(provider), provider);
+test('composition shutdown is the only route the daemon uses: it shuts every runtime down and runs plugin cleanup', async () => {
+  const { home, env } = pluginHome();
+  const log = path.join(home, 'shutdown-log');
+  selectV2Plugin(
+    home,
+    'cleaning',
+    `import fs from 'node:fs';
+    export default (options) => ({
+      apiVersion: 2, provider: 'cleaning', credentials: { variables: [] },
+      setup: async () => ({
+        runtime: { provider: 'cleaning', ownsDevice: () => false, getInteractor: () => undefined,
+          deviceInventoryProvider: async () => [], leaseLifecycle: {},
+          shutdown: async () => { fs.appendFileSync(options.log, 'runtime;'); } },
+        platformModule: { owner: { kind: 'provider-runtime', provider: 'cleaning', instance: 'test' }, loadRuntime: async () => { throw new Error('lazy'); } },
+        dispose: async () => { fs.appendFileSync(options.log, 'dispose;'); },
+      }),
+    });`,
+    { selectionOptions: { log } },
+  );
+  const composition = await createDaemonProviderRuntimeComposition(env);
+  assert.ok(composition.runtimes.some((runtime) => runtime.provider === 'cleaning'));
+
+  await composition.shutdown();
+
+  assert.equal(fs.readFileSync(log, 'utf8'), 'runtime;dispose;');
 });

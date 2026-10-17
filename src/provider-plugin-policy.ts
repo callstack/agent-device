@@ -1,45 +1,39 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { PluginConnection } from '@agent-device/plugins/connection';
-import type { PluginLoadPolicy } from '@agent-device/plugins/load';
-import type { CloudWebDriverProviderOptions } from '@agent-device/provider-webdriver/plugin';
-import {
-  CLOUD_WEBDRIVER_PROVIDERS,
-  type CloudWebDriverKnownProviderName,
-} from '@agent-device/provider-webdriver/providers';
-
-/** The one list of provider ids plugins cannot claim: connect routes and bundled runtimes. */
-export const RESERVED_PLUGIN_PROVIDERS: readonly (
-  | 'cloud'
-  | 'proxy'
-  | 'limrun'
-  | CloudWebDriverKnownProviderName
-)[] = ['cloud', 'proxy', ...Object.values(CLOUD_WEBDRIVER_PROVIDERS), 'limrun'];
-
-type WebDriverFactoryResult = {
-  webDriver: CloudWebDriverProviderOptions;
-  connection?: PluginConnection;
-};
+import type { PluginRegistryPolicy } from '@agent-device/plugins/registry';
+import type { CloudWebDriverRuntimeOptions } from '@agent-device/provider-webdriver/plugin';
 
 /**
- * The policy every plugin load, connection and installation in this process runs under. The
- * WebDriver runtime is evaluated only for a plugin that returns `{ webDriver }`.
+ * The policy every provider registry in this process runs under. A plugin that returns a
+ * `{ webDriver }` descriptor gets the shared WebDriver engine, loaded only then.
  */
-export const PROVIDER_PLUGIN_POLICY: PluginLoadPolicy = Object.freeze({
-  reservedProviders: RESERVED_PLUGIN_PROVIDERS,
-  adaptFactoryResult: async (result, { plugin, host }) => {
-    if (typeof result !== 'object' || result === null || !('webDriver' in result)) return undefined;
-    const { webDriver, connection } = result as WebDriverFactoryResult;
-    if (webDriver?.provider !== plugin.provider) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `WebDriver plugin provider does not match its declaration: ${plugin.name}`,
-      );
-    }
+export const PROVIDER_PLUGIN_POLICY: PluginRegistryPolicy = Object.freeze({
+  adaptWebDriver: async (descriptor, { clientVersion }) => {
+    const options = readWebDriverOptions(descriptor);
     const { createCloudWebDriverRuntime } = await import('@agent-device/provider-webdriver/plugin');
-    const runtime = await createCloudWebDriverRuntime({
-      ...webDriver,
-      clientVersion: host.clientVersion,
-    });
-    return { runtime, platformModule: runtime.platformRuntimeModule, connection };
+    const runtime = await createCloudWebDriverRuntime({ ...options, clientVersion });
+    return { runtime, platformModule: runtime.platformRuntimeModule };
   },
 });
+
+type WebDriverDescriptorOptions = Omit<CloudWebDriverRuntimeOptions, 'clientVersion'>;
+
+/** Refuses a descriptor that lacks what the engine needs, so a broken plugin fails at startup and not at the first lease. */
+function readWebDriverOptions(descriptor: object): WebDriverDescriptorOptions {
+  const fields = descriptor as Partial<Record<keyof WebDriverDescriptorOptions, unknown>>;
+  const endpoint = fields.endpoint;
+  const valid =
+    typeof fields.provider === 'string' &&
+    (typeof endpoint === 'string' || endpoint instanceof URL) &&
+    (fields.platform === 'android' || fields.platform === 'ios') &&
+    typeof fields.deviceName === 'string' &&
+    typeof fields.profileFields === 'object' &&
+    fields.profileFields !== null;
+  if (!valid) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'A WebDriver plugin must provide provider, endpoint, platform, deviceName and profileFields',
+      { reason: 'invalid_plugin' },
+    );
+  }
+  return descriptor as WebDriverDescriptorOptions;
+}

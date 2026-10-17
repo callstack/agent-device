@@ -35,7 +35,10 @@ import type { AgentDeviceClient, Lease } from '../../agent-device-client.ts';
 import type { CloudProviderSessionResult } from '@agent-device/contracts/observability';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
-import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
+import {
+  connectionProviderCapabilities,
+  primeProviderConnection,
+} from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
 import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
 import {
@@ -106,6 +109,7 @@ export async function materializeRemoteConnectionForCommand(options: {
     );
   }
 
+  await primeProviderConnection(providerOf(existingState, remoteConfig.profile));
   const state =
     existingState ??
     createRemoteConnectionStateFromFlags(
@@ -821,6 +825,14 @@ function selectCompatibleRuntime(
 ): SessionRuntimeHints | undefined {
   if (!runtime) return undefined;
   return isRuntimeCompatibleWithPlatform(runtime, platform) ? runtime : undefined;
+}
+
+// A stored connection names its provider; before one exists, the remote config profile does.
+function providerOf(
+  existingState: Pick<RemoteConnectionState, 'leaseProvider'> | null | undefined,
+  profile: Pick<RemoteConnectionState, 'leaseProvider'>,
+): string | undefined {
+  return existingState?.leaseProvider ?? profile.leaseProvider;
 }
 
 function createRemoteConnectionStateFromFlags(

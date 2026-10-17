@@ -66,8 +66,8 @@ export function daemonRuntimeDepsFixture(
       }),
       hostDiagnostics: hostDiagnosticsFixture(),
       ownerLifecycle: platformOwnerLifecycleFixture(),
-      providerDeviceRuntimes: [],
-      skippedProviderRuntimes: [],
+      shutdownProviderRuntimes: async () => [],
+      pluginInventory: [],
       providerRuntimeIds: [],
       recoverableProviderIds: [],
       deviceRuntimeGateway: Object.freeze({

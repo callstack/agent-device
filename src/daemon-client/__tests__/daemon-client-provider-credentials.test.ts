@@ -15,8 +15,14 @@ import {
   mkdtempForTestSync,
   supportsLoopbackBind,
 } from '@agent-device/test-kit';
-import { providerCredentialFingerprint } from '../../provider-credential-fingerprint.ts';
+import { providerCredentialFingerprint as fingerprintFor } from '../../provider-credential-fingerprint.ts';
+import { builtinPluginInventory } from '../../__tests__/test-utils/builtin-plugin-inventory.ts';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { LIMRUN_CREDENTIAL_VARIABLES } from '../../provider-limrun-credentials.ts';
+
+const inventory = await builtinPluginInventory();
+const providerCredentialFingerprint = (provider: string, env: EnvMap, leaseBackend?: string) =>
+  fingerprintFor(provider, env, leaseBackend, inventory);
 
 const API_KEY = 'lim-secret-key';
 const ANDROID_ATTACH = {
@@ -170,6 +176,7 @@ function writeDaemonInfo(stateDir: string, endpoint: Record<string, unknown>): v
     paths.infoPath,
     `${JSON.stringify({
       ...endpoint,
+      plugins: inventory,
       token: 'local-secret',
       pid: process.pid,
       version: readVersion(),

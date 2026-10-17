@@ -15,6 +15,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./agent-device": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
     "./connection-verification": {
       "types": "./src/testmu-connection-verification.ts",
       "default": "./src/testmu-connection-verification.ts"
@@ -48,7 +52,10 @@
   "publishConfig": {
     "exports": {
       ".": {
-        "import": "./dist/plugin.mjs"
+        "import": "./dist/agent-device.mjs"
+      },
+      "./agent-device": {
+        "import": "./dist/agent-device.mjs"
       }
     },
     "access": "public"

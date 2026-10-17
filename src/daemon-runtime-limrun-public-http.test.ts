@@ -23,7 +23,12 @@ const rootPorts = vi.hoisted(() => {
     finalizeDaemonShutdown: vi.fn(async () => {}),
   };
   return {
-    providerComposition: vi.fn(async () => ({ runtimes: [] as unknown[], platformModules: [] })),
+    providerComposition: vi.fn(async () => ({
+      runtimes: [] as unknown[],
+      platformModules: [] as unknown[],
+      inventory: [] as unknown[],
+      shutdown: async () => [],
+    })),
     createPlatformRuntimeGateway: vi.fn(() => ({
       applicationLifecycle,
       inspectFacts: async () => {
@@ -76,7 +81,15 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
     { apiKey: 'lim_test_key', runtimeInstance: 'http-access-test' },
     limrunTestDependencies,
   );
-  rootPorts.providerComposition.mockResolvedValue({ runtimes: [limrun], platformModules: [] });
+  rootPorts.providerComposition.mockResolvedValue({
+    runtimes: [limrun],
+    platformModules: [],
+    inventory: [],
+    shutdown: async () => {
+      await limrun.shutdown();
+      return [];
+    },
+  });
   let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | undefined;
 
   try {

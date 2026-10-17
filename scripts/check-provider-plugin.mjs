@@ -47,17 +47,15 @@ async function pack(directory) {
 }
 try {
   await run('pnpm', ['build'], plugin);
-  const coreTarball = await pack(root);
+  // AGENT_DEVICE_CORE_SPEC installs a published agent-device (such as agent-device@0.21.28) instead
+  // of packing this checkout, to prove a plugin still loads on a host without the newest contract.
+  const coreSpec = process.env.AGENT_DEVICE_CORE_SPEC ?? (await pack(root));
   const pluginTarball = await pack(plugin);
   for (const directory of [consumer, project]) {
     await fs.mkdir(directory, { recursive: true });
     await fs.writeFile(path.join(directory, 'package.json'), '{"private":true,"type":"module"}');
   }
-  await run(
-    'npm',
-    ['install', '--ignore-scripts', '--no-audit', '--no-fund', coreTarball],
-    consumer,
-  );
+  await run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', coreSpec], consumer);
   await run(
     'npm',
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', pluginTarball],
@@ -67,7 +65,10 @@ try {
   const installed = JSON.parse(
     await fs.readFile(path.join(project, 'node_modules', manifest.name, 'package.json'), 'utf8'),
   );
-  assert.deepEqual(installed.exports, { '.': { import: './dist/plugin.mjs' } });
+  assert.deepEqual(installed.exports, {
+    '.': { import: './dist/agent-device.mjs' },
+    './agent-device': { import: './dist/agent-device.mjs' },
+  });
   assert.equal(installed.dependencies, undefined);
   assert.equal(installed.peerDependencies, undefined);
   await assert.rejects(fs.stat(path.join(project, 'node_modules', 'agent-device')), {
