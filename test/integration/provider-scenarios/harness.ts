@@ -21,7 +21,11 @@ import {
   buildHttpRpcPayload,
   handleDaemonHttpResponseBody,
 } from '../../../src/daemon-client/daemon-client-rpc.ts';
-import { commandRequest, responseToRpcResult } from './harness-rpc.ts';
+import {
+  commandRequest,
+  envelopeToRpcResult,
+  type JsonRpcResponseEnvelope,
+} from './harness-rpc.ts';
 import { createDaemonRuntimeDeps } from '../../../src/daemon-composition.ts';
 import {
   createPlatformRuntimeGateway,
@@ -51,11 +55,6 @@ const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
 } as const;
 
 export type ProviderScenarioRpcResult = { statusCode: number; json: any };
-
-type JsonRpcResponseEnvelope = {
-  result?: DaemonResponse;
-  error?: { code: number; message: string; data?: Record<string, unknown> };
-};
 
 export type ProviderScenarioHarness = {
   callCommand: (
@@ -264,17 +263,7 @@ export async function createProviderScenarioHarness(
       });
       const envelope = JSON.parse(body) as JsonRpcResponseEnvelope;
       if (envelope.result) assertNoInternalChromeProvenance(envelope.result);
-      if (envelope.result) {
-        return responseToRpcResult(envelope.result, String(payload.id), statusCode);
-      }
-      return {
-        statusCode,
-        json: {
-          jsonrpc: '2.0',
-          id: payload.id,
-          error: envelope.error ?? { code: statusCode, message: '' },
-        },
-      };
+      return envelopeToRpcResult(envelope, payload.id, statusCode);
     },
     client: () => client,
     hasSession: async (name = 'default') =>
