@@ -25,12 +25,12 @@ Retry policy belongs in `runner-error-classification.ts`. Command typing belongs
 Keep the transport below session and client behavior. Keep xctestrun preparation outside request execution.
 After signing, run `node -e 0` before you measure Gatekeeper-sensitive startup.
 Before you measure on a physical iOS device, set Auto-Lock to Never.
-A failed command can look like a fast success. Examine each result before you record its time.
+A failed command can look like a fast success. Before you record the time of a command, examine its exit status and output.
 
 ## Ownership and cleanup
 
 Use one session for each purpose. For more isolation, use a separate `--state-dir` under `/private/tmp`.
-Close each session that you opened manually, also failed attempts, with its original session, platform, UDID, and state directory.
+Close each session that you opened manually, including failed attempts, with its original session, platform, UDID, and state directory.
 
 For `DEVICE_IN_USE`:
 
