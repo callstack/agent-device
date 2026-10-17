@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createAndroidHelperRuntimeState } from '../adb-shell-protocol.ts';
+import { createAndroidHelperRuntimeState } from '../adb-host.ts';
 import { recoverAndroidSnapshotHelperRetirement } from '../snapshot-helper-retirement.ts';
 import {
   resetAndroidSnapshotHelperSessions,

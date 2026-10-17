@@ -7,13 +7,12 @@
  * `snapshot-helper-session.ts`; they acquire through here and never reach the registry themselves.
  */
 import type { AndroidAdbProcess } from './adb-executor.ts';
-import { requireAndroidAdbHost } from './adb-host.ts';
+import { helperRuntimeSlot, requireAndroidAdbHost } from './adb-host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   androidAdbForwardsDeviceExitStatus,
-  helperRuntimeSlot,
   resetAndroidAdbShellProtocolProbes,
 } from './adb-shell-protocol.ts';
 import type {
