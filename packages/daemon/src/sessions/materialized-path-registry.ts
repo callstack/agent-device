@@ -1,5 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/request';
+import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import { rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -36,19 +35,14 @@ export type RetainedMaterializedPaths = {
   expiresAt: string;
 };
 
-const retainedPathsStorage = new AsyncLocalStorage<Map<string, RetainedEntry>>();
-const standaloneRetainedPaths = new Map<string, RetainedEntry>();
+const retainedPathsRuntime = defineRuntimeSlots();
+const RETAINED_PATHS_SLOT = Symbol('materializedPaths');
 const retainedPaths = (): Map<string, RetainedEntry> =>
-  retainedPathsStorage.getStore() ?? standaloneRetainedPaths;
-
-/** The materialized paths one daemon runtime retains; disposing it stops their expiry timers. */
-export function createMaterializedPathRuntimeState(): RuntimeStateHandle {
-  const owned = new Map<string, RetainedEntry>();
-  return {
-    run: (fn) => retainedPathsStorage.run(owned, fn),
-    enter: () => retainedPathsStorage.enterWith(owned),
-    dispose: () => {
-      for (const entry of owned.values()) {
+  retainedPathsRuntime.slot(
+    RETAINED_PATHS_SLOT,
+    () => new Map<string, RetainedEntry>(),
+    (entries) => {
+      for (const entry of entries.values()) {
         clearTimeout(entry.timer);
         try {
           rmSync(entry.rootPath, { recursive: true, force: true });
@@ -56,10 +50,12 @@ export function createMaterializedPathRuntimeState(): RuntimeStateHandle {
           // best-effort cleanup only
         }
       }
-      owned.clear();
     },
-  };
-}
+  );
+
+/** The materialized paths one daemon runtime retains; disposing it stops their expiry timers. */
+export const createMaterializedPathRuntimeState = (): RuntimeStateHandle =>
+  retainedPathsRuntime.createHandle();
 
 export async function retainMaterializedPaths(params: {
   installablePath: string;

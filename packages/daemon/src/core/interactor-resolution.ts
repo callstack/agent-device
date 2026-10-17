@@ -1,5 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/request';
+import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -31,22 +30,16 @@ const NO_INTERACTOR_RESOLUTION: InteractorResolution = {
 
 type InteractorResolutionState = { resolution: InteractorResolution };
 
-const interactorResolutionStorage = new AsyncLocalStorage<InteractorResolutionState>();
-const standaloneInteractorResolution: InteractorResolutionState = {
-  resolution: NO_INTERACTOR_RESOLUTION,
-};
+const interactorResolutionRuntime = defineRuntimeSlots();
+const INTERACTOR_RESOLUTION_SLOT = Symbol('interactorResolution');
 const interactorResolutionState = (): InteractorResolutionState =>
-  interactorResolutionStorage.getStore() ?? standaloneInteractorResolution;
+  interactorResolutionRuntime.slot(INTERACTOR_RESOLUTION_SLOT, (): InteractorResolutionState => ({
+    resolution: NO_INTERACTOR_RESOLUTION,
+  }));
 
 /** The resolution one daemon runtime owns; the runtime installs its composition's into it. */
-export function createInteractorResolutionRuntimeState(): RuntimeStateHandle {
-  const owned: InteractorResolutionState = { resolution: NO_INTERACTOR_RESOLUTION };
-  return {
-    run: (fn) => interactorResolutionStorage.run(owned, fn),
-    enter: () => interactorResolutionStorage.enterWith(owned),
-    dispose: () => {},
-  };
-}
+export const createInteractorResolutionRuntimeState = (): RuntimeStateHandle =>
+  interactorResolutionRuntime.createHandle();
 
 /**
  * Root composition's installation point, beside the provider-device admission that shares the

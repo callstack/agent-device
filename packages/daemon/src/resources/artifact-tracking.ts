@@ -1,5 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/request';
+import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -51,38 +50,30 @@ type ArtifactTrackingState = {
   uploads: Map<string, UploadEntry>;
 };
 
-const artifactTrackingStorage = new AsyncLocalStorage<ArtifactTrackingState>();
-const createArtifactTrackingState = (): ArtifactTrackingState => ({
-  artifacts: new Map(),
-  uploads: new Map(),
-});
-const standaloneArtifactTracking = createArtifactTrackingState();
+const artifactTrackingRuntime = defineRuntimeSlots();
+const ARTIFACT_TRACKING_SLOT = Symbol('artifactTracking');
 const artifactTracking = (): ArtifactTrackingState =>
-  artifactTrackingStorage.getStore() ?? standaloneArtifactTracking;
-const pendingArtifacts = () => artifactTracking().artifacts;
-const pendingUploads = () => artifactTracking().uploads;
-
-/** The artifacts and uploads one daemon runtime tracks; disposing it stops their expiry timers. */
-export function createArtifactTrackingRuntimeState(): RuntimeStateHandle {
-  const owned = createArtifactTrackingState();
-  return {
-    run: (fn) => artifactTrackingStorage.run(owned, fn),
-    enter: () => artifactTrackingStorage.enterWith(owned),
-    dispose: () => {
-      for (const entry of owned.artifacts.values()) {
+  artifactTrackingRuntime.slot(
+    ARTIFACT_TRACKING_SLOT,
+    (): ArtifactTrackingState => ({ artifacts: new Map(), uploads: new Map() }),
+    (state) => {
+      for (const entry of state.artifacts.values()) {
         clearTimeout(entry.timer);
         cleanupDirectoryArchive(entry);
         if (entry.deleteAfterDownload) removeBestEffort(entry.artifactPath);
       }
-      for (const entry of owned.uploads.values()) {
+      for (const entry of state.uploads.values()) {
         clearTimeout(entry.timer);
         removeBestEffort(entry.tempDir);
       }
-      owned.artifacts.clear();
-      owned.uploads.clear();
     },
-  };
-}
+  );
+const pendingArtifacts = () => artifactTracking().artifacts;
+const pendingUploads = () => artifactTracking().uploads;
+
+/** The artifacts and uploads one daemon runtime tracks; disposing it stops their expiry timers. */
+export const createArtifactTrackingRuntimeState = (): RuntimeStateHandle =>
+  artifactTrackingRuntime.createHandle();
 
 /** What a finished request registers for each artifact it hands back to the client. */
 export type DownloadableArtifactRegistration = {

@@ -1,5 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/request';
+import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 /**
@@ -22,22 +21,16 @@ const NO_PROVIDER_DEVICE_ADMISSION: ProviderDeviceAdmission = {
 
 type ProviderAdmissionState = { admission: ProviderDeviceAdmission };
 
-const providerAdmissionStorage = new AsyncLocalStorage<ProviderAdmissionState>();
-const standaloneProviderAdmission: ProviderAdmissionState = {
-  admission: NO_PROVIDER_DEVICE_ADMISSION,
-};
+const providerAdmissionRuntime = defineRuntimeSlots();
+const PROVIDER_ADMISSION_SLOT = Symbol('providerDeviceAdmission');
 const providerAdmissionState = (): ProviderAdmissionState =>
-  providerAdmissionStorage.getStore() ?? standaloneProviderAdmission;
+  providerAdmissionRuntime.slot(PROVIDER_ADMISSION_SLOT, (): ProviderAdmissionState => ({
+    admission: NO_PROVIDER_DEVICE_ADMISSION,
+  }));
 
 /** The admission one daemon runtime owns; the runtime installs its composition's into it. */
-export function createProviderDeviceAdmissionRuntimeState(): RuntimeStateHandle {
-  const owned: ProviderAdmissionState = { admission: NO_PROVIDER_DEVICE_ADMISSION };
-  return {
-    run: (fn) => providerAdmissionStorage.run(owned, fn),
-    enter: () => providerAdmissionStorage.enterWith(owned),
-    dispose: () => {},
-  };
-}
+export const createProviderDeviceAdmissionRuntimeState = (): RuntimeStateHandle =>
+  providerAdmissionRuntime.createHandle();
 
 /**
  * Root composition's installation point. The provider runtime scope is ambient per request, so

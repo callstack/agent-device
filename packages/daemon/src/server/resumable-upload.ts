@@ -1,5 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/request';
+import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,25 +26,14 @@ type ResumableUploadState = {
   byKey: Map<string, string>;
 };
 
-const resumableUploadStorage = new AsyncLocalStorage<ResumableUploadState>();
-const createResumableUploadState = (): ResumableUploadState => ({
-  byId: new Map(),
-  byKey: new Map(),
-});
-const standaloneResumableUploads = createResumableUploadState();
+const resumableUploadRuntime = defineRuntimeSlots();
+const RESUMABLE_UPLOAD_SLOT = Symbol('resumableUploads');
 const resumableUploads = (): ResumableUploadState =>
-  resumableUploadStorage.getStore() ?? standaloneResumableUploads;
-const RESUMABLE_UPLOADS_BY_ID = () => resumableUploads().byId;
-const RESUMABLE_UPLOADS_BY_KEY = () => resumableUploads().byKey;
-
-/** The resumable uploads one daemon runtime holds; disposing it stops their expiry timers. */
-export function createResumableUploadRuntimeState(): RuntimeStateHandle {
-  const owned = createResumableUploadState();
-  return {
-    run: (fn) => resumableUploadStorage.run(owned, fn),
-    enter: () => resumableUploadStorage.enterWith(owned),
-    dispose: () => {
-      for (const entry of owned.byId.values()) {
+  resumableUploadRuntime.slot(
+    RESUMABLE_UPLOAD_SLOT,
+    (): ResumableUploadState => ({ byId: new Map(), byKey: new Map() }),
+    (state) => {
+      for (const entry of state.byId.values()) {
         clearTimeout(entry.timer);
         try {
           fs.rmSync(entry.tempDir, { recursive: true, force: true });
@@ -53,11 +41,14 @@ export function createResumableUploadRuntimeState(): RuntimeStateHandle {
           // best-effort cleanup only
         }
       }
-      owned.byId.clear();
-      owned.byKey.clear();
     },
-  };
-}
+  );
+const RESUMABLE_UPLOADS_BY_ID = () => resumableUploads().byId;
+const RESUMABLE_UPLOADS_BY_KEY = () => resumableUploads().byKey;
+
+/** The resumable uploads one daemon runtime holds; disposing it stops their expiry timers. */
+export const createResumableUploadRuntimeState = (): RuntimeStateHandle =>
+  resumableUploadRuntime.createHandle();
 
 export type BeginResumableUploadOptions = {
   baseUrl: string;
