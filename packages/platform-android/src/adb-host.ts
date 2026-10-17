@@ -44,9 +44,10 @@ export type AndroidAdbHost = Readonly<{
   /**
    * One piece of helper state the current daemon runtime owns (warm sessions, failed starts,
    * pending retirements, shell-protocol probes), created on first use. The root binds the daemon's
-   * runtime slots here, so a close tears down only its own runtime's helper.
+   * runtime slots here, so each runtime keeps its own and closing one forgets only its own; the
+   * helper itself is stopped by the close-time reset, which reads the same slots.
    */
-  runtimeSlot<T>(key: symbol, create: () => T, dispose?: (value: T) => void): T;
+  runtimeSlot<T>(key: symbol, create: () => T): T;
   /** Explicit process environment captured by the root composition boundary. */
   environment: AndroidAdbEnvironment;
   /** Narrow filesystem authority used by Android helper, SDK, and artifact mechanics. */

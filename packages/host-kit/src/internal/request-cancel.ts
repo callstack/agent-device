@@ -1,35 +1,29 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import type { RuntimeStateHandle } from '../runtime-slots.ts';
+import { defineRuntimeSlots, type RuntimeStateHandle } from '../runtime-slots.ts';
 
 type RequestCancelState = {
   canceledRequestIds: Set<string>;
   requestAbortControllers: Map<string, AbortController>;
 };
 
-const createRequestCancelState = (): RequestCancelState => ({
-  canceledRequestIds: new Set<string>(),
-  requestAbortControllers: new Map<string, AbortController>(),
-});
-const requestCancelStorage = new AsyncLocalStorage<RequestCancelState>();
-const standaloneRequestCancelState = createRequestCancelState();
+const requestCancelRuntime = defineRuntimeSlots();
+const REQUEST_CANCEL_SLOT = Symbol('requestCancel');
 const requestCancelState = (): RequestCancelState =>
-  requestCancelStorage.getStore() ?? standaloneRequestCancelState;
+  requestCancelRuntime.slot(
+    REQUEST_CANCEL_SLOT,
+    (): RequestCancelState => ({
+      canceledRequestIds: new Set<string>(),
+      requestAbortControllers: new Map<string, AbortController>(),
+    }),
+    (state) => {
+      for (const controller of state.requestAbortControllers.values()) controller.abort();
+    },
+  );
 const canceledRequestIds = () => requestCancelState().canceledRequestIds;
 const requestAbortControllers = () => requestCancelState().requestAbortControllers;
 
-export function createRequestCancelRuntimeState(): RuntimeStateHandle {
-  const owned = createRequestCancelState();
-  return {
-    run: (fn) => requestCancelStorage.run(owned, fn),
-    enter: () => requestCancelStorage.enterWith(owned),
-    dispose: () => {
-      for (const controller of owned.requestAbortControllers.values()) controller.abort();
-      owned.requestAbortControllers.clear();
-      owned.canceledRequestIds.clear();
-    },
-  };
-}
+export const createRequestCancelRuntimeState = (): RuntimeStateHandle =>
+  requestCancelRuntime.createHandle();
 
 export type RequestAbortRegistration = {
   requestId: string;

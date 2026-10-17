@@ -147,7 +147,7 @@ test('a composed daemon registers the Apple runner and Android helper state, one
   // Apple's runner state and Android's helper state.
   expect(first.runtimeStates).toHaveLength(2);
   expect(second.runtimeStates).toHaveLength(2);
-  // The Android handle scopes the slot accessor the root binds into the adb host.
+  // The Android handle scopes the accessor the root binds into the adb host port.
   const [, firstAndroid] = first.runtimeStates;
   const [, secondAndroid] = second.runtimeStates;
   const inFirst = firstAndroid!.run(() => androidHelperRuntimeSlot(slotKey, () => ({})));

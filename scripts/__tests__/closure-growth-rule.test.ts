@@ -50,6 +50,25 @@ test('no-growth fails growth with both counts and passes an equal or smaller clo
   ).toMatch(/evaluates 43 modules.*merge-base evaluated 42/);
 });
 
+test('a module a maintainer approved is excused from the count, and only that module', () => {
+  const grown = {
+    baseCount: 42,
+    headCount: 43,
+    baseWeight: 200,
+    headWeight: 230,
+    preservedBaseClosure: true,
+    addedModulesAreNew: true,
+  };
+  expect(classifyGrowth('x.ts', { ...grown, approvedAddedCount: 1 })).toBeNull();
+  expect(
+    classifyGrowth('x.ts', { ...grown, headCount: 44, approvedAddedCount: 1 }),
+    'a second, unapproved addition still fails',
+  ).toMatch(/evaluates 44 modules.*merge-base evaluated 42/);
+  expect(classifyGrowth('x.ts', grown), 'without approval the same growth fails').toMatch(
+    /evaluates 43 modules/,
+  );
+});
+
 // --- the split tolerance (#2469) -------------------------------------------------------------
 // The no-growth rule counts modules, and a split of a hub module is count growth with no new
 // eager work -- which made extracting any module inside a gated closure impossible (ADR 0027).

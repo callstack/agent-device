@@ -134,6 +134,26 @@ export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
 > = Object.freeze({});
 
+/**
+ * Modules a maintainer approved as additions to the closures of entries that exist at the merge-base:
+ * each is excused from those entries' no-growth count, and only that module is. One row per module,
+ * naming the issue, the reason and the owner who approved it. A row whose module is gone fails.
+ */
+export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
+  module: string;
+  issue: string;
+  reason: string;
+  owner: string;
+}>[] = Object.freeze([
+  {
+    module: 'packages/host-kit/src/runtime-slots.ts',
+    issue: '#3752',
+    reason:
+      'The one owner of per-runtime async-local state: the store, its standalone fallback and its disposal, so Apple, request-cancel and the root declare only slot keys instead of each keeping a copy.',
+    owner: 'thymikee',
+  },
+]);
+
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {
   if (/^packages\/platform-[^/]+\/src\/index\.ts$/.test(entryFile)) return 'platform-facade';
