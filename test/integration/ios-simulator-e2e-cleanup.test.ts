@@ -91,8 +91,7 @@ test('a different INVALID_ARGS still fails after exhausting retries', async (t) 
     retryCleanupStep(OTHER_STEP, async (attempt) => {
       attempts += 1;
       if (attempt < 3) return invalidArgsResult(MIC_APPLESS_MESSAGE, sessionAppRequiredDetails());
-      // Mirrors runStep(..., { allowFailure: false }) on the final attempt: it throws
-      // instead of returning a failed result.
+      // A thrown subprocess failure must also propagate on the final attempt.
       throw new Error(`cleanup: ${OTHER_STEP} (attempt 3) failed`);
     }),
   );
@@ -115,6 +114,35 @@ test('the appless message without its typed reason still fails after retries', a
   );
   assert.ok(failure instanceof Error, `expected a propagated failure, got ${String(failure)}`);
   assert.equal(attempts, 3, 'should exhaust all three attempts');
+});
+
+test('a returned cleanup failure on the third attempt is reported', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let attempts = 0;
+  const failure = await drainRetry(
+    t,
+    retryCleanupStep(OTHER_STEP, async () => {
+      attempts += 1;
+      return invalidArgsResult('unrelated refusal');
+    }),
+  );
+  assert.ok(failure instanceof Error);
+  assert.match(failure.message, /restore portrait orientation failed after 3 attempts/);
+  assert.equal(attempts, 3);
+});
+
+test('a session disappearing on the third cleanup attempt is already clean', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let attempts = 0;
+  const failure = await drainRetry(
+    t,
+    retryCleanupStep(OTHER_STEP, async () => {
+      attempts += 1;
+      return attempts === 3 ? sessionNotFoundResult() : invalidArgsResult('unrelated refusal');
+    }),
+  );
+  assert.equal(failure, undefined);
+  assert.equal(attempts, 3);
 });
 
 // Deterministic regression for finalizeSessionCleanup: the other half of #1548, which

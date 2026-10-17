@@ -166,7 +166,11 @@ extension RunnerTests {
       XCTAssertTrue(response.ok, "prefilled: \(prefilled) \(String(describing: response.error))")
       XCTAssertEqual(response.data?.textEntryRoute, "synthesized-first-responder-replacement")
       XCTAssertEqual(response.data?.message, "typed", "prefilled: \(prefilled)")
-      XCTAssertEqual(textField.value as? String, String(repeating: "\u{2022}", count: 8), "prefilled: \(prefilled)")
+      // An unreadable field cannot certify replacement or commit timing. Readable-field tests
+      // below pin exact replacement, including dropped select-alls; this case pins classification.
+      let delivered = app.staticTexts["agent-device-masked-delivery"]
+      let delivery = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "delivered"), object: delivered)
+      XCTAssertEqual(XCTWaiter.wait(for: [delivery], timeout: appExistenceTimeout), .completed, "prefilled: \(prefilled)")
       XCTAssertEqual(togglePresses.label, "presses=0", "prefilled: \(prefilled)")
     }
   }

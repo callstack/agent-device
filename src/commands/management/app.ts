@@ -44,7 +44,9 @@ const openCommandMetadata = defineFieldCommandMetadata(
       'macOS presentation surface to open: the app itself, the frontmost app, the desktop, or the menu bar.',
     ),
     activity: stringField('Android activity name.'),
-    launchConsole: stringField('Launch console mode.'),
+    launchConsole: stringField(
+      'File path on the daemon host for the stdout and stderr of the initial app launch. iOS simulator direct app launches only; not for URL opens.',
+    ),
     launchArgs: stringArrayField(
       'Launch arguments forwarded verbatim to the platform launch command.',
     ),

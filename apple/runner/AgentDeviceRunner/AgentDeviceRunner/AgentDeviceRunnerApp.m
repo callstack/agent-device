@@ -84,6 +84,7 @@ int main(int argc, const char *argv[]) {
 
 @interface AgentDeviceRunnerViewController : UIViewController
 @property(nonatomic, strong) UILabel *maskedToggleStatus;
+@property(nonatomic, strong) UILabel *maskedDeliveryStatus;
 @property(nonatomic, assign) NSUInteger maskedTogglePresses;
 @property(nonatomic, strong) UILabel *alertActionStatus;
 @property(nonatomic, strong) UILabel *alertActivationBusyAnswer;
@@ -466,6 +467,9 @@ static const CGFloat AgentDeviceTextEntryFieldHeight = 44;
 static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
+  if (self.maskedDeliveryStatus != nil) {
+    self.maskedDeliveryStatus.text = [textField.text hasSuffix:@"not-a-secret-123"] ? @"delivered" : @"pending";
+  }
   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
   // typed faster than the app renders loses the characters that arrived while a render was in
   // flight, and the field settles stable short of the request.
@@ -808,6 +812,15 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [toggle.widthAnchor constraintEqualToConstant:48],
         [self.maskedToggleStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.maskedToggleStatus.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
+      ]];
+      self.maskedDeliveryStatus = [[UILabel alloc] init];
+      self.maskedDeliveryStatus.accessibilityIdentifier = @"agent-device-masked-delivery";
+      self.maskedDeliveryStatus.text = @"pending";
+      self.maskedDeliveryStatus.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.maskedDeliveryStatus];
+      [NSLayoutConstraint activateConstraints:@[
+        [self.maskedDeliveryStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.maskedDeliveryStatus.topAnchor constraintEqualToAnchor:self.maskedToggleStatus.bottomAnchor constant:8],
       ]];
       [self updateMaskedToggleStatus];
     }

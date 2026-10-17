@@ -22,7 +22,7 @@ const RUN_TIMEOUT_MS = Number(process.env.HELP_BENCH_TIMEOUT_MS ?? 90_000);
 // Runner x case pairs run concurrently, capped low: these are paid LLM calls
 // and the CLI help subprocess calls behind loadDocs share this same machine.
 const CONCURRENCY = Number(process.env.HELP_BENCH_CONCURRENCY ?? 4);
-const DEFAULT_RUNNERS = ['codex:gpt-5.4-mini', 'claude:claude-haiku-4-5'];
+const DEFAULT_RUNNERS = ['codex:gpt-6-luna', 'claude:claude-haiku-4-5'];
 const USAGE = `Usage: node scripts/help-conformance-bench.mjs [options]
 
 Feeds a help slice + task into one non-agentic LLM call per runner x case and

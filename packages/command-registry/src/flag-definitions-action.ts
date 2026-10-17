@@ -147,7 +147,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     max: 100,
     usageLabel: '--jitter-px <n>',
-    usageDescription: 'Deterministic coordinate jitter radius for press',
+    usageDescription: 'Deterministic per-axis coordinate jitter in pixels',
     projectConfig: true,
     recorded: true,
   },

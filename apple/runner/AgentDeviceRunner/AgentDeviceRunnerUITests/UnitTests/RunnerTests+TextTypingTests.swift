@@ -441,7 +441,9 @@ extension RunnerTests {
     XCTAssertTrue(fillResponse.ok, String(describing: fillResponse.error))
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
     XCTAssertEqual(fillResponse.data?.message, "typed")
-    XCTAssertEqual(textField.value as? String, String(repeating: "\u{2022}", count: 8))
+    let delivered = app.staticTexts["agent-device-masked-delivery"]
+    let delivery = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "delivered"), object: delivered)
+    XCTAssertEqual(XCTWaiter.wait(for: [delivery], timeout: appExistenceTimeout), .completed)
     XCTAssertEqual(togglePresses.label, "presses=0")
   }
 

@@ -162,7 +162,7 @@ export function createLiveDeviceHarness<
       );
       context.completedScenarios.push(scenario.id);
     } catch (error) {
-      await recordScenarioFailure(context, error);
+      await recordFailure(context, error);
       throw error;
     } finally {
       context.timings.push({ durationMs: Date.now() - startedAt, id: scenario.id });
@@ -170,7 +170,7 @@ export function createLiveDeviceHarness<
     }
   }
 
-  async function recordScenarioFailure(context: Context, error: unknown): Promise<void> {
+  async function recordFailure(context: Context, error: unknown): Promise<void> {
     if (error instanceof Error && reportedFailures.has(error)) return;
     try {
       const evidence = await captureFailedStepEvidence(context);
@@ -363,6 +363,7 @@ export function createLiveDeviceHarness<
   }
 
   return {
+    recordFailure,
     runScenario,
     runStep,
     sessionExists,

@@ -967,14 +967,20 @@ function buildHelpTopicUsageText(topicName: string): string | null {
   const topic = HELP_TOPICS[topicName as keyof typeof HELP_TOPICS];
   if (!topic) return null;
   const body = topicName === 'commands' ? renderFullCommandReferenceText() : topic.body;
+  const related = RELATED_HELP_LINES.filter((entry) => entry.topic !== topicName)
+    .map((entry) => `  ${entry.line}\n`)
+    .join('');
   return `${withVersionHeader(topicName, body)}
 
 Related:
-  agent-device help <command>   command-specific flags
-  agent-device help manual-qa   routine QA loop
-  agent-device help workflow    full automation reference
-`;
+${related}`;
 }
+
+const RELATED_HELP_LINES = [
+  { topic: null, line: 'agent-device help <command>   command-specific flags' },
+  { topic: 'manual-qa', line: 'agent-device help manual-qa   routine QA loop' },
+  { topic: 'workflow', line: 'agent-device help workflow    full automation reference' },
+] as const;
 
 // Every topic body's first line is authored as `agent-device help <topicId>`. Swapping in the
 // installed version here (instead of hand-editing every topic string) gives the skill router a

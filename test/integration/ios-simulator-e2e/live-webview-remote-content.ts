@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 
-import { assertWaitText, snapshotNodes } from './live-assertions.ts';
-import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
+import {
+  assertElementTextAfterScrolling,
+  assertWaitText,
+  snapshotNodes,
+} from './live-assertions.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
-const WEBVIEW_LAB_DEEP_LINK = 'agent-device-test-app:///webview';
-// Native chrome of the lab, rendered with the route and before the page: it proves the deep link
-// landed without asking the runner to query a screen whose web view is still loading.
+// Native chrome proves Settings navigation reached the lab before its web page finishes loading.
 const LAB_CHROME_ID = 'close-webview-lab';
 // The first WebContent process of the run spawns here; a cold CI simulator needs more than the
 // shared 10 s wait budget before the page's tree exists.
@@ -28,14 +29,19 @@ const XCTEST_FALLBACK_WARNING =
  * vanish from every snapshot and no ref can reach them.
  */
 export async function assertWebViewRemoteContent(context: LiveContext): Promise<void> {
-  await runStep(context, 'open WebView accessibility lab', [
-    'open',
-    context.appId,
-    '--relaunch',
-    '--launch-url',
-    WEBVIEW_LAB_DEEP_LINK,
+  await runStep(context, 'open WebView fixture settings', ['click', 'label="Settings"']);
+  await assertWaitText(context, 'Settings');
+  await assertElementTextAfterScrolling(
+    context,
+    'id="open-webview-lab"',
+    'Open WebView accessibility lab',
+  );
+  await runStep(context, 'open WebView accessibility lab', ['click', 'id="open-webview-lab"']);
+  await runStep(context, 'wait for WebView native chrome', [
+    'wait',
+    `id="${LAB_CHROME_ID}"`,
+    '15000',
   ]);
-  await waitForDeepLinkDestination(context, [`id="${LAB_CHROME_ID}"`]);
   // `wait` observes through the same route as `snapshot`: page content is reachable only once the
   // route has stopped publishing the bridge's page-less tree.
   await runStep(context, 'wait for the WebView page to expose its link', [
@@ -65,12 +71,6 @@ export async function assertWebViewRemoteContent(context: LiveContext): Promise<
     `WebView snapshot must disclose the XCTest fallback for remote content: ${JSON.stringify(snapshot)}`,
   );
 
-  await runStep(context, 'restore fixture home after WebView lab', [
-    'open',
-    context.appId,
-    '--relaunch',
-  ]);
-  await assertWaitText(context, 'Agent Device Tester');
   verifyBehavior(
     context,
     'webview-remote-content',

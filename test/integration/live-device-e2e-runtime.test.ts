@@ -69,6 +69,24 @@ test('a scenario assertion after allowed misses captures evidence before caller 
   assert.equal(reports(), 1);
 });
 
+test('a caller-owned cleanup failure captures evidence without reissuing the command', async () => {
+  const { context, harness, calls } = fixture();
+  context.currentScenario = 'cleanup';
+  const result = await harness.runStep(context, 'close session', ['close'], { allowFailure: true });
+  assert.equal(result.status, 1);
+  await harness.recordFailure(context, new Error('close session exhausted its retry budget'));
+
+  assert.deepEqual(
+    calls.map((args) => args[0]),
+    ['close', 'screenshot', 'snapshot'],
+  );
+  assert.ok(fs.existsSync(path.join(context.artifactDir, 'failed-step-1.png')));
+  assert.ok(fs.existsSync(path.join(context.artifactDir, 'failed-step-1-snapshot.json')));
+  const report = fs.readFileSync(path.join(context.artifactDir, 'failed-step.txt'), 'utf8');
+  assert.match(report, /close session exhausted its retry budget/);
+  assert.match(report, /scenario: cleanup/);
+});
+
 test('a scenario assertion before any command also captures evidence', async () => {
   const { context, harness, calls } = fixture();
   const failure = new Error('fixture assertion');
