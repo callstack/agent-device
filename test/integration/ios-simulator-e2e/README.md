@@ -18,6 +18,7 @@ For a form interaction scenario, use the existing registration pattern:
 { id: 'smoke:form-input', runner: 'formInput', tier: 'smoke', setup: 'fixture-home' }
 ```
 
+Run commands serially on the selected device.
 The runner closes the preceding session and assigns a distinct session to each smoke scenario.
 Session recreation clears stored launch URLs; relaunch alone retains them.
 Keep assertions inside the scenario's Node subtest.
@@ -40,6 +41,7 @@ Before testing keyboard dismissal, require the fixture's visible Done control.
 Enable the simulator software keyboard for that lifecycle contract.
 For intentionally truncated raw-depth assertions, validate the structural frontier; require semantic capture quality on regular and full-raw observations.
 Use the built CLI for preparation and execution after building once.
+Source and built clients have different daemon code signatures; alternating them can replace the daemon under test.
 Use the built SDK with the existing-daemon transport for forced-backend probes.
 Do not let a probe start or replace the daemon under test.
 
@@ -50,7 +52,8 @@ Require both a retriable verdict and a typed prevented-observation reason.
 Fail readable absence, exhausted readable waits, invalid selectors, and incorrect values.
 If a helper owns retries, pass `reattemptInfrastructureMiss: undefined` on every attempt.
 Keep cleanup retries in `retryCleanupStep`; return failed results with `allowFailure: true` so its typed already-clean handling applies on every attempt.
-Report exhausted cleanup failures separately from scenario assertions.
+Capture exhausted cleanup failures through the shared harness before continuing cleanup.
+Report them separately from scenario assertions.
 Replay-suite attempt policies have their own owner; this step policy does not redefine them.
 
 ## Match input assertions to the contract
@@ -61,7 +64,7 @@ Do not infer replacement or length from masking bullets.
 For readable input, retain exact replacement assertions and deliberately dropped-select-all regressions.
 Keep unreadable classification and bounded clearing in their owning policy tests.
 
-## Verify an extension
+## Verify simulator smoke changes
 
 Read the live entry point's environment contract before running it.
 Build a current Release fixture with embedded JavaScript for simulator smoke verification.

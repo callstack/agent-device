@@ -170,7 +170,7 @@ extension RunnerTests {
       // below pin exact replacement, including dropped select-alls; this case pins classification.
       let delivered = app.staticTexts["agent-device-masked-delivery"]
       let delivery = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "delivered"), object: delivered)
-      XCTAssertEqual(XCTWaiter.wait(for: [delivery], timeout: appExistenceTimeout), .completed)
+      XCTAssertEqual(XCTWaiter.wait(for: [delivery], timeout: appExistenceTimeout), .completed, "prefilled: \(prefilled)")
       XCTAssertEqual(togglePresses.label, "presses=0", "prefilled: \(prefilled)")
     }
   }

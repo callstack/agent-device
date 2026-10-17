@@ -96,6 +96,7 @@ export function verifyNestedReplayCommand(
 const MICROPHONE_PERMISSION_RESET_STEP = 'reset microphone permission';
 
 export async function cleanupSession(context: LiveContext): Promise<void> {
+  context.currentScenario = 'cleanup';
   const failures: unknown[] = [];
   const cleanupSteps: Array<[string, string[]]> = [];
   if (context.tier === 'full') {
@@ -113,7 +114,10 @@ export async function cleanupSession(context: LiveContext): Promise<void> {
         reattemptInfrastructureMiss: undefined,
       }),
     );
-    if (failure !== undefined) failures.push(failure);
+    if (failure !== undefined) {
+      await harness.recordFailure(context, failure);
+      failures.push(failure);
+    }
   }
   if (failures.length === 0) return;
   const errorPath = path.join(context.artifactDir, 'cleanup-error.txt');

@@ -110,6 +110,12 @@ test('an unrelated prompt or an unreadable alert is never accepted as a fixture 
         result(0, { data: { message: 'Allow microphone access?', items: ['Cancel', 'Open'] } }),
       accept,
     ),
+    {
+      name: 'AssertionError',
+      code: 'ERR_ASSERTION',
+      operator: 'strictEqual',
+      message: /Allow microphone access/,
+    },
   );
   await assert.rejects(
     answerFixtureLaunchConfirmation(

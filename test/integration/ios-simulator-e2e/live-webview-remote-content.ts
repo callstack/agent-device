@@ -7,8 +7,7 @@ import {
 } from './live-assertions.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
-// Native chrome of the lab, rendered with the route and before the page: it proves the deep link
-// landed without asking the runner to query a screen whose web view is still loading.
+// Native chrome proves Settings navigation reached the lab before its web page finishes loading.
 const LAB_CHROME_ID = 'close-webview-lab';
 // The first WebContent process of the run spawns here; a cold CI simulator needs more than the
 // shared 10 s wait budget before the page's tree exists.
