@@ -7,7 +7,7 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
 - One contract. A provider plugin is a factory that returns `{ apiVersion: 2, provider, credentials,
   connection?, setup(host) }`. `setup` returns `{ runtime, platformModule, dispose? }` or
   `{ webDriver, dispose? }`. A `{ webDriver }` result stays a data descriptor the host interprets.
-- One registry. Sources compose in the order built-in, store, embedder. Built-in providers use the
+- One registry. Sources compose in the order built-in, store, embedder; the embedder slot arrives with #3757. Built-in providers use the
   same shape as an installed plugin, and one function validates what every factory returns.
 - Plugins import only types from agent-device. The type-only contract is `agent-device/plugins`;
   there is no runtime helper, and the contract does not depend on a plugin's module URL.
@@ -20,8 +20,8 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
   its `dispose`, and returns an outcome per plugin and step. Runtimes are never wrapped.
   Composition is transactional: when a later step fails, it closes the registry before it throws.
 - The registry receives candidates. Composition chooses the sources.
-- `daemon.json` has one reader. Its states are `absent`, `unreadable`, and `invalid`; only `absent`
-  reads as a stopped daemon.
+- `daemon.json` has one reader. Its states are `absent`, `unreadable`, and `invalid`. A missing or
+  stale record reads as a stopped daemon; an unreadable or invalid one never does.
 - The plugin set is fixed for a daemon's lifetime. A plugin change takes effect on the next daemon.
 - v1 plugins (`agentDevicePlugin.apiVersion: 1`) without a `./agent-device` export are dispatched by
   their manifest before any code runs and load through an adapter until 0.22 removes them (#3759).
