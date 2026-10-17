@@ -10,7 +10,7 @@ function result(status: number, json?: unknown): CliJsonResult {
 }
 
 function miss(details: Record<string, unknown>): CliJsonResult {
-  return result(1, { error: { code: 'COMMAND_FAILED', details } });
+  return result(1, { error: { code: 'COMMAND_FAILED', retriable: true, details } });
 }
 
 const LANDED = result(0, { success: true });
@@ -39,20 +39,37 @@ test('a destination seen on the first wait costs one wait', async () => {
   assert.equal(calls.length, 1);
 });
 
-test('a runner start and a slow foreground are waited out within the bounded waits', async () => {
-  const { wait, calls } = waits([RUNNER_START_TIMEOUT, SLOW_FOREGROUND, LANDED]);
+test('an observation prevented by runner startup gets one repeat', async () => {
+  const { wait, calls } = waits([RUNNER_START_TIMEOUT, LANDED]);
   assert.equal(await retryDestinationWait(wait), LANDED);
   assert.deepEqual(
     calls.map((call) => call.allowFailure),
-    [true, true, true],
+    [true, false],
   );
 });
 
-test('the fifth miss fails the wait instead of retrying again', async () => {
-  const { wait, calls } = waits([SLOW_FOREGROUND]);
-  await assert.rejects(retryDestinationWait(wait), /\(5\/5\) failed/);
-  assert.equal(calls.length, 5);
-  assert.equal(calls.at(-1)?.allowFailure, false);
+test('a readable destination miss fails without repeating the wait', async () => {
+  const { wait, calls } = waits([SLOW_FOREGROUND, LANDED]);
+  await assert.rejects(retryDestinationWait(wait), /deep-link destination wait failed/);
+  assert.equal(calls.length, 1);
+});
+
+test('the second observation failure ends the wait', async () => {
+  const { wait, calls } = waits([RUNNER_START_TIMEOUT]);
+  await assert.rejects(retryDestinationWait(wait), /\(2\/2\) failed/);
+  assert.equal(calls.length, 2);
+});
+
+test('the final failed result cannot start an unbounded wait if the caller returns it', async () => {
+  let calls = 0;
+  await assert.rejects(
+    retryDestinationWait(async () => {
+      calls += 1;
+      return RUNNER_START_TIMEOUT;
+    }),
+    /deep-link destination wait failed/,
+  );
+  assert.equal(calls, 2);
 });
 
 test('a miss that is not a pending destination fails at once', async () => {

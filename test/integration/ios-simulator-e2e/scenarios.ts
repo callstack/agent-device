@@ -6,6 +6,7 @@ export type IosSimulatorScenario = {
 type ScenarioRunnerKey =
   | 'automationInput'
   | 'captureClose'
+  | 'deepLinkNavigation'
   | 'deviceLifecycle'
   | 'fixtureReplays'
   | 'formInput'
@@ -29,6 +30,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDefinition[] = [
     tier: 'smoke',
   },
   { id: 'smoke:webview-remote-content', runner: 'webviewRemoteContent', tier: 'smoke' },
+  { id: 'smoke:deep-link-navigation', runner: 'deepLinkNavigation', tier: 'smoke' },
   { id: 'smoke:capture-close', runner: 'captureClose', tier: 'smoke' },
   { id: 'full:lifecycle-system', runner: 'lifecycleSystem', tier: 'full' },
   {
