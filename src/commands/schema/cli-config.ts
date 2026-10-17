@@ -106,6 +106,18 @@ function loadSingleConfigFile(entry: ConfigPath): Partial<CliFlags> {
   });
 }
 
+// The `record` config key was released (v0.21.10) as a project/user-config default, but
+// the repair-segment exclusion it feeds needs per-invocation provenance a config default
+// cannot carry. The key is retired: `--record` stays a per-invocation flag, and a config
+// file or environment still naming the key fails with this migration guidance rather
+// than silently doing nothing.
+const RETIRED_RECORD_CONFIG_KEY = {
+  flagKey: 'record',
+  envVar: 'AGENT_DEVICE_RECORD',
+  migration:
+    '--record is per-invocation only: pass --record on the command, or record: true in the SDK/MCP call, to keep a corrective read in a healed script',
+} as const;
+
 function parseConfigObject(
   source: Record<string, unknown>,
   origin: { source: ConfigFileSource; label: string },
@@ -115,6 +127,12 @@ function parseConfigObject(
     ([key]) => key !== 'plugins' || origin.source !== 'user',
   );
   for (const [rawKey, rawValue] of entries) {
+    if (rawKey === RETIRED_RECORD_CONFIG_KEY.flagKey) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `Config key "${rawKey}" in ${origin.label} was removed; ${RETIRED_RECORD_CONFIG_KEY.migration}.`,
+      );
+    }
     const key = rawKey as FlagKey;
     const spec = getOptionSpec(key);
     if (!spec) {
@@ -158,6 +176,17 @@ function parseConfigObject(
 const RETIRED_MAX_SIZE_ENV_COMMANDS = new Set(['screenshot', 'record']);
 
 function readEnvFlagDefaults(env: EnvMap, command: string | null): Partial<CliFlags> {
+  if (
+    command !== null &&
+    getOptionSpec(RETIRED_RECORD_CONFIG_KEY.flagKey)?.supportsCommand(command) === true &&
+    typeof env[RETIRED_RECORD_CONFIG_KEY.envVar] === 'string' &&
+    env[RETIRED_RECORD_CONFIG_KEY.envVar]!.trim().length > 0
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${RETIRED_RECORD_CONFIG_KEY.envVar} was removed; ${RETIRED_RECORD_CONFIG_KEY.migration}.`,
+    );
+  }
   const retiredEnvValue = env[RETIRED_SCREENSHOT_MAX_SIZE.envVar];
   if (
     command !== null &&
