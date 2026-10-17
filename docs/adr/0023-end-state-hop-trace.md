@@ -17,7 +17,7 @@ Reference trace for the entry-to-platform hop counts in ADR 0019 and the couplin
 
 This trace supports the "Entry-to-platform hop count" paragraph in
 [0019-request-bound-platform-runtime.md](./0019-request-bound-platform-runtime.md#end-state-proposed-2026-09-02-maintainer-decision-pending).
-That paragraph cited 38 hops for `press`/Android and 29 for `snapshot`/iOS without an ordered route, definition, or linked artifact.
+That paragraph cited 38 hops for `press`/Android and 29 for `snapshot`/iOS without an ordered route, counting definition, or linked artifact.
 This file supplies all three.
 
 This revision replaces the superseded 23/24 tables recorded at `132ffe1da`.
@@ -349,7 +349,7 @@ They were already in effect when 38/29 was recorded.
 This trace measures 41 hops for `press`/Android and 47/49 per arm for `snapshot`/iOS.
 The ADR supplies no ordered chain, command/artifact, or definition for 38/29.
 The discrepancy cannot be resolved against that text.
-A different unit is the most likely explanation: perhaps named exports or all static/type imports instead of distinct files on the path.
+A different unit is the most likely explanation: perhaps named exports or all static/type imports instead of distinct production files on the call path.
 **Treat 38 and 29 as superseded by these auditable measurements.**
 They are not another data point for reconciliation.
 
