@@ -23,10 +23,7 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergenceKind, ReplayRepairHint } from '@agent-device/contracts/divergence';
 import { matchesAncestryPrefix, buildAncestryChain, buildIndexMap } from '@agent-device/ad-script';
 import type { TargetAnnotationV1, TargetScrollRegion } from '@agent-device/contracts/replay';
-import {
-  computeScrollRegionKey,
-  scrollRegionKeysEqual,
-} from '@agent-device/selectors/target-evidence';
+import { isInScrollRegion } from '@agent-device/selectors/target-evidence';
 
 export type ReplayRepairHintCapture =
   | { state: 'available'; nodes: SnapshotNode[] }
@@ -107,7 +104,7 @@ function isScrollRegionPresent(
   // Some node's OWN nearest scrollable ancestor (walked via parentIndex)
   // resolves to the recorded region: the identified region still contains a
   // descendant.
-  return nodes.some((node) => scrollRegionKeysEqual(computeScrollRegionKey(node, byIndex), region));
+  return nodes.some((node) => isInScrollRegion(node, byIndex, region));
 }
 
 /**

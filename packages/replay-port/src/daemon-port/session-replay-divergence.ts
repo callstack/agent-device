@@ -112,7 +112,7 @@ export async function buildReplayFailureDivergence(params: {
   const screen = buildDivergenceScreen(observation, sanitize);
   const suggestions =
     observation.state === 'available' && session
-      ? collectReplayDivergenceSuggestions({
+      ? await collectReplayDivergenceSuggestions({
           action,
           session,
           nodes: observation.nodes,
@@ -510,12 +510,12 @@ function buildReplayDivergenceScreenRefs(
  * Ranking: identity-component strength (id > role+label > label > other),
  * then recorded scroll region, then document order.
  */
-function collectReplayDivergenceSuggestions(params: {
+async function collectReplayDivergenceSuggestions(params: {
   action: ReplayReportAction;
   session: ReplaySessionState;
   nodes: SnapshotNode[];
   sanitize: DivergenceFieldSanitizer;
-}): ReplayDivergenceSuggestion[] {
+}): Promise<ReplayDivergenceSuggestion[]> {
   const { action, session, nodes, sanitize } = params;
   if (!isSuggestionEligibleCommand(action.command)) return [];
   const candidates = collectReplaySelectorCandidates(action);
@@ -549,14 +549,14 @@ type RankedSuggestion = {
   nodeIndex: number;
 };
 
-function rankSuggestionCandidates(params: {
+async function rankSuggestionCandidates(params: {
   candidates: string[];
   nodes: SnapshotNode[];
   session: ReplaySessionState;
   action: ReplayReportAction;
   matching: SuggestionMatchingConfig;
   sanitize: DivergenceFieldSanitizer;
-}): ReplayDivergenceSuggestion[] {
+}): Promise<ReplayDivergenceSuggestion[]> {
   const { candidates, nodes, session, action, matching, sanitize } = params;
   // Dedupe by node (its unique tree index), keeping the STRONGEST match basis
   // per the ADR: a node reachable through several recorded selector terms
@@ -575,10 +575,11 @@ function rankSuggestionCandidates(params: {
     if (!entry) continue;
     entries.push(entry);
   }
-  return rankAndDedupeReplaySuggestions(entries, {
+  const ranked = await rankAndDedupeReplaySuggestions(entries, {
     nodes,
     targetEvidence: action.targetEvidence,
-  }).map((entry) => entry.suggestion);
+  });
+  return ranked.map((entry) => entry.suggestion);
 }
 
 function resolveSuggestionCandidate(params: {

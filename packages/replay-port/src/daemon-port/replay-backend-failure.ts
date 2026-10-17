@@ -54,11 +54,13 @@ export async function buildReplayBackendActionFailureResponse(
       };
   const suggestions =
     session && observation.state === 'available' && !failure.isControl
-      ? rankAndDedupeReplaySuggestions(
-          failure
-            .suggestNodes({ createdAt: Date.now(), nodes: observation.nodes })
-            .map(({ node, basis }) => ({ node, nodeIndex: node.index, basis })),
-          { nodes: observation.nodes, targetEvidence: undefined },
+      ? (
+          await rankAndDedupeReplaySuggestions(
+            failure
+              .suggestNodes({ createdAt: Date.now(), nodes: observation.nodes })
+              .map(({ node, basis }) => ({ node, nodeIndex: node.index, basis })),
+            { nodes: observation.nodes, targetEvidence: undefined },
+          )
         ).map(({ node, basis }) =>
           buildReplayDivergenceSuggestionForNode({
             node,

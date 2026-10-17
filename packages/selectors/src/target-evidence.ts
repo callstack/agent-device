@@ -208,6 +208,14 @@ export function scrollRegionKeysEqual(
   return matchesLocalIdentity(a, b);
 }
 
+export function isInScrollRegion(
+  node: SnapshotNode,
+  byIndex: Map<number, SnapshotNode>,
+  region: TargetScrollRegion | undefined,
+): boolean {
+  return scrollRegionKeysEqual(computeScrollRegionKey(node, byIndex), region);
+}
+
 function boundedRect(node: SnapshotNode): TargetAnnotationV1['rect'] {
   const rect = node.rect;
   if (!rect) return undefined;
@@ -247,9 +255,7 @@ function computeDisambiguationDomain(params: {
 
   const regionMembers =
     identitySet.length > 0
-      ? identitySet.filter((candidate) =>
-          scrollRegionKeysEqual(computeScrollRegionKey(candidate, byIndex), scrollRegion),
-        )
+      ? identitySet.filter((candidate) => isInScrollRegion(candidate, byIndex, scrollRegion))
       : undefined;
 
   const orderedRegion = regionMembers ? orderByViewportPosition(regionMembers) : [];
