@@ -8,7 +8,8 @@ Moves use `refactor(move)` PRs.
 Git history retains completed move batches.
 
 The allocator design withdrawal removed `packages/managed-allocation` on 2026-10-10; see [ADR 0021](0021-host-simlock-managed-device-allocation.md).
-The `src/managed-device-allocation.ts` row records the rationale for #3287's move, later deleted with that package.
+The `src/managed-device-allocation.ts` row and Batch 1 record a move that landed in #3287.
+The removal of the package then deleted the moved file.
 Nothing moves there now.
 Rows that reject this destination or cite its capture-kit dependency as a cycle no longer bind.
 Re-evaluate those files against their remaining edges.
