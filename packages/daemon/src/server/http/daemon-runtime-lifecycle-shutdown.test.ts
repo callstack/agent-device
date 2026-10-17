@@ -4,6 +4,7 @@ import {
   mkdtempForTestSync,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
+import { teardownDaemonSessionForShutdown } from './server-shutdown.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -100,7 +101,7 @@ import {
   daemonRuntimeDepsFixture,
 } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { startDaemonRuntime, teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
+import { startDaemonRuntime } from './daemon-runtime.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 

@@ -13,14 +13,8 @@ import {
   resolveDaemonServerMode,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createDaemonHttpServer } from './http-server.ts';
+import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import {
-  createArtifactTrackingRuntimeState,
-  trackDownloadableArtifact,
-} from '../../resources/artifact-tracking.ts';
-import { createResumableUploadRuntimeState } from '../resumable-upload.ts';
-import { createMaterializedPathRuntimeState } from '../../sessions/materialized-path-registry.ts';
-import {
-  createProviderDeviceAdmissionRuntimeState,
   installProviderDeviceAdmission,
   type ProviderDeviceAdmission,
 } from '../../core/provider-device-admission.ts';
@@ -30,7 +24,6 @@ import {
 } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { assertDaemonPolicyAllowsCapability } from '../../core/daemon-policy.ts';
 import {
-  createInteractorResolutionRuntimeState,
   installInteractorResolution,
   type InteractorResolution,
 } from '../../core/interactor-resolution.ts';
@@ -42,20 +35,23 @@ import {
   getLeaseRegistryExecutionLocks,
 } from '../request-execution-scope.ts';
 import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
-import { stopSessionAppLog, teardownSessionResources } from '../../sessions/session-teardown.ts';
+import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
 import { runtimeHintValues } from '../../sessions/session-runtime.ts';
 import {
   closeDaemonServers,
+  createRuntimeContext,
+  teardownDaemonSessionForShutdown,
+  type RuntimeContext,
+  type WritableOutput,
   createProviderRuntimeDisposal,
   createStartupRollback,
   type ShutdownReport,
   type StartupRollback,
 } from './server-shutdown.ts';
 import type { DaemonInvokeFn } from '../../core/daemon-request.ts';
-import type { SessionRef, SessionState } from '../../core/session-state.ts';
-import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { SessionRef } from '../../core/session-state.ts';
 import { createDaemonIdleReap } from '../../sessions/server/daemon-idle-reap.ts';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
@@ -71,10 +67,7 @@ import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { withCommandHost } from '@agent-device/host-kit/command';
-import {
-  createRequestCancelRuntimeState,
-  type RuntimeStateHandle,
-} from '@agent-device/host-kit/request';
+import { type RuntimeStateHandle } from '@agent-device/host-kit/request';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import {
@@ -107,7 +100,6 @@ import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { PlatformOwnerLifecycle } from '../../core/platform-owner-lifecycle.ts';
-import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 import type {
   LeaseLifecycleProvider,
   ProviderDeviceRuntime,
@@ -123,10 +115,6 @@ const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
 // finalizing on SIGINT; force-killing it sooner leaves every later recording failing with EBUSY
 // (#2170). Bound the grace to the recorder purpose, so daemon startup stays under the client budget.
 const DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS = 5_000;
-
-type WritableOutput = {
-  write: (chunk: string) => unknown;
-};
 
 /**
  * Every capability the daemon runtime cannot construct for itself: the platform and provider
@@ -322,146 +310,10 @@ function armDaemonMetadataLossWatch(
   });
 }
 
-async function settleDaemonTeardownStep(params: {
-  session: SessionState;
-  stderr: WritableOutput;
-  resource: 'app-log' | 'session' | 'lifecycle';
-  teardown: () => Promise<unknown>;
-}): Promise<boolean> {
-  const { session, stderr, resource, teardown } = params;
-  try {
-    await teardown();
-    return true;
-  } catch (error) {
-    stderr.write(
-      `Daemon ${resource} teardown error (${session.name}): ${
-        error instanceof Error ? error.message : String(error)
-      }\n`,
-    );
-    return false;
-  }
-}
-
-/**
- * Daemon-shutdown teardown of one session: bounded resource cleanup (budget
- * from {@link resolveDaemonSessionTeardownTimeoutMs}, resolved BEFORE cleanup
- * starts since finalizing the recording detaches `session.screenRecording`), then the
- * repair-commit finalization and session deletion. Cleanup failures — including
- * a recorder that could not be finalized — surface on stderr instead of being
- * silently swallowed.
- */
-export async function teardownDaemonSessionForShutdown(params: {
-  ref: SessionRef;
-  sessionStore: SessionStore;
-  stderr: WritableOutput;
-  platformCleanup: PlatformResourceCleanup;
-  finalizeApplicationLifecycle?: (
-    session: SessionState,
-    runtimeHints: RuntimeHintValues,
-  ) => Promise<void>;
-  afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
-}): Promise<boolean> {
-  const {
-    ref,
-    sessionStore,
-    stderr,
-    platformCleanup,
-    finalizeApplicationLifecycle,
-    afterSuccessfulTeardown,
-  } = params;
-  const current = sessionStore.resolveCurrent(ref);
-  const session = current ?? ref.session;
-  const runtimeHints = runtimeHintValues(
-    current ? sessionStore.getRuntimeHints(ref.address) : undefined,
-  );
-  const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
-  // The ownership-fenced app-log side effect must settle while this process
-  // still owns the daemon lock. It is intentionally outside the generic
-  // teardown race so lock release and runtime shutdown cannot overtake it.
-
-  const appLogTeardownSucceeded = await settleDaemonTeardownStep({
-    session,
-    stderr,
-    resource: 'app-log',
-    teardown: async () => await stopSessionAppLog({ ref, sessionStore }),
-  });
-  const sessionAfterAppLog = sessionStore.resolveCurrent(ref) ?? session;
-  const teardown = (async () => {
-    const genericTeardownSucceeded = await settleDaemonTeardownStep({
-      session,
-      stderr,
-      resource: 'session',
-      teardown: async () =>
-        await teardownSessionResources({
-          appLog: 'already-settled',
-          ref,
-          sessionStore,
-          platformCleanup,
-        }),
-    });
-    const lifecycleTeardownSucceeded = finalizeApplicationLifecycle
-      ? await settleDaemonTeardownStep({
-          session,
-          stderr,
-          resource: 'lifecycle',
-          teardown: async () =>
-            await finalizeApplicationLifecycle(sessionAfterAppLog, runtimeHints),
-        })
-      : true;
-    return genericTeardownSucceeded && lifecycleTeardownSucceeded;
-  })();
-  const genericTeardownSucceeded = await Promise.race([
-    teardown,
-    sleep(timeoutMs).then(() => {
-      stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
-      return false;
-    }),
-  ]);
-  const teardownSucceeded = appLogTeardownSucceeded && genericTeardownSucceeded;
-  // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
-  // `.ad` iff the repair transaction completed, else leave a bounded
-  // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
-  sessionStore.finalizeRepairTeardown(ref);
-  if (teardownSucceeded) await afterSuccessfulTeardown?.(session);
-  sessionStore.retire(ref);
-  return teardownSucceeded;
-}
-
-type RuntimeContext = Readonly<{
-  run<T>(fn: () => T): T;
-  /** Adds state the composition contributed and binds it for the rest of the start. */
-  extend(handles: readonly RuntimeStateHandle[]): void;
-  dispose(): void;
-}>;
-
-/** The per-runtime state of every module that keeps some, in the order it is entered. */
-function createDaemonRuntimeStates(): RuntimeStateHandle[] {
-  return [
-    createRequestCancelRuntimeState(),
-    createProviderDeviceAdmissionRuntimeState(),
-    createInteractorResolutionRuntimeState(),
-    createArtifactTrackingRuntimeState(),
-    createResumableUploadRuntimeState(),
-    createMaterializedPathRuntimeState(),
-  ];
-}
-
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions,
 ): Promise<DaemonRuntimeController> {
-  const states = createDaemonRuntimeStates();
-  const runtimeContext: RuntimeContext = {
-    run: (fn) => states.reduceRight((next, state) => () => state.run(next), fn)(),
-    extend: (handles) => {
-      for (const handle of handles) {
-        states.push(handle);
-        handle.enter();
-      }
-    },
-    dispose: () => {
-      for (const state of states) state.dispose();
-    },
-  };
+  const runtimeContext = createRuntimeContext();
   return await runtimeContext.run(
     async () =>
       await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {

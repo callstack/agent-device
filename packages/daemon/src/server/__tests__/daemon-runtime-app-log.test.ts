@@ -1,4 +1,5 @@
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
+import { teardownDaemonSessionForShutdown } from '../http/server-shutdown.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import fs from 'node:fs';
@@ -9,10 +10,7 @@ import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import {
-  flushDaemonStartupDiagnostics,
-  teardownDaemonSessionForShutdown,
-} from '../http/daemon-runtime.ts';
+import { flushDaemonStartupDiagnostics } from '../http/daemon-runtime.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { unavailableDeviceRuntimeGateway } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
