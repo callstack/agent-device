@@ -257,7 +257,9 @@ export function normalizeLeaseAdmissionRequest(
   if (!runId) throw new AppError('INVALID_ARGS', 'tenant isolation requires run id.');
   const leaseId = normalizeLeaseId(request.leaseId);
   if (!leaseId) {
-    throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id from leases.allocate.');
+    throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id.', {
+      hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
+    });
   }
   return { ...request, tenantId, runId, leaseId, leaseBackend };
 }
