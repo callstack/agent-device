@@ -305,7 +305,14 @@ function hashScopeRoot(scopeRoot: string): string {
   return crypto.createHash('sha256').update(scopeRoot).digest('hex').slice(0, 16);
 }
 
-function resolveCallerScopeRoot(rawCwd: string | undefined): string | undefined {
+/**
+ * The canonical workspace root a caller's cwd belongs to: the git worktree root when the cwd sits
+ * inside one, otherwise the realpath of the directory. It is the identity the implicit session
+ * address hashes, and therefore the key anything else that asks "did this caller and that record
+ * come from the same workspace?" must compare on — comparing raw directories instead would
+ * separate `open` run at the checkout root from `install` run in a subdirectory of it.
+ */
+export function resolveCallerScopeRoot(rawCwd: string | undefined): string | undefined {
   if (!rawCwd || rawCwd.trim().length === 0) return undefined;
   const cwd = resolveExistingPath(rawCwd);
   return findGitWorktreeRoot(cwd) ?? cwd;
