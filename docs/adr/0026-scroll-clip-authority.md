@@ -41,7 +41,7 @@ That inference determined output membership.
 A scroll view's indicators are its children.
 The parent edge is therefore the producer's ownership claim.
 No new contract field, cross-language ownership table, or capture-local index remap is necessary.
-The edge survives until presentation at both input stages because every iOS scroll host is regular-eligible.
+The edge survives until presentation at both input stages because every scroll host that iOS can emit is regular-eligible.
 Projection therefore re-parents indicators only to that host.
 These two lists encode the same fact and must remain synchronized:
 
@@ -57,15 +57,15 @@ Both contain these types:
 - `TextView`
 - `WebView`
 
-**Same-frame traversal preserves structural ownership.**
+**Same-frame pass-through preserves structural ownership.**
 The producer states that two nodes have the same rectangle.
 This is a structural fact, not a label or type inference.
-Same-frame traversal is necessary because a `WKWebView` page indicator is published under `WebView` wrappers that exactly fill its `ScrollView`.
+Same-frame pass-through is necessary because a `WKWebView` page indicator is published under `WebView` wrappers that exactly fill its `ScrollView`.
 #1784/#1797 and real #2754 step 3 captures establish this shape.
 Strict parent-edge ownership left this region without a band and exposed content under the toolbar.
 Traversal stops at the first frame change.
 A smaller host, such as a `WebView` row inside a list, describes a different scroll region and still owns nothing.
-Same-frame traversal must not restore #2214's failure.
+Same-frame pass-through must not restore #2214's failure.
 
 **The eligibility claim applies only to iOS.**
 `isScrollableSnapshotType` accepts `scrollarea`, but neither eligible set contains it.
@@ -155,13 +155,13 @@ That ledger is the shape to extend. A second parallel ledger would be a second s
 
 ## Consequences and open evidence
 
-- **Same-frame traversal resolves the observed under-clipping.**
+- **Under-clipping was the open risk. Same-frame pass-through resolves the real instance.**
   Strict parent-edge ownership left a `WKWebView` page without a band because `WebView` wrappers contained the indicator.
   It exposed content under the toolbar (#1797, with adjacent #1784).
   #2754 step 3 surveyed Settings, Settings › Privacy & Security, and a Safari `WKWebView` page.
   The captures contained 25 indicators, 18 under non-scroll parents.
   The survey found exactly this shape on the web surface.
-  Same-frame traversal reproduces `main` clipping on all three captures.
+  Same-frame pass-through reproduces `main` clipping on all three captures.
   Smaller-host cases from #2214 still own nothing.
   A non-scroll wrapper with a different frame would still under-clip.
   No captured iOS tree has that shape.
