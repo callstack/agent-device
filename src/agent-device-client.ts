@@ -61,14 +61,7 @@ import {
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { createDaemonTransport } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import {
-  prepareMetroRuntime,
-  reloadMetro,
-  clearMetroSessionHintsQuietly,
-  recordPreparedMetroSession,
-  recordOpenedMetroSession,
-  readMetroSessionRuntime,
-} from '@agent-device/react-native';
+import * as devServer from '@agent-device/react-native';
 import {
   asOptionalRecord,
   readPresentedSurfaceFact,
@@ -90,6 +83,26 @@ export function createAgentDeviceClient(
   const transport = deps.transport ?? createDaemonTransport(host);
   // A typo in a JSON or JS config must not fall through to the default and manage a daemon.
   readDaemonLifecycle(config.daemonLifecycle);
+  // The dev-server helpers take the client's host explicitly.
+  const prepareMetroRuntime = (input: Parameters<typeof devServer.prepareMetroRuntime>[0]) =>
+    devServer.prepareMetroRuntime(input, host);
+  const { reloadMetro } = devServer;
+  const withHost = <Options extends { session: string }>(options: Options) => ({
+    ...options,
+    host,
+  });
+  const clearMetroSessionHintsQuietly = (options: { session: string; stateDir?: string }) =>
+    devServer.clearMetroSessionHintsQuietly(withHost(options));
+  const recordPreparedMetroSession = (
+    options: { session: string; stateDir?: string },
+    result: Parameters<typeof devServer.recordPreparedMetroSession>[1],
+  ) => devServer.recordPreparedMetroSession(withHost(options), result);
+  const recordOpenedMetroSession = (
+    options: { session: string; stateDir?: string },
+    input: Parameters<typeof devServer.recordOpenedMetroSession>[1],
+  ) => devServer.recordOpenedMetroSession(withHost(options), input);
+  const readMetroSessionRuntime = (options: { session: string; stateDir?: string }) =>
+    devServer.readMetroSessionRuntime(withHost(options));
 
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the

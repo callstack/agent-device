@@ -26,10 +26,13 @@ test(
       async (tmpDir) => {
         const calls: string[][] = [];
         const outputPath = path.join(tmpDir, 'close-leak.mp4');
-        const daemon = await createAndroidRecordingScenarioHarness({
-          androidAdbProvider: () => createAndroidRecordingProvider({ calls }),
-          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-        });
+        const daemon = await createAndroidRecordingScenarioHarness(
+          {
+            androidAdbProvider: () => createAndroidRecordingProvider({ calls }),
+            deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+          },
+          tmpDir,
+        );
         try {
           const started = await daemon.callCommand('record', ['start', outputPath], {
             platform: 'android',

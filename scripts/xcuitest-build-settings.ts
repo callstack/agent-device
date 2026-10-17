@@ -28,7 +28,7 @@ function resolveXcuitestBuildSettings(
   return [
     ...resolveRunnerPerformanceBuildSettings(),
     ...resolveRunnerArchBuildSettings(env),
-    ...resolveRunnerSandboxBuildArgs(),
+    ...resolveRunnerSandboxBuildArgs(env),
     ...resolveRunnerBundleBuildSettings(env),
     ...resolveRunnerSigningBuildSettings(env, device.kind === 'device', device),
   ];

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { createTestHost } from '../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -98,6 +99,7 @@ type BuildInput = Partial<
 
 function build(videoPath: string, input: BuildInput = {}) {
   return buildRecordingContactSheet({
+    host: createTestHost(),
     ...input,
     videoPath,
     maxPixels: input.maxPixels ?? 20_000_000,

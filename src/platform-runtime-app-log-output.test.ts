@@ -1,9 +1,12 @@
 import fs from 'node:fs';
 
 import path from 'node:path';
+import { withCommandHost } from '@agent-device/host-kit/command';
 import { afterEach, expect, test } from 'vitest';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const roots: string[] = [];
 
@@ -92,3 +95,25 @@ function finalSymlinkFixture(label: string) {
   fs.symlinkSync(outsidePath, outputPath);
   return { sessionsDir, outputPath, outsidePath };
 }
+
+test('redacts with the patterns of the command host, not the process', async () => {
+  const root = mkdtempForTestSync('agent-device-app-log-redact-');
+  roots.push(root);
+  const sessionsDir = path.join(root, 'sessions');
+  const outputPath = path.join(sessionsDir, 'one', 'app.log');
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  await withCommandHost(
+    {
+      host: { env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: 'secret-\\d+' }, cwd: root },
+      requestEnv: undefined,
+    },
+    async () => {
+      const sink = await openAppLogOutput(sessionsDir, outputPath);
+      await sink.write('token secret-42 leaked\n');
+      await sink[Symbol.asyncDispose]();
+    },
+  );
+
+  expect(fs.readFileSync(outputPath, 'utf8')).toBe('token [REDACTED] leaked\n');
+});

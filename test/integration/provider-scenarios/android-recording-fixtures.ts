@@ -6,11 +6,7 @@ import { deviceIdentity } from '@agent-device/kernel/device';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { AndroidRecordingManifestFixture } from './android-recording-manifest-fixtures.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
-import {
-  createProviderScenarioHarness,
-  restoreEnv,
-  withProviderScenarioTempDir,
-} from './harness.ts';
+import { createProviderScenarioHarness, withProviderScenarioTempDir } from './harness.ts';
 
 export type ProviderScenarioDaemon = Awaited<ReturnType<typeof createProviderScenarioHarness>>;
 export type ProviderScenarioRpcResult = Awaited<ReturnType<ProviderScenarioDaemon['callCommand']>>;
@@ -25,28 +21,29 @@ export async function stopAndroidRecording(
   });
 }
 
+/**
+ * The daemon's host for an Android recording scenario: no real tool on its PATH, so the Swift
+ * helpers cannot compile, and a Swift cache of its own.
+ */
+function androidRecordingHostEnv(tmpDir: string): Readonly<Record<string, string>> {
+  return { PATH: tmpDir, AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'swift-cache') };
+}
+
 export async function createAndroidRecordingScenarioHarness(
   deps: Parameters<typeof createProviderScenarioHarness>[0],
+  tmpDir: string,
 ): Promise<ProviderScenarioDaemon> {
-  return await createProviderScenarioHarness({ ...deps });
+  return await createProviderScenarioHarness({
+    ...deps,
+    env: { ...androidRecordingHostEnv(tmpDir), ...deps.env },
+  });
 }
 
 export async function withAndroidRecordingScenario<T>(
   prefix: string,
   run: (tmpDir: string) => Promise<T>,
 ): Promise<T> {
-  return await withProviderScenarioTempDir(prefix, async (tmpDir) => {
-    const previousPath = process.env.PATH;
-    const previousSwiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
-    process.env.PATH = tmpDir;
-    process.env.AGENT_DEVICE_SWIFT_CACHE_DIR = path.join(tmpDir, 'swift-cache');
-    try {
-      return await run(tmpDir);
-    } finally {
-      restoreEnv('PATH', previousPath);
-      restoreEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', previousSwiftCacheDir);
-    }
-  });
+  return await withProviderScenarioTempDir(prefix, run);
 }
 
 export function seedAndroidRecordingResource(

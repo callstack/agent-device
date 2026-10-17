@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { promises as fs, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { RunnerScreenCaptureMetadata } from '@agent-device/contracts/screen-capture-contract';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+
+bindTestCommandHost();
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();

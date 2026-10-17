@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
-import { buildSwiftToolEnv, compileSwiftSourceText } from './swift-cache.ts';
+import { buildSwiftToolEnv, compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
 
@@ -34,7 +35,8 @@ semaphore.wait()
 exit(exitCode)
 `.trim();
 
-let videoValidatorExecutablePathPromise: Promise<string> | undefined;
+// A compiled helper is valid for the Swift cache it was built into, so each cache root keeps its own.
+const videoValidatorExecutablePaths = new Map<string, Promise<string>>();
 
 export async function waitForStableFile(
   filePath: string,
@@ -67,18 +69,18 @@ export async function waitForStableFile(
   }
 }
 
-export async function isPlayableVideo(filePath: string): Promise<boolean> {
+export async function isPlayableVideo(filePath: string, host: HostEnvironment): Promise<boolean> {
   const container = await readVideoContainerKind(filePath);
   if (!container) return false;
   // AVFoundation is the MP4 semantic validator. It does not reliably load WebM on supported
   // macOS hosts, so WebM completion is established by its EBML document type + Segment marker.
   if (container === 'webm') return true;
   try {
-    const validatorPath = await getVideoValidatorExecutablePath();
+    const validatorPath = await getVideoValidatorExecutablePath(host);
     const result = await runCmd(validatorPath, [filePath], {
       allowFailure: true,
       timeoutMs: 10_000,
-      env: buildSwiftToolEnv(),
+      env: buildSwiftToolEnv(host.env),
     });
     if (result.exitCode === 0) {
       return true;
@@ -92,16 +94,22 @@ export async function isPlayableVideo(filePath: string): Promise<boolean> {
   }
 }
 
-async function getVideoValidatorExecutablePath(): Promise<string> {
-  videoValidatorExecutablePathPromise ??= compileSwiftSourceText({
-    source: VIDEO_VALIDATION_SCRIPT,
-    cacheName: 'video-validator',
-    timeoutMs: 30_000,
-  });
+async function getVideoValidatorExecutablePath(host: HostEnvironment): Promise<string> {
+  const cacheRoot = getSwiftCacheRoot(host.env);
+  let compiled = videoValidatorExecutablePaths.get(cacheRoot);
+  if (!compiled) {
+    compiled = compileSwiftSourceText({
+      host,
+      source: VIDEO_VALIDATION_SCRIPT,
+      cacheName: 'video-validator',
+      timeoutMs: 30_000,
+    });
+    videoValidatorExecutablePaths.set(cacheRoot, compiled);
+  }
   try {
-    return await videoValidatorExecutablePathPromise;
+    return await compiled;
   } catch (error) {
-    videoValidatorExecutablePathPromise = undefined;
+    videoValidatorExecutablePaths.delete(cacheRoot);
     throw error;
   }
 }
@@ -122,13 +130,13 @@ function isSwiftVideoValidatorError(error: unknown): boolean {
 /** Polls until the file plays, for `attempts` polls or until `deadline` passes, whichever is first. */
 export async function waitForPlayableVideo(
   filePath: string,
-  options: { pollMs?: number; attempts?: number; deadline?: Deadline } = {},
+  options: { host: HostEnvironment; pollMs?: number; attempts?: number; deadline?: Deadline },
 ): Promise<void> {
   const pollMs = options.pollMs ?? 150;
   const attempts = options.attempts ?? 12;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (await isPlayableVideo(filePath)) {
+    if (await isPlayableVideo(filePath, options.host)) {
       return;
     }
     if (options.deadline?.isExpired()) {

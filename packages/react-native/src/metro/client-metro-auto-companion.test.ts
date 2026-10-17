@@ -2,7 +2,7 @@ import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('../companion/client-metro-companion.ts', () => ({
@@ -98,15 +98,18 @@ test('prepareMetroRuntime starts the local companion only after bridge setup nee
   vi.stubGlobal('fetch', fetchMock);
 
   try {
-    const result = await prepareMetroRuntime({
-      projectRoot,
-      proxyBaseUrl: 'https://proxy.example.test',
-      proxyBearerToken: 'shared-token',
-      bridgeScope: TEST_BRIDGE_SCOPE,
-      metroPort: 8081,
-      reuseExisting: true,
-      installDependenciesIfNeeded: false,
-    });
+    const result = await prepareMetroRuntime(
+      {
+        projectRoot,
+        proxyBaseUrl: 'https://proxy.example.test',
+        proxyBearerToken: 'shared-token',
+        bridgeScope: TEST_BRIDGE_SCOPE,
+        metroPort: 8081,
+        reuseExisting: true,
+        installDependenciesIfNeeded: false,
+      },
+      createTestHostEnvironment(),
+    );
 
     assert.equal(result.started, false);
     assert.equal(result.reused, true);
@@ -131,7 +134,8 @@ test('prepareMetroRuntime starts the local companion only after bridge setup nee
       launchUrl: undefined,
       profileKey: undefined,
       consumerKey: undefined,
-      env: process.env,
+      env: { ...process.env },
+      cwd: process.cwd(),
     });
     assert.equal(fetchMock.mock.calls.length, 3);
     assert.equal(fetchMock.mock.calls[1]?.[0], 'https://proxy.example.test/api/metro/bridge');
@@ -208,15 +212,18 @@ test('prepareMetroRuntime rejects bridged descriptors without iOS bundle URLs', 
   try {
     await assert.rejects(
       () =>
-        prepareMetroRuntime({
-          projectRoot,
-          proxyBaseUrl: 'https://proxy.example.test',
-          proxyBearerToken: 'shared-token',
-          bridgeScope: TEST_BRIDGE_SCOPE,
-          metroPort: 8081,
-          reuseExisting: true,
-          installDependenciesIfNeeded: false,
-        }),
+        prepareMetroRuntime(
+          {
+            projectRoot,
+            proxyBaseUrl: 'https://proxy.example.test',
+            proxyBearerToken: 'shared-token',
+            bridgeScope: TEST_BRIDGE_SCOPE,
+            metroPort: 8081,
+            reuseExisting: true,
+            installDependenciesIfNeeded: false,
+          },
+          createTestHostEnvironment(),
+        ),
       /bridge descriptor is missing ios_runtime\.metro_bundle_url/,
     );
     assert.equal(vi.mocked(ensureMetroCompanion).mock.calls.length, 0);
@@ -268,17 +275,20 @@ test('prepareMetroRuntime preserves the initial bridge error and companion stop 
   try {
     await assert.rejects(
       () =>
-        prepareMetroRuntime({
-          projectRoot,
-          publicBaseUrl: 'https://public.example.test',
-          proxyBaseUrl: 'https://proxy.example.test',
-          proxyBearerToken: 'shared-token',
-          bridgeScope: TEST_BRIDGE_SCOPE,
-          metroPort: 8081,
-          reuseExisting: true,
-          installDependenciesIfNeeded: false,
-          probeTimeoutMs: 10,
-        }),
+        prepareMetroRuntime(
+          {
+            projectRoot,
+            publicBaseUrl: 'https://public.example.test',
+            proxyBaseUrl: 'https://proxy.example.test',
+            proxyBearerToken: 'shared-token',
+            bridgeScope: TEST_BRIDGE_SCOPE,
+            metroPort: 8081,
+            reuseExisting: true,
+            installDependenciesIfNeeded: false,
+            probeTimeoutMs: 10,
+          },
+          createTestHostEnvironment(),
+        ),
       (error: unknown) => {
         assert(error instanceof Error);
         assert.match(error.message, /bridgeError=companion startup failed/);
@@ -331,17 +341,20 @@ test('prepareMetroRuntime fails fast when initial bridge failure is non-retryabl
   try {
     await assert.rejects(
       () =>
-        prepareMetroRuntime({
-          projectRoot,
-          publicBaseUrl: 'https://public.example.test',
-          proxyBaseUrl: 'https://proxy.example.test',
-          proxyBearerToken: 'shared-token',
-          bridgeScope: TEST_BRIDGE_SCOPE,
-          metroPort: 8081,
-          reuseExisting: true,
-          installDependenciesIfNeeded: false,
-          probeTimeoutMs: 10,
-        }),
+        prepareMetroRuntime(
+          {
+            projectRoot,
+            publicBaseUrl: 'https://public.example.test',
+            proxyBaseUrl: 'https://proxy.example.test',
+            proxyBearerToken: 'shared-token',
+            bridgeScope: TEST_BRIDGE_SCOPE,
+            metroPort: 8081,
+            reuseExisting: true,
+            installDependenciesIfNeeded: false,
+            probeTimeoutMs: 10,
+          },
+          createTestHostEnvironment(),
+        ),
       /\/api\/metro\/bridge failed \(401\)/,
     );
     assert.equal(vi.mocked(ensureMetroCompanion).mock.calls.length, 0);
@@ -394,17 +407,20 @@ test('prepareMetroRuntime fails fast on non-retryable bridge errors after compan
 
   try {
     let settled: unknown = 'pending';
-    const preparePromise = prepareMetroRuntime({
-      projectRoot,
-      publicBaseUrl: 'https://public.example.test',
-      proxyBaseUrl: 'https://proxy.example.test',
-      proxyBearerToken: 'shared-token',
-      bridgeScope: TEST_BRIDGE_SCOPE,
-      metroPort: 8081,
-      reuseExisting: true,
-      installDependenciesIfNeeded: false,
-      probeTimeoutMs: 10,
-    });
+    const preparePromise = prepareMetroRuntime(
+      {
+        projectRoot,
+        publicBaseUrl: 'https://public.example.test',
+        proxyBaseUrl: 'https://proxy.example.test',
+        proxyBearerToken: 'shared-token',
+        bridgeScope: TEST_BRIDGE_SCOPE,
+        metroPort: 8081,
+        reuseExisting: true,
+        installDependenciesIfNeeded: false,
+        probeTimeoutMs: 10,
+      },
+      createTestHostEnvironment(),
+    );
     void preparePromise.then(
       () => {
         settled = 'resolved';
@@ -504,17 +520,20 @@ test('prepareMetroRuntime retries malformed retryable bridge responses after com
   vi.useFakeTimers();
 
   try {
-    const preparePromise = prepareMetroRuntime({
-      projectRoot,
-      publicBaseUrl: 'https://public.example.test',
-      proxyBaseUrl: 'https://proxy.example.test',
-      proxyBearerToken: 'shared-token',
-      bridgeScope: TEST_BRIDGE_SCOPE,
-      metroPort: 8081,
-      reuseExisting: true,
-      installDependenciesIfNeeded: false,
-      probeTimeoutMs: 10,
-    });
+    const preparePromise = prepareMetroRuntime(
+      {
+        projectRoot,
+        publicBaseUrl: 'https://public.example.test',
+        proxyBaseUrl: 'https://proxy.example.test',
+        proxyBearerToken: 'shared-token',
+        bridgeScope: TEST_BRIDGE_SCOPE,
+        metroPort: 8081,
+        reuseExisting: true,
+        installDependenciesIfNeeded: false,
+        probeTimeoutMs: 10,
+      },
+      createTestHostEnvironment(),
+    );
 
     await vi.advanceTimersByTimeAsync(1_000);
     const result = await preparePromise;

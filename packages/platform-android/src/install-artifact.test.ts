@@ -16,10 +16,13 @@ test('installing an already-installed APK resolves its package with no aapt reac
   // after — the diff resolves nothing — and no adb call may run. The closest negative — the same
   // install without the artifact identity — lives in deployment/native.test.ts.
   bindAndroidAdbHostStub();
-  const artifact = await prepareAndroidInstallArtifact({
-    kind: 'path',
-    path: ANDROID_MANIFEST_APK_FIXTURE_PATH,
-  });
+  const artifact = await prepareAndroidInstallArtifact(
+    {
+      kind: 'path',
+      path: ANDROID_MANIFEST_APK_FIXTURE_PATH,
+    },
+    { environment: process.env },
+  );
   try {
     assert.equal(artifact.packageName, ANDROID_MANIFEST_FIXTURE_PACKAGE);
     const adbCalls: string[][] = [];

@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { RECORDING_OUTPUT_UNPLAYABLE_REASON } from '@agent-device/contracts/screen-recording-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type { Deadline } from '@agent-device/host-kit/retry';
 import {
   getRecordingOverlaySupportWarning,
@@ -28,8 +29,9 @@ async function finalizeScreenRecording(
 ) {
   const overlayDeadline = startRecordingOverlayBudget();
   await waitForStableFile(input.outputPath);
-  await waitForPlayableVideo(input.outputPath);
-  if (!(await isPlayableVideo(input.outputPath))) throw unplayableRecording(input.outputPath);
+  const host = commandHostEnvironment();
+  await waitForPlayableVideo(input.outputPath, { host });
+  if (!(await isPlayableVideo(input.outputPath, host))) throw unplayableRecording(input.outputPath);
   const telemetryPath = persistRecordingTelemetry({
     recording: { outPath: input.outputPath, gestureEvents: [...input.gestureEvents] },
   });
@@ -45,7 +47,9 @@ async function overlayTouches(
   const warning = getRecordingOverlaySupportWarning();
   if (warning) return { telemetryPath, overlayWarning: warning };
   try {
+    const host = commandHostEnvironment();
     await overlayRecordingTouches({
+      host,
       videoPath: input.outputPath,
       telemetryPath,
       exportQuality: input.exportQuality,
@@ -53,7 +57,7 @@ async function overlayTouches(
       targetLabel: input.targetLabel,
       deadline,
     });
-    if (!(await isPlayableVideo(input.outputPath))) {
+    if (!(await isPlayableVideo(input.outputPath, host))) {
       throw new Error('recording post-processing produced an unplayable video');
     }
     return { telemetryPath };

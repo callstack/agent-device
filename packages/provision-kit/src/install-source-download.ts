@@ -33,11 +33,12 @@ export async function downloadInstallSource(params: {
   url: string;
   headers?: Record<string, string>;
   signal: AbortSignal;
+  environment: NodeJS.ProcessEnv;
 }): Promise<string> {
   let currentUrl = parseSourceUrl(params.url);
   let headers = withDefaultUserAgent(sanitizeHeaders(params.headers));
   for (let redirectCount = 0; ; redirectCount += 1) {
-    const response = await requestHop(currentUrl, headers, params.signal);
+    const response = await requestHop(currentUrl, headers, params.signal, params.environment);
     try {
       const redirected = readRedirect(response, currentUrl, redirectCount);
       if (redirected) {
@@ -57,6 +58,7 @@ async function requestHop(
   url: URL,
   headers: Record<string, string>,
   signal: AbortSignal,
+  environment: NodeJS.ProcessEnv,
 ): Promise<networkTransport.InstallSourceNetworkResponse> {
   const approved = await approveDownloadSourceUrl(url, signal);
   try {
@@ -66,6 +68,7 @@ async function requestHop(
       family: approved.family,
       headers: { ...headers, 'accept-encoding': 'identity' },
       signal,
+      environment,
     });
   } catch (error) {
     if (error instanceof AppError) throw error;

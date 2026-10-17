@@ -26,8 +26,8 @@ export function getAppLogPathMetadata(outPath: string): {
   }
 }
 
-export function appendAppLogMarker(outPath: string, marker: string): void {
-  ensureAppLogPath(outPath);
+export function appendAppLogMarker(outPath: string, marker: string, env: NodeJS.ProcessEnv): void {
+  ensureAppLogPath(outPath, env);
   const line = `[agent-device][mark][${new Date().toISOString()}] ${marker.trim() || 'marker'}\n`;
   const descriptor = openVerifiedFileForAppend(outPath);
   try {

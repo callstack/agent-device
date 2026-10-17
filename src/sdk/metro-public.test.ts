@@ -68,3 +68,12 @@ test('public metro entrypoint does not expose runtime hint builders', async () =
   status: 200,
   headers: { 'content-type': 'application/json' },
 }) satisfies MetroTunnelResponseMessage;
+
+test('public prepareMetroRuntime runs without a daemon or CLI host around it', async () => {
+  const { prepareMetroRuntime } = await import('./metro.ts');
+
+  await assert.rejects(
+    prepareMetroRuntime({}),
+    (error: unknown) => (error as { code?: string }).code === 'INVALID_ARGS',
+  );
+});

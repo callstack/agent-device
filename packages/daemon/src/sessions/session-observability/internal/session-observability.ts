@@ -211,7 +211,7 @@ async function executeLogsRuntimePlan(
       return await handleLogsStop(params);
     case 'mark':
       await params.bindDevice(params.session.device, plan.use);
-      return handleLogsMark(plan.marker, params.sessionName, params.sessionStore);
+      return handleLogsMark(plan.marker, params.sessionName, params.sessionStore, params.host.env);
     case 'clear':
       await params.bindDevice(params.session.device, plan.use);
       return handleLogsClear(params);
@@ -301,9 +301,10 @@ function handleLogsMark(
   marker: string,
   sessionName: string,
   sessionStore: SessionStore,
+  env: NodeJS.ProcessEnv,
 ): DaemonResponse {
   const logPath = sessionStore.resolveAppLogPath(sessionName);
-  appendAppLogMarker(logPath, marker);
+  appendAppLogMarker(logPath, marker, env);
   return { ok: true, data: { path: logPath, marked: true } };
 }
 
