@@ -179,6 +179,7 @@ A statement-neutral split is shippable, so an oversized hub is addressable debt,
   Content comparison still uses a threshold.
 - **Weight alone, #2469 candidate 1: refuted.**
   The planted drop test replaces modules while retaining the same statement total.
+  A swap can keep the statement total flat while the closure evaluates different modules.
 - **Leave the array in place.**
   This is the status quo, not a resolution.
   It leaves the size debt without an owner and the conflict without documentation.
