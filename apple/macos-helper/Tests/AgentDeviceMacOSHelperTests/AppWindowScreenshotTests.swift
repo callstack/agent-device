@@ -22,22 +22,21 @@ final class AppWindowScreenshotTests: XCTestCase {
       windowInfo(id: 8),
     ]
 
-    let frontID = try frontWindow(pid: 42, windowInfo: windows)?.number
-    let selected = frontCaptureWindow([7, 8], frontWindowID: frontID, sharingState: 1, windowID: { $0 })
+    let front = try frontWindow(pid: 42, windowInfo: windows)
+    let selected = frontShareableWindow([7, 8], front: front, windowID: { $0 })
 
     // Scroll and the click actionWindow fallback both consume frontWindowFrame.
     XCTAssertEqual(
       try frontWindowFrame(pid: 42, windowInfo: windows),
       CGRect(x: 10, y: 10, width: 20, height: 20))
-    XCTAssertEqual(frontID, 7)
+    XCTAssertEqual(front?.number, 7)
     XCTAssertEqual(try selected.get(), 7)
   }
 
   func testSkipsAppModalAlertInFrontOfNormalLayerWindow() throws {
     let windows = [windowInfo(id: 8, layer: 8), windowInfo(id: 3)]
     let front = try frontWindow(pid: 42, windowInfo: windows)
-    let selected = frontCaptureWindow(
-      [8, 3], frontWindowID: front?.number, sharingState: front?.sharingState, windowID: { $0 })
+    let selected = frontShareableWindow([8, 3], front: front, windowID: { $0 })
 
     XCTAssertEqual(front?.number, 3)
     XCTAssertEqual(try selected.get(), 3)
@@ -51,28 +50,22 @@ final class AppWindowScreenshotTests: XCTestCase {
       windowInfo(id: 3, width: 0),
       windowInfo(id: 4, height: 0),
     ]
-    let frontID = try frontWindow(pid: 42, windowInfo: windows)?.number
-    let selected = frontCaptureWindow([5], frontWindowID: frontID, sharingState: 1, windowID: { $0 })
+    let front = try frontWindow(pid: 42, windowInfo: windows)
+    let selected = frontShareableWindow([5], front: front, windowID: { $0 })
 
     XCTAssertNil(try frontWindowFrame(pid: 42, windowInfo: windows))
-    XCTAssertNil(frontID)
+    XCTAssertNil(front)
     XCTAssertThrowsError(try selected.get()) { error in
-      XCTAssertEqual(error as? AppWindowScreenshotRefusal, .windowNotFound)
+      assertRefusal(error, reason: "window-not-found", hint: "Open or unminimize")
     }
   }
 
   func testUnreadableWindowListRefusesBeforeCaptureOrScrollCanReportNoWindow() {
     XCTAssertThrowsError(try frontWindow(pid: 42, windowInfo: nil)) { error in
-      guard case HelperError.commandFailed(_, let details) = error else {
-        return XCTFail("expected a typed window-list refusal, got \(error)")
-      }
-      XCTAssertEqual(details["reason"], "window-list-unreadable")
+      assertUnreadableList(error)
     }
     XCTAssertThrowsError(try frontWindowFrame(pid: 42, windowInfo: nil)) { error in
-      guard case HelperError.commandFailed(_, let details) = error else {
-        return XCTFail("expected a typed window-list refusal, got \(error)")
-      }
-      XCTAssertEqual(details["reason"], "window-list-unreadable")
+      assertUnreadableList(error)
     }
     XCTAssertNil(try frontWindow(pid: 42, windowInfo: []))
     XCTAssertNil(try frontWindowFrame(pid: 42, windowInfo: []))
@@ -81,7 +74,7 @@ final class AppWindowScreenshotTests: XCTestCase {
   func testSelectsTheFrontWindowEvenWhenAnotherIsLarger() {
     let candidates = [Candidate(id: 7, area: 10_000), Candidate(id: 3, area: 100)]
 
-    let selected = frontCaptureWindow(candidates, frontWindowID: 3, sharingState: 1, windowID: \.id)
+    let selected = frontShareableWindow(candidates, front: onScreenWindow(id: 3), windowID: \.id)
 
     XCTAssertEqual(try selected.get(), Candidate(id: 3, area: 100))
   }
@@ -89,10 +82,14 @@ final class AppWindowScreenshotTests: XCTestCase {
   func testRefusesWhenTheFrontWindowIsNotShareable() {
     let candidates = [Candidate(id: 7, area: 10_000), Candidate(id: 8, area: 100)]
 
-    let selected = frontCaptureWindow(candidates, frontWindowID: 3, sharingState: 1, windowID: \.id)
+    let selected = frontShareableWindow(candidates, front: onScreenWindow(id: 3), windowID: \.id)
 
     XCTAssertThrowsError(try selected.get()) { error in
-      XCTAssertEqual(error as? AppWindowScreenshotRefusal, .frontWindowNotShareable)
+      assertRefusal(
+        error,
+        reason: "front-window-not-shareable",
+        hint: "retry after it settles",
+        frontWindowId: "3")
     }
   }
 
@@ -103,29 +100,76 @@ final class AppWindowScreenshotTests: XCTestCase {
     XCTAssertEqual(front?.sharingState, 0)
 
     for candidates in [[3, 7], [7]] {
-      let selected = frontCaptureWindow(
-        candidates, frontWindowID: front?.number, sharingState: front?.sharingState, windowID: { $0 })
+      let selected = frontShareableWindow(candidates, front: front, windowID: { $0 })
       XCTAssertThrowsError(try selected.get()) { error in
-        XCTAssertEqual(error as? AppWindowScreenshotRefusal, .frontWindowCaptureExcluded)
+        assertRefusal(
+          error,
+          reason: "front-window-capture-excluded",
+          hint: "Run `snapshot` to read the window",
+          frontWindowId: "3")
       }
     }
 
     var entry = windowInfo(id: 3)
     entry.removeValue(forKey: kCGWindowSharingState as String)
     let unknown = try frontWindow(pid: 42, windowInfo: [entry])
-    let selected = frontCaptureWindow(
-      [3], frontWindowID: unknown?.number, sharingState: unknown?.sharingState, windowID: { $0 })
+    let selected = frontShareableWindow([3], front: unknown, windowID: { $0 })
     XCTAssertEqual(try selected.get(), 3)
   }
 
   func testRefusesWhenTheAppHasNoOnScreenWindow() {
-    let selected = frontCaptureWindow(
-      [Candidate(id: 7, area: 10_000)], frontWindowID: nil, sharingState: nil, windowID: \.id)
+    let selected = frontShareableWindow(
+      [Candidate(id: 7, area: 10_000)], front: nil, windowID: \.id)
 
     XCTAssertThrowsError(try selected.get()) { error in
-      XCTAssertEqual(error as? AppWindowScreenshotRefusal, .windowNotFound)
+      assertRefusal(error, reason: "window-not-found", hint: "Open or unminimize")
     }
   }
+}
+
+/// The refusal carries the reason and the remedy the agent runs next, alongside the front window
+/// it refused.
+private func assertRefusal(
+  _ error: Error,
+  reason: String,
+  hint: String,
+  frontWindowId: String? = nil,
+  file: StaticString = #filePath,
+  line: UInt = #line
+) {
+  guard let refusal = error as? AppWindowScreenshotRefusal else {
+    return XCTFail("expected an AppWindowScreenshotRefusal, got \(error)", file: file, line: line)
+  }
+  guard
+    case HelperError.commandFailed(_, let details) = refusal.error(
+      bundleId: "com.apple.TextEdit")
+  else {
+    return XCTFail("expected a commandFailed refusal error", file: file, line: line)
+  }
+  XCTAssertEqual(details["reason"], reason, file: file, line: line)
+  XCTAssertEqual(details["bundleId"], "com.apple.TextEdit", file: file, line: line)
+  XCTAssertEqual(details["frontWindowId"], frontWindowId, file: file, line: line)
+  XCTAssertTrue(
+    (details["hint"] ?? "").contains(hint),
+    "hint \(details["hint"] ?? "<nil>") lacks \(hint)",
+    file: file, line: line)
+}
+
+private func assertUnreadableList(
+  _ error: Error, file: StaticString = #filePath, line: UInt = #line
+) {
+  guard case HelperError.commandFailed(_, let details) = error else {
+    return XCTFail("expected a typed window-list refusal, got \(error)", file: file, line: line)
+  }
+  XCTAssertEqual(details["reason"], "window-list-unreadable", file: file, line: line)
+  XCTAssertEqual(
+    details["hint"],
+    "The app's on-screen window list could not be read. Retry the command.",
+    file: file, line: line)
+}
+
+private func onScreenWindow(id: Int) -> OnScreenWindow {
+  OnScreenWindow(number: id, bounds: .zero, sharingState: 1)
 }
 
 private func windowInfo(

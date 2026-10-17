@@ -1,5 +1,5 @@
 {
-  "description": "Vocabulary the macOS helper reports for app-surface actions. Swift: BackgroundRefusal, BackgroundDeliveryMechanism, WindowListRefusal, and AppWindowScreenshotRefusal in apple/macos-helper. TypeScript: the macOS helper client in packages/platform-apple/src/os/macos/helper.ts.",
+  "description": "Vocabulary the macOS helper reports for app-surface actions. Swift: BackgroundRefusal and BackgroundDeliveryMechanism in apple/macos-helper. TypeScript: the macOS helper client in packages/platform-apple/src/os/macos/helper.ts.",
   "refusalReasons": [
     "background-pointer-gesture",
     "no-accessible-target",
@@ -14,11 +14,5 @@
     "ax-confirm",
     "ax-scroll-bar",
     "key-events"
-  ],
-  "screenshotRefusalReasons": [
-    "window-not-found",
-    "front-window-not-shareable",
-    "front-window-capture-excluded"
-  ],
-  "windowListRefusalReasons": ["window-list-unreadable"]
+  ]
 }

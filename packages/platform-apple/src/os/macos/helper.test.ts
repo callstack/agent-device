@@ -7,14 +7,11 @@ import { readFileSync } from 'node:fs';
 import {
   MACOS_DELIVERY_MECHANISMS,
   MACOS_HELPER_REFUSAL_REASONS,
-  MACOS_WINDOW_LIST_REFUSAL_REASONS,
-  MACOS_SCREENSHOT_REFUSAL_REASONS,
   macOsClickScheduleMs,
   runMacOsPressAction,
   runMacOsReadTextAction,
   runMacOsScreenshotAction,
   runMacOsSnapshotAction,
-  runMacOsScrollAction,
 } from './helper.ts';
 
 const desktop = macOsHelperSurface('desktop', 'xctest')!;
@@ -246,8 +243,11 @@ test('macOS helper screenshot argv carries only --out and --surface', async () =
   assert.deepEqual(receivedArgs, ['screenshot', '--out', '/tmp/out.png', '--surface', 'desktop']);
 });
 
-for (const reason of ['front-window-not-shareable', 'front-window-capture-excluded', undefined]) {
-  test(`an app screenshot refusal gives the remedy for ${reason}`, async () => {
+for (const hint of [
+  'The front window is unavailable to screen capture. If it is opening or closing, retry after it settles.',
+  undefined,
+]) {
+  test(`a helper refusal carries its details and hint through untouched (${hint === undefined ? 'no hint' : 'with hint'})`, async () => {
     const provider = createLocalAppleToolProvider({
       macosHelper: {
         run: async () => ({
@@ -258,9 +258,10 @@ for (const reason of ['front-window-not-shareable', 'front-window-capture-exclud
               message:
                 "screenshot could not capture the app's front window: ScreenCaptureKit does not offer it",
               details: {
-                reason,
+                reason: 'front-window-not-shareable',
                 bundleId: 'com.apple.TextEdit',
                 frontWindowId: '4242',
+                ...(hint ? { hint } : {}),
               },
             },
           }),
@@ -281,18 +282,9 @@ for (const reason of ['front-window-not-shareable', 'front-window-capture-exclud
 
     assert.ok(error instanceof AppError);
     assert.equal(error.code, 'COMMAND_FAILED');
-    assert.equal(error.details?.reason, reason);
+    assert.equal(error.details?.reason, 'front-window-not-shareable');
     assert.equal(error.details?.frontWindowId, '4242');
-    if (reason === 'front-window-capture-excluded') {
-      assert.match(String(error.details?.hint), /Run `snapshot` to read the window/);
-      assert.match(String(error.details?.hint), /retrying the excluded window will not help/);
-      assert.doesNotMatch(String(error.details?.hint), /retry after/);
-    } else if (reason === 'front-window-not-shareable') {
-      assert.match(String(error.details?.hint), /retry after it settles/);
-      assert.doesNotMatch(String(error.details?.hint), /excludes/);
-    } else {
-      assert.equal(error.details?.hint, undefined);
-    }
+    assert.equal(error.details?.hint, hint);
   });
 }
 
@@ -314,51 +306,6 @@ test('helper entry points accept only an owner-routed surface', () => {
   assert.equal(typeof widenedCalls, 'function');
 });
 
-for (const action of ['screenshot', 'scroll'] as const) {
-  for (const reason of ['window-list-unreadable', undefined]) {
-    test(`${action} maps an unreadable window list by reason, not error text (${reason})`, async () => {
-      const provider = createLocalAppleToolProvider({
-        macosHelper: {
-          run: async () => ({
-            exitCode: 1,
-            stdout: JSON.stringify({
-              ok: false,
-              error: {
-                message: "the app's on-screen windows could not be read",
-                details: { reason },
-              },
-            }),
-            stderr: '',
-          }),
-        },
-      });
-      await assert.rejects(
-        withAppleToolProvider(provider, async () =>
-          action === 'screenshot'
-            ? runMacOsScreenshotAction('/tmp/out.png', {
-                surface: nativeApp,
-                bundleId: 'com.apple.TextEdit',
-              })
-            : runMacOsScrollAction('down', { bundleId: 'com.apple.TextEdit' }),
-        ),
-        (error: unknown) => {
-          assert.ok(error instanceof AppError);
-          assert.equal(error.code, 'COMMAND_FAILED');
-          assert.equal(error.details?.reason, reason);
-          if (reason) {
-            assert.match(String(error.details?.hint), /window list could not be read/);
-            assert.match(String(error.details?.hint), /Retry the command/);
-            assert.doesNotMatch(String(error.details?.hint), /Open or unminimize|XCTest/);
-          } else {
-            assert.equal(error.details?.hint, undefined);
-          }
-          return true;
-        },
-      );
-    });
-  }
-}
-
 test('the helper vocabulary matches the table the Swift helper is held to', () => {
   const fixture = JSON.parse(
     readFileSync(
@@ -371,11 +318,7 @@ test('the helper vocabulary matches the table the Swift helper is held to', () =
   ) as {
     refusalReasons: string[];
     deliveryMechanisms: string[];
-    screenshotRefusalReasons: string[];
-    windowListRefusalReasons: string[];
   };
-  assert.deepEqual([...MACOS_WINDOW_LIST_REFUSAL_REASONS], fixture.windowListRefusalReasons);
   assert.deepEqual([...MACOS_HELPER_REFUSAL_REASONS], fixture.refusalReasons);
   assert.deepEqual([...MACOS_DELIVERY_MECHANISMS], fixture.deliveryMechanisms);
-  assert.deepEqual([...MACOS_SCREENSHOT_REFUSAL_REASONS], fixture.screenshotRefusalReasons);
 });

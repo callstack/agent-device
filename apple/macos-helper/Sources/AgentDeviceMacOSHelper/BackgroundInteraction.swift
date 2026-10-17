@@ -97,7 +97,7 @@ func pressInBackground(
   let point = CGPoint(x: request.x, y: request.y)
   try requireAppWindowPoint(point, app: app)
   cursor?.move(to: point)
-  let target = try resolvePressTarget(app: app, point: point)
+  let target = resolvePressTarget(app: app, point: point)
   if let target, isInMenuBar(target.element) {
     throw refusal(.noAccessibleTarget, "the point is on the app's menu bar", app: app)
   }
@@ -172,7 +172,7 @@ func fillInBackground(
   cursor?.move(to: point)
   let hit = elementAtPoint(in: app, point: point)
   let chain = hit.map(pressSearchChain) ?? []
-  let fallback = try actionWindow(app: app, hit: hit).flatMap { window in
+  let fallback = actionWindow(app: app, hit: hit).flatMap { window in
     smallestElement(in: window, containing: point, where: isTextInput)
   }
   if let input = chain.first(where: isTextInput) ?? fallback, isInMenuBar(input) {
@@ -276,12 +276,12 @@ private enum PressTarget {
 
 /// What a click at a point means. The app's own hit test answers first; web content often answers
 /// with a wrapper group, so the snapshot geometry decides when the hit names no control.
-private func resolvePressTarget(app: NSRunningApplication, point: CGPoint) throws -> PressTarget? {
+private func resolvePressTarget(app: NSRunningApplication, point: CGPoint) -> PressTarget? {
   let hit = elementAtPoint(in: app, point: point)
   let chain = hit.map(pressSearchChain) ?? []
   if let input = chain.first(where: isTextInput) { return .focus(input) }
   if let control = chain.first(where: isPressableControl) { return .press(control) }
-  if let found = try actionWindow(app: app, hit: hit).flatMap({
+  if let found = actionWindow(app: app, hit: hit).flatMap({
     smallestElement(in: $0, containing: point, where: { isTextInput($0) || isPressableControl($0) })
   }) {
     return isTextInput(found) ? .focus(found) : .press(found)
@@ -360,13 +360,14 @@ private func pressSearchChain(from hit: AXUIElement) -> [AXUIElement] {
 
 /// The one window a point action may act in: the window the app's hit test landed in, else the
 /// app's front on-screen window. A fallback target never comes from a window behind it, and the
-/// response names the window so the host can check it.
-private func actionWindow(app: NSRunningApplication, hit: AXUIElement?) throws -> AXUIElement? {
+/// response names the window so the host can check it. The caller's `requireAppWindowPoint` has
+/// already read the window list, so a list that turned unreadable here is treated as no window.
+private func actionWindow(app: NSRunningApplication, hit: AXUIElement?) -> AXUIElement? {
   if let hit {
     if role(of: hit) == "AXWindow" { return hit }
     if let window = elementAttribute(hit, attribute: kAXWindowAttribute as String) { return window }
   }
-  guard let front = try frontWindowFrame(pid: app.processIdentifier) else { return nil }
+  guard let front = try? frontWindowFrame(pid: app.processIdentifier) else { return nil }
   return windows(of: AXUIElementCreateApplication(app.processIdentifier)).first { window in
     guard let rect = rectAttribute(window) else { return false }
     return abs(rect.x - front.minX) < 1 && abs(rect.y - front.minY) < 1
@@ -512,15 +513,17 @@ func appWindowInfo() -> [[String: Any]]? {
     as? [[String: Any]]
 }
 
-enum WindowListRefusal: String, CaseIterable {
-  case unreadable = "window-list-unreadable"
-}
-
+/// The app's front on-screen window: frontmost among its eligible windows, or nil when it has
+/// none. A window list that cannot be read is a refusal, not an empty list: the caller must not
+/// report "no window" for a WindowServer it could not ask.
 func frontWindow(pid: pid_t, windowInfo: [[String: Any]]? = appWindowInfo()) throws -> OnScreenWindow? {
   guard let windowInfo else {
     throw HelperError.commandFailed(
       "the app's on-screen windows could not be read",
-      details: ["reason": WindowListRefusal.unreadable.rawValue]
+      details: [
+        "reason": "window-list-unreadable",
+        "hint": "The app's on-screen window list could not be read. Retry the command.",
+      ]
     )
   }
   return onScreenWindows(pid: pid, windowInfo: windowInfo).first

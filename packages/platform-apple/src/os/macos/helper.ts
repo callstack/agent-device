@@ -142,25 +142,6 @@ export const MACOS_HELPER_REFUSAL_REASONS = [
   'no-settable-text-input',
   'no-scroll-bar',
 ] as const;
-/**
- * Why the helper refused an app-surface screenshot. It captures the app's front window or
- * nothing, so each refusal names what kept that window out of reach.
- */
-export const MACOS_SCREENSHOT_REFUSAL_REASONS = [
-  'window-not-found',
-  'front-window-not-shareable',
-  'front-window-capture-excluded',
-] as const;
-type MacOsScreenshotRefusalReason = (typeof MACOS_SCREENSHOT_REFUSAL_REASONS)[number];
-const MACOS_SCREENSHOT_REFUSAL_HINTS: Record<MacOsScreenshotRefusalReason, string> = {
-  'window-not-found':
-    'Open or unminimize a window of the app on the current Space, then retry the screenshot.',
-  'front-window-not-shareable':
-    'The front window is unavailable to screen capture. If it is opening or closing, retry after it settles.',
-  'front-window-capture-excluded':
-    "The app excludes the front window from screen capture. Run `snapshot` to read the window's UI tree; retrying the excluded window will not help.",
-};
-export const MACOS_WINDOW_LIST_REFUSAL_REASONS = ['window-list-unreadable'] as const;
 export const MACOS_DELIVERY_MECHANISMS = [
   'ax-press',
   'ax-focus',
@@ -373,7 +354,8 @@ async function runMacOsHelper<T extends Record<string, unknown>>(
     parsed && !parsed.ok
       ? (parsed.error?.message ?? `macOS helper exited with code ${result.exitCode}`)
       : stdout || result.stderr.trim() || `macOS helper exited with code ${result.exitCode}`;
-  const details = parsed && !parsed.ok ? parsed.error?.details : undefined;
+  // The helper's `details` carry its typed `reason` and, where a remedy exists, its `hint`;
+  // `normalizeError` reads `details.hint`, so the refusal reaches the agent untouched.
   // exec-guard-allow: the message is already built from the helper's JSON error
   // envelope (or its output); a stderr excerpt would only degrade it, and the
   // throw is reachable at exit 0 when the envelope reports ok=false.
@@ -383,10 +365,7 @@ async function runMacOsHelper<T extends Record<string, unknown>>(
     stdout: result.stdout,
     stderr: result.stderr,
     exitCode: result.exitCode,
-    ...details,
-    ...(details?.reason === MACOS_WINDOW_LIST_REFUSAL_REASONS[0]
-      ? { hint: "The app's on-screen window list could not be read. Retry the command." }
-      : {}),
+    ...(parsed && !parsed.ok ? parsed.error?.details : {}),
   });
 }
 
@@ -604,25 +583,5 @@ export async function runMacOsScreenshotAction(
 }> {
   const args = ['screenshot', '--out', outPath];
   appendMacOsHelperContextArgs(args, options);
-  try {
-    return await runMacOsHelper(args, { signal: options.signal });
-  } catch (error) {
-    throw withScreenshotRefusalHint(error);
-  }
-}
-
-function withScreenshotRefusalHint(error: unknown): unknown {
-  if (!(error instanceof AppError)) return error;
-  const reason = error.details?.reason;
-  if (!isMacOsScreenshotRefusalReason(reason)) return error;
-  return new AppError(
-    error.code,
-    error.message,
-    { ...error.details, hint: MACOS_SCREENSHOT_REFUSAL_HINTS[reason] },
-    error,
-  );
-}
-
-function isMacOsScreenshotRefusalReason(value: unknown): value is MacOsScreenshotRefusalReason {
-  return (MACOS_SCREENSHOT_REFUSAL_REASONS as readonly unknown[]).includes(value);
+  return await runMacOsHelper(args, { signal: options.signal });
 }
