@@ -50,7 +50,7 @@ agent-device open MyApp --platform ios --ios-simulator-device-set "$SIMLOCK_IOS_
 ```
 
 The lease provides exclusion between agents.
-Process-owned device claims still prevent two sessions of one installation from driving the same device.
+Process-owned device claims still guard against two sessions of one installation that drive the same device.
 Simlock's "advisory, not a sandbox" model applies.
 agent-device does not verify that a device is leased.
 
