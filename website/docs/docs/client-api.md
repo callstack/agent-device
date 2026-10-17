@@ -301,6 +301,7 @@ Domain client methods:
 - `client.settings.update()`
 
 If the daemon returns a missing or non-object lease, or a lease without a non-empty string for `leaseId`, `tenantId`, `runId`, or `backend`, `client.leases.allocate()` and `client.leases.heartbeat()` reject with `COMMAND_FAILED` and `details.reason: "INVALID_LEASE_RESPONSE"`.
+The original daemon response is available in `error.details.response`.
 
 `client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/docs/commands#device-discovery) for the sources.
 
