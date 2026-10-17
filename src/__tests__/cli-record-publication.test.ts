@@ -53,7 +53,7 @@ test.each([false, true])(
     const publication = repairPublication(root);
     const result = await runCliCapture(['snapshot', '--json', ...(explicit ? ['--record'] : [])], {
       cwd: project,
-      env: { HOME: home },
+      env: { HOME: home, USERPROFILE: home },
       sendToDaemon: publication.transport,
     });
     expect(result.calls).toHaveLength(1);
@@ -68,7 +68,7 @@ test.each([false, true])(
     const { root, home, project } = makeTempWorkspace();
     fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify({ record: true }));
     const publication = repairPublication(root);
-    const restoreEnv = installIsolatedCliTestEnv({ HOME: home });
+    const restoreEnv = installIsolatedCliTestEnv({ HOME: home, USERPROFILE: home });
     const previousCwd = process.cwd();
     process.chdir(project);
     try {
