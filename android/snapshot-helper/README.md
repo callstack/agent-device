@@ -60,6 +60,9 @@ results are not reused across captures.
 
 Passing `-e mode snapshot|viewport|gesture` selects what a single instrumentation run does; `snapshot`
 is the default and matches the `Run` section above.
+The `viewport` mode reads application and keyboard bounds while content updates continue; it does
+not wait for the accessibility event stream to become idle. Snapshot mode uses the idle wait
+configured above.
 
 ```sh
 # Read the interactive-window viewport without capturing a snapshot.

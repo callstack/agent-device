@@ -7,6 +7,7 @@ public final class SnapshotHelperTestSuite {
     PointerEventScheduleTest.run();
     AccessibilityCaptureStabilizerTest.run();
     AccessibilityReadBatchTest.run();
+    AccessibilityTreeXmlTest.run();
     BoundedUiAutomationConnectionTest.run();
     GestureViewportReaderTest.run();
     DisplayExtentTest.run();
