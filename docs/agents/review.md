@@ -2,7 +2,6 @@
 
 Keep reviewed source read-only.
 If checks can modify it, run them in an isolated checkout.
-For mutations or base comparisons, use [isolated experiments](test-experiments.md).
 
 ## Reviewing
 

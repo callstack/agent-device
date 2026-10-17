@@ -1,7 +1,5 @@
 # Validate a change
 
-For mutations or base comparisons, use [isolated experiments](test-experiments.md).
-
 ## Run checks
 
 1. During edits, run the focused test or `pnpm check:quick`.
