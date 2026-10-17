@@ -10,7 +10,7 @@ import type {
 } from '@agent-device/contracts/remote';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdSync, runCmdDetached } from '@agent-device/host-kit/command';
+import { commandHostEnvironment, runCmdSync, runCmdDetached } from '@agent-device/host-kit/command';
 import {
   confirmedProcessStopDetails,
   describeUnconfirmedProcessStop,
@@ -710,8 +710,9 @@ function resolveMetroLogPath(
 function resolveMetroPrepareSettings(
   input: PrepareMetroRuntimeOptions,
 ): ResolvedMetroPrepareSettings {
-  const env = input.env ?? process.env;
-  const cwd = process.cwd();
+  const host = commandHostEnvironment();
+  const env = input.env ?? host.env;
+  const cwd = host.cwd;
   const projectRoot = resolvePath(input.projectRoot ?? cwd, env, cwd);
   const requestedKind = input.kind ?? 'auto';
   let packageJson: PackageJsonShape | null = null;

@@ -8,12 +8,15 @@ import path from 'node:path';
 import { prepareMetroRuntime, reloadMetro } from './index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  bindTestCommandHost,
   closeLoopbackServer,
   mkdtempForTestSync,
   writeFakeMetroNpx,
   findFreeMetroPort,
   stopTestMetroProcess,
 } from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const TEST_TOKEN = 'agent-device-proxy-test-token';
 

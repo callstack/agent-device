@@ -3,6 +3,7 @@ import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import fs from 'node:fs';
 import path from 'node:path';
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import { resolveMetroServerUrl, type MetroReloadTargetInput } from './metro-reload-endpoints.ts';
 
@@ -17,9 +18,11 @@ export type MetroSessionScope = { stateDir: string; session: string };
 export type MetroSessionOptions = { stateDir?: string; session: string };
 
 function resolveMetroSessionScope(options: MetroSessionOptions): MetroSessionScope {
+  const host = commandHostEnvironment();
   return {
-    stateDir: resolveDaemonPaths(options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR, {
-      cwd: process.cwd(),
+    stateDir: resolveDaemonPaths(options.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR, {
+      env: host.env,
+      cwd: host.cwd,
     }).baseDir,
     session: options.session,
   };

@@ -2,8 +2,10 @@ import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { AppError } from '@agent-device/kernel/errors';
+
+bindTestCommandHost();
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),

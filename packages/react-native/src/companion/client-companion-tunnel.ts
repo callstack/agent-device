@@ -16,7 +16,7 @@ import {
   ENV_COMPANION_TUNNEL_UNREGISTER_PATH,
 } from './client-companion-tunnel-contract.ts';
 import { normalizeBaseUrl } from '../metro/base-url.ts';
-import { runCmdDetached } from '@agent-device/host-kit/command';
+import { commandHostEnvironment, runCmdDetached } from '@agent-device/host-kit/command';
 import {
   confirmedProcessStopDetails,
   describeUnconfirmedProcessStop,
@@ -400,8 +400,10 @@ function spawnCompanionProcess(
   const logFd = fs.openSync(logPath, 'a');
   let pid = 0;
   try {
+    const host = commandHostEnvironment();
     pid = runCmdDetached(process.execPath, [...execArgs, modulePath, options.definition.runArg], {
-      env: buildCompanionEnv(options, options.env ?? process.env),
+      cwd: host.cwd,
+      env: buildCompanionEnv(options, options.env ?? host.env),
       stdio: ['ignore', logFd, logFd],
     });
   } finally {
