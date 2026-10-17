@@ -13,7 +13,11 @@ import {
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { providerCredentialsFixture } from '../../__tests__/support/provider-credentials-fixture.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
-import { describeUnfinishedShutdownWork, type ShutdownReport } from './server-shutdown.ts';
+import {
+  describeUnfinishedShutdownWork,
+  reportDaemonClose,
+  type ShutdownReport,
+} from './server-shutdown.ts';
 
 const silent = { stderr: { write: () => {} }, stdout: { write: () => {} } };
 
@@ -129,4 +133,33 @@ test('a clean close leaves nothing to report and an unfinished one names each pi
     expect.stringContaining('outcome unknown for lease-b'),
     expect.stringContaining('1 session(s) failed to tear down'),
   ]);
+});
+
+test('the executable writes unfinished work to stderr after a close, and a clean close nothing', async () => {
+  const clean: string[] = [];
+  const unfinished: string[] = [];
+  const failed: string[] = [];
+
+  expect(
+    await reportDaemonClose({
+      closed: Promise.resolve(cleanReport),
+      stderr: { write: (chunk) => clean.push(chunk) },
+    }),
+  ).toEqual({ failed: false });
+  expect(
+    await reportDaemonClose({
+      closed: Promise.resolve({ ...cleanReport, requests: { drained: 0, abandoned: 1 } }),
+      stderr: { write: (chunk) => unfinished.push(chunk) },
+    }),
+  ).toEqual({ failed: false });
+  expect(
+    await reportDaemonClose({
+      closed: Promise.reject(new Error('close blew up')),
+      stderr: { write: (chunk) => failed.push(chunk) },
+    }),
+  ).toEqual({ failed: true });
+
+  expect(clean).toEqual([]);
+  expect(unfinished).toEqual([expect.stringMatching(/1 request\(s\) ignored cancellation/)]);
+  expect(failed.join('')).toContain('Daemon shutdown error: close blew up');
 });
