@@ -1,15 +1,14 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
 import { loginWithDeviceAuth, removeCliSession, summarizeCliSession } from '../auth-session.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
-export const authCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const authCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   const subcommand = positionals[0] ?? 'status';
   const stateDir = resolveDaemonPaths(flags.stateDir, {
-    cwd: commandHostEnvironment().cwd,
-    env: commandHostEnvironment().env,
+    cwd: host.cwd,
+    env: host.env,
   }).baseDir;
   if (subcommand === 'status') {
     const status = summarizeCliSession({ stateDir });
@@ -21,7 +20,7 @@ export const authCommand: ClientCommandHandler = async ({ positionals, flags }) 
       stateDir,
       flags,
       commandLabel: 'agent-device auth login',
-      env: commandHostEnvironment().env,
+      env: host.env,
     });
     const data = {
       authenticated: true,

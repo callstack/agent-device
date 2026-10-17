@@ -7,7 +7,11 @@ import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
 import { readActiveConnectionState } from '@agent-device/remote/remote-connection-state';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 bindTestCommandHost();
 
@@ -86,6 +90,7 @@ async function connectWithNoLogin(stateDir: string): Promise<void> {
   const stdoutCapture = beginStdoutCapture();
   try {
     await connectCommand({
+      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         json: true,

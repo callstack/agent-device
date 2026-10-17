@@ -1,4 +1,4 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import {
@@ -14,11 +14,11 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';
 
 // Loaded dynamically by dedicatedCliCommandHandlerLoaders in router.ts.
-export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   if (positionals.length !== 1 || (positionals[0] !== 'status' && positionals[0] !== 'release')) {
     throw new AppError('INVALID_ARGS', 'device accepts only: status, release');
   }
-  if (positionals[0] === 'release') return await runDeviceRelease(flags);
+  if (positionals[0] === 'release') return await runDeviceRelease(flags, host);
   const inspectedClaims = inspectDeviceClaims(
     {
       platform: flags.platform,
@@ -26,7 +26,7 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }
       udid: flags.udid,
       serial: flags.serial,
     },
-    commandHostEnvironment().env,
+    host.env,
   );
   const staleClaims = inspectedClaims.filter((claim) =>
     deviceClaimRequiresStaleInspection(claim.classification),
@@ -59,7 +59,7 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }
  * provably cannot release them. Everything else fails closed and is reported
  * with the reason, so a live or uncertain owner is never interrupted.
  */
-async function runDeviceRelease(flags: CliFlags): Promise<boolean> {
+async function runDeviceRelease(flags: CliFlags, host: HostEnvironment): Promise<boolean> {
   if (flags.stale !== true) {
     throw new AppError(
       'INVALID_ARGS',
@@ -77,7 +77,7 @@ async function runDeviceRelease(flags: CliFlags): Promise<boolean> {
       udid: flags.udid,
       serial: flags.serial,
     },
-    commandHostEnvironment().env,
+    host.env,
   );
   const data = {
     released: outcomes.filter((outcome) => outcome.status === 'released').map(serializeOutcome),

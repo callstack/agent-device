@@ -15,7 +15,7 @@ import type {
 import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { createStubClientLeases } from './test-utils/client-lease-fixtures.ts';
 import { withCapturedOutput, withCapturedStdoutAsync } from './test-utils/stream-capture.ts';
 
@@ -42,6 +42,7 @@ test('install-from-source forwards URL and repeated headers to client.apps.insta
   });
 
   const handled = await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'install-from-source',
     positionals: ['https://example.com/app.apk'],
     flags: {
@@ -84,6 +85,7 @@ test('install-from-source forwards GitHub Actions artifact flag to client.apps.i
   });
 
   const handled = await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'install-from-source',
     positionals: [],
     flags: {
@@ -120,6 +122,7 @@ test('install-from-source preserves colons in GitHub Actions artifact names', as
   });
 
   await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'install-from-source',
     positionals: [],
     flags: {
@@ -153,6 +156,7 @@ test('install-from-source forwards configured GitHub Actions artifact name to cl
   });
 
   const handled = await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'install-from-source',
     positionals: [],
     flags: {
@@ -189,6 +193,7 @@ test('install-from-source rejects malformed header syntax', async () => {
   await assert.rejects(
     () =>
       tryRunClientBackedCommand({
+        host: createTestHostEnvironment(),
         command: 'install-from-source',
         positionals: ['https://example.com/app.apk'],
         flags: {
@@ -216,6 +221,7 @@ test('install-from-source rejects headers with GitHub Actions artifact sources',
   await assert.rejects(
     () =>
       tryRunClientBackedCommand({
+        host: createTestHostEnvironment(),
         command: 'install-from-source',
         positionals: [],
         flags: {
@@ -268,6 +274,7 @@ test('metro prepare forwards normalized options to client.metro.prepare', async 
 
   const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'metro',
       positionals: ['prepare'],
       flags: {
@@ -330,6 +337,7 @@ test('metro prepare rejects when no public or proxy base URL is provided', async
   await assert.rejects(
     () =>
       tryRunClientBackedCommand({
+        host: createTestHostEnvironment(),
         command: 'metro',
         positionals: ['prepare'],
         flags: {
@@ -366,6 +374,7 @@ test('metro reload forwards host, port, bundle URL, and timeout to client.metro.
 
   const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'metro',
       positionals: ['reload'],
       flags: {
@@ -420,6 +429,7 @@ test('events prints a parsed session timeline from the generic CLI route', async
 
   const output = await withCapturedOutput(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'events',
       positionals: [],
       flags: {
@@ -461,6 +471,7 @@ test('screenshot forwards --overlay-refs to the client capture API', async () =>
   });
 
   const handled = await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'screenshot',
     positionals: ['/tmp/screenshot.png'],
     flags: {
@@ -510,6 +521,7 @@ test('diff screenshot forwards --surface to live client screenshot capture', asy
 
     await withCapturedStdoutAsync(async () => {
       const handled = await tryRunClientBackedCommand({
+        host: createTestHostEnvironment(),
         command: 'diff',
         positionals: ['screenshot'],
         flags: {
@@ -554,6 +566,7 @@ test('open forwards macOS surface to the client apps API', async () => {
   });
 
   const handled = await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     positionals: ['MenuBarApp'],
     flags: {
@@ -589,6 +602,7 @@ test('open forwards launch console option to the client apps API', async () => {
   });
 
   const handled = await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     positionals: ['Agent Device Tester'],
     flags: {
@@ -622,6 +636,7 @@ test('apps command defaults to user-installed and prints discovery hint', async 
 
   const output = await withCapturedOutput(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'apps',
       positionals: [],
       flags: {
@@ -669,6 +684,7 @@ test('screenshot reports annotated ref count in non-json mode', async () => {
 
   const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'screenshot',
       positionals: ['/tmp/screenshot.png'],
       flags: {
@@ -703,6 +719,7 @@ click text="Continue"
 
   const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'replay',
       positionals: ['export', sourcePath],
       flags: {
@@ -784,6 +801,7 @@ test('replay rejects extra plain replay paths before daemon dispatch', async () 
   await assert.rejects(
     async () =>
       await tryRunClientBackedCommand({
+        host: createTestHostEnvironment(),
         command: 'replay',
         positionals: ['one.ad', 'two.ad'],
         flags: {
@@ -814,6 +832,7 @@ test('wait keeps CLI bare text behavior through the typed client command API', a
   };
 
   const handled = await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'wait',
     positionals: ['Continue', '1500'],
     flags: {
@@ -848,6 +867,7 @@ test('keyboard status prints Android input ownership in human output', async () 
 
   const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'keyboard',
       positionals: ['status'],
       flags: {
@@ -880,6 +900,7 @@ test('metro prepare wraps output in the standard success envelope for --json', a
 
   const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'metro',
       positionals: ['prepare'],
       flags: {
@@ -953,6 +974,7 @@ test('metro prepare with --remote-config loads profile defaults', async () => {
 
   const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'metro',
       positionals: ['prepare'],
       flags: parsed.flags,
@@ -993,6 +1015,7 @@ test('install prints command-owned success output in human mode', async () => {
 
   const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
+      host: createTestHostEnvironment(),
       command: 'install',
       positionals: ['Demo', '/tmp/Demo.app'],
       flags: {
@@ -1023,6 +1046,7 @@ test('settings location set forwards coordinates to client settings update', asy
   });
 
   const handled = await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'settings',
     positionals: ['location', 'set', '37.3349', '-122.009'],
     flags: {
@@ -1064,6 +1088,7 @@ test('settings location set rejects invalid coordinates before client call', asy
     await assert.rejects(
       () =>
         tryRunClientBackedCommand({
+          host: createTestHostEnvironment(),
           command: 'settings',
           positionals,
           flags: {

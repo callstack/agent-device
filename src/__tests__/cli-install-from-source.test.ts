@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -15,6 +16,7 @@ async function runInstallFromSource(source: string) {
     },
   } as unknown as AgentDeviceClient;
   return await tryRunClientBackedCommand({
+    host: createTestHostEnvironment(),
     command: 'install-from-source',
     positionals: [source],
     flags: { json: false, help: false, version: false },

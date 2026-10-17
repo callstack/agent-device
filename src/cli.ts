@@ -219,6 +219,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
         const client = createAgentDeviceClient(buildClientConfig(ctx), {
           host: ctx.host,
           transport: createCliDaemonTransport({
+            host,
             command,
             flags: ctx.effectiveFlags,
             replayTestReporterRuntime,
@@ -448,6 +449,7 @@ async function resolveRemoteContext(
     const { materializeRemoteConnectionForCommand } =
       await import('./cli/commands/connection-runtime.ts');
     const materialized = await materializeRemoteConnectionForCommand({
+      host: ctx.host,
       command: ctx.command,
       flags: ctx.effectiveFlags,
       client: materializationClient,
@@ -573,6 +575,7 @@ async function dispatchCliCommand(
     }));
     if (
       await tryRunClientBackedCommand({
+        host: ctx.host,
         command,
         positionals,
         flags: { ...effectiveFlags, batchSteps },
@@ -591,6 +594,7 @@ async function dispatchCliCommand(
     );
   } else if (
     await tryRunClientBackedCommand({
+      host: ctx.host,
       command,
       positionals,
       flags: effectiveFlags,
@@ -852,6 +856,7 @@ function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boole
 }
 
 type CliDaemonTransportSetup = {
+  host: HostEnvironment;
   command: string;
   flags: CliFlags;
   replayTestReporterRuntime?: ReplayTestReporterRuntime;
@@ -869,7 +874,7 @@ function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDevice
   return async (req, context) => {
     const response = await send(req, context);
     const { forgetEndedProxyLease } = await import('./cli/connection/ended-lease.ts');
-    forgetEndedProxyLease(options.flags, response);
+    forgetEndedProxyLease(options.flags, response, options.host);
     return response;
   };
 }

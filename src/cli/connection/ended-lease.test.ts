@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
@@ -46,6 +46,7 @@ function storedLeaseIdAfter(
       session: 'adc-proxy',
     },
     response,
+    createTestHostEnvironment(),
   );
   return readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId;
 }
