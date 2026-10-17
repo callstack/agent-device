@@ -32,7 +32,6 @@ export async function resolveCloudConnectProfile(options: {
     flags: options.flags,
     env: options.env,
     io: {
-      env: options.env,
       fetch: options.fetchImpl,
     },
   });

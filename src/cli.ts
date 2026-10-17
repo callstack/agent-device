@@ -352,6 +352,7 @@ async function resolveRunContextOrExit(
   const explicitFlagKeys = new Set(parsed.providedFlags.map((entry) => entry.key));
   try {
     const binding = resolveBindingSettings({
+      env: base.host.env,
       policyOverrides: parsed.flags,
       configuredPlatform: parsed.flags.platform,
       configuredSession: parsed.flags.session,
@@ -359,6 +360,7 @@ async function resolveRunContextOrExit(
     const flags = binding.lockPolicy
       ? { ...parsed.flags }
       : applyDefaultPlatformBinding(parsed.flags, {
+          env: base.host.env,
           policyOverrides: parsed.flags,
           configuredPlatform: parsed.flags.platform,
           configuredSession: parsed.flags.session,
@@ -562,6 +564,7 @@ async function dispatchCliCommand(
         ctx.binding.lockPolicy && ctx.flags.platform === undefined
           ? { ...step.input }
           : applyDefaultPlatformBinding(step.input, {
+              env: ctx.host.env,
               policyOverrides: effectiveFlags,
               configuredPlatform: effectiveFlags.platform,
               configuredSession: effectiveFlags.session,

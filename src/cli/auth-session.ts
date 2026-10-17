@@ -65,7 +65,6 @@ type CliSessionRefreshResponse = {
 };
 
 type AuthIo = {
-  env?: EnvMap;
   stdinIsTTY?: boolean;
   stdoutIsTTY?: boolean;
   stderr?: Pick<NodeJS.WriteStream, 'write'>;
@@ -80,7 +79,7 @@ export async function resolveRemoteAuthForCli(options: {
   command: string;
   flags: CliFlags;
   stateDir: string;
-  env?: EnvMap;
+  env: EnvMap;
 }): Promise<RemoteAuthResolution> {
   return await resolveRemoteAuth({
     command: options.command,
@@ -96,10 +95,10 @@ export async function resolveRemoteAuth(options: {
   flags: CliFlags;
   stateDir: string;
   allowInteractiveLogin: boolean;
-  env?: EnvMap;
+  env: EnvMap;
   io?: AuthIo;
 }): Promise<RemoteAuthResolution> {
-  const env = options.env ?? options.io?.env ?? process.env;
+  const { env } = options;
   if (!options.flags.daemonBaseUrl) return { flags: options.flags, source: 'none' };
   if (hasToken(options.flags.daemonAuthToken)) return { flags: options.flags, source: 'flag' };
   if (hasToken(env.AGENT_DEVICE_DAEMON_AUTH_TOKEN)) {
@@ -146,13 +145,13 @@ export async function resolveRemoteAuth(options: {
 export async function resolveCloudAccessForConnect(options: {
   stateDir: string;
   flags: CliFlags;
-  env?: EnvMap;
+  env: EnvMap;
   io?: AuthIo;
 }): Promise<{
   accessToken: string;
   cloudBaseUrl: string;
 }> {
-  const env = options.env ?? options.io?.env ?? process.env;
+  const { env } = options;
   if (hasToken(options.flags.daemonAuthToken)) {
     return {
       accessToken: options.flags.daemonAuthToken,
@@ -198,7 +197,7 @@ export async function resolveCloudAccessForConnect(options: {
 export async function loginWithDeviceAuth(options: {
   stateDir: string;
   flags: CliFlags;
-  env?: EnvMap;
+  env: EnvMap;
   io?: AuthIo;
   commandLabel?: string;
 }): Promise<{
@@ -206,7 +205,7 @@ export async function loginWithDeviceAuth(options: {
   expiresAt?: string;
   session: CliSessionRecord;
 }> {
-  const env = options.env ?? options.io?.env ?? process.env;
+  const { env } = options;
   const authMode = detectAuthMode(env, options.io);
   if (authMode === 'non-interactive') {
     throw buildNonInteractiveLoginError(options.commandLabel ?? 'agent-device connect', env);

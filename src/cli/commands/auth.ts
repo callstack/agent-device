@@ -21,6 +21,7 @@ export const authCommand: ClientCommandHandler = async ({ positionals, flags }) 
       stateDir,
       flags,
       commandLabel: 'agent-device auth login',
+      env: commandHostEnvironment().env,
     });
     const data = {
       authenticated: true,

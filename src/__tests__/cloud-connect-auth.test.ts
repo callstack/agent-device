@@ -54,7 +54,6 @@ test('cloud access with no-login reports auth requirement after reuse options ar
       },
       env: {},
       io: {
-        env: {},
         fetch: vi.fn(),
       },
     }),
