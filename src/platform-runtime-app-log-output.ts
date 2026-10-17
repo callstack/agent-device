@@ -23,7 +23,8 @@ export async function openAppLogOutput(
   stream.on('error', (error) => {
     streamError ??= error;
   });
-  const patterns = redactionPatterns();
+  const { env } = commandHostEnvironment();
+  const patterns = redactionPatterns(env);
   let pending = '';
   let writes = Promise.resolve();
   let disposal: Promise<void> | undefined;
@@ -90,8 +91,8 @@ function requireManagedOutputPath(sessionsDir: string, pathname: string): string
   });
 }
 
-function redactionPatterns(): RegExp[] {
-  return (process.env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
+function redactionPatterns(env: NodeJS.ProcessEnv): RegExp[] {
+  return (env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean)

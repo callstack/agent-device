@@ -190,7 +190,7 @@ test('proxy enforces public-only Maestro HTTP policy on a local daemon', async (
             headers: {},
             publicNetworkOnly: request.internal?.publicNetworkOnly === true,
           },
-          process.env,
+          env,
         ),
       };
     },

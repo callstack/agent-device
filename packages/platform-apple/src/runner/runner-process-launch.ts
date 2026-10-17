@@ -59,9 +59,9 @@ export function launchRunnerProcess(input: LaunchRunnerProcessInput): LaunchedRu
     } catch {}
   });
   const listenerReady = createRunnerListenerReadySignal();
-  // The runner outlives this process, so it gets its environment and directory as plain values.
-  const { env, cwd } = commandHostEnvironment();
   try {
+    // The runner outlives this process, so it gets its environment and directory as plain values.
+    const { env, cwd } = commandHostEnvironment();
     const launched = runCmdBackground(
       'xcodebuild',
       [

@@ -1,13 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { RunScriptHttpRequest } from './run-script-http.ts';
 import { executeRunScriptHttpRequest } from './run-script-http.ts';
 
 export async function runScriptHttpChild(): Promise<void> {
   const response = await executeRunScriptHttpRequest(
     JSON.parse(readFileSync(0, 'utf8')) as RunScriptHttpRequest,
-    captureHostEnvironment(process).env,
+    process.env,
   );
   process.stdout.write(JSON.stringify(response));
 }

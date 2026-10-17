@@ -42,7 +42,8 @@ export function buildRecordingScriptPathCandidates(
 
 /**
  * Resolves one recording helper script: checkout, built package, or working-directory fallback.
- * The caller names the project root it trusts, so this module stays free of host metadata lookup.
+ * The caller names the project root it trusts, so this module stays free of host metadata lookup;
+ * the working directory defaults to the command host's.
  */
 export function resolveRecordingScriptPath(
   scriptName: string,

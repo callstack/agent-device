@@ -84,8 +84,8 @@ export async function materializeInstallablePath(
   }
 }
 
-function expandSourcePath(inputPath: string): string {
-  return expandUserHomePath(inputPath);
+function expandSourcePath(inputPath: string, env: NodeJS.ProcessEnv): string {
+  return expandUserHomePath(inputPath, { env });
 }
 
 async function materializeLocalSource(
@@ -94,7 +94,7 @@ async function materializeLocalSource(
 ): Promise<MaterializeLocalSourceResult> {
   if (source.kind === 'path') {
     return {
-      localPath: expandSourcePath(source.path),
+      localPath: expandSourcePath(source.path, options.environment),
       cleanup: async () => {},
     };
   }
