@@ -65,7 +65,9 @@ test('a worker that dies under a request is reported in that request, not only t
   });
   await started;
   // The worker's own error event carries no diagnostics scope.
-  FakeWorker.last?.emit('error', new Error('worker crashed'));
+  const worker = FakeWorker.last;
+  if (!worker) throw new Error('the pre-warm did not start a worker');
+  worker.emit('error', new Error('worker crashed'));
 
   expect(await scoped).toBe(1);
   vi.doUnmock('node:worker_threads');
