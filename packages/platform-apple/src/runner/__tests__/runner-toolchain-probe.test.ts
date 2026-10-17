@@ -317,8 +317,15 @@ describe('the developer dir a toolchain fingerprint answers for', () => {
 
     // The installer writes a new bundle: same path, new inode for the version file.
     const versionFile = path.join(selected, '..', 'version.plist');
+    const replacedAt = fs.statSync(versionFile).mtimeMs + 1_000;
     fs.unlinkSync(versionFile);
     fs.writeFileSync(versionFile, '<plist>build 2</plist>\n');
+    // Not left to the filesystem to make the two halves of the identity differ. On ext4 or tmpfs a
+    // freed inode comes straight back out, and the two writes can land in one truncated millisecond,
+    // which would leave the key untouched and this case red for a reason the fix has nothing to do
+    // with. A replacement bundle is written after the one it replaces, so one second later says that
+    // wherever the temp dir lives.
+    fs.utimesSync(versionFile, new Date(replacedAt), new Date(replacedAt));
 
     runCmdSync.mockClear();
     expect(readFingerprint().xcodeBuildVersion).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
