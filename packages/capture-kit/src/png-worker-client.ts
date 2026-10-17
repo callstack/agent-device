@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { resolveInternalEntryModulePath } from './internal-entry.ts';
@@ -39,16 +39,31 @@ type PendingJob = {
 
 let worker: Worker | null = null;
 let workerUnavailable = false;
-let warnedWorkerUnavailable = false;
+let workerUnavailableReason: string | undefined;
+let reportedWorkerUnavailable = false;
 let nextJobId = 0;
 const pendingJobs = new Map<number, PendingJob>();
 
-/** Permanently degrades to the sync path and reports the reason once. */
+/** Permanently degrades to the sync path; the reason is reported by the first scope that sees it. */
 function markWorkerUnavailable(reason: string): void {
   workerUnavailable = true;
-  if (warnedWorkerUnavailable) return;
-  warnedWorkerUnavailable = true;
-  emitDiagnostic({ level: 'warn', phase: 'png_worker_unavailable', data: { reason } });
+  workerUnavailableReason ??= reason;
+  reportWorkerUnavailable();
+}
+
+/**
+ * A pre-warm at daemon startup runs outside any diagnostics scope, where the event would be
+ * dropped, so the report waits for the first request scope that reaches the degraded path.
+ */
+function reportWorkerUnavailable(): void {
+  if (reportedWorkerUnavailable || workerUnavailableReason === undefined) return;
+  if (Object.keys(getDiagnosticsMeta()).length === 0) return;
+  reportedWorkerUnavailable = true;
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'png_worker_unavailable',
+    data: { reason: workerUnavailableReason },
+  });
 }
 
 function handleWorkerMessage(message: PngWorkerResponse): void {
@@ -97,7 +112,10 @@ function updateWorkerRef(): void {
 }
 
 function obtainWorker(): Worker | null {
-  if (workerUnavailable) return null;
+  if (workerUnavailable) {
+    reportWorkerUnavailable();
+    return null;
+  }
   if (worker) return worker;
   const modulePath = resolveInternalEntryModulePath(import.meta.url, PNG_WORKER_ENTRYPOINT);
   if (!modulePath) {
