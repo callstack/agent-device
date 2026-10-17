@@ -341,7 +341,7 @@ test('non-iOS screenshot response tolerates malformed PNG metadata', async () =>
   }
 });
 
-test('iOS simulator screenshot omits logical density metadata after --scale downscale', async () => {
+test('iOS simulator screenshot suppresses logical density metadata when --scale is set', async () => {
   const screenshotPath = path.join(
     mkdtempForTestSync('agent-device-ios-scale'),
     `agent-device-ios-scale-${Date.now()}.png`,
