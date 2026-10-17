@@ -89,7 +89,7 @@ export function recordActionEntry(
     ...(OBSERVATION_ONLY_COMMANDS.has(recordedEntry.command)
       ? recordedEntry.interactiveObservation === false
         ? { publicationIntent: 'authored' as const }
-        : recordedEntry.flags.recordingIntent === 'explicit-record'
+        : recordedEntry.flags.record === true
           ? { publicationIntent: 'explicit-record' as const }
           : {}
       : {}),
@@ -367,7 +367,7 @@ function isExcludedRepairSegmentObservation(
 ): boolean {
   if (!entry.interactiveObservation) return false;
   if (repairSessionBoundary(session) === undefined) return false;
-  return entry.flags.recordingIntent !== 'explicit-record';
+  return entry.flags.record !== true;
 }
 
 // The keys a recorded action carries derive from each flag declaration's `recorded`

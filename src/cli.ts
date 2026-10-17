@@ -190,7 +190,6 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
         const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
         const commandProgress = createCommandProgressState();
         const client = createAgentDeviceClient(buildClientConfig(ctx), {
-          recordSource: ctx.explicitFlagKeys.has('record') ? 'explicit' : 'default',
           transport: createCliDaemonTransport({
             command,
             flags: ctx.effectiveFlags,

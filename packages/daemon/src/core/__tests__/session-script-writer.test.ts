@@ -134,7 +134,6 @@ test.each(['authored', 'explicit-record'] as const)(
         intent === 'explicit-record'
           ? {
               record: true,
-              recordingIntent: 'explicit-record' as const,
               snapshotInteractiveOnly: true,
             }
           : { snapshotInteractiveOnly: true },
@@ -886,7 +885,6 @@ test.each([
       positionals: [],
       flags: {
         record,
-        recordingIntent: record ? 'explicit-record' : undefined,
         snapshotInteractiveOnly: true,
       },
       interactiveObservation: !replayPlanStep,

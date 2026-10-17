@@ -133,12 +133,6 @@ async function assertRepairSegmentReadExclusion(params: {
   });
   assertRpcOk(diagnosticRead);
 
-  const defaultRecordRead = await daemon.callCommand('get', ['text', SEARCH_SELECTOR], {
-    ...selection,
-    record: true,
-  });
-  assertRpcOk(defaultRecordRead);
-
   // (b) The corrective read (the wave-3 E3 shape: the diverged step is itself
   //     a read), forced into the heal with `--record`.
   await daemon.client().interactions.get({

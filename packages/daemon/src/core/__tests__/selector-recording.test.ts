@@ -92,24 +92,9 @@ test('--record forces get/is/find through even while repair-armed', () => {
   });
   store.publish('default', session);
 
-  recordIfSession(
-    store,
-    store.lookup('default'),
-    req('get', { record: true, recordingIntent: 'explicit-record' }),
-    {},
-  );
-  recordIfSession(
-    store,
-    store.lookup('default'),
-    req('is', { record: true, recordingIntent: 'explicit-record' }),
-    {},
-  );
-  recordIfSession(
-    store,
-    store.lookup('default'),
-    req('find', { record: true, recordingIntent: 'explicit-record' }),
-    {},
-  );
+  recordIfSession(store, store.lookup('default'), req('get', { record: true }), {});
+  recordIfSession(store, store.lookup('default'), req('is', { record: true }), {});
+  recordIfSession(store, store.lookup('default'), req('find', { record: true }), {});
 
   expect(store.get('default')!.actions.map((a) => a.command)).toEqual(['get', 'is', 'find']);
 });
