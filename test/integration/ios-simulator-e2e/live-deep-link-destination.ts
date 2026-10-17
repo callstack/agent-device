@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 
-import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
+import {
+  ALERT_NOT_FOUND_RUNNER_CODE,
+  DEFAULT_ALERT_TIMEOUT_MS,
+} from '@agent-device/contracts/alert-contract';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isObservationPreventedStepMiss } from './live-step-retry-policy.ts';
 import type { CliJsonResult } from '../cli-json.ts';
@@ -39,6 +42,17 @@ export async function waitForDeepLinkDestination(
         ],
         { allowFailure, reattemptInfrastructureMiss: undefined },
       ),
+    () =>
+      answerFixtureLaunchConfirmation(
+        () =>
+          runStep(
+            context,
+            'wait for optional fixture launch confirmation',
+            ['alert', 'wait', String(DEFAULT_ALERT_TIMEOUT_MS)],
+            { allowFailure: true },
+          ),
+        () => runStep(context, 'accept fixture launch confirmation', ['alert', 'accept']),
+      ),
   );
   verifyCommand(
     context,
@@ -48,13 +62,24 @@ export async function waitForDeepLinkDestination(
   return arrived;
 }
 
-export async function retryDestinationWait(wait: DestinationWait): Promise<CliJsonResult> {
+export async function retryDestinationWait(
+  wait: DestinationWait,
+  answerStoppedLaunch?: () => Promise<void>,
+): Promise<CliJsonResult> {
   for (let attempt = 1; attempt <= DESTINATION_WAITS; attempt += 1) {
     const arrived = await wait(
       `wait for the deep-link destination (${attempt}/${DESTINATION_WAITS})`,
       { allowFailure: attempt < DESTINATION_WAITS },
     );
     if (arrived.status === 0) return arrived;
+    if (
+      attempt < DESTINATION_WAITS &&
+      answerStoppedLaunch &&
+      arrived.json?.error?.details?.runnerErrorCode === 'APP_NOT_RUNNING'
+    ) {
+      await answerStoppedLaunch();
+      continue;
+    }
     assert.ok(
       attempt < DESTINATION_WAITS && isObservationPreventedStepMiss(arrived),
       `deep-link destination wait failed: ${JSON.stringify(arrived.json)}`,

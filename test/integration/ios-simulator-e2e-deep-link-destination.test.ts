@@ -120,3 +120,25 @@ test('an unrelated prompt or an unreadable alert is never accepted as a fixture 
   );
   assert.equal(accepts, 0);
 });
+
+test('a stopped app is checked for its launch confirmation before the destination is observed again', async () => {
+  const { wait, calls } = waits([miss({ runnerErrorCode: 'APP_NOT_RUNNING' }), LANDED]);
+  let answers = 0;
+  assert.equal(
+    await retryDestinationWait(wait, async () => {
+      answers += 1;
+    }),
+    LANDED,
+  );
+  assert.equal(answers, 1);
+  assert.equal(calls.length, 2);
+});
+
+test('an already observed destination never probes for an optional alert', async () => {
+  const { wait } = waits([LANDED]);
+  let answers = 0;
+  await retryDestinationWait(wait, async () => {
+    answers += 1;
+  });
+  assert.equal(answers, 0);
+});

@@ -145,12 +145,21 @@ async function executeLiveScenarios(
   testContext?: TestContext,
 ): Promise<void> {
   let assertionCaptureVerified = false;
+  const sessionPrefix = context.session;
   for (const scenario of LIVE_SCENARIOS.filter((candidate) => candidate.tier === 'smoke')) {
     const run = async () => {
       await runScenario(context, {
         ...scenario,
         run: async () => {
-          if (scenario.id !== 'smoke:inventory-install') {
+          if (await sessionExists(context)) {
+            await runStep(context, 'release preceding scenario session', ['close']);
+          }
+          context.session = `${sessionPrefix}-${scenario.id.replace(':', '-')}`;
+          if (
+            scenario.id !== 'smoke:inventory-install' &&
+            scenario.id !== 'smoke:automation-input' &&
+            scenario.id !== 'smoke:deep-link-navigation'
+          ) {
             const opened = await runStep(context, `reset fixture for ${scenario.id}`, [
               'open',
               context.appId,

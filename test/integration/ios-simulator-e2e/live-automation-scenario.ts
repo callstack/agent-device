@@ -11,10 +11,7 @@ import {
   assertJsonContains,
   assertWaitText,
 } from './live-assertions.ts';
-import {
-  answerFixtureLaunchConfirmation,
-  waitForDeepLinkDestination,
-} from './live-deep-link-destination.ts';
+import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
 import { clearStateLaunchUrlMaestroFlow } from './live-fixtures.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
@@ -266,7 +263,7 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
 async function openAutomationDeepLink(context: LiveContext, step: string): Promise<void> {
   // --debug keeps the open's own request log, which is where a held launch URL's alert read, the
   // post-open observation verdict and any re-hand-off are visible when this step fails.
-  const opened = await runStep(context, step, [
+  await runStep(context, step, [
     'open',
     context.appId,
     '--relaunch',
@@ -274,19 +271,4 @@ async function openAutomationDeepLink(context: LiveContext, step: string): Promi
     AUTOMATION_DEEP_LINK,
     '--debug',
   ]);
-  if (
-    opened.json?.data?.timing?.postOpenObservation !== 'observable' &&
-    opened.json?.data?.launchConfirmation !== 'accepted'
-  ) {
-    await answerFixtureLaunchConfirmation(
-      () =>
-        runStep(
-          context,
-          'wait for optional fixture launch confirmation',
-          ['alert', 'wait', ALERT_WAIT_TIMEOUT],
-          { allowFailure: true },
-        ),
-      () => runStep(context, 'accept fixture launch confirmation', ['alert', 'accept']),
-    );
-  }
 }
