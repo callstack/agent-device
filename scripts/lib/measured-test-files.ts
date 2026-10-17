@@ -3,7 +3,7 @@
 // tree instead of importing its subjects and so is invisible to Vitest's module graph.
 
 export const MEASURED_TEST_ROOTS: readonly string[] = ['src', 'packages', 'test', 'scripts'];
-export const UNMEASURED_DIRECTORIES: ReadonlySet<string> = new Set([
+const UNMEASURED_DIRECTORIES: ReadonlySet<string> = new Set([
   'node_modules',
   'dist',
   'dist-types',
