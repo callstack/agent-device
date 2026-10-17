@@ -833,6 +833,7 @@ function startDaemon(settings: DaemonClientSettings): DaemonStartupLaunch {
     paths: settings.paths,
     serverMode: settings.serverMode,
     env: settings.host.env,
+    cwd: settings.host.cwd,
     ownedStateDir: settings.ownedStateDir,
     args: launchSpec.useSrc
       ? ['--experimental-strip-types', launchSpec.srcPath]

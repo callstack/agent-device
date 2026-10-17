@@ -459,6 +459,7 @@ test('private retirement closes startup admission, joins the actual child and ne
   const args = registeredDaemonFixtureArgs(paths, fields);
   const launch = launchDaemonProcess({
     env: process.env,
+    cwd: process.cwd(),
     paths,
     args,
     serverMode: 'socket',
@@ -470,6 +471,7 @@ test('private retirement closes startup admission, joins the actual child and ne
     await waitForFixtureFile(paths.infoPath);
     contender = launchDaemonProcess({
       env: process.env,
+      cwd: process.cwd(),
       paths,
       args,
       serverMode: 'socket',
@@ -485,7 +487,14 @@ test('private retirement closes startup admission, joins the actual child and ne
     const pending = stopAndRetireDaemon(input);
     assert.throws(
       () =>
-        launchDaemonProcess({ env: process.env, paths, args, serverMode: 'socket', ownedStateDir }),
+        launchDaemonProcess({
+          env: process.env,
+          cwd: process.cwd(),
+          paths,
+          args,
+          serverMode: 'socket',
+          ownedStateDir,
+        }),
       (error: { details?: { reason?: string } }) =>
         error.details?.reason === 'daemon_startup_admission_closed',
     );
@@ -514,6 +523,7 @@ test('private retirement retains the directory while an earlier actual startup c
   );
   const first = launchDaemonProcess({
     env: process.env,
+    cwd: process.cwd(),
     paths,
     args,
     serverMode: 'socket',
@@ -524,6 +534,7 @@ test('private retirement retains the directory while an earlier actual startup c
     await waitForFixtureFile(ready);
     second = launchDaemonProcess({
       env: process.env,
+      cwd: process.cwd(),
       paths,
       args: registeredDaemonFixtureArgs(paths, fields),
       serverMode: 'socket',
@@ -549,6 +560,24 @@ test('private retirement retains the directory while an earlier actual startup c
   }
 });
 
+test('a launched daemon starts in the working directory of the host that launched it', async () => {
+  const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-launch-cwd-'));
+  const hostCwd = fs.realpathSync(mkdtempForTestSync('agent-device-launch-host-cwd-'));
+  const reported = path.join(paths.baseDir, 'cwd.txt');
+  assert.notEqual(hostCwd, fs.realpathSync(process.cwd()));
+  const launch = launchDaemonProcess({
+    env: process.env,
+    cwd: hostCwd,
+    paths,
+    args: ['-e', `require('node:fs').writeFileSync(${JSON.stringify(reported)}, process.cwd())`],
+    serverMode: 'socket',
+  });
+
+  await launch.exited;
+
+  assert.equal(fs.readFileSync(reported, 'utf8'), hostCwd);
+});
+
 const privateStartupFailures = [
   ['missing-birth', 'ownership-unproven', []],
   ['unverified-birth', 'exit-unconfirmed', []],
@@ -571,6 +600,7 @@ for (const [failure, reason, expectedSignals] of privateStartupFailures) {
         : undefined;
     const launch = launchDaemonProcess({
       env: process.env,
+      cwd: process.cwd(),
       paths,
       args,
       serverMode: 'socket',
@@ -664,6 +694,7 @@ test('private startup completion stays bounded without published birth proof and
   const birthProbe = vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null);
   const launch = launchDaemonProcess({
     env: process.env,
+    cwd: process.cwd(),
     paths,
     args: registeredDaemonFixtureArgs(paths, fields),
     serverMode: 'socket',
@@ -690,6 +721,7 @@ test('private startup completion stays bounded without published birth proof and
       () =>
         launchDaemonProcess({
           env: process.env,
+          cwd: process.cwd(),
           paths,
           args: [],
           serverMode: 'socket',
@@ -742,6 +774,7 @@ for (const contents of [
     fs.writeFileSync(evidencePath, contents);
     const launch = launchDaemonProcess({
       env: process.env,
+      cwd: process.cwd(),
       paths,
       args: registeredDaemonFixtureArgs(paths, fields),
       serverMode: 'socket',
@@ -952,6 +985,7 @@ test.for(['different pid', 'different birth', 'joined child'] as const)(
     const probe = vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null);
     const launch = launchDaemonProcess({
       env: process.env,
+      cwd: process.cwd(),
       paths,
       args: registeredDaemonFixtureArgs(paths, fields),
       serverMode: 'socket',

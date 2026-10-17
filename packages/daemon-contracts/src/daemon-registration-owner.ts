@@ -249,6 +249,8 @@ export function launchDaemonProcess(
     serverMode: DaemonServerMode;
     /** The environment the daemon process starts with, before the state dir and mode overrides. */
     env: EnvMap;
+    /** The daemon's working directory: the one its client resolves relative paths against. */
+    cwd: string;
     ownedStateDir?: OwnedReplayStateDir;
   }>,
 ): DaemonStartupLaunch {
@@ -261,6 +263,7 @@ export function launchDaemonProcess(
   const logFd = fs.openSync(input.paths.logPath, 'a');
   try {
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
+      cwd: input.cwd,
       env: {
         ...input.env,
         AGENT_DEVICE_STATE_DIR: input.paths.baseDir,
