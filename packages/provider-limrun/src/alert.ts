@@ -15,7 +15,7 @@ import {
 
 /**
  * The four alert legs on a Limrun iOS direct session (issue #3349). There is no XCUITest runner
- * to ask, so this backend supplies the shared tree-alert driver (`platform-android`'s
+ * to ask, so this backend supplies the shared tree-alert driver (`capture-kit`'s
  * `runTreeAlertAction`, the one poll/confirm/same-alert/response owner every tree-based backend
  * rides) with its own observation and press seams only: observation through the session's own
  * element-tree capture and its host-root reader, action through the same point-touch seam every
@@ -54,8 +54,8 @@ export async function handleLimrunIosAlert(
     timeoutMs: options?.timeoutMs,
     ...(options?.signal ? { signal: options.signal } : {}),
     // The Limrun WebSocket client exposes no abort on `elementTree`/`tap`, so the seam signal
-    // cannot cancel its transport; the shared driver's window guards are what keep this
-    // backend's late answers unconsumed and its presses inside the window.
+    // cannot cancel its transport: a started call always runs to its answer, and the leg waits
+    // for it (the documented one-call overrun) rather than dropping the answer.
     capture: () => client.elementTree(),
     findCandidate: (tree): TreeAlertObservation<LimrunAlertCandidate> =>
       readLimrunAlertCapture(tree as Parameters<typeof readLimrunAlertCapture>[0]),

@@ -205,37 +205,39 @@ test('a caller cancel during the press discloses that the tap may or may not hav
   // The one dispatched-unknown exit: the budget never stops a press, so the only way a press
   // dies mid-flight is the caller's own cancellation. The adb child is killed between the tap's
   // dispatch and its rejection, so the device may already have received it — the cancellation
-  // carries that typed, never a clean 'no'.
+  // carries that typed, never a clean 'no'. The fake reacts to its seam signal the way the adb
+  // executor does — a child killed on abort — and the caller speaks only after the tap is
+  // verifiably in flight, so the test exercises the mid-press cut, not a pre-aborted shortcut.
   runAndroidAdb.mockClear();
   const caller = new AbortController();
   const tapSignals: (AbortSignal | undefined)[] = [];
+  let markTapStarted!: () => void;
+  const tapStarted = new Promise<void>((resolve) => {
+    markTapStarted = resolve;
+  });
   runAndroidAdb.mockImplementationOnce(async (_device, args, options) => {
     if (args.includes('tap')) {
       tapSignals.push(options?.signal);
-      // The cancel arrives while the press is in flight: the leg may already have dispatched
-      // the tap by the time the caller speaks, which is the state `unknown` names. The fake
-      // reacts to its seam signal the way the adb executor does — a child killed on abort,
-      // and an abort that beat the call still dies the call.
-      caller.abort();
-      await new Promise<void>((resolve, reject) => {
-        if (options?.signal?.aborted) {
-          reject(new Error('adb killed'));
-          return;
-        }
+      await new Promise<void>((_resolve, reject) => {
+        markTapStarted();
         options?.signal?.addEventListener('abort', () => reject(new Error('adb killed')), {
           once: true,
         });
-        setTimeout(resolve, 2_000);
       });
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   });
 
+  const result = handleAndroidAlert(device, 'dismiss', {
+    signal: caller.signal,
+    captureNodes: dialogUntilPressed(),
+  });
+  result.catch(() => {});
+  await tapStarted;
+  caller.abort();
+
   await assert.rejects(
-    handleAndroidAlert(device, 'dismiss', {
-      signal: caller.signal,
-      captureNodes: dialogUntilPressed(),
-    }),
+    result,
     (error: unknown) =>
       isRequestCanceledError(error) &&
       (error as { details?: { dispatched?: unknown } }).details?.dispatched === 'unknown',
@@ -274,24 +276,31 @@ test('a quiet screen with captures straddling the lookup answers alert-not-found
 test('the read-first capture rides the caller cancellation and dies with it', async () => {
   // Android's transport is cancellable, so the invariant here is the actual child-process cut:
   // the capture seam receives the leg's live AbortSignal, and aborting the caller cuts the
-  // in-flight capture before any press exists.
+  // in-flight capture before any press exists. The caller speaks only after the capture is
+  // verifiably started, so the seam is on the in-flight path rather than a pre-aborted short
+  // circuit.
   runAndroidAdb.mockClear();
   const caller = new AbortController();
   const seamSignals: AbortSignal[] = [];
   let rejectCapture: ((error: Error) => void) | undefined;
+  let markCaptureStarted!: () => void;
+  const captureStarted = new Promise<void>((resolve) => {
+    markCaptureStarted = resolve;
+  });
   const result = handleAndroidAlert(device, 'dismiss', {
     signal: caller.signal,
     captureNodes: (seam) =>
       new Promise<RawSnapshotNode[]>((_resolve, reject) => {
         seamSignals.push(seam.signal);
         rejectCapture = reject;
+        markCaptureStarted();
         seam.signal.addEventListener('abort', () => reject(new Error('adb killed')), {
           once: true,
         });
       }),
   });
   result.catch(() => {});
-  await Promise.resolve();
+  await captureStarted;
   caller.abort();
   rejectCapture?.(new Error('adb killed'));
 

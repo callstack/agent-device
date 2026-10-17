@@ -60,8 +60,10 @@ export type TreeAlertCandidate<
 /**
  * The seams one tree-based backend owns. `signal` is always the daemon request's own
  * cancellation, never a budget timer: it is what may stop a transport in flight. A transport
- * with no abort (Limrun's client) simply keeps running one call past the budget — the overrun
- * named above — and answers nothing after the loop has ended.
+ * with no abort (Limrun's client) cannot be stopped this way — its in-flight call keeps running,
+ * and the leg waits for the answer it started (the overrun named above) or, if the caller
+ * disconnects first, the daemon answers the request as canceled while the transport finishes
+ * detached behind it.
  */
 export type TreeAlertSeam = Readonly<{ signal: AbortSignal }>;
 
@@ -191,9 +193,11 @@ type TreeAlertObserverDriver<TCapture, TCandidate> = Readonly<{
  * The budget never cuts a capture: `pollUntilSettled` awaits every probe it starts and clamps
  * each sleep to the deadline, so the terminal answer is what the probes answered, never how the
  * clock fell. With no `settled` given, the loop ends on an alert. `value` is the last answer
- * either way and `sawUndecided` states the window saw an unresolvable capture at some point: a
- * degraded sheet that never resolved is not an absence, and callers must not report the two
- * alike.
+ * either way and `sawUndecided` states the window saw an unresolvable capture at some point. The
+ * acting lookup is what that fact binds: it decides absence vs undecided there, and a degraded
+ * sheet that never resolved is not an absence. The wait leg deliberately ignores it — its
+ * timeout phrasing ("no alert resolved within the window") is the honest answer for a quiet
+ * screen and for an unresolved sheet alike, and `alert get` remains the undecided reporter.
  */
 async function pollTreeAlert<TCapture, TCandidate>(
   driver: TreeAlertObserverDriver<TCapture, TCandidate>,
@@ -232,6 +236,12 @@ async function actOnTreeAlert<
   driver: TreeAlertDriver<TCapture, TAlert, TButton, TCandidate, TPlatform>,
 ): Promise<TreeAlertResult<TAlert, TPlatform>> {
   const polled = await lookupTreeAlert(action, driver);
+  // A cancel that arrived while the lookup's last probe was in flight is honored here, before
+  // anything is dispatched: the caller withdrew the action, so the press never starts and the
+  // exit is the clean pre-press cancellation (`dispatched: no`), not the press-time unknown.
+  if (driver.signal?.aborted) {
+    throw createRequestCanceledError({ dispatched: 'no' });
+  }
   const candidate = polled.candidate;
   const choice = driver.choose(candidate, action);
   if (!choice) {
@@ -247,18 +257,21 @@ async function actOnTreeAlert<
     );
   }
   // The press rides only the caller's cancellation: once the loop has chosen, the press is the
-  // action itself, not a probe a budget may end. Its one uncertainty is a cancel that arrives
-  // while the tap is in flight — the device may already have received it — so that exit is typed
-  // `dispatched: unknown`, never a clean 'no'.
+  // action itself, not a probe a budget may end. From the moment the press starts, every
+  // caller-cancelled exit is typed `dispatched: unknown` — the device may already have received
+  // the tap — whether the transport dies with the cancel (the catch), answers it AFTER the
+  // cancel (a transport with no abort resolves normally on an aborted request: the post-press
+  // check), or the cancel arrives during the post-press confirm window. None of them may read
+  // as a clean 'no'.
   try {
     await driver.press(choice, { signal: driver.signal ?? neverSignal });
+    await confirmTreeAlertGone(driver, candidate.alert, action);
   } catch (error) {
     if (driver.signal?.aborted) {
       throw createRequestCanceledError({ dispatched: 'unknown' }, error);
     }
     throw error;
   }
-  await confirmTreeAlertGone(driver, candidate.alert, action);
   return {
     kind: 'alertHandled',
     platform: driver.platform,

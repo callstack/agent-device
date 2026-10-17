@@ -1,9 +1,8 @@
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import {
-  runTreeAlertAction,
-  type TreeAlertDriver,
-  type TreeAlertResult,
-  type TreeAlertSeam,
+import type {
+  TreeAlertDriver,
+  TreeAlertResult,
+  TreeAlertSeam,
 } from '@agent-device/capture-kit/alert-tree-driver';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
@@ -22,6 +21,8 @@ import { backAndroid, pressAndroid } from './input-actions.ts';
  * the one poll/confirm/same-alert/response owner every tree-based backend rides) plus this
  * platform's own observation (`captureNodes` + the candidate reader) and acting policy (the
  * id-derived grant rank over the shared label vocabulary, the neutral-button/Back fallback).
+ * The driver is loaded on the alert path like the Limrun provider loads this file, so the
+ * mechanics façade keeps its eager-closure budget (ADR-0019 implementation-laziness).
  */
 
 type AndroidAlertOptions = {
@@ -77,5 +78,6 @@ export async function handleAndroidAlert(
       await backAndroid(device, { signal: seam.signal });
     },
   };
+  const { runTreeAlertAction } = await import('@agent-device/capture-kit/alert-tree-driver');
   return await runTreeAlertAction(action, driver);
 }
