@@ -19,9 +19,10 @@ For label meanings and state flow, see `docs/agents/triage-labels.md`.
 
 ## Current state
 
-When you change a decision or the scope of your issue, post a comment that starts with `Decision:`.
+When you change a decision or the scope of your issue, post a comment that starts with `Decision: <topic>:`.
 After a PR merges on your umbrella issue, post a `Current state:` comment: merged PRs, open PRs, and the next step.
-Before you continue work, read all `Decision:` comments (newest wins per topic) and the newest `Current state:` comment.
+Before you continue work, read all `Decision:` comments. For each topic, the newest comment wins.
+On an umbrella issue, also read the newest `Current state:` comment, if one exists.
 
 ## Dependencies and sequencing
 
