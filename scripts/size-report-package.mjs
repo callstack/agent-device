@@ -17,6 +17,17 @@ export function assertSnapshotBridgeAssets(presentPaths, context) {
   }
 }
 
+/**
+ * The test targets the macOS helper manifest declares — the one reading of "which test targets
+ * exist". SwiftPM refuses to load a package whose declared test target has no sources, so each
+ * name here must appear in the pack as `apple/macos-helper/Tests/<name>/PackStub.swift`.
+ */
+export function readMacosHelperTestTargets(manifestSource) {
+  return [...manifestSource.matchAll(/\.testTarget\(\s*name:\s*"([^"]+)"/g)].map(
+    (match) => match[1],
+  );
+}
+
 export function collectNpmPack(root) {
   const cachePath = path.join(root, '.tmp', 'npm-cache');
   fs.mkdirSync(cachePath, { recursive: true });
@@ -28,6 +39,7 @@ export function collectNpmPack(root) {
   const pack = parseNpmPackOutput(stdout);
   const entries = normalizeNpmPackEntries(pack);
   assertPublishPackageContents(entries, {
+    repoRoot: root,
     requireSnapshotBridge: fs.existsSync(path.join(root, 'apple', 'snapshot-bridge')),
   });
   return {
@@ -89,14 +101,26 @@ export function assertPublishPackageContents(entries, options = {}) {
   if (shippedSwiftTests.length > 0) {
     throw new Error(`npm pack includes macOS helper test sources: ${shippedSwiftTests.join(', ')}`);
   }
-  const packStubs = paths.filter(
-    (entryPath) =>
-      entryPath.startsWith('apple/macos-helper/Tests/') && entryPath.endsWith('/PackStub.swift'),
-  );
-  if (paths.includes('apple/macos-helper/Package.swift') && packStubs.length < 2) {
-    throw new Error(
-      `npm pack is missing macOS helper test-target pack stubs: expected one PackStub.swift per test target, found ${packStubs.length}`,
+  // Read the target list from the same manifest the pack ships, so the pack and the manifest can
+  // never drift onto different target sets. A pack without the manifest ships no helper at all.
+  if (paths.includes('apple/macos-helper/Package.swift')) {
+    const manifestSource =
+      options.macosHelperManifestSource ??
+      fs.readFileSync(
+        path.join(options.repoRoot ?? process.cwd(), 'apple/macos-helper/Package.swift'),
+        'utf8',
+      );
+    const testTargets = readMacosHelperTestTargets(manifestSource);
+    const missingStubs = testTargets.filter(
+      (target) => !paths.includes(`apple/macos-helper/Tests/${target}/PackStub.swift`),
     );
+    if (missingStubs.length > 0) {
+      throw new Error(
+        `npm pack is missing macOS helper test-target pack stubs: ${missingStubs
+          .map((target) => `apple/macos-helper/Tests/${target}/PackStub.swift`)
+          .join(', ')}`,
+      );
+    }
   }
 }
 

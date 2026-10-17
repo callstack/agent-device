@@ -41,18 +41,40 @@ test('publish package requires both Android helpers and excludes benchmark scrip
       ]),
     /benchmark or build scripts/,
   );
+  // The helper ships as buildable source, so the manifest in the pack and the per-target
+  // PackStub.swift set must agree; the fixture carries both sides of that contract.
+  const helperManifest = { path: 'apple/macos-helper/Package.swift', size: 1 };
+  const helperStubs = [
+    {
+      path: 'apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/PackStub.swift',
+      size: 1,
+    },
+    {
+      path: 'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift',
+      size: 1,
+    },
+  ];
+  const helperManifestSource = [
+    '.target(',
+    '  name: "AgentDeviceMacOSInput",',
+    '.executableTarget(',
+    '  name: "AgentDeviceMacOSHelper",',
+    '.testTarget(',
+    '  name: "AgentDeviceMacOSHelperTests",',
+    '.testTarget(',
+    '  name: "AgentDeviceMacOSInputTests",',
+  ].join('\n');
   assert.doesNotThrow(() =>
-    assertPublishPackageContents([
-      ...fixturePack.files,
-      {
-        path: 'apple/macos-helper/Tests/AgentDeviceMacOSHelperTests/PackStub.swift',
-        size: 1,
-      },
-      {
-        path: 'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/PackStub.swift',
-        size: 1,
-      },
-    ]),
+    assertPublishPackageContents([...fixturePack.files, helperManifest, ...helperStubs], {
+      macosHelperManifestSource: helperManifestSource,
+    }),
+  );
+  assert.throws(
+    () =>
+      assertPublishPackageContents([...fixturePack.files, helperManifest, helperStubs[0]!], {
+        macosHelperManifestSource: helperManifestSource,
+      }),
+    /pack stubs: apple\/macos-helper\/Tests\/AgentDeviceMacOSInputTests\/PackStub\.swift/,
   );
   assert.throws(
     () =>
