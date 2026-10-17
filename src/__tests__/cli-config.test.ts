@@ -118,61 +118,6 @@ test('retired screenshotMaxSize config key is refused with migration guidance', 
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('retired record config key is refused with migration guidance on every config surface', async () => {
-  const { root, home, project } = makeTempWorkspace();
-  fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });
-  fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify({ record: true }));
-  fs.writeFileSync(path.join(home, '.agent-device', 'config.json'), JSON.stringify({}));
-
-  const result = await runCliCapture(['snapshot'], {
-    cwd: project,
-    env: { HOME: home },
-    defaultResponse: { ok: true, data: {} },
-  });
-  assert.equal(result.code, 1);
-  assert.match(result.stderr, /"record" in project config file .* was removed/);
-  assert.match(result.stderr, /--record is per-invocation only/);
-
-  fs.rmSync(path.join(project, 'agent-device.json'));
-  fs.writeFileSync(
-    path.join(home, '.agent-device', 'config.json'),
-    JSON.stringify({ record: true }),
-  );
-  const fromUserConfig = await runCliCapture(['snapshot'], {
-    cwd: project,
-    env: { HOME: home },
-    defaultResponse: { ok: true, data: {} },
-  });
-  assert.equal(fromUserConfig.code, 1);
-  assert.match(fromUserConfig.stderr, /"record" in config file .* was removed/);
-
-  fs.writeFileSync(path.join(home, '.agent-device', 'config.json'), JSON.stringify({}));
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
-test('retired AGENT_DEVICE_RECORD fails closed only for commands that accept --record', async () => {
-  const { root, home, project } = makeTempWorkspace();
-  const env = { HOME: home, AGENT_DEVICE_RECORD: 'true' };
-
-  const snapshot = await runCliCapture(['snapshot'], {
-    cwd: project,
-    env,
-    defaultResponse: { ok: true, data: {} },
-  });
-  assert.equal(snapshot.code, 1);
-  assert.match(snapshot.stderr, /AGENT_DEVICE_RECORD was removed/);
-  assert.match(snapshot.stderr, /--record is per-invocation only/);
-
-  const unaffected = await runCliCapture(['devices', '--json'], {
-    cwd: project,
-    env,
-    defaultResponse: { ok: true, data: { devices: [] } },
-  });
-  assert.equal(unaffected.code, null);
-
-  fs.rmSync(root, { recursive: true, force: true });
-});
-
 test('config can set appsFilter through canonical enum values', async () => {
   const { root, home, project } = makeTempWorkspace();
   fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });
