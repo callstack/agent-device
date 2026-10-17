@@ -31,7 +31,16 @@ vi.mock('./platform-runtime.ts', () => ({
 vi.mock('./provider-device-runtimes.ts', () => ({
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
   createDaemonProviderRuntimeComposition: async () => ({
-    runtimes: [{ provider: 'browserstack', ownsDevice: () => false }],
+    runtimes: [
+      {
+        provider: 'browserstack',
+        leaseLifecycle: {},
+        deviceInventoryProvider: { discover: async () => [] },
+        ownsDevice: () => false,
+        getInteractor: () => undefined,
+        shutdown: async () => {},
+      },
+    ],
     platformModules: [],
   }),
 }));
@@ -80,7 +89,9 @@ test('daemon startup compares lease credentials with its own startup environment
     expect(await allocate({ ...daemonEnv, BROWSERSTACK_ACCESS_KEY: 'key-2' })).toContain(
       'provider-credentials-changed',
     );
-    expect(await allocate(daemonEnv)).not.toContain('provider-credentials-changed');
+    const accepted = await allocate(daemonEnv);
+    expect(accepted).not.toContain('provider-credentials-changed');
+    expect(accepted).toContain('leaseId');
   } finally {
     await runtime?.shutdown();
   }

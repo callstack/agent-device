@@ -662,7 +662,13 @@ test('lease_allocate treats a daemon that reports no provider runtimes as having
       sessionStore: makeSessionStore('agent-device-no-runtimes-'),
       leaseRegistry: new LeaseRegistry(),
     }),
-    (error: unknown) =>
-      error instanceof AppError && error.details?.registeredProviders !== undefined,
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.reason, 'provider-not-registered');
+      assert.equal(error.details?.provider, 'browserstack');
+      assert.deepEqual(error.details?.registeredProviders, []);
+      return true;
+    },
   );
 });
