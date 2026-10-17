@@ -7,6 +7,9 @@ import { AppError } from '@agent-device/kernel/errors';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import { prepareIosInstallArtifact } from '../install-artifact.ts';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+import { bindTestCommandHost } from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 /**
  * An IPA whose `Payload` holds more than one `.app` is legal on disk and ambiguous for the
