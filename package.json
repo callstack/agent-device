@@ -320,6 +320,7 @@
     "@agent-device/selectors": "workspace:*",
     "@agent-device/session-journal": "workspace:*",
     "@agent-device/test-kit": "workspace:*",
+    "@agent-device/testmu": "workspace:*",
     "@agent-device/xml": "workspace:*",
     "@arethetypeswrong/cli": "^0.18.5",
     "@chenglou/freerange": "^0.0.4",
@@ -340,7 +341,7 @@
     "ai": "^7.0.68",
     "eslint-plugin-no-only-tests": "^3.4.0",
     "eslint-plugin-perfectionist": "^5.10.1",
-    "fallow": "3.32.0",
+    "fallow": "3.34.0",
     "fast-check": "^4.9.0",
     "ipaddr.js": "^2.5.0",
     "jpeg-js": "^0.4.4",
@@ -356,7 +357,6 @@
     "vite": "^8.2.1",
     "vitest": "5.0.4",
     "yaml": "^2.9.0",
-    "yauzl": "^3.4.0",
-    "@agent-device/testmu": "workspace:*"
+    "yauzl": "^3.4.0"
   }
 }

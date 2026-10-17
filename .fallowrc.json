@@ -41,7 +41,7 @@
     "examples/sdk/contracts-result.ts",
     "examples/sdk/batch-orchestration.ts",
     "examples/sdk/ai-sdk-tools.ts",
-    "test/integration/*.test.ts",
+    "test/integration/**/*.test.ts",
     "website/docs/404.mdx",
     "website/rspress.config.ts"
   ],
@@ -351,7 +351,7 @@
     },
     {
       // Host-kit seam façades: same false-positive shape as the contracts façades above — each seam names every type its re-exported functions put in a public signature, and callers use those types structurally without importing the name. unused-exports (the VALUE check) stays on.
-      "files": ["packages/host-kit/src/*.ts"],
+      "files": ["packages/host-kit/src/**/*.ts"],
       "rules": {
         "unused-types": "off"
       }
