@@ -466,7 +466,7 @@ The session closed and its daemon stopped after the run.
 The targets were iPhone Duo with iOS 27.1 and Xcode 27.1 beta, closed at 0° and open at 180°.
 A 130° session with different app content corroborated results.
 An iPhone 17 with iOS 27.0 served as the single-panel control.
-Hinge readback determined pose, not the requested preset. The amendment above makes hinge readback the only defensible source.
+Hinge readback determined pose, not the requested preset. The amendment above makes hinge readback the only defensible source for these recorded poses.
 Two initial inner-panel sessions requested open but read back 130°.
 They therefore serve as corroboration; the settled 180° session supplies the table.
 
