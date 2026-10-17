@@ -17,7 +17,6 @@ vi.mock('../../sessions/session-teardown.ts', async (importOriginal) => {
 import { SessionStore } from '../../core/session-store.ts';
 import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import type { SessionState } from '../../core/session-state.ts';
-import {} from './daemon-runtime.ts';
 
 const mockTeardownSessionResources = vi.mocked(teardownSessionResources);
 const roots: string[] = [];

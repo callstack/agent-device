@@ -5,7 +5,6 @@ import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { makeWebSession } from '../../__tests__/support/session-teardown.fixtures.ts';
 import { SessionStore } from '../../core/session-store.ts';
-import {} from './daemon-runtime.ts';
 
 afterEach(() => {
   vi.useRealTimers();
