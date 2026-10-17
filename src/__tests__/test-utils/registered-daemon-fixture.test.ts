@@ -1,14 +1,68 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
+import {
+  DAEMON_STARTUP_EXIT_CODES,
+  resolveDaemonStartupPhasesPath,
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
+  launchRegisteredDaemonFixtureArgs,
+  registeredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
   waitForRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
 } from './registered-daemon-fixture.ts';
+
+test('args built before any launch keep their own entry script under a concurrent second build', async () => {
+  // #3791 review: a second registeredDaemonFixtureArgs call must not rewrite the script file an
+  // earlier call already generated. Both arg sets are built before either child starts (that build
+  // order is the overwrite window); child 1 then runs its own switches and child 2 exits busy.
+  // Under a shared entry path, child 1 would execute child 2's script and its own record would
+  // carry child 2's marker switch instead of its own.
+  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-fixture-entry-isolation-'));
+  fs.mkdirSync(paths.baseDir, { recursive: true });
+  fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
+  const fields = {
+    httpPort: 4211,
+    token: 'fixture',
+    version: 'test',
+    codeOrigin: 'checkout' as const,
+    codeSignature: 'fixture',
+  };
+  const firstArgs = registeredDaemonFixtureArgs(paths, fields, undefined, {
+    emitStartupMarkerBeforeAcquisition: true,
+  });
+  const secondArgs = registeredDaemonFixtureArgs(paths, fields, undefined, {
+    emitStartupMarker: true,
+  });
+  assert.notEqual(firstArgs[1], secondArgs[1]);
+  const first = launchRegisteredDaemonFixtureArgs(paths, firstArgs, { stdio: 'ignore' });
+  try {
+    // Child 1 holds the registration before child 2 starts, so child 2's busy exit is ordered,
+    // not scheduled.
+    const held = path.join(paths.baseDir, `registration-held-${first.pid}`);
+    for (let attempt = 0; !fs.existsSync(held); attempt += 1) {
+      assert.ok(attempt < 400, 'child 1 never acquired the registration');
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const second = launchRegisteredDaemonFixtureArgs(paths, secondArgs, { stdio: 'ignore' });
+    assert.equal((await second.exited).exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
+    const ownRecord = resolveDaemonStartupPhasesPath(paths.baseDir, first.pid);
+    const text = fs.readFileSync(ownRecord, 'utf8');
+    assert.match(text, /modules-loaded/);
+    assert.doesNotMatch(
+      text,
+      /lock-acquired/,
+      "child 1 must run the script built for it, not the second build's switches",
+    );
+  } finally {
+    await finishRegisteredDaemonFixture(paths.baseDir);
+  }
+});
 
 test('a joined fixture exit refuses its remaining registration metadata', async () => {
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-fixture-exited-publication-'));

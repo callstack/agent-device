@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { vi } from 'vitest';
@@ -39,9 +40,14 @@ export function registeredDaemonFixtureArgs(
   acquisitionBarrier?: string,
   fixtureOptions?: RegisteredDaemonFixtureOptions,
 ): string[] {
-  const entry = path.join(paths.baseDir, 'dist', 'src', 'internal', 'daemon.js');
+  // One directory per construction: a later call must never overwrite a script an earlier
+  // launched child has not loaded yet. The per-launch directory still ends in the real daemon
+  // entry path so the daemon-command identity checks classify this child exactly as they
+  // classify a real daemon.
+  const launchDir = path.join(paths.baseDir, 'fixture-entries', crypto.randomUUID());
+  const entry = path.join(launchDir, 'dist', 'src', 'internal', 'daemon.js');
   fs.mkdirSync(path.dirname(entry), { recursive: true });
-  fs.writeFileSync(path.join(paths.baseDir, 'package.json'), '{"type":"module"}');
+  fs.writeFileSync(path.join(launchDir, 'package.json'), '{"type":"module"}');
   const registrationUrl = new URL(
     '../../../packages/daemon-contracts/src/daemon-registration-owner.ts',
     import.meta.url,
@@ -89,6 +95,18 @@ setInterval(() => {}, 1000);
   return ['--experimental-strip-types', entry];
 }
 
+export function launchRegisteredDaemonFixtureArgs(
+  paths: DaemonPaths,
+  args: string[],
+  options: Parameters<typeof runCmdDetachedMonitored>[2],
+): ReturnType<typeof runCmdDetachedMonitored> {
+  const child = actualCommand.runCmdDetachedMonitored(process.execPath, args, options);
+  const owned = children.get(paths.baseDir) ?? [];
+  owned.push({ launch: child, startTime: readProcessStartTime(child.pid) });
+  children.set(paths.baseDir, owned);
+  return child;
+}
+
 export function spawnRegisteredDaemonFixture(
   paths: DaemonPaths,
   fields: DaemonRegistrationFields,
@@ -96,15 +114,11 @@ export function spawnRegisteredDaemonFixture(
   acquisitionBarrier?: string,
   fixtureOptions?: RegisteredDaemonFixtureOptions,
 ): ReturnType<typeof runCmdDetachedMonitored> {
-  const child = actualCommand.runCmdDetachedMonitored(
-    process.execPath,
+  return launchRegisteredDaemonFixtureArgs(
+    paths,
     registeredDaemonFixtureArgs(paths, fields, acquisitionBarrier, fixtureOptions),
     options,
   );
-  const owned = children.get(paths.baseDir) ?? [];
-  owned.push({ launch: child, startTime: readProcessStartTime(child.pid) });
-  children.set(paths.baseDir, owned);
-  return child;
 }
 
 export async function waitForRegisteredDaemonFixture(
