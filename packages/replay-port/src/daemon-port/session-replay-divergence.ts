@@ -11,7 +11,12 @@ import { collectReplaySelectorCandidates } from '@agent-device/replay-port/sessi
 import { buildSelectorCandidates, resolveReplaySuggestionCandidate } from '@agent-device/selectors';
 import { collectSettleChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
 import { buildAndPersistReplayDivergenceResume } from '@agent-device/replay-port/session-replay-resume';
-import { formatDivergenceActionLabel, isTouchTargetCommand } from '@agent-device/ad-script';
+import {
+  buildIndexMap,
+  formatDivergenceActionLabel,
+  isTouchTargetCommand,
+} from '@agent-device/ad-script';
+import { isInScrollRegion } from '@agent-device/selectors/target-evidence';
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
@@ -112,7 +117,7 @@ export async function buildReplayFailureDivergence(params: {
   const screen = buildDivergenceScreen(observation, sanitize);
   const suggestions =
     observation.state === 'available' && session
-      ? await collectReplayDivergenceSuggestions({
+      ? collectReplayDivergenceSuggestions({
           action,
           session,
           nodes: observation.nodes,
@@ -510,12 +515,12 @@ function buildReplayDivergenceScreenRefs(
  * Ranking: identity-component strength (id > role+label > label > other),
  * then recorded scroll region, then document order.
  */
-async function collectReplayDivergenceSuggestions(params: {
+function collectReplayDivergenceSuggestions(params: {
   action: ReplayReportAction;
   session: ReplaySessionState;
   nodes: SnapshotNode[];
   sanitize: DivergenceFieldSanitizer;
-}): Promise<ReplayDivergenceSuggestion[]> {
+}): ReplayDivergenceSuggestion[] {
   const { action, session, nodes, sanitize } = params;
   if (!isSuggestionEligibleCommand(action.command)) return [];
   const candidates = collectReplaySelectorCandidates(action);
@@ -549,14 +554,14 @@ type RankedSuggestion = {
   nodeIndex: number;
 };
 
-async function rankSuggestionCandidates(params: {
+function rankSuggestionCandidates(params: {
   candidates: string[];
   nodes: SnapshotNode[];
   session: ReplaySessionState;
   action: ReplayReportAction;
   matching: SuggestionMatchingConfig;
   sanitize: DivergenceFieldSanitizer;
-}): Promise<ReplayDivergenceSuggestion[]> {
+}): ReplayDivergenceSuggestion[] {
   const { candidates, nodes, session, action, matching, sanitize } = params;
   // Dedupe by node (its unique tree index), keeping the STRONGEST match basis
   // per the ADR: a node reachable through several recorded selector terms
@@ -575,10 +580,19 @@ async function rankSuggestionCandidates(params: {
     if (!entry) continue;
     entries.push(entry);
   }
-  const ranked = await rankAndDedupeReplaySuggestions(entries, {
-    nodes,
-    targetEvidence: action.targetEvidence,
-  });
+  let recordedRegionNodeIndices: Set<number> | undefined;
+  const targetEvidence = action.targetEvidence;
+  if (targetEvidence?.verification === 'verified') {
+    const byIndex = buildIndexMap(nodes);
+    recordedRegionNodeIndices = new Set();
+    for (const { nodeIndex } of entries) {
+      const node = byIndex.get(nodeIndex);
+      if (node && isInScrollRegion(node, byIndex, targetEvidence.scrollRegion)) {
+        recordedRegionNodeIndices.add(nodeIndex);
+      }
+    }
+  }
+  const ranked = rankAndDedupeReplaySuggestions(entries, recordedRegionNodeIndices);
   return ranked.map((entry) => entry.suggestion);
 }
 

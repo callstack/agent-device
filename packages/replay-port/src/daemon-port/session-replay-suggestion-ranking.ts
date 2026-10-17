@@ -1,5 +1,3 @@
-import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergenceSuggestionBasis } from '@agent-device/contracts/divergence';
 
 const BASIS_RANK: Record<ReplayDivergenceSuggestionBasis, number> = {
@@ -9,18 +7,12 @@ const BASIS_RANK: Record<ReplayDivergenceSuggestionBasis, number> = {
   other: 3,
 };
 
-export async function rankAndDedupeReplaySuggestions<
+export function rankAndDedupeReplaySuggestions<
   T extends {
     readonly nodeIndex: number;
     readonly basis: ReplayDivergenceSuggestionBasis;
   },
->(
-  entries: Iterable<T>,
-  context: {
-    nodes: readonly SnapshotNode[];
-    targetEvidence: TargetAnnotationV1 | undefined;
-  },
-): Promise<T[]> {
+>(entries: Iterable<T>, recordedRegionNodeIndices: ReadonlySet<number> = new Set()): T[] {
   const byNode = new Map<number, T>();
   for (const entry of entries) {
     const existing = byNode.get(entry.nodeIndex);
@@ -28,21 +20,11 @@ export async function rankAndDedupeReplaySuggestions<
       byNode.set(entry.nodeIndex, entry);
     }
   }
-  const sameRegion = new Set<number>();
-  if (context.targetEvidence?.verification === 'verified') {
-    const { buildIndexMap } = await import('@agent-device/ad-script');
-    const { isInScrollRegion } = await import('@agent-device/selectors/target-evidence');
-    const byIndex = buildIndexMap(context.nodes);
-    for (const nodeIndex of byNode.keys()) {
-      const node = byIndex.get(nodeIndex);
-      if (node && isInScrollRegion(node, byIndex, context.targetEvidence.scrollRegion))
-        sameRegion.add(nodeIndex);
-    }
-  }
   return [...byNode.values()].sort(
     (left, right) =>
       basisRank(left.basis) - basisRank(right.basis) ||
-      Number(sameRegion.has(right.nodeIndex)) - Number(sameRegion.has(left.nodeIndex)) ||
+      Number(recordedRegionNodeIndices.has(right.nodeIndex)) -
+        Number(recordedRegionNodeIndices.has(left.nodeIndex)) ||
       left.nodeIndex - right.nodeIndex,
   );
 }

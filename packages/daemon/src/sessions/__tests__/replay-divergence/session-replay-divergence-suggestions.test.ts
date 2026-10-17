@@ -118,7 +118,7 @@ test.each(['region', 'absent', 'none', 'unverifiable'] as const)(
               ancestry: [],
               sibling: 0,
               viewportOrder: 0,
-              ...(evidence === 'region'
+              ...(evidence === 'region' || evidence === 'unverifiable'
                 ? { scrollRegion: { role: 'scrollview', id: 'recorded' } }
                 : {}),
               verification:
