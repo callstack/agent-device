@@ -4,118 +4,159 @@
 
 Accepted
 
-> **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Persistent protocols,
-> invalidation, and explicitly safe one-shot fallback remain accepted. "Daemon-owned" means the
-> daemon owns helper lifetime policy; platform modules own process-lived helper managers and helper
-> mechanics, and request bindings attach to but never own or stop healthy helper generations.
+> **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** Persistent protocols, invalidation, and explicitly safe one-shot fallback remain accepted.
+> In this ADR, "daemon-owned" means that the daemon owns helper lifetime policy.
+> Platform modules own process-lived helper managers and helper mechanics.
+> Request bindings attach to healthy helper generations but never own or stop them.
+
+## Rules at a glance
+
+- When startup costs are high and an automation context is reusable, use persistent platform helper sessions.
+- The daemon owns helper lifetime policy. Platform modules own helper-manager mechanics.
+- Unless a separate cache contract has explicit invalidation, a helper must execute each command against fresh platform state.
+- On Android, snapshot capture, gesture viewport resolution, and planned-touch injection share one bundled automation helper.
+- On Android, after a failed session command, retry one-shot only for idempotent reads, and only after the failed session has stopped.
+- On Android, return a session gesture failure directly. Do not retry it one-shot.
+- For Android snapshots, if the packaged helper is unavailable or invalid, agent-device must fail closed. It must not substitute the legacy `adb uiautomator dump` snapshot engine.
 
 ## Context
 
-Some platform automation backends are expensive to start but cheap to reuse. iOS already uses a
-long-lived XCTest runner session with an HTTP transport. That model avoids paying `xcodebuild`,
-runner boot, and XCTest readiness costs for every command, while still allowing the daemon to
-invalidate the runner when the device, app, bundle, or runner process changes.
+Some platform automation backends have high startup costs but low reuse costs.
+iOS already uses a long-lived XCTest runner session with an HTTP transport.
+This model avoids repeated `xcodebuild`, runner boot, and XCTest readiness costs for each command.
+The daemon can still invalidate the runner when the device, app, bundle, or runner process changes.
 
-Android snapshot capture initially used a one-shot instrumentation helper. Every snapshot launched
-`adb shell am instrument`, connected `UiAutomation`, captured the tree, emitted XML, and exited.
-Recent Android snapshot optimizations reduced XML size, idle waiting, extra file I/O, and hidden
-content hint work, but a throwaway prototype still showed that process/session startup dominates
-steady-state latency:
+Android snapshot capture initially used a one-shot instrumentation helper.
+Each snapshot performed these operations:
 
-- launcher snapshot: one-shot p50 `227ms`, persistent socket p50 `5.8ms`
-- React Navigation playground snapshot: one-shot p50 `265.7ms`, persistent socket p50 `16.5ms`
+1. Start `adb shell am instrument`.
+2. Connect `UiAutomation`.
+3. Capture the tree.
+4. Emit XML.
+5. Exit.
 
-The same pressure can appear on new platform adapters. HarmonyOS or other device backends may have
-host tools, test runners, accessibility services, or bridge processes with the same shape: expensive
-startup, cheap repeated commands, and a need for strict invalidation.
+Recent Android snapshot optimizations reduced XML size, idle waits, extra file I/O, and work on hidden content hints.
+However, a disposable prototype showed that process/session startup dominates steady-state latency:
+
+- Launcher snapshot: one-shot p50 `227ms`, persistent socket p50 `5.8ms`.
+- React Navigation playground snapshot: one-shot p50 `265.7ms`, persistent socket p50 `16.5ms`.
+
+New platform adapters can have the same costs.
+HarmonyOS or other backends may use host tools, test runners, accessibility services, or bridge processes with this pattern:
+
+- High startup costs.
+- Low costs for repeated commands.
+- A need for strict invalidation.
 
 ## Decision
 
-Use persistent platform helper sessions when a backend has high startup cost and a reusable
-automation context.
+When a backend has high startup costs and a reusable automation context, use persistent platform helper sessions.
 
-A helper session is an optimization layer governed by daemon-owned lifetime policy, not a
-replacement for command correctness. Platform modules own helper-manager mechanics. A helper may
-keep processes, sockets, runner state, accessibility service flags, or device forwards warm. It must
-still execute each command against fresh platform state unless a separate cache contract has explicit
-invalidation.
+A helper session is an optimization under daemon-owned lifetime policy.
+It does not replace command correctness.
+Platform modules own helper-manager mechanics.
+A helper may retain processes, sockets, runner state, accessibility service flags, or device forwards for reuse.
+Unless a separate cache contract defines explicit invalidation, the helper must execute each command against fresh platform state.
 
-The session pattern is:
+Use this session pattern:
 
-- start lazily on the first command that benefits from reuse
-- bind the session to a device identity and helper/runner identity
-- communicate through a small validated protocol with request ids and version metadata
-- reuse the session while the identity and protocol remain valid
-- invalidate on device disconnect, helper reinstall/version change, process exit, socket/protocol
-  failure, app/session identity change, or capture options that affect command semantics
-- fall back to the existing one-shot path for the current command when reuse fails
-- make shutdown best effort and make stale sessions disposable
+- On the first command that benefits from reuse, start the session lazily.
+- Bind the session to a device identity and helper/runner identity.
+- Communicate through a small validated protocol with request ids and version metadata.
+- While the identity and protocol remain valid, reuse the session.
+- When an invalidation condition occurs, invalidate the session.
+- If reuse fails, use the existing one-shot path as the fallback for the current command.
+- Make shutdown best effort.
+- Make stale sessions disposable.
 
-For Android snapshots, productize a persistent helper mode that keeps `UiAutomation` alive and
-serves fresh snapshot requests over an `adb forward` socket. Do not add snapshot result caching as
-part of that first step. The first reliable win is infrastructure reuse, not data reuse. The current
-implementation keeps the existing one-shot instrumentation helper as the fallback for startup,
-socket, protocol, and request failures. Both transports execute the same packaged helper contract;
-agent-device must fail closed when that helper is unavailable or invalid instead of substituting
-the legacy `adb uiautomator dump` snapshot engine.
+These conditions invalidate a session:
 
-Android permits only one reliable instrumentation-owned `UiAutomation` context per device. Snapshot
-capture, gesture viewport resolution, and planned-touch injection therefore share one bundled
-automation helper: a live persistent helper session executes touch commands directly over its
-session socket, and without one the same helper runs one-shot (amended 2026-07, issue #1275,
-consistent with ADR 0013; previously touch synthesis shipped as a separate instrumentation helper,
-so the daemon had to stop the persistent snapshot session before every gesture and let the next
-snapshot restart it lazily). One-shot retry after a failed session command applies only to
-idempotent reads such as viewport resolution, and only after the failed session has been stopped.
-Gesture injection is not idempotent — events may already be partially injected — so a session
-gesture failure surfaces directly instead of retrying one-shot. Helper reuse must never turn
-process ownership into cross-command interference.
+- Device disconnect.
+- Helper reinstall or version change.
+- Process exit.
+- Socket or protocol failure.
+- App or session identity change.
+- Capture options that affect command semantics.
 
-For iOS, keep the XCTest runner session as the reference implementation for lifecycle and
-invalidation behavior. Android does not need to copy iOS internals, but it should reuse the same
-lifetime-policy ideas: per-device session management, readiness checks, structured protocol errors,
-fallback/invalidation, and request-scoped observability.
+For Android snapshots, productize a persistent helper mode that retains `UiAutomation` and serves fresh snapshot requests over an `adb forward` socket.
+Do not add snapshot result caching in this first step.
+The first reliable improvement is infrastructure reuse, not data reuse.
+The current implementation retains the existing one-shot instrumentation helper as the fallback for startup, socket, protocol, and request failures.
+Both transports execute the same packaged helper contract.
+If that helper is unavailable or invalid, agent-device must fail closed.
+It must not substitute the legacy `adb uiautomator dump` snapshot engine.
 
-For future platforms such as HarmonyOS, prefer designing adapters around this same helper-session
-contract when their native automation layer is runner-like. Avoid embedding platform-specific
-startup assumptions directly in command handlers.
+Android permits only one reliable instrumentation-owned `UiAutomation` context per device.
+Thus, snapshot capture, gesture viewport resolution, and planned-touch injection share one bundled automation helper (amended 2026-07, issue #1275, consistent with ADR 0013).
+A live persistent helper session executes touch commands directly over its session socket.
+Without a live persistent session, the same helper runs one-shot.
+Before that amendment, touch synthesis shipped as a separate instrumentation helper.
+Thus, the daemon had to stop the persistent snapshot session before every gesture, and the next snapshot restarted it lazily.
+After a failed session command, one-shot retry applies only to idempotent reads, such as viewport resolution.
+The retry runs only after the failed session has stopped.
+Gesture injection is not idempotent because events may already be partially injected.
+Thus, session gesture failures return directly without a one-shot retry.
+Helper reuse must never let process ownership cause interference between commands.
+
+For iOS, keep the XCTest runner session as the reference implementation for lifecycle and invalidation behavior.
+Android does not need to copy iOS internals.
+However, it should reuse these lifetime-policy concepts:
+
+- Per-device session management.
+- Readiness checks.
+- Structured protocol errors.
+- Fallback and invalidation.
+- Request-scoped observability.
+
+For future platforms such as HarmonyOS, prefer this helper-session contract when the native automation layer uses a runner-like model.
+Avoid platform-specific startup assumptions in command handlers.
 
 ## Alternatives Considered
 
-- Keep one-shot helpers only: simplest and robust, but Android measurements show it leaves an order
-  of magnitude of steady-state snapshot performance on the table.
-- Cache snapshots in the daemon: faster for repeated reads, but unsafe after mutations, animations,
-  navigation, system dialogs, or app process changes unless a mutation generation contract exists.
-  Cache infrastructure can be added later; it should not be mixed with helper-session reuse.
-- Promote an abstract cross-platform runner immediately: tempting, but premature. iOS XCTest,
-  Android instrumentation, macOS helper, Linux AT-SPI, and future HarmonyOS backends have different
-  startup and transport mechanics. Share the daemon lifecycle contract first, then extract common
-  code only where repetition appears.
-- Replace Android instrumentation with a normal app service: potentially useful, but Android
-  `UiAutomation` access is instrumentation-owned. A persistent instrumentation process keeps the
-  required privilege model while removing repeated process startup.
+- **Keep only one-shot helpers.** This option is the simplest, and it is robust.
+  However, Android measurements show that it loses an order of magnitude of steady-state snapshot performance.
+- **Cache snapshots in the daemon.** This accelerates repeated reads.
+  Without a mutation generation contract, it is unsafe after mutations, animations, navigation, system dialogs, or app process changes.
+  Cache infrastructure can be added later.
+  It should remain separate from helper-session reuse.
+- **Create an abstract cross-platform runner immediately.** This is premature.
+  iOS XCTest, Android instrumentation, macOS helper, Linux AT-SPI, and future HarmonyOS backends have different startup and transport mechanics.
+  Share the daemon lifecycle contract first.
+  Extract common code only where repetition appears.
+- **Replace Android instrumentation with a normal app service.** This is potentially useful.
+  However, Android `UiAutomation` access belongs to instrumentation.
+  A persistent instrumentation process retains the required privilege model and removes repeated process startup.
 
 ## Consequences
 
-Persistent helper sessions should be measured before being productized. A prototype or benchmark
-should show meaningful wall-clock improvement on a realistic app state, not just a trivial screen.
+Before persistent helper sessions become product features, they should be measured.
+A prototype or benchmark should show meaningful wall-clock improvement on a realistic app state, not only a trivial screen.
 
-Session managers need more lifecycle tests than one-shot helpers: startup, ready protocol, reuse,
-timeout, malformed response, helper version mismatch, device disconnect, install invalidation,
-shutdown, exclusive instrumentation handoff, and one-shot fallback.
+Session managers need more lifecycle tests than one-shot helpers.
+These tests cover:
 
-Observability should report whether a command used a persistent session, started one, reused one,
-invalidated one, or fell back to one-shot. This keeps CI and user bug reports diagnosable when a
-fast path fails.
+- Startup.
+- Ready protocol.
+- Reuse.
+- Timeout.
+- Malformed response.
+- Helper version mismatch.
+- Device disconnect.
+- Install invalidation.
+- Shutdown.
+- Exclusive instrumentation handoff.
+- One-shot fallback.
 
-Persistent sessions should not make direct interactive commands unexpectedly slow. Use short
-connect/request timeouts for the persistent path, then fall back to the existing one-shot timeout
-budget.
+Observability should report whether a command used, started, reused, or invalidated a persistent session, or used a one-shot fallback.
+When a fast path fails, this information keeps CI results and user bug reports diagnosable.
 
-The daemon remains the owner of helper lifetime policy. Platform modules own helper-manager mechanics
-and may expose helper-session operations, but request bindings and command handlers must not directly
-own or stop long-lived helper processes or raw host tool state.
+Persistent sessions should not make direct interactive commands unexpectedly slow.
+Use short connect/request timeouts for the persistent path.
+Then use the existing one-shot timeout budget for the fallback.
 
-This ADR does not require every backend to implement a persistent session. It defines the preferred
-shape when the backend has the same startup/reuse economics that iOS and Android snapshots now
-demonstrate.
+The daemon remains the owner of helper lifetime policy.
+Platform modules own helper-manager mechanics and may expose helper-session operations.
+Request bindings and command handlers must not directly own or stop long-lived helper processes or raw host tool state.
+
+This ADR does not require every backend to implement a persistent session.
+It defines the preferred design when a backend has the startup and reuse costs demonstrated by iOS and Android snapshots.
