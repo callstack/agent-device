@@ -109,6 +109,7 @@ test('Provider-backed integration Android telephony reports a console refusal wi
     await world.daemon.client().apps.open({ app: 'settings', ...world.selection });
     const data = assertRpcError(
       await world.daemon.callCommand('telephony', ['accept', '5551234'], world.selection),
+      500,
       'COMMAND_FAILED',
       /refused telephony accept/,
     );
@@ -127,6 +128,7 @@ test('Provider-backed integration Android telephony refuses a physical device be
     assert.equal(opened.device?.id, PROVIDER_SCENARIO_ANDROID_PHONE.id);
     const data = assertRpcError(
       await world.daemon.callCommand('telephony', ['call', '5551234'], world.selection),
+      500,
       'UNSUPPORTED_OPERATION',
       /telephony is not supported on this device/,
     );

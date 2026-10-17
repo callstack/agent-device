@@ -132,6 +132,7 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
       const pinnedStale = await daemon.callCommand('press', [`@e2~s${g1}`], {});
       const pinnedStaleData = assertRpcError(
         pinnedStale,
+        500,
         'COMMAND_FAILED',
         /Ref @e2 was minted from a superseded snapshot generation/,
       );

@@ -116,6 +116,7 @@ test('provider lease allocation fails when the daemon lacks the requested runtim
     );
     const error = assertRpcError(
       response,
+      500,
       'UNSUPPORTED_OPERATION',
       /Provider "limrun" is not available in this daemon runtime/,
     );

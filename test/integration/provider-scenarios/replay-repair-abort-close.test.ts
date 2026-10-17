@@ -63,7 +63,7 @@ test('Provider-backed integration: repair close paths (abort, plain close, commi
     await armRepair(client, selection);
 
     const abortedClose = await daemon.callCommand('close', [], { saveScript: true });
-    assertRpcError(abortedClose, 'COMMAND_FAILED', /repair was aborted/);
+    assertRpcError(abortedClose, 500, 'COMMAND_FAILED', /repair was aborted/);
     assert.equal(fs.existsSync(path.join(tempRoot, 'repair.healed.ad')), false);
     assert.equal(await daemon.hasSession(), false);
     await daemon.close();

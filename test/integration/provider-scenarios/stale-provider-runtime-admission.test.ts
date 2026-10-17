@@ -199,7 +199,12 @@ test('an active AWS WebDriver device denies unsupported install from facts befor
       { ...flags, serial: device.id },
       { meta },
     );
-    const error = assertRpcError(response, 'UNSUPPORTED_OPERATION', /not supported on this device/);
+    const error = assertRpcError(
+      response,
+      500,
+      'UNSUPPORTED_OPERATION',
+      /not supported on this device/,
+    );
     assert.equal(
       (error.details as Record<string, unknown> | undefined)?.reason,
       'owner-capability-missing',

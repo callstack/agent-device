@@ -30,7 +30,7 @@ test('provider route publishes and replays an open-to-destination script with a 
       const liveSnapshot = await client.capture.snapshot({ interactiveOnly: true });
       assert.ok(liveSnapshot.nodes.some((node) => node.label === 'Search'));
       const flaggedClose = await world.daemon.callCommand('close', [], { saveScript: scriptPath });
-      assertRpcError(flaggedClose, 'INVALID_ARGS', /cannot re-publish/);
+      assertRpcError(flaggedClose, 400, 'INVALID_ARGS', /cannot re-publish/);
       assert.equal(await world.daemon.hasSession(), true);
       await client.sessions.close();
 
@@ -126,7 +126,7 @@ test('replaying a published script against a reshuffled screen fails closed inst
 
         phase = 'replay';
         const replay = await world.daemon.callCommand('replay', [scriptPath], world.selection);
-        const errorData = assertRpcError(replay, 'REPLAY_DIVERGENCE', /wait/i);
+        const errorData = assertRpcError(replay, 500, 'REPLAY_DIVERGENCE', /wait/i);
         const divergence = (errorData.details as Record<string, unknown> | undefined)
           ?.divergence as
           | { kind?: string; targetBinding?: { classification?: string; matchCount?: number } }
@@ -159,7 +159,7 @@ test('a second successful open aborts publication and terminal save flags fail b
         relaunch: true,
         saveScript: scriptPath,
       });
-      assertRpcError(rearm, 'INVALID_ARGS', /only arm a fresh session/);
+      assertRpcError(rearm, 400, 'INVALID_ARGS', /only arm a fresh session/);
       const second = await world.daemon.callCommand('open', ['settings'], {
         ...world.selection,
         relaunch: true,
@@ -167,10 +167,10 @@ test('a second successful open aborts publication and terminal save flags fail b
       const secondData = assertRpcOk<{ warnings?: string[] }>(second);
       assert.match(String(secondData.warnings), /publication was aborted/i);
       const publication = await world.daemon.callCommand('session_save_script', [scriptPath]);
-      assertRpcError(publication, 'COMMAND_FAILED', /aborted by a second successful open/);
+      assertRpcError(publication, 500, 'COMMAND_FAILED', /aborted by a second successful open/);
 
       const flaggedClose = await world.daemon.callCommand('close', [], { saveScript: scriptPath });
-      assertRpcError(flaggedClose, 'INVALID_ARGS', /terminal recording/);
+      assertRpcError(flaggedClose, 400, 'INVALID_ARGS', /terminal recording/);
       assert.equal(await world.daemon.hasSession(), true);
       assert.equal(fs.existsSync(scriptPath), false);
 
@@ -197,7 +197,7 @@ test('an unarmed session refuses close --save-script and closes cleanly on plain
       const opened = await world.daemon.callCommand('open', ['settings'], { ...world.selection });
       assertRpcOk(opened);
       const flaggedClose = await world.daemon.callCommand('close', [], { saveScript: scriptPath });
-      assertRpcError(flaggedClose, 'INVALID_ARGS', /not armed/);
+      assertRpcError(flaggedClose, 400, 'INVALID_ARGS', /not armed/);
       assert.equal(await world.daemon.hasSession(), true);
       assert.equal(fs.existsSync(scriptPath), false);
 
@@ -286,7 +286,7 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
           ...world.selection,
           recordAs: 'password',
         });
-        assertRpcError(invalidName, 'INVALID_ARGS', /Invalid --record-as variable/);
+        assertRpcError(invalidName, 400, 'INVALID_ARGS', /Invalid --record-as variable/);
         assert.equal(world.textInjectionCalls.length, 0);
 
         const contradictory = await world.daemon.callCommand('fill', [`@${search.ref}`, secret], {
@@ -294,7 +294,7 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
           recordAs: 'SEARCH_TERM',
           noRecord: true,
         });
-        assertRpcError(contradictory, 'INVALID_ARGS', /cannot be combined with --no-record/);
+        assertRpcError(contradictory, 400, 'INVALID_ARGS', /cannot be combined with --no-record/);
         assert.equal(world.textInjectionCalls.length, 0);
 
         const fill = await client.interactions.fill({
@@ -328,7 +328,7 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
           [scriptPath],
           world.selection,
         );
-        assertRpcError(missingValue, 'INVALID_ARGS', /Unresolved variable \$\{SEARCH_TERM\}/);
+        assertRpcError(missingValue, 400, 'INVALID_ARGS', /Unresolved variable \$\{SEARCH_TERM\}/);
         assert.equal(world.textInjectionCalls.length, callsBeforeMissingValue);
         await client.sessions.close();
 
@@ -363,7 +363,7 @@ test('parameterized fill publishes only ${VAR} and replay resolves it immediatel
           ['id=com.android.settings:id/search', secret],
           { ...world.selection, recordAs: 'SEARCH_TERM' },
         );
-        assertRpcError(unarmed, 'INVALID_ARGS', /requires an armed script recording/);
+        assertRpcError(unarmed, 400, 'INVALID_ARGS', /requires an armed script recording/);
         assert.equal(world.textInjectionCalls.length, callsBeforeUnarmed);
         await client.sessions.close();
       } finally {
@@ -448,7 +448,7 @@ test('#1398: a read-only wait recorded after a parameterized fill never re-seria
           [scriptPath],
           world.selection,
         );
-        assertRpcError(refusedPublish, 'COMMAND_FAILED', /destination guard/);
+        assertRpcError(refusedPublish, 500, 'COMMAND_FAILED', /destination guard/);
 
         // Recording a stable, non-value-bearing landmark — mirroring the
         // real-world fix of switching to the "Apps" landmark — recovers a

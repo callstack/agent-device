@@ -27,6 +27,7 @@ test(
     await withIosContractDaemon([runnerSnapshotEntry(KEYBOARD_TREE)], async (daemon) => {
       const error = assertRpcError(
         await daemon.callCommand('find', ['label', 'Form', 'focus']),
+        500,
         'COMMAND_FAILED',
         /Ref @e2 is behind the visible keyboard and cannot be focused safely/,
       );
@@ -66,6 +67,7 @@ test(
     await withIosContractDaemon([runnerSnapshotEntry(coveredFormTree())], async (daemon) => {
       const error = assertRpcError(
         await daemon.callCommand('find', ['label', 'Form', 'focus']),
+        500,
         'COMMAND_FAILED',
         /Matched element @e2 is covered by another visible element and cannot be focused safely/,
       );
@@ -87,6 +89,7 @@ test(
       async (daemon) => {
         const ambiguous = assertRpcError(
           await daemon.callCommand('find', ['label', 'Form', 'focus']),
+          500,
           'AMBIGUOUS_MATCH',
           /find matched 2 elements for label "Form"/,
         );
@@ -129,6 +132,7 @@ test(
     await withIosContractDaemon([runnerSnapshotEntry(KEYBOARD_TREE)], async (daemon) => {
       assertRpcError(
         await daemon.callCommand('find', ['label', 'Nowhere', 'focus']),
+        500,
         'COMMAND_FAILED',
         /find did not match any element/,
       );

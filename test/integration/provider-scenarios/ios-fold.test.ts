@@ -359,6 +359,7 @@ test('fold worst-case ledger covers the client envelope with the daemon-result m
   });
   const calibrationError = assertRpcError(
     calibration.response,
+    500,
     'COMMAND_FAILED',
     /did not settle/,
   ) as { details?: { reason?: unknown } };

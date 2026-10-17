@@ -292,7 +292,7 @@ test('Provider-backed integration Android external ANR fails with actionable con
         (call) => call.slice(0, 4).join(' ') === 'shell am start -W',
       ).length;
       const press = await world.daemon.callCommand('press', ['50', '60'], world.selection);
-      const error = assertRpcError(press, 'COMMAND_FAILED', /com\.android\.systemui/);
+      const error = assertRpcError(press, 500, 'COMMAND_FAILED', /com\.android\.systemui/);
       const details = error.details as Record<string, unknown>;
 
       assert.equal(details.focusedPackage, 'com.android.systemui');
@@ -672,7 +672,7 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     platform: 'android',
     serial: PROVIDER_SCENARIO_ANDROID.id,
   });
-  assertRpcError(invalidPerfAction, 'INVALID_ARGS', /perf action must be/i);
+  assertRpcError(invalidPerfAction, 400, 'INVALID_ARGS', /perf action must be/i);
 
   const logsStop = await client.observability.logs({ action: 'stop', ...selection });
   assert.equal(logsStop.stopped, true);

@@ -62,7 +62,7 @@ test('Provider-backed integration daemon command policies gate admission and pro
         { platform: 'android' },
         { meta: inactiveLeaseMeta },
       );
-      assertRpcError(blockedSnapshot, 'UNAUTHORIZED', /Lease is not active/);
+      assertRpcError(blockedSnapshot, 401, 'UNAUTHORIZED', /Lease is not active/);
 
       const recordStart = await daemon.callCommand('record', ['start', '/tmp/policy-record.mp4'], {
         recordingScope: 'device',

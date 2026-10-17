@@ -307,6 +307,7 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
         });
         const frontmostRefusalErrorData = assertRpcError(
           frontmostFullscreenRefusal,
+          400,
           'INVALID_ARGS',
           /--fullscreen is not accepted on the macOS frontmost-app surface/,
         );
@@ -349,6 +350,7 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
         });
         const refusalErrorData = assertRpcError(
           fullscreenRefusal,
+          400,
           'INVALID_ARGS',
           /--fullscreen is not accepted on the macOS desktop surface/,
         );

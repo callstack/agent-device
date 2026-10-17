@@ -40,20 +40,10 @@ export function assertRpcOk<TData extends Record<string, unknown> = Record<strin
 
 export function assertRpcError(
   response: ProviderScenarioRpcResult,
+  expectedStatus: 400 | 401 | 404 | 423 | 500,
   code: string,
   message: RegExp,
 ): Record<string, unknown> {
-  const details = response.json?.error?.data?.details;
-  const expectedStatus =
-    code === 'INVALID_ARGS'
-      ? 400
-      : code === 'UNAUTHORIZED'
-        ? 401
-        : code === 'SESSION_NOT_FOUND'
-          ? 404
-          : code === 'DEVICE_IN_USE' && details?.reason === 'human_control_active'
-            ? 423
-            : 500;
   assert.equal(response.statusCode, expectedStatus, JSON.stringify(response.json));
   assert.equal(response.json?.error?.data?.code, code, JSON.stringify(response.json));
   assert.match(response.json?.error?.message ?? '', message);

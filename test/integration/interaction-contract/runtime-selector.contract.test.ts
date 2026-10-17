@@ -269,6 +269,7 @@ test(
         const refusal = await daemon.callCommand('press', ['label=Continue']);
         const data = assertRpcError(
           refusal,
+          500,
           'COMMAND_FAILED',
           /label=Continue had no confirmed resting position when the transition window ran out/,
         );
@@ -392,7 +393,7 @@ test(
       [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerSnapshotEntry(RUNNER_CONTINUE_NODES)],
       async (daemon) => {
         const press = await daemon.callCommand('press', ['label=Missing']);
-        const error = assertRpcError(press, 'COMMAND_FAILED', /Selector did not match/);
+        const error = assertRpcError(press, 500, 'COMMAND_FAILED', /Selector did not match/);
         assert.equal((error.details as Record<string, unknown>)?.dispatched, 'no');
       },
     );

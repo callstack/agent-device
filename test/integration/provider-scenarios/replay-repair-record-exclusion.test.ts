@@ -148,7 +148,7 @@ async function assertRepairSegmentReadExclusion(params: {
     record: true,
     noRecord: true,
   });
-  assertRpcError(conflictingFlags, 'INVALID_ARGS', /--record and --no-record are mutually/);
+  assertRpcError(conflictingFlags, 400, 'INVALID_ARGS', /--record and --no-record are mutually/);
 }
 
 /** What must (and must not) have landed in the healed script. */
