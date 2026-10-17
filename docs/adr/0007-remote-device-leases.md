@@ -268,7 +268,7 @@ Thus, `batch` steps and `replay` actions are confined when they enter admission 
 The confinement has these parts:
 
 - An allow list of commands: the commands whose command registry descriptor declares `appLease: 'allowed'`.
-  Later commands are refused.
+  A command without that declaration is refused, including a command that is added later.
   Of the commands that lease admission otherwise exempts, only `lease_heartbeat` and `lease_release` declare it.
 - `open` and `close` of the leased bundle only.
 - The `app` surface only.
