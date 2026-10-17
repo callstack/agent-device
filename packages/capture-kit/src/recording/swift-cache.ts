@@ -147,7 +147,8 @@ export async function compileSwiftSourceText(params: {
   return executablePath;
 }
 
-function getSwiftCacheRoot(env: NodeJS.ProcessEnv): string {
+/** The directory compiled helpers land in for `env`: what a cached helper path is valid for. */
+export function getSwiftCacheRoot(env: NodeJS.ProcessEnv): string {
   const configured = env.AGENT_DEVICE_SWIFT_CACHE_DIR?.trim();
   if (configured) {
     return path.resolve(configured);

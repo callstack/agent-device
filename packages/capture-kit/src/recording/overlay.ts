@@ -46,25 +46,30 @@ export function startRecordingOverlayBudget(): Deadline {
  */
 const HELPER_EXIT_GRACE_MS = 5_000;
 
-let overlayScriptPath: string | undefined;
-let exportSupportScriptPath: string | undefined;
+// The working-directory fallback in the search makes a resolved script path specific to the host's
+// directory, so each directory keeps its own.
+const overlayScriptPaths = new Map<string, string>();
+const exportSupportScriptPaths = new Map<string, string>();
+
+function resolveCachedScriptPath(
+  cache: Map<string, string>,
+  scriptName: string,
+  host: HostEnvironment,
+): string {
+  let resolved = cache.get(host.cwd);
+  if (resolved === undefined) {
+    resolved = resolveRecordingScriptPath(scriptName, findProjectRoot(), host.cwd);
+    cache.set(host.cwd, resolved);
+  }
+  return resolved;
+}
 
 function getOverlayScriptPath(host: HostEnvironment): string {
-  overlayScriptPath ??= resolveRecordingScriptPath(
-    'recording-overlay.swift',
-    findProjectRoot(),
-    host.cwd,
-  );
-  return overlayScriptPath;
+  return resolveCachedScriptPath(overlayScriptPaths, 'recording-overlay.swift', host);
 }
 
 function getExportSupportScriptPath(host: HostEnvironment): string {
-  exportSupportScriptPath ??= resolveRecordingScriptPath(
-    'RecordingExportSupport.swift',
-    findProjectRoot(),
-    host.cwd,
-  );
-  return exportSupportScriptPath;
+  return resolveCachedScriptPath(exportSupportScriptPaths, 'RecordingExportSupport.swift', host);
 }
 
 async function exportProcessedVideo(params: {

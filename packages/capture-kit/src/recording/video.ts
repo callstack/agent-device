@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { type Deadline, sleep } from '@agent-device/host-kit/retry';
-import { buildSwiftToolEnv, compileSwiftSourceText } from './swift-cache.ts';
+import { buildSwiftToolEnv, compileSwiftSourceText, getSwiftCacheRoot } from './swift-cache.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import { hasPlayableWebmStructure } from './video-webm.ts';
@@ -35,7 +35,8 @@ semaphore.wait()
 exit(exitCode)
 `.trim();
 
-let videoValidatorExecutablePathPromise: Promise<string> | undefined;
+// A compiled helper is valid for the Swift cache it was built into, so each cache root keeps its own.
+const videoValidatorExecutablePaths = new Map<string, Promise<string>>();
 
 export async function waitForStableFile(
   filePath: string,
@@ -94,16 +95,21 @@ export async function isPlayableVideo(filePath: string, host: HostEnvironment): 
 }
 
 async function getVideoValidatorExecutablePath(host: HostEnvironment): Promise<string> {
-  videoValidatorExecutablePathPromise ??= compileSwiftSourceText({
-    host,
-    source: VIDEO_VALIDATION_SCRIPT,
-    cacheName: 'video-validator',
-    timeoutMs: 30_000,
-  });
+  const cacheRoot = getSwiftCacheRoot(host.env);
+  let compiled = videoValidatorExecutablePaths.get(cacheRoot);
+  if (!compiled) {
+    compiled = compileSwiftSourceText({
+      host,
+      source: VIDEO_VALIDATION_SCRIPT,
+      cacheName: 'video-validator',
+      timeoutMs: 30_000,
+    });
+    videoValidatorExecutablePaths.set(cacheRoot, compiled);
+  }
   try {
-    return await videoValidatorExecutablePathPromise;
+    return await compiled;
   } catch (error) {
-    videoValidatorExecutablePathPromise = undefined;
+    videoValidatorExecutablePaths.delete(cacheRoot);
     throw error;
   }
 }
