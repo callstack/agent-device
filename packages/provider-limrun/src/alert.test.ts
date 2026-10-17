@@ -176,10 +176,12 @@ describe('wait budget', () => {
     expect(settled).toBe('pending');
 
     // The instance/session teardown route: the pending call fails, the leg ends, and it ends as
-    // the caller's cancellation — not as a transport failure.
+    // the caller's cancellation — not as a transport failure. It is a pre-press exit (acting
+    // legs never press before their lookup returns; get has no press), so it carries the clean
+    // dispatched: no like the other pre-press refusal.
     rejectCapture?.(new Error('websocket closed'));
     await expect(leg).rejects.toMatchObject({
-      details: { reason: 'request_canceled' },
+      details: { reason: 'request_canceled', dispatched: 'no' },
     });
   });
 

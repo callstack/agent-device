@@ -304,7 +304,12 @@ test('the read-first capture rides the caller cancellation and dies with it', as
   caller.abort();
   rejectCapture?.(new Error('adb killed'));
 
-  await assert.rejects(result, (error: unknown) => isRequestCanceledError(error));
+  await assert.rejects(
+    result,
+    (error: unknown) =>
+      isRequestCanceledError(error) &&
+      (error as { details?: { dispatched?: unknown } }).details?.dispatched === 'no',
+  );
   assert.equal(seamSignals.length, 1);
   assert.equal(seamSignals[0]?.aborted, true);
   assert.equal(runAndroidAdb.mock.calls.length, 0);

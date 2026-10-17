@@ -60,10 +60,10 @@ export type TreeAlertCandidate<
 /**
  * The seams one tree-based backend owns. `signal` is always the daemon request's own
  * cancellation, never a budget timer: it is what may stop a transport in flight. A transport
- * with no abort (Limrun's client) cannot be stopped this way — its in-flight call keeps running,
- * and the leg waits for the answer it started (the overrun named above) or, if the caller
- * disconnects first, the daemon answers the request as canceled while the transport finishes
- * detached behind it.
+ * with no abort (Limrun's client) cannot be stopped this way — its in-flight call keeps running
+ * and the leg waits for the answer it started (the overrun named above). The caller meanwhile
+ * learns of its cancellation from its own client transport; the daemon's own answer lands once
+ * the leg settles on the started probe's answer.
  */
 export type TreeAlertSeam = Readonly<{ signal: AbortSignal }>;
 
@@ -176,7 +176,12 @@ async function observeTreeAlert<TCapture, TCandidate>(
   try {
     capture = await driver.capture({ signal: driver.signal ?? neverSignal });
   } catch (error) {
-    if (driver.signal?.aborted) throw createRequestCanceledError(undefined, error);
+    if (driver.signal?.aborted) {
+      // A capture that died with the caller's cancellation is always a pre-press exit: no
+      // acting leg presses before its lookup returns, and get/wait have no press at all — so
+      // nothing can have been dispatched when this route throws.
+      throw createRequestCanceledError({ dispatched: 'no' }, error);
+    }
     throw error;
   }
   return driver.findCandidate(capture);
