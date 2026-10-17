@@ -41,6 +41,17 @@ test('publish package requires both Android helpers and excludes benchmark scrip
       ]),
     /benchmark or build scripts/,
   );
+  assert.throws(
+    () =>
+      assertPublishPackageContents([
+        ...fixturePack.files,
+        {
+          path: 'apple/macos-helper/Tests/AgentDeviceMacOSInputTests/ScheduleTests.swift',
+          size: 1,
+        },
+      ]),
+    /macOS helper test sources/,
+  );
 });
 
 test('Markdown emphasizes total install size and startup without duplicate breakdowns', () => {

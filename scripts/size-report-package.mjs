@@ -76,6 +76,16 @@ export function assertPublishPackageContents(entries, options = {}) {
   if (forbiddenPaths.length > 0) {
     throw new Error(`npm pack includes benchmark or build scripts: ${forbiddenPaths.join(', ')}`);
   }
+  // The macOS helper ships as buildable source and the helper's own manifest declares no test
+  // targets, so anything under its Tests/ directory could only ever be dead weight the install
+  // never compiles. Its tests live in apple/macos-helper-tests, which `files` does not list.
+  const shippedSwiftTests = paths.filter(
+    (entryPath) =>
+      entryPath === 'apple/macos-helper/Tests' || entryPath.startsWith('apple/macos-helper/Tests/'),
+  );
+  if (shippedSwiftTests.length > 0) {
+    throw new Error(`npm pack includes macOS helper test sources: ${shippedSwiftTests.join(', ')}`);
+  }
 }
 
 function parseNpmPackOutput(stdout) {
