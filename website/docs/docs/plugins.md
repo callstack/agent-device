@@ -34,6 +34,10 @@ A failed install keeps the previous selection. A running daemon keeps the plugin
 
 `source` is `builtin`, `store`, or `embedder`. A plugin that cannot register has `state: "failed"` and an `error` with `code`, `message`, and a `reason` such as `invalid_plugin`, `incompatible_plugin`, or `duplicate_provider`. The daemon starts without it and keeps every other provider. Fix or remove the package, then stop the daemon so the next command starts a new one.
 
+When a daemon's `daemon.json` cannot be used, `daemon status` says so instead of reporting a stopped daemon: `unreadable` means the file exists but could not be read, and `invalid` means it was read but is not a daemon record. Only an absent file means `stopped`.
+
+When the daemon stops, it closes every plugin once: each runtime shuts down, then its `dispose` runs. A step that fails is logged as `provider_plugin_cleanup_failed` with the provider and step, and the other plugins still close.
+
 `plugins list --json` works without a daemon. It lists your installed plugins with their provider and whether their factory loads and validates; whether `setup` succeeds shows only in a running daemon's inventory. When a daemon is running for the same `--state-dir`, it also reports that daemon's inventory under `daemon`.
 
 When two plugins claim the same provider, the first one wins: bundled providers, then installed plugins in package-name order, then plugins a JavaScript host passes itself. The others are `failed` with `duplicate_provider`. The first claim holds even when that plugin then fails to set up, so a later plugin for the same provider doesn't take over. `cloud` and `proxy` are reserved and can't be claimed.

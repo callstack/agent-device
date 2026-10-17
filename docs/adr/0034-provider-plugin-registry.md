@@ -16,6 +16,12 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
 - A plugin that fails to enumerate, load, validate or set up is recorded and skipped. The daemon
   starts with the rest. The inventory lists every plugin as `active` or `failed`, with a typed
   `error.reason`, and is published in `daemon.json` and by `agent-device daemon status`.
+- `registry.close()` is the single, idempotent cleanup owner. It shuts down each runtime, then calls
+  its `dispose`, and returns an outcome per plugin and step. Runtimes are never wrapped.
+  Composition is transactional: when a later step fails, it closes the registry before it throws.
+- The registry receives candidates. Composition chooses the sources.
+- `daemon.json` has one reader. Its states are `absent`, `unreadable`, and `invalid`; only `absent`
+  reads as a stopped daemon.
 - The plugin set is fixed for a daemon's lifetime. A plugin change takes effect on the next daemon.
 - v1 plugins (`agentDevicePlugin.apiVersion: 1`) without a `./agent-device` export are dispatched by
   their manifest before any code runs and load through an adapter until 0.22 removes them (#3759).
