@@ -22,16 +22,16 @@ The operation-facts mapped type cannot express such a key.
 [ADR 0024](./0024-screen-recording-provable-signal.md) proposes an amendment dated 2026-09-14 for the `screen-recording` kind only.
 The note at the start of section 5 describes it. It takes effect when ADR 0024 is accepted.
 
-Completion through #2070–#2072 removes capability buckets and the legacy execution shape.
+Completion on 2026-08-27 through #2070–#2072 removed capability buckets and the legacy execution shape.
 Every descriptor declares `none`, `host`, `inventory`, or `device-runtime`.
 R65 enforces zero concrete platform dependencies from production `packages/daemon/src/**`.
-R66 enforces facts-only admission and runtime proof without historical route or handler names.
-Section 6 required deletion of the completed cutover table.
+The per-command cutover table was retired after completion, as section 6 required.
+R66 now enforces the permanent facts-only admission and runtime-proof invariants without historical route or handler names.
 
-The #2082 extraction puts all six families' implementations and family-owned tests behind private package exports.
+The #2082 extraction completes the physical ownership boundary: all six families' implementations and family-owned tests are behind private package exports.
 The `src/platforms` path and former R3 folder seam are retired.
 R13 governs the import direction of concrete platform packages and implementation laziness.
-The `retired-platforms-zone` gate rejects the old root path.
+The `retired-platforms-zone` gate rejects any attempt to recreate the old root path.
 
 ## Rules at a glance
 
@@ -42,19 +42,19 @@ The `retired-platforms-zone` gate rejects the old root path.
 - The registry is **metadata-eager and implementation-lazy**.
   Cheap family identity, inventory entrypoints, and static fact declarations may load at composition time.
   Mechanics and process-lived helper managers load only when discovery or the first binding for that family needs them.
-- Each canonical family has one local runtime owner.
+- The registry selects one local runtime owner per canonical family.
   Support claims and tests cover the exact platform leaf, device kind/backend, and provider mode.
   Family ownership does not imply equal support for every leaf.
 - Command descriptors declare one typed execution shape: inventory use or platform-neutral required device operations.
   A device-operation declaration declares any preferred optimizations and fact-conditional semantic operations separately.
-  Runtime owners report device-specific facts and expose behavior through facets.
+  Runtime owners report device-specific facts and expose behavior-bearing facets.
   Platform and provider implementations never name commands.
 - `RequestExecutionScope.bindDevice(device, use)` resolves provider ownership, validates facts and concrete facets, and returns a runtime narrowed to proven use.
   Handlers cannot use undeclared facets. Casts and non-null assertions cannot repair absent proof.
-- Provider ownership is authoritative and fail-closed.
+- Provider ownership is first-class and fail-closed.
   An owning provider may supply transport to a platform runtime or implement facets directly.
   Missing required behavior never causes a local-owner fallback.
-- Process-lived helper managers, request-lived bindings, and daemon-session durable resources have separate lifetimes.
+- Process-lived helper managers, request-lived device bindings, and daemon-session durable resources have separate lifetimes.
   Helpers remain lazy, identity-bound, invalidatable, and idle-stoppable.
   Disposal of a request binding never stops a healthy helper or adopted resource.
 - Durable work has a process-local live handle and a versioned, persistable descriptor for recovery by the same owner.
@@ -68,7 +68,7 @@ The `retired-platforms-zone` gate rejects the old root path.
   Any device-runtime part uses another command's declared use.
 - Evidence is tiered by what a unit imports.
   Request-scoped device units prove facts, operations, and parity cells.
-  Only durable-resource units require the lifecycle evidence in sections 4–5.
+  Only durable-resource units carry the lifecycle evidence in sections 4–5.
 - A handler binds once with its execution use, subject to the section 9 observation exception.
   Admission, `capabilities`, and doctor use facts inspection without side effects.
   Required-only declarations are the default.
@@ -223,7 +223,7 @@ Its workspace compliance includes `check:affected` selection, R11/R13 package en
 >
 > `package-boundaries.test.ts` pins each substrate package's exported subpaths. Additional subpaths fail the gate.
 > The contracts mechanics gate retains its planted-red test.
-> `retired-platforms-zone` rejects production, test, and fixture files under the former `src/platforms` path.
+> `retired-platforms-zone` rejects every production, test, or fixture file under the former `src/platforms` path.
 
 The Apple package root serves composition only.
 It exposes the inventory module, runtime module, shutdown loader, and platform plugin.
@@ -355,8 +355,8 @@ Absence of the member for a whole admitted operation remains an ownership bug an
 That absence is never the mechanism that expresses an unsupported shape.
 
 **A subject of an operation may carry its own fact.**
-An operation may serve a closed vocabulary with unequal owner support, such as `setSetting` over the settings catalog.
-Its available fact may name a fact per subject and an `unlisted` refusal for every other subject.
+One operation can serve a closed vocabulary that owners serve unevenly, such as `setSetting` over the settings catalog.
+In that case, its available fact may name a fact per subject and an `unlisted` refusal for every other subject.
 Before a binding, admission uses the requested subject.
 It refuses an unavailable subject exactly as it refuses an unavailable operation.
 A subject names the requested thing, such as which setting.
@@ -382,7 +382,7 @@ The narrowed type does not intersect a wide optional aggregate that would still 
 The descriptor and its specialized handler share one non-widened declaration.
 A widened generic descriptor supplies no static proof.
 A compile-time contract test proves the selected projection.
-The **runtime-facet-narrowing gate** covers every runtime-migrated handler owner.
+The structural **runtime-facet-narrowing gate** covers every runtime-migrated handler owner.
 It rejects attempts to manufacture required-operation proof with assertions or optional admission.
 Optional access is permitted only for descriptor-declared preferred or conditional operations.
 The tracking issue owns the gate implementation and required planted violation.
@@ -599,7 +599,7 @@ Contracts first validate a neutral envelope with these fields:
 - Lifecycle state.
 
 Only after exact-owner selection does the facet's total codec decode the descriptor body.
-Invalid or unknown envelopes/bodies remain recovery evidence with typed `descriptor-invalid`/`descriptor-version-unsupported` outcomes.
+Invalid or unknown envelopes/bodies remain retained recovery evidence with typed `descriptor-invalid`/`descriptor-version-unsupported` outcomes.
 They are never cast to a descriptor, deleted, or offered to another facet.
 
 If no live handle is available, the daemon completes lease/admission and takeover fences.
@@ -632,7 +632,7 @@ The authoritative record remains cleanup-pending with a manual-recovery reason.
 Before command start success returns, the descriptor must have an authoritative persisted home.
 Prefer an existing platform/resource-owned recovery manifest.
 If a resource has no honest manifest, introduce a daemon-owned persisted resource record only for that demonstrated need.
-Extract a shared resource index only after multiple resource types require it.
+Extract a shared resource index only after multiple resource types justify it.
 Current diagnostics/session events and a future journal from proposed ADR 0018 serve observability only.
 They never become recovery authority.
 They may mirror descriptor lifecycle events.
@@ -649,7 +649,7 @@ Its neutral record contains these values:
 
 In-progress distinctions, for example starting, active, completing, and cleanup-pending, are phase metadata on the open record, not additional lifecycle states.
 The fence and descriptor remain authoritative across all open phases.
-Cleanup uncertainty cannot be a terminal lifecycle.
+Therefore, cleanup uncertainty cannot be encoded as a terminal lifecycle.
 A new handle remains private until acquisition of the persisted ownership fence.
 Each finish/cleanup attempt holds the guard across destructive work and the persisted transition.
 Alternatively, the attempt delegates to an operation that atomically enforces the token.
@@ -687,7 +687,7 @@ A temporary parametrized cutover table proved that each unit deleted its old ada
 Those rows were deleted after the final unit completed.
 The permanent union cannot express `legacy`.
 Descriptors cannot carry capability admission.
-R66 rejects manufactured runtime proof and restored legacy admission.
+R66 rejects manufactured runtime proof or restored legacy admission.
 R65 rejects every daemon dependency on a concrete platform implementation.
 
 Migrated and legacy commands do not duplicate shared Apple-runner or Android-helper mechanics.
@@ -696,7 +696,7 @@ Either these mechanics remain physically in place until their last consumer can 
 Composition injects that capability into both the package facet and the complete legacy adapter.
 Command execution ownership remains singular.
 
-Review the behavior-neutral package/registry substrate and each command unit from a clean committed tree with all production files present in `HEAD`.
+Review each package/registry change and each command unit from a clean committed tree with all production files present in `HEAD`.
 A passing layering check with untracked production files is not evidence.
 Platform packages receive no migration allowlist or root back-import exception.
 Temporary fixtures never authorize a production bridge, a duplicate route, or a recorded package back-import.
@@ -745,7 +745,7 @@ These tiers remain review vocabulary for future runtime changes. They do not res
 
 Completion retired the cutover table.
 Facts are the only support authority for device commands.
-Permanent R66 policy rejects descriptor capability buckets, `requireCommandSupported` calls, and manufactured or repaired narrowed runtime proof.
+Permanent R66 policy rejects descriptor capability buckets, `requireCommandSupported` calls, and attempts to manufacture or repair narrowed runtime proof.
 
 ### 9. Binding ergonomics: one bind per handler
 
@@ -797,7 +797,7 @@ Persisted durable manifests and platform-owned markers are the only triggers for
 A family's mechanics load only when its evidence exists.
 A family without evidence never evaluates, which preserves implementation laziness.
 App-log recovery provides the model.
-Remaining platform-specific startup recovery, for example the Android test-IME marker and web browser orphans, moves to this pattern when its owning domain migrates, not earlier.
+Remaining platform-specific startup recovery, namely the Android test-IME marker and web browser orphans, moves to this pattern when its owning domain migrates, not earlier.
 
 Daemon shutdown uses two gateway phases:
 
@@ -805,7 +805,7 @@ Daemon shutdown uses two gateway phases:
    A healthy kept-hot helper may transfer to a successor daemon.
 2. After session resources finalize, stop terminates each still-owned generation at most once, as section 4 requires.
 
-Daemon runtime no longer calls platform-specific shutdown directly.
+Platform-specific shutdown calls have been deleted from the daemon runtime.
 Owners participate through these phases.
 
 Session teardown retains isolated steps and has no generic hook API.
@@ -816,7 +816,7 @@ Each domain owns its cleanup step:
 - Close-time cleanup consumes neutral owner services.
 
 R65 enforces the daemon end state through planted-red AST tests.
-It rejects static, dynamic, re-export, and type-only dependencies from production `packages/daemon/src/**` to `src/platforms/**` and concrete `@agent-device/platform-*` packages.
+It rejects every dependency edge, whether static, dynamic, re-export, or type-only, from production `packages/daemon/src/**` to `src/platforms/**` and concrete `@agent-device/platform-*` packages.
 It excludes test files, consistently with the layering scanner.
 R13 governs concrete package imports across the repository.
 `retired-platforms-zone` prevents restoration of the old root seam.
@@ -915,7 +915,7 @@ The completed repository retains only closed execution shapes and permanent stru
   Correctness would depend on observability.
   Current events are projections. Proposed ADR 0018 also prohibits state reconstructed from events.
 - **A separate process-local resource ledger beside `SessionState` for live handles:** rejected.
-  The in-memory session store already supplies the process-local home.
+  The session store is in-memory, so live `SessionState` already is the process-local home.
   A parallel handle/descriptor store would duplicate ownership that the R7 transition owner governs.
   The accepted admission ledger contains only bounded cleanup-block evidence.
   It contains no live handle or descriptor and never replaces the authoritative manifest.
@@ -1002,4 +1002,4 @@ The number 14 remains a historical discussion reference, not a proposed commitme
   CLI output and SDK session normalization remain application adapters under `src/`.
 
 Neither number has an owning issue, gate, or accepted budget yet.
-Both remain inputs to a maintainer decision, not a ratchet.
+Treat both as inputs to a maintainer decision, not as a ratchet.
