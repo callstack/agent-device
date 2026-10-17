@@ -170,6 +170,13 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: layering }
 
+      # The size ratchet also runs inside Coverage's unit suite. It is declared here as well
+      # because `check:affected` names it directly: a changed test file never reaches it through
+      # Vitest's module graph. It reads origin/main, which this deep checkout has.
+      - name: Check test-file sizes against the merge-base
+        uses: ./.github/actions/run-gate
+        with: { gate: test-file-size }
+
       # Model tests for the dependency-graph report and its blast-radius query. The report
       # reads the gate's model (scripts/layering/model.ts) and applies the gate's own R6
       # counting rule, so it is not a second measurement of the R6 ratchet.

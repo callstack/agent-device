@@ -166,6 +166,7 @@
     "check:agent-guidance": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/__tests__/agent-guidance-contract.test.ts",
     "check:replay-compat": "node --experimental-strip-types scripts/check-replay-compat-provenance.ts",
     "check:daemon-wire-compat": "node --experimental-strip-types scripts/wire-compat/run.ts",
+    "check:test-file-size": "vitest run --project unit-core scripts/__tests__/test-file-size-ratchet.test.ts",
     "check:daemon-wire-compat:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/wire-compat/model.test.ts",
     "check:xctest-selection": "node --experimental-strip-types scripts/check-xctest-selection.ts",
     "check:packaged-runner-swift": "node --experimental-strip-types scripts/check-packaged-runner-swift.ts",

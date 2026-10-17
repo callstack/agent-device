@@ -89,6 +89,9 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     'Daemon RPC wire surface vs. last released tag',
     'check:daemon-wire-compat',
   ),
+  // The ratchet walks the tree rather than importing the files it measures, so Vitest's related
+  // graph never selects it; the selector names it directly (#3787).
+  gate('test-file-size', 'Test-file size ratchet', 'check:test-file-size'),
 
   // --- Tooling gates ---------------------------------------------------------
   // Each proves one of the checkers above still behaves. They were always real CI

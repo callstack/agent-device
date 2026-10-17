@@ -20,6 +20,7 @@
 // remains authoritative; this only optimizes local/agent feedback.
 
 import { WIRE_SURFACE_FILES } from '../../test/wire-compat/surface.ts';
+import { isMeasuredTestFile } from '../lib/measured-test-files.ts';
 import { deviceLaneOwnership } from './device-lanes.ts';
 
 // The canonical gate universe. Every gate CI runs is one of these — including the
@@ -60,6 +61,7 @@ export const ALL_CHECKS = [
   'web-smoke',
   'replay-compat',
   'daemon-wire-compat',
+  'test-file-size',
   'affected-selector',
   'gate-manifest',
   'gate-manifest-model',
@@ -383,6 +385,21 @@ const daemonWireCompatOwnership: OwnershipRule = ({ file }) => {
   ];
 };
 
+// The test-file size ratchet (#3787) walks the tree and reads line counts, so it never imports the
+// test files it measures and Vitest's module graph never selects it for them. Any measured file
+// that changes owns it; `isMeasuredTestFile` is the definition the ratchet itself measures with.
+const testFileSizeOwnership: OwnershipRule = ({ file }) =>
+  isMeasuredTestFile(file)
+    ? [
+        reason(
+          'test-file-size',
+          file,
+          'own:test-file-size',
+          'a changed test file may push its length past the size tripwire',
+        ),
+      ]
+    : [];
+
 const ownsAppleRunnerBuildSource = (file: string): boolean =>
   file.startsWith('apple/runner/') ||
   file.startsWith('apple/snapshot-presentation/') ||
@@ -615,6 +632,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   testAppOwnership,
   replayCompatOwnership,
   daemonWireCompatOwnership,
+  testFileSizeOwnership,
   buildOwnership,
   deviceLaneRule,
 ];
@@ -630,6 +648,8 @@ function fileFacts(file: string): FileFacts {
     isSrcProd: underSrc && isTs && !isTestPath(file),
   };
 }
+
+const ALWAYS_ON_GATES: ReadonlySet<CheckId> = new Set(['format', 'test-file-size']);
 
 function failOpenFor(file: string): FailOpenReason | null {
   if (isSelectorOwning(file)) {
@@ -680,11 +700,11 @@ export function selectChecks(input: SelectInput): CheckPlan {
       });
       continue;
     }
-    // `format` is an always-on gate, not evidence of test/build ownership. A
-    // file we can only route to formatting (e.g. a non-.ts fixture under
-    // test/) has no derivable suite owner, so treat it as ambiguous and fail
-    // open rather than silently narrowing to just `format`.
-    if (!selections.some((selection) => selection.check !== 'format')) {
+    // `format` and the size ratchet are always-on gates, not evidence of test/build
+    // ownership. A file we can only route to them (e.g. a .test.mjs under test/)
+    // has no derivable suite owner, so treat it as ambiguous and fail open
+    // rather than silently narrowing the plan.
+    if (!selections.some((selection) => !ALWAYS_ON_GATES.has(selection.check))) {
       failOpenReasons.push({
         path: file,
         rule: 'ambiguous-path',

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { assertCatalogComplete, CHECK_CATALOG, resolveCommand } from './checks.ts';
+import { isMeasuredTestFile } from '../lib/measured-test-files.ts';
 import { ALL_CHECKS, selectChecks, type CheckId, type SelectInput } from './model.ts';
 
 function plan(changedFiles: string[], extra: Partial<SelectInput> = {}) {
@@ -50,6 +51,62 @@ test('unit test files delegate affected-test discovery to Vitest', () => {
   assert.ok(result.includes('vitest-related'));
   assert.ok(!result.includes('unit'));
   assert.ok(!result.includes('provider-integration'));
+});
+
+test('a changed test file selects the test-file size ratchet and names itself as the reason', () => {
+  for (const file of [
+    'packages/platform-apple/src/lifecycle.test.ts',
+    'packages/daemon/src/__tests__/selectors.test.ts',
+    'src/agent-device-client-metro.test.ts',
+    'test/integration/provider-scenarios/foo.test.ts',
+  ]) {
+    const result = plan([file]);
+    assert.equal(result.failOpen, false, file);
+    assert.ok(result.checks.includes('test-file-size'), file);
+    const reason = result.reasons.find((entry) => entry.check === 'test-file-size');
+    assert.equal(reason?.path, file);
+    assert.equal(reason?.rule, 'own:test-file-size');
+  }
+});
+
+test('a change that touches no measured test file does not select the test-file size ratchet', () => {
+  for (const file of [
+    'packages/platform-apple/src/lifecycle.ts',
+    'src/utils/args.ts',
+    'test/integration/provider-scenarios/fixtures.ts',
+    'packages/daemon/src/__tests__/helpers.ts',
+    'docs/agents/testing.md',
+  ]) {
+    assert.ok(!ids([file]).includes('test-file-size'), file);
+  }
+});
+
+test('the ratchet measures test files under its roots and skips build output', () => {
+  for (const file of [
+    'src/a.test.ts',
+    'packages/maestro/test/conformance/projection.test.tsx',
+    'test/ci/trusted-fixture-artifact.test.mjs',
+    'scripts/check-affected/model.test.ts',
+  ]) {
+    assert.equal(isMeasuredTestFile(file), true, file);
+  }
+  for (const file of [
+    'packages/platform-apple/dist/lifecycle.test.ts',
+    'packages/kernel/dist-types/a.test.ts',
+    'packages/kernel/node_modules/dep/a.test.ts',
+    'scripts/.tmp/a.test.ts',
+    'examples/test-app/security/image-size-security.test.mjs',
+    'src/helpers.ts',
+    'src/a.test.js',
+  ]) {
+    assert.equal(isMeasuredTestFile(file), false, file);
+  }
+});
+
+test('a measured test file the module graph cannot own still fails open', () => {
+  const result = plan(['test/ci/trusted-fixture-artifact.test.mjs']);
+  assert.equal(result.failOpen, true);
+  assert.equal(result.failOpenReasons[0]?.rule, 'ambiguous-path');
 });
 
 test('Vitest owns project and support-module relationships through one check', () => {
