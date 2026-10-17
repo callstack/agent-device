@@ -70,6 +70,7 @@ export type ProviderScenarioHarness = {
   ) => Promise<ProviderScenarioRpcResult>;
   client: () => AgentDeviceClient;
   hasSession: (session?: string) => Promise<boolean>;
+  stateDir: string;
   baseUrl: string;
   httpPort: number;
   token: string;
@@ -268,6 +269,7 @@ export async function createProviderScenarioHarness(
     client: () => client,
     hasSession: async (name = 'default') =>
       (await client.sessions.list()).some((session) => session.name === name),
+    stateDir,
     baseUrl,
     httpPort: runtime.httpPort,
     token: runtime.token,

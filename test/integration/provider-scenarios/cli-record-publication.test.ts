@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, onTestFinished } from 'vitest';
-import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
+import { expect, test, onTestFinished, vi } from 'vitest';
+import * as codeSignature from '@agent-device/host-kit/code-signature';
+import { resolveLocalDaemonCodeIdentity } from '../../../src/daemon-client/daemon-launch-spec.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { createProviderScenarioHarness } from './harness.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
@@ -18,6 +19,13 @@ import { createCommandToolExecutor } from '../../../src/mcp/command-tools.ts';
 import { installIsolatedCliTestEnv } from '../../../src/__tests__/cli-test-env.ts';
 
 async function repairPublication(root: string) {
+  // The runtime runs inside Vitest, so publish the daemon entry's identity instead of Vitest's.
+  const identity = await resolveLocalDaemonCodeIdentity();
+  if (identity.origin !== 'checkout') throw new Error('expected checkout identity');
+  const signature = vi
+    .spyOn(codeSignature, 'resolveDaemonCodeSignature')
+    .mockReturnValue(identity.codeSignature);
+  onTestFinished(() => signature.mockRestore());
   const shellState = createAndroidProviderShellState();
   const daemon = await createProviderScenarioHarness({
     androidAdbProvider: () => ({
@@ -53,17 +61,8 @@ async function repairPublication(root: string) {
         }) => error.details.divergence.resume,
       );
     expect(divergence.repairSessionHeld).toBe(true);
-    const transport: AgentDeviceDaemonTransport = async (req) => {
-      const result = await daemon.callCommand(req.command, req.positionals, {
-        ...req.flags,
-        ...selection,
-      });
-      return result.json.error
-        ? { ok: false, error: result.json.error.data }
-        : { ok: true, data: result.json.result.data };
-    };
     return {
-      transport,
+      config: { stateDir: daemon.stateDir, daemonTransport: 'http' as const, ...selection },
       close: () => daemon.close(),
       commands: async () => {
         await client.replay.run({
@@ -88,17 +87,33 @@ test.each([false, true])(
   'CLI project record default retains a repair snapshot only with explicit opt-in=%s',
   async (explicit) => {
     const { root, home, project } = makeTempWorkspace();
-    fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify({ record: true }));
     const publication = await repairPublication(root);
+    fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify({ record: true }));
     onTestFinished(() => publication.close());
-    const result = await runCliCapture(['snapshot', '--json', ...(explicit ? ['--record'] : [])], {
-      cwd: project,
-      env: { HOME: home, USERPROFILE: home },
-      sendToDaemon: publication.transport,
-    });
-    expect(result.calls).toHaveLength(1);
-    expect(result.calls[0]?.flags?.record).toBe(true);
-    expect(await publication.commands()).toEqual(
+    const result = await runCliCapture(
+      [
+        'snapshot',
+        '--json',
+        '--session',
+        'default',
+        '--state-dir',
+        publication.config.stateDir,
+        '--daemon-transport',
+        'http',
+        '--platform',
+        'android',
+        '--serial',
+        publication.config.serial,
+        ...(explicit ? ['--record'] : []),
+      ],
+      {
+        cwd: project,
+        env: { HOME: home, USERPROFILE: home },
+        useRealDaemonClient: true,
+      },
+    );
+    expect(result.code, result.stderr || result.stdout).not.toBe(1);
+    expect(await publication.commands(), JSON.stringify(result)).toEqual(
       explicit ? ['snapshot', 'snapshot', 'is', 'close'] : ['snapshot', 'is', 'close'],
     );
   },
@@ -108,20 +123,26 @@ test.each([false, true])(
   'MCP project record default retains a repair snapshot only with explicit opt-in=%s',
   async (explicit) => {
     const { root, home, project } = makeTempWorkspace();
-    fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify({ record: true }));
     const publication = await repairPublication(root);
+    fs.writeFileSync(path.join(project, 'agent-device.json'), JSON.stringify({ record: true }));
     onTestFinished(() => publication.close());
-    const restoreEnv = installIsolatedCliTestEnv({ HOME: home, USERPROFILE: home });
+    const restoreEnv = installIsolatedCliTestEnv({
+      HOME: home,
+      USERPROFILE: home,
+      AGENT_DEVICE_STATE_DIR: publication.config.stateDir,
+      AGENT_DEVICE_DAEMON_TRANSPORT: 'http',
+    });
     const previousCwd = process.cwd();
     process.chdir(project);
     try {
-      const executor = createCommandToolExecutor({
-        createClient: (config, ingress) =>
-          createAgentDeviceClient(config, { ...ingress, transport: publication.transport }),
+      const executor = createCommandToolExecutor();
+      const result = await executor.execute('snapshot', {
+        platform: 'android',
+        serial: publication.config.serial,
+        ...(explicit ? { record: true } : {}),
       });
-      const result = await executor.execute('snapshot', explicit ? { record: true } : {});
-      expect(result.isError).toBe(false);
-      expect(await publication.commands()).toEqual(
+      expect(result.isError, JSON.stringify(result)).toBe(false);
+      expect(await publication.commands(), JSON.stringify(result)).toEqual(
         explicit ? ['snapshot', 'snapshot', 'is', 'close'] : ['snapshot', 'is', 'close'],
       );
     } finally {
@@ -135,7 +156,7 @@ test('SDK per-call record explicitly retains a corrective snapshot', async () =>
   const { root } = makeTempWorkspace();
   const publication = await repairPublication(root);
   onTestFinished(() => publication.close());
-  const client = createAgentDeviceClient({}, { transport: publication.transport });
+  const client = createAgentDeviceClient(publication.config);
   await client.capture.snapshot({ record: true });
   expect(await publication.commands()).toEqual(['snapshot', 'snapshot', 'is', 'close']);
 });
