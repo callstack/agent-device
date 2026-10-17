@@ -12,7 +12,7 @@ Completed process history is in git history.
 > The descriptor's other derived projections remain accepted.
 >
 > **Parity gate retired (2026-09).** The completed migration deleted every hand-authored table, so a parity test has no second table to compare.
-> No parity test exists.
+> No byte-for-byte table parity test exists.
 > Do not add or search for one.
 > Compile-time guards (`CommandOwnerFileClaimsAreComplete`) and literal pin-set tests now enforce totality.
 > Those tests compare name sets instead of two tables.
