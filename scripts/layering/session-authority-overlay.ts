@@ -95,7 +95,7 @@ export function checkSessionAuthorityOverlay(
       message:
         'new handler-owned SessionState shape edge: the merge-base holds no such import. ' +
         "Route the read through the owning module's facade or a named semantic query. " +
-        'If the boundary change is intended, change the invariant and the gate together.',
+        "If the boundary change is intended, change ADR 0022's authority invariant and R75 in scripts/layering/check.ts together.",
     });
   }
   for (const file of scopedMeasured.authorityFiles) {
@@ -107,7 +107,7 @@ export function checkSessionAuthorityOverlay(
       message:
         'new handler-owned SessionStore authority edge: the merge-base holds no such import. ' +
         "Route the operation through the owning module's facade or a named store operation. " +
-        'If the boundary change is intended, change the invariant and the gate together.',
+        "If the boundary change is intended, change ADR 0022's authority invariant and R75 in scripts/layering/check.ts together.",
     });
   }
   return violations;

@@ -132,7 +132,8 @@ test('R75 fails a handler file that gains a shape or authority edge beyond the m
   assert.match(shape.message, /owning module's facade or a named semantic query/);
   assert.match(authority.message, /owning module's facade or a named store operation/);
   for (const { message } of [shape, authority]) {
-    assert.match(message, /change the invariant and the gate together/);
+    assert.match(message, /ADR 0022's authority invariant/);
+    assert.match(message, /R75 in scripts\/layering\/check\.ts/);
     assert.doesNotMatch(message, /accept the growth/);
   }
 });
