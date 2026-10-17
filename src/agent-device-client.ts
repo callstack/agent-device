@@ -61,14 +61,7 @@ import {
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { createDaemonTransport } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import {
-  prepareMetroRuntime,
-  reloadMetro,
-  clearMetroSessionHintsQuietly,
-  recordPreparedMetroSession,
-  recordOpenedMetroSession,
-  readMetroSessionRuntime,
-} from '@agent-device/react-native';
+import * as devServer from '@agent-device/react-native';
 import {
   asOptionalRecord,
   readPresentedSurfaceFact,
@@ -76,6 +69,7 @@ import {
 } from '@agent-device/kernel/record';
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { withCommandHost } from '@agent-device/host-kit/command';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createLeaseClient } from './client/lease-client.ts';
@@ -90,6 +84,25 @@ export function createAgentDeviceClient(
   const transport = deps.transport ?? createDaemonTransport(host);
   // A typo in a JSON or JS config must not fall through to the default and manage a daemon.
   readDaemonLifecycle(config.daemonLifecycle);
+  // The dev-server helpers read their environment from the command host; this client's host owns it.
+  const inHost = async <T>(fn: () => Promise<T> | T): Promise<T> =>
+    await withCommandHost({ host, requestEnv: undefined }, async () => await fn());
+  const prepareMetroRuntime = (input: Parameters<typeof devServer.prepareMetroRuntime>[0]) =>
+    inHost(() => devServer.prepareMetroRuntime(input));
+  const reloadMetro = (input: Parameters<typeof devServer.reloadMetro>[0]) =>
+    inHost(() => devServer.reloadMetro(input));
+  const clearMetroSessionHintsQuietly = (
+    options: Parameters<typeof devServer.clearMetroSessionHintsQuietly>[0],
+  ) => inHost(() => devServer.clearMetroSessionHintsQuietly(options));
+  const recordPreparedMetroSession = (
+    ...args: Parameters<typeof devServer.recordPreparedMetroSession>
+  ) => inHost(() => devServer.recordPreparedMetroSession(...args));
+  const recordOpenedMetroSession = (
+    ...args: Parameters<typeof devServer.recordOpenedMetroSession>
+  ) => inHost(() => devServer.recordOpenedMetroSession(...args));
+  const readMetroSessionRuntime = (
+    options: Parameters<typeof devServer.readMetroSessionRuntime>[0],
+  ) => inHost(() => devServer.readMetroSessionRuntime(options));
 
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the
