@@ -7,7 +7,6 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityWindowInfo;
 import java.util.List;
-import java.util.Locale;
 
 /** Serializes accessibility nodes using the helper's host-consumed XML contract. */
 final class AccessibilityTreeXml {
@@ -91,16 +90,7 @@ final class AccessibilityTreeXml {
               hasAccessibilityAction(node, AccessibilityAction.ACTION_SCROLL_BACKWARD)));
     }
     appendAttribute(xml, "password", Boolean.toString(node.isPassword()));
-    appendAttribute(
-        xml,
-        "bounds",
-        String.format(
-            Locale.ROOT,
-            "[%d,%d][%d,%d]",
-            bounds.left,
-            bounds.top,
-            bounds.right,
-            bounds.bottom));
+    appendBoundsAttribute(xml, "bounds", bounds.left, bounds.top, bounds.right, bounds.bottom);
 
     int childCount = depth >= maxDepth ? 0 : node.getChildCount();
     if (depth >= maxDepth && node.getChildCount() > 0) {
@@ -212,16 +202,9 @@ final class AccessibilityTreeXml {
     appendAttribute(xml, "window-layer", Integer.toString(metadata.layer));
     appendAttribute(xml, "window-active", Boolean.toString(metadata.active));
     appendAttribute(xml, "window-focused", Boolean.toString(metadata.focused));
-    appendAttribute(
-        xml,
-        "window-bounds",
-        String.format(
-            Locale.ROOT,
-            "[%d,%d][%d,%d]",
-            metadata.bounds.left,
-            metadata.bounds.top,
-            metadata.bounds.right,
-            metadata.bounds.bottom));
+    appendBoundsAttribute(
+        xml, "window-bounds", metadata.bounds.left, metadata.bounds.top,
+        metadata.bounds.right, metadata.bounds.bottom);
     if (metadata.regionRect != null) {
       appendAttribute(xml, "window-region-rect", Boolean.toString(metadata.regionRect));
     }
@@ -234,6 +217,13 @@ final class AccessibilityTreeXml {
     xml.append("=\"");
     appendEscaped(xml, stringValue);
     xml.append('"');
+  }
+
+  static void appendBoundsAttribute(
+      StringBuilder xml, String name, int left, int top, int right, int bottom) {
+    xml.append(' ').append(name).append("=\"[")
+        .append(left).append(',').append(top).append("][")
+        .append(right).append(',').append(bottom).append("]\"");
   }
 
   private static boolean hasAccessibilityAction(

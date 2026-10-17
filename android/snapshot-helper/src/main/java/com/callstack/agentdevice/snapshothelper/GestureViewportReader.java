@@ -6,7 +6,6 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Resolves the active application window bounds used to validate planned gestures, plus the input
@@ -59,11 +58,6 @@ final class GestureViewportReader {
 
   @SuppressWarnings("deprecation")
   static Reading readReading(UiAutomation automation) throws InterruptedException {
-    try {
-      automation.waitForIdle(100, 2_000);
-    } catch (TimeoutException ignored) {
-      // Window/root state can still be usable when the app is animating continuously.
-    }
     // UiAutomation.getWindows() transfers recyclable AccessibilityWindowInfo instances, and this
     // read runs repeatedly inside the persistent helper session: copy the bounds the precedence
     // below needs, then recycle every window before resolving.
