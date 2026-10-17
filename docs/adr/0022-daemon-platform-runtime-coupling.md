@@ -103,7 +103,7 @@ The ADR 0019 trace recorded routes of approximately 24 files without an accepted
    R7/R10 logical-module declarations own cross-module reads outside this handler path.
    R75 does not ratchet those reads.
 
-4. **The repeated hop trace assigns roles and tests deletion.**
+4. **The entry-to-platform hop trace was re-run with hop roles and deletion tests.**
    Roles are policy, orchestration, translation, adapter, and pass-through, with a terminal marker.
    Each pass-through/translation hop receives a deletion test.
    [ADR 0023](0023-end-state-hop-trace.md) records 41 hops for `press`/Android and 47/49 per arm for `snapshot`/iOS.
@@ -145,6 +145,7 @@ The ADR 0019 trace recorded routes of approximately 24 files without an accepted
 - **The hop target is retired, not missed.**
   The routes measured at `132ffe1da` grew from 23/24 to 41 / 47-49.
   New request-scope wrappers, the AgentDevice command layer, the adb host split, and dual-arm snapshot capture explain the growth.
+  All of these changes landed on the traced paths.
   Every retained hop now has a documented role.
   Each pass-through/translation hop also has a kept-depth or removable verdict.
   The one proven removable hop is the only endorsed collapse.
