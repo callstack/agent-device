@@ -11,6 +11,7 @@ Read the owner. Do not copy its policy into consumers.
 | --- | --- |
 | Command names | `packages/command-registry/src/catalog.ts` |
 | Surface, runtime, batch, timeout, daemon route and policy traits | `packages/command-registry/src/registry.ts` |
+| Daemon request-policy predicates | `packages/daemon/src/core/daemon-command-registry.ts` |
 | Interaction guarantees | `packages/contracts/src/interaction-guarantees.ts` |
 | Runtime-fact admission | `packages/daemon/src/core/runtime-admission.ts`, `src/platform-runtime-gateway.ts` |
 | Input fields and audiences | `src/commands/common-input-fields.ts`, `src/commands/input-audience.ts` |
