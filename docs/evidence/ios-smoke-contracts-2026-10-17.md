@@ -1,6 +1,6 @@
 # iOS smoke contracts
 
-Authoring rules live in [iOS smoke authoring](../agents/ios-smoke.md). This file records the failures and verification behind PR #3786.
+Authoring rules live in [iOS smoke authoring](../../test/integration/ios-simulator-e2e/README.md). This file records the failures and verification behind PR #3786.
 
 ## Failure evidence
 

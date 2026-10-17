@@ -1,7 +1,7 @@
 # Author iOS smoke scenarios
 
 Use this for `test/integration/ios-simulator-e2e/` and its native input regressions.
-Use [test authoring](test-authoring.md) for test boundaries and [device verification](device-verification.md) for builds and cleanup.
+Use [test authoring](../../../docs/agents/test-authoring.md) for test boundaries and [device verification](../../../docs/agents/device-verification.md) for builds and cleanup.
 
 ## Declare the starting state
 
@@ -75,6 +75,6 @@ xcrun simctl spawn <udid> defaults write com.apple.keyboard.preferences Automati
 The iOS workflow sets this before fixture smoke.
 For local verification, record the prior value and restore it afterward.
 Run the changed scenario through the checked-in smoke entry point and preserve its coverage and failure artifacts.
-Record the source SHA, device, command, and semantic result under [device verification](device-verification.md).
-For regressions, prove the test fails without the fix using [isolated experiments](test-experiments.md).
+Record the source SHA, device, command, and semantic result under [device verification](../../../docs/agents/device-verification.md).
+For regressions, prove the test fails without the fix using [isolated experiments](../../../docs/agents/test-experiments.md).
 Do not count skipped device tests as passed.
