@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts';
 /**
@@ -110,6 +110,7 @@ test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a
   mockLifecycleDispatch.mockRejectedValueOnce(platformCloseError);
 
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -151,6 +152,7 @@ test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a
   // Retry once the platform close succeeds: commits cleanly.
   mockLifecycleDispatch.mockResolvedValueOnce(undefined);
   const retry = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -193,6 +195,7 @@ test('BLOCKER 3 (second follow-up): a retry after a SUCCESSFUL platform close bu
   const before = fs.readFileSync(healedPath, 'utf8');
 
   const closeResponse = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -221,6 +224,7 @@ test('BLOCKER 3 (second follow-up): a retry after a SUCCESSFUL platform close bu
   // wedge recovery entirely) on a second close of an already-closed target.
   const retryPath = path.join(root, 'flow.promoted.ad');
   const retry = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -292,6 +296,7 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
   // (no positional target, not `web`), so the platform close never dispatches
   // at all; the commit then fails (no-clobber).
   const first = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
     sessionName,
@@ -304,6 +309,7 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
   expect(sessionStore.get(sessionName)).toBeDefined();
 
   const retry = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -336,6 +342,7 @@ test('BLOCKER 3 (third follow-up): a retry targeting a DIFFERENT app than the su
 
   // First attempt targets app-a; the platform close succeeds, the commit fails.
   const first = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -358,6 +365,7 @@ test('BLOCKER 3 (third follow-up): a retry targeting a DIFFERENT app than the su
   // already closed just because SOME close succeeded. It must dispatch again,
   // against app-b specifically.
   const retry = await handleCloseCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

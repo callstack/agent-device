@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -17,6 +18,7 @@ test('network requires an active session before requesting a runtime binding', a
   const sessionStore = makeSessionStore();
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -52,6 +54,7 @@ test('network validates the legacy limit after runtime-fact admission', async ()
   );
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

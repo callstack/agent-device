@@ -4,7 +4,10 @@ import { makeSessionStore } from '../../../__tests__/support/handlers/session-te
 import { handleAppStateCommand } from '../session-appstate.ts';
 import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
+import {
+  createUnavailableRuntimeFactsForTest,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -15,6 +18,7 @@ function appStateRequest(session: string, flags: DaemonRequest['flags']): Daemon
 
 test('appstate returns missing-session error for explicit session flag', async () => {
   const response = await handleAppStateCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: appStateRequest('named', { platform: 'ios', session: 'named' }),
     sessionName: 'named',
@@ -35,6 +39,7 @@ test('appstate returns missing-session error for explicit session flag', async (
 
 test('appstate --platform macos missing-session error never suggests omitting --session', async () => {
   const response = await handleAppStateCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: appStateRequest('named', { platform: 'macos', session: 'named' }),
     sessionName: 'named',
@@ -53,6 +58,7 @@ test('appstate --platform macos missing-session error never suggests omitting --
 
 test('appstate --platform apple missing-session error never suggests omitting --session', async () => {
   const response = await handleAppStateCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: appStateRequest('named', { platform: 'apple', session: 'named' }),
     sessionName: 'named',
@@ -89,6 +95,7 @@ test('appstate --udid with no --platform resolves the stated device and THEN ans
   const inspected: string[] = [];
   try {
     const response = await handleAppStateCommand({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: appStateRequest('lost', { session: 'lost', udid: 'SIM-UDID-A' }),
       sessionName: 'lost',
@@ -138,6 +145,7 @@ test('appstate --udid on an Apple device without naming a session keeps the plai
   resolved.mockResolvedValue(iosSim);
   try {
     const response = await handleAppStateCommand({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: appStateRequest('default', { udid: 'SIM-UDID-B' }),
       sessionName: 'default',
@@ -195,6 +203,7 @@ test('appstate keeps the admission-time named-session verdict when the store cha
   });
   try {
     const response = await handleAppStateCommand({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: appStateRequest('lost', { session: 'lost', udid: 'SIM-UDID-C' }),
       sessionName: 'lost',
@@ -229,6 +238,7 @@ test('appstate with a named session and an identity device selector keeps the st
   const inspected: string[] = [];
   try {
     const response = await handleAppStateCommand({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: appStateRequest('named', { session: 'named', platform: 'android', device: 'Pixel 9' }),
       sessionName: 'named',
@@ -259,6 +269,7 @@ test('appstate with a named session and an identity device selector keeps the st
 
 test('appstate refuses --platform ios without a session at the message level', async () => {
   const response = await handleAppStateCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: appStateRequest('default', { platform: 'ios', device: 'iPhone 17' }),
     sessionName: 'default',
@@ -276,6 +287,7 @@ test('appstate refuses --platform ios without a session at the message level', a
 
 test('appstate refuses --platform macos without a session at the message level', async () => {
   const response = await handleAppStateCommand({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: appStateRequest('default', { platform: 'macos', device: 'Mac' }),
     sessionName: 'default',

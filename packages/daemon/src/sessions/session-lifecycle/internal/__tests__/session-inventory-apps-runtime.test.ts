@@ -16,6 +16,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   bindTestCommandHost,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import type {
   BindDeviceRuntime,
@@ -123,6 +124,7 @@ test('macOS apps consumes generic readiness and app inventory through one runtim
   };
 
   const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName,
@@ -153,6 +155,7 @@ test('deferred provider apps returns uploaded assets without resolving a device'
   };
 
   const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: req.session,
@@ -201,6 +204,7 @@ test('deferred provider apps forwards request cancellation to the catalog', asyn
 
   try {
     const response = handleSessionInventoryCommands({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: req.session,
@@ -229,6 +233,7 @@ test('deferred provider apps forwards public daemon access to the catalog', asyn
   };
 
   await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: req.session,

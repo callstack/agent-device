@@ -528,7 +528,7 @@ async function startDaemonRuntimeOnHost(
     });
   };
 
-  const shutdownClaimLedger = createDaemonShutdownClaimLedger();
+  const shutdownClaimLedger = createDaemonShutdownClaimLedger(env);
 
   const teardownDaemonSession = async (ref: SessionRef): Promise<void> => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
@@ -596,6 +596,7 @@ async function startDaemonRuntimeOnHost(
   };
 
   const leaseSessionEnd = createLeaseSessionEnd({
+    env,
     sessionStore,
     executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
     teardownSession: settleIdleExpiredSession,
@@ -608,6 +609,7 @@ async function startDaemonRuntimeOnHost(
   };
 
   const sessionIdleExpiry = createSessionIdleExpiry({
+    env,
     sessionStore,
     idleExpiryMs: resolveSessionIdleExpiryMs(env),
     executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),

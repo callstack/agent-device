@@ -17,6 +17,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   bindTestCommandHost,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import type {
   BindDeviceRuntime,
@@ -117,6 +118,7 @@ async function listApps(appsFilter: 'all' | 'user-installed'): Promise<DaemonRes
     flags: { appsFilter },
   };
   return await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName,

@@ -6,7 +6,7 @@ import { expect, test } from 'vitest';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 test('test --fail-fast continues after passing scripts', async () => {
@@ -16,6 +16,7 @@ test('test --fail-fast continues after passing scripts', async () => {
 
   const invokedPaths: string[] = [];
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

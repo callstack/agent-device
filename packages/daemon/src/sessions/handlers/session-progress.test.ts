@@ -2,7 +2,7 @@ import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withTestDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { withRequestProgressSink } from '@agent-device/host-kit/request';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -50,6 +50,7 @@ async function runSuite(params: {
       (event) => events.push(event),
       async () =>
         await handleSessionCommands({
+          host: createTestHostEnvironment(),
           createCommandSurface: fakeCreateCommandSurface,
           platformServices: daemonPlatformServicesFixture(),
           req: {

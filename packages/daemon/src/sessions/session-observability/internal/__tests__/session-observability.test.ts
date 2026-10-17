@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -17,6 +18,7 @@ test('network dump validates include mode directly', async () => {
     emptyAppLogResult('android', input),
   );
   const response = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -45,6 +47,7 @@ test('network dump accepts explicit include flag and rejects conflicting values'
     emptyAppLogResult('android', input),
   );
   const okResponse = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -61,6 +64,7 @@ test('network dump accepts explicit include flag and rejects conflicting values'
   if (okResponse?.ok) assert.equal(okResponse.data?.include, 'headers');
 
   const conflictResponse = await handleSessionObservabilityCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -95,6 +99,7 @@ test.each(REMOVED_AGGREGATE_PERF_POSITIONALS.map((positionals) => [positionals] 
   async (positionals) => {
     const sessionStore = makeAndroidStore();
     const response = await handleSessionObservabilityCommands({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: { token: 't', session: 'android', command: 'perf', positionals, flags: {} },
       sessionName: 'android',

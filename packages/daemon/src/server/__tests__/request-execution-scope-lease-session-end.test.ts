@@ -71,7 +71,12 @@ function leaseSessionEnd(sessionStore: SessionStore, teardownSession: SessionTea
   const executionLocks = new Map<string, Promise<unknown>>();
   return {
     executionLocks,
-    ender: createLeaseSessionEnd({ sessionStore, executionLocks, teardownSession }),
+    ender: createLeaseSessionEnd({
+      env: process.env,
+      sessionStore,
+      executionLocks,
+      teardownSession,
+    }),
   };
 }
 

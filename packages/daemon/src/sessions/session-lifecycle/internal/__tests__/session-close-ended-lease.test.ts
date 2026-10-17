@@ -2,7 +2,11 @@ import { daemonPlatformServicesFixture } from '../../../../__tests__/support/pla
 import { beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { SessionStore } from '../../../../core/session-store.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
@@ -73,6 +77,7 @@ function close(
   sessionStore.publish(SESSION_NAME, session);
   const endedLeases: EndedLeaseLedger = [];
   const response = handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

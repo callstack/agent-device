@@ -49,6 +49,7 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
   now = 2_000;
 
   const req = admitRequestLeaseForLockedScope({
+    env: process.env,
     req: makeRequest({ command: 'snapshot' }),
     sessionName: 'default',
     sessionStore,
@@ -85,6 +86,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
   const teardownSession = vi.fn(async () => {});
 
   const cleaned = await cleanupExpiredLeasedSession({
+    env: process.env,
     sessionName: 'default',
     sessionStore,
     leaseRegistry,

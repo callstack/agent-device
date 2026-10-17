@@ -12,7 +12,7 @@ import type { SessionCommandParams } from '../session-command-input.ts';
 import { handleReplayTestCommand } from '../session-replay-command.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { makeSessionStore } from '../../../__tests__/support/handlers/session-test-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 import { withClientReplayScriptSources } from '../../../__tests__/support/replay-script-source-fixture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
@@ -25,6 +25,7 @@ import type { EndedLeaseLedger } from '../../../core/request-ended-leases.ts';
 test('replay test handler threads the complete video owner into the application command', async () => {
   const root = mkdtempForTestSync('agent-device-replay-handler-video-');
   const params: SessionCommandParams = {
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 'token',
@@ -81,6 +82,7 @@ test('replay test session cleanup reports the lease it ended on the test request
     meta: { cwd: root, requestId: 'replay-handler-ended-lease' },
   });
   const params: SessionCommandParams = {
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     req: { ...wireReq, internal: { endedLeases } },
     sessionName: 'default',

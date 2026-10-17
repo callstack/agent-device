@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
@@ -54,6 +55,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 
 export type SessionOpenCommandInput = Readonly<{
+  host: HostEnvironment;
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
@@ -221,6 +223,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     const lostClaim = await renewOpenSessionClaim(
       admittedSession.device,
       admittedSession.deviceClaim,
+      params.host.env,
     );
     if (lostClaim) return { type: 'response', response: lostClaim };
 
@@ -264,6 +267,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     const reclaimed = await renewOpenSessionClaim(
       device,
       sessionStore.requireCurrent(existingRef).deviceClaim,
+      params.host.env,
     );
     if (reclaimed) return { type: 'response', response: reclaimed };
 
@@ -347,6 +351,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     device.id,
     async () =>
       await openNewSessionWithDeviceClaim({
+        host: params.host,
         req,
         sessionName,
         logPath,

@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { isTenantOwnedSessionName, normalizeTenantId } from '@agent-device/contracts/daemon-http';
 import { resolveSessionIsolationMode } from '../core/config.ts';
@@ -69,11 +70,12 @@ export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
 export function assertRequestLeaseAdmission(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
-  session?: SessionState,
+  session: SessionState | undefined,
   options: Readonly<{
+    env: HostEnvironment['env'];
     providerAppCatalog?: ProviderAppCatalog;
     daemonPolicy?: DaemonPolicy;
-  }> = {},
+  }>,
 ): DeviceLease | undefined {
   if (isExemptFromLeaseAdmission(req, leaseRegistry, session, options.daemonPolicy)) {
     return undefined;
@@ -83,7 +85,7 @@ export function assertRequestLeaseAdmission(
   const sessionLease = session?.lease;
   if (options.daemonPolicy?.requiredLeaseBackend) {
     const leased = Boolean(resolveRequestOrSessionLeaseScope(req, session).leaseId);
-    const lease = leased ? admitLease(req, leaseRegistry, session) : undefined;
+    const lease = leased ? admitLease(req, leaseRegistry, session, options.env) : undefined;
     assertDaemonPolicyAdmitsLease(options.daemonPolicy, lease);
     return lease;
   }
@@ -104,13 +106,14 @@ export function assertRequestLeaseAdmission(
     if (!requestLeaseScope.leaseId) return undefined;
     if (!requestLeaseScope.tenantId && !requestLeaseScope.runId) return undefined;
   }
-  return admitLease(req, leaseRegistry, session);
+  return admitLease(req, leaseRegistry, session, options.env);
 }
 
 function admitLease(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   session: SessionState | undefined,
+  env: HostEnvironment['env'],
 ): DeviceLease {
   assertRequestSessionLeaseMatches(resolveLeaseScope(req), session?.lease);
   const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
@@ -119,7 +122,7 @@ function admitLease(
   // Naming a proxy-specific default here used to shorten every lease allocated above it — a client
   // that rented a device for longer than the default lost it on the next admitted command (#2946).
   const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
-  assertMacOsAppLeaseAdmitsRequest(lease, req, session);
+  assertMacOsAppLeaseAdmitsRequest(lease, req, session, env);
   if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
   return lease;
 }

@@ -2,7 +2,12 @@ import { daemonPlatformServicesFixture } from '../../../__tests__/support/platfo
 import { expect, test } from 'vitest';
 import type { SessionState } from '../../../core/session-state.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
-import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  IOS_DEVICE,
+  IOS_SIMULATOR,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import {
   handleSessionCommands,
   mockBindDeviceRuntime,
@@ -14,6 +19,7 @@ async function uninstall(device: SessionState['device'], app: string) {
   const sessionStore = makeSessionStore('agent-device-session-uninstall-');
   sessionStore.publish('default', { name: 'default', createdAt: Date.now(), actions: [], device });
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture({
       appleSessionObservation: {

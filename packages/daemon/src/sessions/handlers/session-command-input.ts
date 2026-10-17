@@ -1,4 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
@@ -20,6 +21,7 @@ import type {
 import type { SessionStore } from '../../core/session-store.ts';
 
 export type SessionCommandInput = {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;

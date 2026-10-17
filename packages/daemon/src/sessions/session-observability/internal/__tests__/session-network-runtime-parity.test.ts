@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -64,6 +65,7 @@ test.each(NETWORK_RUNTIME_PROJECTION_PARITY)(
     const runtime = createNetworkRuntime(session.device, async () => result);
 
     const response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -119,6 +121,7 @@ test('network admission remains fail-closed before parsing invalid input', async
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -218,6 +221,7 @@ async function runNetwork(
   bindDevice: BindDeviceRuntime,
 ) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

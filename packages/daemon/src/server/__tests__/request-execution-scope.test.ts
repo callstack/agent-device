@@ -828,6 +828,7 @@ test('router: deferred tenant connect with no daemon session closes as SESSION_N
 
   const response = await scope.runLocked(async () =>
     handleSessionCloseCommands({
+      host: createTestHostEnvironment(),
       platformServices: daemonPlatformServicesFixture(),
       req: scope.req,
       sessionName: scope.sessionName,

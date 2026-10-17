@@ -6,7 +6,7 @@ import { handleSessionInventoryCommands } from '../inventory.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit';
+import { IOS_SIMULATOR, createTestHostEnvironment } from '@agent-device/test-kit';
 import { resolveImplicitSessionScope } from '../../../session-routing.ts';
 import { tenantScopedSessionName } from '../../../../core/session-tenant-scope.ts';
 
@@ -38,6 +38,7 @@ async function runSessionList(): Promise<DaemonResponse | null> {
     flags: {},
   };
   return await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: SCOPED_KEY,
@@ -87,6 +88,7 @@ test('session list returns the caller cwd and local named sessions without cross
   });
 
   const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: callerSessionAddress,
@@ -130,6 +132,7 @@ test('session list returns only sessions owned by the requesting tenant', async 
   };
 
   const response = await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: req.session,

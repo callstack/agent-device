@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
@@ -12,6 +13,7 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import { handleTraceCommand } from './trace-runtime.ts';
 
 export async function handleRecordTraceCommands(params: {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -43,7 +45,7 @@ export async function handleRecordTraceCommands(params: {
   }
 
   if (command === 'trace') {
-    return handleTraceCommand({ req, sessionName, sessionStore });
+    return handleTraceCommand({ host: params.host, req, sessionName, sessionStore });
   }
 
   return null;
