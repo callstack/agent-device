@@ -191,7 +191,11 @@ async function runPngJob<Kind extends PngWorkerJobKind>(
   try {
     return await runWorkerJob(job);
   } catch (error) {
-    if (error instanceof PngWorkerUnavailableError) return await runSync();
+    if (error instanceof PngWorkerUnavailableError) {
+      // A worker can fail while this request waits on it, from an event callback with no scope.
+      reportWorkerUnavailable();
+      return await runSync();
+    }
     throw error;
   }
 }
