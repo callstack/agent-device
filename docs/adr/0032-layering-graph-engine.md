@@ -36,7 +36,7 @@ Retrieve the harness with `git show d9959f510:scripts/layering/boundary-engine-s
 Its header gives usage.
 It derives both engines' R5/R6 rules from `model.ts`'s `RANKED_ZONES` and `zoneRank`.
 It declares other rules' paths inline, with R77 paths from `RUNNER_SUBTREE`.
-It runs on exactly the tracked production tree: 1,837 files and 41 zones.
+It runs only on exactly the tracked production tree: 1,837 files and 41 zones.
 It supplies recorded R6/R78 edges to each engine's known-violations baseline.
 The deletion table and `.fallowrc.json` field count also refer to files at that commit.
 
@@ -53,7 +53,7 @@ The deletion table and `.fallowrc.json` field count also refer to files at that 
 The nine extra pairs are `import('./x').T` type positions missed by the custom engine.
 Both replacement engines correctly detect them.
 
-The umbrella's 3.1.1 cross-check missed 88 dynamic/type-only edges.
+The umbrella's 3.1.1 cross-check missed 88 dynamic and type-only edges.
 Version 18.5 misses none of these edges but mislabels 46 pairs:
 
 - 33 dynamic → type.
@@ -65,7 +65,7 @@ Thus, `typeof import('./x').f` and `await import('./x')` retain whichever appear
 
 Fallow agrees with custom on value/type classification for every pair but has no dynamic kind.
 Its boundary check follows `export type *` barrels to the declaring module.
-`src/commands/cli-runner.ts → src/agent-device-client.ts` therefore counts as `commands → client` and adds an R6 finding.
+`src/commands/cli-runner.ts → src/agent-device-client.ts` therefore counts as `commands → client`. This adds one more R6 finding.
 Clean-tree findings are custom 0, depcruise 10, and fallow 11.
 Depcruise's ten are three R6 survivors and seven recorded R78 edges.
 
@@ -147,8 +147,7 @@ The current per-pair count ratchet permits that replacement.
 
 ## Decision
 
-Retain the current engine.
-The evaluated replacements lack sufficient semantic parity and net simplification.
+Retain the current engine, because the evaluated replacements lack sufficient semantic parity and net simplification.
 Graph-based checks share one normalized import model.
 Its implementation remains replaceable.
 Continue replacement of generic algorithms and compiler-enforceable rules with maintained tools.

@@ -99,8 +99,8 @@ Three facts determine eligibility from the closure graphs and merge-base tree, w
    It removes or replaces none.
 2. **Added-module novelty.**
    Each module newly evaluated by the head is absent from the merge-base tree at its rename-canonicalized path.
-   It must also contain no detected transplant from a source deleted since the merge-base.
-   Two or more identical normalized top-level statements shared with one deleted source constitute a move signal.
+   It must also carry no code from a source deleted since the merge-base.
+   The check matches an added module when it shares two or more identical normalized top-level statements with one deleted source; that is a move signal.
    One shared statement counts as coincidence.
    Short constants, such as schema versions or default timeouts, repeat across the repository.
    Classification of every single-statement reuse as a move would incorrectly reject new files.
@@ -127,7 +127,7 @@ Formatting and comments change bytes without changing those statements.
 
 The guarantee is exactly these facts:
 
-- Newly evaluated paths are absent from the merge-base tree.
+- Newly evaluated modules are new code: their paths are absent from the merge-base tree.
 - Each shares at most one coincidental statement with any source deleted since the merge-base.
 - Total statement weight stays flat over a preserved closure.
 
@@ -188,7 +188,7 @@ A statement-neutral split is shippable, so an oversized hub is addressable debt,
   A proxy improvement does not justify loss of a correctness guarantee.
 - **Reduce descriptor verbosity instead of splitting.**
   This is legitimate but unexamined.
-  It changes declaration vocabulary for approximately 80 commands, exceeds the split's scope, and needs a separate decision.
+  It changes the declaration vocabulary for all approximately 80 commands, exceeds the split's scope, and needs a separate decision.
 
 ## Recovery
 

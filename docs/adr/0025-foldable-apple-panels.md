@@ -293,7 +293,7 @@ This distinguishes unconfirmed dispatch from an observed contradictory pose.
 `hingeReadFailure` retains the read failure.
 Its stderr supplies the cause instead of an assumption.
 If panel power identifies exactly one lit panel, the error includes `screen` evidence.
-Panel power cannot distinguish `half-open` from `open` and never proves pose.
+Panel power cannot distinguish `half-open` from `open`, so the `screen` evidence is never promoted to a verified pose.
 A later no-sample read after an earlier sample retains its own reason.
 
 ## Pose is derived from panel power, and official control does not exist

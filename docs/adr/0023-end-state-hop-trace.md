@@ -127,7 +127,7 @@ The terminal invokes host-kit's shared `runCmd` in `packages/host-kit/src/intern
 The snapshot route counts this generic subprocess adapter; this route adds no separate hop for it.
 The baseline likewise ended at the route-level issue point, `adb.ts`, although the executor below it spawned the process.
 At the traced HEAD, the equivalent boundary is `adb-host`.
-ADR Decision section 1 permits only the named composition module to bind this named root file.
+Only its named composition module binds this named root file, per ADR Decision section 1.
 
 **Admission fan-out (not hops).**
 The Android owner's per-request `inspectFacts` in `packages/platform-android/src/runtime.ts` calls 23 distinct `*RuntimeOperationFacts` builders as side-calls.
@@ -183,7 +183,7 @@ The route branches at `packages/platform-apple/src/snapshot-route.ts` through `r
 The in-simulator AX bridge is primary.
 The XCTest runner is fallback under any of these conditions:
 
-- The capture is ineligible.
+- `isEligible` returns false.
 - AX acquisition fails.
 - Single-flight target discovery has not settled within this capture's `TARGET_DISCOVERY_WAIT_MS` wait in `snapshot-target.ts`.
 

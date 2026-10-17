@@ -74,10 +74,10 @@ Operators need to confine a remote agent to one simulator and prevent the agent 
 The HTTP auth hook, `AGENT_DEVICE_HTTP_AUTH_HOOK`, sees every top-level RPC and could refuse commands.
 It cannot correctly own operation policy for these reasons:
 
-- Internal `batch` steps and `replay` actions do not cross HTTP again.
+- Internal `batch` steps and `replay` actions never pass the HTTP edge again.
   `shutdown` supports batch execution.
 - The daemon resolves names such as `--device "iPhone 16"`.
-  The HTTP boundary sees only the name.
+  The HTTP edge sees only the name.
 - `close --shutdown` and lifecycle close reach the same shutdown capability as `shutdown`.
 
 ## Decision
@@ -150,4 +150,4 @@ Its digest identifies that policy.
   An authenticating front end can add per-user rules on top of this per-daemon policy.
   This per-daemon policy is the floor.
 - **A programmatic policy module: deferred.**
-  If added, it must decide at the same three points, not the HTTP boundary.
+  If added, it must decide at the same three points, not at the HTTP edge.

@@ -110,7 +110,7 @@ Each source index must end presented with its representatives or removed with a 
 This rule makes the ledger complete by construction, without a gate.
 #2754 step 5 still owes the removal reason.
 Currently, `presentedIndexesBySourceIndex` in `ios-snapshot-engine/semantic-index.ts` records representatives without removal reasons.
-Extend that ledger. A parallel ledger would create another source of truth.
+That ledger is the shape to extend. A second parallel ledger would be a second source of truth.
 
 ## Refuted alternatives
 
