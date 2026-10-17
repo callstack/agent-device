@@ -169,7 +169,9 @@ jobs:
       - name: Preflight iOS runner through public CLI
         run: |
           pnpm clean:daemon
-          node bin/agent-device.mjs prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
+          # --debug keeps the daemon_startup diagnostic, which #3791 needs as the measured
+          # successful cold-startup evidence for the startup budget (#3782). JSON stays on stdout.
+          node bin/agent-device.mjs prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --debug --json
 
       # The replay reuses the prepared runner in the same daemon. --debug keeps every step's request
       # log, not only the failing one, so a stale tap can be traced to its pre-tap capture (#3367).
