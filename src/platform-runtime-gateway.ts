@@ -74,8 +74,8 @@ export function createComposedPlatformRuntimeGateway(options: {
   };
   // Which durable resources exist is the host's composition problem; the gateway only owns the
   // once-per-process shape of each phase and keeps the host load lazy.
-  let lifecycleDetach: Promise<void> | undefined;
-  let lifecycleFinalize: Promise<void> | undefined;
+  let lifecycleDetach: Promise<readonly string[]> | undefined;
+  let lifecycleFinalize: Promise<readonly string[]> | undefined;
   const applicationLifecycle = Object.freeze({
     recoverStartupResources: async (input: Readonly<{ stateDir: string }>) => {
       await runStartupRecoveryFence(input.stateDir, async () => {
@@ -86,13 +86,13 @@ export function createComposedPlatformRuntimeGateway(options: {
       lifecycleDetach ??= loadHost().then(
         async (host) => await host.applicationResources.detachForDaemonShutdown(),
       );
-      await lifecycleDetach;
+      return await lifecycleDetach;
     },
     finalizeDaemonShutdown: async () => {
       lifecycleFinalize ??= loadHost().then(
         async (host) => await host.applicationResources.finalizeDaemonShutdown(),
       );
-      await lifecycleFinalize;
+      return await lifecycleFinalize;
     },
   });
   const registerOwner = (owner: PlatformRuntimeOwner) => {

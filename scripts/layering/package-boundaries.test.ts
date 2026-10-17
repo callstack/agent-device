@@ -614,6 +614,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/host-kit/project-runtime',
     '@agent-device/host-kit/request',
     '@agent-device/host-kit/retry',
+    '@agent-device/host-kit/runtime-slots',
     '@agent-device/host-kit/runtime-transport-hints',
     '@agent-device/host-kit/session-paths',
     '@agent-device/host-kit/status-markers',

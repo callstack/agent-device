@@ -1,6 +1,7 @@
 import type { ApplicationLifecycleResourceLifecycle } from '@agent-device/contracts/application-lifecycle-runtime';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { vi } from 'vitest';
 import type {
   ComposeDaemonRuntimeDeps,
@@ -25,8 +26,8 @@ export function applicationLifecycleResourceFixture(
 ): ApplicationLifecycleResourceLifecycle {
   return Object.freeze({
     recoverStartupResources: vi.fn(async () => {}),
-    detachForDaemonShutdown: vi.fn(async () => {}),
-    finalizeDaemonShutdown: vi.fn(async () => {}),
+    detachForDaemonShutdown: vi.fn(async (): Promise<readonly string[]> => []),
+    finalizeDaemonShutdown: vi.fn(async (): Promise<readonly string[]> => []),
     ...overrides,
   });
 }
@@ -59,6 +60,7 @@ export function daemonRuntimeDepsFixture(
   return async (input) => {
     const resolved = typeof overrides === 'function' ? overrides(input) : overrides;
     return Object.freeze({
+      runtimeStates: [],
       ownedProcessRecords: createOwnedProcessRecordStore({
         stateDir: input.baseDir,
         sessionsDir: input.sessionsDir,
@@ -92,5 +94,50 @@ export function daemonRuntimeDepsFixture(
       }),
       ...resolved,
     });
+  };
+}
+
+/**
+ * A plugin registry over provider runtimes, as the composition hands it to the daemon: the
+ * inventory of active plugins and the one `close` that shuts each runtime down and answers with a
+ * per-plugin outcome.
+ */
+export function pluginRegistryFixture(
+  runtimes: readonly Pick<ProviderDeviceRuntime, 'provider' | 'shutdown'>[],
+): Pick<DaemonRuntimeDeps, 'pluginInventory' | 'shutdownProviderRuntimes'> {
+  return {
+    pluginInventory: runtimes.map((runtime) => ({
+      provider: runtime.provider,
+      source: 'builtin' as const,
+      state: 'active' as const,
+      credentials: { variables: [], byBackend: {} },
+    })),
+    shutdownProviderRuntimes: async () =>
+      await Promise.all(
+        runtimes.map(async (runtime) => {
+          try {
+            await runtime.shutdown();
+            return {
+              provider: runtime.provider,
+              source: 'builtin' as const,
+              shutdown: { status: 'ok' as const },
+              dispose: { status: 'ok' as const },
+            };
+          } catch (error) {
+            return {
+              provider: runtime.provider,
+              source: 'builtin' as const,
+              shutdown: {
+                status: 'failed' as const,
+                error: {
+                  code: 'COMMAND_FAILED',
+                  message: error instanceof Error ? error.message : String(error),
+                },
+              },
+              dispose: { status: 'ok' as const },
+            };
+          }
+        }),
+      ),
   };
 }

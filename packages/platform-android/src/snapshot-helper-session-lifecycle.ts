@@ -7,7 +7,7 @@
  * `snapshot-helper-session.ts`; they acquire through here and never reach the registry themselves.
  */
 import type { AndroidAdbProcess } from './adb-executor.ts';
-import { requireAndroidAdbHost } from './adb-host.ts';
+import { helperRuntimeSlot, requireAndroidAdbHost } from './adb-host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -94,12 +94,16 @@ export type AndroidSnapshotHelperSessionAcquisition = {
   deviceKey: string;
 };
 
-const sessions = new Map<string, AndroidSnapshotHelperSession>();
+const sessionsSlot = Symbol('androidSnapshotHelperSessions');
+const sessions = (): Map<string, AndroidSnapshotHelperSession> =>
+  helperRuntimeSlot(sessionsSlot, () => new Map<string, AndroidSnapshotHelperSession>());
 /**
  * Capture identity → when this process may spawn that helper build again after a failed start or a
  * failed session capture.
  */
-const failedSessions = new Map<string, number>();
+const failedSessionsSlot = Symbol('androidSnapshotHelperFailedSessions');
+const failedSessions = (): Map<string, number> =>
+  helperRuntimeSlot(failedSessionsSlot, () => new Map<string, number>());
 
 /**
  * Starts (or reuses) the session without capturing, so a helper-backed read that is not a snapshot
@@ -145,7 +149,7 @@ export async function acquireAndroidSnapshotHelperSession(
 export function getLiveAndroidSnapshotHelperSession(
   deviceKey: string,
 ): AndroidSnapshotHelperSession | undefined {
-  return sessions.get(deviceKey);
+  return sessions().get(deviceKey);
 }
 
 async function resolveAndroidSnapshotHelperSession(params: {
@@ -157,7 +161,7 @@ async function resolveAndroidSnapshotHelperSession(params: {
 }): Promise<AndroidSnapshotHelperSession | undefined> {
   if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) return undefined;
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
-  return sessions.get(params.deviceKey) ?? (await tryStartAndroidSnapshotHelperSession(params));
+  return sessions().get(params.deviceKey) ?? (await tryStartAndroidSnapshotHelperSession(params));
 }
 
 /** Drops a cached session this command cannot write to, so only its forward is left behind. */
@@ -165,7 +169,7 @@ async function retireUnusableAndroidSnapshotHelperSession(
   deviceKey: string,
   identity: string,
 ): Promise<void> {
-  const cached = sessions.get(deviceKey);
+  const cached = sessions().get(deviceKey);
   if (!cached || isReusableAndroidSnapshotHelperSession(cached, identity)) return;
   // A process that already exited cannot answer the forwarded port, so there is nothing left to ask
   // it to quit gracefully.
@@ -191,7 +195,7 @@ async function tryStartAndroidSnapshotHelperSession(params: {
     return await startAndroidSnapshotHelperSession(params);
   } catch (error) {
     params.options.signal?.throwIfAborted();
-    failedSessions.set(
+    failedSessions().set(
       params.identity,
       Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs),
     );
@@ -210,10 +214,10 @@ async function tryStartAndroidSnapshotHelperSession(params: {
 
 /** A helper build whose last start or capture failed is left alone until its backoff has run out. */
 function isAndroidSnapshotHelperSessionBackedOff(identity: string): boolean {
-  const retryAtMs = failedSessions.get(identity);
+  const retryAtMs = failedSessions().get(identity);
   if (retryAtMs === undefined) return false;
   if (retryAtMs > Date.now()) return true;
-  failedSessions.delete(identity);
+  failedSessions().delete(identity);
   return false;
 }
 
@@ -250,7 +254,7 @@ export async function retireFailedAndroidSnapshotHelperSession(params: {
     cause: params.cause,
   });
   if (params.signal?.aborted) return;
-  failedSessions.set(
+  failedSessions().set(
     params.identity,
     Date.now() +
       params.fallbackBudgetMs +
@@ -318,8 +322,8 @@ async function startAndroidSnapshotHelperSession(params: {
       params.startBudgetMs,
       params.options.signal,
     );
-    sessions.set(params.deviceKey, session);
-    failedSessions.delete(params.identity);
+    sessions().set(params.deviceKey, session);
+    failedSessions().delete(params.identity);
     // `am instrument` force-stops whatever is already instrumenting this package, so a helper that
     // reported itself ready is the only helper process the device has left, and the release the
     // previous teardown could not prove went away with the process that owed it. Leaving the entry
@@ -448,9 +452,9 @@ export async function stopAndroidSnapshotHelperSession(
     cause?: unknown;
   } = {},
 ): Promise<boolean> {
-  const session = sessions.get(deviceKey);
+  const session = sessions().get(deviceKey);
   if (!session) return false;
-  sessions.delete(deviceKey);
+  sessions().delete(deviceKey);
   const processExit = observeAndroidSnapshotHelperProcessExit(session.process);
   const force = options.force === true || options.signal?.aborted === true;
   const graceful = await requestGracefulSessionExit(session, processExit, force, options.signal);
@@ -564,15 +568,15 @@ export async function stopAndroidSnapshotHelperSessionForDevice(
 export async function resetAndroidSnapshotHelperSessions(): Promise<void> {
   try {
     await Promise.allSettled(
-      [...sessions.keys()].map(async (deviceKey) => {
+      [...sessions().keys()].map(async (deviceKey) => {
         await stopAndroidSnapshotHelperSession(deviceKey);
       }),
     );
   } finally {
     // One teardown that throws must not leave the next caller believing a session, a pending
     // retirement, or a failed start is still standing.
-    sessions.clear();
-    failedSessions.clear();
+    sessions().clear();
+    failedSessions().clear();
     resetAndroidSnapshotHelperRetirements();
     resetAndroidAdbShellProtocolProbes();
   }

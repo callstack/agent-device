@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
+import { teardownDaemonSessionForShutdown } from './server-shutdown.ts';
 import {
   clearRequestAbortRegistration,
   markRequestCanceled,
@@ -12,7 +13,6 @@ import { snapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { DAEMON_SESSION_TEARDOWN_TIMEOUT_MS } from '../../sessions/session-teardown-budget.ts';
 import { dispatchSnapshotViaRuntime } from '../../sessions/snapshot-runtime.ts';
-import { teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
 import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
@@ -77,7 +77,7 @@ for (const initialSession of ['published', 'draft'] as const) {
       (error: unknown) => ({ error }),
     );
     const stderr: string[] = [];
-    let teardown: Promise<void> | undefined;
+    let teardown: Promise<boolean> | undefined;
     try {
       await captureEntered.promise;
       vi.useFakeTimers();

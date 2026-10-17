@@ -381,7 +381,7 @@ test('graceful shutdown stops idle retained generations and hands off active rea
   const active = await ensureReadyRunner(activeDevice);
   await closeFinalizationLifecycle(idleDevice, []).finalizeApplicationClose(closeInput(true));
 
-  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+  assert.equal((await detachIosRunnerSessionsForShutdown()).length, 1);
   assert.equal(active.state, 'stopped');
   assert.equal(idle.state, 'ready');
   await stopAllIosRunnerSessions();

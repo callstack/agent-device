@@ -19,8 +19,8 @@ const limrunIo = vi.hoisted(() => ({
 const rootPorts = vi.hoisted(() => {
   const applicationLifecycle = {
     recoverStartupResources: vi.fn(async () => {}),
-    detachForDaemonShutdown: vi.fn(async () => {}),
-    finalizeDaemonShutdown: vi.fn(async () => {}),
+    detachForDaemonShutdown: vi.fn(async () => []),
+    finalizeDaemonShutdown: vi.fn(async () => []),
   };
   return {
     providerComposition: vi.fn(async () => ({
@@ -106,8 +106,6 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
           LIM_ANDROID_INSTANCE_ADB_URL: 'https://region.limrun.example/v1/android_test/adb',
         },
       }),
-      exit: () => {},
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
     });
@@ -162,7 +160,7 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
     assert.equal(rootPorts.createRequestPlatformProviders.mock.calls.length, 1);
     assert.equal(rootPorts.applicationLifecycle.recoverStartupResources.mock.calls.length, 1);
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
     await limrun.shutdown();
     fs.rmSync(paths.baseDir, { recursive: true, force: true });
     if (runtime)

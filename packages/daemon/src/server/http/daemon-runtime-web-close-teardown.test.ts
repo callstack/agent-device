@@ -1,10 +1,10 @@
 import path from 'node:path';
+import { teardownDaemonSessionForShutdown } from './server-shutdown.ts';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { makeWebSession } from '../../__tests__/support/session-teardown.fixtures.ts';
 import { SessionStore } from '../../core/session-store.ts';
-import { teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
 
 afterEach(() => {
   vi.useRealTimers();

@@ -1,5 +1,7 @@
 export {
+  cancelAllRequests,
   clearRequestAbortRegistration,
+  createRequestCancelRuntimeState,
   clearRequestCanceled,
   getRequestSignal,
   isRequestCanceled,

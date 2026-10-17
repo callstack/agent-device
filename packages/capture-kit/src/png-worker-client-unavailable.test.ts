@@ -8,11 +8,11 @@ test('an unavailable worker is reported by the first diagnostics scope that reac
   // Loaded after the reset so the client and the scope share one diagnostics module.
   const { countDiagnosticEventsByPhase, withDiagnosticsScope } =
     await import('@agent-device/host-kit/diagnostics');
-  const { decodePngAsync, prewarmPngWorker } = await import('./png-worker-client.ts');
+  const { decodePngAsync, retainPngWorker } = await import('./png-worker-client.ts');
   const png = PNG.sync.write(new PNG({ width: 1, height: 1 }));
 
-  // The daemon pre-warms outside any request scope, where the report would be dropped.
-  prewarmPngWorker();
+  // The daemon retains the worker outside any request scope, where the report would be dropped.
+  const release = retainPngWorker();
 
   const reported = await withDiagnosticsScope({ command: 'screenshot' }, async () => {
     await decodePngAsync(png, 'first');
@@ -27,6 +27,7 @@ test('an unavailable worker is reported by the first diagnostics scope that reac
 
   expect(reported).toEqual({ afterFirst: 1, afterSecond: 1 });
   expect(laterScope).toBe(0);
+  await release();
   vi.doUnmock('./internal-entry.ts');
 });
 
@@ -51,9 +52,9 @@ test('a worker that dies under a request is reported in that request, not only t
   }));
   const { countDiagnosticEventsByPhase, withDiagnosticsScope } =
     await import('@agent-device/host-kit/diagnostics');
-  const { decodePngAsync, prewarmPngWorker } = await import('./png-worker-client.ts');
+  const { decodePngAsync, retainPngWorker } = await import('./png-worker-client.ts');
   const png = PNG.sync.write(new PNG({ width: 1, height: 1 }));
-  prewarmPngWorker();
+  const release = retainPngWorker();
 
   let jobStarted!: () => void;
   const started = new Promise<void>((resolve) => (jobStarted = resolve));
@@ -66,9 +67,10 @@ test('a worker that dies under a request is reported in that request, not only t
   await started;
   // The worker's own error event carries no diagnostics scope.
   const worker = FakeWorker.last;
-  if (!worker) throw new Error('the pre-warm did not start a worker');
+  if (!worker) throw new Error('the retained worker did not start');
   worker.emit('error', new Error('worker crashed'));
 
   expect(await scoped).toBe(1);
+  await release();
   vi.doUnmock('node:worker_threads');
 });

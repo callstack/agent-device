@@ -1,4 +1,5 @@
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
+import { teardownDaemonSessionForShutdown } from '../http/server-shutdown.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import fs from 'node:fs';
@@ -9,10 +10,7 @@ import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import {
-  flushDaemonStartupDiagnostics,
-  teardownDaemonSessionForShutdown,
-} from '../http/daemon-runtime.ts';
+import { flushDaemonStartupDiagnostics } from '../http/daemon-runtime.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { unavailableDeviceRuntimeGateway } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
@@ -36,13 +34,12 @@ test('daemon startup configures the Apple runner owner after acquiring the lock,
   const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
   const acquiredLock = source.indexOf("if (acquisition.status !== 'acquired')");
   const runnerOwnerConfigured = source.indexOf('await deps.ownerLifecycle.configureForDaemonLock(');
-  const lockFailureExit = source.indexOf('exit(', acquiredLock);
+  const lockFailureExit = source.indexOf("reason: 'daemon_registration_refused'", acquiredLock);
 
   expect(acquiredLock).toBeGreaterThanOrEqual(0);
   expect(lockFailureExit).toBeGreaterThan(acquiredLock);
   expect(runnerOwnerConfigured).toBeGreaterThan(acquiredLock);
-  // The configure call sits inside the post-lock try block, after the failure branch that exits
-  // for a lock held by another process.
+  // The configure call comes after the failure branch that refuses a lock held by another process.
   expect(runnerOwnerConfigured).toBeGreaterThan(lockFailureExit);
 });
 

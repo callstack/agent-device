@@ -35,8 +35,6 @@ test('daemon startup reaps orphaned simctl recorders with a graceful finalize wi
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
       }),
-      exit: () => {},
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
     });
@@ -50,7 +48,7 @@ test('daemon startup reaps orphaned simctl recorders with a graceful finalize wi
     // so it releases the host recording lock instead of leaving it dangling for the next session.
     expect(Number(recordingReap!.termTimeoutMs)).toBeGreaterThanOrEqual(5_000);
 
-    await runtime?.shutdown();
+    await runtime?.close();
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

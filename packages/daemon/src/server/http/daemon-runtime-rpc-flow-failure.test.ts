@@ -52,7 +52,6 @@ test('a /rpc flow failure the server refused itself reaches the runtime stderr a
   expect(observed.events).toHaveLength(1);
   expect(observed.events[0]?.data).toEqual({ code: 'UNKNOWN', message: 'Unknown error' });
   expect(observed.rejections).toEqual([]);
-  expect(observed.exitCode).toBeUndefined();
   expect(observed.nextCall).toEqual({ status: 400, code: -32600 });
 });
 
@@ -67,7 +66,6 @@ test('a /rpc flow failure still reaches daemon.log when the injected stderr thro
   expect(observed.events[0]?.phase).toBe('daemon_rpc_request_flow_failed');
   expect(observed.stderrLines).toEqual([]);
   expect(observed.rejections).toEqual([]);
-  expect(observed.exitCode).toBeUndefined();
 });
 
 type FlowFailure = {
@@ -76,7 +74,6 @@ type FlowFailure = {
   events: Array<{ phase: string; data?: Record<string, unknown> }>;
   stderrLines: string[];
   rejections: unknown[];
-  exitCode: number | undefined;
 };
 
 /**
@@ -94,8 +91,7 @@ async function driveFlowFailure(options: { stderrThrows?: boolean }): Promise<Fl
   const observeRejection = (reason: unknown) => {
     rejections.push(reason);
   };
-  let exitCode: number | undefined;
-  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> | null = null;
   try {
     runtime = await startDaemonRuntime({
       composeDeps: daemonRuntimeDepsFixture(),
@@ -107,10 +103,6 @@ async function driveFlowFailure(options: { stderrThrows?: boolean }): Promise<Fl
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
       }),
-      exit: (code) => {
-        exitCode = code;
-      },
-      registerProcessHandlers: false,
       stderr: {
         write: (chunk: string) => {
           if (options.stderrThrows) throw new Error('the stream is gone');
@@ -143,14 +135,13 @@ async function driveFlowFailure(options: { stderrThrows?: boolean }): Promise<Fl
       events,
       stderrLines,
       rejections,
-      exitCode,
     };
   } finally {
     process.off('unhandledRejection', observeRejection);
     // Idle reaping is disabled here, so the runtime would otherwise keep an HTTP listener and a
     // forked Vitest worker alive. The state directory needs no cleanup: it lives under the per-run
     // TMPDIR Vitest removes.
-    await runtime?.shutdown();
+    await runtime?.close();
   }
 }
 

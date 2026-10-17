@@ -50,6 +50,45 @@ test('no-growth fails growth with both counts and passes an equal or smaller clo
   ).toMatch(/evaluates 43 modules.*merge-base evaluated 42/);
 });
 
+test('a module a maintainer approved is excused from the count, and only that module', () => {
+  const grown = {
+    baseCount: 42,
+    headCount: 43,
+    baseWeight: 200,
+    headWeight: 230,
+    preservedBaseClosure: true,
+    addedModulesAreNew: true,
+  };
+  expect(classifyGrowth('x.ts', { ...grown, approvedAddedCount: 1 })).toBeNull();
+  expect(
+    classifyGrowth('x.ts', { ...grown, headCount: 44, approvedAddedCount: 1 }),
+    'a second, unapproved addition still fails',
+  ).toMatch(/evaluates 44 modules.*merge-base evaluated 42/);
+  expect(classifyGrowth('x.ts', grown), 'without approval the same growth fails').toMatch(
+    /evaluates 43 modules/,
+  );
+});
+
+test('an approved module that only renames a base module excuses nothing', () => {
+  const graph = (...files: string[]) => new Map(files.map((file) => [`/r/${file}`, null]));
+  const weights = (...files: string[]) => new Map(files.map((file) => [`/r/${file}`, 1]));
+  const evidence = closureGrowthEvidence({
+    baseGraph: graph('entry.ts', 'old.ts'),
+    headGraph: graph('entry.ts', 'moved.ts', 'extra.ts'),
+    baseWeights: weights('entry.ts', 'old.ts'),
+    headWeights: weights('entry.ts', 'moved.ts', 'extra.ts'),
+    headStatementTexts: new Map(),
+    baseTree: { exists: () => false },
+    renamedBaseToHead: new Map([['/r/old.ts', '/r/moved.ts']]),
+    approvedModules: new Set(['/r/moved.ts']),
+  });
+
+  expect(evidence.approvedAddedCount, 'moved.ts was already in the base closure as old.ts').toBe(0);
+  expect(classifyGrowth('x.ts', evidence), 'the unrelated addition still fails').toMatch(
+    /evaluates 3 modules.*merge-base evaluated 2/,
+  );
+});
+
 // --- the split tolerance (#2469) -------------------------------------------------------------
 // The no-growth rule counts modules, and a split of a hub module is count growth with no new
 // eager work -- which made extracting any module inside a gated closure impossible (ADR 0027).

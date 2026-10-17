@@ -4,6 +4,7 @@ import {
   mkdtempForTestSync,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
+import { teardownDaemonSessionForShutdown } from './server-shutdown.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -100,7 +101,7 @@ import {
   daemonRuntimeDepsFixture,
 } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { startDaemonRuntime, teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
+import { startDaemonRuntime } from './daemon-runtime.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 
@@ -116,7 +117,6 @@ afterEach(() => {
 
 test('daemon shutdown detaches before session teardown and force-finalizes only after gateway resources', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-lifecycle-shutdown-');
-  const exits: number[] = [];
   const startupErrors: string[] = [];
   try {
     const runtime = await startDaemonRuntime({
@@ -135,9 +135,11 @@ test('daemon shutdown detaches before session teardown and force-finalizes only 
                 phase: 'detach_scope_probe',
                 data: { lane: 'physical_coredevice' },
               });
+              return [];
             },
             finalizeDaemonShutdown: async () => {
               lifecycleEvents.push('finalize');
+              return [];
             },
           }),
           shutdown: async () => {
@@ -153,17 +155,14 @@ test('daemon shutdown detaches before session teardown and force-finalizes only 
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
       }),
-      exit: (code) => exits.push(code),
-      registerProcessHandlers: false,
       stderr: { write: (chunk) => startupErrors.push(chunk) },
       stdout: { write: () => {} },
     });
     expect(runtime, startupErrors.join('')).not.toBeNull();
 
-    await Promise.all([runtime?.shutdown(), runtime?.shutdown()]);
+    await Promise.all([runtime?.close(), runtime?.close()]);
 
     expect(lifecycleEvents).toEqual(['detach', 'gateway-shutdown', 'finalize']);
-    expect(exits).toEqual([0]);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
@@ -190,9 +189,11 @@ test('a SIGTERM shutdown gives the handoff a diagnostics scope to write its reas
                 phase: 'detach_scope_probe',
                 data: { lane: 'physical_coredevice' },
               });
+              return [];
             },
             finalizeDaemonShutdown: async () => {
               lifecycleEvents.push('finalize');
+              return [];
             },
           }),
           shutdown: async () => {
@@ -208,14 +209,12 @@ test('a SIGTERM shutdown gives the handoff a diagnostics scope to write its reas
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
       }),
-      exit: () => {},
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
     });
     expect(runtime).not.toBeNull();
 
-    await runtime?.shutdown();
+    await runtime?.close();
 
     const daemonLog = fs.readFileSync(path.join(stateDir, 'daemon.log'), 'utf8');
     expect(daemonLog).toMatch(/"phase":"detach_scope_probe"/);
@@ -245,9 +244,11 @@ test('shutdown includes drain publications, releases their claims and refuses po
               phase: 'detach_scope_probe',
               data: { lane: 'physical_coredevice' },
             });
+            return [];
           },
           finalizeDaemonShutdown: async () => {
             lifecycleEvents.push('finalize');
+            return [];
           },
         }),
         shutdown: async () => {
@@ -263,8 +264,6 @@ test('shutdown includes drain publications, releases their claims and refuses po
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
       },
     }),
-    exit: () => {},
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
   });
@@ -298,14 +297,14 @@ test('shutdown includes drain publications, releases their claims and refuses po
         refusal = error;
       }
     });
-    await runtime!.shutdown();
+    await runtime!.close();
     expect(shutdownProbe.finalize).toHaveBeenCalledOnce();
     expect(refusal).toMatchObject({ details: { reason: 'daemon_shutting_down' } });
     expect(store.lookup('draining')).toBeUndefined();
     expect(store.lookup('late')).toBeUndefined();
     expect(fs.existsSync(deviceClaimFilePath(acquired.ownership.deviceKey))).toBe(false);
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
   }
 });
 
@@ -327,9 +326,11 @@ test('shutdown joins dispatch completion after force-closing the client before t
               phase: 'detach_scope_probe',
               data: { lane: 'physical_coredevice' },
             });
+            return [];
           },
           finalizeDaemonShutdown: async () => {
             lifecycleEvents.push('finalize');
+            return [];
           },
         }),
         shutdown: async () => {
@@ -345,8 +346,6 @@ test('shutdown joins dispatch completion after force-closing the client before t
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
       },
     }),
-    exit: () => {},
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
   });
@@ -363,7 +362,7 @@ test('shutdown joins dispatch completion after force-closing the client before t
     closed = resolve;
   });
   let request: Promise<unknown> | undefined;
-  let shutdown: Promise<void> | undefined;
+  let shutdown: Promise<unknown> | undefined;
   try {
     expect(runtime).not.toBeNull();
     const store = shutdownProbe.store!;
@@ -413,7 +412,7 @@ test('shutdown joins dispatch completion after force-closing the client before t
     shutdownProbe.drain = async () => {
       closed();
     };
-    shutdown = runtime!.shutdown();
+    shutdown = runtime!.close();
     await serversClosed;
     await new Promise((resolve) => setImmediate(resolve));
     expect(lifecycleEvents).not.toContain('detach');
@@ -429,7 +428,7 @@ test('shutdown joins dispatch completion after force-closing the client before t
     release();
     await request;
     await shutdown;
-    await runtime?.shutdown();
+    await runtime?.close();
   }
 });
 test.each([false, true])(
@@ -496,9 +495,11 @@ test('daemon shutdown releases a session lease whose session teardown rejects', 
               phase: 'detach_scope_probe',
               data: { lane: 'physical_coredevice' },
             });
+            return [];
           },
           finalizeDaemonShutdown: async () => {
             lifecycleEvents.push('finalize');
+            return [];
           },
         }),
         shutdown: async () => {
@@ -514,8 +515,6 @@ test('daemon shutdown releases a session lease whose session teardown rejects', 
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
       },
     }),
-    exit: () => {},
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
   });
@@ -531,7 +530,7 @@ test('daemon shutdown releases a session lease whose session teardown rejects', 
   });
   shutdownProbe.finalize.mockRejectedValueOnce(new Error('teardown failed'));
 
-  await runtime?.shutdown();
+  await runtime?.close();
 
   expect(shutdownProbe.finalize).toHaveBeenCalledOnce();
   expect(leaseProbe.released).toEqual([lease]);
@@ -557,9 +556,11 @@ test('daemon shutdown releases a retainOnClose lease that no session holds', asy
                 phase: 'detach_scope_probe',
                 data: { lane: 'physical_coredevice' },
               });
+              return [];
             },
             finalizeDaemonShutdown: async () => {
               lifecycleEvents.push('finalize');
+              return [];
             },
           }),
           shutdown: async () => {
@@ -575,8 +576,6 @@ test('daemon shutdown releases a retainOnClose lease that no session holds', asy
           AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
         },
       }),
-      exit: () => {},
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
     });
@@ -589,7 +588,7 @@ test('daemon shutdown releases a retainOnClose lease that no session holds', asy
       retainOnClose: true,
     });
 
-    await runtime?.shutdown();
+    await runtime?.close();
 
     expect(leaseProbe.released).toEqual([lease]);
     expect(leaseRegistry!.listActiveLeases()).toEqual([]);

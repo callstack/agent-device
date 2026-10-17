@@ -73,7 +73,7 @@ test('Limrun retries an expired provider lease persisted by a daemon before rest
       interval: 10,
       timeout: 2_000,
     });
-    await firstDaemon.runtime.shutdown();
+    await firstDaemon.runtime.close();
     assert.ok(limrun.iosDisconnect.mock.calls.length > 0);
 
     const pendingPath = path.join(stateDir, 'expired-provider-leases.json');
@@ -100,7 +100,7 @@ test('Limrun retries an expired provider lease persisted by a daemon before rest
     if (restartedDaemon) {
       await restartedDaemon.close();
     } else {
-      await firstDaemon?.runtime.shutdown();
+      await firstDaemon?.runtime.close();
       fs.rmSync(stateDir, { recursive: true, force: true });
     }
   }

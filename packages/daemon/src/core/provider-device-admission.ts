@@ -1,3 +1,4 @@
+import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 /**
@@ -18,7 +19,18 @@ const NO_PROVIDER_DEVICE_ADMISSION: ProviderDeviceAdmission = {
   isActive: () => false,
 };
 
-let installedProviderDeviceAdmission: ProviderDeviceAdmission = NO_PROVIDER_DEVICE_ADMISSION;
+type ProviderAdmissionState = { admission: ProviderDeviceAdmission };
+
+const providerAdmissionRuntime = defineRuntimeSlots();
+const PROVIDER_ADMISSION_SLOT = Symbol('providerDeviceAdmission');
+const providerAdmissionState = (): ProviderAdmissionState =>
+  providerAdmissionRuntime.slot(PROVIDER_ADMISSION_SLOT, (): ProviderAdmissionState => ({
+    admission: NO_PROVIDER_DEVICE_ADMISSION,
+  }));
+
+/** The admission one daemon runtime owns; the runtime installs its composition's into it. */
+export const createProviderDeviceAdmissionRuntimeState = (): RuntimeStateHandle =>
+  providerAdmissionRuntime.createHandle();
 
 /**
  * Root composition's installation point. The provider runtime scope is ambient per request, so
@@ -26,9 +38,9 @@ let installedProviderDeviceAdmission: ProviderDeviceAdmission = NO_PROVIDER_DEVI
  * provider runtime internals itself.
  */
 export function installProviderDeviceAdmission(admission: ProviderDeviceAdmission): void {
-  installedProviderDeviceAdmission = admission;
+  providerAdmissionState().admission = admission;
 }
 
 export function isActiveProviderDevice(device: DeviceInfo): boolean {
-  return installedProviderDeviceAdmission.isActive(device);
+  return providerAdmissionState().admission.isActive(device);
 }

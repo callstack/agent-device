@@ -83,9 +83,9 @@ export function isIosRunnerDetachEnabled(env: NodeJS.ProcessEnv = hostEnvironmen
 export async function detachRunnerSessionsForShutdown(
   sessions: ReadonlyMap<string, RunnerSession>,
   onDetached: (deviceId: string, session: RunnerSession) => void,
-): Promise<number> {
-  if (!isIosRunnerDetachEnabled()) return 0;
-  let detached = 0;
+): Promise<string[]> {
+  if (!isIosRunnerDetachEnabled()) return [];
+  const detached: string[] = [];
   for (const [deviceId, session] of sessions) {
     const outcome = detachRunnerSessionForShutdown(session);
     if (!outcome.detached) {
@@ -106,7 +106,7 @@ export async function detachRunnerSessionsForShutdown(
       });
       continue;
     }
-    detached += 1;
+    detached.push(deviceId);
     onDetached(deviceId, session);
     emitDiagnostic({
       level: 'info',

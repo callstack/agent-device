@@ -212,10 +212,8 @@ export async function createProviderScenarioHarness(
   try {
     runtime = await startDaemonRuntime({
       host: createTestHostEnvironment({ env }),
-      registerProcessHandlers: false,
       stdout: { write: () => undefined },
       stderr: { write: () => undefined },
-      exit: () => undefined,
       composeDeps,
     });
   } catch (error) {
@@ -289,9 +287,9 @@ export async function createProviderScenarioHarness(
       if (scopedAppleToolProvider) {
         const { withAppleToolProvider } =
           await import('@agent-device/platform-apple/tool-provider');
-        await withAppleToolProvider(scopedAppleToolProvider, async () => await runtime?.shutdown());
+        await withAppleToolProvider(scopedAppleToolProvider, async () => await runtime?.close());
       } else {
-        await runtime?.shutdown();
+        await runtime?.close();
       }
       await removeProviderScenarioTempDir(testRoot);
     },

@@ -67,7 +67,17 @@ export type SessionOpenCommandInput = Readonly<{
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }>;
 
-const firstSessionOpenLocks = new Map<string, Promise<unknown>>();
+// One lock table per session store, which is to say per daemon runtime.
+const firstSessionOpenLocksByStore = new WeakMap<SessionStore, Map<string, Promise<unknown>>>();
+
+function firstSessionOpenLocks(sessionStore: SessionStore): Map<string, Promise<unknown>> {
+  let locks = firstSessionOpenLocksByStore.get(sessionStore);
+  if (!locks) {
+    locks = new Map();
+    firstSessionOpenLocksByStore.set(sessionStore, locks);
+  }
+  return locks;
+}
 
 type OpenRuntimeAdmission =
   | Readonly<{
@@ -347,7 +357,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   const { admission, runtimeHintPlan } = runtimePlanAdmission;
 
   return await withKeyedLock(
-    firstSessionOpenLocks,
+    firstSessionOpenLocks(sessionStore),
     device.id,
     async () =>
       await openNewSessionWithDeviceClaim({

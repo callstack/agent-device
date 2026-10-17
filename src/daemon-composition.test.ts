@@ -7,6 +7,7 @@ import {
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
+import { androidHelperRuntimeSlot } from './platform-runtime-android-helper-state.ts';
 import { setActiveProviderDeviceRuntimes } from './provider-device-runtime.ts';
 
 const ports = vi.hoisted(() => ({
@@ -22,8 +23,8 @@ vi.mock('./platform-runtime.ts', () => ({
   createPlatformRuntimeGateway: () => ({
     applicationLifecycle: {
       recoverStartupResources: async () => {},
-      detachForDaemonShutdown: async () => {},
-      finalizeDaemonShutdown: async () => {},
+      detachForDaemonShutdown: async () => [],
+      finalizeDaemonShutdown: async () => [],
     },
     inspectFacts: async () => {
       throw new Error('unused');
@@ -120,4 +121,37 @@ test('a composition that succeeds leaves the plugins open for the daemon to clos
   expect(ports.shutdownProviders).not.toHaveBeenCalled();
   await deps.shutdownProviderRuntimes();
   expect(ports.shutdownProviders).toHaveBeenCalledOnce();
+});
+
+test('a composed daemon registers the Apple runner and Android helper state, one set per composition', async () => {
+  const compose = async (name: string) => {
+    const baseDir = mkdtempForTestSync(`agent-device-daemon-composition-states-${name}-`);
+    return await createDaemonRuntimeDeps({
+      host: createTestHostEnvironment({
+        env: { ...process.env, AGENT_DEVICE_STATE_DIR: baseDir },
+      }),
+      baseDir,
+      sessionsDir: `${baseDir}/sessions`,
+      assertShutdownAllowed: undefined,
+      resolveSessionDir: (sessionId) => `${baseDir}/sessions/${sessionId}`,
+      resolveSessionArtifacts: () => {
+        throw new Error('unused');
+      },
+      openWebSessionNames: () => [],
+    });
+  };
+  const first = await compose('first');
+  const second = await compose('second');
+  const slotKey = Symbol('composition-test');
+
+  // Apple's runner state and Android's helper state.
+  expect(first.runtimeStates).toHaveLength(2);
+  expect(second.runtimeStates).toHaveLength(2);
+  // The Android handle scopes the accessor the root binds into the adb host port.
+  const [, firstAndroid] = first.runtimeStates;
+  const [, secondAndroid] = second.runtimeStates;
+  const inFirst = firstAndroid!.run(() => androidHelperRuntimeSlot(slotKey, () => ({})));
+  const inSecond = secondAndroid!.run(() => androidHelperRuntimeSlot(slotKey, () => ({})));
+  expect(inFirst).not.toBe(inSecond);
+  expect(firstAndroid!.run(() => androidHelperRuntimeSlot(slotKey, () => ({})))).toBe(inFirst);
 });

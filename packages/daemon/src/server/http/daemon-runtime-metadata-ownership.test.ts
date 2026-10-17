@@ -33,7 +33,7 @@ type DaemonPaths = ReturnType<typeof resolveDaemonPaths>;
 // anything that verifies identity against the process table.
 const SUCCESSOR_PID = 999_999_999;
 
-function startRuntime(stateDir: string, exit: (code: number) => void) {
+function startRuntime(stateDir: string) {
   return startDaemonRuntime({
     composeDeps: daemonRuntimeDepsFixture(() => ({
       // The post-lock, pre-publication step the runtime awaits first. Making it throw lands the
@@ -62,8 +62,6 @@ function startRuntime(stateDir: string, exit: (code: number) => void) {
         AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
       },
     }),
-    exit,
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
   });
@@ -97,15 +95,13 @@ test('a shutdown whose daemon.json names a successor keeps the file and logs the
   // daemon's metadata and leaving every later client failing with hasInfo:false + retainedLockProcess.
   const stateDir = mkdtempForTestSync('agent-device-daemon-info-ownership-shutdown-');
   const paths = resolveDaemonPaths(stateDir);
-  const exits: number[] = [];
   try {
-    const runtime = await startRuntime(stateDir, (code) => exits.push(code));
+    const runtime = await startRuntime(stateDir);
     expect(runtime).not.toBeNull();
 
     publishSuccessor(paths);
-    await runtime?.shutdown();
+    await runtime?.close();
 
-    expect(exits).toEqual([0]);
     expect(lifecycleEvents).toContain('gateway-shutdown');
     expect(fs.existsSync(paths.infoPath), 'the serving daemon keeps its metadata').toBe(true);
     expect(fs.existsSync(paths.lockPath), 'the exiting daemon still releases its own lock').toBe(
@@ -126,7 +122,7 @@ test('a shutdown removes its own metadata and reports an unverified release', as
   const stateDir = mkdtempForTestSync('agent-device-daemon-info-owned-shutdown-');
   const paths = resolveDaemonPaths(stateDir);
   try {
-    const runtime = await startRuntime(stateDir, () => {});
+    const runtime = await startRuntime(stateDir);
     expect(runtime).not.toBeNull();
 
     const originalRmdir = fs.rmdirSync;
@@ -134,7 +130,7 @@ test('a shutdown removes its own metadata and reports an unverified release', as
       if (target === paths.lockPath) throw Object.assign(new Error('busy'), { code: 'EBUSY' });
       return originalRmdir(target, options);
     });
-    await runtime?.shutdown();
+    await runtime?.close();
 
     expect(fs.existsSync(paths.infoPath)).toBe(false);
     expect(logEvents(stateDir).map((event) => event.phase)).not.toContain(
@@ -170,7 +166,7 @@ test('a failed provider plugin is logged and published after this daemon publish
     credentials: { variables: [], byBackend: {} },
   } as const;
   providerComposition.inventory = [failed];
-  const runtime = await startRuntime(stateDir, () => {});
+  const runtime = await startRuntime(stateDir);
   try {
     const event = logEvents(stateDir).find(({ phase }) => phase === 'provider_plugin_failed');
     expect(event?.data).toMatchObject({
@@ -181,7 +177,7 @@ test('a failed provider plugin is logged and published after this daemon publish
     const published = JSON.parse(fs.readFileSync(resolveDaemonPaths(stateDir).infoPath, 'utf8'));
     expect(published.plugins).toEqual([failed]);
   } finally {
-    await runtime?.shutdown();
+    await runtime?.close();
   }
 });
 
@@ -190,13 +186,9 @@ test('a startup that fails before publication removes no record and writes no lo
   // silent: reporting an "absent" record here would create a daemon.log on every such startup.
   const stateDir = mkdtempForTestSync('agent-device-daemon-info-startup-absent-');
   const paths = resolveDaemonPaths(stateDir);
-  const exits: number[] = [];
   startupFailure.active = true;
   try {
-    const runtime = await startRuntime(stateDir, (code) => exits.push(code));
-
-    expect(runtime).toBeNull();
-    expect(exits).toEqual([1]);
+    await expect(startRuntime(stateDir)).rejects.toThrow('startup step failed');
     expect(fs.existsSync(paths.infoPath)).toBe(false);
     expect(fs.existsSync(paths.logPath), 'nothing was declined, so nothing is logged').toBe(false);
   } finally {
@@ -207,14 +199,10 @@ test('a startup that fails before publication removes no record and writes no lo
 test('a startup that fails before publication leaves a foreign record standing', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-info-startup-foreign-');
   const paths = resolveDaemonPaths(stateDir);
-  const exits: number[] = [];
   publishSuccessor(paths);
   startupFailure.active = true;
   try {
-    const runtime = await startRuntime(stateDir, (code) => exits.push(code));
-
-    expect(runtime).toBeNull();
-    expect(exits).toEqual([1]);
+    await expect(startRuntime(stateDir)).rejects.toThrow('startup step failed');
     expect(fs.existsSync(paths.infoPath)).toBe(true);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -230,7 +218,7 @@ test('a successor published during this daemon lifetime is recorded at detection
   const stateDir = mkdtempForTestSync('agent-device-daemon-metadata-lost-');
   const paths = resolveDaemonPaths(stateDir);
   try {
-    const runtime = await startRuntime(stateDir, () => {});
+    const runtime = await startRuntime(stateDir);
     expect(runtime).not.toBeNull();
 
     publishSuccessor(paths);
@@ -244,7 +232,7 @@ test('a successor published during this daemon lifetime is recorded at detection
     );
 
     vi.useRealTimers();
-    await runtime?.shutdown();
+    await runtime?.close();
   } finally {
     vi.useRealTimers();
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -266,14 +254,15 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   // A watch still armed when the removal runs can report a loss for a record its own process just
   // deleted. The startup-failure half of this is unreachable from a test — everything after
   // publication needs a real toolchain — so the invariant is read off the source, the same way the
-  // arming order above is.
+  // arming order above is. Startup rollback runs its steps in reverse, so the registration that
+  // stops the watch comes after the one that finishes the registration; the close path stops first.
   const source = fs.readFileSync(new URL('./daemon-runtime.ts', import.meta.url), 'utf8');
   const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);
   const finishes = [...source.matchAll(/await finishDaemonRegistration\(/g)].map((m) => m.index);
   expect(stops).toHaveLength(2);
   expect(finishes).toHaveLength(2);
-  expect(finishes[0]).toBeGreaterThan(stops[0]!);
-  expect(finishes[0]).toBeLessThan(stops[1]!);
+  expect(stops[0]).toBeGreaterThan(finishes[0]!);
+  expect(stops[1]).toBeGreaterThan(stops[0]!);
   expect(finishes[1]).toBeGreaterThan(stops[1]!);
 });
 
@@ -293,9 +282,9 @@ test('a plugin whose cleanup failed at shutdown is recorded in daemon.log', asyn
       dispose: { status: 'ok' },
     },
   ];
-  const runtime = await startRuntime(stateDir, () => {});
+  const runtime = await startRuntime(stateDir);
   try {
-    await runtime?.shutdown();
+    await runtime?.close();
     const events = logEvents(stateDir).filter(
       ({ phase }) => phase === 'provider_plugin_cleanup_failed',
     );

@@ -343,7 +343,7 @@ test('shutdown detach moves a handed-off session to stopped without killing its 
   assert.ok(runnerPid);
   runnerStateTransitions.length = 0;
 
-  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+  assert.equal((await detachIosRunnerSessionsForShutdown()).length, 1);
 
   assert.equal(session.state, 'stopped');
   assert.deepEqual(runnerStateTransitions, ['stopped']);
@@ -361,7 +361,7 @@ test('a scoped simulator-set session hands off like one in the default set', asy
   const session = await ensureRunnerSession(device, {});
   await serveOneCommand(device, session);
 
-  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+  assert.equal((await detachIosRunnerSessionsForShutdown()).length, 1);
 
   assert.equal(session.state, 'stopped');
   assert.match(leaseRaw(device.id), /"ownerToken": "detached-owner-/);
@@ -393,7 +393,7 @@ test('a runner that served a command is handed off on the physical lane', async 
   runnerStateTransitions.length = 0;
 
   const diagnostics = await captureDiagnostics(async () => {
-    assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+    assert.equal((await detachIosRunnerSessionsForShutdown()).length, 1);
   });
 
   assert.equal(session.state, 'stopped');
@@ -418,7 +418,7 @@ test('a runner that never served a command is torn down instead of handed off', 
   assert.equal(session.state, 'starting');
 
   const diagnostics = await captureDiagnostics(async () => {
-    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+    assert.deepEqual(await detachIosRunnerSessionsForShutdown(), []);
   });
 
   assert.deepEqual(readRunnerSessionLiveness(device.id), {
@@ -449,7 +449,7 @@ test('a runner reporting main-thread work still draining is not handed off', asy
   assert.equal(session.state, 'ready');
 
   const diagnostics = await captureDiagnostics(async () => {
-    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+    assert.deepEqual(await detachIosRunnerSessionsForShutdown(), []);
   });
 
   assert.match(diagnostics, /"reason":"main_thread_occupied"/);
@@ -484,7 +484,7 @@ test('a session that still owes a response is not handed off', async () => {
   assert.equal(session.commandCharges.outstandingChargeCount, 1);
 
   const diagnostics = await captureDiagnostics(async () => {
-    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+    assert.deepEqual(await detachIosRunnerSessionsForShutdown(), []);
   });
 
   assert.match(diagnostics, /"reason":"command_in_flight"/);
@@ -521,7 +521,7 @@ test('a command abandoned by a cancelled transport keeps the runner occupied', a
   assert.equal(session.commandCharges.hasAbandonedCharges, true);
 
   const refused = await captureDiagnostics(async () => {
-    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+    assert.deepEqual(await detachIosRunnerSessionsForShutdown(), []);
   });
   assert.match(refused, /"reason":"command_in_flight"/);
   // The refusal this issue is about: nothing is awaited any more, and only terminal evidence for that
@@ -535,7 +535,7 @@ test('a command abandoned by a cancelled transport keeps the runner occupied', a
   // `runner-client-recovery-wiring.test.ts`, where the probe reaches a real session.
   await serveOneCommand(device, session);
   assert.equal(session.commandCharges.hasOutstandingCharges, false);
-  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+  assert.equal((await detachIosRunnerSessionsForShutdown()).length, 1);
 });
 
 test('the macOS host runner is never handed off, although it is kind device', async () => {
@@ -544,7 +544,7 @@ test('the macOS host runner is never handed off, although it is kind device', as
   await serveOneCommand(device, session);
 
   const diagnostics = await captureDiagnostics(async () => {
-    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+    assert.deepEqual(await detachIosRunnerSessionsForShutdown(), []);
   });
 
   assert.match(diagnostics, /"reason":"macos_host"/);
@@ -563,7 +563,7 @@ test('a physical tvOS runner is never handed off, although it is kind device too
   await serveOneCommand(device, session);
 
   const diagnostics = await captureDiagnostics(async () => {
-    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+    assert.deepEqual(await detachIosRunnerSessionsForShutdown(), []);
   });
 
   assert.match(diagnostics, /"reason":"physical_non_ios_os"/);
@@ -580,7 +580,7 @@ test('a usbmux-only xctest backend runner is never handed off', async () => {
   await serveOneCommand(device, session);
 
   const diagnostics = await captureDiagnostics(async () => {
-    assert.equal(await detachIosRunnerSessionsForShutdown(), 0);
+    assert.deepEqual(await detachIosRunnerSessionsForShutdown(), []);
   });
 
   assert.match(diagnostics, /"reason":"xctest_backend"/);
@@ -597,7 +597,7 @@ test("the handoff releases this daemon's log bookkeeping only after the lease sa
     tokenWhenReleased.push(leaseRaw(device.id));
   };
 
-  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+  assert.equal((await detachIosRunnerSessionsForShutdown()).length, 1);
 
   assert.equal(tokenWhenReleased.length, 1);
   assert.match(tokenWhenReleased[0]!, /"ownerToken": "detached-owner-/);

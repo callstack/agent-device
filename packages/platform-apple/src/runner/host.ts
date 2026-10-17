@@ -102,6 +102,8 @@ export type AppleRunnerHost = Pick<
     resolveIosPhysicalDeviceControl: (device: DeviceInfo) => IosPhysicalDeviceRunnerControl;
     /** Daemon-owned lease owner state directory. */
     leaseOwnerStateDir: typeof AppleRunnerOwnerState.getRunnerLeaseOwnerStateDir;
+    /** One registry the daemon runtime owns (sessions, locks, ledgers), created on first use. */
+    runnerRuntimeSlot: typeof AppleRunnerOwnerState.runnerRuntimeSlot;
     /**
      * Daemon-owned device-claim arbitration probe: true only while the embedding process holds
      * the host-global local device claim for exactly this device (matched by canonical
@@ -179,6 +181,7 @@ export const classifyOwnerLiveness = delegate('classifyOwnerLiveness');
 export const readHostCpuArchSync = delegate('readHostCpuArchSync');
 export const findProjectRoot = delegate('findProjectRoot');
 export const readVersion = delegate('readVersion');
+export const runnerRuntimeSlot = delegate('runnerRuntimeSlot');
 export const acquireProcessLock = delegate('acquireProcessLock');
 export const withProcessLock = delegate('withProcessLock');
 export const publishFileSync = delegate('publishFileSync');

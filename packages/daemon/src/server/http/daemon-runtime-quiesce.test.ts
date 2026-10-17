@@ -99,10 +99,6 @@ type Booted = {
 async function bootDaemon(options: { serverMode?: 'socket' | 'dual' } = {}): Promise<Booted> {
   const stateDir = mkdtempForTestSync('agent-device-daemon-quiesce-');
   const paths = resolveDaemonPaths(stateDir);
-  let resolveExit: (code: number) => void = () => {};
-  const exit = new Promise<number>((resolve) => {
-    resolveExit = resolve;
-  });
   const runtime = await startDaemonRuntime({
     composeDeps: daemonRuntimeDepsFixture(),
     host: createTestHostEnvironment({
@@ -113,12 +109,11 @@ async function bootDaemon(options: { serverMode?: 'socket' | 'dual' } = {}): Pro
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
       },
     }),
-    exit: resolveExit,
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
   });
   if (!runtime?.socketPort) throw new Error('daemon did not start');
+  const exit = runtime.closed.then(() => 0);
   const info = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as {
     pid: number;
     processStartTime?: string;
@@ -217,7 +212,7 @@ test('a daemon with a request in flight refuses to quiesce and keeps serving', a
   } finally {
     release();
     await running.catch(() => {});
-    await daemon.runtime.shutdown();
+    await daemon.runtime.close();
   }
 });
 
@@ -253,7 +248,7 @@ test('a daemon holding a session, a repair session or a live lease refuses to qu
     expect((await daemon.quiesce()).ok).toBe(true);
     expect(await daemon.exit).toBe(0);
   } finally {
-    await daemon.runtime.shutdown();
+    await daemon.runtime.close();
   }
 });
 
@@ -271,7 +266,7 @@ test('a quiesce with the wrong token or for another daemon instance leaves the d
 
     expect((await daemon.sessionList()).ok).toBe(true);
   } finally {
-    await daemon.runtime.shutdown();
+    await daemon.runtime.close();
   }
 });
 
@@ -311,7 +306,7 @@ test('a quiesce that arrives as a remote-origin HTTP request is refused', async 
     expect(JSON.stringify(body)).toContain('"UNAUTHORIZED"');
     expect((await daemon.sessionList()).ok).toBe(true);
   } finally {
-    await daemon.runtime.shutdown();
+    await daemon.runtime.close();
   }
 });
 
@@ -329,10 +324,6 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
   probe.startupGate = new Promise<void>((resolve) => {
     openGate = resolve;
   });
-  let resolveExit: (code: number) => void = () => {};
-  const exit = new Promise<number>((resolve) => {
-    resolveExit = resolve;
-  });
   const starting = startDaemonRuntime({
     composeDeps: daemonRuntimeDepsFixture(),
     host: createTestHostEnvironment({
@@ -343,8 +334,6 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
       },
     }),
-    exit: resolveExit,
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
   });
@@ -376,13 +365,14 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
     });
 
     openGate();
-    await starting;
+    const runtime = await starting;
+    const exit = runtime.closed.then(() => 0);
     const again = await sendSocketRequest(info.port, quiesceRequest);
     expect(again).toEqual({ ok: true, data: { outcome: 'draining' } });
     expect(await exit).toBe(0);
     expect(fs.existsSync(paths.infoPath)).toBe(false);
   } finally {
     openGate();
-    await starting.then((runtime) => runtime?.shutdown());
+    await starting.then((runtime) => runtime?.close());
   }
 });

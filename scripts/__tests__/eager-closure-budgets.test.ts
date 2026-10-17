@@ -23,6 +23,7 @@ import {
 } from './closure-growth-rule.ts';
 import {
   addedModules,
+  APPROVED_CLOSURE_ADDITIONS,
   APPROVED_OVER_CEILING,
   classifyNewEntry,
   describeClosureGrowth,
@@ -725,6 +726,10 @@ const deletedSourceTexts = [
  * cross-entry shared-homes note after it read the same graphs instead of walking each closure
  * twice.
  */
+const approvedAdditionPaths = new Set(
+  APPROVED_CLOSURE_ADDITIONS.map((row) => absolute(row.module)),
+);
+
 const carriedGrowth = carried.map((entry) => {
   const entryPath = absolute(entry.entryFile);
   const graph = eagerClosureGraphOf(entryPath);
@@ -746,8 +751,18 @@ const carriedGrowth = carried.map((entry) => {
       baseTree,
       renamedBaseToHead,
       deletedSourceTexts,
+      approvedModules: approvedAdditionPaths,
     }),
   };
+});
+
+test('every approved closure addition names an existing module with its issue and owner', () => {
+  for (const row of APPROVED_CLOSURE_ADDITIONS) {
+    expect(fs.existsSync(absolute(row.module)), `${row.module} no longer exists`).toBe(true);
+    expect(row.issue).toMatch(/^#\d+$/);
+    expect(row.reason.trim().length).toBeGreaterThan(0);
+    expect(row.owner.trim().length).toBeGreaterThan(0);
+  }
 });
 
 test('every hub exists and is not also a discovered façade', () => {

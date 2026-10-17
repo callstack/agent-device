@@ -36,14 +36,23 @@ import {
   getLeaseRegistryExecutionLocks,
 } from '../request-execution-scope.ts';
 import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
-import { stopSessionAppLog, teardownSessionResources } from '../../sessions/session-teardown.ts';
+import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
 import { runtimeHintValues } from '../../sessions/session-runtime.ts';
-import { closeDaemonServers } from './server-shutdown.ts';
+import {
+  closeDaemonServers,
+  createRuntimeContext,
+  teardownDaemonSessionForShutdown,
+  type RuntimeContext,
+  type WritableOutput,
+  createPluginClose,
+  createStartupRollback,
+  type ShutdownReport,
+  type StartupRollback,
+} from './server-shutdown.ts';
 import type { DaemonInvokeFn } from '../../core/daemon-request.ts';
-import type { SessionRef, SessionState } from '../../core/session-state.ts';
-import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
+import type { SessionRef } from '../../core/session-state.ts';
 import {
   createDaemonIdleReap,
   createDaemonQuiesce,
@@ -63,6 +72,8 @@ import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { withCommandHost } from '@agent-device/host-kit/command';
+import { cancelAllRequests } from '@agent-device/host-kit/request';
+import type { RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import {
@@ -90,12 +101,11 @@ import {
   listenNetServer,
   type DaemonServer,
 } from './transport.ts';
-import { prewarmPngWorker, terminatePngWorker } from '@agent-device/capture-kit/png-worker-client';
+import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { PlatformOwnerLifecycle } from '../../core/platform-owner-lifecycle.ts';
-import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 import type {
   LeaseLifecycleProvider,
   ProviderExpiredLeaseRecovery,
@@ -110,14 +120,13 @@ const DAEMON_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const LEASE_EXPIRY_SWEEP_INTERVAL_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
+// A handler that ignores cancellation must not hold `close()` forever; past this it is reported
+// abandoned and the registration stays held while the process lives.
+const DAEMON_REQUEST_DRAIN_TIMEOUT_MS = 5_000;
 // An orphaned `simctl recordVideo` releases the host-wide recording lock only after it finishes
 // finalizing on SIGINT; force-killing it sooner leaves every later recording failing with EBUSY
 // (#2170). Bound the grace to the recorder purpose, so daemon startup stays under the client budget.
 const DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS = 5_000;
-
-type WritableOutput = {
-  write: (chunk: string) => unknown;
-};
 
 /**
  * Every capability the daemon runtime cannot construct for itself: the platform and provider
@@ -129,6 +138,8 @@ type WritableOutput = {
  * same factory, so the production assembly is the one every runtime test boots.
  */
 export type DaemonRuntimeDeps = Readonly<{
+  /** State the composition's platform modules keep per daemon runtime (the Apple runner's). */
+  runtimeStates: readonly RuntimeStateHandle[];
   ownedProcessRecords: OwnedProcessRecordStore;
   hostDiagnostics: HostDiagnostics;
   ownerLifecycle: PlatformOwnerLifecycle;
@@ -210,18 +221,35 @@ export type DaemonRuntimeOptions = {
   host: HostEnvironment;
   stdout?: WritableOutput;
   stderr?: WritableOutput;
-  exit?: (code: number) => void;
-  registerProcessHandlers?: boolean;
   /** The root's runtime composition, as a factory so the server owns paths, policy, and store. */
   composeDeps: ComposeDaemonRuntimeDeps;
+  /** Shutdown time budgets, for hosts and tests that need other than the defaults. */
+  shutdownBudgets?: { requestDrainMs?: number; pluginMs?: number };
 };
 
 export type DaemonRuntimeController = {
   httpPort?: number;
   socketPort?: number;
-  shutdown: (options?: { exitCode?: number; cause?: unknown }) => Promise<void>;
+  /**
+   * Closes the runtime. Concurrent and repeated calls share one close, whose report every caller
+   * receives. The runtime never exits the process: the executable owns signals and exit codes.
+   */
+  close: (options?: { cause?: unknown }) => Promise<ShutdownReport>;
+  /** Settles once the runtime has closed, whoever closed it (an idle reap closes it unasked). */
+  closed: Promise<ShutdownReport>;
+  /** Runs `fn` as this runtime, for code that serves it from outside its own callbacks. */
+  run: <T>(fn: () => T) => T;
   token: string;
 };
+
+/**
+ * Thrown by {@link startDaemonRuntime} when the daemon must not run: its policy is unusable or
+ * another daemon owns the state dir. `details.exitCode` is the code the executable exits with.
+ */
+export function daemonStartupExitCode(error: unknown): number {
+  const exitCode = asAppError(error).details?.exitCode;
+  return typeof exitCode === 'number' ? exitCode : 1;
+}
 
 export async function flushDaemonStartupDiagnostics(
   logPath: string,
@@ -300,126 +328,34 @@ function armDaemonMetadataLossWatch(
   });
 }
 
-async function settleDaemonTeardownStep(params: {
-  session: SessionState;
-  stderr: WritableOutput;
-  resource: 'app-log' | 'session' | 'lifecycle';
-  teardown: () => Promise<unknown>;
-}): Promise<boolean> {
-  const { session, stderr, resource, teardown } = params;
-  try {
-    await teardown();
-    return true;
-  } catch (error) {
-    stderr.write(
-      `Daemon ${resource} teardown error (${session.name}): ${
-        error instanceof Error ? error.message : String(error)
-      }\n`,
-    );
-    return false;
-  }
-}
-
-/**
- * Daemon-shutdown teardown of one session: bounded resource cleanup (budget
- * from {@link resolveDaemonSessionTeardownTimeoutMs}, resolved BEFORE cleanup
- * starts since finalizing the recording detaches `session.screenRecording`), then the
- * repair-commit finalization and session deletion. Cleanup failures — including
- * a recorder that could not be finalized — surface on stderr instead of being
- * silently swallowed.
- */
-export async function teardownDaemonSessionForShutdown(params: {
-  ref: SessionRef;
-  sessionStore: SessionStore;
-  stderr: WritableOutput;
-  platformCleanup: PlatformResourceCleanup;
-  finalizeApplicationLifecycle?: (
-    session: SessionState,
-    runtimeHints: RuntimeHintValues,
-  ) => Promise<void>;
-  afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
-}): Promise<void> {
-  const {
-    ref,
-    sessionStore,
-    stderr,
-    platformCleanup,
-    finalizeApplicationLifecycle,
-    afterSuccessfulTeardown,
-  } = params;
-  const current = sessionStore.resolveCurrent(ref);
-  const session = current ?? ref.session;
-  const runtimeHints = runtimeHintValues(
-    current ? sessionStore.getRuntimeHints(ref.address) : undefined,
-  );
-  const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
-  // The ownership-fenced app-log side effect must settle while this process
-  // still owns the daemon lock. It is intentionally outside the generic
-  // teardown race so lock release and runtime shutdown cannot overtake it.
-
-  const appLogTeardownSucceeded = await settleDaemonTeardownStep({
-    session,
-    stderr,
-    resource: 'app-log',
-    teardown: async () => await stopSessionAppLog({ ref, sessionStore }),
-  });
-  const sessionAfterAppLog = sessionStore.resolveCurrent(ref) ?? session;
-  const teardown = (async () => {
-    const genericTeardownSucceeded = await settleDaemonTeardownStep({
-      session,
-      stderr,
-      resource: 'session',
-      teardown: async () =>
-        await teardownSessionResources({
-          appLog: 'already-settled',
-          ref,
-          sessionStore,
-          platformCleanup,
-        }),
-    });
-    const lifecycleTeardownSucceeded = finalizeApplicationLifecycle
-      ? await settleDaemonTeardownStep({
-          session,
-          stderr,
-          resource: 'lifecycle',
-          teardown: async () =>
-            await finalizeApplicationLifecycle(sessionAfterAppLog, runtimeHints),
-        })
-      : true;
-    return genericTeardownSucceeded && lifecycleTeardownSucceeded;
-  })();
-  const genericTeardownSucceeded = await Promise.race([
-    teardown,
-    sleep(timeoutMs).then(() => {
-      stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
-      return false;
-    }),
-  ]);
-  const teardownSucceeded = appLogTeardownSucceeded && genericTeardownSucceeded;
-  // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
-  // `.ad` iff the repair transaction completed, else leave a bounded
-  // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
-  sessionStore.finalizeRepairTeardown(ref);
-  if (teardownSucceeded) await afterSuccessfulTeardown?.(session);
-  sessionStore.retire(ref);
-}
-
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions,
-): Promise<DaemonRuntimeController | null> {
-  return await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
-    return await startDaemonRuntimeOnHost(options);
-  });
+): Promise<DaemonRuntimeController> {
+  const runtimeContext = createRuntimeContext();
+  return await runtimeContext.run(
+    async () =>
+      await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
+        const rollback = createStartupRollback();
+        rollback.onRollback(() => runtimeContext.dispose());
+        try {
+          return await startDaemonRuntimeOnHost(options, rollback, runtimeContext);
+        } catch (error) {
+          await rollback.run();
+          throw error;
+        }
+      }),
+  );
 }
 
 async function startDaemonRuntimeOnHost(
   options: DaemonRuntimeOptions,
-): Promise<DaemonRuntimeController | null> {
+  rollback: StartupRollback,
+  runtimeContext: RuntimeContext,
+): Promise<DaemonRuntimeController> {
   const { host } = options;
   const { env } = host;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
-  const exit = options.exit ?? ((code: number) => process.exit(code));
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR, { env, cwd: host.cwd });
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
@@ -427,14 +363,7 @@ async function startDaemonRuntimeOnHost(
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
   // with a weaker policy than its operator named. The server loads it before composing any
   // runtime, so no capability is ever built under a policy that failed validation.
-  let daemonPolicy: DaemonPolicy | undefined;
-  try {
-    daemonPolicy = loadDaemonPolicy(env, host.cwd);
-  } catch (error) {
-    stderr.write(`Daemon error: ${asAppError(error).message}\n`);
-    exit(1);
-    return null;
-  }
+  const daemonPolicy: DaemonPolicy | undefined = loadDaemonPolicy(env, host.cwd);
   // Derived here, beside the policy it reads: the server hands the same refusal to the root's
   // composition, so a runtime can never be built without the operator's shutdown gate.
   const assertShutdownAllowed = daemonPolicy
@@ -454,6 +383,7 @@ async function startDaemonRuntimeOnHost(
     }),
     openWebSessionNames: () => openWebSessionNames(sessionStore),
   });
+  runtimeContext.extend(deps.runtimeStates);
   const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const audioProbeAdmissionLedger = createAudioProbeAdmissionLedger();
   const perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger();
@@ -463,26 +393,20 @@ async function startDaemonRuntimeOnHost(
   const daemonIdentity = readCurrentOwnerIdentity();
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
+  const requestDrainTimeoutMs =
+    options.shutdownBudgets?.requestDrainMs ?? DAEMON_REQUEST_DRAIN_TIMEOUT_MS;
+  // The registry is the one plugin cleanup owner: closing it shuts each runtime down, then disposes
+  // the plugin, and it is idempotent, so the final close, a startup rollback and the last release
+  // all go through the same call.
+  const pluginClose = createPluginClose({
+    close: deps.shutdownProviderRuntimes,
+    inventory: deps.pluginInventory,
+    timeoutMs: options.shutdownBudgets?.pluginMs,
+  });
+  rollback.onRollback(async () => {
+    await pluginClose.close();
+  });
   const deviceRuntimeGateway = deps.deviceRuntimeGateway;
-  // Provider cleanup is best effort for the daemon, but a plugin whose cleanup failed is recorded.
-  // A daemon that lost the registration does not own `daemon.log`, so it reports on stderr instead.
-  const closeProviders = async (report: 'daemon-log' | 'stderr'): Promise<void> => {
-    const outcomes = await deps.shutdownProviderRuntimes().catch(() => []);
-    for (const { provider, source, shutdown, dispose } of outcomes) {
-      if (shutdown.status === 'ok' && dispose.status === 'ok') continue;
-      const data = {
-        provider,
-        source,
-        shutdown: shutdown.status === 'failed' ? shutdown.error : undefined,
-        dispose: dispose.status === 'failed' ? dispose.error : undefined,
-      };
-      if (report === 'daemon-log') {
-        await emitDaemonDiagnostic(logPath, 'provider_plugin_cleanup_failed', data);
-      } else {
-        stderr.write(`Provider plugin cleanup failed: ${JSON.stringify(data)}\n`);
-      }
-    }
-  };
   const applicationLifecycle = deviceRuntimeGateway.applicationLifecycle;
   if (!applicationLifecycle) {
     throw new AppError('COMMAND_FAILED', 'Platform lifecycle gateway is not configured.', {
@@ -498,6 +422,7 @@ async function startDaemonRuntimeOnHost(
     stateDir: baseDir,
     recoverableProviderIds: deps.recoverableProviderIds,
   });
+  rollback.onRollback(() => expiredProviderLeaseReleaser.shutdown());
   void expiredProviderLeaseReleaser.retryPending();
   const leaseRegistry = new LeaseRegistry({
     maxActiveSimulatorLeases: parseIntegerEnv(env.AGENT_DEVICE_MAX_SIMULATOR_LEASES),
@@ -516,6 +441,7 @@ async function startDaemonRuntimeOnHost(
     LEASE_EXPIRY_SWEEP_INTERVAL_MS,
   );
   leaseExpirySweep.unref();
+  rollback.onRollback(() => clearInterval(leaseExpirySweep));
   const dispatchRequest = createRequestHandler({
     host,
     logPath,
@@ -556,10 +482,10 @@ async function startDaemonRuntimeOnHost(
 
   const shutdownClaimLedger = createDaemonShutdownClaimLedger(env);
 
-  const teardownDaemonSession = async (ref: SessionRef): Promise<void> => {
+  const teardownDaemonSession = async (ref: SessionRef): Promise<boolean> => {
     const session = sessionStore.resolveCurrent(ref) ?? ref.session;
     try {
-      await teardownDaemonSessionForShutdown({
+      return await teardownDaemonSessionForShutdown({
         ref,
         sessionStore,
         stderr,
@@ -579,10 +505,14 @@ async function startDaemonRuntimeOnHost(
     }
   };
 
-  const teardownDaemonSessions = async (): Promise<void> => {
+  const teardownDaemonSessions = async (): Promise<ShutdownReport['sessions']> => {
     sessionStore.closeAdmission();
     const sessionsToStop = sessionStore.listRefs();
-    await Promise.all(sessionsToStop.map(teardownDaemonSession));
+    const outcomes = await Promise.all(
+      sessionsToStop.map(async (ref) => await teardownDaemonSession(ref).catch(() => false)),
+    );
+    const closedCount = outcomes.filter(Boolean).length;
+    return { closed: closedCount, failed: outcomes.length - closedCount };
   };
 
   // #2833: settles the resources of a session this daemon expires for idleness. Deliberately NOT
@@ -654,7 +584,7 @@ async function startDaemonRuntimeOnHost(
 
   // Reaps this daemon process when it sits fully idle (no open sessions, no
   // in-flight requests, no active recording) past AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS.
-  // `shutdown` is defined below but only invoked asynchronously by the timer,
+  // `close` is defined below but only invoked asynchronously by the timer,
   // well after this closure captures it.
   let shuttingDown = false;
   const inFlightRequests = new Set<ReturnType<DaemonInvokeFn>>();
@@ -663,9 +593,15 @@ async function startDaemonRuntimeOnHost(
     getInFlightRequestCount: () => inFlightRequests.size,
     hasRetainedLeases: () => leaseRegistry.hasRetainedLeases(),
     onIdleReap: () => {
-      void shutdown();
+      void close();
     },
     env,
+  });
+
+  rollback.onRollback(() => {
+    idleReap.cancel();
+    sessionIdleExpiry.cancel();
+    leaseSessionEnd.cancel();
   });
 
   // The quiesce request is answered before dispatch and never joins `inFlightRequests`, so the
@@ -680,14 +616,14 @@ async function startDaemonRuntimeOnHost(
     inFlightRequestCount: () => inFlightRequests.size,
     startingUp: () => startingUp,
     drain: () => {
-      void shutdown();
+      void close();
     },
   });
 
   const handleRequest: DaemonInvokeFn = quiesce.admit(async (req) => {
     if (shuttingDown) return daemonShuttingDownResponse();
     idleReap.cancel();
-    const dispatch = dispatchRequest(req);
+    const dispatch = runtimeContext.run(() => dispatchRequest(req));
     inFlightRequests.add(dispatch);
     try {
       return await dispatch;
@@ -784,131 +720,154 @@ async function startDaemonRuntimeOnHost(
 
   const acquisition = await tryAcquireDaemonRegistration(daemonPaths);
   if (acquisition.status !== 'acquired') {
-    await closeProviders('stderr');
-    stderr.write(`Daemon registration ${acquisition.status}; exiting.\n`);
-    exit(DAEMON_STARTUP_EXIT_CODES[acquisition.status]);
-    return null;
+    throw new AppError('COMMAND_FAILED', `Daemon registration ${acquisition.status}.`, {
+      reason: 'daemon_registration_refused',
+      status: acquisition.status,
+      exitCode: DAEMON_STARTUP_EXIT_CODES[acquisition.status],
+    });
   }
   const registration = acquisition.owner;
-
+  rollback.onRollback(async () => {
+    await deps.ownerLifecycle.clearDaemonLockConfiguration();
+  });
+  rollback.onRollback(async () => {
+    await finishDaemonRegistration({ registration, infoPath, logPath });
+  });
   let servers: DaemonServer[] = [];
-  let socketPort: number | undefined;
-  let httpPort: number | undefined;
-  const startupDiagnostics: ResourceDiagnostic[] = [];
-  try {
-    await deps.ownerLifecycle.configureForDaemonLock({
-      stateDir: baseDir,
-      hasDeviceClaimAuthority: (device) => processOwnsActiveDeviceClaim(device, env),
-      onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
-    });
-    const legacyMarkerRecovery = await deps.ownerLifecycle.recoverLegacyAppLogMarkers(sessionsDir);
-    appLogAdmissionLedger.retainLegacyMarkers(legacyMarkerRecovery.retained);
-    for (const markerPath of legacyMarkerRecovery.recovered) {
-      startupDiagnostics.push({
-        phase: 'app_log_legacy_marker_recovered',
-        resourcePath: markerPath,
-        data: {},
-      });
-    }
-    for (const retained of legacyMarkerRecovery.retained) {
-      startupDiagnostics.push({
-        phase: 'app_log_legacy_marker_retained',
-        resourcePath: retained.markerPath,
-        data: {
-          reason: retained.reason,
-          ...(retained.message === undefined ? {} : { message: retained.message }),
-        },
-      });
-    }
-    await recoverAppLogResourcesAfterDaemonLock({
-      sessionsDir,
-      gateway: deviceRuntimeGateway,
-      scope: createRecoveryPlatformScope(),
-      onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
-    });
-    await reapOwnedProcessRecordsAtStartup(deps.ownedProcessRecords, {
-      openWebSessionNames: openWebSessionNames(sessionStore),
-      purposes: ['simctl-screen-recording'],
-      termTimeoutMs: DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS,
-    });
-    await deps.cleanupManagedWebOrphans({
-      stateDir: baseDir,
-      openWebSessionNames: openWebSessionNames(sessionStore),
-      ownedProcessRecords: deps.ownedProcessRecords,
-    });
-    // Marker-gated lifecycle recovery owns test-IME orphan repair. Its implementation remains
-    // lazy until the marker exists, so a normal daemon startup does not load or probe adb.
-    void applicationLifecycle.recoverStartupResources({ stateDir: baseDir }).catch((error) => {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'daemon_lifecycle_startup_recovery_failed',
-        data: { error: error instanceof Error ? error.message : String(error) },
-      });
-    });
-    const opened = await openDaemonServers();
-    servers = opened.servers;
-    socketPort = opened.socketPort;
-    httpPort = opened.httpPort;
-    publishDaemonInfo(socketPort, httpPort);
-    stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
-    await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
-    for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
-      await emitDaemonDiagnostic(logPath, 'provider_plugin_failed', {
-        provider: plugin.provider,
-        package: plugin.package,
-        source: plugin.source,
-        code: plugin.error?.code,
-        reason: plugin.error?.reason,
-        message: plugin.error?.message,
-        hint: plugin.error?.hint,
-      });
-    }
-    // After publication: publishDaemonInfo truncates daemon.log, so anything
-    // written before it is lost — including reconciliation diagnostics.
-    await reconcileDeviceClaimsForDaemonStartup(
-      logPath,
-      createOwnerScopedDeviceClaimReconciler({
-        scope: createRecoveryPlatformScope(),
-        composeGateway: deps.claimRecoveryGateway,
-      }),
-      baseDir,
-      env,
-    );
-    // Arms the initial idle-reap timer: a daemon that starts and never
-    // receives a request must still be able to reap itself.
-    idleReap.noteActivity();
-    // The #2833 deadline needs no equivalent arm: the store is empty until a request puts a session
-    // in it, and that request's own completion re-arms the reaper.
-  } catch (error) {
-    const appErr = asAppError(error);
-    stderr.write(`Daemon error: ${appErr.message}\n`);
+  rollback.onRollback(async () => {
     closeServersBestEffort(servers);
     stopMetadataLossWatch();
-    await closeProviders('daemon-log');
-    await finishDaemonRegistration({ registration, infoPath, logPath });
-    await deps.ownerLifecycle.clearDaemonLockConfiguration();
-    exit(1);
-    return null;
+  });
+  const startupDiagnostics: ResourceDiagnostic[] = [];
+  await deps.ownerLifecycle.configureForDaemonLock({
+    stateDir: baseDir,
+    hasDeviceClaimAuthority: (device) => processOwnsActiveDeviceClaim(device, env),
+    onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
+  });
+  const legacyMarkerRecovery = await deps.ownerLifecycle.recoverLegacyAppLogMarkers(sessionsDir);
+  appLogAdmissionLedger.retainLegacyMarkers(legacyMarkerRecovery.retained);
+  for (const markerPath of legacyMarkerRecovery.recovered) {
+    startupDiagnostics.push({
+      phase: 'app_log_legacy_marker_recovered',
+      resourcePath: markerPath,
+      data: {},
+    });
   }
+  for (const retained of legacyMarkerRecovery.retained) {
+    startupDiagnostics.push({
+      phase: 'app_log_legacy_marker_retained',
+      resourcePath: retained.markerPath,
+      data: {
+        reason: retained.reason,
+        ...(retained.message === undefined ? {} : { message: retained.message }),
+      },
+    });
+  }
+  await recoverAppLogResourcesAfterDaemonLock({
+    sessionsDir,
+    gateway: deviceRuntimeGateway,
+    scope: createRecoveryPlatformScope(),
+    onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
+  });
+  await reapOwnedProcessRecordsAtStartup(deps.ownedProcessRecords, {
+    openWebSessionNames: openWebSessionNames(sessionStore),
+    purposes: ['simctl-screen-recording'],
+    termTimeoutMs: DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS,
+  });
+  await deps.cleanupManagedWebOrphans({
+    stateDir: baseDir,
+    openWebSessionNames: openWebSessionNames(sessionStore),
+    ownedProcessRecords: deps.ownedProcessRecords,
+  });
+  // Marker-gated lifecycle recovery owns test-IME orphan repair. Its implementation remains
+  // lazy until the marker exists, so a normal daemon startup does not load or probe adb.
+  void applicationLifecycle.recoverStartupResources({ stateDir: baseDir }).catch((error) => {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'daemon_lifecycle_startup_recovery_failed',
+      data: { error: error instanceof Error ? error.message : String(error) },
+    });
+  });
+  const opened = await openDaemonServers();
+  servers = opened.servers;
+  const { socketPort, httpPort } = opened;
+  publishDaemonInfo(socketPort, httpPort);
+  stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
+  await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
+  for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
+    await emitDaemonDiagnostic(logPath, 'provider_plugin_failed', {
+      provider: plugin.provider,
+      package: plugin.package,
+      source: plugin.source,
+      code: plugin.error?.code,
+      reason: plugin.error?.reason,
+      message: plugin.error?.message,
+      hint: plugin.error?.hint,
+    });
+  }
+  // After publication: publishDaemonInfo truncates daemon.log, so anything
+  // written before it is lost — including reconciliation diagnostics.
+  await reconcileDeviceClaimsForDaemonStartup(
+    logPath,
+    createOwnerScopedDeviceClaimReconciler({
+      scope: createRecoveryPlatformScope(),
+      composeGateway: deps.claimRecoveryGateway,
+    }),
+    baseDir,
+    env,
+  );
+  // Arms the initial idle-reap timer: a daemon that starts and never
+  // receives a request must still be able to reap itself.
+  idleReap.noteActivity();
+  // The #2833 deadline needs no equivalent arm: the store is empty until a request puts a session
+  // in it, and that request's own completion re-arms the reaper.
 
   // Spawn the PNG worker ahead of the first screenshot request so its
   // cold-start cost is not paid on a user-visible call. Best effort: when it
   // cannot start, PNG processing falls back to the in-process sync path.
-  prewarmPngWorker();
+  const releasePngWorker = retainPngWorker();
 
-  const shutdownOnHost = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
+  let registrationFinished = false;
+  let lockConfigurationCleared = false;
+  // Work that ignored cancellation may still be running, so this process keeps the registration
+  // and lock it holds: releasing them would let a second daemon drive the same devices.
+  let abandonedRequests = 0;
+  const drainInFlightRequests = async (): Promise<ShutdownReport['requests']> => {
+    const total = inFlightRequests.size;
+    if (total === 0) return { drained: 0, abandoned: 0 };
+    cancelAllRequests();
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
+      Promise.allSettled(inFlightRequests).then(() => 'drained' as const),
+      new Promise<'deadline'>((resolve) => {
+        deadlineTimer = setTimeout(() => resolve('deadline'), requestDrainTimeoutMs);
+      }),
+    ]);
+    clearTimeout(deadlineTimer);
+    abandonedRequests = outcome === 'drained' ? 0 : inFlightRequests.size;
+    if (abandonedRequests > 0) {
+      await emitDaemonDiagnostic(logPath, 'daemon_shutdown_requests_abandoned', {
+        abandoned: abandonedRequests,
+        budgetMs: requestDrainTimeoutMs,
+      });
+    }
+    return { drained: total - abandonedRequests, abandoned: abandonedRequests };
+  };
+  const closeSteps = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
     leaseSessionEnd.cancel();
     clearInterval(leaseExpirySweep);
-    if (shuttingDown) return;
     shuttingDown = true;
     stopMetadataLossWatch();
-    if (shutdownOptions.cause) {
-      await emitFatalDiagnostic(shutdownOptions.cause);
+    if (closeOptions.cause) {
+      await emitFatalDiagnostic(closeOptions.cause);
     }
-    await closeDaemonServers(servers);
-    await Promise.allSettled(inFlightRequests);
+    // Cancellation and the listener close run together: a connection held by a request that ignores
+    // cancellation is force-closed at the same budget the drain gives it.
+    const serversClosed = closeDaemonServers(servers, requestDrainTimeoutMs);
+    const requests = await drainInFlightRequests();
+    await serversClosed;
     await leaseSessionEnd.drain();
     // Hand healthy runners off before durable session teardown. The lifecycle gateway later
     // terminates only still-owned generations once all resources have finalized.
@@ -917,13 +876,14 @@ async function startDaemonRuntimeOnHost(
     // no diagnostics scope, so `emitDiagnostic` would drop every detach reason. Daemon debug level is
     // forced on here because the declines are the point of the record — a handoff that silently
     // skipped is indistinguishable from a rebuild (#2681).
+    let handedOffRunners: readonly string[] = [];
     try {
       await withDaemonDiagnosticsScope({ logPath }, async () => {
-        await applicationLifecycle.detachForDaemonShutdown();
+        handedOffRunners = await applicationLifecycle.detachForDaemonShutdown();
       });
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
-    await teardownDaemonSessions();
+    const sessions = await teardownDaemonSessions();
     await withDaemonDiagnosticsScope({ logPath }, async () => {
       await finalizeDaemonLeases({
         leaseRegistry,
@@ -955,58 +915,97 @@ async function startDaemonRuntimeOnHost(
     });
     expiredProviderLeaseReleaser.shutdown();
     await deviceRuntimeGateway.shutdown();
-    await closeProviders('daemon-log');
-    await applicationLifecycle.finalizeDaemonShutdown();
+    const plugins = await pluginClose.close();
+    for (const failure of plugins.failed) {
+      await emitDaemonDiagnostic(logPath, 'provider_plugin_cleanup_failed', {
+        provider: failure.provider,
+        source: failure.source,
+        [failure.step]: failure.error,
+      });
+    }
+    const stoppedRunners = await applicationLifecycle.finalizeDaemonShutdown();
     // Best effort: stop the PNG worker so an in-flight job cannot delay exit.
     await Promise.race([
-      terminatePngWorker().catch(() => {}),
+      releasePngWorker().catch(() => {}),
       sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
     ]);
-    await finishDaemonRegistration({
-      registration,
-      infoPath,
-      logPath,
-      outcome: { providerReleases: providerReleaseDrain, claims: shutdownClaimLedger.claims },
-    });
-    await deps.ownerLifecycle.clearDaemonLockConfiguration();
-    exit(shutdownOptions.exitCode ?? 0);
+    if (abandonedRequests === 0) {
+      registrationFinished = true;
+      await finishDaemonRegistration({
+        registration,
+        infoPath,
+        logPath,
+        outcome: { providerReleases: providerReleaseDrain, claims: shutdownClaimLedger.claims },
+      });
+      lockConfigurationCleared = true;
+      await deps.ownerLifecycle.clearDaemonLockConfiguration();
+    }
+    const unknownLeaseIds = new Set(providerReleaseDrain.unknown.map((lease) => lease.leaseId));
+    return {
+      providerReleases: {
+        completed: providerReleaseDrain.released.map((lease) => lease.leaseId),
+        pending: providerReleaseDrain.pending
+          .filter((lease) => !unknownLeaseIds.has(lease.leaseId))
+          .map((lease) => lease.leaseId),
+        unknown: [...unknownLeaseIds],
+      },
+      requests,
+      runners: { stopped: [...stoppedRunners], handedOff: [...handedOffRunners] },
+      sessions,
+      plugins,
+    };
   };
 
-  // Signal handlers and external callers run outside the startup scope, so shutdown re-enters it.
-  const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) =>
-    await withCommandHost(
-      { host, requestEnv: undefined },
-      async () => await shutdownOnHost(shutdownOptions),
-    );
+  // A step that rejects must not strand what the later steps release: the PNG worker hold, the
+  // provider runtimes, the registration and lock, and the runtime's own state.
+  const closeOnHost = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
+    try {
+      return await closeSteps(closeOptions);
+    } finally {
+      await Promise.allSettled([
+        releasePngWorker(),
+        pluginClose.close(),
+        registrationFinished || abandonedRequests > 0
+          ? undefined
+          : finishDaemonRegistration({ registration, infoPath, logPath }),
+        lockConfigurationCleared || abandonedRequests > 0
+          ? undefined
+          : deps.ownerLifecycle.clearDaemonLockConfiguration(),
+      ]);
+      runtimeContext.dispose();
+    }
+  };
+
+  // Idle reap, external callers and the executable's signal handlers all close through here, and
+  // none of them runs inside the startup scope, so the close re-enters it.
+  let closing: Promise<ShutdownReport> | undefined;
+  let settleClosed: { resolve(report: ShutdownReport): void; reject(error: unknown): void };
+  const closed = new Promise<ShutdownReport>((resolve, reject) => {
+    settleClosed = { resolve, reject };
+  });
+  // A close nobody awaits (an idle reap) still reports through `closed`, which must not become an
+  // unhandled rejection when no caller observes it.
+  closed.catch(() => {});
+  const close = (closeOptions: { cause?: unknown } = {}): Promise<ShutdownReport> => {
+    if (!closing) {
+      closing = runtimeContext.run(() =>
+        withCommandHost(
+          { host, requestEnv: undefined },
+          async () => await closeOnHost(closeOptions),
+        ),
+      );
+      closing.then(settleClosed.resolve, settleClosed.reject);
+    }
+    return closing;
+  };
 
   startingUp = false;
 
-  if (options.registerProcessHandlers !== false) {
-    process.on('SIGINT', () => {
-      void shutdown();
-    });
-    process.on('SIGTERM', () => {
-      void shutdown();
-    });
-    process.on('SIGHUP', () => {
-      void shutdown();
-    });
-    process.on('uncaughtException', (err) => {
-      const appErr = err instanceof AppError ? err : asAppError(err);
-      stderr.write(`Daemon error: ${appErr.message}\n`);
-      void shutdown({ exitCode: 1, cause: err });
-    });
-    process.on('unhandledRejection', (reason) => {
-      const err = reason instanceof Error ? reason : new Error(String(reason));
-      const appErr = err instanceof AppError ? err : asAppError(err);
-      stderr.write(`Daemon error: ${appErr.message}\n`);
-      void shutdown({ exitCode: 1, cause: err });
-    });
-  }
-
   return {
     httpPort,
-    shutdown,
+    close,
+    closed,
+    run: runtimeContext.run,
     socketPort,
     token,
   };

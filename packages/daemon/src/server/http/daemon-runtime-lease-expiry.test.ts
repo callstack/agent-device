@@ -63,8 +63,6 @@ test('an expired lease ends its session without any further request', async () =
           AGENT_DEVICE_LEASE_MIN_TTL_MS: '1',
         },
       }),
-      exit: () => {},
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
     });
@@ -78,7 +76,7 @@ test('an expired lease ends its session without any further request', async () =
     await vi.advanceTimersByTimeAsync(1_000);
     assert.deepEqual(leaseProbe.ended, [[lease.leaseId, 'LEASE_EXPIRED']]);
 
-    const shutdown = runtime?.shutdown();
+    const shutdown = runtime?.close();
     await vi.runOnlyPendingTimersAsync();
     await shutdown;
   } finally {
@@ -106,14 +104,12 @@ test('shutdown cancels and drains lease ends before it tears sessions down', asy
           AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
         },
       }),
-      exit: () => {},
-      registerProcessHandlers: false,
       stderr: { write: () => {} },
       stdout: { write: () => {} },
     });
     assert.notEqual(runtime, null);
 
-    await runtime?.shutdown();
+    await runtime?.close();
 
     assert.deepEqual(leaseProbe.shutdownSteps, ['cancel', 'drain', 'teardown']);
   } finally {

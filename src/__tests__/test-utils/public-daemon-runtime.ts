@@ -52,8 +52,6 @@ export async function startPublicDaemonRuntime(
         AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
       },
     }),
-    exit: () => {},
-    registerProcessHandlers: false,
     stderr: { write: () => {} },
     stdout: { write: () => {} },
   });
@@ -74,12 +72,12 @@ export async function startPublicDaemonRuntime(
       baseUrl: `http://127.0.0.1:${port}`,
       runtime,
       close: async () => {
-        await runtime.shutdown();
+        await runtime.close();
         fs.rmSync(stateDir, { recursive: true, force: true });
       },
     };
   } catch (error) {
-    await runtime.shutdown().catch(() => {});
+    await runtime.close().catch(() => {});
     if (ownsStateDir) fs.rmSync(stateDir, { recursive: true, force: true });
     throw error;
   }
