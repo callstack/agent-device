@@ -11,9 +11,9 @@ export function resolveProxyConnectProfile(options: {
   flags: CliFlags;
   stateDir: string;
   cwd: string;
-  env?: EnvMap;
+  env: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
-  const daemonBaseUrl = options.flags.daemonBaseUrl ?? options.env?.AGENT_DEVICE_DAEMON_BASE_URL;
+  const daemonBaseUrl = options.flags.daemonBaseUrl ?? options.env.AGENT_DEVICE_DAEMON_BASE_URL;
   if (!daemonBaseUrl) {
     throw new AppError(
       'INVALID_ARGS',

@@ -62,6 +62,7 @@ test('an aborted signal ends a legacy upload mid-stream instead of finishing the
     await assert.rejects(
       async () =>
         await uploadArtifact({
+          env: process.env,
           localPath: artifactPath,
           baseUrl: server.baseUrl,
           token: TEST_TOKEN,
@@ -92,6 +93,7 @@ test('an aborted signal before preflight refuses to ask the daemon for a ticket'
     await assert.rejects(
       async () =>
         await uploadArtifact({
+          env: process.env,
           localPath: artifactPath,
           baseUrl: server.baseUrl,
           token: TEST_TOKEN,
@@ -129,6 +131,7 @@ test('an upload with no signal behaves exactly as before', async () => {
 
   try {
     const uploadId = await uploadArtifact({
+      env: process.env,
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,

@@ -1,3 +1,4 @@
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -24,6 +25,7 @@ export type PreparedUploadArtifact = {
 export async function prepareUploadArtifact(
   localPath: string,
   requestedPlatform: string | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<PreparedUploadArtifact> {
   const stat = fs.statSync(localPath);
   const fileName = path.basename(localPath);
@@ -33,7 +35,7 @@ export async function prepareUploadArtifact(
   const cleanupPaths: string[] = [];
   try {
     const payloadPath = isDirectory
-      ? await createGzipTarArchive(localPath, cleanupPaths)
+      ? await createGzipTarArchive(localPath, cleanupPaths, env)
       : localPath;
     const payloadStat = fs.statSync(payloadPath);
 
@@ -53,7 +55,11 @@ export async function prepareUploadArtifact(
   }
 }
 
-async function createGzipTarArchive(localPath: string, cleanupPaths: string[]): Promise<string> {
+async function createGzipTarArchive(
+  localPath: string,
+  cleanupPaths: string[],
+  env: Readonly<EnvMap>,
+): Promise<string> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-upload-${randomUUID()}-`));
   cleanupPaths.push(tempDir);
   const archivePath = path.join(tempDir, `${path.basename(localPath)}.tar.gz`);
@@ -62,7 +68,7 @@ async function createGzipTarArchive(localPath: string, cleanupPaths: string[]): 
     ['czf', archivePath, '-C', path.dirname(localPath), path.basename(localPath)],
     {
       env: {
-        ...process.env,
+        ...env,
         COPYFILE_DISABLE: '1',
       },
     },

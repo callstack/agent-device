@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
-import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 const mocks = vi.hoisted(() => ({
   cleanupDaemonOwner: vi.fn(async () => undefined),
@@ -56,6 +60,7 @@ test('accepts only daemon stop and status', async () => {
   await assert.rejects(
     async () =>
       await daemonCommand({
+        host: createTestHostEnvironment(),
         positionals: [],
         flags: { help: false, json: false, version: false },
         client: {} as never,
@@ -65,6 +70,7 @@ test('accepts only daemon stop and status', async () => {
   await assert.rejects(
     async () =>
       await daemonCommand({
+        host: createTestHostEnvironment(),
         positionals: ['stop', 'extra'],
         flags: { help: false, json: false, version: false },
         client: {} as never,
@@ -93,6 +99,7 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['stop'],
       flags: { clean: true, help: false, json: false, stateDir, version: false },
       client: {} as never,
@@ -132,6 +139,7 @@ test('reports graceful provider cleanup as unknown when the shutdown report is u
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['stop'],
       flags: { help: false, json: false, stateDir, version: false },
       client: {} as never,
@@ -169,6 +177,7 @@ test('warns in text output when a graceful stop leaves an orphaned claim', async
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['stop'],
       flags: { clean: false, help: false, json: false, stateDir, version: false },
       client: {} as never,
@@ -206,6 +215,7 @@ test('routes an unattributable claim to the default status view, never to --stal
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['stop'],
       flags: { clean: false, help: false, json: false, stateDir, version: false },
       client: {} as never,
@@ -260,6 +270,7 @@ test('daemon status reads the daemon record without stopping or contacting the d
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['status'],
       flags: { help: false, json: true, stateDir, version: false },
       client: {} as never,

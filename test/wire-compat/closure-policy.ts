@@ -35,6 +35,8 @@ const WIRE_EXTERNAL_MODULES: Readonly<Record<string, string>> = {
  * cannot change what a skewed peer parses.
  */
 export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
+  'packages/kernel/src/source-value.ts#HostEnvironment':
+    "The client process's own environment and working directory, read to resolve local paths. It never crosses the wire; only the paths it helps resolve do, and those are digested through the declarations that use them.",
   'packages/kernel/src/errors.ts#AppError':
     'The local error CLASS. Only its projection onto the wire is contractual, and that projection is DaemonError, which is listed.',
   'packages/kernel/src/errors.ts#AppErrorCode':

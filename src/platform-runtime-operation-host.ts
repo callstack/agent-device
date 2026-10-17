@@ -1,3 +1,4 @@
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { DeviceShutdownRuntimeLoaders } from '@agent-device/contracts/device-shutdown-runtime';
 import type {
@@ -53,6 +54,7 @@ export async function loadMacOsSurfaceSnapshot(
 }
 
 export function createPlatformRuntimeHost(options: {
+  env: Readonly<EnvMap>;
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
@@ -92,7 +94,7 @@ export function createPlatformRuntimeHost(options: {
   return Object.freeze({
     commands,
     appleTools,
-    toolchains: createHostToolchainPreparer(),
+    toolchains: createHostToolchainPreparer(options.env),
     artifacts: Object.freeze({ resolveSession: options.resolveSessionArtifacts }),
     outputs: Object.freeze({
       openAppend: async (pathname: string) => await openAppLogOutput(options.sessionsDir, pathname),
@@ -114,7 +116,7 @@ export function createPlatformRuntimeHost(options: {
     }),
     ...network,
     appleDeployment: createAppleAppDeploymentExecutor(),
-    androidDeployment: createAndroidAppDeploymentExecutor(),
+    androidDeployment: createAndroidAppDeploymentExecutor(options.env),
     androidTools: createAndroidToolHost(),
     temporaryFiles: Object.freeze({
       create: async (temporaryFileOptions: { prefix: string; suffix: string }) =>

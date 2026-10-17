@@ -146,6 +146,7 @@ async function sendToDaemonOnHost(
             settings.paths,
             requestTimeoutMs,
             {
+              host,
               onProgress: options.onProgress,
               signal: options.signal,
               timeoutRecovery:
@@ -373,6 +374,7 @@ async function protectArtifactUploadWithLeaseBeats(
       request,
       info,
       callerSignal ?? new AbortController().signal,
+      settings.host,
     );
   }
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
@@ -386,6 +388,7 @@ async function protectArtifactUploadWithLeaseBeats(
         request,
         info,
         callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
+        settings.host,
       ),
     callerSignal,
   });

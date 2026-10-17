@@ -159,6 +159,8 @@ test('cdp passes injected remote target url to npm exec', async () => {
   });
 
   const exitCode = await runAgentCdpCommand(['target', 'list'], {
+    cwd: process.cwd(),
+    env: process.env,
     flags: {
       leaseBackend: 'ios-instance',
       metroProxyBaseUrl: 'https://bridge.example.test',

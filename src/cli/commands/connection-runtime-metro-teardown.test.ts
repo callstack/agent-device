@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -60,6 +60,7 @@ test('deferred materialization stops the new Metro companion if state persistenc
   await assert.rejects(
     async () =>
       await materializeRemoteConnectionForCommand({
+        host: createTestHostEnvironment(),
         command: 'open',
         flags: {
           json: true,

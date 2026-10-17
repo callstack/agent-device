@@ -21,7 +21,7 @@ export async function resolveCloudConnectProfile(options: {
   flags: CliFlags;
   stateDir: string;
   cwd: string;
-  env?: EnvMap;
+  env: EnvMap;
   // di-seam-approved: injects the fetch global, which has no module boundary vi.mock can
   // intercept. Exercised at the CLI layer by cloud-connect-profile.test.ts via
   // vi.stubGlobal('fetch', ...), a layer where this parameter is not reachable.
@@ -32,7 +32,6 @@ export async function resolveCloudConnectProfile(options: {
     flags: options.flags,
     env: options.env,
     io: {
-      env: options.env,
       fetch: options.fetchImpl,
     },
   });

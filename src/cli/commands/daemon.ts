@@ -1,4 +1,3 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import {
   readPluginInventory,
   type PluginInventoryEntry,
@@ -22,14 +21,14 @@ import { createDaemonOwnerCleanup } from '../../platform-runtime-daemon-owner-cl
 
 const daemonOwnerCleanup = createDaemonOwnerCleanup();
 
-export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   const subcommand = positionals[0];
   if ((subcommand !== 'stop' && subcommand !== 'status') || positionals.length !== 1) {
     throw new AppError('INVALID_ARGS', 'daemon accepts only: stop, status');
   }
   const paths = resolveDaemonPaths(flags.stateDir, {
-    cwd: commandHostEnvironment().cwd,
-    env: commandHostEnvironment().env,
+    cwd: host.cwd,
+    env: host.env,
   });
   if (subcommand === 'status') {
     const status = readDaemonStatus(paths);

@@ -21,7 +21,7 @@ type LockableFlags = Pick<
 >;
 
 type BindingOptions = {
-  env?: NodeJS.ProcessEnv;
+  env: NodeJS.ProcessEnv;
   policyOverrides?: BindingPolicyOverrides;
   configuredPlatform?: CliFlags['platform'];
   configuredSession?: string;
@@ -30,7 +30,7 @@ type BindingOptions = {
 
 export function applyDefaultPlatformBinding<T extends LockableFlags>(
   flags: T,
-  options: BindingOptions = {},
+  options: BindingOptions,
 ): T {
   const settings = resolveBindingSettings(options);
   const nextFlags = { ...flags };
@@ -43,7 +43,7 @@ export function applyDefaultPlatformBinding<T extends LockableFlags>(
 }
 
 export function resolveBindingSettings(options: BindingOptions): BindingSettings {
-  const env = options.env ?? process.env;
+  const { env } = options;
   const defaultPlatform =
     options.inheritedPlatform ??
     options.configuredPlatform ??

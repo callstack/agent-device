@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -99,6 +99,7 @@ test('proxy open without an exact device allocates by its selectors and keeps th
   const requests: LeaseAllocateRequest[] = [];
 
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     flags: { ...flags, device: 'iPhone 17', target: 'mobile', iosSimulatorDeviceSet: '/sims' },
     client: createTestClient({
@@ -152,6 +153,7 @@ test('a later open on the live lease uses the device its key names instead of pi
   const heartbeats: string[] = [];
 
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     flags: { ...flags, device: 'iPhone 17' },
     // Another simulator with the same name must not replace the leased one.
@@ -172,6 +174,7 @@ test('a later open naming another device on the live lease is refused instead of
 
   await assert.rejects(
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'open',
       flags: { ...flags, device: 'iPhone 16' },
       client: renewingClient([], [LEASED_SIMULATOR, { ...IPHONE_SIMULATOR, name: 'iPhone 16' }]),
@@ -213,6 +216,7 @@ test('a later open scoped to a simulator set that excludes the leased device is 
 
   await assert.rejects(
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'open',
       flags: { ...flags, iosSimulatorDeviceSet: '/other-sims' },
       client,
@@ -236,6 +240,7 @@ test('a daemon whose lease names no device gets that lease released and the devi
   const releases: LeaseReleaseRequest[] = [];
 
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     flags: { ...flags, device: 'iPhone 17' },
     client: createTestClient({
@@ -270,6 +275,7 @@ test('a renewed lease that names no device is refused and left to its owner', as
 
   await assert.rejects(
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'open',
       flags: { ...flags, device: 'iPhone 17' },
       client: createTestClient({
@@ -302,6 +308,7 @@ test('proxy open with an exact udid still picks locally and allocates that devic
   const requests: LeaseAllocateRequest[] = [];
 
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     flags: { ...flags, udid: 'SIM-LOCAL' },
     client: createTestClient({

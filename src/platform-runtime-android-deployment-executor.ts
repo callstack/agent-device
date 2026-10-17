@@ -1,3 +1,4 @@
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type {
   AndroidAppDeploymentExecutor,
   MaterializeAppSourceInput,
@@ -5,9 +6,11 @@ import type {
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 /** Android deployment adapter; native command construction remains package-owned. */
-export function createAndroidAppDeploymentExecutor(): AndroidAppDeploymentExecutor {
+export function createAndroidAppDeploymentExecutor(
+  env: Readonly<EnvMap>,
+): AndroidAppDeploymentExecutor {
   return Object.freeze({
-    bundletoolJar: process.env.AGENT_DEVICE_BUNDLETOOL_JAR?.trim() || undefined,
+    bundletoolJar: env.AGENT_DEVICE_BUNDLETOOL_JAR?.trim() || undefined,
     withInvalidatedAppResolutionCache: async (device, operation) => {
       const { withAndroidAppResolutionCacheInvalidated } = await loadAndroidMechanics();
       return await withAndroidAppResolutionCacheInvalidated(device, operation);

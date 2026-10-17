@@ -161,7 +161,7 @@ const inventoryScope: PlatformRequestScope = Object.freeze({
 });
 
 async function discoverLocalLinuxInventory(): Promise<DeviceInfo[]> {
-  const source = await linuxInventoryModule.loadInventory(createDeviceInventoryHost());
+  const source = await linuxInventoryModule.loadInventory(createDeviceInventoryHost(process.env));
   return [...(await source.discover({ platform: 'linux' }, inventoryScope))];
 }
 

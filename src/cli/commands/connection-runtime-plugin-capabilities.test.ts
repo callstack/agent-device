@@ -1,6 +1,11 @@
 import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
-import { pluginHome, selectV2Plugin, v2RegistrationSource } from '@agent-device/test-kit';
+import {
+  pluginHome,
+  selectV2Plugin,
+  v2RegistrationSource,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import {
   connectionWorkspace,
   createTestClient,
@@ -43,6 +48,7 @@ test('a stored profile for a v2 plugin provider needs no remote daemon URL', asy
   // refused for lacking a daemonBaseUrl.
   await expect(
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'snapshot',
       client: createTestClient(),
       flags: {

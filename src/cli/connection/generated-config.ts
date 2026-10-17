@@ -37,7 +37,7 @@ export function writeGeneratedRemoteConfig(options: {
 function resolveGeneratedRemoteConfigProfile(options: {
   configPath: string;
   cwd: string;
-  env?: EnvMap;
+  env: EnvMap;
   provider: string;
 }): ResolvedRemoteConfigProfile {
   try {
@@ -60,7 +60,7 @@ function resolveGeneratedRemoteConfigProfile(options: {
 export function persistAndResolveGeneratedProfile(options: {
   stateDir: string;
   cwd: string;
-  env?: EnvMap;
+  env: EnvMap;
   provider: string;
   profile: RemoteConfigProfile;
   flags: CliFlags;

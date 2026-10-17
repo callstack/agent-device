@@ -1,4 +1,3 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../commands/output/diff.ts';
 import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
@@ -38,7 +37,7 @@ export const screenshotCommand: ClientCommandHandler = async ({ positionals, fla
   return true;
 };
 
-export const diffCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
+export const diffCommand: ClientCommandHandler = async ({ positionals, flags, client, host }) => {
   if (positionals[0] === 'snapshot') {
     const result = await runCliCommand({ client, command: 'diff', positionals, flags });
     await writeCommandOutput(flags, result, () => formatSnapshotDiffText(result));
@@ -52,11 +51,9 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     throw new AppError('INVALID_ARGS', 'diff screenshot requires --baseline <path>');
   }
 
-  const baselinePath = resolveUserPath(baselineRaw, { cwd: commandHostEnvironment().cwd });
+  const baselinePath = resolveUserPath(baselineRaw, { cwd: host.cwd });
   const outputPath =
-    typeof flags.out === 'string'
-      ? resolveUserPath(flags.out, { cwd: commandHostEnvironment().cwd })
-      : undefined;
+    typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: host.cwd }) : undefined;
   const currentRaw = positionals[1];
   if (positionals.length > 2) {
     throw new AppError(
@@ -73,7 +70,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
   ]);
   const runtime = createAgentDevice({
     backend: createClientScreenshotBackend(client, flags),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: host.cwd }),
     sessions: {
       get: (name) => ({ name }),
       set: () => {},
@@ -85,7 +82,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     session: flags.session,
     baseline: { kind: 'path', path: baselinePath },
     current: currentRaw
-      ? { kind: 'path', path: resolveUserPath(currentRaw, { cwd: commandHostEnvironment().cwd }) }
+      ? { kind: 'path', path: resolveUserPath(currentRaw, { cwd: host.cwd }) }
       : { kind: 'live' },
     ...(outputPath ? { out: { kind: 'path', path: outputPath } } : {}),
     threshold: parseCliThreshold(flags.threshold),

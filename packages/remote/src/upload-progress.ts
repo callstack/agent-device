@@ -1,3 +1,4 @@
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { Transform } from 'node:stream';
 
 const DEFAULT_UPLOAD_PROGRESS_STEP_BYTES = 8 * 1024 * 1024;
@@ -58,8 +59,10 @@ export function createUploadProgressTransform(options: {
   });
 }
 
-export function createStderrUploadProgressReporter(): UploadProgressSink | undefined {
-  if (process.stderr.isTTY !== true || process.env.CI) return undefined;
+export function createStderrUploadProgressReporter(
+  env: Readonly<EnvMap>,
+): UploadProgressSink | undefined {
+  if (process.stderr.isTTY !== true || env.CI) return undefined;
   return (event) => {
     process.stderr.write(`${formatUploadProgressEvent(event)}\n`);
   };

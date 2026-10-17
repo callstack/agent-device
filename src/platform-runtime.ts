@@ -70,10 +70,6 @@ export async function getAndroidAppStateWithAdb(
   return await readAndroidAppStateWithExecutor(adb, signal);
 }
 
-const androidInventoryModule = createAndroidInventoryModule({
-  sdkRoots: configuredValues(process.env.ANDROID_SDK_ROOT, process.env.ANDROID_HOME),
-});
-
 /** One root-composed Android observer shared by every daemon request. */
 export const androidObservation = createPackageAndroidObservationAdapter(
   createAndroidObservationHost(),
@@ -86,29 +82,34 @@ const shutdownLoaders = Object.freeze({
     await loadAndroidShutdownRuntime(dependencies),
 });
 
-const harmonyosInventoryModule = createHarmonyInventoryModule({
-  hdcSdkPath: process.env.HDC_SDK_PATH,
-  devecoSdkHome: process.env.DEVECO_SDK_HOME,
-  commandLineToolsHome: process.env.HARMONYOS_COMMAND_LINE_TOOLS,
-});
-
-export const platformModuleRegistry = createPlatformModuleRegistry([
-  appleInventoryModule,
-  androidInventoryModule,
-  harmonyosInventoryModule,
-  vegaInventoryModule,
-  linuxInventoryModule,
-  webInventoryModule,
-]);
+export function createPlatformModuleRegistryForHost(
+  env: Readonly<Record<string, string | undefined>>,
+) {
+  return createPlatformModuleRegistry([
+    appleInventoryModule,
+    createAndroidInventoryModule({
+      sdkRoots: configuredValues(env.ANDROID_SDK_ROOT, env.ANDROID_HOME),
+    }),
+    createHarmonyInventoryModule({
+      hdcSdkPath: env.HDC_SDK_PATH,
+      devecoSdkHome: env.DEVECO_SDK_HOME,
+      commandLineToolsHome: env.HARMONYOS_COMMAND_LINE_TOOLS,
+    }),
+    vegaInventoryModule,
+    linuxInventoryModule,
+    webInventoryModule,
+  ]);
+}
 
 export async function createPlatformDeviceInventoryGateways(
+  env: Readonly<Record<string, string | undefined>>,
   provider?: ProviderDeviceInventorySource,
 ): Promise<ComposedDeviceInventoryGateways> {
   return await attachAppleInstalledAppProbe({
-    registry: platformModuleRegistry,
+    registry: createPlatformModuleRegistryForHost(env),
     loadHost: async () => {
       const { createDeviceInventoryHost } = await import('./platform-runtime-host.ts');
-      return createDeviceInventoryHost();
+      return createDeviceInventoryHost(env);
     },
     provider,
   });
@@ -121,8 +122,8 @@ const androidRuntimeModule = createAndroidRuntimeModule({
   },
 });
 
-/** The root composition registry shared by the gateway and bounded host-contract fixtures. */
-export const platformRuntimeModules: ReadonlyMap<Platform, PlatformRuntimeModule> = new Map<
+/** The root composition registry the platform runtime gateway reads. */
+const platformRuntimeModules: ReadonlyMap<Platform, PlatformRuntimeModule> = new Map<
   Platform,
   PlatformRuntimeModule
 >([
@@ -138,6 +139,7 @@ type Platform = PlatformRuntimeModule['family'];
 
 export function createPlatformRuntimeGateway(
   options: Readonly<{
+    env: Readonly<Record<string, string | undefined>>;
     providerRuntimes?: readonly ProviderDeviceRuntime[];
     providerModules?: readonly PlatformRuntimeProviderRegistration[];
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
@@ -152,6 +154,7 @@ export function createPlatformRuntimeGateway(
       const { createPlatformRuntimeHost, createSnapshotRuntimeHost, loadMacOsSurfaceSnapshot } =
         await import('./platform-runtime-operation-host.ts');
       return createPlatformRuntimeHost({
+        env: options.env,
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,

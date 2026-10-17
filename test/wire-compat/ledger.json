@@ -59,12 +59,12 @@
     "src/daemon-client/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
     "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:bbcf00e71d3975caba4add0e85537396b5831796f1af52cc8c62a4688882ebd7",
     "src/daemon-client/daemon-client-rpc.ts#buildLeaseRpcParams": "sha256:365490a0fe1833d7ce8b0d3f5425462608a85119b12c1a2c4f16bb83b5d28e06",
-    "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:8d5849a4e573d6bb8fbd4ee0259755b76116a65f4abe41705cf84bfab5834ce4",
+    "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:7f2913988208ce42c2f03b4c3124df25e3f887a4f987fbe448d7a6298f815c23",
     "src/daemon-client/daemon-client-rpc.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
     "src/daemon-client/daemon-client-rpc.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
     "src/daemon-client/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
     "src/daemon-client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:a5cf6fd4a9abea34ec051f03d6e45e5aa248f480371fdf22f93de06622a57b47",
-    "src/daemon-client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:9432fffc59c11ff7ccf8c9ce7076559e5c043264045737f24cc4b8e67d76c3d7",
+    "src/daemon-client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:64dff5e16136cbc69f4692c64ea0ea55465155909c4da112ea1356da4fecf5e4",
     "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:3bac36fa97090b273afe1128103e1bf476d05441fd9de41317f1b78775b88304",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:7702598468b4c82b4ffa93064cd6bdfec938c1c527f7e6007c0584f3884a6eea",
@@ -151,8 +151,8 @@
     "packages/remote/src/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
     "packages/remote/src/daemon-artifacts.ts#downloadRemoteArtifact": "sha256:f3ab09ce387577073ecc5bcd2528963e45f91b2c1e4cc57847c3e2732ccbb300",
     "packages/remote/src/daemon-artifacts.ts#isRemoteDaemon": "sha256:0f6a714c5f60ce4e8548d811b516d8b6241eca9f7e5414733732da395b8a00e7",
-    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:c3ea70cc9a218acfaa30f6c4ba55b80224c96aba10e4e9c7a17828fc851de77e",
-    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:cad37beddeb03ba70bc92118a5e45f552edfc00feec789758e390d1ea4c7d879",
+    "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:fffe8ce578e8bcdea175d6a200bea364ffce0956c2cba65bea48d72c0aaea375",
+    "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:0cb422301edef0545615b0f3acb3d80280213921cab2eb529715260ff0fa3647",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
     "packages/remote/src/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "packages/remote/src/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
@@ -216,8 +216,8 @@
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#materializeRemoteArtifacts",
-      "digest": "sha256:c3ea70cc9a218acfaa30f6c4ba55b80224c96aba10e4e9c7a17828fc851de77e",
-      "rationale": "#2246 passes isDirectory only for the new test-artifacts type and uses the exact path the client materializer published. Existing screenshot and recording artifacts still report their requested file path; only the new directory response gains its suite-invocation segment. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
+      "digest": "sha256:fffe8ce578e8bcdea175d6a200bea364ffce0956c2cba65bea48d72c0aaea375",
+      "rationale": "#2246 passes isDirectory only for the new test-artifacts type and uses the exact path the client materializer published. Existing screenshot and recording artifacts still report their requested file path; only the new directory response gains its suite-invocation segment. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves."
     },
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload",
@@ -241,8 +241,8 @@
     },
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
-      "digest": "sha256:8d5849a4e573d6bb8fbd4ee0259755b76116a65f4abe41705cf84bfab5834ce4",
-      "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved."
+      "digest": "sha256:7f2913988208ce42c2f03b4c3124df25e3f887a4f987fbe448d7a6298f815c23",
+      "rationale": "#1801 client-side only: the RPC error branch now runs through `rejectDaemonHttpRpcError`, which reads a superset of the fields it read before and, for a remote daemon, replaces the daemon-host `logPath` with a caller-local copy. Every field a released daemon sends is still accepted; nothing new is required of the daemon. The signature also names the client request as DaemonWireRequest and the response as the kernel DaemonResponse instead of the daemon package aliases; only compile-time type names moved. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves."
     },
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError",
@@ -471,13 +471,13 @@
     },
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#resolveDaemonHttpResult",
-      "digest": "sha256:9432fffc59c11ff7ccf8c9ce7076559e5c043264045737f24cc4b8e67d76c3d7",
-      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did."
+      "digest": "sha256:64dff5e16136cbc69f4692c64ea0ea55465155909c4da112ea1356da4fecf5e4",
+      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves."
     },
     {
       "declaration": "packages/remote/src/daemon-artifacts.ts#resolveMaterializedArtifactPath",
-      "digest": "sha256:cad37beddeb03ba70bc92118a5e45f552edfc00feec789758e390d1ea4c7d879",
-      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did."
+      "digest": "sha256:0cb422301edef0545615b0f3acb3d80280213921cab2eb529715260ff0fa3647",
+      "rationale": "The client names its request as DaemonWireRequest (packages/contracts/src/daemon-wire-request.ts, a narrowing of the listed kernel DaemonRequest) and its response as the kernel DaemonResponse, instead of the daemon package's DaemonRequest/DaemonResponse aliases, so the daemon package is no longer a client import. The declaration's serialized fields, method names and framing are unchanged; only the compile-time type names in its signature moved, so a peer on protocol 2 parses exactly what it did. The function now takes the client host as a parameter and resolves a relative local path against its working directory instead of the process's; the client binds the same directory, so nothing a peer parses moves."
     }
   ]
 }

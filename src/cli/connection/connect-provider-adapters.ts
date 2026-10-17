@@ -102,11 +102,10 @@ export async function resolveConnectProviderProfile(options: {
   provider?: ConnectProvider;
   flags: CliFlags;
   stateDir: string;
-  cwd?: string;
-  env?: EnvMap;
+  cwd: string;
+  env: EnvMap;
 }): Promise<ResolvedConnectProfile> {
-  const cwd = options.cwd ?? process.cwd();
-  const env = options.env ?? process.env;
+  const { cwd, env } = options;
   if (options.flags.remoteConfig) {
     const resolved = resolveRemoteConfigProfile({
       configPath: options.flags.remoteConfig,
@@ -187,6 +186,7 @@ async function resolveProviderConnectionProfile(
 
 export async function verifyResolvedConnectProvider(
   resolved: ResolvedConnectProfile,
+  env: EnvMap,
 ): Promise<ConnectVerification> {
   if (!resolved.provider) {
     return {
@@ -198,7 +198,7 @@ export async function verifyResolvedConnectProvider(
   }
   const context = {
     flags: resolved.flags,
-    env: process.env,
+    env,
   };
   const adapter = builtinConnectAdapter(resolved.provider);
   return adapter

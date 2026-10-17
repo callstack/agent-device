@@ -1,3 +1,4 @@
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { randomUUID } from 'node:crypto';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -16,6 +17,8 @@ type UploadArtifactOptions = {
   baseUrl: string;
   token: string;
   platform?: string;
+  /** The environment a packaging command (`tar`) starts from. */
+  env: Readonly<EnvMap>;
   /** The lease this upload is for; every request to the daemon names it in a header. */
   leaseId?: string;
   onProgress?: UploadProgressSink;
@@ -54,7 +57,7 @@ type UploadPreflightResult =
     };
 
 export async function uploadArtifact(options: UploadArtifactOptions): Promise<string> {
-  const prepared = await prepareUploadArtifact(options.localPath, options.platform);
+  const prepared = await prepareUploadArtifact(options.localPath, options.platform, options.env);
   const normalizedBase = options.baseUrl.endsWith('/') ? options.baseUrl : `${options.baseUrl}/`;
   const uploadAttemptId = randomUUID();
 
