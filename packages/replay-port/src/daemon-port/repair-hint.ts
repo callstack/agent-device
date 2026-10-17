@@ -15,7 +15,7 @@
  *
  * The container-presence test below is a genuine structural containment check over `parentIndex` — the
  * same tree-walking machinery decision 3's own identity-set filter uses
- * (`buildAncestryChain`/`computeScrollRegionKey`, `@agent-device/selectors/target-evidence`)
+ * (`buildAncestryChain`/`isInScrollRegion`, `@agent-device/selectors/target-evidence`)
  * — not a flat identity-string search.
  */
 

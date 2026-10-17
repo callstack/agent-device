@@ -182,7 +182,7 @@ export function computeSiblingOrdinal(nodes: readonly SnapshotNode[], node: Snap
 }
 
 /** Decision 3 record-time write step 4: nearest scrollable ancestor's local identity, or `undefined` for *none*. */
-export function computeScrollRegionKey(
+function computeScrollRegionKey(
   node: SnapshotNode,
   byIndex: Map<number, SnapshotNode>,
 ): TargetScrollRegion | undefined {
@@ -199,7 +199,7 @@ export function computeScrollRegionKey(
   };
 }
 
-export function scrollRegionKeysEqual(
+function scrollRegionKeysEqual(
   a: TargetScrollRegion | undefined,
   b: TargetScrollRegion | undefined,
 ): boolean {
