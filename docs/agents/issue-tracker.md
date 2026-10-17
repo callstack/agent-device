@@ -28,7 +28,7 @@ Before you continue work, read all `Decision:` comments (newest wins per topic) 
 - `Blocked by: ...` lines, linked prerequisite issues, and branch-base notes are part of the issue contract.
 - Before you schedule or review work, examine the blockers. If one is open, decide: wait, stack on its branch, or rescope explicitly.
 - If the prerequisite semantics are not resolved, do not mark the issue as ready for implementation.
-  You can publish a dependent PR with its base and blockers explicit.
+  You can publish a dependent PR with its base and blockers explicit. Merge-readiness follows `docs/agents/pull-requests.md`.
 - Before you close an umbrella issue, verify child issue states and key implementation PRs, not only checked boxes.
 
 A skill workflow alone does not authorize you to publish an issue.
