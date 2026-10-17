@@ -14,6 +14,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   runCmdDetachedMonitored: vi.fn(),
 }));
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
+import * as hostProcess from '@agent-device/host-kit/process';
 import * as ensureModule from '../../daemon-client/daemon-client-ensure.ts';
 import { createCommandToolExecutor } from '../command-tools.ts';
 
@@ -35,6 +36,7 @@ test('each MCP tool call ensures the daemon, then attaches to it', async (t) => 
   launchesFreshDaemonAt(spawn, paths, daemon.port);
   vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
   const ensure = vi.spyOn(ensureModule, 'ensureDaemon');
+  const capture = vi.spyOn(hostProcess, 'captureHostEnvironment');
   const executor = createCommandToolExecutor();
 
   try {
@@ -44,6 +46,10 @@ test('each MCP tool call ensures the daemon, then attaches to it', async (t) => 
     assert.equal(first.isError, false, JSON.stringify(first.structuredContent));
     assert.equal(second.isError, false, JSON.stringify(second.structuredContent));
     assert.equal(ensure.mock.calls.length, 2, 'one ensure per tool call');
+    assert.equal(capture.mock.calls.length, 2, 'one host capture per tool call');
+    // The host the ensuring transport used is the one the call captured, not a second capture.
+    assert.equal(ensure.mock.calls[0]?.[1], capture.mock.results[0]?.value);
+    assert.equal(ensure.mock.calls[1]?.[1], capture.mock.results[1]?.value);
     assert.equal(spawn.mock.calls.length, 1, 'the second call reuses the daemon the first started');
     assert.deepEqual(daemon.rpcCommands, ['devices', 'devices']);
   } finally {

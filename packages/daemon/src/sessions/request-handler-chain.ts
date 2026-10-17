@@ -31,7 +31,7 @@ import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 
 type RequestHandlerChainParams = {
-  /** The environment and working directory the session and record-trace routes read configuration from. */
+  /** The request's bound host: the environment and working directory its routes read configuration from. */
   host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
