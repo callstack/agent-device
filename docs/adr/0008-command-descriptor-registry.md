@@ -104,7 +104,8 @@ The descriptor is the prerequisite for typed per-command results in ADR 0010, wh
 It also supplies the capability facet used by the platform-plugin work in ADR 0009.
 
 During the migration, the import-cycle inversion was the principal risk.
-At that time, `command-catalog.ts` had approximately 95 importers, and the family facet imported `AgentDeviceClient`.
+At that time, `command-catalog.ts` had approximately 95 importers.
+The family facet imports `AgentDeviceClient`.
 Thus, the descriptor module must own the `Input`/`Result` types.
 The client must be derived as a view type, and a lint boundary enforces this.
 
