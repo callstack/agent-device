@@ -1,9 +1,10 @@
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  claimDaemonStartupPhasesFile,
   readDaemonStartupPhaseMarkers,
   recordDaemonStartupMarker,
   removeDaemonStartupPhasesFile,
@@ -50,6 +51,55 @@ describe('per-launch startup marker files', () => {
       '{"data":{"startupPhase":"listening","timestampMs":30}}',
     ].join('\n');
     expect(readDaemonStartupPhaseMarkers(text)).toEqual({ listening: 30 });
+  });
+});
+
+describe('producer lifetime claim', () => {
+  it('empties a same-pid leftover so only the fresh lifetime markers survive', async () => {
+    // The scenario the per-pid name alone cannot cover: both the client and the daemon of an old
+    // launch died before either cleanup ran, the host reused the pid, and the new writer finds the
+    // old lifetime's record under its own name. The entry claims its record before its first
+    // marker; this child repeats that producer sequence against its own pid, which no test can
+    // arrange from the outside.
+    const stateDir = await mkdtempForTest('agent-device-markers-');
+    writeFileSync(path.join(stateDir, 'package.json'), '{"type":"module"}');
+    const entry = path.join(stateDir, 'claim-producer.js');
+    const registrationUrl = new URL('./daemon-registration-owner.ts', import.meta.url).href;
+    writeFileSync(
+      entry,
+      `import { claimDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
+const file = resolveDaemonStartupPhasesPath(${JSON.stringify(stateDir)}, process.pid);
+recordDaemonStartupMarker(file, 'listening');
+recordDaemonStartupMarker(file, 'registered');
+claimDaemonStartupPhasesFile(file);
+recordDaemonStartupMarker(file, 'modules-loaded');
+`,
+    );
+    const child = spawnSync(process.execPath, ['--experimental-strip-types', entry], {
+      encoding: 'utf8',
+    });
+    if (child.status !== 0) throw new Error(child.stderr);
+    const phases = readDaemonStartupPhaseMarkers(
+      readFileSync(resolveDaemonStartupPhasesPath(stateDir, child.pid!), 'utf8'),
+    );
+    expect(phases).toEqual({ 'modules-loaded': expect.any(Number) });
+  });
+
+  it('reports a refused reset through the callback instead of throwing', async () => {
+    const stateDir = await mkdtempForTest('agent-device-markers-');
+    // A directory in place of the marker file makes the unlink fail.
+    const markerPath = resolveDaemonStartupPhasesPath(stateDir, 778);
+    mkdirSync(markerPath, { recursive: true });
+
+    const reported: unknown[] = [];
+    expect(() =>
+      claimDaemonStartupPhasesFile(markerPath, (error) => {
+        reported.push(error);
+      }),
+    ).not.toThrow();
+
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toHaveProperty('message');
   });
 });
 

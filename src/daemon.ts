@@ -1,6 +1,7 @@
 import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { startDaemonRuntime } from '@agent-device/daemon';
 import {
+  claimDaemonStartupPhasesFile,
   recordDaemonStartupMarker,
   resolveDaemonStartupPhasesPath,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
@@ -16,6 +17,16 @@ function reportMarkerFailure(error: unknown): void {
 // #3782: the first marker the waiting client can read. It says this entry's module graph evaluated,
 // which on an overloaded host is the slowest thing a daemon start does before it can prove itself.
 // The file is named for this process's pid, so the client attributes every line to this launch.
+// The claim first: a host that reused this pid after an old launch died before either cleanup ran
+// would otherwise leave that lifetime's phases in this same file, and this launch's timings would
+// read as older and farther-progressed than they are.
+claimDaemonStartupPhasesFile(
+  resolveDaemonStartupPhasesPath(
+    resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR).baseDir,
+    process.pid,
+  ),
+  reportMarkerFailure,
+);
 recordDaemonStartupMarker(
   resolveDaemonStartupPhasesPath(
     resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR).baseDir,

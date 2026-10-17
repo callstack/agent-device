@@ -50,7 +50,7 @@ export function registeredDaemonFixtureArgs(
     entry,
     `import fs from 'node:fs';
 import path from 'node:path';
-import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
+import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration, claimDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
 const paths = ${JSON.stringify(paths)};
 const barrier = ${JSON.stringify(acquisitionBarrier)};
 const emitBefore = ${fixtureOptions?.emitStartupMarkerBeforeAcquisition ? 'true' : 'false'};
@@ -59,8 +59,11 @@ if (barrier) {
   fs.writeFileSync(barrier + '.ready-' + process.pid, 'ready');
   while (!fs.existsSync(barrier)) await new Promise(resolve => setTimeout(resolve, 10));
 }
-if (emitBefore)
-  recordDaemonStartupMarker(resolveDaemonStartupPhasesPath(paths.baseDir, process.pid), 'modules-loaded');
+if (emitBefore) {
+  const ownRecord = resolveDaemonStartupPhasesPath(paths.baseDir, process.pid);
+  claimDaemonStartupPhasesFile(ownRecord);
+  recordDaemonStartupMarker(ownRecord, 'modules-loaded');
+}
 const acquired = await tryAcquireDaemonRegistration(paths);
 if (acquired.status !== 'acquired') process.exit(DAEMON_STARTUP_EXIT_CODES[acquired.status]);
 if (emitAfter)
