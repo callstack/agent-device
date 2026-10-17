@@ -5,10 +5,8 @@ import type {
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { DaemonServer } from './transport.ts';
 import { sleep } from '@agent-device/host-kit/retry';
-import {
-  createRequestCancelRuntimeState,
-  type RuntimeStateHandle,
-} from '@agent-device/host-kit/request';
+import { createRequestCancelRuntimeState } from '@agent-device/host-kit/request';
+import type { RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { SessionStore } from '../../core/session-store.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';

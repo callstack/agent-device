@@ -72,7 +72,8 @@ import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { withCommandHost } from '@agent-device/host-kit/command';
-import { cancelAllRequests, type RuntimeStateHandle } from '@agent-device/host-kit/request';
+import { cancelAllRequests } from '@agent-device/host-kit/request';
+import type { RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import {
