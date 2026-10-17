@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import {
   createProviderScenarioHarness,
@@ -91,12 +90,13 @@ test('provider-owned iOS simulators relaunch without local CoreSimulator refresh
 });
 
 test('provider lease allocation is refused when no registered runtime claims the provider', async () => {
-  const leaseRegistry = new LeaseRegistry();
   const daemon = await createProviderScenarioHarness({
     providerRuntimeIds: [FAKE_PROVIDER],
-    leaseRegistry,
     deviceInventoryProvider: async () => null,
   });
+  // A daemon never reuses an id it issued, so naming the refused lease's id again proves no lease
+  // was recorded.
+  const leaseId = 'abcdef0123456789abcdef0123456789';
   try {
     const response = await daemon.callCommand(
       'lease_allocate',
@@ -106,6 +106,7 @@ test('provider lease allocation is refused when no registered runtime claims the
         meta: {
           tenantId: 'team-a',
           runId: 'run-a',
+          leaseId,
           leaseBackend: 'ios-instance',
           leaseProvider: 'testmu',
         },
@@ -122,7 +123,13 @@ test('provider lease allocation is refused when no registered runtime claims the
     assert.equal(details.provider, 'testmu');
     assert.deepEqual(details.registeredProviders, [FAKE_PROVIDER]);
     assert.match(String(error.hint), /Restart the daemon/);
-    assert.deepEqual(leaseRegistry.listActiveLeases(), []);
+    const retried = await daemon.callCommand(
+      'lease_allocate',
+      [],
+      { tenant: 'team-a', runId: 'run-a' },
+      { meta: { tenantId: 'team-a', runId: 'run-a', leaseId } },
+    );
+    assert.equal(assertRpcOk<{ lease: DeviceLease }>(retried).lease.leaseId, leaseId);
   } finally {
     await daemon.close();
   }
