@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-  entry: { plugin: 'src/plugin.ts' },
+  entry: { plugin: 'src/plugin.ts', 'agent-device': 'src/index.ts' },
   outDir: 'dist',
   format: 'esm',
   platform: 'node',

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
-import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
+import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import type { CloudArtifact } from '@agent-device/contracts/observability';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
@@ -308,7 +308,7 @@ async function waitForLeaseExpiry(server: FakeWebDriverServer): Promise<void> {
 
 async function createCloudWebDriverWorld(params: { leaseTtlMs?: number } = {}) {
   const server = await FakeWebDriverServer.start();
-  const runtimes = createBundledCloudWebDriverRuntimes({
+  const runtimes = await createBundledCloudWebDriverRuntimes({
     env: {
       BROWSERSTACK_USERNAME: 'browser-user',
       BROWSERSTACK_ACCESS_KEY: 'browser-key',

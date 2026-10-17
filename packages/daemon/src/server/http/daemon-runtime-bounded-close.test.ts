@@ -6,7 +6,10 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { clearAndroidObservationFixture } from '../../__tests__/support/android-observation-fixture.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
-import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import {
+  daemonRuntimeDepsFixture,
+  pluginRegistryFixture,
+} from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { providerCredentialsFixture } from '../../__tests__/support/provider-credentials-fixture.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
@@ -82,13 +85,14 @@ test('a plugin that never finishes shutting down is reported pending at the budg
     ...silent,
     shutdownBudgets: { pluginMs: 50 },
     composeDeps: daemonRuntimeDepsFixture({
-      providerDeviceRuntimes: [stuck, done] as unknown as ProviderDeviceRuntime[],
+      ...pluginRegistryFixture([stuck, done] as unknown as ProviderDeviceRuntime[]),
     }),
   });
 
   const report = await runtime.close();
 
-  expect(report.plugins).toEqual({ disposed: ['done'], failed: [], pending: ['stuck'] });
+  // The registry reports once, after its slowest plugin, so every active plugin is pending.
+  expect(report.plugins).toEqual({ disposed: [], failed: [], pending: ['stuck', 'done'] });
   expect(report.requests).toEqual({ drained: 0, abandoned: 0 });
 });
 
@@ -111,14 +115,16 @@ test('a clean close leaves nothing to report and an unfinished one names each pi
     plugins: {
       disposed: [],
       pending: ['stuck'],
-      failed: [{ provider: 'broken', error: { code: 'UNKNOWN', message: 'refused' } }],
+      failed: [
+        { provider: 'broken', step: 'dispose', error: { code: 'UNKNOWN', message: 'refused' } },
+      ],
     },
   });
 
   expect(lines).toEqual([
     expect.stringContaining('2 request(s) ignored cancellation'),
     expect.stringContaining('plugin stuck was still shutting down'),
-    expect.stringContaining('plugin broken failed to shut down: refused'),
+    expect.stringContaining('plugin broken failed to dispose: refused'),
     expect.stringContaining('lease release still pending for lease-a'),
     expect.stringContaining('outcome unknown for lease-b'),
     expect.stringContaining('1 session(s) failed to tear down'),

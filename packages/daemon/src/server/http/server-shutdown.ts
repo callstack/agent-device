@@ -1,4 +1,7 @@
-import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type {
+  PluginCleanupOutcome,
+  PluginInventoryEntry,
+} from '@agent-device/contracts/plugin-inventory';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { DaemonServer } from './transport.ts';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -73,7 +76,12 @@ export type ShutdownReport = {
   /** `pending` plugins were still shutting down when the budget ran out. */
   plugins: {
     disposed: string[];
-    failed: { provider: string; error: NormalizedError }[];
+    failed: {
+      provider: string;
+      source?: PluginCleanupOutcome['source'];
+      step: 'shutdown' | 'dispose';
+      error: NormalizedError;
+    }[];
     pending: string[];
   };
 };
@@ -96,7 +104,7 @@ export function describeUnfinishedShutdownWork(report: ShutdownReport): string[]
   }
   for (const failure of report.plugins.failed) {
     lines.push(
-      `Daemon shutdown: plugin ${failure.provider} failed to shut down: ${failure.error.message}`,
+      `Daemon shutdown: plugin ${failure.provider} failed to ${failure.step === 'shutdown' ? 'shut down' : 'dispose'}: ${failure.error.message}`,
     );
   }
   const { pending, unknown } = report.providerReleases;
@@ -133,42 +141,74 @@ export async function reportDaemonClose(params: {
   }
 }
 
-export type ProviderRuntimeDisposal = Readonly<{
-  /** Disposes every provider runtime once; later calls return the first call's result. */
-  dispose(): Promise<ShutdownReport['plugins']>;
+export type PluginClose = Readonly<{
+  /** Closes the plugin registry once; later calls return the first call's report. */
+  close(): Promise<ShutdownReport['plugins']>;
 }>;
 
-export function createProviderRuntimeDisposal(
-  runtimes: readonly Pick<ProviderDeviceRuntime, 'provider' | 'shutdown'>[],
-  timeoutMs: number = DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS,
-): ProviderRuntimeDisposal {
-  let disposal: Promise<ShutdownReport['plugins']> | undefined;
+/**
+ * The daemon's one plugin cleanup: the registry closes each plugin (runtime shutdown, then dispose)
+ * and answers with a per-plugin outcome. Bounded, because one plugin that never finishes must not
+ * hold the whole close: past the budget every active plugin is reported pending while its cleanup
+ * keeps running.
+ */
+export function createPluginClose(params: {
+  close: () => Promise<readonly PluginCleanupOutcome[]>;
+  inventory: readonly PluginInventoryEntry[];
+  timeoutMs?: number;
+}): PluginClose {
+  let closing: Promise<ShutdownReport['plugins']> | undefined;
+  const activeProviders = (): string[] =>
+    params.inventory.flatMap((entry) =>
+      entry.state === 'active' && entry.provider !== undefined ? [entry.provider] : [],
+    );
   return {
-    dispose: () =>
-      (disposal ??= (async () => {
+    close: () =>
+      (closing ??= (async () => {
         const report: ShutdownReport['plugins'] = { disposed: [], failed: [], pending: [] };
         let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-        const deadline = new Promise<'deadline'>((resolve) => {
-          deadlineTimer = setTimeout(() => resolve('deadline'), timeoutMs);
-        });
-        await Promise.all(
-          runtimes.map(async (runtime) => {
-            const settled = (async () => {
-              try {
-                await runtime.shutdown();
-                report.disposed.push(runtime.provider);
-              } catch (error) {
-                report.failed.push({ provider: runtime.provider, error: normalizeError(error) });
-              }
-              return 'settled' as const;
-            })();
-            // A shutdown that outlives the budget keeps running; the report says so instead of waiting.
-            if ((await Promise.race([settled, deadline])) === 'deadline') {
-              report.pending.push(runtime.provider);
-            }
+        const outcome = await Promise.race([
+          params.close().then(
+            (outcomes) => ({ kind: 'closed' as const, outcomes }),
+            (error: unknown) => ({ kind: 'rejected' as const, error }),
+          ),
+          new Promise<{ kind: 'deadline' }>((resolve) => {
+            deadlineTimer = setTimeout(
+              () => resolve({ kind: 'deadline' }),
+              params.timeoutMs ?? DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS,
+            );
           }),
-        );
+        ]);
         clearTimeout(deadlineTimer);
+        if (outcome.kind === 'deadline') {
+          report.pending.push(...activeProviders());
+        } else if (outcome.kind === 'rejected') {
+          for (const provider of activeProviders()) {
+            report.failed.push({
+              provider,
+              step: 'shutdown',
+              error: normalizeError(outcome.error),
+            });
+          }
+        } else {
+          for (const { provider, source, shutdown, dispose } of outcome.outcomes) {
+            for (const [step, result] of [
+              ['shutdown', shutdown],
+              ['dispose', dispose],
+            ] as const) {
+              if (result.status === 'failed') {
+                const { code, message, hint } = result.error;
+                report.failed.push({
+                  provider,
+                  source,
+                  step,
+                  error: { code, message, ...(hint === undefined ? {} : { hint }) },
+                });
+              }
+            }
+            if (shutdown.status === 'ok' && dispose.status === 'ok') report.disposed.push(provider);
+          }
+        }
         return report;
       })()),
   };

@@ -23,6 +23,7 @@ import {
   connectProviderNamesForError,
   connectionProviderCapabilities,
   isConnectProviderName,
+  primeProviderConnection,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
 import {
@@ -58,6 +59,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
     cwd: commandHostEnvironment().cwd,
     env: commandHostEnvironment().env,
   }).baseDir;
+  await primeProviderConnection(positionals[0]);
   const provider = readConnectProvider(positionals);
   assertConnectProviderUsage(provider, flags);
   const resolved = await resolveConnectProviderProfile({
@@ -353,6 +355,7 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
+  await primeProviderConnection(state.leaseProvider);
   const leasePreparation = buildLeasePreparationNotice(state);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state);
   await writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>

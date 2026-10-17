@@ -46,7 +46,7 @@ import {
   teardownDaemonSessionForShutdown,
   type RuntimeContext,
   type WritableOutput,
-  createProviderRuntimeDisposal,
+  createPluginClose,
   createStartupRollback,
   type ShutdownReport,
   type StartupRollback,
@@ -107,10 +107,13 @@ import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-run
 import type { PlatformOwnerLifecycle } from '../../core/platform-owner-lifecycle.ts';
 import type {
   LeaseLifecycleProvider,
-  ProviderDeviceRuntime,
   ProviderExpiredLeaseRecovery,
 } from '@agent-device/contracts/device';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
+import type {
+  PluginCleanupOutcome,
+  PluginInventoryEntry,
+} from '@agent-device/contracts/plugin-inventory';
 
 const DAEMON_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const LEASE_EXPIRY_SWEEP_INTERVAL_MS = 1_000;
@@ -139,13 +142,18 @@ export type DaemonRuntimeDeps = Readonly<{
   ownedProcessRecords: OwnedProcessRecordStore;
   hostDiagnostics: HostDiagnostics;
   ownerLifecycle: PlatformOwnerLifecycle;
-  providerDeviceRuntimes: readonly ProviderDeviceRuntime[];
   /**
-   * Provider runtimes the composition skipped. Data only: this server records each one as a
-   * `provider_runtime_skipped` diagnostic after publishing its registration, so log emission
-   * stays in this module.
+   * Shuts every provider down, each runtime and then its plugin's own cleanup. The composition owns
+   * what a provider is made of, so the server calls this once per shutdown path and never reaches
+   * into a runtime.
    */
-  skippedProviderRuntimes: readonly Readonly<{ provider: string; error: AppError }>[];
+  shutdownProviderRuntimes: () => Promise<readonly PluginCleanupOutcome[]>;
+  /**
+   * Every provider plugin the composition saw, active or failed. Data only: this server publishes
+   * it in the daemon registration and records each failed entry as a `provider_plugin_failed`
+   * diagnostic, so log emission stays in this module.
+   */
+  pluginInventory: readonly PluginInventoryEntry[];
   interactorResolution: InteractorResolution;
   providerDeviceAdmission: ProviderDeviceAdmission;
   cleanupManagedWebOrphans: (
@@ -384,15 +392,18 @@ async function startDaemonRuntimeOnHost(
   const daemonIdentity = readCurrentOwnerIdentity();
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
-  const providerDeviceRuntimes = deps.providerDeviceRuntimes;
   const requestDrainTimeoutMs =
     options.shutdownBudgets?.requestDrainMs ?? DAEMON_REQUEST_DRAIN_TIMEOUT_MS;
-  const pluginDisposal = createProviderRuntimeDisposal(
-    providerDeviceRuntimes,
-    options.shutdownBudgets?.pluginMs,
-  );
+  // The registry is the one plugin cleanup owner: closing it shuts each runtime down, then disposes
+  // the plugin, and it is idempotent, so the final close, a startup rollback and the last release
+  // all go through the same call.
+  const pluginClose = createPluginClose({
+    close: deps.shutdownProviderRuntimes,
+    inventory: deps.pluginInventory,
+    timeoutMs: options.shutdownBudgets?.pluginMs,
+  });
   rollback.onRollback(async () => {
-    await pluginDisposal.dispose();
+    await pluginClose.close();
   });
   const deviceRuntimeGateway = deps.deviceRuntimeGateway;
   const applicationLifecycle = deviceRuntimeGateway.applicationLifecycle;
@@ -450,6 +461,7 @@ async function startDaemonRuntimeOnHost(
     platformResourceCleanup: deps.platformResourceCleanup,
     leaseLifecycleProvider: deps.leaseLifecycleProvider,
     providerRuntimeIds: deps.providerRuntimeIds,
+    failedPlugins: deps.pluginInventory.filter(({ state }) => state === 'failed'),
     ...deps.requestRouter,
   });
 
@@ -691,6 +703,7 @@ async function startDaemonRuntimeOnHost(
       codeSignature: daemonCodeSignature,
       policyDigest: daemonPolicy?.digest,
       capabilities: DAEMON_CAPABILITIES,
+      plugins: deps.pluginInventory,
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
@@ -780,12 +793,15 @@ async function startDaemonRuntimeOnHost(
   publishDaemonInfo(socketPort, httpPort);
   stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
   await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
-  for (const skipped of deps.skippedProviderRuntimes) {
-    await emitDaemonDiagnostic(logPath, 'provider_runtime_skipped', {
-      provider: skipped.provider,
-      code: skipped.error.code,
-      message: skipped.error.message,
-      hint: skipped.error.details?.hint,
+  for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
+    await emitDaemonDiagnostic(logPath, 'provider_plugin_failed', {
+      provider: plugin.provider,
+      package: plugin.package,
+      source: plugin.source,
+      code: plugin.error?.code,
+      reason: plugin.error?.reason,
+      message: plugin.error?.message,
+      hint: plugin.error?.hint,
     });
   }
   // After publication: publishDaemonInfo truncates daemon.log, so anything
@@ -898,7 +914,14 @@ async function startDaemonRuntimeOnHost(
     });
     expiredProviderLeaseReleaser.shutdown();
     await deviceRuntimeGateway.shutdown();
-    const plugins = await pluginDisposal.dispose();
+    const plugins = await pluginClose.close();
+    for (const failure of plugins.failed) {
+      await emitDaemonDiagnostic(logPath, 'provider_plugin_cleanup_failed', {
+        provider: failure.provider,
+        source: failure.source,
+        [failure.step]: failure.error,
+      });
+    }
     const stoppedRunners = await applicationLifecycle.finalizeDaemonShutdown();
     // Best effort: stop the PNG worker so an in-flight job cannot delay exit.
     await Promise.race([
@@ -940,7 +963,7 @@ async function startDaemonRuntimeOnHost(
     } finally {
       await Promise.allSettled([
         releasePngWorker(),
-        pluginDisposal.dispose(),
+        pluginClose.close(),
         registrationFinished || abandonedRequests > 0
           ? undefined
           : finishDaemonRegistration({ registration, infoPath, logPath }),

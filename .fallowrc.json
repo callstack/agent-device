@@ -100,6 +100,11 @@
       "exports": ["default"]
     },
     {
+      // The version 1 entry a provider package's `agentDevicePlugin.entry` names; hosts without the version 2 contract import the built file and read `default`.
+      "file": "packages/provider-*/src/plugin.ts",
+      "exports": ["default"]
+    },
+    {
       // packages/platform-apple/src/lifecycle.ts loads this module on demand and reads the member off the memoized import() promise, which Fallow cannot follow.
       "file": "packages/platform-apple/src/expo-dev-client-launch.ts",
       "exports": ["resolveExpoDevClientLaunchUrl"]

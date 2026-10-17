@@ -6,6 +6,7 @@ import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/tes
 import {
   applicationLifecycleResourceFixture,
   daemonRuntimeDepsFixture,
+  pluginRegistryFixture,
   platformOwnerLifecycleFixture,
 } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
@@ -39,7 +40,7 @@ test('close is idempotent and every caller receives the one report', async () =>
     host: hostFor(stateDir),
     ...silent,
     composeDeps: daemonRuntimeDepsFixture({
-      providerDeviceRuntimes: [providerRuntime('stops', stop), providerRuntime('fails', failing)],
+      ...pluginRegistryFixture([providerRuntime('stops', stop), providerRuntime('fails', failing)]),
       deviceRuntimeGateway: Object.freeze({
         ...lifecycleDeviceRuntimeGateway,
         applicationLifecycle: applicationLifecycleResourceFixture({
@@ -68,6 +69,8 @@ test('close is idempotent and every caller receives the one report', async () =>
     expect(first.plugins.failed).toEqual([
       {
         provider: 'fails',
+        source: 'builtin',
+        step: 'shutdown',
         error: expect.objectContaining({ message: 'provider refused to stop' }),
       },
     ]);
@@ -90,7 +93,7 @@ test('a startup that fails after acquiring resources rolls them back once', asyn
       host: hostFor(stateDir),
       ...silent,
       composeDeps: daemonRuntimeDepsFixture({
-        providerDeviceRuntimes: [providerRuntime('stops', stop)],
+        ...pluginRegistryFixture([providerRuntime('stops', stop)]),
         ownerLifecycle: platformOwnerLifecycleFixture({
           configureForDaemonLock: async () => {
             throw failure;
@@ -114,7 +117,7 @@ test('a shutdown step that rejects still releases the registration, lock and pro
     host: hostFor(stateDir),
     ...silent,
     composeDeps: daemonRuntimeDepsFixture({
-      providerDeviceRuntimes: [providerRuntime('stops', stop)],
+      ...pluginRegistryFixture([providerRuntime('stops', stop)]),
       ownerLifecycle: platformOwnerLifecycleFixture({ clearDaemonLockConfiguration: clearLock }),
       deviceRuntimeGateway: Object.freeze({
         ...lifecycleDeviceRuntimeGateway,

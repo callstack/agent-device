@@ -13,11 +13,15 @@ import { resolveLimrunConnectProfile } from './limrun-profile.ts';
 import { readLimrunCredentials } from '../../provider-limrun-credentials.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
-import { isConnectProviderName, type ConnectProvider } from './provider-policy.ts';
+import {
+  isConnectProviderName,
+  primeProviderConnection,
+  type ConnectProvider,
+} from './provider-policy.ts';
+import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
 import { bundledCloudWebDriverConnection } from '../../provider-webdriver.ts';
 import { withPluginConnection } from '@agent-device/plugins/load';
-import { PROVIDER_PLUGIN_POLICY } from '../../provider-plugin-policy.ts';
-import type { PluginConnection } from '@agent-device/plugins/connection';
+import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
@@ -86,12 +90,12 @@ function builtinConnectAdapter(provider: string): ConnectProviderAdapter | undef
 async function withProviderConnection<T>(
   provider: string,
   env: EnvMap,
-  run: (connection: PluginConnection) => Promise<T>,
+  run: (connection: PluginConnectionCallbacks) => Promise<T>,
 ): Promise<T> {
   const bundled = bundledCloudWebDriverConnection(provider, env);
   return bundled
     ? await run(bundled)
-    : await withPluginConnection(provider, env, PROVIDER_PLUGIN_POLICY, run);
+    : await withPluginConnection(provider, BUILTIN_PROVIDER_IDS, env, run);
 }
 
 export async function resolveConnectProviderProfile(options: {
@@ -110,6 +114,7 @@ export async function resolveConnectProviderProfile(options: {
       env,
     });
     const leaseProvider = resolved.profile.leaseProvider;
+    await primeProviderConnection(leaseProvider, env);
     return {
       flags: {
         ...profileToCliFlags(resolved.profile),
@@ -145,7 +150,7 @@ export async function resolveConnectProviderProfile(options: {
  */
 async function resolveProviderConnectionProfile(
   provider: string,
-  connection: PluginConnection,
+  connection: PluginConnectionCallbacks,
   context: AdapterContext,
 ): Promise<ConnectProfile> {
   const resolved = await connection.resolve(context);

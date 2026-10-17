@@ -42,7 +42,6 @@ export type ProviderDeviceRuntimeRequestProviders = {
   /** Eager provider ownership metadata for the platform-runtime composition boundary. */
   providerRuntimes: readonly ProviderDeviceRuntime[];
   providerRuntimeIds: readonly string[];
-  providerRuntimeRequiredIds: readonly string[];
   recoverableProviderIds: readonly string[];
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   recoverExpiredLease?: ProviderExpiredLeaseRecovery;
@@ -93,17 +92,12 @@ function getActiveProviderDeviceRuntimes(): ProviderDeviceRuntime[] {
 
 export function createProviderDeviceRuntimeRequestProviders(
   runtimes: ProviderDeviceRuntime[],
-  options: { providerRuntimeRequiredIds?: readonly string[] } = {},
 ): ProviderDeviceRuntimeRequestProviders {
   assertUniqueProviderRuntimeIds(runtimes);
   const providerRuntimeIds = runtimes.map((runtime) => runtime.provider);
   return {
     providerRuntimes: Object.freeze([...runtimes]),
     providerRuntimeIds,
-    providerRuntimeRequiredIds: uniqueProviderIds([
-      ...providerRuntimeIds,
-      ...(options.providerRuntimeRequiredIds ?? []),
-    ]),
     leaseLifecycleProvider: composeLeaseProvider(runtimes),
     recoverableProviderIds: runtimes
       .filter((runtime) => runtime.recoverExpiredLease !== undefined)
@@ -184,10 +178,6 @@ function composeExpiredLeaseRecovery(
     }
     await runtime.recoverExpiredLease(lease);
   };
-}
-
-function uniqueProviderIds(providerIds: readonly string[]): string[] {
-  return [...new Set(providerIds)];
 }
 
 function composeLeaseProvider(

@@ -1,7 +1,7 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
+import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { assertRpcOk } from './assertions.ts';
@@ -252,7 +252,7 @@ function textEntryTranscript(server: FakeIosWebDriverServer): string[] {
 
 async function createCloudIosWorld() {
   const server = await FakeIosWebDriverServer.start();
-  const runtimes = createBundledCloudWebDriverRuntimes({
+  const runtimes = await createBundledCloudWebDriverRuntimes({
     env: {
       BROWSERSTACK_USERNAME: 'browser-user',
       BROWSERSTACK_ACCESS_KEY: 'browser-key',

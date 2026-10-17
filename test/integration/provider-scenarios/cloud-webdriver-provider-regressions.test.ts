@@ -1,12 +1,10 @@
+import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import {
-  createBundledCloudWebDriverRuntimes,
-  type RunHostCommand,
-} from '@agent-device/provider-webdriver';
+import { type RunHostCommand } from '@agent-device/provider-webdriver';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
@@ -35,7 +33,7 @@ test('AWS Device Farm endpoint selection skips live-control WebSocket URLs', asy
       appiumEndpoint: `${server.url}/wd/hub/`,
     });
     const runtime = providerRuntimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: { AWS_REGION: 'us-west-2' },
         clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
         runHostCommand: host.run,
@@ -65,7 +63,7 @@ test('WebDriver session creation is not retried on transient provider failures',
   await withProviderScenarioResource(ProviderRegressionServer.start, async (server) => {
     server.sessionFailuresRemaining = 1;
     const runtime = providerRuntimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: {
           BROWSERSTACK_USERNAME: 'user',
           BROWSERSTACK_ACCESS_KEY: 'key',
@@ -99,7 +97,7 @@ test('AWS Device Farm rejects local artifact install until upload support exists
         appiumEndpoint: `${server.url}/wd/hub/`,
       });
       const runtime = providerRuntimeFor(
-        createBundledCloudWebDriverRuntimes({
+        await createBundledCloudWebDriverRuntimes({
           env: { AWS_REGION: 'us-west-2' },
           clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
           runHostCommand: host.run,
@@ -132,7 +130,7 @@ test('AWS Device Farm rejects local artifact install until upload support exists
 test('an active AWS Device Farm owner binds no install-family deployment operations', async () => {
   await withProviderScenarioResource(ProviderRegressionServer.start, async (server) => {
     const host = new AwsRemoteAccessHost({ appiumEndpoint: `${server.url}/wd/hub/` });
-    const runtimes = createBundledCloudWebDriverRuntimes({
+    const runtimes = await createBundledCloudWebDriverRuntimes({
       env: { AWS_REGION: 'us-west-2' },
       clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
       runHostCommand: host.run,
@@ -206,7 +204,7 @@ test('AWS Device Farm sends the requested platform in WebDriver capabilities', a
       device: { name: 'Apple iPhone 13', platform: 'IOS', os: '16.0.2' },
     });
     const runtime = providerRuntimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: { AWS_REGION: 'us-west-2' },
         clientVersion: PROVIDER_REGRESSION_CLIENT_VERSION,
         runHostCommand: host.run,
@@ -235,7 +233,7 @@ test('BrowserStack iOS snapshot reaches one shared presenter and public daemon o
   await withProviderScenarioResource(
     () => ProviderRegressionServer.start('ios'),
     async (server) => {
-      const runtimes = createBundledCloudWebDriverRuntimes({
+      const runtimes = await createBundledCloudWebDriverRuntimes({
         env: {
           BROWSERSTACK_USERNAME: 'user',
           BROWSERSTACK_ACCESS_KEY: 'key',
