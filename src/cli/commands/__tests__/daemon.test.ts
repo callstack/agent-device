@@ -270,6 +270,7 @@ test('daemon status reads the daemon record without stopping or contacting the d
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['status'],
       flags: { help: false, json: true, stateDir, version: false },
       client: {} as never,
