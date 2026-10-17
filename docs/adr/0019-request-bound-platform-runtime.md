@@ -11,7 +11,7 @@ Git history retains the completed process history.
 The amendment of 2026-08-26 closed the Wave 6 residue.
 It extends `host` beyond diagnostics to host-scoped platform work through a narrow, neutral, typed service.
 Host diagnostics, daemon-owner resource cleanup, and managed host tooling share this execution category because none binds a request-scoped device runtime.
-Their domain services remain separate and do not form a generic host service.
+Their domain services remain separate and do not form a generic host grab bag.
 
 An amendment proposed on 2026-09-23 accompanies the web press-shape refusal.
 It states in section 3 that a modifier on an admitted operation is not a second operation and therefore has no fact cell.
@@ -49,7 +49,7 @@ The `retired-platforms-zone` gate rejects the old root path.
   A device-operation declaration declares any preferred optimizations and fact-conditional semantic operations separately.
   Runtime owners report device-specific facts and expose behavior through facets.
   Platform and provider implementations never name commands.
-- `RequestExecutionScope.bindDevice(device, use)` resolves ownership, validates facts and facets, and returns a runtime narrowed to proven use.
+- `RequestExecutionScope.bindDevice(device, use)` resolves provider ownership, validates facts and concrete facets, and returns a runtime narrowed to proven use.
   Handlers cannot use undeclared facets. Casts and non-null assertions cannot repair absent proof.
 - Provider ownership is authoritative and fail-closed.
   An owning provider may supply transport to a platform runtime or implement facets directly.
@@ -72,7 +72,7 @@ The `retired-platforms-zone` gate rejects the old root path.
 - A handler binds once with its execution use, subject to the section 9 observation exception.
   Admission, `capabilities`, and doctor use facts inspection without side effects.
   Required-only declarations are the default.
-  Preferred operations require recorded measurements. Conditional operations require parity evidence for correctness that depends on owner facts.
+  Preferred operations require recorded measurements. A conditional operation requires parity evidence that explains why correctness depends on the owner fact.
 - A cross-cutting facet accompanies its first consuming command unit.
   Daemon startup recovery is gated by evidence. Shutdown has two phases: detach, then stop.
   Each domain owns its session-teardown steps. There is no generic lifecycle-hook API.
@@ -699,10 +699,11 @@ Command execution ownership remains singular.
 Review the behavior-neutral package/registry substrate and each command unit from a clean committed tree with all production files present in `HEAD`.
 A passing layering check with untracked production files is not evidence.
 Platform packages receive no migration allowlist or root back-import exception.
+Temporary fixtures never authorize a production bridge, a duplicate route, or a recorded package back-import.
 For a `packages/platform-*` change, `check:affected` must select platform contract, provider, and coverage scenarios.
 A new structural gate requires a planted violation that proves the intended failure before acceptance.
 
-A unit that changes `SessionState` classifies each changed field once under R7.
+Any unit that touches `SessionState` classifies each changed field once under R7.
 It excludes request bindings, concrete platform/provider types, and raw process/transport mechanics.
 Each mutable resource field has one transition owner.
 The only permitted live value is the opaque implementation behind a neutral facet-specific handle contract.
@@ -942,7 +943,7 @@ The snapshot route shares 30 hops, with 17/19 per arm: in-simulator AX bridge pr
 The earlier 38/29 counts had no ordered chain, definition, or artifact and do not reproduce.
 They are superseded, not another data point.
 
-Decision sections 1–2 declare `src/platform-runtime.ts` and each façade's `loadRuntime` pair as boundaries.
+Decision sections 1–2 declare `src/platform-runtime.ts` and each façade's `loadRuntime` pair as boundaries, not pass-through layers.
 They remain in every hop count regardless of target.
 Other traced hops are pass-through candidates only where R13's named facets and the package direction already allow their collapse:
 `kernel < contracts < host-kit < capture-kit < provision-kit < platform/provider/daemon`.
