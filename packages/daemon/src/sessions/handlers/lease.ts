@@ -81,9 +81,12 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     }
     case 'lease_allocate': {
       assertTenantMayAllocate(leaseScope.leaseBackend);
-      assertProviderRuntimeRegistered(leaseScope, providerRuntimeIds ?? []);
+      // The registry stores the trimmed, validated id, so every admission check reads that id:
+      // " testmu " names testmu, and a malformed id is INVALID_ARGS as everywhere else.
+      const leaseProvider = normalizeLeaseProvider(leaseScope.leaseProvider);
+      assertProviderRuntimeRegistered(leaseProvider, providerRuntimeIds ?? []);
       assertProviderCredentialsUnchanged(
-        leaseScope,
+        { leaseProvider, leaseBackend: leaseScope.leaseBackend },
         req.meta?.providerCredentialFingerprint,
         providerCredentials,
       );
@@ -331,14 +334,10 @@ function leaseLifecycleContext(req: DaemonRequest): LeaseLifecycleContext {
 }
 
 function assertProviderRuntimeRegistered(
-  leaseScope: LeaseScope,
+  leaseProvider: string | undefined,
   registeredProviders: readonly string[],
 ): void {
-  // The registry stores the trimmed, validated id, so classify that id: " testmu " names testmu
-  // and a malformed id is INVALID_ARGS, as it is everywhere else a lease provider is read.
-  const provider = leaseProviderRequiringRuntime({
-    leaseProvider: normalizeLeaseProvider(leaseScope.leaseProvider),
-  });
+  const provider = leaseProviderRequiringRuntime({ leaseProvider });
   if (provider === undefined || registeredProviders.includes(provider)) return;
   throw new AppError(
     'UNSUPPORTED_OPERATION',
