@@ -10,9 +10,9 @@ import * as networkTransport from '@agent-device/provision-kit/install-source-ne
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
 import { prepareAndroidInstallArtifact } from '../install-artifact.ts';
 import * as manifest from '../manifest.ts';
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindAndroidAdbHostStub } from '../adb-host.fixtures.ts';
 
-bindTestCommandHost();
+bindAndroidAdbHostStub();
 
 test('aborts an in-flight Android artifact identity probe', async () => {
   const tempRoot = await mkdtempForTest('agent-device-android-artifact-abort-');

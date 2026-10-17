@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { commandHostEnvironment, emitDiagnostic } from './host.ts';
+import { hostEnvironment, emitDiagnostic } from './host.ts';
 import {
   acquireRunnerXctestrunCacheLock,
   emitRunnerXctestrunDecision,
@@ -17,7 +17,7 @@ const CACHE_KEY_DIRECTORY = /^cache-[0-9a-f]{16}$/;
 
 /** How many runner cache keys per platform folder survive, the current one included; 0 keeps them all. */
 export function resolveRunnerCacheKeepCount(
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
 ): number {
   const raw = env.AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP?.trim();
   if (!raw || !/^\d+$/.test(raw)) return DEFAULT_RUNNER_CACHE_KEEP;
@@ -35,7 +35,7 @@ export function resolveRunnerCacheKeepCount(
  */
 export async function evictStaleRunnerCaches(
   currentDerived: string,
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
   nowMs: number = Date.now(),
 ): Promise<string[]> {
   const keep = resolveRunnerCacheKeepCount(env);

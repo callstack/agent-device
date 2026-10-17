@@ -15,7 +15,7 @@ import {
   emitRequestProgress,
   findProjectRoot,
   isCommandTimeoutError,
-  commandHostEnvironment,
+  hostEnvironment,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -873,7 +873,7 @@ async function buildRunnerXctestrun(
   // teardown or a last-waiter cancellation reaches this same line again, and admission is what
   // refuses it. Checking at registration would be a check after the child exists (#3220).
   assertRunnerStartAdmitsPreparation(device.id, options.startAdmission);
-  const { env } = commandHostEnvironment();
+  const { env } = hostEnvironment();
   const runnerBundleBuildSettings = resolveRunnerBundleBuildSettings(env);
   const signingBuildSettings = resolveRunnerSigningBuildSettings(
     env,

@@ -6,7 +6,7 @@ import {
   emitDiagnostic,
   buildSimctlArgsForDevice,
   runXcrun,
-  commandHostEnvironment,
+  hostEnvironment,
 } from './host.ts';
 import { isApplePlatform, type DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
@@ -525,7 +525,7 @@ async function cleanupStaleSimulatorRunnerBundles(device: DeviceInfo): Promise<v
   }
 
   await Promise.allSettled(
-    resolveRunnerContainerBundleIds(commandHostEnvironment().env).map(async (bundleId) => {
+    resolveRunnerContainerBundleIds(hostEnvironment().env).map(async (bundleId) => {
       // Best-effort cleanup only; xcodebuild may still be able to install.
       await uninstallStaleSimulatorRunnerBundle(device, bundleId);
     }),

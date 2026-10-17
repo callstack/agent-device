@@ -1,5 +1,5 @@
 import {
-  commandHostEnvironment,
+  hostEnvironment,
   emitDiagnostic,
   isProcessAlive,
   isProcessGroupAlive,
@@ -290,7 +290,7 @@ async function terminateRunnerSimulatorApps(device: DeviceInfo): Promise<void> {
   if (device.kind !== 'simulator') return;
 
   await Promise.allSettled(
-    resolveRunnerContainerBundleIds(commandHostEnvironment().env).map(async (bundleId) => {
+    resolveRunnerContainerBundleIds(hostEnvironment().env).map(async (bundleId) => {
       try {
         await runXcrun(buildSimctlArgsForDevice(device, ['terminate', device.id, bundleId]), {
           allowFailure: true,

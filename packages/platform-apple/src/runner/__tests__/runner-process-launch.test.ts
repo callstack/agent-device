@@ -52,7 +52,7 @@ test("the runner is spawned detached onto its own log file, not onto this proces
 test('the detached runner gets its environment and working directory as plain values', () => {
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   const host = { env: { FROM_HOST: 'yes' }, cwd: '/tmp/host-cwd' };
-  appleRunnerTestHost.update({ commandHostEnvironment: () => host });
+  appleRunnerTestHost.update({ hostEnvironment: () => host });
 
   launchRunnerProcess({
     device: IOS_SIMULATOR,

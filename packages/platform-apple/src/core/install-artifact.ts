@@ -14,7 +14,6 @@ import {
   noteInstallArtifactArchiveDepth,
   withInstallArtifactArchiveScope,
 } from '@agent-device/provision-kit/install-artifact-archive-context';
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { materializeInstallablePath } from '@agent-device/provision-kit/install-source';
 import {
   makeHostTemporaryDirectory,
@@ -25,6 +24,8 @@ import {
 type InstallIosArtifactOptions = {
   appIdentifierHint?: string;
   signal?: AbortSignal;
+  /** The host environment whose proxy settings apply to a network download. */
+  environment: NodeJS.ProcessEnv;
 };
 
 type IosPayloadAppBundle = {
@@ -45,7 +46,7 @@ export type PreparedIosInstallArtifact = {
 
 export async function prepareIosInstallArtifact(
   source: LocalInstallSource,
-  options?: InstallIosArtifactOptions,
+  options: InstallIosArtifactOptions,
 ): Promise<PreparedIosInstallArtifact> {
   return await withInstallArtifactArchiveScope(
     async () => await prepareIosInstallArtifactInScope(source, options),
@@ -54,7 +55,7 @@ export async function prepareIosInstallArtifact(
 
 async function prepareIosInstallArtifactInScope(
   source: LocalInstallSource,
-  options?: InstallIosArtifactOptions,
+  options: InstallIosArtifactOptions,
 ): Promise<PreparedIosInstallArtifact> {
   const materialized = await materializeInstallablePath({
     source,
@@ -62,8 +63,8 @@ async function prepareIosInstallArtifactInScope(
       (stat.isDirectory() && candidatePath.toLowerCase().endsWith('.app')) ||
       (stat.isFile() && candidatePath.toLowerCase().endsWith('.ipa')),
     installableLabel: 'iOS installable (.app or .ipa)',
-    signal: options?.signal,
-    environment: commandHostEnvironment().env,
+    signal: options.signal,
+    environment: options.environment,
   });
 
   let resolved: Awaited<ReturnType<typeof resolveIosInstallablePath>> | undefined;

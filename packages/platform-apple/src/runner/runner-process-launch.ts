@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { commandHostEnvironment, runCmdBackground } from './host.ts';
+import { hostEnvironment, runCmdBackground } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { resolveRunnerDestination } from './apple-runner-platform.ts';
 import { resolveRunnerMaxConcurrentDestinationsFlag } from './runner-cache-metadata.ts';
@@ -61,7 +61,7 @@ export function launchRunnerProcess(input: LaunchRunnerProcessInput): LaunchedRu
   const listenerReady = createRunnerListenerReadySignal();
   try {
     // The runner outlives this process, so it gets its environment and directory as plain values.
-    const { env, cwd } = commandHostEnvironment();
+    const { env, cwd } = hostEnvironment();
     const launched = runCmdBackground(
       'xcodebuild',
       [

@@ -72,7 +72,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   requireExecSuccess,
   isCommandTimeoutError,
   commandDeveloperDir,
-  commandHostEnvironment,
+  hostEnvironment: commandHostEnvironment,
   shellQuote,
   emitDiagnostic,
   withDiagnosticTimer,

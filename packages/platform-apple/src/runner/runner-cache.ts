@@ -8,7 +8,7 @@ import {
   withProcessLock,
   isEnvTruthy,
   findProjectRoot,
-  commandHostEnvironment,
+  hostEnvironment,
 } from './host.ts';
 import {
   RUNNER_CACHE_METADATA_FILE,
@@ -285,12 +285,12 @@ function evaluateRunnerCacheMetadata(
 }
 
 function shouldCleanDerived(): boolean {
-  return isEnvTruthy(commandHostEnvironment().env.AGENT_DEVICE_IOS_CLEAN_DERIVED);
+  return isEnvTruthy(hostEnvironment().env.AGENT_DEVICE_IOS_CLEAN_DERIVED);
 }
 
 export function assertSafeDerivedCleanup(
   derivedPath: string,
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
 ): void {
   const override = env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim();
   if (!override) {

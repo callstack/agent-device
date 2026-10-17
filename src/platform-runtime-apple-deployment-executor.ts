@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import type {
   AppleAppDeploymentExecutor,
   MaterializeAppSourceInput,
@@ -17,7 +18,10 @@ export function createAppleAppDeploymentExecutor(): AppleAppDeploymentExecutor {
     prepareArtifact: async (input: MaterializeAppSourceInput, options) => {
       const { prepareIosInstallArtifact } =
         await import('@agent-device/platform-apple/install-artifact');
-      return await prepareIosInstallArtifact(input.source, options);
+      return await prepareIosInstallArtifact(input.source, {
+        ...options,
+        environment: commandHostEnvironment().env,
+      });
     },
     resolveAppBundleId: async (device, app, options) => {
       const { resolveIosApp } = await import('@agent-device/platform-apple/app-resolution');

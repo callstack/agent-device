@@ -58,7 +58,6 @@ export type AppleRunnerHost = Pick<
   | 'requireExecSuccess'
   | 'isCommandTimeoutError'
   | 'commandDeveloperDir'
-  | 'commandHostEnvironment'
 > &
   Pick<typeof HostDiagnostics, 'emitDiagnostic' | 'withDiagnosticTimer'> &
   Pick<typeof HostRetry, 'retryWithPolicy' | 'isEnvTruthy'> &
@@ -88,6 +87,11 @@ export type AppleRunnerHost = Pick<
   > &
   Pick<typeof AppleSimctl, 'buildSimctlArgsForDevice' | 'simulatorAddressFor'> &
   Pick<typeof ApplePlistXml, 'visitXmlPlistEntries'> & {
+    /**
+     * The environment and working directory the runner reads its configuration from (derived-data
+     * overrides, lease directory, bundle ids, signing settings) and starts detached children with.
+     */
+    hostEnvironment: typeof HostCommand.commandHostEnvironment;
     /**
      * The `Deadline` constructor is a class static, so the port carries the factory alone, typed
      * to the read side: a test host substitutes its own clock.
@@ -159,7 +163,7 @@ export const runCmdBackground = delegate('runCmdBackground');
 export const requireExecSuccess = delegate('requireExecSuccess');
 export const isCommandTimeoutError = delegate('isCommandTimeoutError');
 export const commandDeveloperDir = delegate('commandDeveloperDir');
-export const commandHostEnvironment = delegate('commandHostEnvironment');
+export const hostEnvironment = delegate('hostEnvironment');
 export const shellQuote = delegate('shellQuote');
 export const emitDiagnostic = delegate('emitDiagnostic');
 export const withDiagnosticTimer = delegate('withDiagnosticTimer');

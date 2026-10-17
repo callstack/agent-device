@@ -25,11 +25,10 @@ import {
 } from '@agent-device/platform-apple/tool-provider';
 import { prepareIosInstallArtifact } from '@agent-device/platform-apple/install-artifact';
 import { AppError } from '@agent-device/kernel/errors';
+import '../platform-runtime-android-adb-host.ts';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
-import { bindTestCommandHost, mkdtempForTest } from '@agent-device/test-kit';
+import { mkdtempForTest } from '@agent-device/test-kit';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';
-
-bindTestCommandHost();
 
 test('validateDownloadSourceUrl rejects localhost and private literal addresses by default', async () => {
   await assert.rejects(
@@ -202,10 +201,13 @@ test('prepareIosInstallArtifact extracts a URL archive from any public host', as
     async () => {
       await withIosBundleInfo('com.example.signedurl', 'Signed URL', async () => {
         await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
-          const result = await prepareIosInstallArtifact({
-            kind: 'url',
-            url: 'https://artifacts.example.com/signed/build.zip?sig=abc',
-          });
+          const result = await prepareIosInstallArtifact(
+            {
+              kind: 'url',
+              url: 'https://artifacts.example.com/signed/build.zip?sig=abc',
+            },
+            { environment: process.env },
+          );
 
           try {
             assert.equal(path.basename(result.installablePath), 'Demo.app');
@@ -389,10 +391,13 @@ test('prepareIosInstallArtifact extracts GitHub artifact ZIP containing nested a
     async () => {
       await withIosBundleInfo('com.example.githubtar', 'GitHub Tar', async () => {
         await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
-          const result = await prepareIosInstallArtifact({
-            kind: 'url',
-            url: 'https://api.github.com/repos/acme/app/actions/artifacts/789/zip',
-          });
+          const result = await prepareIosInstallArtifact(
+            {
+              kind: 'url',
+              url: 'https://api.github.com/repos/acme/app/actions/artifacts/789/zip',
+            },
+            { environment: process.env },
+          );
 
           try {
             assert.equal(path.basename(result.installablePath), 'Demo.app');
@@ -430,10 +435,13 @@ test('prepareIosInstallArtifact extracts GitHub artifact ZIP containing one IPA'
     async () => {
       await withIosBundleInfo('com.example.githubipa', 'GitHub IPA', async () => {
         await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
-          const result = await prepareIosInstallArtifact({
-            kind: 'url',
-            url: 'https://api.github.com/repos/acme/app/actions/artifacts/987/zip',
-          });
+          const result = await prepareIosInstallArtifact(
+            {
+              kind: 'url',
+              url: 'https://api.github.com/repos/acme/app/actions/artifacts/987/zip',
+            },
+            { environment: process.env },
+          );
 
           try {
             assert.equal(path.basename(result.installablePath), 'Demo.app');
@@ -466,10 +474,13 @@ test('prepareIosInstallArtifact names the zip a simulator app arrived in as its 
     async () => {
       await withIosBundleInfo('com.example.githubapp', 'GitHub App', async () => {
         await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
-          const result = await prepareIosInstallArtifact({
-            kind: 'url',
-            url: 'https://api.github.com/repos/acme/app/actions/artifacts/989/zip',
-          });
+          const result = await prepareIosInstallArtifact(
+            {
+              kind: 'url',
+              url: 'https://api.github.com/repos/acme/app/actions/artifacts/989/zip',
+            },
+            { environment: process.env },
+          );
 
           try {
             assert.equal(path.basename(result.installablePath), 'Demo.app');
@@ -508,10 +519,13 @@ test('prepareIosInstallArtifact cleans URL materialization when IPA payload reso
         await withIsolatedInstallTempRoot(async (materializeTempRoot) => {
           await assert.rejects(
             async () =>
-              await prepareIosInstallArtifact({
-                kind: 'url',
-                url: 'https://api.github.com/repos/acme/app/actions/artifacts/988/zip',
-              }),
+              await prepareIosInstallArtifact(
+                {
+                  kind: 'url',
+                  url: 'https://api.github.com/repos/acme/app/actions/artifacts/988/zip',
+                },
+                { environment: process.env },
+              ),
             /found 2 .app bundles/,
           );
           assert.deepEqual(await fs.readdir(materializeTempRoot), []);

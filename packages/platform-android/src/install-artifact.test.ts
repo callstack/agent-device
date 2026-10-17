@@ -9,9 +9,6 @@ import {
 import { installAndroidArtifact } from './deployment/native.ts';
 import { prepareAndroidInstallArtifact } from './install-artifact.ts';
 import { ANDROID_EMULATOR } from './__tests__/test-utils/device-fixtures.ts';
-import { bindTestCommandHost } from '@agent-device/test-kit';
-
-bindTestCommandHost();
 
 test('installing an already-installed APK resolves its package with no aapt reachable', async () => {
   // The stub host answers `isExecutable` as false, so no `aapt` is reachable and the identity can

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { commandHostEnvironment, isEnvTruthy, findProjectRoot, readVersion } from './host.ts';
+import { hostEnvironment, isEnvTruthy, findProjectRoot, readVersion } from './host.ts';
 import {
   resolveRunnerBuildDestinationFamily,
   resolveRunnerDerivedBaseName,
@@ -88,16 +88,14 @@ function normalizeBundleId(value: string | undefined): string {
   return value?.trim() ?? '';
 }
 
-export function resolveRunnerAppBundleId(
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
-): string {
+export function resolveRunnerAppBundleId(env: NodeJS.ProcessEnv = hostEnvironment().env): string {
   const configured =
     normalizeBundleId(env.AGENT_DEVICE_IOS_BUNDLE_ID) ||
     normalizeBundleId(env.AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID);
   return configured || DEFAULT_IOS_RUNNER_APP_BUNDLE_ID;
 }
 
-function resolveRunnerTestBundleId(env: NodeJS.ProcessEnv = commandHostEnvironment().env): string {
+function resolveRunnerTestBundleId(env: NodeJS.ProcessEnv = hostEnvironment().env): string {
   const configured = normalizeBundleId(env.AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID);
   if (configured) {
     return configured;
@@ -125,7 +123,7 @@ export function resolveExpectedRunnerCacheMetadata(
   budget?: RunnerPhaseBudget,
 ): RunnerXctestrunCacheMetadata {
   const platformName = resolveRunnerPlatformName(device);
-  const { env } = commandHostEnvironment();
+  const { env } = hostEnvironment();
   return {
     schemaVersion: RUNNER_CACHE_SCHEMA_VERSION,
     packageVersion: readVersion(projectRoot),
@@ -151,7 +149,7 @@ export function resolveRunnerDerivedPath(
   device: DeviceInfo,
   metadata: RunnerXctestrunCacheMetadata,
 ): string {
-  const override = commandHostEnvironment().env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim();
+  const override = hostEnvironment().env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim();
   if (override) {
     return path.resolve(override);
   }
@@ -255,7 +253,7 @@ export function resolveRunnerMaxConcurrentDestinationsFlag(device: DeviceInfo): 
 }
 
 export function resolveRunnerSigningBuildSettings(
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
   forDevice = false,
   device: Pick<DeviceInfo, 'platform' | 'appleOs'> = { platform: 'apple' },
 ): string[] {
@@ -285,7 +283,7 @@ export function resolveRunnerSigningBuildSettings(
 }
 
 export function resolveRunnerBundleBuildSettings(
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
 ): string[] {
   const appBundleId = resolveRunnerAppBundleId(env);
   const testBundleId = resolveRunnerTestBundleId(env);
@@ -312,7 +310,7 @@ export function resolveRunnerPerformanceBuildSettings(): string[] {
  * cache identity from this one resolver.
  */
 export function resolveRunnerArchBuildSettings(
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
 ): string[] {
   const archs = env.AGENT_DEVICE_XCUITEST_ARCHS?.trim();
   return archs ? [`ARCHS=${archs}`] : [];
@@ -333,7 +331,7 @@ export function resolveRunnerBuildLocationSettings(derived: string): string[] {
 }
 
 export function resolveRunnerSandboxBuildArgs(
-  env: NodeJS.ProcessEnv = commandHostEnvironment().env,
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
 ): string[] {
   return [...RUNNER_SANDBOX_BUILD_ARGS, `OTHER_SWIFT_FLAGS=${resolveRunnerSwiftFlags(env)}`];
 }

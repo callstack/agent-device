@@ -14,7 +14,7 @@ import {
   classifyOwnerLiveness,
   leaseOwnerStateDir,
   shellQuote,
-  commandHostEnvironment,
+  hostEnvironment,
 } from './host.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -302,7 +302,7 @@ function logicalLeaseContextMatchesDevice(
 function readCurrentStateDir(): string | undefined {
   const configured = leaseOwnerStateDir();
   if (configured) return configured;
-  return commandHostEnvironment().env.AGENT_DEVICE_STATE_DIR?.trim() || undefined;
+  return hostEnvironment().env.AGENT_DEVICE_STATE_DIR?.trim() || undefined;
 }
 
 function buildBusyRunnerLeaseHint(
@@ -471,7 +471,7 @@ function resolveRunnerLeasePath(deviceId: string): string {
 }
 
 function resolveRunnerLeaseRoot(): string {
-  const override = commandHostEnvironment().env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR?.trim();
+  const override = hostEnvironment().env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR?.trim();
   if (override) return path.resolve(override);
   return path.join(os.homedir(), '.agent-device', 'apple-runner', 'leases');
 }
