@@ -1,5 +1,6 @@
 import { aroundEach } from 'vitest';
 import { withCommandHost } from '@agent-device/host-kit/command';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 /**
@@ -10,7 +11,10 @@ import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value'
 export function createTestHostEnvironment(
   options: { env?: EnvMap; cwd?: string } = {},
 ): HostEnvironment {
-  return { env: { ...(options.env ?? process.env) }, cwd: options.cwd ?? process.cwd() };
+  return captureHostEnvironment({
+    env: options.env ?? process.env,
+    cwd: () => options.cwd ?? process.cwd(),
+  });
 }
 
 /**

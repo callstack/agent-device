@@ -827,12 +827,16 @@ test('cutover refuses an already-running legacy daemon before signaling or chang
     assert.equal(disposition.exitCode, DAEMON_STARTUP_EXIT_CODES.unproven);
     await assert.rejects(
       ensureDaemon(
-        resolveClientSettings({
-          session: 'default',
-          command: 'devices',
-          positionals: [],
-          flags: { stateDir: paths.baseDir },
-        }),
+        resolveClientSettings(
+          {
+            session: 'default',
+            command: 'devices',
+            positionals: [],
+            flags: { stateDir: paths.baseDir },
+          },
+          undefined,
+          { env: process.env, cwd: process.cwd() },
+        ),
       ),
       (error: unknown) => {
         assert.ok(error instanceof AppError);

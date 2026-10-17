@@ -14,7 +14,11 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
-import { sendToDaemon } from './daemon-client/daemon-client.ts';
+import {
+  createDaemonTransport,
+  resolveRunTransport,
+  sendToDaemon,
+} from './daemon-client/daemon-client.ts';
 import fs from 'node:fs';
 import type { BatchStep } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
@@ -54,12 +58,19 @@ import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
+  /** Builds the transport that talks as a given host; injected deps leave it out. */
+  transportForHost?: (host: HostEnvironment) => typeof sendToDaemon;
 };
 
 type CliDaemonTransport = typeof sendToDaemon;
 type CliDaemonRequest = Parameters<CliDaemonTransport>[0];
 type CliDaemonTransportOptions = Parameters<CliDaemonTransport>[1];
 type ClientDaemonRequest = Parameters<AgentDeviceDaemonTransport>[0];
+
+const DEFAULT_CLI_DEPS: CliDeps = {
+  sendToDaemon,
+  transportForHost: createDaemonTransport,
+};
 
 const printHumanError = (
   err: AppError | NormalizedError,
@@ -71,10 +82,6 @@ const printJson = (
   result: { success: true; data?: unknown } | { success: false; error: NormalizedError },
 ): Promise<void> =>
   import('./commands/output/json.ts').then(({ printJson: write }) => write(result));
-
-const DEFAULT_CLI_DEPS: CliDeps = {
-  sendToDaemon,
-};
 
 const METRO_RUNTIME_OVERRIDE_FLAG_KEYS = new Set<FlagKey>([
   'launchUrl',
@@ -196,7 +203,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
             flags: ctx.effectiveFlags,
             replayTestReporterRuntime,
             commandProgress,
-            transport: deps.sendToDaemon,
+            transport: resolveRunTransport(deps, host),
           }),
         });
         await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
@@ -411,7 +418,7 @@ async function resolveRemoteContext(ctx: CliRunContext, deps: CliDeps): Promise<
   if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
     const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
       host: ctx.host,
-      transport: createClientDaemonTransport(deps.sendToDaemon),
+      transport: createClientDaemonTransport(resolveRunTransport(deps, ctx.host)),
     });
     const { materializeRemoteConnectionForCommand } =
       await import('./cli/commands/connection-runtime.ts');

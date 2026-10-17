@@ -1,3 +1,4 @@
+import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { randomBytes } from 'node:crypto';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
@@ -30,17 +31,21 @@ export const proxyCommand: ClientCommandHandler = async ({ positionals, flags })
 };
 
 async function startProxy(flags: CliFlags): Promise<ProxyStartup> {
-  const settings = resolveClientSettings({
-    session: 'default',
-    command: 'proxy',
-    positionals: [],
-    flags: {
-      stateDir: flags.stateDir,
-      daemonBaseUrl: '',
-      daemonTransport: 'http',
-      daemonServerMode: 'http',
+  const settings = resolveClientSettings(
+    {
+      session: 'default',
+      command: 'proxy',
+      positionals: [],
+      flags: {
+        stateDir: flags.stateDir,
+        daemonBaseUrl: '',
+        daemonTransport: 'http',
+        daemonServerMode: 'http',
+      },
     },
-  });
+    undefined,
+    commandHostEnvironment(),
+  );
   const daemon = await ensureDaemon(settings);
   const upstreamBaseUrl = resolveLocalDaemonBaseUrl(daemon.info.httpPort);
   const token = resolveProxyClientToken(flags);
