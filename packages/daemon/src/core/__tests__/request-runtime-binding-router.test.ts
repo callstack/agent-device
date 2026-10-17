@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import { expect, test, vi } from 'vitest';
 import {
   clearRequestCanceled,
@@ -13,11 +14,7 @@ import {
   localRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import {
-  createAppLogStartResult,
-  createDurableResourceEnvelope,
-  createAppLogLiveHandle,
-} from '@agent-device/capture-kit';
+import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   createTestHostEnvironment,

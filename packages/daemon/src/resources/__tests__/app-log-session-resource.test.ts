@@ -1,4 +1,5 @@
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
+import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -8,7 +9,6 @@ import {
   createAppLogLiveHandleFromFinish,
   createAppLogStartResult,
   createDurableResourceEnvelope,
-  createAppLogLiveHandle,
 } from '@agent-device/capture-kit';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { mkdtempForTestSync } from '@agent-device/test-kit';

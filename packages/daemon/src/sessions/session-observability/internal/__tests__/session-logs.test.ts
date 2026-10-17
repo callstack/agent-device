@@ -1,4 +1,5 @@
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
+import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import fs from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -15,11 +16,7 @@ import {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
-import {
-  createAppLogStartResult,
-  createDurableResourceEnvelope,
-  createAppLogLiveHandle,
-} from '@agent-device/capture-kit';
+import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {

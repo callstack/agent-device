@@ -7,7 +7,7 @@ export {
   createAppLogStartResult,
   decodeAppLogProcessMarker,
 } from './app-log-runtime.ts';
-export { createAppLogLiveHandle, createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
+export { createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
 export { createHostAudioProbeCaptureOperations } from './audio-probe-runtime.ts';
 export { decodeDurableDescriptor } from './durable-descriptor-codec.ts';
 export { createScreenRecordingLiveHandle } from './screen-recording-live-handle.ts';

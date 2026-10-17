@@ -1,9 +1,10 @@
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
+import { createAppLogLiveHandle } from '@agent-device/capture-kit/app-log-live-handle';
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { createDurableResourceEnvelope, createAppLogLiveHandle } from '@agent-device/capture-kit';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type DeviceRuntimeGateway,
