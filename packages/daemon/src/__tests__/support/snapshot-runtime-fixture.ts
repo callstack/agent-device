@@ -179,6 +179,7 @@ function settingsFacts(device: DeviceInfo) {
         unsupported,
         write: {
           wifi: available,
+          bluetooth: available,
           airplane: available,
           'mobile-data': available,
           location: available,

@@ -142,6 +142,32 @@ test.each([
   },
 );
 
+test.each([
+  ['feature:android.software.leanback_only\nfeature:android.hardware.wifi\n', 'tv'],
+  ['feature:android.hardware.type.television=1\n', 'tv'],
+  ['feature:android.software.leanback_extra\nfeature:android.hardware.wifi\n', 'mobile'],
+] as const)(
+  'Android inventory reads the feature list %j as a %s target',
+  async (featureList, target) => {
+    const host = createHost(async (request) => {
+      const key = request.args.join('\0');
+      if (key === 'devices\0-l')
+        return result('List of devices attached\nR5CT1 device model:Box\n');
+      if (key.includes('pm\0list\0features')) return result(featureList);
+      const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+      if (probe) return result(probe[1]);
+      throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+    });
+
+    const [device] = await createAndroidInventory(host).discover(
+      { androidAvdSelection: 'running-only' },
+      scope,
+    );
+
+    assert.equal(device?.target, target);
+  },
+);
+
 test('Android inventory fails closed when adb is unavailable', async () => {
   const host = createHost(async () => result(''), { adb: undefined });
   await assert.rejects(

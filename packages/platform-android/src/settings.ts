@@ -1,7 +1,5 @@
 import {
   AppError,
-  createRequestCanceledError,
-  discloseDispatch,
   sessionAppRequiredDetails,
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
@@ -26,8 +24,8 @@ import {
   type SettingName,
 } from '@agent-device/contracts/settings-catalog';
 import { runAndroidAdb, runAndroidShell } from './adb.ts';
-import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
+import { setAndroidGlobalToggle, type AndroidGlobalToggle } from './settings-global-toggle.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
 import {
@@ -39,6 +37,7 @@ import {
 /** The settings {@link setAndroidSetting} applies over adb, wherever an owner runs it. */
 export const ANDROID_SETTINGS = [
   'wifi',
+  'bluetooth',
   'airplane',
   'mobile-data',
   'location',
@@ -100,11 +99,20 @@ export async function setAndroidSetting(
       await runAndroidShell(device, ['svc', 'wifi', enabled ? 'enable' : 'disable']);
       return;
     }
+    case 'bluetooth': {
+      const { setAndroidBluetooth } = await import('./settings-bluetooth.ts');
+      return await setAndroidBluetooth(device, parseSettingState(state), signal);
+    }
     case 'airplane': {
       return await setAndroidAirplaneMode(device, parseSettingState(state));
     }
     case 'mobile-data': {
-      return await setAndroidMobileData(device, parseSettingState(state), signal);
+      return await setAndroidGlobalToggle(
+        device,
+        MOBILE_DATA_TOGGLE,
+        parseSettingState(state),
+        signal,
+      );
     }
     case 'location': {
       if (state.toLowerCase() === 'set') {
@@ -293,85 +301,26 @@ function nearestTextSizeCategory(scale: number): (typeof TEXT_SIZE_CATEGORIES)[n
   return nearest;
 }
 
-type AndroidMobileData = 'enabled' | 'disabled';
-
-/** `svc data` can return before the telephony service stores the switch, so the read-back polls. */
-const MOBILE_DATA_SETTLE_MS = 2000;
-const MOBILE_DATA_SAMPLE_INTERVAL_MS = 100;
-const MOBILE_DATA_NOT_APPLIED_REASON = 'mobile-data-not-applied';
-const MOBILE_DATA_UNREADABLE_REASON = 'mobile-data-unreadable';
-
 /**
  * Reads back only the global `mobile_data` row, where a single-SIM device stores the switch. A
  * multi-SIM device keeps it per subscription; that read-back is uncovered until a dual-SIM run shows
  * which row to read.
  */
-async function setAndroidMobileData(
-  device: DeviceInfo,
-  enabled: boolean,
-  signal: AbortSignal | undefined,
-): Promise<{ mobileData: AndroidMobileData }> {
-  const requested: AndroidMobileData = enabled ? 'enabled' : 'disabled';
-  if (signal?.aborted) throw createRequestCanceledError();
-  try {
-    await runAndroidShell(device, ['svc', 'data', enabled ? 'enable' : 'disable'], { signal });
-    return { mobileData: await awaitAndroidMobileData(device, requested, signal) };
-  } catch (error) {
-    throw error instanceof AppError ? discloseDispatch(error, 'unknown') : error;
-  }
-}
-
-async function awaitAndroidMobileData(
-  device: DeviceInfo,
-  requested: AndroidMobileData,
-  signal: AbortSignal | undefined,
-): Promise<AndroidMobileData> {
-  const deadline = Deadline.fromTimeoutMs(MOBILE_DATA_SETTLE_MS);
-  const { settled, value } = await pollUntilSettled({
-    probe: async () => {
-      const { stdout } = await runAndroidShell(
-        device,
-        ['settings', 'get', 'global', 'mobile_data'],
-        { signal, timeoutMs: Math.max(1, deadline.remainingMs()) },
-      );
-      const storedValue = stdout.trim();
-      return { storedValue, mobileData: parseAndroidMobileData(storedValue) };
-    },
-    settled: (read) => read.mobileData === requested,
-    deadline,
-    intervalMs: MOBILE_DATA_SAMPLE_INTERVAL_MS,
-    signal,
-  });
-  if (settled) return requested;
-  throw androidMobileDataSettleError(device, requested, value.mobileData, value.storedValue);
-}
-
-function parseAndroidMobileData(storedValue: string): AndroidMobileData | undefined {
-  if (storedValue === '1') return 'enabled';
-  if (storedValue === '0') return 'disabled';
-  return undefined;
-}
-
-function androidMobileDataSettleError(
-  device: DeviceInfo,
-  requested: AndroidMobileData,
-  mobileData: AndroidMobileData | undefined,
-  storedValue: string,
-): AppError {
-  const message =
-    mobileData === undefined
-      ? `Android reported an unusable mobile_data value after requesting mobile data ${requested}: ${storedValue || '(empty)'}`
-      : `Android mobile data reads ${mobileData} after requesting ${requested}.`;
-  return new AppError('COMMAND_FAILED', message, {
-    deviceId: device.id,
-    reason:
-      mobileData === undefined ? MOBILE_DATA_UNREADABLE_REASON : MOBILE_DATA_NOT_APPLIED_REASON,
-    requested,
-    ...(mobileData === undefined ? {} : { mobileData }),
-    storedValue,
-    hint: 'Run `adb shell settings get global mobile_data` to see what the device holds. A target without an active SIM, or with more than one, can accept svc data without changing that row.',
-  });
-}
+const MOBILE_DATA_TOGGLE: AndroidGlobalToggle<'mobileData'> = {
+  service: 'data',
+  row: 'mobile_data',
+  label: 'mobile data',
+  stateKey: 'mobileData',
+  parseRow: (storedValue) => {
+    if (storedValue === '1') return 'enabled';
+    if (storedValue === '0') return 'disabled';
+    return undefined;
+  },
+  notAppliedReason: 'mobile-data-not-applied',
+  unreadableReason: 'mobile-data-unreadable',
+  sampleIntervalMs: 100,
+  hint: 'Run `adb shell settings get global mobile_data` to see what the device holds. A target without an active SIM, or with more than one, can accept svc data without changing that row.',
+};
 
 type AndroidFingerprintAction = 'match' | 'nonmatch';
 

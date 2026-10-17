@@ -106,15 +106,18 @@ describe('settings CLI permission', () => {
     }
   });
 
-  test('forwards --app on mobile-data so the daemon refuses it instead of dropping it', () => {
-    const input = settingsCliReader(['mobile-data', 'off'], {
-      targetApp: 'com.example.app',
-    } as CliFlags);
-    expect(settingsDaemonWriter(input)).toMatchObject({
-      positionals: ['mobile-data', 'off'],
-      input: { app: 'com.example.app' },
-    });
-  });
+  test.each(['mobile-data', 'bluetooth'])(
+    'forwards --app on %s so the daemon refuses it instead of dropping it',
+    (setting) => {
+      const input = settingsCliReader([setting, 'off'], {
+        targetApp: 'com.example.app',
+      } as CliFlags);
+      expect(settingsDaemonWriter(input)).toMatchObject({
+        positionals: [setting, 'off'],
+        input: { app: 'com.example.app' },
+      });
+    },
+  );
 
   test('carries an app on an iOS location toggle to the daemon request input', () => {
     const input = settingsCliReader(['location', 'on'], {
@@ -177,10 +180,10 @@ describe('settings CLI permission', () => {
 
   test('passes a setting outside the catalog to the daemon, which refuses it', () => {
     expect(
-      settingsDaemonWriter({ setting: 'bluetooth', state: 'on' } as unknown as Parameters<
+      settingsDaemonWriter({ setting: 'nfc', state: 'on' } as unknown as Parameters<
         typeof settingsDaemonWriter
       >[0]),
-    ).toMatchObject({ positionals: ['bluetooth', 'on'] });
+    ).toMatchObject({ positionals: ['nfc', 'on'] });
   });
 
   test('omits the request input when no app is named', () => {

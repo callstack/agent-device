@@ -227,6 +227,29 @@ test('settings text-size reads the category the owner holds without mutating any
   expect(fixtureSettingsMutations).toHaveLength(0);
 });
 
+test('settings bluetooth on an iOS simulator is refused at admission, before dispatch', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-bluetooth';
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', { positionals: ['bluetooth', 'on'] }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
+    expect(response.error.message).toBe('settings bluetooth is not supported on this device');
+    expect(response.error.details?.reason).toBe('unsupported-platform-leaf');
+  }
+  expect(fixtureSettingsMutations).toHaveLength(0);
+});
+
 test('settings on the macOS host refuses a setting it does not serve, read and write alike', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-settings';
@@ -655,31 +678,34 @@ test('settings mobile-data reaches the Android owner as an on/off mutation', asy
   expect(fixtureSettingsMutations.at(-1)).toMatchObject({ setting: 'mobile-data', state: 'off' });
 });
 
-test('settings Android mobile-data refuses a named app before reaching the owner', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'android-mobile-data-app-refused';
-  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+test.each(['mobile-data', 'bluetooth'])(
+  'settings Android %s refuses a named app before reaching the owner',
+  async (setting) => {
+    const sessionStore = makeSessionStore();
+    const sessionName = `android-${setting}-app-refused`;
+    sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
 
-  const response = await handleSnapshotCommands({
-    createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: snapshotRequest(sessionName, 'settings', {
-      positionals: ['mobile-data', 'off'],
-      input: { app: 'com.example.app' },
-    }),
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
+    const response = await handleSnapshotCommands({
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req: snapshotRequest(sessionName, 'settings', {
+        positionals: [setting, 'off'],
+        input: { app: 'com.example.app' },
+      }),
+      sessionName,
+      logPath: '/tmp/daemon.log',
+      sessionStore,
+    });
 
-  expect(response?.ok).toBe(false);
-  expect(fixtureSettingsMutations).toHaveLength(0);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.details?.reason).toBe('setting_app_not_consumed');
-    expect(response.error.details?.dispatched).toBe('no');
-  }
-});
+    expect(response?.ok).toBe(false);
+    expect(fixtureSettingsMutations).toHaveLength(0);
+    if (response && !response.ok) {
+      expect(response.error.code).toBe('INVALID_ARGS');
+      expect(response.error.details?.reason).toBe('setting_app_not_consumed');
+      expect(response.error.details?.dispatched).toBe('no');
+    }
+  },
+);
 
 test('settings macOS permission grant refuses a named app before reaching the owner', async () => {
   const sessionStore = makeSessionStore();
