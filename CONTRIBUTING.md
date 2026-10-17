@@ -201,8 +201,8 @@ pnpm test:maestro-compat     # example of a focused family suite
 pnpm exec vitest run path/to/file.test.ts
 ```
 
-Before pushing, commit the change and validate that exact commit. The repository derives the
-required gates from the diff:
+Before pushing a normal code change, commit it and validate that exact commit. The repository
+derives the required gates from the diff:
 
 ```bash
 pnpm check:affected --run --head "$(git rev-parse HEAD)"
