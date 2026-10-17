@@ -198,6 +198,16 @@ extension RunnerTests {
     XCTAssertFalse(Self.querySweepCanStartQuery(deadline: sliceDeadline, now: sliceDeadline))
   }
 
+  func testCollapsedTabQueryStartsOnlyWhileTheSliceCoversItsExpectedCost() {
+    let now = Date(timeIntervalSinceReferenceDate: 1_000)
+
+    XCTAssertTrue(Self.querySweepCanStartQuery(deadline: now.addingTimeInterval(2), now: now, expectedCost: 2))
+    XCTAssertFalse(
+      Self.querySweepCanStartQuery(deadline: now.addingTimeInterval(1.9), now: now, expectedCost: 2),
+      "a query expected to outlast the slice must not start"
+    )
+  }
+
   func testQuerySweepRunsEveryQueryThatFitsAndStopsOnAXUnavailable() {
     let startedAt = Date(timeIntervalSinceReferenceDate: 1_000)
     let deadline = startedAt.addingTimeInterval(Self.flatInteractiveFallbackBudget)
@@ -361,6 +371,52 @@ extension RunnerTests {
       target, options in
       try self.snapshotRaw(target: target, options: options)
     }
+  }
+
+  @MainActor
+  func testCrowdedScreenWithAWideSliderAdoptsItsItemsWithoutReadingEveryElement() throws {
+    // The crowded screen has about 500 elements, so reading each one live outlasts the slice by
+    // minutes. The two buttons sit over the slider as its siblings, so the expected children pin the
+    // fallback's current output and prove XCTest ran the predicate inside a real query.
+    app.launchArguments = ["--agent-device-crowded-screen", "--agent-device-wide-slider"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
+    let hint = CaptureHint(
+      projection: .regular,
+      depth: nil,
+      regularPresentedDepth: nil,
+      interactiveOnly: false,
+      customActions: false
+    )
+    let context = try XCTUnwrap(makeSnapshotTraversalContext(app: app, hint: hint))
+    let unstarted = try recursiveTreeSnapshotAcquisition(context: context, hint: hint, processingDeadline: Date())
+    XCTAssertEqual(
+      unstarted.outcome,
+      .deadlineExhausted,
+      "a candidate query the slice cannot fit is a tier timeout, not a complete tree"
+    )
+    XCTAssertTrue(unstarted.acquisition.truncated)
+
+    let startedAt = Date()
+    let capture = try recursiveTreeSnapshotAcquisition(
+      context: context,
+      hint: hint,
+      processingDeadline: startedAt.addingTimeInterval(treeCaptureSliceBudget)
+    )
+    let elapsed = Date().timeIntervalSince(startedAt)
+    let nodes = capture.acquisition.nodes
+    XCTAssertEqual(capture.outcome, .completed)
+
+    XCTAssertLessThan(elapsed, treeCaptureSliceBudget, "the tree walk must fit its processing slice")
+    let slider = try XCTUnwrap(nodes.first { $0.type == "Slider" && $0.label == "Volume" })
+    XCTAssertEqual(
+      nodes.filter { $0.parentIndex == slider.index }.map { "\($0.type):\($0.label ?? "")" }.sorted(),
+      ["Button:Left", "Button:Right", "StaticText:Left", "StaticText:Right"]
+    )
   }
 #endif
 }
