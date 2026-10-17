@@ -165,53 +165,74 @@ export function createPluginClose(params: {
   return {
     close: () =>
       (closing ??= (async () => {
-        const report: ShutdownReport['plugins'] = { disposed: [], failed: [], pending: [] };
-        let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-        const outcome = await Promise.race([
-          params.close().then(
-            (outcomes) => ({ kind: 'closed' as const, outcomes }),
-            (error: unknown) => ({ kind: 'rejected' as const, error }),
-          ),
-          new Promise<{ kind: 'deadline' }>((resolve) => {
-            deadlineTimer = setTimeout(
-              () => resolve({ kind: 'deadline' }),
-              params.timeoutMs ?? DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS,
-            );
-          }),
-        ]);
-        clearTimeout(deadlineTimer);
+        const outcome = await closeWithinBudget(
+          params.close,
+          params.timeoutMs ?? DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS,
+        );
         if (outcome.kind === 'deadline') {
-          report.pending.push(...activeProviders());
-        } else if (outcome.kind === 'rejected') {
-          for (const provider of activeProviders()) {
-            report.failed.push({
-              provider,
-              step: 'shutdown',
-              error: normalizeError(outcome.error),
-            });
-          }
-        } else {
-          for (const { provider, source, shutdown, dispose } of outcome.outcomes) {
-            for (const [step, result] of [
-              ['shutdown', shutdown],
-              ['dispose', dispose],
-            ] as const) {
-              if (result.status === 'failed') {
-                const { code, message, hint } = result.error;
-                report.failed.push({
-                  provider,
-                  source,
-                  step,
-                  error: { code, message, ...(hint === undefined ? {} : { hint }) },
-                });
-              }
-            }
-            if (shutdown.status === 'ok' && dispose.status === 'ok') report.disposed.push(provider);
-          }
+          return { disposed: [], failed: [], pending: activeProviders() };
         }
-        return report;
+        if (outcome.kind === 'rejected') {
+          const error = normalizeError(outcome.error);
+          return {
+            disposed: [],
+            failed: activeProviders().map((provider) => ({
+              provider,
+              step: 'shutdown' as const,
+              error,
+            })),
+            pending: [],
+          };
+        }
+        return reportCleanupOutcomes(outcome.outcomes);
       })()),
   };
+}
+
+type PluginCloseOutcome =
+  | { kind: 'closed'; outcomes: readonly PluginCleanupOutcome[] }
+  | { kind: 'rejected'; error: unknown }
+  | { kind: 'deadline' };
+
+async function closeWithinBudget(
+  close: () => Promise<readonly PluginCleanupOutcome[]>,
+  timeoutMs: number,
+): Promise<PluginCloseOutcome> {
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const outcome = await Promise.race([
+    close().then(
+      (outcomes): PluginCloseOutcome => ({ kind: 'closed', outcomes }),
+      (error: unknown): PluginCloseOutcome => ({ kind: 'rejected', error }),
+    ),
+    new Promise<PluginCloseOutcome>((resolve) => {
+      deadlineTimer = setTimeout(() => resolve({ kind: 'deadline' }), timeoutMs);
+    }),
+  ]);
+  clearTimeout(deadlineTimer);
+  return outcome;
+}
+
+function reportCleanupOutcomes(
+  outcomes: readonly PluginCleanupOutcome[],
+): ShutdownReport['plugins'] {
+  const report: ShutdownReport['plugins'] = { disposed: [], failed: [], pending: [] };
+  for (const { provider, source, shutdown, dispose } of outcomes) {
+    for (const [step, result] of [
+      ['shutdown', shutdown],
+      ['dispose', dispose],
+    ] as const) {
+      if (result.status !== 'failed') continue;
+      const { code, message, hint } = result.error;
+      report.failed.push({
+        provider,
+        source,
+        step,
+        error: { code, message, ...(hint === undefined ? {} : { hint }) },
+      });
+    }
+    if (shutdown.status === 'ok' && dispose.status === 'ok') report.disposed.push(provider);
+  }
+  return report;
 }
 
 /** Undoes startup work in reverse order; a step that throws never stops the ones before it. */
