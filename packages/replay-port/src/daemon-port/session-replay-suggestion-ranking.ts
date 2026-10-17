@@ -12,7 +12,7 @@ export function rankAndDedupeReplaySuggestions<
     readonly nodeIndex: number;
     readonly basis: ReplayDivergenceSuggestionBasis;
   },
->(entries: Iterable<T>): T[] {
+>(entries: Iterable<T>, recordedRegionNodeIndices: ReadonlySet<number> = new Set()): T[] {
   const byNode = new Map<number, T>();
   for (const entry of entries) {
     const existing = byNode.get(entry.nodeIndex);
@@ -22,7 +22,10 @@ export function rankAndDedupeReplaySuggestions<
   }
   return [...byNode.values()].sort(
     (left, right) =>
-      basisRank(left.basis) - basisRank(right.basis) || left.nodeIndex - right.nodeIndex,
+      basisRank(left.basis) - basisRank(right.basis) ||
+      Number(recordedRegionNodeIndices.has(right.nodeIndex)) -
+        Number(recordedRegionNodeIndices.has(left.nodeIndex)) ||
+      left.nodeIndex - right.nodeIndex,
   );
 }
 

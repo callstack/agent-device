@@ -1,13 +1,19 @@
 import type { DaemonIdentity } from '@agent-device/contracts/client';
 import {
   DAEMON_QUIESCE_REASONS,
+  type DaemonPaths,
   type DaemonQuiesceCensus,
 } from '@agent-device/daemon-contracts/daemon-resolution';
+import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { AppError } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readVersion } from '@agent-device/host-kit/version';
 import type { DaemonClientSettings } from './daemon-client-lifecycle.ts';
-import type { DaemonInfo } from './daemon-client-metadata.ts';
+import {
+  getDaemonMetadataState,
+  resolveDaemonStartupHint,
+  type DaemonInfo,
+} from './daemon-client-metadata.ts';
 import { resolveLocalDaemonCodeIdentity, type DaemonTakeoverCause } from './daemon-launch-spec.ts';
 
 // The four ways an explicit lifecycle stops short of a usable daemon. Callers branch on
@@ -61,8 +67,23 @@ export function daemonNotRunningError(stateDir: string, registered?: DaemonInfo)
     reason: DAEMON_LIFECYCLE_REASONS.notRunning,
     stateDir,
     ...(registered ? { daemon: daemonIdentityOf(registered) } : {}),
-    hint: `Start one with a local agent-device command that uses the daemon (devices, for example), or with ensureDaemon({ stateDir: ${JSON.stringify(stateDir)} }) from the SDK, before attaching.${registered ? ` The registered daemon (pid ${registered.pid}) does not answer; ${daemonStopCommand(stateDir)} clears it.` : ''}`,
+    hint: `Start one with a local agent-device command that uses the daemon (agent-device devices --state-dir ${shellQuoteIfNeeded(stateDir)}, for example), or with ensureDaemon({ stateDir: ${JSON.stringify(stateDir)} }) from the SDK, before attaching.${registered ? ` The registered daemon (pid ${registered.pid}) does not answer; ${daemonStopCommand(stateDir)} clears it.` : ''}`,
   });
+}
+
+export function daemonRetirementUnconfirmedError(
+  retirement: Extract<DaemonRetirementResult, { status: 'retained' }>,
+  paths: DaemonPaths,
+): AppError {
+  return new AppError('COMMAND_FAILED', 'Daemon replacement could not be confirmed.', {
+    reason: 'daemon_retirement_unconfirmed',
+    retirement,
+    hint: retirement.error?.hint ?? resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
+  });
+}
+
+export function isDaemonNotRunningError(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === DAEMON_LIFECYCLE_REASONS.notRunning;
 }
 
 export async function daemonIncompatibleError(params: {

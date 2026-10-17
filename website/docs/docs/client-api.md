@@ -109,7 +109,7 @@ await ensureDaemon({
 const client = createAgentDeviceClient({ stateDir, daemonLifecycle: 'attach' });
 ```
 
-`ensureDaemon()` starts a daemon when none runs. It replaces a daemon that does not match the client only if that daemon holds no work: no request in flight, no session, no repair session and no live lease. A resumable upload still streaming and a host human-control hold that names no lease are not counted, so a replacement can end them. Otherwise it fails and leaves the daemon alone. Two cases retire a daemon without that proof, because it cannot be asked: a registered daemon that answers nothing on any transport, and one that times out on the quiesce request and then fails repeated liveness probes. It returns `{ stateDir, daemon, started }`; `daemon` holds the pid, version and code identity, and no credentials. `onStart` runs when the call started a daemon: `'incompatible'` when it replaced a daemon that agreed to leave, with that daemon as `previous`, and `'missing'` otherwise. A `'missing'` start that also has a `previous` replaced a registered daemon that answered nothing.
+`ensureDaemon()` starts a daemon when none runs. It replaces a daemon that does not match the client only if that daemon holds no work: no request in flight, no session, no repair session and no live lease. A resumable upload still streaming and a host human-control hold that names no lease are not counted, so a replacement can end them. Otherwise it fails and leaves the daemon alone. Two cases retire a daemon without that proof, because it cannot be asked: a registered daemon that answers nothing on any transport, and one that times out on the quiesce request and then fails repeated liveness probes. A daemon that accepted the quiesce request is never signaled while it drains: the call waits up to 60 s for it to exit and clear its registration. One still running after that fails repeated liveness probes and is force-retired when its process is provably a daemon. A daemon that still answers, or whose process cannot be proven to be a daemon, fails the call with `daemon-drain-timeout`; a force retirement that cannot be confirmed fails it with `daemon_retirement_unconfirmed`. It returns `{ stateDir, daemon, started }`; `daemon` holds the pid, version and code identity, and no credentials. `onStart` runs when the call started a daemon: `'incompatible'` when it replaced a daemon that agreed to leave, with that daemon as `previous`, and `'missing'` otherwise. A `'missing'` start that also has a `previous` replaced a registered daemon that answered nothing, or one that accepted the request to leave and was force-retired after outlasting its drain.
 
 These failures carry a typed `error.details.reason`:
 
@@ -118,6 +118,7 @@ These failures carry a typed `error.details.reason`:
 | `daemon-not-running` | An `'attach'` client found no daemon to connect to. Call `ensureDaemon()`. |
 | `daemon-incompatible` | The running daemon does not match the client. `details.daemon` and `details.client` hold both identities. Stop it with `agent-device daemon stop --state-dir <path>`, then call `ensureDaemon()`. A daemon from a release that predates quiescing cannot be asked to leave, so `ensureDaemon()` reports it the same way. |
 | `daemon-busy` | `ensureDaemon()` found an incompatible daemon that still holds work. `details` counts `inFlightRequests`, `sessions`, `repairSessions` and `leases`. Wait for them to end and retry. |
+| `daemon-drain-timeout` | A daemon accepted the request to leave but was still running 60 s later and could not be force-retired, either because it still answers or because its process cannot be proven to be a daemon (an embedded host). It was not signaled. Retry once it has exited, or stop it with `agent-device daemon stop --state-dir <path>`. |
 
 `ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` never starts or stops a local daemon in either mode, and `daemonLifecycle` does not change `daemonTransport` or `daemonServerMode`.
 
@@ -299,6 +300,9 @@ Domain client methods:
 - `client.debug.symbols()`
 - `client.recording.record()` and `client.recording.trace()`
 - `client.settings.update()`
+
+If the daemon returns a missing or non-object lease, or a lease without a non-empty string for `leaseId`, `tenantId`, `runId`, or `backend`, `client.leases.allocate()` and `client.leases.heartbeat()` reject with `COMMAND_FAILED` and `details.reason: "INVALID_LEASE_RESPONSE"`.
+The original daemon response is available in `error.details.response`.
 
 `client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/docs/commands#device-discovery) for the sources.
 

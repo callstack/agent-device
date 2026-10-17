@@ -1,7 +1,11 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonLifecycle, EnsureDaemonOptions } from '@agent-device/contracts/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { daemonContendedError, daemonStopCommand } from './daemon-lifecycle-errors.ts';
+import {
+  daemonContendedError,
+  daemonRetirementUnconfirmedError,
+  daemonStopCommand,
+} from './daemon-lifecycle-errors.ts';
 import { attachActiveSessionAddressHint } from './daemon-client-address-hints.ts';
 import fs from 'node:fs';
 import { processLockHoldsDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
@@ -374,24 +378,25 @@ function daemonRegistrationUnprovenError(
   });
 }
 
+export async function stopDaemonForTakeover(
+  existing: DaemonInfo,
+  paths: DaemonPaths,
+  mode: 'graceful' | 'force' = 'graceful',
+): Promise<DaemonRetirementResult> {
+  return await stopAndRetireDaemon({
+    paths: paths,
+    observed: { pid: existing.pid, startTime: existing.processStartTime ?? null },
+    mode,
+  });
+}
+
 export async function retireDaemonForTakeover(
   existing: DaemonInfo,
   paths: DaemonPaths,
   mode: 'graceful' | 'force' = 'graceful',
 ): Promise<void> {
-  const retirement = await stopAndRetireDaemon({
-    paths: paths,
-    observed: { pid: existing.pid, startTime: existing.processStartTime ?? null },
-    mode,
-  });
-  if (retirement.status === 'retained') {
-    throw new AppError('COMMAND_FAILED', 'Daemon replacement could not be confirmed.', {
-      reason: 'daemon_retirement_unconfirmed',
-      retirement,
-      hint:
-        retirement.error?.hint ?? resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
-    });
-  }
+  const retirement = await stopDaemonForTakeover(existing, paths, mode);
+  if (retirement.status === 'retained') throw daemonRetirementUnconfirmedError(retirement, paths);
 }
 
 /**

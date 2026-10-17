@@ -51,8 +51,7 @@ import {
 import {
   boundedLocalIdentity,
   computeSiblingOrdinal,
-  computeScrollRegionKey,
-  scrollRegionKeysEqual,
+  isInScrollRegion,
   orderByViewportPosition,
 } from '@agent-device/selectors/target-evidence';
 import { resolveRecordedTarget } from '@agent-device/selectors';
@@ -122,7 +121,7 @@ export function classifyReplayTarget(params: {
     (candidate) => computeSiblingOrdinal(nodes, candidate) === recorded.sibling,
   );
   const regionMembers = identitySet.filter((candidate) =>
-    scrollRegionKeysEqual(computeScrollRegionKey(candidate, byIndex), recorded.scrollRegion),
+    isInScrollRegion(candidate, byIndex, recorded.scrollRegion),
   );
   const orderedRegion = orderByViewportPosition(regionMembers);
   const viewportCandidateRef = orderedRegion[recorded.viewportOrder]?.ref;

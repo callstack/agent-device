@@ -1,9 +1,9 @@
-import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonIdentity, EnsureDaemonOptions } from '@agent-device/contracts/client';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { sendToDaemon } from './daemon-client.ts';
+import { isDaemonNotRunningError } from './daemon-lifecycle-errors.ts';
 
 type DaemonTransport = typeof sendToDaemon;
 
@@ -71,8 +71,7 @@ export function withEnsuredDaemon(
     } catch (error) {
       // The daemon this invocation ensured is gone (idle reap, a crash, another client's stop).
       // An attach that finds none sent nothing, so ensuring again and sending once is safe.
-      if (!(error instanceof AppError) || error.details?.reason !== 'daemon-not-running')
-        throw error;
+      if (!isDaemonNotRunningError(error)) throw error;
       // Only the promise this attach relied on is dropped: a concurrent request may already have
       // replaced it with a fresh one.
       if (ensured.get(stateDir) === relied) ensured.delete(stateDir);

@@ -26,7 +26,7 @@ import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { audioProbeDurableResource } from '@agent-device/capture-kit/audio-probe-session-resource';
 import type { SessionStore } from '../../../../core/session-store.ts';
-import { handleSessionObservabilityCommands } from '../../index.ts';
+import { handleSessionObservabilityCommands } from '../session-observability.ts';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 
 async function runAudio(
