@@ -31,7 +31,7 @@ export function commandRequest(
   };
 }
 
-export function responseToRpcResult(
+function responseToRpcResult(
   response: DaemonResponse,
   id: string,
   statusCode: number,
