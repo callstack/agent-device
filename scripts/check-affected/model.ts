@@ -359,16 +359,6 @@ const replayCompatOwnership: OwnershipRule = ({ file }) => {
   return selections;
 };
 
-// The daemon RPC wire ledger (#1432). The wire SOURCE files are the ones that
-// would otherwise slip: editing `packages/kernel/src/contracts.ts` selects
-// vitest-related, but the wire gate reads that file as TEXT rather than
-// importing it, so it is invisible to the module graph Vitest walks. The file
-// list is read from the manifest instead of restated here, so a declaration
-// added under a new file selects the gate the day it is listed.
-//
-// `ledger.json` needs the rule for the second reason `.ad` corpus data does:
-// a non-.ts file under test/ resolves to `format` alone and would fail open.
-// (`scripts/wire-compat/` needs no branch — all of scripts/ already fails open.)
 // The test-file size ratchet (scripts/__tests__/test-file-size-ratchet.test.ts) reads test files
 // as TEXT: it walks the tree and counts lines, so it imports nothing the diff touches and is
 // invisible to the module graph `vitest-related` walks (#3787). A measured file therefore selects
@@ -409,6 +399,16 @@ export function vitestRelatedRunFiles(changedFiles: readonly string[]): string[]
   return files;
 }
 
+// The daemon RPC wire ledger (#1432). The wire SOURCE files are the ones that
+// would otherwise slip: editing `packages/kernel/src/contracts.ts` selects
+// vitest-related, but the wire gate reads that file as TEXT rather than
+// importing it, so it is invisible to the module graph Vitest walks. The file
+// list is read from the manifest instead of restated here, so a declaration
+// added under a new file selects the gate the day it is listed.
+//
+// `ledger.json` needs the rule for the second reason `.ad` corpus data does:
+// a non-.ts file under test/ resolves to `format` alone and would fail open.
+// (`scripts/wire-compat/` needs no branch — all of scripts/ already fails open.)
 const daemonWireCompatOwnership: OwnershipRule = ({ file }) => {
   if (!file.startsWith('test/wire-compat/') && !WIRE_SURFACE_FILES.includes(file)) return [];
   return [
