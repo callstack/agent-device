@@ -4,6 +4,7 @@ import {
   type ScrollEdgeTarget,
 } from '../scroll-edge-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { matchesSnapshotScope, reindexSnapshotNodes } from '@agent-device/contracts/snapshot';
 import { formatRole } from '@agent-device/kernel/snapshot';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 
@@ -115,4 +116,23 @@ export async function captureThrows(scope: string | undefined): Promise<AppError
     }
     throw error;
   }
+}
+
+/**
+ * The scope root's subtree, reindexed, as an Android scoped snapshot returns it: the first node in
+ * document order whose label, value or identifier matches, plus its descendants. Unscoped returns
+ * the whole tree.
+ */
+export function subtreeFor(
+  nodes: readonly SnapshotNode[],
+  scope: string | undefined,
+): SnapshotNode[] {
+  if (scope === undefined) return [...nodes];
+  const root = nodes.find((node) => matchesSnapshotScope(node, scope));
+  if (!root) return [];
+  const inScope = new Set([root.index]);
+  for (const node of nodes) {
+    if (node.parentIndex !== undefined && inScope.has(node.parentIndex)) inScope.add(node.index);
+  }
+  return reindexSnapshotNodes(nodes.filter((node) => inScope.has(node.index)));
 }

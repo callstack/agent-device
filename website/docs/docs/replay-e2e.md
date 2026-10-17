@@ -351,6 +351,8 @@ Text output prints a compact summary of the same fields; `--json`/MCP carry the 
 
 ## Resume a failed replay
 
+During a repair armed with `replay --save-script`, diagnostic reads stay out of the healed script. To keep a corrective read, pass `--record` on that invocation, or `record: true` in that SDK/MCP call. `--record` is per-invocation only: the config key `record` and `AGENT_DEVICE_RECORD` were removed, and a config file or environment still naming them fails with migration guidance. Authored replay observations are retained automatically.
+
 `replay --from <n> --plan-digest <sha256>` resumes **at** plan step `n`, not after it, skipping `1..n-1` without executing them. Both flags come from a divergence report's `resume` field — `from` is the failed step, `planDigest` is the digest of the exact unchanged plan that produced it.
 
 Choose one recovery workflow:

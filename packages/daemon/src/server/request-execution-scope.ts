@@ -276,6 +276,27 @@ export async function createRequestExecutionScope(params: {
       claimRecoveryGateway: params.claimRecoveryGateway,
     });
 
+    let bindingCleanup: Promise<void> | undefined;
+    const disposeBindings = (): Promise<void> => {
+      bindingCleanup ??= (async () => {
+        try {
+          await runtimeBindings?.[Symbol.asyncDispose]();
+        } finally {
+          await claimAdmission?.[Symbol.asyncDispose]();
+        }
+      })();
+      return bindingCleanup;
+    };
+    const runAdmittedAndDispose = async <T>(task: () => Promise<T>): Promise<T> => {
+      try {
+        return await scope.runAdmitted(task);
+      } finally {
+        // The router consumes the same cleanup outcome when it finalizes the response,
+        // preserving a primary command failure over a secondary disposal failure.
+        await Promise.allSettled([disposeBindings()]);
+      }
+    };
+
     const scope: RequestExecutionScope = {
       host: params.host,
       req: scopedReq,
@@ -343,22 +364,16 @@ export async function createRequestExecutionScope(params: {
       runLocked: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
         if (!openWait) {
-          return await requestExecutionLocks.run(async () => await scope.runAdmitted(task));
+          return await requestExecutionLocks.run(async () => await runAdmittedAndDispose(task));
         }
         return await openWait.runWhenDeviceIsUnheld({
           acquireLocks: requestExecutionLocks.run,
-          task: async () => await scope.runAdmitted(task),
+          task: async () => await runAdmittedAndDispose(task),
         });
       },
       // Claims outlive the bindings they guard: release only once no device
       // operation from this request can still run.
-      [Symbol.asyncDispose]: async () => {
-        try {
-          await runtimeBindings?.[Symbol.asyncDispose]();
-        } finally {
-          await claimAdmission?.[Symbol.asyncDispose]();
-        }
-      },
+      [Symbol.asyncDispose]: disposeBindings,
     };
     requestScopeFinalizers.set(scope, (response) => {
       if (shouldRecordRequestEvents) {

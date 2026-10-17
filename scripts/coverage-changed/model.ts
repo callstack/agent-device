@@ -220,7 +220,15 @@ export function computeChangedCoverage(input: ComputeInput): ChangedCoverageResu
   const excludedFiles: ExcludedFileReport[] = [];
 
   for (const diff of input.diffs) {
-    if (diff.deleted || diff.added.length === 0 || !isIncludableSource(diff.path)) continue;
+    // A non-blob side (symlink, gitlink) is not source: its working-tree entry can
+    // resolve to a directory, which no content read may attempt.
+    if (
+      diff.deleted ||
+      !diff.regularFile ||
+      diff.added.length === 0 ||
+      !isIncludableSource(diff.path)
+    )
+      continue;
 
     const cov = input.coverage.get(diff.path);
     if (!cov) {

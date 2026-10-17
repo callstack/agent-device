@@ -1,14 +1,13 @@
 # Agent Device Domain Language
 
-Canonical vocabulary for the automation domain. Use these names in code, tests, issues, and
-architecture notes; implementation decisions and procedures belong in ADRs and task guidance.
+Use these canonical names in code, tests, issues, and ADRs.
 
 ## Language
 
 ### Sessions, targets, and devices
 
 **Platform family**:
-An internal ownership group for related automation platforms: Apple, Android, HarmonyOS, Vega,
+An internal ownership group of related automation platforms: Apple, Android, HarmonyOS, Vega,
 Linux, web.
 
 **Platform leaf**:
@@ -26,8 +25,8 @@ The platform-neutral boundary that reports runtime facts and binds an admitted d
 runtime owner.
 
 **Runtime owner**:
-The one local platform module or provider runtime selected to execute
-behavior for an ownership-qualified device.
+The one local platform module or provider runtime that executes behavior for an
+ownership-qualified device.
 
 **Request binding**:
 A request-lived attachment of cancellation, diagnostics, progress, and admitted context to a
@@ -54,7 +53,7 @@ assets.
 The selected automation destination, such as mobile, TV, or desktop.
 
 **Session**:
-Daemon-owned state for one selected target and its opened app or surface.
+Daemon-owned state for one selected target and its open app or surface.
 
 **Device key**:
 A stable provider-scoped identity for device ownership and contention.
@@ -121,8 +120,8 @@ _Avoid_: New or migrated command behavior
 One route an interaction command takes from a resolved target to device execution.
 
 **Coordinate-first resolved element activation**:
-An Apple interaction that resolves a semantic element and activates its resolved center point
-without a second lookup.
+An Apple interaction that resolves a semantic element and activates its center point without
+a second lookup.
 
 **Parent-owned touch point**:
 A point that keeps the selected parent's identity while avoiding independently interactive
@@ -166,8 +165,7 @@ An optional post-action observation that waits for a quiet UI and diffs against 
 tree.
 
 **Resolution disclosure**:
-Bounded response evidence describing how an interaction target resolved, issuing no new actionable
-refs.
+Bounded response evidence of how an interaction target resolved; it issues no new actionable refs.
 
 ### Gestures and touch
 
@@ -208,8 +206,8 @@ traversal depth kept apart from regular presented depth, and narrowing only wher
 prove it complete.
 
 **Regular presented-depth frontier**:
-The acquisition boundary for an unscoped regular snapshot, measured against regular presented depth
-after structural wrappers collapse.
+The acquisition boundary for an unscoped regular snapshot, measured in regular presented depth after
+structural wrappers collapse.
 
 **Snapshot eligibility**:
 Membership in a presented snapshot projection, independent of current hittability.
@@ -220,7 +218,7 @@ backend: viewport and scroll-container clipping, ancestor projection, scroll hin
 depth. Platform differences enter as a fold policy, never as a backend exception.
 
 **Presented node**:
-A wire-facing snapshot value produced at the presentation boundary.
+A wire-facing snapshot value made at the presentation boundary.
 
 **Snapshot capture plan**:
 An ordered set of capture backends under one shared wall-clock budget.
@@ -289,7 +287,22 @@ A provider runtime mapping a cloud-owned Appium or WebDriver session into agent-
 leases, runtime behavior, artifacts, and release.
 
 **Cloud artifact**:
-Provider-hosted session output: video, automation logs, device logs, or dashboard links.
+Provider-hosted session output: video, automation or device logs, or dashboard links.
 
 **Daemon artifact type**:
 An optional semantic category from the owner of a daemon-managed downloadable artifact.
+
+**Provider-backed integration scenario**:
+A device-free test on the real daemon request path that fakes only external device and host tools.
+
+**Provider transcript**:
+An exact record of external provider calls, to verify command translation.
+
+**Scenario transcript**:
+A command-level flow of user-visible behavior through daemon commands.
+
+**In-process provider scenario harness**:
+A runner that calls the daemon request handler with no HTTP listener.
+
+**HTTP contract test**:
+A narrow test of JSON-RPC transport, authentication, and response finalization.

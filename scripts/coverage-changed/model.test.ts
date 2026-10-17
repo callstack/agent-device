@@ -86,7 +86,12 @@ const coverage = parseLcov(
 );
 
 function diff(path: string, added: number[], deleted = false): ChangedFileDiff {
-  return { path, added, deleted };
+  return { path, added, deleted, regularFile: true };
+}
+
+/** A changed path whose new side is not a blob (symlink or gitlink); `run.ts` never reads its bytes. */
+function nonBlobDiff(path: string, added: number[]): ChangedFileDiff {
+  return { path, added, deleted: false, regularFile: false };
 }
 
 test('gate fails when changed-line coverage is below threshold and lists offenders', () => {
@@ -156,6 +161,31 @@ test('waiver forces a pass but still reports the numbers', () => {
   assert.equal(result.waived, true);
   assert.equal(result.passed, true);
   assert.equal(result.pct, 66.67);
+});
+
+test('an includable path whose new side is a symlink or gitlink is skipped, not read', () => {
+  // A committed symlink like `tools/helper-tests/Sources -> ../helper/Sources` shows in the
+  // diff as added text (its target), so it reaches this loop by path shape. Its working-tree
+  // entry resolves to a directory, so a content read dies on EISDIR; reading the
+  // object mode is what keeps the file out of both the scored and the excluded tally.
+  const readPaths: string[] = [];
+  const result = computeChangedCoverage({
+    diffs: [
+      nonBlobDiff('src/helper-tests/index.ts', [1]),
+      nonBlobDiff('vendor/lib', [1]),
+      diff('src/covered.ts', [1, 2, 3]),
+    ],
+    coverage,
+    fileLines: (path) => {
+      readPaths.push(path);
+      return null;
+    },
+  });
+  assert.deepEqual(readPaths, ['src/covered.ts']);
+  // 2/3 = 66.67% < 70: the skip leaves the verdict exactly what the scored file alone earns.
+  assert.equal(result.totalLines, 3);
+  assert.equal(result.passed, false);
+  assert.deepEqual(result.excluded.files, []);
 });
 
 test('includable source absent from lcov counts as excluded-path code lines', () => {

@@ -3,7 +3,7 @@ import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { HEAL_COMPLETE_SENTINEL, SessionScriptWriter } from '../session-script-writer.ts';
-import { recordActionEntry } from '../session-action-recorder.ts';
+import { isInteractiveObservation, recordActionEntry } from '../session-action-recorder.ts';
 import {
   makeAuthoringSession,
   makeRepairArmedSession,
@@ -119,6 +119,38 @@ test('write() carries a recorded wait --raw through to the script and back', () 
   expect(parsed.actions[0]?.flags.snapshotRaw).toBe(true);
 });
 
+test.each(['authored', 'explicit-record'] as const)(
+  'healed output preserves a snapshot with %s publication intent',
+  (intent) => {
+    const root = mkdtempForTestSync('agent-device-script-writer-retained-snapshot-');
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+    const session = makeRepairCompleteSession('default');
+    const req = {
+      token: 't',
+      session: 'default',
+      command: 'snapshot',
+      positionals: [],
+      flags:
+        intent === 'explicit-record'
+          ? {
+              record: true,
+              snapshotInteractiveOnly: true,
+            }
+          : { snapshotInteractiveOnly: true },
+      ...(intent === 'authored' ? { internal: { replayPlanStep: true } } : {}),
+    };
+    recordActionEntry(session, {
+      command: req.command,
+      positionals: req.positionals,
+      flags: req.flags,
+      interactiveObservation: isInteractiveObservation(req),
+    });
+    const { parsed } = writeAndParse(writer, session);
+    expect(parsed.actions.map((entry) => entry.command)).toEqual(['snapshot']);
+    expect(parsed.actions[0]?.flags.snapshotInteractiveOnly).toBe(true);
+  },
+);
+
 test('a boundary-sliced script still strips diagnostic snapshot actions', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-snapshot-strip-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));
@@ -127,6 +159,7 @@ test('a boundary-sliced script still strips diagnostic snapshot actions', () => 
     actions: [
       action({ command: 'open', positionals: ['Demo'] }),
       action({ command: 'snapshot', positionals: [] }),
+      action({ command: 'snapshot', positionals: [], flags: { record: true } }),
       action({ command: 'click', positionals: ['label="Save"'] }),
     ],
   });
@@ -834,3 +867,32 @@ test('#1533: an ARMED authoring recording is untouched by the abort gate', () =>
   const { parsed } = writeAndParse(writer, session);
   expect(parsed.actions.map((a) => a.command)).toEqual(['click']);
 });
+
+test.each([
+  { record: undefined, replayPlanStep: false },
+  { record: true, replayPlanStep: false },
+  { record: true, replayPlanStep: true },
+])(
+  'ordinary authoring retains only authored snapshots with record=$record and replayPlanStep=$replayPlanStep',
+  ({ record, replayPlanStep }) => {
+    const root = mkdtempForTestSync('agent-device-script-writer-authoring-snapshot-');
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+    const session = makeAuthoringSession('default', {
+      actions: [action({ command: 'open', positionals: ['Demo'] })],
+    });
+    recordActionEntry(session, {
+      command: 'snapshot',
+      positionals: [],
+      flags: {
+        record,
+        snapshotInteractiveOnly: true,
+      },
+      interactiveObservation: !replayPlanStep,
+    });
+
+    const { parsed } = writeAndParse(writer, session);
+    expect(parsed.actions.map((entry) => entry.command)).toEqual(
+      replayPlanStep ? ['open', 'snapshot'] : ['open'],
+    );
+  },
+);

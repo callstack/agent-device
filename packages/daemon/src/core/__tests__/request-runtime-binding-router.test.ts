@@ -1,5 +1,11 @@
 import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
+import {
+  clearRequestCanceled,
+  markRequestCanceled,
+  throwIfRequestCanceled,
+} from '@agent-device/host-kit/request';
+import { AppError } from '@agent-device/kernel/errors';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type DeviceBinding,
@@ -18,6 +24,7 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { getLeaseRegistryExecutionLocks } from '../../server/request-execution-scope.ts';
 
 test('request binding disposes once after response while adopted app-log handle survives', async () => {
   const runtime = makeGateway();
@@ -52,8 +59,81 @@ test('primary request failure survives a rejecting binding disposal', async () =
   expect(phases).toContain('request_binding_cleanup_failed');
 });
 
+for (const outcome of ['success', 'throw', 'cancellation'] as const) {
+  for (const key of ['session', 'device'] as const) {
+    test(`binding cleanup holds the ${key} execution lock after ${outcome}`, async () => {
+      const runtime = makeGateway();
+      const { handler, sessionStore, leaseRegistry } = makeHandler(runtime.gateway);
+      const current = sessionStore.get('session')!;
+      sessionStore.publish('other-session', { ...current, name: 'other-session', actions: [] });
+      const requestId = `cleanup-${key}-${outcome}`;
+      let markCleanupStarted: () => void = () => {};
+      let finishCleanup: () => void = () => {};
+      const cleanupStarted = new Promise<void>((resolve) => {
+        markCleanupStarted = resolve;
+      });
+      const cleanupFinished = new Promise<void>((resolve) => {
+        finishCleanup = resolve;
+      });
+      runtime.bindingDispose.mockImplementationOnce(async () => {
+        markCleanupStarted();
+        await cleanupFinished;
+      });
+      let doctorCalls = 0;
+      vi.spyOn(runtime.operations, 'appLogDoctor').mockImplementation(async () => {
+        if (doctorCalls++ > 0) return { backend: 'android', checks: {}, notes: [] };
+        if (outcome === 'throw') throw new AppError('COMMAND_FAILED', 'doctor failed');
+        if (outcome === 'cancellation') {
+          markRequestCanceled(requestId);
+          throwIfRequestCanceled(requestId);
+        }
+        return { backend: 'android', checks: {}, notes: [] };
+      });
+      const first = handler({ ...request(['doctor']), meta: { requestId } });
+      await cleanupStarted;
+      const locks = getLeaseRegistryExecutionLocks(leaseRegistry);
+      const sharedKey = key === 'session' ? 'session:session' : 'device:emulator-5554';
+      let markQueued: (entry: { previous: Promise<unknown> | undefined }) => void = () => {};
+      const queued = new Promise<{ previous: Promise<unknown> | undefined }>((resolve) => {
+        markQueued = resolve;
+      });
+      const setLock = locks.set.bind(locks);
+      const queueSpy = vi.spyOn(locks, 'set').mockImplementation((lockKey, completion) => {
+        if (lockKey === sharedKey) markQueued({ previous: locks.get(lockKey) });
+        return setLock(lockKey, completion);
+      });
+      const second = handler({
+        ...request(['doctor']),
+        session: key === 'session' ? 'session' : 'other-session',
+        meta: { requestId: `${requestId}-queued` },
+      });
+      try {
+        expect((await queued).previous).toBeDefined();
+        expect(runtime.bind).toHaveBeenCalledTimes(1);
+      } finally {
+        queueSpy.mockRestore();
+        finishCleanup();
+        clearRequestCanceled(requestId);
+        await Promise.all([first, second]);
+      }
+      const [firstResponse, secondResponse] = await Promise.all([first, second]);
+      expect(firstResponse.ok).toBe(outcome === 'success');
+      if (outcome === 'cancellation') {
+        expect(firstResponse).toMatchObject({
+          ok: false,
+          error: { code: 'COMMAND_FAILED', details: { reason: 'request_canceled' } },
+        });
+      }
+      expect(secondResponse.ok).toBe(true);
+      expect(runtime.bind).toHaveBeenCalledTimes(2);
+      expect(runtime.bindingDispose).toHaveBeenCalledTimes(2);
+    });
+  }
+}
+
 function makeHandler(gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>) {
   const sessionStore = makeSessionStore('request-runtime-binding-router-');
+  const leaseRegistry = new LeaseRegistry();
   sessionStore.publish('session', {
     name: 'session',
     device: { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
@@ -63,13 +143,14 @@ function makeHandler(gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>) {
   });
   return {
     sessionStore,
+    leaseRegistry,
     handler: createRequestHandler({
       host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       logPath: '/tmp/daemon.log',
       token: 'token',
       sessionStore,
-      leaseRegistry: new LeaseRegistry(),
+      leaseRegistry,
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
       deviceRuntimeGateway: gateway,
       trackDownloadableArtifact: () => 'artifact',
@@ -183,7 +264,7 @@ function makeGateway(disposeError?: Error) {
     bind,
     shutdown: async () => {},
   };
-  return { gateway, bind, bindingDispose, forceCleanup, handle };
+  return { gateway, bind, bindingDispose, forceCleanup, handle, operations };
 }
 
 const unavailableRecording = Object.freeze({
