@@ -40,7 +40,6 @@ export async function handleSessionAppDeploymentCommand(params: {
   }
   if (req.command === 'install_source') {
     return await handleInstallFromSourceDeploymentCommand({
-      host,
       req,
       sessionName,
       sessionStore,
