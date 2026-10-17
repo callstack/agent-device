@@ -15,7 +15,7 @@ Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
 2. `macOsSurfaceBackend(surface, appBackend)` in `packages/contracts/src/session-surface.ts` owns the single routing decision.
    With `native`, the `app` surface is helper-routed exactly like `frontmost-app`, `desktop`, and `menubar`.
 3. A native daemon never starts XCTest on macOS.
-   For every macOS session, `macOsNativeBackendFacts` refuses runner-only operations at admission:
+   For every macOS session, `macOsNativeBackendFacts` refuses every runner-only operation at admission:
    - Recording.
    - `prepare`.
    - `back`.
@@ -67,7 +67,7 @@ Drags and WKWebView button clicks arrived only after private focus-without-raise
 Calculator and Electron accepted background keyboard events.
 
 A dropped post still reports success.
-An unverified event fallback could therefore report success when no action occurred.
+An unverified event fallback would therefore report success when no action occurred.
 Pointer actions have no event fallback until an event path verifies its outcome.
 
 **Target resolution.**
@@ -116,4 +116,4 @@ A persistent pointer would require a long-lived helper.
 - **Native by default.**
   Accessibility cannot express drags, holds, or double-clicks.
   Apps with sparse accessibility trees still require the runner.
-  Default changes require coverage evidence across app frameworks.
+  Defaults change only with coverage evidence across app frameworks.
