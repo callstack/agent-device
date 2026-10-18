@@ -30,7 +30,8 @@ type RefFrameFields = Readonly<{
 
 /**
  * One value, replaced whole by the transitions below. The class is not exported, so nothing
- * outside this file can construct, edit, or derive a frame; its ECMAScript private field also
+ * outside this file can construct it directly or edit its private fields; frame construction
+ * and derivation go through the exported factories below. Its ECMAScript private field also
  * makes the exported `RefFrame` nominal, so no object literal can stand in for one.
  */
 class SessionRefFrame {

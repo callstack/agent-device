@@ -25,7 +25,9 @@ The ref-frame vocabulary is promoted into `CONTEXT.md`.
   The frame is one value on `SessionState`.
   A transition replaces the frame whole and never edits it in place.
   The frame type is nominal (`#`-private fields).
-  Thus, no module outside `packages/daemon/src/core/ref-frame-slot.ts` can construct a frame, edit a frame, or derive a frame from an existing frame.
+  Thus, no module outside `packages/daemon/src/core/ref-frame-slot.ts` can construct the frame class directly, access its private fields, or edit a frame in place.
+  Callers construct and derive frames only through the exported factory APIs `issuedRefFrame` and `expiredRefFrame`.
+  `packages/daemon/src/core/ref-frame.ts` owns the transitions and admission that call these factories.
   The type cannot judge a whole frame that moves unchanged, for example when code clears the field or assigns the frame of another session.
   The field-owner gate still covers these moves.
 - A complete snapshot activates an `all` frame.
