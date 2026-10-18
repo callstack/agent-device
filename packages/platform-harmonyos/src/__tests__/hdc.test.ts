@@ -143,6 +143,8 @@ test('ensureHarmonyToolchainPathConfigured defaults to the host environment', as
   const toolchains = await seedDirectToolchain(mkdtempForTestSync('agent-device-hdc-host-'));
   vi.stubEnv('PATH', '/usr/bin');
   vi.stubEnv('HDC_SDK_PATH', toolchains);
+  vi.stubEnv('DEVECO_SDK_HOME', undefined);
+  vi.stubEnv('HARMONYOS_COMMAND_LINE_TOOLS', undefined);
 
   await ensureHarmonyToolchainPathConfigured();
 
