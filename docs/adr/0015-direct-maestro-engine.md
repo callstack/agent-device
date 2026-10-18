@@ -159,7 +159,7 @@ That oracle replaced the original hand-typed parser fixture.
    The pinned parser is SHA-verified at regeneration.
    Layer 1 captures each parse.
    The deterministic verifier replays that capture against our engine.
-   The verifier classifies every flow as identical / both-reject / we-reject / mismatch.
+   The verifier classifies every flow as identical / both-reject / we-reject / mismatch / we-are-lenient.
    Each non-identical outcome must be a declared, on-the-record divergence.
 2. Layer 2 reads upstream constants (retry cap, animation-wait threshold/timeout, erase cap) straight from the pinned bytecode.
    It also reads parser-observed defaults (swipe duration) straight from the pinned bytecode.
