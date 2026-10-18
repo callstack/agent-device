@@ -5,10 +5,8 @@ import {
   resetAndroidAdbShellProtocolProbes,
 } from '../adb-shell-protocol.ts';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
-import { bindAndroidAdbHostStub } from '../adb-host.fixtures.ts';
 
 beforeEach(() => {
-  bindAndroidAdbHostStub();
   resetAndroidAdbShellProtocolProbes();
 });
 
