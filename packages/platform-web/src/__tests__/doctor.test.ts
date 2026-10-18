@@ -42,7 +42,10 @@ test('web doctor lifecycle check reports live managed Chrome process count', asy
       ],
     } satisfies AgentBrowserProcessSummary);
 
-    const check = await webBrowserLifecycleCheck(stateDir);
+    const check = await webBrowserLifecycleCheck(stateDir, {
+      env: process.env,
+      cwd: process.cwd(),
+    });
 
     assert.equal(check.id, 'web-agent-browser-processes');
     assert.equal(check.status, 'info');
@@ -57,7 +60,10 @@ test('web doctor lifecycle check reports live managed Chrome process count', asy
 test('web doctor lifecycle check stays informational when managed backend is missing', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-doctor-missing-');
   try {
-    const check = await webBrowserLifecycleCheck(stateDir);
+    const check = await webBrowserLifecycleCheck(stateDir, {
+      env: process.env,
+      cwd: process.cwd(),
+    });
 
     assert.equal(check.status, 'info');
     assert.match(check.summary ?? '', /not installed/);

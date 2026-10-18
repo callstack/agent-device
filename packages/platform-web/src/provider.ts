@@ -1,5 +1,6 @@
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { SessionSurface } from '@agent-device/contracts/session';
+import { AppError } from '@agent-device/kernel/errors';
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type {
@@ -7,7 +8,6 @@ import type {
   BackendDumpNetworkResult,
 } from '@agent-device/contracts/backend-diagnostics';
 import type { AudioProbeResult } from '@agent-device/contracts/audio-probe-result';
-import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 
 export type WebOpenOptions = {
   url?: string;
@@ -72,9 +72,32 @@ export type WebProvider = {
   probeAudio?(options: WebAudioProbeOptions): Promise<WebAudioProbeResult>;
 };
 
-const localWebProvider: WebProvider = createAgentBrowserWebProvider();
+/**
+ * The un-composed fallback: a request that reaches a web device without a composed provider is a
+ * composition bug, so it fails closed instead of borrowing a host it was never given (#3794).
+ * Optional capabilities stay absent, exactly as a provider that lacks them reports them.
+ */
+function uncomposedWebProviderFailure(): Promise<never> {
+  return Promise.reject(
+    new AppError('COMMAND_FAILED', 'The web provider is not composed for this request.', {
+      reason: 'web-provider-missing',
+    }),
+  );
+}
 
-const webProviderScope = createScopedProvider(localWebProvider);
+const uncomposedWebProvider: WebProvider = {
+  open: () => uncomposedWebProviderFailure(),
+  close: () => uncomposedWebProviderFailure(),
+  snapshot: () => uncomposedWebProviderFailure(),
+  screenshot: () => uncomposedWebProviderFailure(),
+  setViewport: () => uncomposedWebProviderFailure(),
+  click: () => uncomposedWebProviderFailure(),
+  fill: () => uncomposedWebProviderFailure(),
+  typeText: () => uncomposedWebProviderFailure(),
+  scroll: () => uncomposedWebProviderFailure(),
+};
+
+const webProviderScope = createScopedProvider(uncomposedWebProvider);
 
 export function resolveWebProvider(provider?: WebProvider): WebProvider {
   return webProviderScope.resolve(provider);

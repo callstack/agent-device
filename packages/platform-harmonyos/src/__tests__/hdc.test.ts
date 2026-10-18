@@ -144,7 +144,7 @@ test('ensureHarmonyToolchainPathConfigured defaults to the host environment', as
   vi.stubEnv('PATH', '/usr/bin');
   vi.stubEnv('HDC_SDK_PATH', toolchains);
 
-  await ensureHarmonyToolchainPathConfigured();
+  await ensureHarmonyToolchainPathConfigured(process.env);
 
   assert.equal(process.env.PATH, [toolchains, '/usr/bin'].join(path.delimiter));
 });

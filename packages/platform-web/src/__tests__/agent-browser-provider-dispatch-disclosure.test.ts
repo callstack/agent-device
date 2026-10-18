@@ -134,6 +134,7 @@ async function scrollRefusedOnThirdStep(): Promise<void> {
 /** The managed backend is not installed, so the CLI is never spawned. */
 async function openWithMissingBackend(): Promise<void> {
   const provider = createAgentBrowserWebProvider({
+    host: { env: process.env, cwd: process.cwd() },
     stateDir: mkdtempForTestSync('agent-device-web-disclosure-missing-'),
   });
   await provider.open('https://example.test');

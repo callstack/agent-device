@@ -442,7 +442,13 @@ async function withWebProvider(
   const stateDir = mkdtempForTestSync('agent-device-web-provider-rects-');
   try {
     installFakeManagedAgentBrowser(stateDir);
-    await testFn(createAgentBrowserWebProvider({ stateDir, session: 'web-session' }));
+    await testFn(
+      createAgentBrowserWebProvider({
+        host: { env: process.env, cwd: process.cwd() },
+        stateDir,
+        session: 'web-session',
+      }),
+    );
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

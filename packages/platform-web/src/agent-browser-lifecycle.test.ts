@@ -55,7 +55,10 @@ test('managed Chrome launch args include a stable agent-device ownership marker 
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     const marker = agentBrowserChromeLaunchMarker(status);
 
     assert.match(marker, /^--agent-device-managed-web=[a-f0-9]{16}$/);
@@ -100,7 +103,10 @@ test('ownership detection accepts only Chrome-like processes with managed marker
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     const marker = agentBrowserChromeLaunchMarker(status);
     const managedChrome = path.join(
       status.homeDir,
@@ -146,8 +152,12 @@ test('cleanup skips reaping when the daemon reports open web sessions', async ()
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
+      env: process.env,
       openWebSessionNames: ['default-web'],
     });
 
@@ -165,11 +175,16 @@ test('cleanup skips reaping when managed browser socket activity is recent', asy
   process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '60000';
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     fs.mkdirSync(status.socketDir, { recursive: true });
     fs.writeFileSync(path.join(status.socketDir, 'agent-browser.sock'), '');
 
-    const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup');
+    const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
+      env: process.env,
+    });
 
     assert.equal(result.skipped?.reason, 'recent-browser-activity');
     assert.equal(mockRunCmd.mock.calls.length, 0);
@@ -189,11 +204,16 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
   process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '60000';
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     fs.mkdirSync(status.socketDir, { recursive: true });
     mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
 
-    const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup');
+    const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
+      env: process.env,
+    });
 
     assert.equal(result.skipped, undefined);
     assert.equal(mockRunCmd.mock.calls.length, 0);
@@ -243,8 +263,12 @@ test('cleanup reads recorded browser identities without reconstructing a process
 
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     const result = await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', {
+      env: process.env,
       ownedProcessRecords,
     });
 
@@ -266,7 +290,10 @@ test('process summary reports only conservatively owned managed Chrome processes
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     const marker = agentBrowserChromeLaunchMarker(status);
     const summary = summarizeAgentBrowserProcesses(
       [
@@ -292,7 +319,10 @@ test('records the managed browser daemon and Chrome fleet at the spawn owner', a
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     const marker = agentBrowserChromeLaunchMarker(status);
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
     mockRunCmd.mockResolvedValue({
@@ -331,7 +361,10 @@ test('recording the fleet owns the recordable agent-browser daemon', async () =>
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     const command = `${process.execPath} ${status.entryScript}`;
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
     mockProcessList([`  101     1 ${command}`]);
@@ -370,7 +403,10 @@ test('a fleet left running by a previous version stays owned after the pin moves
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     const { previous, daemonCommand, markedChromeCommand, homeChromeCommand } =
       installPreviousVersionFleet(stateDir);
     assert.notEqual(previous.installDir, status.installDir);
@@ -408,7 +444,10 @@ test('a previous version fleet from another state dir is not claimed', async () 
   const otherStateDir = mkdtempForTestSync('agent-device-web-life-other-');
   try {
     installFakeManagedAgentBrowser(stateDir);
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     const { daemonCommand, markedChromeCommand } = installPreviousVersionFleet(otherStateDir);
     const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
     mockProcessList([`  101     1 ${daemonCommand}`, `  201     1 ${markedChromeCommand}`]);

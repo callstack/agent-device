@@ -8,7 +8,6 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 import { runCmd, whichCmd } from '@agent-device/host-kit/command';
-import { resetInputToolCache } from '../linux-env.ts';
 import { fillLinux, pressLinux, scrollLinux, typeLinux, sendKey } from '../input-actions.ts';
 
 bindTestCommandHost();
@@ -23,7 +22,6 @@ function setupXdotool(): void {
   Object.defineProperty(process, 'platform', { value: 'linux' });
   process.env['XDG_SESSION_TYPE'] = 'x11';
   delete process.env['WAYLAND_DISPLAY'];
-  resetInputToolCache();
   mockWhichCmd.mockImplementation(async (cmd) => cmd === 'xdotool');
   mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 }
@@ -32,7 +30,6 @@ function setupYdotool(): void {
   Object.defineProperty(process, 'platform', { value: 'linux' });
   process.env['XDG_SESSION_TYPE'] = 'wayland';
   process.env['WAYLAND_DISPLAY'] = 'wayland-0';
-  resetInputToolCache();
   mockWhichCmd.mockImplementation(async (cmd) => cmd === 'ydotool');
   mockRunCmd.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 }
@@ -45,7 +42,6 @@ function calls(): Array<[string, string[]]> {
 beforeEach(() => {
   mockRunCmd.mockReset();
   mockWhichCmd.mockReset();
-  resetInputToolCache();
 });
 
 afterAll(() => {

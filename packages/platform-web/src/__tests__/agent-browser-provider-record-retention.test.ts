@@ -151,6 +151,7 @@ async function withFleetRecordStore(
   store.replace({ kind: 'daemon' }, [seed]);
   await runScenario({
     provider: createAgentBrowserWebProvider({
+      host: { env: process.env, cwd: process.cwd() },
       session: 'web-session',
       stateDir,
       openWebSessionNames: () => ['web-session'],

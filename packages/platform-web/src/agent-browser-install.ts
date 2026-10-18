@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { runCmd, commandHostEnvironment } from '@agent-device/host-kit/command';
+import { runCmd } from '@agent-device/host-kit/command';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   ensureHostDirectorySync,
   hostFileStatSync,
@@ -20,11 +21,12 @@ export async function installManagedAgentBrowserPackage(params: {
   packageRoot: string;
   packageSpec: string;
   timeoutMs: number;
+  env: Readonly<EnvMap>;
 }): Promise<void> {
   ensureHostDirectorySync(params.packageRoot);
   // `--no-global` keeps an ambient `npm_config_global` from redirecting the
   // install out of the managed prefix, where the backend entry would be missed.
-  const npm = npmCommand([
+  const npm = npmCommand(params.env, [
     'install',
     '--prefix',
     params.packageRoot,
@@ -35,7 +37,7 @@ export async function installManagedAgentBrowserPackage(params: {
     params.packageSpec,
   ]);
   await runCmd(npm.command, npm.args, {
-    env: commandHostEnvironment().env,
+    env: params.env,
     timeoutMs: params.timeoutMs,
   });
 }
@@ -66,9 +68,9 @@ export function writeManagedAgentBrowserManifest(params: {
  * without a shell since the CVE-2024-27980 fix, so its JS entry runs under the
  * current Node runtime instead (#2022).
  */
-function npmCommand(args: string[]): { command: string; args: string[] } {
+function npmCommand(env: Readonly<EnvMap>, args: string[]): { command: string; args: string[] } {
   if (hostPlatform() !== 'win32') return { command: 'npm', args };
-  const npmCliScript = resolveWindowsNpmCliScript(commandHostEnvironment().env);
+  const npmCliScript = resolveWindowsNpmCliScript(env);
   if (!npmCliScript) {
     throw new AppError('TOOL_MISSING', 'npm not found in PATH', {
       nodeExecPath: hostNodeExecutablePath(),

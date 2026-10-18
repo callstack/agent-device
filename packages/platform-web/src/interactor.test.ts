@@ -44,7 +44,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
   });
 
   const snapshot = await withWebProvider(provider, async () => {
-    const interactor = await createWebInteractor();
+    const interactor = await createWebInteractor({ env: process.env, cwd: process.cwd() });
     await interactor.open('https://example.test');
     await interactor.open('app-shell', { url: 'https://example.test/deep' });
     await interactor.close('app-shell');
@@ -81,7 +81,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
 
 test('web interactor reports hover unsupported when the provider lacks it', async () => {
   await withWebProvider(makeWebProvider(), async () => {
-    const interactor = await createWebInteractor();
+    const interactor = await createWebInteractor({ env: process.env, cwd: process.cwd() });
     assert.equal(interactor.tapRef, undefined);
     assert.equal(interactor.hover, undefined);
     assert.equal(interactor.hoverRef, undefined);
@@ -93,14 +93,14 @@ test('web interactor reports hover unsupported when the provider lacks it', asyn
 // web session must carry no fused double-click of its own.
 test('web interactor carries no fused double-click mechanic', async () => {
   await withWebProvider(makeWebProvider(), async () => {
-    const interactor = await createWebInteractor();
+    const interactor = await createWebInteractor({ env: process.env, cwd: process.cwd() });
 
     assert.equal(interactor.doubleTap, undefined);
   });
 });
 
 test('web interactor reports unsupported operations explicitly', async () => {
-  const interactor = await createWebInteractor();
+  const interactor = await createWebInteractor({ env: process.env, cwd: process.cwd() });
 
   await assert.rejects(
     () => interactor.back(),

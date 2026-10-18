@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { runCmd, type ExecResult, commandHostEnvironment } from '@agent-device/host-kit/command';
+import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
 import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import {
   createHostDirectoryLinkSync,
@@ -19,6 +19,7 @@ import {
   readProcessStartTime,
 } from '@agent-device/host-kit/process';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { ManagedWebBackendStatus } from '@agent-device/contracts/managed-web-backend';
 import {
   installManagedAgentBrowserPackage,
@@ -40,6 +41,8 @@ const DOCTOR_TIMEOUT_MS = 60_000;
 export type AgentBrowserToolStatus = ManagedWebBackendStatus;
 
 export type ManagedAgentBrowserRunOptions = {
+  /** The caller's host: its environment selects the state dir and seeds the backend env. */
+  host: HostEnvironment;
   stateDir?: string;
   timeoutMs: number;
   allowFailure?: boolean;
@@ -57,12 +60,13 @@ export async function runManagedAgentBrowser(
   args: readonly string[],
   options: ManagedAgentBrowserRunOptions,
 ): Promise<ExecResult> {
-  const status = getManagedAgentBrowserStatus({ stateDir: options.stateDir });
+  const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
   if (!status.installed) throw missingManagedToolError(status);
   return await spawnManagedAgentBrowser(status, args, options);
 }
 
 export async function setupManagedAgentBrowser(options: {
+  host: HostEnvironment;
   stateDir?: string;
 }): Promise<AgentBrowserToolStatus> {
   const status = getManagedAgentBrowserStatus(options);
@@ -89,12 +93,17 @@ export async function setupManagedAgentBrowser(options: {
         packageRoot: path.join(freshStatus.installDir, 'package'),
         packageSpec: `${AGENT_BROWSER}@${MANAGED_AGENT_BROWSER_VERSION}`,
         timeoutMs: SETUP_TIMEOUT_MS,
+        env: options.host.env,
       });
       // The backend entry only exists once npm has written the package.
       const installedStatus = getManagedAgentBrowserStatus(options);
       if (!installedStatus.entryScript) throw unusableInstallError(installedStatus);
-      await spawnManagedAgentBrowser(installedStatus, ['install'], { timeoutMs: SETUP_TIMEOUT_MS });
+      await spawnManagedAgentBrowser(installedStatus, ['install'], {
+        host: options.host,
+        timeoutMs: SETUP_TIMEOUT_MS,
+      });
       await spawnManagedAgentBrowser(installedStatus, ['doctor', '--offline', '--quick'], {
+        host: options.host,
         timeoutMs: DOCTOR_TIMEOUT_MS,
       });
       writeManagedAgentBrowserManifest({
@@ -108,6 +117,7 @@ export async function setupManagedAgentBrowser(options: {
 }
 
 export async function doctorManagedAgentBrowser(options: {
+  host: HostEnvironment;
   stateDir?: string;
 }): Promise<{ status: AgentBrowserToolStatus; stdout: string; stderr: string; exitCode: number }> {
   const status = getManagedAgentBrowserStatus(options);
@@ -115,6 +125,7 @@ export async function doctorManagedAgentBrowser(options: {
     throw missingManagedToolError(status);
   }
   const result = await spawnManagedAgentBrowser(status, ['doctor', '--offline', '--quick'], {
+    host: options.host,
     timeoutMs: DOCTOR_TIMEOUT_MS,
     allowFailure: true,
   });
@@ -122,10 +133,11 @@ export async function doctorManagedAgentBrowser(options: {
 }
 
 export function getManagedAgentBrowserStatus(options: {
+  host: HostEnvironment;
   stateDir?: string;
 }): AgentBrowserToolStatus {
   const stateDir =
-    options.stateDir ?? commandHostEnvironment().env.AGENT_DEVICE_STATE_DIR ?? defaultStateDir();
+    options.stateDir ?? options.host.env.AGENT_DEVICE_STATE_DIR ?? defaultStateDir(options.host);
   const { installDir, homeDir, runtimeHomeDir, socketDir } = managedInstallPaths(
     stateDir,
     MANAGED_AGENT_BROWSER_VERSION,
@@ -161,7 +173,7 @@ async function spawnManagedAgentBrowser(
   if (!status.entryScript) throw missingManagedToolError(status);
   return await runCmd(hostNodeExecutablePath(), [status.entryScript, ...args], {
     allowFailure: options.allowFailure,
-    env: managedAgentBrowserEnv(status, commandHostEnvironment().env),
+    env: managedAgentBrowserEnv(status, options.host.env),
     timeoutMs: options.timeoutMs,
     signal: options.signal,
     stdin: options.stdin,
@@ -287,11 +299,8 @@ function assertWebNodeSupported(nodeMajor: number): void {
   });
 }
 
-function defaultStateDir(): string {
-  return path.join(
-    commandHostEnvironment().env.HOME ?? commandHostEnvironment().cwd,
-    '.agent-device',
-  );
+function defaultStateDir(host: HostEnvironment): string {
+  return path.join(host.env.HOME ?? host.cwd, '.agent-device');
 }
 
 export function mapManagedAgentBrowserError(error: unknown): AppError {

@@ -12,12 +12,18 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 
 import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 import type {
   LinuxAccessibilityTree,
   LinuxSnapshotSurface,
   LinuxTraversalOptions,
 } from './accessibility-types.ts';
+import {
+  createLinuxDisplayConfig,
+  detectLinuxDisplayServer,
+  type LinuxDisplayConfig,
+} from './display.ts';
 
 export type LinuxToolCommandExecutor = (
   cmd: string,
@@ -70,6 +76,8 @@ export type LinuxInputProvider = {
 };
 
 export type LinuxToolProvider = {
+  /** The bound display decision every local tool selection in this provider shares (#3794). */
+  display: LinuxDisplayConfig;
   runCommand: LinuxToolCommandExecutor;
   whichCommand: LinuxToolAvailabilityChecker;
   desktop: LinuxDesktopProvider;
@@ -82,41 +90,67 @@ export type LinuxToolProvider = {
 const whichOnPath = async (cmd: string): Promise<boolean> =>
   await whichCmd(cmd, commandHostEnvironment().env);
 
-const localLinuxToolProvider: LinuxToolProvider = {
-  runCommand: runCmd,
-  whichCommand: whichOnPath,
-  desktop: createLocalLinuxDesktopProvider(runCmd, whichOnPath),
-  clipboard: createLocalLinuxClipboardProvider(runCmd, whichOnPath),
-  screenshot: createLocalLinuxScreenshotProvider(runCmd, whichOnPath),
-};
+/** A provider under construction; only the display decision is required up front. */
+type LinuxToolProviderParts = { display: LinuxDisplayConfig } & Partial<LinuxToolProvider>;
 
-const linuxToolProviderScope = createScopedProvider(
-  localLinuxToolProvider,
-  createLocalLinuxToolProvider,
-);
-
-export function createLocalLinuxToolProvider(
-  provider: Partial<LinuxToolProvider> = {},
-): LinuxToolProvider {
-  const merged = {
-    ...localLinuxToolProvider,
-    ...provider,
-  };
+/** Adds the local parts a partial provider omits; every part then belongs to this instance. */
+function completeLocalLinuxToolProvider(provider: LinuxToolProviderParts): LinuxToolProvider {
+  const runCommand = provider.runCommand ?? runCmd;
+  const whichCommand = provider.whichCommand ?? whichOnPath;
+  const display = provider.display;
   return {
-    ...merged,
-    desktop:
-      provider.desktop ?? createLocalLinuxDesktopProvider(merged.runCommand, merged.whichCommand),
+    runCommand,
+    whichCommand,
+    display,
+    desktop: provider.desktop ?? createLocalLinuxDesktopProvider(runCommand, whichCommand),
     clipboard:
-      provider.clipboard ??
-      createLocalLinuxClipboardProvider(merged.runCommand, merged.whichCommand),
+      provider.clipboard ?? createLocalLinuxClipboardProvider(runCommand, whichCommand, display),
     screenshot:
-      provider.screenshot ??
-      createLocalLinuxScreenshotProvider(merged.runCommand, merged.whichCommand),
+      provider.screenshot ?? createLocalLinuxScreenshotProvider(runCommand, whichCommand, display),
+    ...(provider.accessibility ? { accessibility: provider.accessibility } : {}),
+    ...(provider.input ? { input: provider.input } : {}),
   };
 }
 
+/**
+ * Builds a local provider that reads its configuration from `host`, never from the ambient one:
+ * one provider instance per composing runtime, owning its display decision (#3794).
+ */
+export function createLocalLinuxToolProvider(
+  options: { host: HostEnvironment } & Partial<LinuxToolProvider>,
+): LinuxToolProvider {
+  const { host, ...provider } = options;
+  return completeLocalLinuxToolProvider({
+    ...provider,
+    display: provider.display ?? createLinuxDisplayConfig(host),
+  });
+}
+
+/**
+ * The fallback for callers outside every composed runtime (standalone leaf calls, scripts that
+ * name no host): it reads the display decision from the command host of the call, like the
+ * ambient read it replaces. A composed runtime binds its own host at `createLinuxInteractor`, so
+ * its display decision never comes from here (#3794).
+ */
+const localLinuxToolProvider = completeLocalLinuxToolProvider({
+  runCommand: runCmd,
+  whichCommand: whichOnPath,
+  display: {
+    detectDisplayServer: () => detectLinuxDisplayServer(commandHostEnvironment().env),
+  },
+});
+
+const linuxToolProviderScope = createScopedProvider(
+  localLinuxToolProvider,
+  completeLocalLinuxToolProvider,
+);
+
 export function resolveLinuxToolProvider(provider?: LinuxToolProvider): LinuxToolProvider {
   return linuxToolProviderScope.resolve(provider);
+}
+
+export function hasScopedLinuxToolProvider(): boolean {
+  return linuxToolProviderScope.hasScope();
 }
 
 export async function withLinuxToolProvider<T>(
@@ -173,15 +207,16 @@ function createLocalLinuxDesktopProvider(
 function createLocalLinuxClipboardProvider(
   runCommand: LinuxToolCommandExecutor,
   whichCommand: LinuxToolAvailabilityChecker,
+  display: LinuxDisplayConfig,
 ): LinuxClipboardProvider {
   return {
     async readText() {
-      const tool = await resolveLocalLinuxTool(whichCommand, LOCAL_CLIPBOARD_TOOLS);
+      const tool = await resolveLocalLinuxTool(whichCommand, display, LOCAL_CLIPBOARD_TOOLS);
       const command = LOCAL_CLIPBOARD_READ_COMMANDS[tool];
       return (await runCommand(command.cmd, command.args, command.options)).stdout;
     },
     async writeText(text) {
-      const tool = await resolveLocalLinuxTool(whichCommand, LOCAL_CLIPBOARD_TOOLS);
+      const tool = await resolveLocalLinuxTool(whichCommand, display, LOCAL_CLIPBOARD_TOOLS);
       const command = LOCAL_CLIPBOARD_WRITE_COMMANDS[tool](text);
       await runCommand(command.cmd, command.args, command.options);
     },
@@ -191,10 +226,11 @@ function createLocalLinuxClipboardProvider(
 function createLocalLinuxScreenshotProvider(
   runCommand: LinuxToolCommandExecutor,
   whichCommand: LinuxToolAvailabilityChecker,
+  display: LinuxDisplayConfig,
 ): LinuxScreenshotProvider {
   return {
     async capture(outPath) {
-      const tool = await resolveLocalLinuxTool(whichCommand, LOCAL_SCREENSHOT_TOOLS);
+      const tool = await resolveLocalLinuxTool(whichCommand, display, LOCAL_SCREENSHOT_TOOLS);
       const command = LOCAL_SCREENSHOT_COMMANDS[tool](outPath);
       await runCommand(command.cmd, command.args, command.options);
     },
@@ -300,16 +336,12 @@ const LOCAL_SCREENSHOT_COMMANDS: Record<
 
 async function resolveLocalLinuxTool<T extends string>(
   whichCommand: LinuxToolAvailabilityChecker,
+  display: LinuxDisplayConfig,
   config: LocalLinuxToolConfig<T>,
 ): Promise<T> {
-  const display = isLinuxWayland() ? 'wayland' : 'x11';
-  for (const candidate of config[display]) {
+  const server = display.detectDisplayServer();
+  for (const candidate of config[server]) {
     if (await whichCommand(candidate.command)) return candidate.tool;
   }
-  throw new AppError('TOOL_MISSING', display === 'wayland' ? config.waylandError : config.x11Error);
-}
-
-function isLinuxWayland(): boolean {
-  const environment = commandHostEnvironment().env;
-  return Boolean(environment['WAYLAND_DISPLAY']) || environment['XDG_SESSION_TYPE'] === 'wayland';
+  throw new AppError('TOOL_MISSING', server === 'wayland' ? config.waylandError : config.x11Error);
 }

@@ -77,6 +77,9 @@ export const resolveWebProvider = deferred<(typeof import('./provider.ts'))['res
 export const hasScopedWebProvider = deferred<
   (typeof import('./provider.ts'))['hasScopedWebProvider']
 >(async () => (await import('./provider.ts')).hasScopedWebProvider);
+export const resolveWebProviderForHost = deferred<
+  (typeof import('./resolve-provider.ts'))['resolveWebProviderForHost']
+>(async () => (await import('./resolve-provider.ts')).resolveWebProviderForHost);
 
 export async function withWebProvider<T>(
   provider: import('./provider.ts').WebProvider | undefined,

@@ -1,5 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import { withMethodScope } from '@agent-device/kernel/scoped-provider';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import {
+  createLocalLinuxToolProvider,
+  hasScopedLinuxToolProvider,
+  withLinuxToolProvider,
+} from './tool-provider.ts';
 import {
   backLinux,
   captureLinuxSurfaceSnapshot,
@@ -24,7 +31,18 @@ import {
 import { singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 
-export function createLinuxInteractor(): Interactor {
+export function createLinuxInteractor(host: HostEnvironment): Interactor {
+  // The interactor builds its own provider over the composing runtime's host: the display
+  // decision lives on that instance, never in module state, so another runtime's host cannot
+  // reach it (#3794). A request-scoped provider still wins: this one enters only when the
+  // request scopes none.
+  const provider = createLocalLinuxToolProvider({ host });
+  return withMethodScope(createLinuxInteractorBody(), async (task) =>
+    hasScopedLinuxToolProvider() ? await task() : await withLinuxToolProvider(provider, task),
+  );
+}
+
+function createLinuxInteractorBody(): Interactor {
   return {
     open: (app) => openLinuxApp(app),
     openDevice: () => Promise.resolve(),

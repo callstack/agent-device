@@ -1,5 +1,5 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import path from 'node:path';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { hostFileStatSync, readHostDirectorySync } from '@agent-device/host-kit/host-file';
@@ -37,6 +37,8 @@ export type AgentBrowserCleanupResult = AgentBrowserProcessSummary & {
 };
 
 export type AgentBrowserCleanupOptions = {
+  /** The caller's host: its environment carries the idle-timeout overrides. */
+  env: Readonly<EnvMap>;
   openWebSessionNames?: readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
 };
@@ -54,7 +56,7 @@ export function resolveAgentBrowserIdleTimeoutMs(env: NodeJS.ProcessEnv): number
 export async function cleanupManagedAgentBrowserOrphans(
   status: AgentBrowserToolStatus,
   reason: 'daemon-startup' | 'provider-startup',
-  options: AgentBrowserCleanupOptions = {},
+  options: AgentBrowserCleanupOptions,
 ): Promise<AgentBrowserCleanupResult> {
   const openWebSessionNames = uniqueStrings(
     (options.openWebSessionNames ?? []).filter((value) => value.length > 0),
@@ -63,7 +65,7 @@ export async function cleanupManagedAgentBrowserOrphans(
     return skippedCleanupResult('open-web-session', { openWebSessionNames });
   }
 
-  const idleTimeoutMs = resolveAgentBrowserIdleTimeoutMs(commandHostEnvironment().env);
+  const idleTimeoutMs = resolveAgentBrowserIdleTimeoutMs(options.env);
   const latestActivityMs = readLatestManagedBrowserActivityMs(status);
   if (latestActivityMs !== undefined && Date.now() - latestActivityMs < idleTimeoutMs) {
     return skippedCleanupResult('recent-browser-activity', { idleTimeoutMs, latestActivityMs });
@@ -102,7 +104,7 @@ export async function cleanupManagedAgentBrowserOrphans(
 
 export async function cleanupManagedAgentBrowserOrphansForProviderStartup(
   status: AgentBrowserToolStatus,
-  options: AgentBrowserCleanupOptions = {},
+  options: AgentBrowserCleanupOptions,
 ): Promise<AgentBrowserCleanupResult | undefined> {
   const now = Date.now();
   const key = path.resolve(status.stateDir);

@@ -1,65 +1,32 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 /**
- * Shared Linux environment detection — display server and input tool.
+ * Shared Linux input-tool resolution — display server and input tool.
  *
- * Results are cached after the first probe so that every action
- * (press, type, scroll…) does not re-run `which` on every call.
+ * The display decision comes from the resolved provider's bound host, never an ambient read
+ * (#3794). Nothing is memoized: the interactor that enters a provider is built per request, so a
+ * cache would not outlive the request it serves. A refusal simply throws.
  */
 
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveLinuxToolProvider, type LinuxToolProvider } from './tool-provider.ts';
+import type { DisplayServer } from './display.ts';
+import type { LinuxInputSelection } from './input-tool.ts';
 
-export type DisplayServer = 'wayland' | 'x11';
-export type InputTool = 'xdotool' | 'ydotool';
-
-function detectDisplayServer(): DisplayServer {
-  const environment = commandHostEnvironment().env;
-  if (environment['WAYLAND_DISPLAY']) return 'wayland';
-  if (environment['XDG_SESSION_TYPE'] === 'wayland') return 'wayland';
-  return 'x11';
-}
-
-// ── Cached input tool resolution ───────────────────────────────────────
-
-let cachedInputTool: {
-  tool: InputTool;
-  display: DisplayServer;
-  provider: LinuxToolProvider;
-} | null = null;
-
-export async function ensureInputTool(): Promise<{
-  tool: InputTool;
-  display: DisplayServer;
-}> {
-  const provider = resolveLinuxToolProvider();
-  if (cachedInputTool?.provider === provider) return cachedInputTool;
-
-  const display = detectDisplayServer();
+export async function ensureInputTool(
+  provider: LinuxToolProvider = resolveLinuxToolProvider(),
+): Promise<LinuxInputSelection> {
+  const display: DisplayServer = provider.display.detectDisplayServer();
 
   if (display === 'wayland') {
-    if (await provider.whichCommand('ydotool')) {
-      cachedInputTool = { tool: 'ydotool', display, provider };
-      return cachedInputTool;
-    }
+    if (await provider.whichCommand('ydotool')) return { tool: 'ydotool', display };
     throw new AppError(
       'TOOL_MISSING',
       'ydotool is required for input synthesis on Wayland (xdotool does not work on Wayland). Install it via your package manager.',
     );
   }
 
-  if (await provider.whichCommand('xdotool')) {
-    cachedInputTool = { tool: 'xdotool', display, provider };
-    return cachedInputTool;
-  }
+  if (await provider.whichCommand('xdotool')) return { tool: 'xdotool', display };
   throw new AppError(
     'TOOL_MISSING',
     'xdotool is required for input synthesis on X11. Install it via your package manager.',
   );
-}
-
-/**
- * @internal Test isolation hook for the cached Linux input tool.
- */
-export function resetInputToolCache(): void {
-  cachedInputTool = null;
 }

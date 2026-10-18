@@ -9,6 +9,7 @@ import {
 } from '@agent-device/kernel/errors';
 
 import type { Rect } from '@agent-device/kernel/snapshot';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   buildAudioProbeEvalScript,
   normalizeAgentBrowserAudioProbeResult,
@@ -40,6 +41,8 @@ const AGENT_BROWSER_DOCTOR_HINT =
   'Run `agent-device web setup` to install the managed web backend.';
 
 type AgentBrowserProviderOptions = {
+  /** The composing runtime's host; every backend spawn and status read uses it. */
+  host: HostEnvironment;
   session?: string;
   stateDir?: string;
   openWebSessionNames?: () => readonly string[];
@@ -52,9 +55,7 @@ type AgentBrowserRunOptions = {
   stdin?: string;
 };
 
-export function createAgentBrowserWebProvider(
-  options: AgentBrowserProviderOptions = {},
-): WebProvider {
+export function createAgentBrowserWebProvider(options: AgentBrowserProviderOptions): WebProvider {
   const session = options.session?.trim();
   const runJson = async (args: string[], run?: AgentBrowserRunOptions): Promise<unknown> =>
     await runAgentBrowserJson(args, { session, options, ...run });
@@ -449,10 +450,11 @@ async function runAgentBrowserCommand(
   let exitCode = 0;
   let commandCompleted = false;
   let semanticSuccess = false;
-  const status = getManagedAgentBrowserStatus({ stateDir: options.stateDir });
+  const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
   try {
     await cleanupProviderStartupOrphans(options);
     const result = await runManagedAgentBrowser(cliArgs, {
+      host: options.host,
       stateDir: options.stateDir,
       allowFailure: true,
       timeoutMs: AGENT_BROWSER_TIMEOUT_MS,
@@ -585,10 +587,11 @@ function canClearAgentBrowserRecord(
 
 async function cleanupProviderStartupOrphans(options: AgentBrowserProviderOptions): Promise<void> {
   if (!options.openWebSessionNames) return;
-  const status = getManagedAgentBrowserStatus({ stateDir: options.stateDir });
+  const status = getManagedAgentBrowserStatus({ host: options.host, stateDir: options.stateDir });
   if (!status.installed) return;
   try {
     await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
+      env: options.host.env,
       openWebSessionNames: options.openWebSessionNames(),
       ...(options.ownedProcessRecords === undefined
         ? {}

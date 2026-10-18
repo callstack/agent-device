@@ -2,7 +2,6 @@ import { bindTestCommandHost } from '@agent-device/test-kit';
 import { afterAll, beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { pressLinux } from '../input-actions.ts';
-import { resetInputToolCache } from '../linux-env.ts';
 import { createLocalLinuxToolProvider, withLinuxToolProvider } from '../tool-provider.ts';
 
 bindTestCommandHost();
@@ -14,12 +13,12 @@ beforeEach(() => {
   Object.defineProperty(process, 'platform', { value: 'linux' });
   process.env['XDG_SESSION_TYPE'] = 'x11';
   delete process.env['WAYLAND_DISPLAY'];
-  resetInputToolCache();
 });
 
 test('scoped Linux tool provider handles input discovery and command execution', async () => {
   const commands: Array<[string, string[]]> = [];
   const provider = createLocalLinuxToolProvider({
+    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
     whichCommand: async (cmd) => cmd === 'xdotool',
     runCommand: async (cmd, args) => {
       commands.push([cmd, args]);
@@ -42,6 +41,7 @@ test('scoped Linux tool provider handles input discovery and command execution',
 test('xdotool press skips the --sync move when the pointer already sits on the target', async () => {
   const commands: Array<[string, string[]]> = [];
   const provider = createLocalLinuxToolProvider({
+    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
     whichCommand: async (cmd) => cmd === 'xdotool',
     runCommand: async (cmd, args) => {
       commands.push([cmd, args]);
@@ -64,6 +64,7 @@ test('xdotool press skips the --sync move when the pointer already sits on the t
 test('scoped Linux input provider handles semantic input without host tool discovery', async () => {
   const inputCalls: Array<[string, string, string, string]> = [];
   const provider = createLocalLinuxToolProvider({
+    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
     whichCommand: async (cmd) => {
       throw new Error(`unexpected input discovery: ${cmd}`);
     },
@@ -92,10 +93,18 @@ test('scoped Linux input provider handles semantic input without host tool disco
 
 test('Linux tool provider scopes do not share cached input tool resolution', async () => {
   const providerA = createLocalLinuxToolProvider({
+    host: {
+      env: { ...process.env, XDG_SESSION_TYPE: 'x11', WAYLAND_DISPLAY: '' },
+      cwd: process.cwd(),
+    },
     whichCommand: async (cmd) => cmd === 'xdotool',
     runCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
   });
   const providerB = createLocalLinuxToolProvider({
+    host: {
+      env: { ...process.env, XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0' },
+      cwd: process.cwd(),
+    },
     whichCommand: async (cmd) => cmd === 'ydotool',
     runCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
   });
@@ -110,6 +119,10 @@ test('Linux tool provider scopes do not share cached input tool resolution', asy
 
   await withLinuxToolProvider(
     createLocalLinuxToolProvider({
+      host: {
+        env: { ...process.env, XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'wayland-0' },
+        cwd: process.cwd(),
+      },
       ...providerB,
       runCommand: async (cmd, args) => {
         commands.push([cmd, args]);
@@ -130,6 +143,7 @@ test('Linux tool provider scopes do not share cached input tool resolution', asy
 test('local Linux desktop provider translates semantic lifecycle calls to host tools', async () => {
   const commands: Array<[string, string[], boolean | undefined]> = [];
   const provider = createLocalLinuxToolProvider({
+    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
     whichCommand: async (cmd) => cmd === 'wmctrl',
     runCommand: async (cmd, args, options) => {
       commands.push([cmd, args, options?.allowFailure]);
@@ -151,6 +165,7 @@ test('local Linux desktop provider translates semantic lifecycle calls to host t
 test('local Linux desktop provider falls back to pkill when wmctrl is unavailable', async () => {
   const commands: Array<[string, string[], boolean | undefined]> = [];
   const provider = createLocalLinuxToolProvider({
+    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
     whichCommand: async () => false,
     runCommand: async (cmd, args, options) => {
       commands.push([cmd, args, options?.allowFailure]);
@@ -166,6 +181,7 @@ test('local Linux desktop provider falls back to pkill when wmctrl is unavailabl
 test('local Linux screenshot provider translates capture to available host tool', async () => {
   const commands: Array<[string, string[]]> = [];
   const provider = createLocalLinuxToolProvider({
+    host: { env: { ...process.env, XDG_SESSION_TYPE: 'x11' }, cwd: process.cwd() },
     whichCommand: async (cmd) => cmd === 'scrot',
     runCommand: async (cmd, args) => {
       commands.push([cmd, args]);

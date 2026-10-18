@@ -2,11 +2,17 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { resolveWebProvider, type WebProvider } from './index.ts';
+import { resolveWebProviderForHost, type WebProvider } from './index.ts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createUnsupportedInteractor } from './unsupported-interactor.ts';
 
-export async function createWebInteractor(provider?: WebProvider): Promise<Interactor> {
-  const resolvedProvider = provider ?? (await resolveWebProvider());
+export async function createWebInteractor(
+  host: HostEnvironment,
+  provider?: WebProvider,
+): Promise<Interactor> {
+  // A request's scoped provider wins; an out-of-request local path binds the composing root's
+  // host into its own default provider instead of reading an ambient one (#3794).
+  const resolvedProvider = await resolveWebProviderForHost(host, provider);
   const clickRef = resolvedProvider.clickRef;
   const hover = resolvedProvider.hover;
   const hoverRef = resolvedProvider.hoverRef;

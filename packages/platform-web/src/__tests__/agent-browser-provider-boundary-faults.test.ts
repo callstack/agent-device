@@ -29,7 +29,11 @@ for (const [commandClass, runOperation] of Object.entries(COMMAND_CLASS_OPERATIO
     const stateDir = mkdtempForTestSync(`agent-device-exec-boundary-${commandClass}-`);
     try {
       installFakeManagedAgentBrowser(stateDir);
-      const provider = createAgentBrowserWebProvider({ stateDir, session: 'boundary' });
+      const provider = createAgentBrowserWebProvider({
+        host: { env: process.env, cwd: process.cwd() },
+        stateDir,
+        session: 'boundary',
+      });
       const failure = new AppError('COMMAND_FAILED', 'injected command failure', {
         hint: 'retry the boundary test',
         diagnosticId: `diag-${commandClass}`,

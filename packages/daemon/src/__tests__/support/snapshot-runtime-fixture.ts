@@ -113,7 +113,10 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
     // runner underneath is the suite's own mock.
     const runnerOptions = { signal: requestSignal };
     const appleInteractor = isApplePlatform(device.platform)
-      ? await applePlugin.createInteractor(device, runnerOptions)
+      ? await applePlugin.createInteractor(device, runnerOptions, {
+          env: process.env,
+          cwd: process.cwd(),
+        })
       : undefined;
     const alertOptions = (input: AlertRuntimeInput) => ({
       ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),

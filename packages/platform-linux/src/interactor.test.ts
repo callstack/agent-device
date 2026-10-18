@@ -29,7 +29,7 @@ vi.mock('./index.ts', () => ({
 beforeEach(() => vi.clearAllMocks());
 
 test('Linux owns alternate buttons while the runtime binder owns primary series', async () => {
-  const interactor = createLinuxInteractor();
+  const interactor = createLinuxInteractor({ env: process.env, cwd: process.cwd() });
 
   await interactor.alternateClick!({ x: 10, y: 20 }, 'secondary');
   await interactor.alternateClick!({ x: 30, y: 40 }, 'middle');
@@ -46,7 +46,7 @@ test('Linux executes a planned fling as one drag with the resolved duration', as
     'linux',
   );
 
-  await createLinuxInteractor().performGesture!(plan);
+  await createLinuxInteractor({ env: process.env, cwd: process.cwd() }).performGesture!(plan);
 
   assert.deepEqual(vi.mocked(swipeLinux).mock.calls, [[10, 20, 110, 20, 100]]);
 });

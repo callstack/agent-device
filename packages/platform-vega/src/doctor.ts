@@ -2,16 +2,30 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { firstOutputLine, TOOLCHAIN_TIMEOUT_MS } from '@agent-device/provision-kit/toolchain-probe';
-import { resolveVegaToolProvider } from './tool-provider.ts';
+import {
+  createLocalVegaCliAdapter,
+  createLocalVegaToolProvider,
+  hasScopedVegaToolProvider,
+  resolveVegaToolProvider,
+} from './tool-provider.ts';
 
 type VegaInventoryProbe = Readonly<{
   devices: readonly DeviceInfo[];
   listedSerials: readonly string[];
 }>;
 
-export async function vegaToolchainCheck(context: HostDiagnosticsContext): Promise<DoctorCheck> {
-  const provider = resolveVegaToolProvider();
+export async function vegaToolchainCheck(
+  context: HostDiagnosticsContext,
+  host: HostEnvironment,
+): Promise<DoctorCheck> {
+  // Doctor answers for the host `createHostDiagnostics` was composed with: it builds the same
+  // host-bound adapter the interactor route binds, so CLI resolution agrees with every other
+  // lookup of this runtime (#3794). A test-scoped provider still wins.
+  const provider = hasScopedVegaToolProvider()
+    ? resolveVegaToolProvider()
+    : createLocalVegaToolProvider(createLocalVegaCliAdapter(host));
   if (!(await provider.isAvailable())) {
     return {
       id: 'toolchain',

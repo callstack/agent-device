@@ -26,7 +26,12 @@ test('managed agent-browser reports actionable guidance when install is missing'
   const stateDir = mkdtempForTestSync('agent-device-web-tool-');
   try {
     await assert.rejects(
-      () => runManagedAgentBrowser(['doctor'], { stateDir, timeoutMs: 1_000 }),
+      () =>
+        runManagedAgentBrowser(['doctor'], {
+          host: { env: process.env, cwd: process.cwd() },
+          stateDir,
+          timeoutMs: 1_000,
+        }),
       (error: unknown) =>
         error instanceof AppError &&
         error.code === 'TOOL_MISSING' &&
@@ -54,7 +59,11 @@ test('managed agent-browser runs its JS entry with the current Node runtime, not
         return { stdout: '', stderr: '', exitCode: 0 };
       },
       async () =>
-        await runManagedAgentBrowser(['snapshot', '--json'], { stateDir, timeoutMs: 1_000 }),
+        await runManagedAgentBrowser(['snapshot', '--json'], {
+          host: { env: process.env, cwd: process.cwd() },
+          stateDir,
+          timeoutMs: 1_000,
+        }),
     );
 
     assert.ok(stateDir.includes(' '), 'the fixture must exercise a path containing spaces');
@@ -78,7 +87,12 @@ test('managed agent-browser passes the managed runtime home and socket dir to th
         env = options.env;
         return { stdout: '', stderr: '', exitCode: 0 };
       },
-      async () => await runManagedAgentBrowser(['doctor'], { stateDir, timeoutMs: 1_000 }),
+      async () =>
+        await runManagedAgentBrowser(['doctor'], {
+          host: { env: process.env, cwd: process.cwd() },
+          stateDir,
+          timeoutMs: 1_000,
+        }),
     );
 
     assert.equal(env?.HOME, install.runtimeHomeDir);
@@ -103,7 +117,10 @@ test('managed agent-browser status ignores a bin shim without the backend packag
     fs.writeFileSync(path.join(binDir, 'agent-browser.cmd'), '@echo off\n');
     fs.writeFileSync(path.join(installDir, 'manifest.json'), '{}');
 
-    const status = getManagedAgentBrowserStatus({ stateDir });
+    const status = getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
 
     assert.equal(status.entryScript, undefined);
     assert.equal(status.installed, false);
@@ -170,7 +187,11 @@ for (const scenario of [
                 }
                 return { stdout: '', stderr: '', exitCode: 0 };
               },
-              async () => await setupManagedAgentBrowser({ stateDir }),
+              async () =>
+                await setupManagedAgentBrowser({
+                  stateDir,
+                  host: { env: process.env, cwd: process.cwd() },
+                }),
             );
           if (scenario.expected === 'missing') {
             await assert.rejects(
@@ -228,7 +249,11 @@ test('managed agent-browser setup reports an install that produced no entry', as
         async () => ({ stdout: '', stderr: '', exitCode: 0 }),
         async () =>
           await assert.rejects(
-            () => setupManagedAgentBrowser({ stateDir }),
+            () =>
+              setupManagedAgentBrowser({
+                stateDir,
+                host: { env: process.env, cwd: process.cwd() },
+              }),
             (error: unknown) =>
               error instanceof AppError &&
               error.code === 'TOOL_MISSING' &&
@@ -254,10 +279,16 @@ test('managed agent-browser setup gives the install lock back on every path out'
           return { stdout: '', stderr: '', exitCode: 0 };
         },
         async () => {
-          await setupManagedAgentBrowser({ stateDir });
+          await setupManagedAgentBrowser({
+            stateDir,
+            host: { env: process.env, cwd: process.cwd() },
+          });
           // The package exists by now, so this second call returns from *inside* the lock
           // rather than running to the end of it.
-          await setupManagedAgentBrowser({ stateDir });
+          await setupManagedAgentBrowser({
+            stateDir,
+            host: { env: process.env, cwd: process.cwd() },
+          });
         },
       );
     });
