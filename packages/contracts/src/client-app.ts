@@ -102,7 +102,8 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
 export type AppOpenResult = AppOpenResultBase &
   // The same discriminated report the platform outcome carries: a seen confirmation pairs its
   // reason, and only the absent arm can name a probe step that could not read one. The extra arm
-  // covers a daemon older than the reason field, which answers `unanswered` without one.
+  // covers a daemon whose reason this client does not recognize, which answers `unanswered`
+  // without one.
   (LaunchConfirmationClientOutcome | LaunchConfirmationAbsent);
 
 type AppOpenResultBase = {
