@@ -20,11 +20,7 @@
 export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   '(root)': ['src/bin.ts', 'src/cli.ts', 'src/daemon.ts'],
   // Imported by core's interactor resolution, so they sit at core's rank.
-  core: [
-    'src/platform-runtime-android-adb-host.ts',
-    'src/platform-runtime-android-helper-state.ts',
-    'src/provider-device-runtime.ts',
-  ],
+  core: ['src/platform-runtime-android-adb-host.ts', 'src/provider-device-runtime.ts'],
   // The in-process command runtime: the local artifact-adapter implementation and the assembly
   // that binds command families onto it. The backend and runtime contracts it drives moved to
   // @agent-device/contracts, so the daemon reads that vocabulary from below the daemon.

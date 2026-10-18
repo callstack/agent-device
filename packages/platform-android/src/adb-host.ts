@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { defineRuntimeSlots } from '@agent-device/host-kit/runtime-slots';
 import type { AndroidHelperInstallDecision, AndroidImeHelperArtifact } from './helper-artifacts.ts';
 import type {
   AndroidAdbInvocation,
@@ -41,13 +42,6 @@ export type AndroidAdbFileHost = Readonly<{
 export type AndroidAdbEnvironment = Record<string, string | undefined>;
 
 export type AndroidAdbHost = Readonly<{
-  /**
-   * One piece of helper state the current daemon runtime owns (warm sessions, failed starts,
-   * pending retirements, shell-protocol probes), created on first use. The root binds the daemon's
-   * runtime slots here, so each runtime keeps its own and closing one forgets only its own; the
-   * helper itself is stopped by the close-time reset, which reads the same slots.
-   */
-  runtimeSlot<T>(key: symbol, create: () => T): T;
   /** Explicit process environment captured by the root composition boundary. */
   environment: AndroidAdbEnvironment;
   /** Narrow filesystem authority used by Android helper, SDK, and artifact mechanics. */
@@ -122,10 +116,18 @@ export function bindAndroidAdbHost(host: AndroidAdbHost): void {
   boundHost = host;
 }
 
-/** One piece of helper state the current daemon runtime owns, created on first use. */
-export function helperRuntimeSlot<T>(key: symbol, create: () => T): T {
-  return requireAndroidAdbHost().runtimeSlot(key, create);
-}
+/**
+ * What one daemon runtime owns of the Android helper: warm sessions, failed starts, pending
+ * retirements and shell-protocol probes, which the helper modules keep in {@link helperRuntimeSlot}s.
+ * A close tears down only the runtime that closes; the helper itself is stopped by the close-time
+ * reset, which reads the same slots.
+ */
+const helperRuntime = defineRuntimeSlots();
+
+export const createAndroidHelperRuntimeState = helperRuntime.createHandle;
+
+/** One piece of helper state this daemon runtime owns, created on first use. */
+export const helperRuntimeSlot = helperRuntime.slot;
 
 export function requireAndroidAdbHost(): AndroidAdbHost {
   if (!boundHost) {

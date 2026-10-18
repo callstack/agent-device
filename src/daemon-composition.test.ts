@@ -7,7 +7,7 @@ import {
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
-import { androidHelperRuntimeSlot } from './platform-runtime-android-helper-state.ts';
+import { helperRuntimeSlot } from '@agent-device/platform-android/adb-host';
 import { setActiveProviderDeviceRuntimes } from './provider-device-runtime.ts';
 
 const ports = vi.hoisted(() => ({
@@ -147,11 +147,11 @@ test('a composed daemon registers the Apple runner and Android helper state, one
   // Apple's runner state and Android's helper state.
   expect(first.runtimeStates).toHaveLength(2);
   expect(second.runtimeStates).toHaveLength(2);
-  // The Android handle scopes the accessor the root binds into the adb host port.
+  // The Android handle scopes the slots the helper modules read.
   const [, firstAndroid] = first.runtimeStates;
   const [, secondAndroid] = second.runtimeStates;
-  const inFirst = firstAndroid!.run(() => androidHelperRuntimeSlot(slotKey, () => ({})));
-  const inSecond = secondAndroid!.run(() => androidHelperRuntimeSlot(slotKey, () => ({})));
+  const inFirst = firstAndroid!.run(() => helperRuntimeSlot(slotKey, () => ({})));
+  const inSecond = secondAndroid!.run(() => helperRuntimeSlot(slotKey, () => ({})));
   expect(inFirst).not.toBe(inSecond);
-  expect(firstAndroid!.run(() => androidHelperRuntimeSlot(slotKey, () => ({})))).toBe(inFirst);
+  expect(firstAndroid!.run(() => helperRuntimeSlot(slotKey, () => ({})))).toBe(inFirst);
 });

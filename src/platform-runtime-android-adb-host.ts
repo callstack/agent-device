@@ -1,5 +1,4 @@
 import { bindAndroidAdbHost } from '@agent-device/platform-android/adb-host';
-import { androidHelperRuntimeSlot } from './platform-runtime-android-helper-state.ts';
 import { lowerAndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
 import { assertDeviceShellArgv } from '@agent-device/kernel/device-shell';
 import { createHash, randomUUID } from 'node:crypto';
@@ -40,7 +39,6 @@ function requireQuotedDeviceShellCommand(command: readonly string[]): void {
 }
 
 bindAndroidAdbHost({
-  runtimeSlot: androidHelperRuntimeSlot,
   environment,
   files: {
     access: async (candidate) => await access(candidate),
