@@ -152,6 +152,13 @@ export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
       'The one owner of per-runtime async-local state: the store, its standalone fallback and its disposal, so Apple, request-cancel and the root declare only slot keys instead of each keeping a copy.',
     owner: 'thymikee',
   },
+  {
+    module: 'packages/daemon-contracts/src/daemon-startup-phases.ts',
+    issue: '#3782',
+    reason:
+      'The startup phase record owner the #3791 review asked for (its own file/format/writer/reader/sweep beside daemon-shutdown-report). The daemon entry records its earliest `modules-loaded` marker at module load, so the owner must be eager there; the entry pays for the record it writes first.',
+    owner: 'thymikee',
+  },
 ]);
 
 /** The category is a function of the path, never a hand-written column. */

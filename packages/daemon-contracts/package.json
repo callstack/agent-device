@@ -44,6 +44,10 @@
       "types": "./src/daemon-shutdown-report.ts",
       "default": "./src/daemon-shutdown-report.ts"
     },
+    "./daemon-startup-phases": {
+      "types": "./src/daemon-startup-phases.ts",
+      "default": "./src/daemon-startup-phases.ts"
+    },
     "./daemon-stop": {
       "types": "./src/daemon-stop.ts",
       "default": "./src/daemon-stop.ts"
