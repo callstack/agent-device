@@ -194,47 +194,37 @@ extension RunnerTests {
     XCTAssertEqual(String(describing: textField.value ?? ""), "")
   }
 
-  /// Drops the select-all of the first `remaining` replacing posts, the way a React Native field in
-  /// a freshly launched app does, so each of those passes deletes only the last character.
-  final class SelectAllDroppingSynthesizer: TextEntrySynthesizing {
-    var remaining: Int
-
-    init(dropping count: Int) {
-      remaining = count
-    }
-
+  /// Drops every select-all while preserving real synthesized delete and text delivery.
+  struct SelectAllDroppingSynthesizer: TextEntrySynthesizing {
     func enterText(
       app: XCUIApplication,
       text: String,
       replacingExistingText: Bool
     ) -> SynthesizedTextEntryAction {
-      let dropsSelectAll = replacingExistingText && remaining > 0
-      if dropsSelectAll { remaining -= 1 }
-      return PrivateXCTestTextEntrySynthesizer().enterText(
+      PrivateXCTestTextEntrySynthesizer().enterText(
         app: app,
         text: text,
-        replacingExistingText: replacingExistingText && !dropsSelectAll
+        replacingExistingText: false
       )
     }
   }
 
-  /// Two fixed clear passes left "Clie" of "Client" in 3 of 5 fills on a freshly launched React
-  /// Native app that dropped its select-alls, and the fill typed after it. The clear now repeats
-  /// until the field reads empty, and types nothing over text it could not remove.
+  /// A later Command-A can also be dropped by XCTest/iOS, so neither case relies on it succeeding.
+  /// Three characters require more than the old two clear passes; five exceed the four-pass budget.
   @MainActor
   func testSynthesizedReplacementClearsPastDroppedSelectAlls() throws {
-    let field = try focusSynthesizedReplacementField()
-    defer { tearDownSynthesizedReplacementField() }
-    let frame = field.frame
-    let found = try requireTextInputAtPoint(app: app, x: frame.midX, y: frame.midY)
-    let cases: [(dropped: Int, failure: TextEntryFailure?)] = [
-      (2, nil),
-      (SynthesizedTextPlan.Step.maxClearPassCount, .clearNotObserved),
+    let cases: [(seed: String, failure: TextEntryFailure?)] = [
+      ("old", nil),
+      ("stale", .clearNotObserved),
     ]
 
     for testCase in cases {
-      let label = "\(testCase.dropped) select-alls dropped"
-      let seeded = try replaceSynthesizedFieldText(field, text: "stale", commandId: "seed-\(testCase.dropped)")
+      let field = try focusSynthesizedReplacementField()
+      defer { tearDownSynthesizedReplacementField() }
+      let frame = field.frame
+      let found = try requireTextInputAtPoint(app: app, x: frame.midX, y: frame.midY)
+      let label = "\(testCase.seed.count) characters, all select-alls dropped"
+      let seeded = try replaceSynthesizedFieldText(field, text: testCase.seed, commandId: "seed-\(testCase.seed.count)")
       XCTAssertTrue(seeded.ok, String(describing: seeded.error))
       let result = typeTextReliably(
         app: app,
@@ -248,7 +238,7 @@ extension RunnerTests {
         delaySeconds: 0,
         repairMode: .replacement,
         xCTestChannelPenalized: true,
-        synthesizer: SelectAllDroppingSynthesizer(dropping: testCase.dropped)
+        synthesizer: SelectAllDroppingSynthesizer()
       )
 
       let value = String(describing: field.value ?? "")
