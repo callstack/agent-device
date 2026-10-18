@@ -9,7 +9,8 @@ Accepted
 - The fill-only `recordAs` input parameterizes a recorded fill value.
   The CLI spells it `--record-as <VAR>`.
 - The live fill dispatch receives the literal.
-  The public response, recording state, session event, and published script of the fill use `${VAR}`.
+  The public response, recording state, and published script of the fill use `${VAR}`.
+  The session event hides the fill value as `<text>`.
 - Variable names use replay's uppercase `[A-Z_][A-Z0-9_]*` grammar.
   `AD_*` remains reserved for runtime built-ins.
 - `--record-as` is rejected unless script recording is armed.
@@ -52,7 +53,8 @@ agent-device session save-script
 ```
 
 The live fill dispatch receives the literal.
-Its public response, recording state, session event, and published script use `${PASSWORD}`.
+Its public response, recording state, and published script use `${PASSWORD}`.
+The session event hides the fill value as `<text>`.
 Later, replay resolves the placeholder from `AD_VAR_PASSWORD` or `--env PASSWORD=<value>` before the fill is dispatched.
 
 Variable names use replay's uppercase `[A-Z_][A-Z0-9_]*` grammar.
