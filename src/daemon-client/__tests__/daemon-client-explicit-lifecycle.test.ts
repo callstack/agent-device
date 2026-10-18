@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import { DAEMON_QUIESCE_COMMAND } from '@agent-device/daemon-contracts/daemon-resolution';
+import { DAEMON_LIFECYCLE_COMMANDS } from '@agent-device/daemon-contracts/daemon-resolution';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -254,7 +254,7 @@ test('ensureDaemon replaces an incompatible idle daemon through a fenced quiesce
     });
 
     assert.equal(connection.started, true);
-    assert.deepEqual(stale.rpcCommands, [DAEMON_QUIESCE_COMMAND]);
+    assert.deepEqual(stale.rpcCommands, [DAEMON_LIFECYCLE_COMMANDS.quiesce]);
     assert.equal(stale.rpcRequests[0]?.params.token, 'local-secret');
     assert.deepEqual(stale.rpcRequests[0]?.params.input, {
       pid: info.pid,
@@ -485,7 +485,7 @@ test('a live daemon on another transport is quiesced, never killed as unreachabl
       onStart: (reason) => started.push(reason),
     });
 
-    assert.deepEqual(live.commands, [DAEMON_QUIESCE_COMMAND]);
+    assert.deepEqual(live.commands, [DAEMON_LIFECYCLE_COMMANDS.quiesce]);
     assert.deepEqual(started, ['incompatible']);
     assert.equal(isProcessAlive(child.pid), false, 'it left because it agreed to');
     assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
@@ -543,7 +543,7 @@ test('ensureDaemon judges again after the daemon it addressed turned out to be g
     assert.equal(typeof actualSend, 'function');
     assert.deepEqual(
       stale.rpcCommands,
-      [DAEMON_QUIESCE_COMMAND],
+      [DAEMON_LIFECYCLE_COMMANDS.quiesce],
       'the second judgement asked again',
     );
     assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
@@ -648,7 +648,11 @@ test('ensureDaemon quiesces an incompatible daemon that wins a startup race inst
     const connection = await ensureDaemon({ stateDir, daemonTransport: 'http' });
 
     assert.equal(connection.started, true);
-    assert.deepEqual(stale.rpcCommands, [DAEMON_QUIESCE_COMMAND], 'the racer was asked to leave');
+    assert.deepEqual(
+      stale.rpcCommands,
+      [DAEMON_LIFECYCLE_COMMANDS.quiesce],
+      'the racer was asked to leave',
+    );
     assert.ok(winner);
     assert.equal(isProcessAlive(winner.pid), false);
     assert.equal(spawn.mock.calls.length, 2, 'the second start follows the quiesce');

@@ -4,11 +4,14 @@ import { isProcessPid } from '@agent-device/host-kit/process';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
   readDaemonCapabilities,
+  readDaemonOwnership,
   readDaemonRecord,
   readRecordedDaemonTransport,
   type DaemonCapability,
+  type DaemonOwnership,
   type DaemonPaths,
   type DaemonServerMode,
+  type ObservedDaemonIdentity,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 
 export type DaemonInfo = {
@@ -25,6 +28,11 @@ export type DaemonInfo = {
   policyDigest?: string;
   /** Absent from daemons that predate capabilities, which therefore have none. */
   capabilities?: readonly DaemonCapability[];
+  /**
+   * Who owns the process this record names, and so who may end it. A record that predates the field
+   * is a detached daemon, which is why an absent value means exactly that.
+   */
+  ownership?: DaemonOwnership;
   /** The provider plugin inventory as published; `readPluginInventory` validates it where it is read. */
   plugins?: unknown;
   baseUrl?: string;
@@ -39,12 +47,33 @@ export type DaemonMetadataState = {
 
 export function readDaemonInfo(infoPath: string): DaemonInfo | null {
   const read = readDaemonRecord(infoPath);
-  if (read.status !== 'present') return null;
-  const parsed = read.record as Partial<DaemonInfo>;
+  return read.status === 'present' ? daemonInfoFromRecord(read.record) : null;
+}
+
+function daemonInfoFromRecord(parsed: Partial<DaemonInfo>): DaemonInfo | null {
   const token = readRequiredDaemonToken(parsed);
-  if (!token) return null;
   const ports = readDaemonInfoPorts(parsed);
-  if (!ports) return null;
+  return token && ports ? readDaemonInfoFromRecord(parsed, token, ports) : null;
+}
+
+/**
+ * The observation a retirement judges, from a record this client already read. Ownership travels with
+ * the lifetime because a retirement signals only a process its record proves is a daemon of its own, and
+ * a client that read the record once should not read it again to answer that.
+ */
+export function observedDaemonIdentityOf(info: DaemonInfo): ObservedDaemonIdentity {
+  return {
+    pid: info.pid,
+    startTime: info.processStartTime ?? null,
+    ownership: readDaemonOwnership(info.ownership),
+  };
+}
+
+function readDaemonInfoFromRecord(
+  parsed: Partial<DaemonInfo>,
+  token: string,
+  ports: Pick<DaemonInfo, 'port' | 'httpPort'>,
+): DaemonInfo {
   return {
     token,
     ...ports,
@@ -56,6 +85,7 @@ export function readDaemonInfo(infoPath: string): DaemonInfo | null {
     processStartTime: readOptionalString(parsed.processStartTime),
     policyDigest: readOptionalString(parsed.policyDigest),
     capabilities: readDaemonCapabilities(parsed.capabilities),
+    ownership: readDaemonOwnership(parsed.ownership),
     ...(Array.isArray(parsed.plugins) ? { plugins: parsed.plugins } : {}),
   };
 }

@@ -66,10 +66,47 @@ test('a live registered daemon reports its identity and the plugin inventory it 
     state: 'running',
     stateDir,
     pid: owner.pid,
+    // A record that predates ownership is a detached daemon, which is what a reader must be able to
+    // rely on before it decides a stop may signal this pid.
+    ownership: 'detached',
     version: '0.21.30',
     transport: 'http',
     plugins: [ACTIVE, FAILED, { state: 'unknown' }],
   });
+});
+
+test('a record published by a host reports the ownership that limits what a stop may do', () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-status-');
+  const owner = readCurrentOwnerIdentity();
+  publish(stateDir, {
+    token: 't',
+    port: 1,
+    pid: owner.pid,
+    processStartTime: owner.startTime,
+    ownership: 'embedded',
+  });
+
+  expect(readDaemonStatus(resolveDaemonPaths(stateDir))).toMatchObject({
+    state: 'running',
+    pid: owner.pid,
+    ownership: 'embedded',
+  });
+});
+
+test('a record that claims an ownership nobody knows reads as an unrecognized one', () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-status-');
+  const owner = readCurrentOwnerIdentity();
+  publish(stateDir, {
+    token: 't',
+    port: 1,
+    pid: owner.pid,
+    processStartTime: owner.startTime,
+    ownership: 'sideways',
+  });
+
+  // An ownership value outside the vocabulary says nothing about who owns the process, and `detached`
+  // is the one reading a caller may act on by signalling it. Status says it cannot recognize the owner.
+  expect(readDaemonStatus(resolveDaemonPaths(stateDir)).ownership).toBe('unknown');
 });
 
 test('a record whose process is gone or was replaced is not a running daemon', () => {

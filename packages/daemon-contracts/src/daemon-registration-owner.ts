@@ -29,6 +29,8 @@ import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
   resolveDaemonPaths,
   type DaemonCapability,
+  type DaemonOwnership,
+  type ObservedDaemonIdentity,
   type DaemonPaths,
   type DaemonServerMode,
 } from './daemon-resolution.ts';
@@ -59,6 +61,7 @@ export type DaemonRegistrationFields = Readonly<{
   capabilities?: readonly DaemonCapability[];
   /** The provider plugin inventory, so a client can read what this daemon registered. */
   plugins?: readonly PluginInventoryEntry[];
+  ownership?: DaemonOwnership;
 }>;
 type DaemonRegistrationRemoval =
   | Readonly<{ state: 'removed' }>
@@ -333,7 +336,13 @@ function requirePrivateReplayState(
 
 export type DaemonRetirementInput = Readonly<{
   paths: DaemonPaths;
-  observed: OwnerIdentity | null;
+  /**
+   * The lifetime a caller proved the daemon is, with the owner that record stated at the read. A caller
+   * that launched the process itself states `detached`, which is what it knows; a caller that read
+   * `daemon.json` passes what that record stated. Signalling on a guessed owner is the one thing this
+   * module must not do, so no caller may leave this out.
+   */
+  observed: ObservedDaemonIdentity | null;
   termTimeoutMs?: number;
   killTimeoutMs?: number;
   lockTimeoutMs?: number;
@@ -363,6 +372,13 @@ export type DaemonRetirementResult =
         | 'lock-busy'
         | 'registration-replaced'
         | 'metadata-unreadable'
+        /** A host owns the observed runtime; only that host, or its shutdown request, ends it. */
+        | 'embedded-owner'
+        /**
+         * The record states an owner this build cannot read, so nothing proves the pid it names is a
+         * daemon of its own, and signalling it is refused.
+         */
+        | 'owner-unproven'
         | 'retirement-unconfirmed';
       error?: NormalizedError;
       repairCommitFailure?: RepairCommitFailure;
@@ -395,14 +411,24 @@ export async function stopAndRetireDaemon(
       error: normalizeError(error),
     };
   }
+  // Signalling needs a proven owner, and the observation carries the one its record stated: a record
+  // naming a host describes a runtime that host ends, and a record stating an owner this build cannot
+  // read says nothing about what is safe to end. Only a proven detached daemon is signaled.
+  const owner = observed?.ownership;
   const retirement = retireObservedDaemon(
     { ...input, observed },
-    (identity) =>
-      stopDaemonProcess(identity, {
-        mode: input.mode,
-        termTimeoutMs: input.termTimeoutMs ?? 3_000,
-        killTimeoutMs: input.killTimeoutMs ?? 1_000,
-      }),
+    observed && owner !== 'detached'
+      ? (identity) =>
+          proveExitWithoutSignaling(
+            identity,
+            owner === 'embedded' ? 'embedded-owner' : 'owner-unproven',
+          )
+      : (identity) =>
+          stopDaemonProcess(identity, {
+            mode: input.mode,
+            termTimeoutMs: input.termTimeoutMs ?? 3_000,
+            killTimeoutMs: input.killTimeoutMs ?? 1_000,
+          }),
     owned,
     input.startupJoinTimeoutMs ?? 1_000,
   );
@@ -415,8 +441,8 @@ export async function stopAndRetireDaemon(
 
 function confirmOwnedStartupIdentity(
   owned: PrivateReplayState,
-  observed: OwnerIdentity | null,
-): OwnerIdentity | null {
+  observed: ObservedDaemonIdentity | null,
+): ObservedDaemonIdentity | null {
   if (!observed) {
     if (owned.startups.length === 0) return null;
     throw unownedStartupError();
@@ -424,7 +450,7 @@ function confirmOwnedStartupIdentity(
   const startup = owned.startups.find(({ launch }) => launch.pid === observed.pid);
   if (!startup) throw unownedStartupError();
   const { launch } = startup;
-  const identity = observed.startTime ? observed : launch.readIdentity();
+  const identity = observed.startTime ? observed : { ...observed, ...launch.readIdentity() };
   if (launch.startTime && launch.startTime === identity.startTime) return identity;
   throw unownedStartupError();
 }
@@ -439,13 +465,33 @@ function unownedStartupError(): AppError {
 export async function recoverAbandonedDaemonRegistration(
   input: DaemonRetirementInput,
 ): Promise<DaemonRetirementResult> {
-  return await retireObservedDaemon(input, async (identity) => {
-    if (!identity.startTime?.trim()) return { status: 'retained', reason: 'missing-start-time' };
-    const confirmed = { pid: identity.pid, startTime: identity.startTime };
-    return (await waitForDaemonExit(confirmed, { timeoutMs: 0 })).exited
-      ? { status: 'exited', identity: confirmed, mode: 'already-exited' }
-      : { status: 'retained', reason: 'identity-unverified' };
-  });
+  return await retireObservedDaemon(input, (identity) => proveExitWithoutSignaling(identity));
+}
+
+/**
+ * Termination refusals that name an owner's rule rather than a lifetime this caller could not prove:
+ * both mean "nobody may signal this process", and both travel to the caller at the top level.
+ */
+function isOwnerRefusal(
+  reason: Extract<DaemonTerminationResult, { status: 'retained' }>['reason'],
+): reason is 'embedded-owner' | 'owner-unproven' {
+  return reason === 'embedded-owner' || reason === 'owner-unproven';
+}
+
+/**
+ * Proves `observed` is gone and signals nothing, which is what a lifecycle path may do to a process
+ * it does not own: an abandoned registration, or one a host owns and ends itself. A lifetime whose
+ * exit cannot be proved stays exactly where it is.
+ */
+async function proveExitWithoutSignaling(
+  observed: OwnerIdentity,
+  reason: 'identity-unverified' | 'embedded-owner' | 'owner-unproven' = 'identity-unverified',
+): Promise<DaemonTerminationResult> {
+  if (!observed.startTime?.trim()) return { status: 'retained', reason: 'missing-start-time' };
+  const identity = { pid: observed.pid, startTime: observed.startTime };
+  return (await waitForDaemonExit(identity, { timeoutMs: 0 })).exited
+    ? { status: 'exited', identity, mode: 'already-exited' }
+    : { status: 'retained', reason };
 }
 
 async function retireObservedDaemon(
@@ -468,6 +514,12 @@ async function retireObservedDaemon(
   const joined = await joinOwnedStartups(owned, startupJoinTimeoutMs);
   if (stopFailure)
     return { status: 'retained', reason: 'stop-failed', removedInfo: false, error: stopFailure };
+  // A terminate step that refused because the record's owner ends this runtime, or because the record
+  // could not prove one, says so at the top: a caller must be able to tell "nobody may signal this
+  // process" from "this daemon is hung".
+  if (termination?.status === 'retained' && isOwnerRefusal(termination.reason)) {
+    return { status: 'retained', reason: termination.reason, termination, removedInfo: false };
+  }
   if (termination && termination.status !== 'exited')
     return { status: 'retained', reason: 'exit-unconfirmed', termination, removedInfo: false };
   if (!joined) {

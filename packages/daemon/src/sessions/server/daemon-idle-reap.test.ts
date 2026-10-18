@@ -7,7 +7,7 @@ import { SessionStore } from '../../core/session-store.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import {
   createDaemonIdleReap,
-  createDaemonQuiesce,
+  createDaemonLifecycleAdmission,
   hasActiveRecording,
   hasReapBlockingOpenSessions,
   isDaemonIdle,
@@ -51,6 +51,18 @@ test('resolveDaemonIdleReapMs ignores invalid overrides', () => {
     5 * 60_000,
   );
   assert.equal(resolveDaemonIdleReapMs({ AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '-5' }), 5 * 60_000);
+});
+
+test('resolveDaemonIdleReapMs gives a host-owned runtime no window', () => {
+  // The env window reaches a detached daemon only. A host-owned runtime is ended by its host, and a
+  // build that cannot place a record's owner never reaches this call: a runtime states its own
+  // ownership when it starts, so "unrecognized" is a reader's verdict about daemon.json, not a state
+  // the owner of a running daemon can be in.
+  assert.equal(
+    resolveDaemonIdleReapMs({ AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '1200' }, 'embedded'),
+    0,
+  );
+  assert.equal(resolveDaemonIdleReapMs({}, 'embedded'), 0);
 });
 
 test('hasReapBlockingOpenSessions reflects the session store', () => {
@@ -294,9 +306,32 @@ test('cancel prevents a scheduled reap from firing', async () => {
   assert.equal(reaped, 0);
 });
 
+test("a host that owns the runtime's lifetime never has it reaped on a timer", async () => {
+  vi.useFakeTimers();
+  let reaped = 0;
+  const idleReap = createDaemonIdleReap({
+    sessionStore,
+    getInFlightRequestCount: () => 0,
+    hasRetainedLeases: () => false,
+    onIdleReap: () => {
+      reaped++;
+    },
+    // The env window a detached daemon would use, overridden by the owner's rule.
+    env: { AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '40' },
+    ownership: 'embedded',
+  });
+
+  idleReap.noteActivity();
+  await vi.advanceTimersByTimeAsync(1_000);
+
+  assert.equal(reaped, 0);
+  assert.equal(idleReap.idleMs, 0);
+});
+
 test('a daemon that cannot prove its start time refuses every quiesce', async () => {
   const drain = vi.fn();
-  const quiesce = createDaemonQuiesce({
+  const quiesce = createDaemonLifecycleAdmission({
+    ownership: () => 'detached',
     token: 'daemon-token',
     identity: { pid: process.pid, processStartTime: null },
     sessionStore,

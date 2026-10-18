@@ -3,7 +3,7 @@ import net from 'node:net';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
-  buildDaemonQuiesceRequest,
+  buildDaemonLifecycleRequest,
   resolveDaemonPaths,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
@@ -96,17 +96,24 @@ type Booted = {
   sessionList(): Promise<DaemonResponse>;
 };
 
-async function bootDaemon(options: { serverMode?: 'socket' | 'dual' } = {}): Promise<Booted> {
+async function bootDaemon(
+  options: {
+    serverMode?: 'socket' | 'dual';
+    ownership?: 'embedded' | 'detached';
+    idleTimeoutMs?: number;
+  } = {},
+): Promise<Booted> {
   const stateDir = mkdtempForTestSync('agent-device-daemon-quiesce-');
   const paths = resolveDaemonPaths(stateDir);
   const runtime = await startDaemonRuntime({
+    ownership: options.ownership,
     composeDeps: daemonRuntimeDepsFixture(),
     host: createTestHostEnvironment({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
         AGENT_DEVICE_DAEMON_SERVER_MODE: options.serverMode ?? 'socket',
-        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: String(options.idleTimeoutMs ?? 0),
       },
     }),
     stderr: { write: () => {} },
@@ -126,7 +133,8 @@ async function bootDaemon(options: { serverMode?: 'socket' | 'dual' } = {}): Pro
     exit,
     quiesce: (overrides = {}) =>
       send(
-        buildDaemonQuiesceRequest({
+        buildDaemonLifecycleRequest({
+          mode: 'quiesce',
           token: overrides.token ?? runtime.token,
           fence: {
             pid: overrides.pid ?? info.pid,
@@ -289,7 +297,8 @@ async function quiesceOverHttp(
       jsonrpc: '2.0',
       id: 'http-quiesce',
       method: 'agent_device.command',
-      params: buildDaemonQuiesceRequest({
+      params: buildDaemonLifecycleRequest({
+        mode: 'quiesce',
         token,
         fence: { pid: info.pid, processStartTime: info.processStartTime ?? null },
         requestId: 'http-quiesce',
@@ -350,7 +359,8 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
       processStartTime?: string;
     };
 
-    const quiesceRequest = buildDaemonQuiesceRequest({
+    const quiesceRequest = buildDaemonLifecycleRequest({
+      mode: 'quiesce',
       token: info.token,
       fence: { pid: info.pid, processStartTime: info.processStartTime ?? null },
       requestId: 'startup-quiesce',
@@ -375,4 +385,47 @@ test('a quiesce asked while the daemon is still starting up is refused as busy, 
     openGate();
     await starting.then((runtime) => runtime?.close());
   }
+});
+
+test('an embedded runtime outlives the idle window a detached daemon reaps itself on', async () => {
+  // Booted first on purpose: both get the same window, so the embedded one's window ends no later than
+  // the detached one's. Booting it second would let this assertion run while its own window still had
+  // time left, which would prove nothing about the rule.
+  const embedded = await bootDaemon({ ownership: 'embedded', idleTimeoutMs: 40 });
+  const detached = await bootDaemon({ idleTimeoutMs: 40 });
+  const detachedPaths = resolveDaemonPaths(detached.stateDir);
+  try {
+    // Idle reap releases the state directory it reaped, so that is the fact to wait for. By then the
+    // embedded runtime has been idle at least as long, so a window that ended one daemon's life is
+    // proof enough that it did not end the other's.
+    await vi.waitFor(() => expect(fs.existsSync(detachedPaths.infoPath)).toBe(false), {
+      timeout: 5_000,
+    });
+    // A gap between requests is not the owner asking to be shut down.
+    expect((await embedded.sessionList()).ok).toBe(true);
+  } finally {
+    await detached.runtime.close();
+    await embedded.runtime.close();
+  }
+});
+
+test('an embedded runtime refuses a quiesce and remains serving until direct host close', async () => {
+  const daemon = await bootDaemon({ ownership: 'embedded' });
+  const paths = resolveDaemonPaths(daemon.stateDir);
+  expect(JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')).ownership).toBe('embedded');
+  expect(reasonOf(await daemon.quiesce())).toBe('daemon-owner-embedded');
+  const info = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8'));
+  const shutdown = await sendSocketRequest(info.port, {
+    ...buildDaemonLifecycleRequest({
+      mode: 'quiesce',
+      token: info.token,
+      fence: { pid: info.pid, processStartTime: info.processStartTime },
+      requestId: 'not-exposed',
+    }),
+    command: 'daemon_shutdown',
+  });
+  expect(shutdown.ok).toBe(false);
+  expect((await daemon.sessionList()).ok).toBe(true);
+  await daemon.runtime.close();
+  expect(fs.existsSync(paths.infoPath)).toBe(false);
 });

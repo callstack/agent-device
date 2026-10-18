@@ -18,9 +18,9 @@ import {
   stopDaemonForTakeover,
 } from './daemon-client-startup.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
-import { requestDaemonQuiesce } from './daemon-client-quiesce.ts';
+import { DAEMON_LEAVE_WAIT_MS, requestDaemonLifecycle } from './daemon-client-lifecycle-request.ts';
 import { probeDaemonResponsive } from './daemon-client-liveness-probe.ts';
-import type { DaemonInfo } from './daemon-client-metadata.ts';
+import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
 import {
   DAEMON_CONTENDED_REASON,
   daemonIdentityOf,
@@ -34,10 +34,6 @@ import {
 // a short wait, for as long as a drain can take.
 const ENSURE_ATTEMPTS = 40;
 const JUDGE_AGAIN_DELAY_MS = 250;
-// How long a daemon that accepted a quiesce request gets to finish leaving. Its own shutdown is
-// bounded in phases (server close, session and lease teardown, provider release), so this is the
-// longest a healthy drain can take with margin, not a polling interval.
-const DRAIN_DEADLINE_MS = 60_000;
 const DRAIN_POLL_MS = 250;
 const UNRESPONSIVE_PROBES = 3;
 const UNRESPONSIVE_PROBE_GAP_MS = 200;
@@ -157,26 +153,27 @@ async function awaitDrainedDaemon(
 ): Promise<'left' | 'retired'> {
   const { exited } = await waitForDaemonExit(
     { pid: info.pid, startTime },
-    { timeoutMs: DRAIN_DEADLINE_MS, pollMs: DRAIN_POLL_MS },
+    { timeoutMs: DAEMON_LEAVE_WAIT_MS, pollMs: DRAIN_POLL_MS },
   );
   if (exited) {
     // The daemon removes its own registration; this only clears what a crashed drain left behind.
     await recoverAbandonedDaemonRegistration({
       paths: settings.paths,
-      observed: { pid: info.pid, startTime },
+      observed: observedDaemonIdentityOf(info),
     });
     return 'left';
   }
   if (await answersLivenessProbe(info)) throw await daemonDrainTimeoutError(info, settings);
   const retirement = await stopDaemonForTakeover(info, settings.paths, 'force');
   if (retirement.status !== 'retained') return 'retired';
-  // The identity check could not prove the live process is the daemon it observed (an embedded host
-  // runs no daemon entry; a start time or command line may also be unreadable), so nothing was
-  // signaled.
-  if (
-    retirement.termination?.status === 'retained' &&
-    retirement.termination.reason === 'identity-unverified'
-  ) {
+  // Nothing was signaled because the process could not be proved to be a daemon of its own: either its
+  // start time or command line is unreadable, or the record states an owner this build cannot read.
+  // That is the drain's own outcome: it is still leaving, or already gone, and nobody knows which. A
+  // refusal that names an owner instead (a host that ended up holding this state directory mid-drain)
+  // is a replacement that could not be confirmed, and reports as one.
+  const refusedReason =
+    retirement.termination?.status === 'retained' ? retirement.termination.reason : undefined;
+  if (refusedReason === 'identity-unverified' || refusedReason === 'owner-unproven') {
     throw await daemonDrainTimeoutError(info, settings);
   }
   throw daemonRetirementUnconfirmedError(retirement, settings.paths);
@@ -191,7 +188,7 @@ async function quiesceOrRetireUnresponsive(
   settings: DaemonClientSettings,
 ): Promise<'draining' | 'gone' | 'retired'> {
   try {
-    return await requestDaemonQuiesce(info, settings);
+    return (await requestDaemonLifecycle(info, settings, 'quiesce')).outcome;
   } catch (error) {
     if (!(error instanceof AppError) || error.details?.reason !== 'daemon_transport_timeout')
       throw error;

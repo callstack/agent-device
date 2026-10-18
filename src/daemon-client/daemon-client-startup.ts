@@ -32,6 +32,7 @@ import {
 } from './daemon-launch-spec.ts';
 import {
   getDaemonMetadataState,
+  observedDaemonIdentityOf,
   readDaemonInfo,
   resolveDaemonStartupHint,
   type DaemonInfo,
@@ -39,6 +40,8 @@ import {
 import { canConnect, isDaemonTransportUnavailableError } from './daemon-client-transport.ts';
 import {
   daemonContendedError,
+  daemonNotRetirableError,
+  daemonRecordOwnerUnrecognizedError,
   daemonRetirementUnconfirmedError,
   daemonStopCommand,
 } from './daemon-lifecycle-errors.ts';
@@ -149,6 +152,22 @@ export async function readReusableLocalDaemon(
   }
 
   if (!settings.retireIncompatibleContender) throw daemonContendedError();
+  // A host owns an embedded runtime, so a managed client that wants this state directory asks the host
+  // for it instead of retiring the runtime that holds it.
+  if (existing.ownership === 'embedded') {
+    throw daemonNotRetirableError({
+      info: existing,
+      stateDir: settings.paths.baseDir,
+    });
+  }
+  // A record stating an owner this build cannot read is not a licence to replace what it names: the
+  // whole point of reading the owner is to know whether a pid may be signaled, and this says nothing.
+  if (existing.ownership === 'unknown') {
+    throw daemonRecordOwnerUnrecognizedError({
+      info: existing,
+      stateDir: settings.paths.baseDir,
+    });
+  }
   if (remainingStartupBudget(deadline) < MINIMUM_DAEMON_TAKEOVER_BUDGET_MS) return null;
   emitDaemonTakeoverNotice(existing, decision.reason, settings.paths.baseDir);
   await retireDaemonForTakeover(existing, settings.paths);
@@ -196,7 +215,7 @@ export async function stopDaemonForTakeover(
 ): Promise<DaemonRetirementResult> {
   return await stopAndRetireDaemon({
     paths: paths,
-    observed: { pid: existing.pid, startTime: existing.processStartTime ?? null },
+    observed: observedDaemonIdentityOf(existing),
     mode,
   });
 }
@@ -434,7 +453,7 @@ async function retireStartupAttempt(
 ): Promise<{ cleanup: DaemonRetirementResult; joined: boolean }> {
   const cleanup = await stopAndRetireDaemon({
     paths: settings.paths,
-    observed: launch.readIdentity(),
+    observed: { ...launch.readIdentity(), ownership: 'detached' as const },
     mode: 'graceful',
     ownedStateDir: settings.ownedStateDir,
     termTimeoutMs: Math.min(3_000, remainingStartupBudget(deadline)),

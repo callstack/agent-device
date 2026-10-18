@@ -64,6 +64,34 @@ test('clean daemon script stops a live daemon before removing metadata', async (
     info = readDaemonInfo(stateDir);
     assert.equal(isProcessAlive(info.pid), true);
 
+    const infoPath = path.join(stateDir, 'daemon.json');
+    const original = fs.readFileSync(infoPath, 'utf8');
+    for (const ownership of ['embedded', 'unrecognized']) {
+      const record = JSON.stringify({ ...JSON.parse(original), ownership });
+      fs.writeFileSync(infoPath, record);
+      const refused = runCmdSync(
+        process.execPath,
+        ['--experimental-strip-types', 'scripts/clean-daemon.ts'],
+        {
+          env: { ...process.env, AGENT_DEVICE_STATE_DIR: stateDir },
+          timeoutMs: 5_000,
+          allowFailure: true,
+        },
+      );
+      assert.notEqual(refused.exitCode, 0);
+      assert.match(refused.stderr, ownership === 'embedded' ? /embedded-owner/ : /owner-unproven/);
+      assert.equal(
+        isProcessAlive(info.pid),
+        true,
+        'the same otherwise signalable daemon stays alive',
+      );
+      assert.equal(fs.readFileSync(infoPath, 'utf8'), record);
+      assert.equal(fs.existsSync(path.join(stateDir, 'daemon.lock')), true);
+    }
+    const legacy = JSON.parse(original);
+    delete legacy.ownership;
+    fs.writeFileSync(infoPath, JSON.stringify(legacy));
+
     const cleanup = runCmdSync(
       process.execPath,
       ['--experimental-strip-types', 'scripts/clean-daemon.ts'],
@@ -96,7 +124,13 @@ test('forced retirement waits for a real daemon and reclaims its abandoned regis
     assert.equal(fs.existsSync(paths.lockPath), true);
     const result = await stopAndRetireDaemon({
       paths,
-      observed: { pid: info.pid, startTime: info.processStartTime ?? null },
+      // The record is the one this row's CLI-started daemon published of itself, which is a detached
+      // daemon: what the row retires is that lifetime, under that owner.
+      observed: {
+        pid: info.pid,
+        startTime: info.processStartTime ?? null,
+        ownership: 'detached',
+      },
       mode: 'force',
     });
     assert.equal(result.status, 'retired', JSON.stringify(result));

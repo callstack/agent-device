@@ -8,9 +8,11 @@ import {
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import {
+  readDaemonOwnership,
   readDaemonRecord,
   readRecordedDaemonTransport,
   resolveDaemonPaths,
+  type DaemonOwnership,
   type DaemonPaths,
   type DaemonServerMode,
 } from './daemon-resolution.ts';
@@ -126,6 +128,11 @@ export type DaemonStatus = Readonly<{
   version?: string;
   transport?: DaemonServerMode;
   /**
+   * Who owns the process this record names, and so who may end it. Only a running record can say: a
+   * stopped one names no live process to own.
+   */
+  ownership?: DaemonOwnership;
+  /**
    * The provider plugin inventory the running daemon published, as recorded; `readPluginInventory`
    * validates it where it is shown, so this module stays out of the inventory vocabulary's closure.
    */
@@ -171,6 +178,7 @@ export function readDaemonStatus(paths: DaemonPaths): DaemonStatus {
     state: 'running',
     stateDir: paths.baseDir,
     pid: identity.pid,
+    ownership: readDaemonOwnership(record.ownership),
     ...(typeof record.version === 'string' ? { version: record.version } : {}),
     ...(transport ? { transport } : {}),
     plugins: record.plugins,
@@ -179,6 +187,52 @@ export function readDaemonStatus(paths: DaemonPaths): DaemonStatus {
 
 function readableStartTime(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+/**
+ * What one read of `daemon.json` proves about the process it names, and the one observation every stop
+ * route judges. The lifetime and the owner come from the same read on purpose: a stop that routed on one
+ * record and retired on another could signal a process the record it acted on did not name.
+ *
+ * `identity` is null for a readable record that names no process, which leaves nothing to signal.
+ * `absent` is no record at all, so nothing claims the state directory. `unreadable` is a record that is
+ * present and cannot be read or parsed: it may describe a runtime that is serving, so a stop refuses it
+ * rather than reporting that nothing runs.
+ */
+export type DaemonStopIdentity = Readonly<{
+  /** `absent`: no record. `unreadable`: a record whose contents cannot be used, unreadable or malformed. */
+  ownership: DaemonOwnership | 'absent' | 'unreadable';
+  identity: OwnerIdentity | null;
+}>;
+
+/**
+ * Reads a state directory's record once for a stop: whether it names a process, and whose process that
+ * is. A record that states no owner describes the pre-existing detached daemon, which is what every
+ * record written before the ownership field named.
+ */
+export function readDaemonStopIdentity(infoPath: string): DaemonStopIdentity {
+  const read = readDaemonRecord(infoPath);
+  if (read.status !== 'present') {
+    return {
+      ownership: read.status === 'absent' ? 'absent' : 'unreadable',
+      identity: null,
+    };
+  }
+  const parsed = parseRegistration(read.record);
+  const identity = parsed.pid === null ? null : { pid: parsed.pid, startTime: parsed.startTime };
+  return { ownership: readDaemonOwnership(read.record.ownership), identity };
+}
+
+/**
+ * The lifetime a `--clean` cleanup may walk, from the read that routed the stop. Only a record proving
+ * the process is a daemon of its own names one, and the cleanup needs a start time to tell that lifetime
+ * from whatever holds its pid now.
+ */
+export function readStopCleanupOwner(
+  record: DaemonStopIdentity,
+): { pid: number; processStartTime: string } | null {
+  if (record.ownership !== 'detached' || !record.identity?.startTime) return null;
+  return { pid: record.identity.pid, processStartTime: record.identity.startTime };
 }
 
 /**

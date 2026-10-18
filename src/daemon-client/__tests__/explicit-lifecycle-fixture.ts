@@ -125,6 +125,7 @@ type Registration = {
   socketPort?: number;
   version?: string;
   capabilities?: readonly string[];
+  ownership?: 'embedded' | 'detached';
 };
 
 /** A live child owning the registration, advertising `fields` at the stand-in's port. */
@@ -139,6 +140,7 @@ export async function registerDaemon(paths: DaemonPaths, fields: Registration) {
       codeOrigin: 'checkout',
       codeSignature: currentDaemonCodeSignature(),
       ...(fields.capabilities ? { capabilities: fields.capabilities as ['quiesce'] } : {}),
+      ...(fields.ownership ? { ownership: fields.ownership } : {}),
     },
     undefined,
   );

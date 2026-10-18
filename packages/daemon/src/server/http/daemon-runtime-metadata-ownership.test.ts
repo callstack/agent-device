@@ -254,16 +254,23 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   // A watch still armed when the removal runs can report a loss for a record its own process just
   // deleted. The startup-failure half of this is unreachable from a test — everything after
   // publication needs a real toolchain — so the invariant is read off the source, the same way the
-  // arming order above is. Startup rollback runs its steps in reverse, so the registration that
-  // stops the watch comes after the one that finishes the registration; the close path stops first.
+  // arming order above is.
   const source = fs.readFileSync(new URL('./daemon-runtime.ts', import.meta.url), 'utf8');
   const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);
-  const finishes = [...source.matchAll(/await finishDaemonRegistration\(/g)].map((m) => m.index);
+  // Startup rollback runs its steps in reverse, so the step that stops the watch must be REGISTERED
+  // after the one that removes the record for it to run first.
+  const rollbackRemoval = source.indexOf('await finishDaemonRegistration({');
+  // The close path: the watch is down before the release, which is the only step that removes the
+  // record on that exit, can run.
+  const closeStart = source.indexOf('const closeSteps = async');
+  const closeStop = source.indexOf('stopMetadataLossWatch();', closeStart);
+  const closeRelease = source.indexOf('finishDaemonRegistration({', closeStop);
+
   expect(stops).toHaveLength(2);
-  expect(finishes).toHaveLength(2);
-  expect(stops[0]).toBeGreaterThan(finishes[0]!);
-  expect(stops[1]).toBeGreaterThan(stops[0]!);
-  expect(finishes[1]).toBeGreaterThan(stops[1]!);
+  expect(rollbackRemoval).toBeGreaterThan(0);
+  expect(stops[0]).toBeGreaterThan(rollbackRemoval);
+  expect(closeStop).toBeGreaterThan(0);
+  expect(closeRelease).toBeGreaterThan(closeStop);
 });
 
 test('a plugin whose cleanup failed at shutdown is recorded in daemon.log', async () => {

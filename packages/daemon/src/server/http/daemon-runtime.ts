@@ -12,6 +12,7 @@ import {
   DAEMON_CAPABILITIES,
   resolveDaemonPaths,
   resolveDaemonServerMode,
+  type DaemonRuntimeOwnership,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import {
@@ -55,7 +56,7 @@ import type { DaemonInvokeFn } from '../../core/daemon-request.ts';
 import type { SessionRef } from '../../core/session-state.ts';
 import {
   createDaemonIdleReap,
-  createDaemonQuiesce,
+  createDaemonLifecycleAdmission,
   daemonShuttingDownResponse,
 } from '../../sessions/server/daemon-idle-reap.ts';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
@@ -218,6 +219,8 @@ export type DaemonRuntimeOptions = {
   composeDeps: ComposeDaemonRuntimeDeps;
   /** Shutdown time budgets, for hosts and tests that need other than the defaults. */
   shutdownBudgets?: { requestDrainMs?: number; pluginMs?: number; ownerMs?: number };
+  /** The process owner. An embedded runtime ends through its host's direct close. */
+  ownership?: DaemonRuntimeOwnership;
 };
 
 export type DaemonRuntimeController = {
@@ -511,6 +514,7 @@ async function startDaemonRuntimeOnHost(
   // well after this closure captures it.
   let shuttingDown = false;
   const inFlightRequests = new Set<ReturnType<DaemonInvokeFn>>();
+  const ownership = options.ownership ?? 'detached';
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => inFlightRequests.size,
@@ -519,6 +523,7 @@ async function startDaemonRuntimeOnHost(
       void close();
     },
     env,
+    ownership,
   });
 
   rollback.onRollback(() => {
@@ -531,7 +536,8 @@ async function startDaemonRuntimeOnHost(
   // count it reads needs no allowance for it. The servers listen and `daemon.json` is published
   // before `shutdown` exists, and a daemon answers `draining` only once it has a drain path to run.
   let startingUp = true;
-  const quiesce = createDaemonQuiesce({
+  const quiesce = createDaemonLifecycleAdmission({
+    ownership: () => ownership,
     token,
     identity: { pid: daemonIdentity.pid, processStartTime: daemonIdentity.startTime },
     sessionStore,
@@ -572,6 +578,7 @@ async function startDaemonRuntimeOnHost(
       policyDigest: daemonPolicy?.digest,
       capabilities: DAEMON_CAPABILITIES,
       plugins: deps.pluginInventory,
+      ownership,
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);

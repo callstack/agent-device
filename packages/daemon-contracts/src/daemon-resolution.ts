@@ -7,6 +7,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { OwnerIdentity } from '@agent-device/host-kit/process';
 import type { DaemonServerMode, DaemonTransportPreference } from '@agent-device/kernel/contracts';
 export type { DaemonServerMode, DaemonTransportPreference };
 
@@ -146,35 +147,108 @@ export function resolveDaemonTransportPreference(
   return 'auto';
 }
 
-// The quiesce request is how a client asks an idle daemon to leave so a compatible one can take
-// its state directory. The client and the daemon share this vocabulary, so neither owns it.
-
 /** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
 export const DAEMON_CAPABILITIES = ['quiesce'] as const;
 export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
 
-export const DAEMON_QUIESCE_COMMAND = 'daemon_quiesce';
+/**
+ * Who owns the process a registration names, and so who may end it.
+ *
+ * - `detached`: the daemon is its own process, which a stop may signal. This is what a record that
+ *   predates the field names.
+ * - `embedded`: the host that started the runtime owns the process. Nothing in the central
+ *   lifecycle signals that PID, not even hung recovery or a forced stop: the host closes the
+ *   runtime through its own close, and an external stop refuses it.
+ * - `unknown`: the record states an owner this build does not recognize, so no process may be
+ *   signaled on its strength. Signalling on a guess could end a host process, and a value this
+ *   build cannot read is exactly the case where the safe answer is to do nothing.
+ */
+const DAEMON_OWNERSHIPS = ['detached', 'embedded', 'unknown'] as const;
+export type DaemonOwnership = (typeof DAEMON_OWNERSHIPS)[number];
+
+/**
+ * The ownership a process can state about *itself*: `unknown` is what a reader answers for a record it
+ * cannot place, never what a runtime knows about its own process. So a runtime starts as detached or
+ * embedded, and the refusal for a record this build cannot read belongs to the code that reads the
+ * record — see {@link readDaemonOwnership}.
+ */
+export type DaemonRuntimeOwnership = Exclude<DaemonOwnership, 'unknown'>;
+
+/**
+ * The lifetime a lifecycle path has proved the daemon on a state directory is, together with the owner
+ * its record stated at that read. Ownership travels inside the observation because a pid only says what
+ * is safe to end once its owner is known, and two reads of `daemon.json` can name different pairs.
+ */
+export type ObservedDaemonIdentity = OwnerIdentity & {
+  ownership: DaemonOwnership;
+};
+
+/**
+ * The ownership a `daemon.json` field records. An absent field is the pre-existing detached daemon —
+ * every record written before #3757 states no owner and describes a daemon that is its own process.
+ * A field that states something else is `unknown`, and is never folded into `detached`: the two read
+ * the same way to a caller that is about to signal a pid, and only one of them is safe to act on.
+ */
+export function readDaemonOwnership(value: unknown): DaemonOwnership {
+  return DAEMON_OWNERSHIPS.includes(value as DaemonOwnership)
+    ? (value as DaemonOwnership)
+    : value === undefined
+      ? 'detached'
+      : 'unknown';
+}
+
+/** The command carrying the fenced lifecycle request. */
+export const DAEMON_LIFECYCLE_COMMANDS = {
+  /** Stop if idle: refuses while the daemon holds a request, a session, or a lease. */
+  quiesce: 'daemon_quiesce',
+} as const;
+export type DaemonLifecycleMode = keyof typeof DAEMON_LIFECYCLE_COMMANDS;
+
+/**
+ * The lifecycle mode `command` names, or `undefined` for every request that is not one. Compared
+ * explicitly, because a lookup in an object would answer for a command like `toString` too.
+ */
+export function readDaemonLifecycleMode(command: string): DaemonLifecycleMode | undefined {
+  switch (command) {
+    case DAEMON_LIFECYCLE_COMMANDS.quiesce:
+      return 'quiesce';
+    default:
+      return undefined;
+  }
+}
 
 /** The reason a daemon gives every request it refuses once it has begun to leave. */
 export const DAEMON_SHUTTING_DOWN_REASON = 'daemon_shutting_down';
 
-export const DAEMON_QUIESCE_REASONS = {
+/** Why a daemon refuses a lifecycle request: one entry per rule the admission seam enforces. */
+export const DAEMON_LIFECYCLE_REASONS = {
+  /** A quiesce found the daemon holding work, so nothing was accepted. */
   busy: 'daemon-busy',
+  /** The request names a different daemon instance than the one answering it. */
   instanceMismatch: 'daemon-instance-mismatch',
+  /** A quiesce was refused because a host owns this runtime and ends it through its own close. */
+  ownerEmbedded: 'daemon-owner-embedded',
 } as const;
 
-/** The daemon instance a quiesce request is addressed to; any other instance refuses it. */
-export type DaemonQuiesceFence = Readonly<{
+/**
+ * The refusal for a `daemon.json` whose owner field this build cannot place. No daemon answers it: a
+ * runtime always knows whether it owns itself, so `unknown` is a verdict about a file, and only a reader
+ * can reach it.
+ */
+export const DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON = 'daemon-owner-unrecognized';
+
+/** The daemon instance a lifecycle request is addressed to; any other instance refuses it. */
+export type DaemonLifecycleFence = Readonly<{
   pid: number;
   /** Null when the daemon could not prove its start time, as its `daemon.json` records. */
   processStartTime: string | null;
 }>;
 
 /**
- * What a daemon holds. It leaves a quiesce request only when all four counts are zero and it is
- * not still starting up, because before that it has no drain path to run.
+ * What a daemon holds, and the census a busy refusal carries so a caller knows what to wait for.
+ * A quiesce leaves only when all four counts are zero and it is not still starting up.
  */
-export type DaemonQuiesceCensus = Readonly<{
+export type DaemonLifecycleCensus = Readonly<{
   /** True from process start until the daemon can drain. */
   startingUp: boolean;
   inFlightRequests: number;
@@ -183,23 +257,28 @@ export type DaemonQuiesceCensus = Readonly<{
   leases: number;
 }>;
 
-export function buildDaemonQuiesceRequest(params: {
+/**
+ * The request that asks the fenced instance to leave. Both modes carry the fence in `input`, so a
+ * daemon refuses a request addressed to a predecessor that reused its pid.
+ */
+export function buildDaemonLifecycleRequest(params: {
+  mode: DaemonLifecycleMode;
   token: string;
-  fence: DaemonQuiesceFence;
+  fence: DaemonLifecycleFence;
   requestId: string;
 }): DaemonWireRequest {
-  const { token, fence, requestId } = params;
+  const { mode, token, fence, requestId } = params;
   return {
     token,
     session: 'default',
-    command: DAEMON_QUIESCE_COMMAND,
+    command: DAEMON_LIFECYCLE_COMMANDS[mode],
     positionals: [],
     input: { pid: fence.pid, processStartTime: fence.processStartTime },
     meta: { requestId },
   };
 }
 
-export function readDaemonQuiesceFence(input: unknown): DaemonQuiesceFence | undefined {
+export function readDaemonLifecycleFence(input: unknown): DaemonLifecycleFence | undefined {
   if (typeof input !== 'object' || input === null) return undefined;
   const { pid, processStartTime } = input as Record<string, unknown>;
   if (!Number.isInteger(pid)) return undefined;
@@ -212,7 +291,7 @@ export function readDaemonCapabilities(value: unknown): readonly DaemonCapabilit
   return DAEMON_CAPABILITIES.filter((capability) => value.includes(capability));
 }
 
-export function readDaemonQuiesceCensus(details: unknown): DaemonQuiesceCensus | undefined {
+export function readDaemonLifecycleCensus(details: unknown): DaemonLifecycleCensus | undefined {
   if (typeof details !== 'object' || details === null) return undefined;
   const { startingUp, inFlightRequests, sessions, repairSessions, leases } = details as Record<
     string,

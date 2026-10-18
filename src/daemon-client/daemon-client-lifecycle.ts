@@ -24,7 +24,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { findUnrecoveredRepairCommitFailure } from '@agent-device/daemon-contracts/session-repair-tombstone';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { attachActiveSessionAddressHint } from './daemon-client-address-hints.ts';
-import { isRemoteDaemon } from './daemon-client-metadata.ts';
+import { isRemoteDaemon, observedDaemonIdentityOf } from './daemon-client-metadata.ts';
 import { cachedRemoteDaemonHealth } from './daemon-client-transport.ts';
 import {
   assertDaemonPolicyMatches,
@@ -59,6 +59,17 @@ const LOOPBACK_BLOCK_LIST = new net.BlockList();
 LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
 LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
 LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
+
+export function resolveTimeoutRecovery(
+  settings: DaemonClientSettings,
+  info: DaemonInfo,
+): 'retire-unresponsive' | 'none' {
+  if (settings.daemonLifecycle === 'attach') return 'none';
+  // Only a record that proves a detached daemon authorizes a kill: an embedded one belongs to a host,
+  // and one whose owner this build cannot read says nothing about what is safe to signal.
+  if (info.ownership !== 'detached') return 'none';
+  return 'retire-unresponsive';
+}
 
 export function resolveClientSettings(
   req: Omit<DaemonWireRequest, 'token'>,
@@ -283,7 +294,7 @@ export async function cleanupDaemonAfterRequest(
 
   const result = await stopAndRetireDaemon({
     paths: settings.paths,
-    observed: { pid: daemon.info.pid, startTime: daemon.info.processStartTime ?? null },
+    observed: observedDaemonIdentityOf(daemon.info),
     mode: 'graceful',
     ownedStateDir: settings.ownedStateDir,
   });

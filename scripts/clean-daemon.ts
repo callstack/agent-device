@@ -5,7 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { readRegisteredDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
+import { readDaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import {
   stopAndRetireDaemon,
   recoverAbandonedDaemonRegistration,
@@ -22,7 +22,7 @@ const paths = resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR, {
 });
 const retirement = await stopAndRetireDaemon({
   paths,
-  observed: readRegisteredDaemonIdentity(paths.infoPath),
+  observed: readCleanupIdentity(paths.infoPath),
   mode: 'graceful',
   termTimeoutMs: DAEMON_TERM_TIMEOUT_MS,
   killTimeoutMs: DAEMON_KILL_TIMEOUT_MS,
@@ -65,7 +65,7 @@ async function pruneStaleDevStateDirs(): Promise<void> {
     const paths = resolveDaemonPaths(dirPath, { cwd: process.cwd() });
     const result = await recoverAbandonedDaemonRegistration({
       paths,
-      observed: readRegisteredDaemonIdentity(paths.infoPath),
+      observed: readCleanupIdentity(paths.infoPath),
     });
     if (result.status === 'retired')
       process.stdout.write(
@@ -106,4 +106,11 @@ function statMtimeMs(filePath: string): number {
   } catch {
     return 0;
   }
+}
+
+function readCleanupIdentity(infoPath: string) {
+  const { identity, ownership } = readDaemonStopIdentity(infoPath);
+  return identity && ownership !== 'absent' && ownership !== 'unreadable'
+    ? { ...identity, ownership }
+    : null;
 }
