@@ -60,7 +60,7 @@ Introduce one `CommandDescriptor` per command.
 It **composes facets owned by their domains**.
 Every consumer table is **derived** through pure projection:
 
-- The descriptor composes catalog identity, command-family surface projection hooks, a `capability` facet, a `daemon` facet, platform dispatch membership, response data transforms, and typed-result hooks.
+- The descriptor composes catalog identity, command-family surface projection hooks, the `platformExecution` declaration (successor to the retired `capability` facet), a `daemon` facet, platform dispatch membership, response data transforms, and typed-result hooks.
   `src/commands/**` remains the owner of the CLI schema/reader and executable surface metadata.
   ADR 0003 shapes the route and request-policy traits of the `daemon` facet.
 - Narrow command traits that affect multiple projections belong to the descriptor.
@@ -100,10 +100,11 @@ This design composes with ADR 0003's four invariants and is bound by them:
 ## Consequences
 
 A plain new command changes approximately 1–2 files.
-Per-platform behavior remains N implementations behind the descriptor's `execute`.
+Per-platform behavior remains N implementations behind the in-daemon `execute` seam.
+The descriptor's `platformExecution` declaration names the runtime use that seam binds.
 The descriptor is the prerequisite for typed per-command results.
 `src/client/client-types.ts` retains the public client interface and some `CommandRequestResult` return types.
-It also supplies the capability facet used by the platform-plugin work in ADR 0009.
+It also supplied the capability facet used by the platform-plugin work in ADR 0009. That facet is retired; [ADR 0009](0009-apple-platform-consolidation.md) records the retirement.
 
 During the migration, the import-cycle inversion was the principal risk.
 At that time, `command-catalog.ts` had approximately 95 importers.
