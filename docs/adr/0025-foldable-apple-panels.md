@@ -19,7 +19,8 @@ Only inference answers the second question.
 
 | Situation | Behavior |
 | --- | --- |
-| Any iOS simulator capture | First resolve the CoreDevice display table. Capture the panel that the system currently lights. |
+| iOS simulator capture through `simctl` | First resolve the CoreDevice display table. Capture the panel that the system currently lights. |
+| Runner fallback after a `simctl` failure | Follow the target app's window and capture the display that hosts it. Use the facts that the runner reports. |
 | More than one integrated panel | Pass `--display=<panel name>` on every `simctl io screenshot`. Never use the implicit default. |
 | Zero or multiple lit panels | Name the `primary` panel. Emit `apple_display_capture_ambiguous`. Report pose as `unknown`. |
 | One integrated panel | Preserve pre-panel behavior exactly: no display flag, no pose, unchanged scale probe. |
@@ -137,7 +138,8 @@ SpringBoard owns the home-screen window.
 Thus, a session without an app, or with a stopped app, can still resolve a window's display.
 The result always names a display occupied by a window.
 It never defaults to `XCUIScreen.main`, which is dark on a Duo when the app uses the inner panel.
-A capture fails closed with a typed reason only when neither window resolves.
+A capture fails closed only in three cases. Neither window resolves. A resolved window names no display. A resolved display yields an unrenderable image.
+The typed reasons are `unresolvedWindow`, `unresolvedScreen`, and `unrenderableImage` (`RunnerAppScreenCapture.swift`).
 The query uses both `exists` and frame evidence to refuse an app without a window.
 Such an app returns `(0,0 0x0)` from `frame` without an exception.
 Geometry alone cannot prove that no window exists.
@@ -407,7 +409,8 @@ Only `AVAssetExportPresetHighestQuality` preserves arbitrary geometry.
 Hardware encoding makes full-resolution export inexpensive: approximately 1–2s for 90s at `1206x2622`.
 Thus, `high` was not slower.
 
-`recording-overlay.swift` now always exports through the geometry-preserving preset at both quality tiers.
+`recording-overlay.swift` exports every composited overlay through the geometry-preserving preset at both quality tiers.
+An empty gesture list skips the overlay export and copies the raw capture unchanged.
 `--quality` no longer reduces capture resolution.
 Before adoption, it verifies that the composited track's resolved size matches the capture.
 It also rejects uniformly black output when the raw capture had visible content.
