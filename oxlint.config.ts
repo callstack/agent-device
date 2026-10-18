@@ -84,6 +84,52 @@ export default defineConfig({
   },
   overrides: [
     {
+      files: ['**/*.test.{ts,tsx,mjs}'],
+      rules: {
+        'max-lines': ['error', { max: 1000 }],
+      },
+    },
+    {
+      files: ['src/**/*.{ts,tsx,mjs}', 'packages/*/src/**/*.{ts,tsx,mjs}'],
+      excludeFiles: ['**/*.test.*', '**/__tests__/**', '**/*.fixtures.*', '**/test-utils/**'],
+      rules: {
+        'max-lines': ['error', { max: 1000 }],
+      },
+    },
+    {
+      // Existing oversized test files are architecture debt; remove each entry after splitting.
+      files: [
+        'packages/platform-android/src/__tests__/snapshot.test.ts',
+        'packages/platform-apple/src/runner/__tests__/runner-client-command-retry.test.ts',
+        'packages/platform-apple/src/runner/__tests__/runner-session.test.ts',
+        'src/__tests__/agent-device-client.test.ts',
+        'src/__tests__/cli-client-commands.test.ts',
+        'src/__tests__/cli-config.test.ts',
+        'src/__tests__/cli-network.test.ts',
+        'src/__tests__/remote-connection.test.ts',
+        'src/commands/interaction/runtime/settle.test.ts',
+        'src/daemon-client/__tests__/daemon-client-lifecycle.test.ts',
+        'src/daemon-client/__tests__/daemon-client.test.ts',
+        'src/mcp/__tests__/command-tools.test.ts',
+        'test/integration/provider-scenarios/android-lifecycle.test.ts',
+      ],
+      rules: {
+        'max-lines': 'off',
+      },
+    },
+    {
+      // Existing oversized production files are architecture debt; remove each entry after splitting.
+      files: [
+        'packages/command-registry/src/registry.ts',
+        'packages/host-kit/src/internal/exec.ts',
+        'packages/react-native/src/metro/client-metro.ts',
+        'src/cli/commands/connection-runtime.ts',
+      ],
+      rules: {
+        'max-lines': 'off',
+      },
+    },
+    {
       files: ['scripts/**/*.ts', 'scripts/**/*.mts', 'scripts/**/*.cts'],
       rules: {
         'no-undef': 'error',

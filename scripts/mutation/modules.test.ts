@@ -91,7 +91,6 @@ test('a kernel test is reachable only under root or package src', () => {
   // fail every dry run.
   assert.ok(isKernelTestFile('packages/daemon/src/core/__tests__/ref-frame.test.ts'));
   assert.ok(isKernelTestFile('packages/selectors/src/parse.test.ts'));
-  assert.ok(!isKernelTestFile('scripts/__tests__/test-file-size-ratchet.test.ts'));
   assert.ok(!isKernelTestFile('scripts/__tests__/eager-closure-budgets.test.ts'));
   assert.ok(fs.existsSync(path.join(repoRoot, 'scripts/__tests__/eager-closure-budgets.test.ts')));
   assert.ok(!fs.existsSync(path.join(repoRoot, 'src/__tests__/eager-closure-budgets.test.ts')));
