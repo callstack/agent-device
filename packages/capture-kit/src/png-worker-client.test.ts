@@ -228,8 +228,8 @@ test('decodeScreenshotImageAsync rejects a container it cannot read with the can
 });
 
 test('the worker serves every holder and stops only when the last one lets go', async () => {
-  const first = retainPngWorker();
-  const second = retainPngWorker();
+  const first = retainPngWorker(() => {});
+  const second = retainPngWorker(() => {});
   const encoded = PNG.sync.write(buildPatternPng(5, 4, 2));
 
   await first();
