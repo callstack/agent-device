@@ -25,11 +25,12 @@ The ref-frame vocabulary is promoted into `CONTEXT.md`.
   The frame is one value on `SessionState`.
   A transition replaces the frame whole and never edits it in place.
   The frame type is nominal (`#`-private fields).
-  Thus, no module outside `packages/daemon/src/core/ref-frame.ts` can construct a frame, edit a frame, or derive a frame from an existing frame.
+  Thus, no module outside `packages/daemon/src/core/ref-frame-slot.ts` can construct a frame, edit a frame, or derive a frame from an existing frame.
   The type cannot judge a whole frame that moves unchanged, for example when code clears the field or assigns the frame of another session.
   The field-owner gate still covers these moves.
 - A complete snapshot activates an `all` frame.
   `find`, settled diffs, and replay divergence screens activate a bounded partial frame that supersedes the prior frame.
+  A partial result with no issued ref does not supersede the prior frame.
   Internal read-only captures never activate, reindex, or expire a frame.
 - Every mutating leaf expires the frame at the side-effect seam: after all pre-action guards, immediately before the device operation.
   There is no success-only rollback.
