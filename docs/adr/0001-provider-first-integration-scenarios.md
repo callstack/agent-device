@@ -192,13 +192,20 @@ The script is the source of truth for:
 
 These flags stay in their owning unit/CLI suites:
 
-- Config.
-- Remote transport.
-- Metro preparation.
-- Parser/client-only.
-- Report-writing.
-- Boot-fallback.
+- Config, output, diagnostics, and transport.
+- Remote connection and session-lock policy.
+- Cloud artifact provider lookup.
+- Metro and React Native runtime preparation.
+- Apple launch and perf artifact options.
+- Parser/client-only command flags.
+- Daemon lifecycle control.
+- Platform boot fallback without a provider seam.
+- Open foreground auto-resolution (RFC prototype).
+- Local device contention waiting.
+- Apple simulator screenshot, private-AX, and observe-only capture options.
+- Daemon screenshot selector crop.
 
+`summarizeProviderScenarioFlagExclusions` in `scripts/integration-progress-model.ts` is the full list.
 The report lists these flags as explicit exclusions, so they are not silently missing from the denominator.
 Provider pressure separates semantic Apple `simctl`/`devicectl`, macOS helper, and macOS host usage from generic Apple host-tool usage.
 It also separates semantic Linux desktop/accessibility/clipboard/screenshot/input usage from generic Linux tool usage.
