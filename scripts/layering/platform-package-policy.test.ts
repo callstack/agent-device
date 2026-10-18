@@ -389,7 +389,7 @@ test('platform packages may import the xml vocabulary package', () => {
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 });
 
-test('the Android mechanics facet is the named consumer seam and adb host wiring is root-only', () => {
+test('the Android mechanics facet is the named consumer seam and adb host wiring is limited to the root binding and daemon composition', () => {
   const mechanicsImport =
     "import { resolveAndroidAdbExecutor } from '@agent-device/platform-android/mechanics';";
   const hostImport =
@@ -399,6 +399,7 @@ test('the Android mechanics facet is the named consumer seam and adb host wiring
   allowed.set('src/sdk/android-adb.ts', mechanicsImport);
   allowed.set('packages/daemon/src/sessions/handlers/__tests__/session.test.ts', mechanicsImport);
   allowed.set('src/platform-runtime-android-adb-host.ts', hostImport);
+  allowed.set('src/daemon-composition.ts', hostImport);
   assert.deepEqual(
     messages(allowed).filter((message) => message.includes('may import')),
     [],

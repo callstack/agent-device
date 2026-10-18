@@ -71,7 +71,12 @@ const APPLE_RUNNER_TEST_HOST_FILE = 'packages/platform-apple/src/runner/test-hos
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
 const ANDROID_MECHANICS_FACADE = '@agent-device/platform-android/mechanics';
 const ANDROID_HOST_FACET = '@agent-device/platform-android/adb-host';
-const ANDROID_HOST_BINDING = 'src/platform-runtime-android-adb-host.ts';
+// The host port is bound by the root; daemon composition registers the helper's runtime state.
+const ANDROID_HOST_FACET_IMPORTERS: ReadonlySet<string> = new Set([
+  'src/platform-runtime-android-adb-host.ts',
+  'src/daemon-composition.ts',
+  'src/daemon-composition.test.ts',
+]);
 const ANDROID_DEVICE_BOOT_FACADE = '@agent-device/platform-android/device-boot';
 const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly string[]>>> = {
   apple: [
@@ -115,7 +120,7 @@ function isInteractorSubpathImport(
 }
 
 function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
-  if (specifier === ANDROID_HOST_FACET) return file === ANDROID_HOST_BINDING;
+  if (specifier === ANDROID_HOST_FACET) return ANDROID_HOST_FACET_IMPORTERS.has(file);
   if (isPlatformTestOnlyImport(specifier)) return true;
   if (!(MECHANICS_FACET_SUBPATHS.android ?? []).includes(specifier)) return false;
   // The named facets are the implementation seam for root/core/SDK consumers. Daemon production
