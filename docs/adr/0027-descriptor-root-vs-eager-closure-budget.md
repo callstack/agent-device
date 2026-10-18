@@ -99,7 +99,8 @@ Three facts determine eligibility from the closure graphs and merge-base tree, w
    It removes or replaces none.
 2. **Added-module novelty.**
    Each module newly evaluated by the head is absent from the merge-base tree at its rename-canonicalized path.
-   It must also carry no code from a source deleted since the merge-base.
+   It must also carry no verbatim transplant of code from a source deleted since the merge-base.
+   The probe detects identical normalized statements. A rewritten transplant can pass the probe. The probe limits below record that fact.
    The check matches an added module when it shares two or more identical normalized top-level statements with one deleted source; that is a move signal.
    One shared statement counts as coincidence.
    Short constants, such as schema versions or default timeouts, repeat across the repository.
