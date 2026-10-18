@@ -394,7 +394,7 @@ That Swift policy is the source of truth, because the current table has only thr
 
 - A coordinate synthesized tap never probes keyboards and may use the coordinate fallback.
   This applies to a standalone tap, a `sequence` step, and the in-app `back` top-leading tap.
-- Default iOS scroll probes keyboards only after AX is known healthy.
+- Default iOS scroll probes keyboards whenever AX is not stamped unavailable, including while health is still unknown (#2500).
   It must not fall back to `XCUICoordinate`.
 - Synthesized one-contact `gesture` plans may still use the coordinate fallback before AX health is known.
   After a snapshot stamps AX unavailable, they stop using it.
