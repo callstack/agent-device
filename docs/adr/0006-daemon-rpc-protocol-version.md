@@ -91,7 +91,9 @@ Checks enforce the increment rules above, so nobody has to remember them (#1432)
 `test/wire-compat/ledger.json` records the hash of each declaration and the protocol version of that hash.
 The unit lane fails if the shape of a declaration changes and the ledger does not change with it.
 `pnpm check:daemon-wire-compat` compares the ledger with the last released tag.
-Drift since that release must carry either a protocol increment or a `compatibleChanges` acknowledgment that invokes the additive list above.
+A declaration removed since that release needs a protocol increment; an acknowledgment cannot cover a removal.
+A declaration changed since that release needs a protocol increment or a `compatibleChanges` acknowledgment that invokes the additive list above.
+Declarations added since that release need neither.
 One bullet is only partly digestible: the `/health` and `/rpc` path literals inside `http-server.ts`.
 For that gap, the manifest records the gap and its reason instead of implying coverage.
 See `test/wire-compat/README.md`.
