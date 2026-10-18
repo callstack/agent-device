@@ -113,7 +113,7 @@ Implementation status as of 2026-08:
     Discovery never produces it.
   - visionOS profile/build/discovery, plus simulator-deployment evidence.
 - Decision-only support boundary:
-  - visionOS discovery and simulator deployment are supported and unit-tested in `packages/platform-apple/src/inventory-classification.ts` and `packages/platform-apple/src/deployment/runtime.test.ts`.
+  - visionOS discovery and simulator deployment are supported and unit-tested in `packages/platform-apple/src/inventory-classification.test.ts` and `packages/platform-apple/src/deployment/runtime.test.ts`.
   - App deployment is also admitted for CoreDevice-backed physical devices.
   - XCTest-backed physical deployment is unsupported.
   - Push remains simulator-only.
