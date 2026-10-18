@@ -16,7 +16,7 @@
 - If the per-code default hint would mislead, supply a hint. If the default suffices, omit the hint.
 - When you wrap an error, preserve an existing hint and the cause chain.
 - Every consumer surface must carry at least code, message, and hint. Rehydration helpers copy all fields.
-- Failed requests always flush diagnostics. Messages must not embed raw stderr dumps or secrets.
+- A failed request inside a request diagnostics scope always flushes diagnostics. A failure before that scope opens may omit `diagnosticId` and `logPath`. Messages must not embed raw stderr dumps or secrets.
 
 ## Context
 
@@ -78,8 +78,11 @@ Nothing documented the conventions, so each new site decided them again.
    - Events timeline.
    Rehydration helpers (`throwDaemonError`, `toDaemonHttpRpcError`) copy all fields.
    `NormalizedError` hoists the typed signals, so `--json` consumers see them.
-6. **Observability.** Failed requests always flush diagnostics.
-   A `diagnosticId` and an ndjson `logPath` accompany every error produced on the local machine.
+6. **Observability.** A failed request inside a request diagnostics scope always flushes diagnostics.
+   Inside that scope on the local machine, the error carries a `diagnosticId` and an ndjson `logPath`.
+   The router opens the scope at `handleRequestOnLedger` (`packages/daemon/src/server/request-router.ts`).
+   A failure before it opens, such as malformed RPC method params rejected in
+   `packages/daemon/src/server/http/http-rpc-methods.ts`, returns an envelope that omits both fields.
    On a remote path, the client keeps only a `logPath` it can open.
    When it cannot produce one, `logPathUnavailable` replaces `logPath` and names the reason (#1801).
    Daemon-side diagnostics are under the session state dir.
