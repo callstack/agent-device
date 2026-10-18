@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import * as transport from './transport.ts';
 import { expect, test, vi } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
@@ -64,6 +66,7 @@ test('close is idempotent and every caller receives the one report', async () =>
       handedOff: ['handed-off-device'],
     });
     expect(first.sessions).toEqual({ closed: 0, failed: 0 });
+    expect(first.platformOwners).toBe('closed');
     expect(first.providerReleases).toEqual({ completed: [], pending: [], unknown: [] });
     expect(first.plugins.disposed).toEqual(['stops']);
     expect(first.plugins.failed).toEqual([
@@ -138,4 +141,64 @@ test('a shutdown step that rejects still releases the registration, lock and pro
   expect(clearLock).toHaveBeenCalledOnce();
   expect(fs.existsSync(paths.lockPath)).toBe(false);
   expect(fs.existsSync(paths.infoPath)).toBe(false);
+});
+
+test('failed HTTP setup rolls back an already listening socket', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-partial-listen-');
+  const host = hostFor(stateDir);
+  const createSocketServer = transport.createSocketServer;
+  let acquired: ReturnType<typeof createSocketServer> | undefined;
+  const spy = vi.spyOn(transport, 'createSocketServer').mockImplementation((handler) => {
+    acquired = createSocketServer(handler);
+    return acquired;
+  });
+  try {
+    await expect(
+      startDaemonRuntime({
+        host: createTestHostEnvironment({
+          env: {
+            ...host.env,
+            AGENT_DEVICE_DAEMON_SERVER_MODE: 'dual',
+            AGENT_DEVICE_HTTP_AUTH_HOOK: path.join(stateDir, 'missing-hook.mjs'),
+          },
+        }),
+        ...silent,
+        composeDeps: daemonRuntimeDepsFixture(),
+      }),
+    ).rejects.toMatchObject({ details: { hookPath: path.join(stateDir, 'missing-hook.mjs') } });
+    expect(acquired).toBeDefined();
+    expect(acquired!.listening).toBe(false);
+    expect(fs.existsSync(resolveDaemonPaths(stateDir).lockPath)).toBe(false);
+  } finally {
+    spy.mockRestore();
+    acquired?.close();
+  }
+});
+
+test('a relative HTTP auth hook uses the runtime host directory', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-host-auth-');
+  fs.writeFileSync(
+    path.join(stateDir, 'auth-hook.mjs'),
+    "export default () => ({ ok: false, message: 'host hook refused' });",
+  );
+  const runtime = await startDaemonRuntime({
+    host: createTestHostEnvironment({
+      cwd: stateDir,
+      env: { ...hostFor(stateDir).env, AGENT_DEVICE_HTTP_AUTH_HOOK: './auth-hook.mjs' },
+    }),
+    ...silent,
+    composeDeps: daemonRuntimeDepsFixture(),
+  });
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${runtime.httpPort}/sessions/default/requests/abc123/diagnostics`,
+      {
+        headers: { authorization: `Bearer ${runtime.token}` },
+      },
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: 'host hook refused' });
+  } finally {
+    await runtime.close();
+  }
 });

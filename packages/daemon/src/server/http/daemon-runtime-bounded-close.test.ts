@@ -1,6 +1,9 @@
 import fs from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
+import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { expect, test, vi } from 'vitest';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import type { RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -8,6 +11,8 @@ import { clearAndroidObservationFixture } from '../../__tests__/support/android-
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import {
   daemonRuntimeDepsFixture,
+  applicationLifecycleResourceFixture,
+  platformOwnerLifecycleFixture,
   pluginRegistryFixture,
 } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
@@ -105,6 +110,7 @@ const cleanReport: ShutdownReport = {
   requests: { drained: 0, abandoned: 0 },
   runners: { stopped: [], handedOff: [] },
   sessions: { closed: 0, failed: 0 },
+  platformOwners: 'closed',
   plugins: { disposed: [], failed: [], pending: [] },
 };
 
@@ -162,4 +168,50 @@ test('the executable writes unfinished work to stderr after a close, and a clean
   expect(clean).toEqual([]);
   expect(unfinished).toEqual([expect.stringMatching(/1 request\(s\) ignored cancellation/)]);
   expect(failed.join('')).toContain('Daemon shutdown error: close blew up');
+});
+
+test('unfinished platform owner shutdown is bounded, reports pending and retains ownership', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-bounded-owner-');
+  let finishOwner!: () => void;
+  const ownerClosed = new Promise<void>((resolve) => {
+    finishOwner = resolve;
+  });
+  const clearLock = vi.fn(async () => {});
+  const pluginShutdown = vi.fn(async () => []);
+  const disposeState = vi.fn();
+  const state: RuntimeStateHandle = { run: (fn) => fn(), enter: () => {}, dispose: disposeState };
+  const runtime = await startDaemonRuntime({
+    host: hostFor(stateDir),
+    ...silent,
+    shutdownBudgets: { ownerMs: 20 },
+    composeDeps: daemonRuntimeDepsFixture({
+      deviceRuntimeGateway: {
+        ...lifecycleDeviceRuntimeGateway,
+        applicationLifecycle: applicationLifecycleResourceFixture(),
+        shutdown: () => ownerClosed,
+      },
+      ownerLifecycle: platformOwnerLifecycleFixture({ clearDaemonLockConfiguration: clearLock }),
+      shutdownProviderRuntimes: pluginShutdown,
+      runtimeStates: [state],
+    }),
+  });
+  const closing = runtime.close();
+  try {
+    const report = await Promise.race([closing, delay(1_000, null)]);
+    expect(report).not.toBeNull();
+    expect(report!.platformOwners).toBe('pending');
+    await expect(runtime.closed).resolves.toBe(report);
+    expect(pluginShutdown).toHaveBeenCalledOnce();
+    expect(clearLock).not.toHaveBeenCalled();
+    expect(disposeState).not.toHaveBeenCalled();
+    const paths = resolveDaemonPaths(stateDir);
+    expect(fs.existsSync(paths.lockPath)).toBe(true);
+    expect(fs.existsSync(paths.infoPath)).toBe(true);
+    expect(describeUnfinishedShutdownWork(report!)).toEqual([
+      expect.stringContaining('platform owners were still shutting down'),
+    ]);
+  } finally {
+    finishOwner();
+    await closing;
+  }
 });

@@ -76,6 +76,7 @@ export async function createDaemonHttpServer(options: {
   token?: string;
   retainArtifacts?: boolean;
   env?: NodeJS.ProcessEnv;
+  cwd?: string;
   /**
    * Resolves a request diagnostics record path for the `/sessions/.../requests/...`
    * route (#1801). Omitted by embedded servers with no session store; the route
@@ -97,7 +98,7 @@ export async function createDaemonHttpServer(options: {
     (backend) => backend !== 'macos-app' || process.platform === 'darwin',
   );
   const environment = options.env ?? process.env;
-  const authHook = await loadHttpAuthHook(environment);
+  const authHook = await loadHttpAuthHook(environment, options.cwd ?? process.cwd());
   const {
     handleRequest,
     token,

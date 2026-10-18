@@ -71,6 +71,7 @@ export type ShutdownReport = {
    */
   requests: { drained: number; abandoned: number };
   sessions: { closed: number; failed: number };
+  platformOwners: 'closed' | 'pending';
   /** `pending` plugins were still shutting down when the budget ran out. */
   plugins: {
     disposed: string[];
@@ -93,6 +94,11 @@ export function describeUnfinishedShutdownWork(report: ShutdownReport): string[]
   if (report.requests.abandoned > 0) {
     lines.push(
       `Daemon shutdown: ${report.requests.abandoned} request(s) ignored cancellation and may still be running; the daemon registration stays held until this process exits.`,
+    );
+  }
+  if (report.platformOwners === 'pending') {
+    lines.push(
+      'Daemon shutdown: platform owners were still shutting down when the budget ran out; the daemon registration stays held until this process exits.',
     );
   }
   for (const provider of report.plugins.pending) {
@@ -163,7 +169,7 @@ export function createPluginClose(params: {
   return {
     close: () =>
       (closing ??= (async () => {
-        const outcome = await closeWithinBudget(
+        const outcome = await settleWithinBudget(
           params.close,
           params.timeoutMs ?? DAEMON_PLUGIN_SHUTDOWN_TIMEOUT_MS,
         );
@@ -182,27 +188,30 @@ export function createPluginClose(params: {
             pending: [],
           };
         }
-        return reportCleanupOutcomes(outcome.outcomes);
+        return reportCleanupOutcomes(outcome.value);
       })()),
   };
 }
 
-type PluginCloseOutcome =
-  | { kind: 'closed'; outcomes: readonly PluginCleanupOutcome[] }
+type BoundedShutdownOutcome<T> =
+  | { kind: 'completed'; value: T }
   | { kind: 'rejected'; error: unknown }
   | { kind: 'deadline' };
 
-async function closeWithinBudget(
-  close: () => Promise<readonly PluginCleanupOutcome[]>,
+/** Settles one shutdown operation at its deadline without cancelling its unfinished work. */
+export async function settleWithinBudget<T>(
+  close: () => Promise<T>,
   timeoutMs: number,
-): Promise<PluginCloseOutcome> {
+): Promise<BoundedShutdownOutcome<T>> {
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   const outcome = await Promise.race([
-    close().then(
-      (outcomes): PluginCloseOutcome => ({ kind: 'closed', outcomes }),
-      (error: unknown): PluginCloseOutcome => ({ kind: 'rejected', error }),
-    ),
-    new Promise<PluginCloseOutcome>((resolve) => {
+    Promise.resolve()
+      .then(close)
+      .then(
+        (value): BoundedShutdownOutcome<T> => ({ kind: 'completed', value }),
+        (error: unknown): BoundedShutdownOutcome<T> => ({ kind: 'rejected', error }),
+      ),
+    new Promise<BoundedShutdownOutcome<T>>((resolve) => {
       deadlineTimer = setTimeout(() => resolve({ kind: 'deadline' }), timeoutMs);
     }),
   ]);

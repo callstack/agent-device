@@ -19,7 +19,7 @@ test('daemon startup awaits app-log recovery after acquiring the lock and before
   const acquiredLock = source.indexOf("if (acquisition.status !== 'acquired')");
   const legacyRecovery = source.indexOf('await deps.ownerLifecycle.recoverLegacyAppLogMarkers(');
   const recovery = source.indexOf('await recoverAppLogResourcesAfterDaemonLock(');
-  const openedServers = source.indexOf('const opened = await openDaemonServers()');
+  const openedServers = source.indexOf('await openDaemonServers(');
 
   expect(acquiredLock).toBeGreaterThanOrEqual(0);
   expect(legacyRecovery).toBeGreaterThan(acquiredLock);

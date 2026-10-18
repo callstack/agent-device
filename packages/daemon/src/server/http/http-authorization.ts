@@ -130,13 +130,11 @@ async function runHttpAuthHook(
   return { ok: true };
 }
 
-async function loadHttpAuthHook(
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<HttpAuthHook | null> {
+async function loadHttpAuthHook(env: NodeJS.ProcessEnv, cwd: string): Promise<HttpAuthHook | null> {
   const hookPath = env.AGENT_DEVICE_HTTP_AUTH_HOOK;
   if (!hookPath) return null;
   const exportName = env.AGENT_DEVICE_HTTP_AUTH_EXPORT || 'default';
-  const resolvedPath = path.isAbsolute(hookPath) ? hookPath : path.resolve(hookPath);
+  const resolvedPath = path.isAbsolute(hookPath) ? hookPath : path.resolve(cwd, hookPath);
   let imported: Record<string, unknown>;
   try {
     imported = (await import(pathToFileURL(resolvedPath).href)) as Record<string, unknown>;
