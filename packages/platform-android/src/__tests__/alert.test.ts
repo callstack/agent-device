@@ -178,6 +178,111 @@ test('a fallback Back dismissal (no matching button) carries no coordinates', as
   assert.deepEqual(runAndroidAdb.mock.calls[0]?.[1], ['shell', 'input', 'keyevent', '4']);
 });
 
+const unknownGrantSheet = [
+  node(0, 'android.widget.FrameLayout', { bundleId: 'com.vendor.permissioncontroller' }),
+  text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
+  button(
+    2,
+    'Allow everything and sync',
+    'com.vendor.permissioncontroller:id/permission_allow_everything_button',
+    { x: 32, y: 1420 },
+    false,
+  ),
+];
+
+test('accept never taps an undeclared grant that stands alone', async () => {
+  // The action-seam certificate for the maintainer's literal rule: the sole button is an
+  // allow-shaped id no slot declares with an affirmative-looking label. The refusal must reach
+  // the real seam as alert_button_undecided with dispatched: no and zero adb calls — the
+  // single-button-dialog fallback may not re-admit it.
+  runAndroidAdb.mockClear();
+  await assert.rejects(
+    handleAndroidAlert(device, 'accept', { captureNodes: async () => unknownGrantSheet }),
+    (error: unknown) =>
+      error instanceof Error &&
+      (error as { details?: { reason?: unknown; dispatched?: unknown } }).details?.reason ===
+        'alert_button_undecided' &&
+      (error as { details?: { dispatched?: unknown } }).details?.dispatched === 'no',
+  );
+  assert.equal(runAndroidAdb.mock.calls.length, 0);
+});
+
+test('dismiss of an undeclared grant sheet falls back to Back and taps nothing', async () => {
+  // The undeclared deny-side twin: with no declared leaving choice to name, dismiss answers the
+  // same way a buttonless dialog does — the Back key, which Android treats as the cancel that
+  // grants nothing — never a tap at the unranked grant's coordinates.
+  runAndroidAdb.mockClear();
+  const result = await handleAndroidAlert(device, 'dismiss', {
+    captureNodes: dialogUntilPressed(unknownGrantSheet),
+  });
+
+  assert.equal(result.kind, 'alertHandled');
+  assert.equal(result.kind === 'alertHandled' ? result.button : undefined, 'Back');
+  assert.deepEqual(runAndroidAdb.mock.calls[0]?.[1], ['shell', 'input', 'keyevent', '4']);
+  assert.equal(runAndroidAdb.mock.calls.filter(([, args]) => args.includes('tap')).length, 0);
+});
+
+test('dismiss of an unknown deny-shaped grant falls back to Back instead of pressing it', async () => {
+  // The decline-side shape the review probed: a fork's own deny id alone with decline-shaped
+  // copy. Old main pressed it; under the declaration rule it names no role, so dismiss takes
+  // the Back key like any dialog with no nameable leaving choice — never a tap the fork's
+  // unranked id would direct.
+  runAndroidAdb.mockClear();
+  const result = await handleAndroidAlert(device, 'dismiss', {
+    captureNodes: dialogUntilPressed([
+      node(0, 'android.widget.FrameLayout', { bundleId: 'com.vendor.permissioncontroller' }),
+      text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
+      button(
+        2,
+        'Never allow',
+        'com.vendor.permissioncontroller:id/permission_deny_and_block_button',
+        { x: 32, y: 1420 },
+        false,
+      ),
+    ]),
+  });
+
+  assert.equal(result.kind, 'alertHandled');
+  assert.equal(result.kind === 'alertHandled' ? result.button : undefined, 'Back');
+  assert.equal(runAndroidAdb.mock.calls.filter(([, args]) => args.includes('tap')).length, 0);
+});
+
+test('accept refuses beside an undeclared grant even when a declared grant stands beside it', async () => {
+  // Known + unknown at the seam: the sheet holds the real permission_allow_all_button AND a
+  // fork's own grant id. The press would have landed on the lasting grant; the undeclared
+  // grant stays represented and the whole sheet refuses with zero taps.
+  runAndroidAdb.mockClear();
+  await assert.rejects(
+    handleAndroidAlert(device, 'accept', {
+      captureNodes: async () => [
+        node(0, 'android.widget.FrameLayout', {
+          bundleId: 'com.google.android.permissioncontroller',
+        }),
+        text(
+          1,
+          '¿Permitir que Probe acceda a tus fotos?',
+          'com.android.permissioncontroller:id/permission_message',
+        ),
+        button(2, 'Permitir todo', 'permission_allow_all_button', { x: 32, y: 1420 }, true),
+        button(
+          3,
+          'Permitir con sincronización',
+          'com.vendor.permissioncontroller:id/permission_allow_with_sync_button',
+          { x: 32, y: 1490 },
+          false,
+        ),
+        button(4, 'No permitir', 'permission_deny_button', { x: 32, y: 1560 }, true),
+      ],
+    }),
+    (error: unknown) =>
+      error instanceof Error &&
+      (error as { details?: { reason?: unknown; dispatched?: unknown } }).details?.reason ===
+        'alert_button_undecided' &&
+      (error as { details?: { dispatched?: unknown } }).details?.dispatched === 'no',
+  );
+  assert.equal(runAndroidAdb.mock.calls.length, 0);
+});
+
 test('dismiss returns only after the dialog has left the tree', async () => {
   runAndroidAdb.mockClear();
   // Pre-press lookup, then two captures that still show the closing dialog, then the app.

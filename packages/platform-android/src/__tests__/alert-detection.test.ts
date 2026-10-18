@@ -268,10 +268,36 @@ test('every declared permissioncontroller grant id carries a rank beside its rol
       continue;
     }
     assert.notEqual(chosen, null, `grant id ${identifier} carries no declared rank`);
-    if (!identifier.includes('deny')) {
-      // Every other accept id outranks the last-ranked slot on the one declared scale.
-      assert.equal(chosen?.label, 'Grant one', `grant id ${identifier} ranked out of order`);
+    if (identifier.includes('deny')) {
+      // The same boundary on the dismiss scale: pair each deny id with the other declared deny
+      // id under localized labels — the plain deny slot must win, which only a rank can do.
+      const other =
+        identifier === 'permission_deny_button'
+          ? 'permission_deny_and_dont_ask_again_button'
+          : 'permission_deny_button';
+      const dismissPair = findAndroidAlertCandidate([
+        node(0, 'android.widget.FrameLayout', {
+          bundleId: 'com.google.android.permissioncontroller',
+        }),
+        text(
+          1,
+          '¿Permitir que Probe acceda?',
+          'com.android.permissioncontroller:id/permission_message',
+        ),
+        button(2, 'Permitir', 'permission_allow_button', { x: 32, y: 1420 }, true),
+        button(3, 'Declinar uno', identifier, { x: 32, y: 1490 }, true),
+        button(4, 'Declinar dos', other, { x: 32, y: 1560 }, true),
+      ]);
+      const declined = chooseAndroidAlertButton(dismissPair?.buttons ?? [], 'dismiss');
+      assert.equal(
+        declined?.label,
+        identifier === 'permission_deny_button' ? 'Declinar uno' : 'Declinar dos',
+        `deny id ${identifier} does not resolve on the declared dismiss scale`,
+      );
+      continue;
     }
+    // Every accept id outranks the last-ranked slot on the one declared scale.
+    assert.equal(chosen?.label, 'Grant one', `grant id ${identifier} ranked out of order`);
   }
 });
 
@@ -334,7 +360,153 @@ test('a grant id outside the declared ranks keeps the refusal against a known la
   ]);
 
   assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
-  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, 'Deny');
+  // The undeclared grant stands beside the known deny too, so the boundary names no button for
+  // either action; at the seam the refusal answers `alert_button_undecided` for accept and the
+  // Back fallback for dismiss — the deny id is never pressed beside an unnameable grant.
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss'), null);
+});
+
+test('an unknown grant id standing alone refuses instead of being pressed', () => {
+  // The maintainer's literal rule at its sharpest: a fork's own allow-shaped id is the sheet's
+  // only button. No declaration states this grant's role or rank, so no path may press it —
+  // not the role choice (its role is now undeclared, not accept), not the single-candidate
+  // rule, and not the single-button fallback (the refusal is the whole sheet's, not per-role).
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', { bundleId: 'com.vendor.permissioncontroller' }),
+    text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
+    button(
+      2,
+      'Allow everything and sync',
+      'com.vendor.permissioncontroller:id/permission_allow_everything_button',
+      { x: 32, y: 1420 },
+      false,
+    ),
+  ]);
+
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss'), null);
+});
+
+test('an unknown grant id cannot earn a role from an affirmative label', () => {
+  // The label vocabulary is the fallback for buttons the backend declares nothing about. An
+  // allow/deny-shaped grant id is not such a button: letting English copy alone classify it
+  // would re-admit the accept-by-id-without-rank the declaration exists to make impossible,
+  // and the single candidate would then be pressed.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', { bundleId: 'com.vendor.permissioncontroller' }),
+    text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
+    button(
+      2,
+      'Allow all',
+      'com.vendor.permissioncontroller:id/permission_allow_fine_location_and_sync_button',
+      { x: 32, y: 1420 },
+      false,
+    ),
+  ]);
+
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss'), null);
+});
+
+test('an unknown deny-shaped grant standing alone refuses dismiss instead of being pressed', () => {
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', { bundleId: 'com.vendor.permissioncontroller' }),
+    text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
+    button(
+      2,
+      'Never allow',
+      'com.vendor.permissioncontroller:id/permission_deny_and_block_button',
+      { x: 32, y: 1420 },
+      false,
+    ),
+  ]);
+
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss'), null);
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+});
+
+test('an unknown grant beside a declared one refuses in either order', () => {
+  // Unknown + known, known + unknown: the unknown grant stays represented — it is never dropped
+  // so the declared grant could win alone, and it is never ordered by tree position. Both the
+  // unknown-allow-first and the declared-allow-first sheet refuse acting entirely.
+  for (const unknownFirst of [true, false]) {
+    const unknown = button(
+      2,
+      'Allow with sync',
+      'com.vendor.permissioncontroller:id/permission_allow_with_sync_button',
+      { x: 32, y: 1420 },
+      false,
+    );
+    const known = button(
+      3,
+      'Permitir todo',
+      'permission_allow_all_button',
+      { x: 32, y: 1490 },
+      true,
+    );
+    const deny = button(4, 'No permitir', 'permission_deny_button', { x: 32, y: 1560 }, true);
+    const candidate = findAndroidAlertCandidate([
+      node(0, 'android.widget.FrameLayout', {
+        bundleId: 'com.google.android.permissioncontroller',
+      }),
+      text(
+        1,
+        '¿Permitir que Probe acceda?',
+        'com.android.permissioncontroller:id/permission_message',
+      ),
+      ...(unknownFirst ? [unknown, known, deny] : [known, unknown, deny]),
+    ]);
+
+    assert.equal(
+      chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'),
+      null,
+      `unknown-first=${unknownFirst}: accept pressed beside an undeclared grant`,
+    );
+    assert.equal(
+      chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss'),
+      null,
+      `unknown-first=${unknownFirst}: dismiss pressed beside an undeclared grant`,
+    );
+  }
+});
+
+test('two unknown grants refuse together', () => {
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', { bundleId: 'com.vendor.permissioncontroller' }),
+    text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
+    button(
+      2,
+      'Allow and sync',
+      'com.vendor.permissioncontroller:id/permission_allow_and_sync_button',
+      { x: 32, y: 1420 },
+      false,
+    ),
+    button(
+      3,
+      'Decline for now',
+      'com.vendor.permissioncontroller:id/permission_deny_for_now_button',
+      { x: 32, y: 1490 },
+      false,
+    ),
+  ]);
+
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss'), null);
+});
+
+test('a future AOSP grant id outside the table also refuses rather than pressing alone', () => {
+  // Not a vendor fork: the controller's own id home, a grant name the table has not learned
+  // yet. The same typed fact covers it — undeclared is undeclared, whoever ships it.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
+    button(2, 'Allow all media', 'permission_allow_all_media_button', { x: 32, y: 1420 }, true),
+  ]);
+
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss'), null);
 });
 
 test('two points carrying one grant id refuse instead of resolving by tree order', () => {

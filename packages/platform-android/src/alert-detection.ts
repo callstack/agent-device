@@ -15,6 +15,13 @@ export type AndroidAlertButton = {
   role: AlertButtonRole;
   /** The node's resource id — the backend-owned fact that can rank a grant's role. */
   identifier: string;
+  /**
+   * The id states a permission grant (`permission_allow*` / `permission_deny*`) that no slot of
+   * PERMISSION_GRANT_ID_SLOTS knows. Only a declared slot names such a button's role: an
+   * undeclared grant carries no role for any source, and no label can give it one. Its presence
+   * makes the whole sheet unactionable.
+   */
+  hasUndeclaredGrant: boolean;
 };
 
 type AndroidAlertSource = Extract<AlertSource, 'permission' | 'native-dialog' | 'system-dialog'>;
@@ -94,14 +101,20 @@ function isReachableAlertNode(node: RawSnapshotNode): boolean {
  * ones, whatever language their labels are in), the shared label vocabulary where no grant id
  * exists; else, for dismiss, the first neutral button (Android dialogs commonly name the
  * leaving path only neutrally); else, for accept, a single-button dialog's only affirmative
- * path. Two choices that tie on one rank (the same label or the same grant id at two points) or
- * a candidate no rank source reaches refuse at the shared boundary rather than resolving by
- * tree order — the driver turns that refusal into a Back key for dismiss, or a typed refusal.
+ * path. Two choices that tie on one rank (the same label or the same grant id at two points), a
+ * candidate no rank source reaches, or a grant id no slot declares refuse at the shared
+ * boundary rather than resolving by tree order — the driver turns that refusal into a Back key
+ * for dismiss, or a typed refusal.
  */
 export function chooseAndroidAlertButton(
   buttons: AndroidAlertButton[],
   action: 'accept' | 'dismiss',
 ): AndroidAlertButton | null {
+  // A grant id the declaration does not know makes the whole sheet unactionable for either
+  // action. Dropping it would hand a remaining declared button the sole-candidate press;
+  // keeping it only its own role would leave the other action's fallbacks — the neutral find,
+  // the single-button press — aiming at a sheet whose grants nothing here ranks.
+  if (buttons.some((button) => button.hasUndeclaredGrant)) return null;
   const exact = selectRankedAlertButtonByRole(buttons, action, rankAndroidAlertButtonById);
   if (exact) return exact;
   if (action === 'dismiss') {
@@ -120,9 +133,10 @@ export function chooseAndroidAlertButton(
  * access ("Allow all": Android 13+ files, Android 14+ partial media) over foreground-only over
  * plain/always over a picker-limited grant ("Select photos and videos") over a one-time grant.
  * The dismiss scale then prefers the reversible decline: the plain deny over its don't-ask-again
- * variants. A controller id this table does not know (a vendor fork's own grant) keeps the
- * prefix-only role with no rank, so beside a ranked grant it can only refuse — it is never
- * silently dropped or ordered by tree position.
+ * variants. A controller id this table does not know (a vendor fork's own grant, or a future
+ * AOSP grant) declares no role and no rank at all, and chooseAndroidAlertButton refuses the
+ * whole sheet beside it — it is never silently dropped, never labelled into a role, and never
+ * ordered by tree position.
  */
 const PERMISSION_GRANT_ID_SLOTS: ReadonlyArray<{
   role: AlertButtonRole;
@@ -232,35 +246,51 @@ function findAlertButtons(nodes: RawSnapshotNode[]): AndroidAlertButton[] {
       label,
       x: point.x,
       y: point.y,
-      role: classifyAndroidAlertButton(node, label),
+      ...classifyAndroidAlertButton(node, label),
       identifier: node.identifier ?? '',
     });
   }
   return buttons;
 }
 
-function classifyAndroidAlertButton(node: RawSnapshotNode, label: string): AlertButtonRole {
+function classifyAndroidAlertButton(
+  node: RawSnapshotNode,
+  label: string,
+): Pick<AndroidAlertButton, 'role' | 'hasUndeclaredGrant'> {
   const identifier = node.identifier ?? '';
   const roleFromId = classifyAndroidAlertButtonById(identifier);
-  if (roleFromId) return roleFromId;
-  return classifyAlertButtonRole(label);
+  if (roleFromId === UNDECLARED_GRANT) {
+    // An undeclared grant is neutral to every source: only a declared slot may name a grant's
+    // role, so the label never classifies it either.
+    return { role: 'neutral', hasUndeclaredGrant: true };
+  }
+  if (roleFromId) return { role: roleFromId, hasUndeclaredGrant: false };
+  return { role: classifyAlertButtonRole(label), hasUndeclaredGrant: false };
 }
+
+/** The grant-id shape: an id that states an allow or a deny on a permission sheet. */
+const ANDROID_GRANT_ID_SHAPE = /(?:^|:)id\/permission_(?:allow|deny)/i;
+
+/** `classifyAndroidAlertButtonById`'s fourth answer: a grant id no slot declares. */
+const UNDECLARED_GRANT = 'undeclared-grant' as const;
 
 /**
  * The role a resource id states. A known permissioncontroller id answers from the one slot
  * table that also ranks it; the `android:id/button1..3` positions carry a role Android's dialog
- * owns with no grant to rank; a controller-prefixed id the table does not know (a vendor fork's
- * own grant) keeps the prefix-only role with no declared rank, which the shared choice boundary
- * reads as a refusal, never a position to press.
+ * owns with no grant to rank. A grant-shaped id no slot declares (a vendor fork's own grant, or
+ * a future AOSP grant this build has not learned) answers UNDECLARED_GRANT: it states a grant
+ * nothing here ranks, so it carries no role and no label may give it one — the sheet-level
+ * refusal in chooseAndroidAlertButton reads that typed fact and presses nothing.
  */
-function classifyAndroidAlertButtonById(identifier: string): AlertButtonRole | null {
+function classifyAndroidAlertButtonById(
+  identifier: string,
+): AlertButtonRole | typeof UNDECLARED_GRANT | null {
   const slot = permissionGrantIdSlot(identifier);
   if (slot !== -1) return PERMISSION_GRANT_ID_SLOTS[slot]!.role;
   if (/(?:^|:)id\/button1$/i.test(identifier)) return 'accept';
   if (/(?:^|:)id\/button2$/i.test(identifier)) return 'dismiss';
   if (/(?:^|:)id\/button3$/i.test(identifier)) return 'neutral';
-  if (/(?:^|:)id\/permission_allow/i.test(identifier)) return 'accept';
-  if (/(?:^|:)id\/permission_deny/i.test(identifier)) return 'dismiss';
+  if (ANDROID_GRANT_ID_SHAPE.test(identifier)) return UNDECLARED_GRANT;
   return null;
 }
 
