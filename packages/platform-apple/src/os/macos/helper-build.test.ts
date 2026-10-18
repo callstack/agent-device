@@ -122,7 +122,7 @@ function sourcePath(...segments: string[]): string {
 
 /** A helper command is the freshness entry point: it cannot answer without fingerprinting the tree. */
 async function askTheHelperForTheFrontmostApp(): Promise<void> {
-  const frontmost = await resolveFrontmostMacOsApp();
+  const frontmost = await resolveFrontmostMacOsApp(process.env);
   assert.equal(frontmost.bundleId, 'com.example.Finder');
   // The command runs the binary the freshness check just settled on, not a rebuild.
   assert.equal(layout.helperCommands.at(-1), `${installedHelperPath} app frontmost`);

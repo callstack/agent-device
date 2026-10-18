@@ -37,6 +37,7 @@ import type {
 } from '@agent-device/contracts/interactor-types';
 import { captureMacOsSurfaceSnapshot } from './os/macos/surface-snapshot.ts';
 import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { macOsNativeAppInteractor } from './os/macos/native-app-interactor.ts';
 import {
   presentAppleRunnerSnapshot,
@@ -50,6 +51,7 @@ import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-targe
 export function createAppleInteractor(
   device: DeviceInfo,
   runnerContext: RunnerContext,
+  host: HostEnvironment,
   runnerProvider?: AppleRunnerProvider | AppleRunnerCommandExecutor,
 ): Interactor {
   // watchOS unsupported sentinel: XCUITest cannot drive watchOS UI (no
@@ -62,8 +64,9 @@ export function createAppleInteractor(
       'watchOS is not supported: XCUITest cannot drive watchOS UI, so this device has no runner backend.',
     );
   }
-  const { overrides, runnerOpts } = iosRunnerOverrides(device, runnerContext);
-  const appBackend = isMacOs(device) ? hostMacOsAppBackend() : 'xctest';
+  const env = host.env;
+  const { overrides, runnerOpts } = iosRunnerOverrides(device, runnerContext, env);
+  const appBackend = isMacOs(device) ? hostMacOsAppBackend(env) : 'xctest';
   const helperSurface = (surface: SessionSurface | undefined) =>
     isMacOs(device) ? macOsHelperSurface(surface, appBackend) : undefined;
   const interactor: Interactor = {
@@ -77,17 +80,30 @@ export function createAppleInteractor(
         runnerOptions: runnerOpts,
       }),
     openDevice: () => openIosDevice(device),
-    close: (app) => closeIosApp(device, app, runnerOpts),
+    close: (app) => closeIosApp(device, app, runnerOpts, env),
     screenshot: (outPath, options) =>
-      runAppleScreenshot(device, outPath, options, runnerOpts, helperSurface(options?.surface)),
+      runAppleScreenshot(
+        device,
+        outPath,
+        options,
+        runnerOpts,
+        helperSurface(options?.surface),
+        env,
+      ),
     snapshot: async (options) =>
-      await captureAppleSnapshot(device, options, runnerOpts, helperSurface(options?.surface)),
+      await captureAppleSnapshot(device, options, runnerOpts, helperSurface(options?.surface), env),
     // The live text at a point: helper for a helper-routed macOS surface, XCTest runner for
     // every other Apple leaf.
     readTextAtPoint: async (point, options) => {
       const helper = helperSurface(options?.surface);
       return helper
-        ? await readMacOsSurfaceTextAtPoint(point, helper, options?.appBundleId, options?.signal)
+        ? await readMacOsSurfaceTextAtPoint(
+            point,
+            helper,
+            options?.appBundleId,
+            options?.signal,
+            env,
+          )
         : await readRunnerTextAtPoint(device, point, options, runnerOpts);
     },
     // The XCTest runner's own text reading: it observes the live accessibility hierarchy
@@ -208,16 +224,16 @@ export function createAppleInteractor(
     readClipboard: () => readIosClipboardText(device),
     writeClipboard: (text) => writeIosClipboardText(device, text, runnerOpts),
     setSetting: (setting, state, appId, options) =>
-      setIosSetting(device, setting, state, appId, options),
+      setIosSetting(device, setting, state, appId, options, env),
     readSetting: (setting) => readIosSetting(device, setting),
-    readAlert: (options) => readAppleAlert(device, runnerOpts, options),
-    awaitAlert: (options) => awaitAppleAlert(device, runnerOpts, options),
-    acceptAlert: (options) => actOnAppleAlert(device, runnerOpts, 'accept', options),
-    dismissAlert: (options) => actOnAppleAlert(device, runnerOpts, 'dismiss', options),
+    readAlert: (options) => readAppleAlert(device, runnerOpts, options, env),
+    awaitAlert: (options) => awaitAppleAlert(device, runnerOpts, options, env),
+    acceptAlert: (options) => actOnAppleAlert(device, runnerOpts, 'accept', options, env),
+    dismissAlert: (options) => actOnAppleAlert(device, runnerOpts, 'dismiss', options, env),
     ...overrides,
   };
   const served =
-    appBackend === 'native' ? macOsNativeAppInteractor(interactor, runnerContext) : interactor;
+    appBackend === 'native' ? macOsNativeAppInteractor(interactor, runnerContext, env) : interactor;
   if (!runnerProvider) return served;
   return withInjectedAppleRunnerTransport(device, runnerContext, served, runnerProvider);
 }
@@ -227,9 +243,10 @@ async function captureAppleSnapshot(
   options: SnapshotOptions | undefined,
   runnerOpts: RunnerCallOptions,
   helper: MacOsHelperSurface | undefined,
+  env: Readonly<EnvMap>,
 ) {
   if (helper) {
-    return await captureMacOsSurfaceSnapshot({ ...options, surface: helper }, options?.signal);
+    return await captureMacOsSurfaceSnapshot({ ...options, surface: helper }, options?.signal, env);
   }
   return await captureAppleRunnerSnapshot(device, options, runnerOpts);
 }
@@ -430,6 +447,7 @@ async function runAppleScreenshot(
   options: ScreenshotOptions = {},
   runnerOpts: RunnerCallOptions,
   helper: MacOsHelperSurface | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<ScreenshotCaptureFacts> {
   if (helper) {
     if (options.fullscreen) {
@@ -446,6 +464,7 @@ async function runAppleScreenshot(
       surface: helper,
       ...(helper === 'app' ? { bundleId: options.appBundleId } : {}),
       signal: runnerOpts.signal,
+      env,
     });
     return {};
   }
@@ -458,10 +477,12 @@ async function runAppleScreenshot(
       options.appBundleId,
       options.fullscreen,
       runnerOpts,
+      env,
     );
     return {};
   }
   return await screenshotIos(device, outPath, {
+    env,
     appBundleId: options.appBundleId,
     pixelDensity: options.pixelDensity,
     fullscreen: options.fullscreen,
@@ -476,12 +497,14 @@ async function readMacOsSurfaceTextAtPoint(
   surface: MacOsHelperSurface,
   appBundleId: string | undefined,
   signal: AbortSignal | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<string | undefined> {
   const { runMacOsReadTextAction } = await import('./os/macos/helper.ts');
   const result = await runMacOsReadTextAction(point.x, point.y, {
     bundleId: appBundleId,
     surface,
     signal,
+    env,
   });
   return result.text;
 }

@@ -28,7 +28,11 @@ beforeEach(() => {
 });
 
 test('routes an internal runner screenshot without changing the default backend', async () => {
-  const interactor = createAppleInteractor(device, { appBundleId: 'com.example.app' });
+  const interactor = createAppleInteractor(
+    device,
+    { appBundleId: 'com.example.app' },
+    { env: process.env, cwd: process.cwd() },
+  );
 
   await interactor.screenshot('/tmp/default.png');
   await interactor.screenshot('/tmp/runner.png', {
@@ -49,5 +53,6 @@ test('routes an internal runner screenshot without changing the default backend'
     'com.example.app',
     undefined,
     expect.objectContaining({}),
+    process.env,
   );
 });

@@ -20,6 +20,8 @@ test('captureCoreDeviceScreenshot invokes devicectl with the current capture-scr
     }),
     async () =>
       await captureCoreDeviceScreenshot(IOS_DEVICE, '/tmp/out.png', {
+        env: process.env,
+
         runRunnerCommand: async () => {
           throw new Error('devicectl capture should have succeeded without a runner fallback');
         },

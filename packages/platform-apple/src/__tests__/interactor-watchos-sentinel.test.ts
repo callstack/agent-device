@@ -17,7 +17,11 @@ const watchOsDevice: DeviceInfo = {
 
 test('createAppleInteractor rejects a watchOS device as UNSUPPORTED_PLATFORM', () => {
   // The guard throws before touching runnerContext, so an empty context is fine.
-  const create = () => createAppleInteractor(watchOsDevice, {} as RunnerContext);
+  const create = () =>
+    createAppleInteractor(watchOsDevice, {} as RunnerContext, {
+      env: process.env,
+      cwd: process.cwd(),
+    });
   expect(create).toThrow(AppError);
   try {
     create();
@@ -43,5 +47,10 @@ test('a non-watchOS appleOs does not trigger the watchOS sentinel', () => {
     appleOs: 'tvos',
     booted: true,
   };
-  expect(createAppleInteractor(tvOsDevice, {} as RunnerContext)).toBeTruthy();
+  expect(
+    createAppleInteractor(tvOsDevice, {} as RunnerContext, {
+      env: process.env,
+      cwd: process.cwd(),
+    }),
+  ).toBeTruthy();
 });

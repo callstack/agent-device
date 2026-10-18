@@ -192,15 +192,17 @@ const SCOPED_SITES: Record<string, ScopedDrive> = {
   ],
   'macos.screenshot-runner.fullscreen': [
     MACOS_DEVICE,
-    (outPath) => captureScreenshotViaRunner(MACOS_DEVICE, outPath, APP, true),
+    (outPath) =>
+      captureScreenshotViaRunner(MACOS_DEVICE, outPath, APP, true, undefined, process.env),
   ],
   'ios-device.physical-device-screenshot.coredevice-file': [
     IOS_DEVICE,
-    (outPath) => captureScreenshotViaRunner(IOS_DEVICE, outPath, APP, true),
+    (outPath) => captureScreenshotViaRunner(IOS_DEVICE, outPath, APP, true, undefined, process.env),
   ],
   'ios-device.physical-device-screenshot.xctest-inline': [
     XCTEST_DEVICE,
-    (outPath) => captureScreenshotViaRunner(XCTEST_DEVICE, outPath, APP),
+    (outPath) =>
+      captureScreenshotViaRunner(XCTEST_DEVICE, outPath, APP, undefined, undefined, process.env),
   ],
   'ios-device.physical-device-control.activate': [
     XCTEST_DEVICE,
@@ -223,7 +225,12 @@ test('every Apple request site builds exactly its golden runner request', async 
   for (const [name, [device, drive]] of Object.entries(INTERACTOR_SITES)) {
     const calls: RecordedRunnerCall[] = [];
     await drive(
-      createAppleInteractor(device, { appBundleId: APP }, recordingRunnerProvider(calls)),
+      createAppleInteractor(
+        device,
+        { appBundleId: APP },
+        { env: process.env, cwd: process.cwd() },
+        recordingRunnerProvider(calls),
+      ),
     );
     captured.push([name, onlyRequest(name, calls)]);
   }
@@ -231,6 +238,7 @@ test('every Apple request site builds exactly its golden runner request', async 
   await createAppleInteractor(
     IOS_SIMULATOR,
     { appBundleId: APP },
+    { env: process.env, cwd: process.cwd() },
     recordingRunnerProvider(observationCalls, {
       snapshot: {
         nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } }],

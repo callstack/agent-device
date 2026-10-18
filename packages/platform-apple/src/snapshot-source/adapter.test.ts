@@ -24,6 +24,7 @@ import type {
   SnapshotSourceSocket,
 } from './types.ts';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 test('the Simulator AX source returns raw acquisition facts and discloses unsupported facets', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-adapter-');
@@ -493,7 +494,7 @@ function targetForTest(simulatorSetPath?: string) {
 }
 
 function createAdapterHost(buildDelayMs = 0): AdapterFixture {
-  const realHost = createSnapshotSourceHost();
+  const realHost = createSnapshotSourceHost(createLiveTestHostEnvironment());
   const fixture: AdapterFixture = {
     host: undefined as never,
     builds: 0,

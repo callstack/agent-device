@@ -12,7 +12,6 @@ import { resolveSnapshotSourceLimits } from './limits.ts';
 import { readSnapshotBridgeRecovery, type SnapshotBridgeEnvelope } from './protocol.ts';
 import { createSnapshotBridgePreparation } from './preparation.ts';
 import { decodeSnapshotBridgeTree } from './tree.ts';
-import { createSnapshotSourceHost } from './host.ts';
 import type {
   SnapshotSourceHost,
   SnapshotSourceLimits,
@@ -23,7 +22,7 @@ import type {
 const SNAPSHOT_SOURCE_PRODUCER = 'simulator-ax-bridge' as const;
 
 export type SimulatorSnapshotSourceOptions = Readonly<{
-  host?: SnapshotSourceHost;
+  host: SnapshotSourceHost;
   limits?: Partial<SnapshotSourceLimits>;
   sourceRoot?: string;
   cacheRoot?: string;
@@ -35,9 +34,9 @@ export type SimulatorSnapshotSource = Readonly<{
 }>;
 
 export function createSimulatorSnapshotSource(
-  options: SimulatorSnapshotSourceOptions = {},
+  options: SimulatorSnapshotSourceOptions,
 ): SimulatorSnapshotSource {
-  const host = options.host ?? createSnapshotSourceHost();
+  const host = options.host;
   const manager = new SnapshotBridgeManager(host);
   const depthHints = new AcceptedDepthHints();
   // Preparation is daemon-scoped work: it reads the toolchain identity, fingerprints the bridge

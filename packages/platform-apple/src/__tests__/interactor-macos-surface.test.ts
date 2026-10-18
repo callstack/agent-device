@@ -113,7 +113,11 @@ function reachedBackend(): MacOsSurfaceBackend {
 test.each(SURFACE_ROWS)(
   'every macOS operation on the %s surface reaches the %s backend',
   async (surface, backend) => {
-    const interactor = createAppleInteractor(macOsDevice, {});
+    const interactor = createAppleInteractor(
+      macOsDevice,
+      {},
+      { env: process.env, cwd: process.cwd() },
+    );
     const operations: Record<string, () => Promise<unknown>> = {
       screenshot: async () => await interactor.screenshot('/tmp/out.png', { surface }),
       snapshot: async () => await interactor.snapshot({ surface }),
@@ -139,7 +143,11 @@ test.each(SURFACE_ROWS)(
 test.each(HELPER_ROWS)(
   'refuses an explicit --fullscreen on the macOS %s surface before any capture',
   async (surface) => {
-    const interactor = createAppleInteractor(macOsDevice, {});
+    const interactor = createAppleInteractor(
+      macOsDevice,
+      {},
+      { env: process.env, cwd: process.cwd() },
+    );
 
     await expect(
       interactor.screenshot('/tmp/out.png', { surface, fullscreen: true }),
@@ -158,19 +166,27 @@ test.each(HELPER_ROWS)(
 test.each(HELPER_ROWS)(
   'captures the %s surface through the helper when --fullscreen is not requested',
   async (surface) => {
-    const interactor = createAppleInteractor(macOsDevice, {});
+    const interactor = createAppleInteractor(
+      macOsDevice,
+      {},
+      { env: process.env, cwd: process.cwd() },
+    );
 
     await interactor.screenshot('/tmp/out.png', { surface });
 
     expect(runMacOsScreenshotAction).toHaveBeenCalledOnce();
     const [, options] = vi.mocked(runMacOsScreenshotAction).mock.calls[0]!;
-    expect(options).toEqual({ surface });
+    expect(options).toEqual({ surface, env: process.env });
     expect(Object.hasOwn(options ?? {}, 'fullscreen')).toBe(false);
   },
 );
 
 test('keeps a macOS app session on the runner path with --fullscreen unchanged', async () => {
-  const interactor = createAppleInteractor(macOsDevice, {});
+  const interactor = createAppleInteractor(
+    macOsDevice,
+    {},
+    { env: process.env, cwd: process.cwd() },
+  );
 
   await interactor.screenshot('/tmp/out.png', { surface: 'app', fullscreen: true });
 

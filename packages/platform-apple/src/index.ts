@@ -5,6 +5,7 @@ import type {
   PlatformModuleMetadata,
 } from '@agent-device/contracts/platform-module';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -40,8 +41,8 @@ export const applePlugin = {
   platforms: ['apple'],
   familySelector: 'apple',
   providers: { platformGatedResolvers: ['appleRunnerProvider', 'appleToolProvider'] },
-  createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
+  createInteractor: async (device: DeviceInfo, runner: RunnerContext, host: HostEnvironment) => {
     const { createAppleInteractor } = await import('./interactor.ts');
-    return createAppleInteractor(device, runner);
+    return createAppleInteractor(device, runner, host);
   },
 } as const satisfies PlatformPlugin;

@@ -52,7 +52,7 @@ test('closeIosApp on macOS uses helper quit for bundle identifiers', async () =>
       process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
 
       try {
-        await closeIosApp(MACOS_TEST_DEVICE, 'com.example.foobar');
+        await closeIosApp(MACOS_TEST_DEVICE, 'com.example.foobar', undefined, process.env);
         const logged = await fs.readFile(argsLogPath, 'utf8');
         assert.equal(logged, 'app\nquit\n--bundle-id\ncom.example.foobar\n');
       } finally {
@@ -68,7 +68,7 @@ test('closeIosApp on iOS simulator bounds simctl terminate', async () => {
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
   mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
 
-  await closeIosApp(IOS_TEST_SIMULATOR, 'com.example.foobar');
+  await closeIosApp(IOS_TEST_SIMULATOR, 'com.example.foobar', undefined, process.env);
 
   assert.equal(mockRunCmd.mock.calls.length, 1);
   assert.equal(mockRunCmd.mock.calls[0]?.[0], 'xcrun');

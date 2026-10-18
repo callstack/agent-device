@@ -3,7 +3,6 @@ import { publishFileSync, acquireProcessLock, withProcessLock } from '@agent-dev
 
 import {
   commandDeveloperDir,
-  commandHostEnvironment,
   isCommandTimeoutError,
   requireExecSuccess,
   runCmdBackground,
@@ -11,6 +10,7 @@ import {
   runCmdSync,
 } from '@agent-device/host-kit/command';
 import { shellQuote } from '@agent-device/kernel/device-shell';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   isProcessAlive,
@@ -29,6 +29,7 @@ import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
 import { isRecord } from '@agent-device/kernel/record';
 import { parseBooleanLiteral } from '@agent-device/kernel/source-value';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
 import {
@@ -41,6 +42,7 @@ import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-ki
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { visitXmlPlistEntries } from './plist-xml.ts';
 import {
+  getAppleRunnerHostEnvironment,
   getRunnerDeviceClaimAuthorityProbe,
   getRunnerLeaseOwnerStateDir,
   runnerRuntimeSlot,
@@ -73,7 +75,15 @@ export const appleRunnerHost: AppleRunnerHost = {
   requireExecSuccess,
   isCommandTimeoutError,
   commandDeveloperDir,
-  hostEnvironment: commandHostEnvironment,
+  hostEnvironment: (): HostEnvironment => {
+    const host = getAppleRunnerHostEnvironment();
+    if (!host) {
+      throw new AppError('COMMAND_FAILED', 'Apple runner configuration has no bound host.', {
+        reason: 'apple_runner_host_unbound',
+      });
+    }
+    return host;
+  },
   shellQuote,
   emitDiagnostic,
   withDiagnosticTimer,

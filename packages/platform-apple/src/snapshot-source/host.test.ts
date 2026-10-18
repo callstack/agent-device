@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { runCmdBackground, withCommandHost } from '@agent-device/host-kit/command';
-import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { simulatorAddressFor } from '../core/simctl.ts';
 import { createSnapshotSourceHost, snapshotSourceSocketPath } from './host.ts';
 
@@ -16,7 +20,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 }));
 
 test('snapshot bridge socket paths stay within the AF_UNIX limit and are target-specific', () => {
-  const host = createSnapshotSourceHost();
+  const host = createSnapshotSourceHost(createLiveTestHostEnvironment());
   const first = snapshotSourceSocketPath(host, 'simulator-1', 'owner-1');
   const second = snapshotSourceSocketPath(host, 'simulator-2', 'owner-1');
   const otherOwner = snapshotSourceSocketPath(host, 'simulator-1', 'owner-2');
@@ -45,7 +49,7 @@ test.each([
     wait: new Promise(() => {}),
   });
 
-  const started = createSnapshotSourceHost().start(
+  const started = createSnapshotSourceHost(createLiveTestHostEnvironment()).start(
     simulatorAddressFor({
       platform: 'apple',
       id: 'simulator-1',
@@ -95,7 +99,7 @@ test('the detached bridge starts in the host directory, not the process director
   await withCommandHost(
     { host: { env: { PATH: bin, EVIDENCE: evidence }, cwd: hostCwd }, requestEnv: undefined },
     async () => {
-      createSnapshotSourceHost().start(
+      createSnapshotSourceHost({ env: { PATH: bin, EVIDENCE: evidence }, cwd: hostCwd }).start(
         simulatorAddressFor({
           platform: 'apple',
           id: 'simulator-1',

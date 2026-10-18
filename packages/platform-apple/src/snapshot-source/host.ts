@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
-import { commandHostEnvironment, runCmd, runCmdBackground } from '@agent-device/host-kit/command';
+import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import { signalProcessGroupBestEffort } from '@agent-device/host-kit/process';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
@@ -16,7 +17,7 @@ const BRIDGE_IDLE_TIMEOUT_SECONDS = 60;
 const MAX_PROCESS_LOG_BYTES = 64 * 1024;
 const SNAPSHOT_SOCKET_ROOT = '/tmp';
 
-export function createSnapshotSourceHost(): SnapshotSourceHost {
+export function createSnapshotSourceHost(host: HostEnvironment): SnapshotSourceHost {
   // The bridge's build/cache access is the shared native-build host (#2970); this adds only what a
   // bridge session needs beyond a build: socket start/connect, diagnostics, and target inspection.
   // A native-build cache failure surfaces here as `NativeBuildError`; the cache's own callers
@@ -27,7 +28,8 @@ export function createSnapshotSourceHost(): SnapshotSourceHost {
     ),
     projectRoot: findProjectRoot,
     homeDirectory: hostHomeDirectory,
-    start: startSnapshotBridge,
+    start: (simulator, bridgePath, socketPath, options) =>
+      startSnapshotBridge(host, simulator, bridgePath, socketPath, options),
     connect: connectSnapshotBridge,
     emitDiagnostic,
     withDiagnosticTimer,
@@ -36,6 +38,7 @@ export function createSnapshotSourceHost(): SnapshotSourceHost {
 }
 
 function startSnapshotBridge(
+  host: HostEnvironment,
   simulator: SimulatorAddress,
   bridgePath: string,
   socketPath: string,
@@ -45,7 +48,7 @@ function startSnapshotBridge(
     throw snapshotSourceError('cancelled', 'abort-signal');
   }
   // The bridge outlives this call, so it gets its environment and directory as plain values.
-  const { env, cwd } = commandHostEnvironment();
+  const { env, cwd } = host;
   const started = runCmdBackground(
     'xcrun',
     buildSimctlArgsForAddress(simulator, [

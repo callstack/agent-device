@@ -20,8 +20,8 @@ import {
   resolveExecutableOverridePath,
   runCmdBackground,
   type ExecBackgroundResult,
-  commandHostEnvironment,
 } from '@agent-device/host-kit/command';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { MacOsHelperSurface, SessionSurface } from '@agent-device/contracts/session';
 import {
   hasScopedAppleToolProvider,
@@ -115,9 +115,13 @@ const MACOS_GHOST_CURSOR_ENV = 'AGENT_DEVICE_MACOS_GHOST_CURSOR';
  * A background action on an app session draws its own pointer so the user can follow it while
  * keeping the real one; `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` turns the drawing off.
  */
-function appendGhostCursorArg(args: string[], surface: SessionSurface | undefined): void {
+function appendGhostCursorArg(
+  args: string[],
+  surface: SessionSurface | undefined,
+  env: Readonly<EnvMap>,
+): void {
   if (surface !== 'app') return;
-  if (commandHostEnvironment().env[MACOS_GHOST_CURSOR_ENV]?.trim() === '0') return;
+  if (env[MACOS_GHOST_CURSOR_ENV]?.trim() === '0') return;
   args.push('--ghost-cursor');
 }
 
@@ -230,9 +234,9 @@ async function readInstalledMacOsHelperFingerprint(): Promise<string | null> {
   }
 }
 
-async function ensureMacOsHelperBinary(): Promise<string> {
+async function ensureMacOsHelperBinary(env: Readonly<EnvMap>): Promise<string> {
   const configuredPath = await resolveExecutableOverridePath(
-    commandHostEnvironment().env[MACOS_HELPER_ENV_PATH],
+    env[MACOS_HELPER_ENV_PATH],
     MACOS_HELPER_ENV_PATH,
   );
   if (configuredPath) {
@@ -270,8 +274,8 @@ async function ensureMacOsHelperBinary(): Promise<string> {
   return installedPath;
 }
 
-async function resolveMacOsHelperCommandPath(): Promise<string> {
-  const configuredPath = commandHostEnvironment().env[MACOS_HELPER_ENV_PATH]?.trim();
+async function resolveMacOsHelperCommandPath(env: Readonly<EnvMap>): Promise<string> {
+  const configuredPath = env[MACOS_HELPER_ENV_PATH]?.trim();
   if (configuredPath) {
     const resolvedPath = await resolveExecutableOverridePath(configuredPath, MACOS_HELPER_ENV_PATH);
     if (resolvedPath) return resolvedPath;
@@ -282,15 +286,16 @@ async function resolveMacOsHelperCommandPath(): Promise<string> {
   if (hostPlatform() !== 'darwin') {
     throw new AppError('UNSUPPORTED_PLATFORM', 'macOS helper is only available on macOS');
   }
-  return await ensureMacOsHelperBinary();
+  return await ensureMacOsHelperBinary(env);
 }
 
 export async function startMacOsAudioProbeProcess(options: {
   durationMs: number;
   bucketMs: number;
   statusPath: string;
+  env: Readonly<EnvMap>;
 }): Promise<ExecBackgroundResult> {
-  const helperPath = await resolveMacOsHelperCommandPath();
+  const helperPath = await resolveMacOsHelperCommandPath(options.env);
   return runCmdBackground(
     helperPath,
     [
@@ -318,7 +323,7 @@ const MACOS_HELPER_KILL_GRACE_MS = 1_000;
 
 async function runMacOsHelper<T extends Record<string, unknown>>(
   args: string[],
-  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  options: { signal?: AbortSignal; timeoutMs?: number; env: Readonly<EnvMap> },
 ): Promise<T> {
   const helperOptions = {
     allowFailure: true,
@@ -329,7 +334,7 @@ async function runMacOsHelper<T extends Record<string, unknown>>(
   const helperProvider = resolveAppleToolProvider().macosHelper;
   const helperPath = helperProvider
     ? MACOS_HELPER_PRODUCT_NAME
-    : await resolveMacOsHelperCommandPath();
+    : await resolveMacOsHelperCommandPath(options.env);
   const result = helperProvider
     ? await helperProvider.run(args, helperOptions)
     : await runAppleToolCommand(helperPath, args, helperOptions);
@@ -366,26 +371,32 @@ async function runMacOsHelper<T extends Record<string, unknown>>(
   });
 }
 
-export async function resolveFrontmostMacOsApp(): Promise<{
+export async function resolveFrontmostMacOsApp(env: Readonly<EnvMap>): Promise<{
   bundleId?: string;
   appName?: string;
   pid?: number;
 }> {
-  return await runMacOsHelper(['app', 'frontmost']);
+  return await runMacOsHelper(['app', 'frontmost'], { env });
 }
 
-export async function quitMacOsApp(bundleId: string): Promise<{
+export async function quitMacOsApp(
+  bundleId: string,
+  env: Readonly<EnvMap>,
+): Promise<{
   bundleId: string;
   running: boolean;
   terminated: boolean;
   forceTerminated: boolean;
 }> {
-  return await runMacOsHelper(['app', 'quit', '--bundle-id', assertMacOsBundleId(bundleId)]);
+  return await runMacOsHelper(['app', 'quit', '--bundle-id', assertMacOsBundleId(bundleId)], {
+    env,
+  });
 }
 
 export async function runMacOsPermissionAction(
   action: 'grant' | 'reset',
   target: MacOsPermissionTarget,
+  env: Readonly<EnvMap>,
 ): Promise<{
   target: MacOsPermissionTarget;
   granted: boolean;
@@ -394,12 +405,12 @@ export async function runMacOsPermissionAction(
   action: 'grant' | 'reset';
   message?: string;
 }> {
-  return await runMacOsHelper(['permission', action, target]);
+  return await runMacOsHelper(['permission', action, target], { env });
 }
 
 export async function runMacOsAlertAction(
   action: 'get' | 'accept' | 'dismiss',
-  options: { bundleId?: string; surface?: SessionSurface } = {},
+  options: { bundleId?: string; surface?: SessionSurface; env: Readonly<EnvMap> },
 ): Promise<{
   title?: string;
   role?: string;
@@ -409,12 +420,12 @@ export async function runMacOsAlertAction(
 }> {
   const args = ['alert', action];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args);
+  return await runMacOsHelper(args, { env: options.env });
 }
 
 export async function runMacOsSnapshotAction(
   surface: MacOsHelperSurface,
-  options: { bundleId?: string; signal?: AbortSignal } = {},
+  options: { bundleId?: string; signal?: AbortSignal; env: Readonly<EnvMap> },
 ): Promise<{
   surface: SessionSurface;
   nodes: MacOsSnapshotNode[];
@@ -425,19 +436,24 @@ export async function runMacOsSnapshotAction(
 }> {
   const args = ['snapshot', '--surface', surface];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args, { signal: options.signal });
+  return await runMacOsHelper(args, { signal: options.signal, env: options.env });
 }
 
 export async function runMacOsReadTextAction(
   x: number,
   y: number,
-  options: { surface: MacOsHelperSurface; bundleId?: string; signal?: AbortSignal },
+  options: {
+    surface: MacOsHelperSurface;
+    bundleId?: string;
+    signal?: AbortSignal;
+    env: Readonly<EnvMap>;
+  },
 ): Promise<{
   text: string;
 }> {
   const args = ['read', '--x', String(x), '--y', String(y)];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args, { signal: options.signal });
+  return await runMacOsHelper(args, { signal: options.signal, env: options.env });
 }
 
 // Mirrors the helper's own floors (`MouseClickSchedule.swift`): the schedule the helper runs
@@ -482,6 +498,7 @@ export async function runMacOsPressAction(
     doubleClick?: boolean;
     intervalMs?: number;
     signal?: AbortSignal;
+    env: Readonly<EnvMap>;
   },
 ): Promise<{
   x: number;
@@ -511,9 +528,10 @@ export async function runMacOsPressAction(
     args.push('--double-click');
   }
   appendMacOsHelperContextArgs(args, options);
-  appendGhostCursorArg(args, options.surface);
+  appendGhostCursorArg(args, options.surface, options.env);
   return await runMacOsHelper(args, {
     signal: options.signal,
+    env: options.env,
     timeoutMs: macOsClickScheduleMs(options) + MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
   });
 }
@@ -521,16 +539,36 @@ export async function runMacOsPressAction(
 /** Inserts text at the app session's focused element without activating the app. */
 export async function runMacOsTypeAction(
   text: string,
-  options: { bundleId: string; delayMs?: number; signal?: AbortSignal },
+  options: {
+    bundleId: string;
+    delayMs?: number;
+    signal?: AbortSignal;
+    env: Readonly<EnvMap>;
+  },
 ): Promise<{ mechanism?: MacOsDeliveryMechanism; role?: string; windowTitle?: string }> {
   const args = ['type', '--text', text];
   if (options.delayMs && options.delayMs > 0) args.push('--delay-ms', String(options.delayMs));
   appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
-  appendGhostCursorArg(args, 'app');
+  appendGhostCursorArg(args, 'app', options.env);
   return await runMacOsHelper(args, {
     signal: options.signal,
+    env: options.env,
     timeoutMs:
       MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args) + text.length * (options.delayMs ?? 0),
+  });
+}
+
+/** Dispatches one prepared app-surface action with the ghost-cursor settle budget added. */
+function runMacOsAppSurfaceAction<T extends Record<string, unknown>>(
+  args: string[],
+  options: { bundleId: string; signal?: AbortSignal; env: Readonly<EnvMap> },
+): Promise<T> {
+  appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
+  appendGhostCursorArg(args, 'app', options.env);
+  return runMacOsHelper<T>(args, {
+    signal: options.signal,
+    env: options.env,
+    timeoutMs: MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
   });
 }
 
@@ -539,15 +577,12 @@ export async function runMacOsFillAction(
   x: number,
   y: number,
   text: string,
-  options: { bundleId: string; signal?: AbortSignal },
+  options: { bundleId: string; signal?: AbortSignal; env: Readonly<EnvMap> },
 ): Promise<{ mechanism?: MacOsDeliveryMechanism; role?: string; windowTitle?: string }> {
-  const args = ['fill', '--x', String(x), '--y', String(y), '--text', text];
-  appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
-  appendGhostCursorArg(args, 'app');
-  return await runMacOsHelper(args, {
-    signal: options.signal,
-    timeoutMs: MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
-  });
+  return await runMacOsAppSurfaceAction(
+    ['fill', '--x', String(x), '--y', String(y), '--text', text],
+    options,
+  );
 }
 
 /** Scrolls the scroll area at the center of the app session's front window. */
@@ -558,27 +593,28 @@ export async function runMacOsScrollAction(
     amount?: number;
     pixels?: number;
     signal?: AbortSignal;
+    env: Readonly<EnvMap>;
   },
 ): Promise<Record<string, unknown>> {
   const args = ['scroll', '--direction', direction];
   if (options.amount !== undefined) args.push('--amount', String(options.amount));
   if (options.pixels !== undefined) args.push('--pixels', String(options.pixels));
-  appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
-  appendGhostCursorArg(args, 'app');
-  return await runMacOsHelper(args, {
-    signal: options.signal,
-    timeoutMs: MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
-  });
+  return await runMacOsAppSurfaceAction(args, options);
 }
 
 export async function runMacOsScreenshotAction(
   outPath: string,
-  options: { surface: MacOsHelperSurface; bundleId?: string; signal?: AbortSignal },
+  options: {
+    surface: MacOsHelperSurface;
+    bundleId?: string;
+    signal?: AbortSignal;
+    env: Readonly<EnvMap>;
+  },
 ): Promise<{
   path: string;
   surface?: SessionSurface;
 }> {
   const args = ['screenshot', '--out', outPath];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args, { signal: options.signal });
+  return await runMacOsHelper(args, { signal: options.signal, env: options.env });
 }

@@ -102,7 +102,7 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
       return unexpectedArgs(args);
     },
     async ({ calls }) => {
-      await screenshotIos(IOS_TEST_SIMULATOR, outPath);
+      await screenshotIos(IOS_TEST_SIMULATOR, outPath, { env: process.env });
       const png = PNG.sync.read(await fs.readFile(outPath));
       assert.equal(png.width, 42);
       assert.equal(png.height, 91);
@@ -144,7 +144,7 @@ test('screenshotIos keeps requested simulator pixel density', async () => {
       return unexpectedArgs(args);
     },
     async () => {
-      await screenshotIos(IOS_TEST_SIMULATOR, outPath, { pixelDensity: 2 });
+      await screenshotIos(IOS_TEST_SIMULATOR, outPath, { env: process.env, pixelDensity: 2 });
       const png = PNG.sync.read(await fs.readFile(outPath));
       assert.equal(png.width, 84);
       assert.equal(png.height, 182);

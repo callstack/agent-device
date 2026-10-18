@@ -41,6 +41,9 @@ test('setIosSetting text-size applies the category with simctl ui content_size',
         IOS_TEST_SIMULATOR,
         'text-size',
         'accessibility-extra-large',
+        undefined,
+        undefined,
+        process.env,
       );
       assert.deepEqual(result, {
         setting: 'text-size',
@@ -62,7 +65,14 @@ test('setIosSetting text-size sends the normalized category, not the caller casi
       return unexpectedArgs(args);
     },
     async ({ calls }) => {
-      await setIosSetting(IOS_TEST_SIMULATOR, 'text-size', ' Extra-Small ');
+      await setIosSetting(
+        IOS_TEST_SIMULATOR,
+        'text-size',
+        ' Extra-Small ',
+        undefined,
+        undefined,
+        process.env,
+      );
       assert.deepEqual(simctlUiCalls(calls), ['simctl ui sim-1 content_size extra-small']);
     },
   );
@@ -78,7 +88,15 @@ test('setIosSetting text-size refuses an off-ladder category without calling sim
       // `simctl ui ... content_size bogus` exits 0 with `Invalid argument`, so an unvalidated write
       // would be reported as a successful change that changed nothing.
       await assertRejectsAppError(
-        () => setIosSetting(IOS_TEST_SIMULATOR, 'text-size', 'gigantic'),
+        () =>
+          setIosSetting(
+            IOS_TEST_SIMULATOR,
+            'text-size',
+            'gigantic',
+            undefined,
+            undefined,
+            process.env,
+          ),
         {
           code: 'INVALID_ARGS',
         },

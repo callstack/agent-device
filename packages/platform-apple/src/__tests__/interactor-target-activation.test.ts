@@ -31,7 +31,12 @@ function interactorServing(payload: Record<string, unknown>) {
     hasLiveSession: () => true,
     runCommand: async () => payload,
   };
-  return createAppleInteractor(IOS_SIMULATOR, { appBundleId: 'com.example.app' }, runnerProvider);
+  return createAppleInteractor(
+    IOS_SIMULATOR,
+    { appBundleId: 'com.example.app' },
+    { env: process.env, cwd: process.cwd() },
+    runnerProvider,
+  );
 }
 
 test('a capture whose own command repaired foreground discloses it and keeps the fact', async () => {
@@ -71,7 +76,12 @@ test.each([
         return { ...HEALTHY_TREE, observation };
       },
     };
-    const snapshot = (await createAppleInteractor(device, {}, runnerProvider).snapshot({
+    const snapshot = (await createAppleInteractor(
+      device,
+      {},
+      { env: process.env, cwd: process.cwd() },
+      runnerProvider,
+    ).snapshot({
       appBundleId: 'com.example.app',
       observeOnly: true,
     })) as SnapshotResult;

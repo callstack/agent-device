@@ -30,7 +30,9 @@ test('AGENT_DEVICE_MACOS_HELPER_BIN rejects relative override paths', async () =
   process.env.AGENT_DEVICE_MACOS_HELPER_BIN = './agent-device-macos-helper';
 
   try {
-    await assert.rejects(() => quitMacOsApp('com.example.App'), { code: 'INVALID_ARGS' });
+    await assert.rejects(() => quitMacOsApp('com.example.App', process.env), {
+      code: 'INVALID_ARGS',
+    });
   } finally {
     if (previousHelperPath === undefined) {
       delete process.env.AGENT_DEVICE_MACOS_HELPER_BIN;
@@ -41,5 +43,5 @@ test('AGENT_DEVICE_MACOS_HELPER_BIN rejects relative override paths', async () =
 });
 
 test('quitMacOsApp rejects invalid bundle identifiers before invoking helper', async () => {
-  await assert.rejects(() => quitMacOsApp('not a bundle id'), /reverse-DNS form/i);
+  await assert.rejects(() => quitMacOsApp('not a bundle id', process.env), /reverse-DNS form/i);
 });

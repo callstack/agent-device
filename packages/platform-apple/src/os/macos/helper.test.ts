@@ -45,7 +45,8 @@ test('macOS helper snapshot passes cancellation to the helper process', async ()
 
   await withAppleToolProvider(
     provider,
-    async () => await runMacOsSnapshotAction(desktop, { signal: controller.signal }),
+    async () =>
+      await runMacOsSnapshotAction(desktop, { env: process.env, signal: controller.signal }),
   );
 
   assert.equal(receivedSignal, controller.signal);
@@ -74,6 +75,7 @@ test('macOS helper press carries the hold, repeat count, and interval to the cli
     provider,
     async () =>
       await runMacOsPressAction(12, 34, {
+        env: process.env,
         surface: menubar,
         bundleId: 'com.example.Menu',
         holdMs: 800,
@@ -115,7 +117,13 @@ test('macOS helper press carries an explicit zero interval instead of dropping i
 
   await withAppleToolProvider(
     provider,
-    async () => await runMacOsPressAction(7, 8, { surface: desktop, clicks: 2, intervalMs: 0 }),
+    async () =>
+      await runMacOsPressAction(7, 8, {
+        env: process.env,
+        surface: desktop,
+        clicks: 2,
+        intervalMs: 0,
+      }),
   );
 
   assert.ok(receivedArgs.includes('--clicks'), receivedArgs.join(' '));
@@ -142,7 +150,12 @@ test('macOS helper press keeps repeats independent and names a double-click expl
   await withAppleToolProvider(
     provider,
     async () =>
-      await runMacOsPressAction(7, 8, { surface: frontmostApp, clicks: 3, doubleClick: true }),
+      await runMacOsPressAction(7, 8, {
+        env: process.env,
+        surface: frontmostApp,
+        clicks: 3,
+        doubleClick: true,
+      }),
   );
 
   // `--count 3 --double-tap` is three double-clicks: the count stays the press count and the
@@ -174,6 +187,7 @@ test('macOS helper press outlives its own click schedule and forwards cancellati
     provider,
     async () =>
       await runMacOsPressAction(1, 2, {
+        env: process.env,
         surface: desktop,
         holdMs: 10_000,
         clicks: 4,
@@ -216,7 +230,7 @@ test('macOS helper press stays a single held click when nothing is repeated', as
 
   await withAppleToolProvider(
     provider,
-    async () => await runMacOsPressAction(5, 6, { surface: frontmostApp }),
+    async () => await runMacOsPressAction(5, 6, { env: process.env, surface: frontmostApp }),
   );
 
   assert.equal(receivedArgs.includes('--clicks'), false);
@@ -237,7 +251,8 @@ test('macOS helper screenshot argv carries only --out and --surface', async () =
 
   await withAppleToolProvider(
     provider,
-    async () => await runMacOsScreenshotAction('/tmp/out.png', { surface: desktop }),
+    async () =>
+      await runMacOsScreenshotAction('/tmp/out.png', { env: process.env, surface: desktop }),
   );
 
   assert.deepEqual(receivedArgs, ['screenshot', '--out', '/tmp/out.png', '--surface', 'desktop']);
@@ -274,6 +289,7 @@ for (const hint of [
       runMacOsScreenshotAction('/tmp/out.png', {
         surface: nativeApp,
         bundleId: 'com.apple.TextEdit',
+        env: process.env,
       }).then(
         () => undefined,
         (error: unknown) => error,
@@ -295,7 +311,7 @@ test('helper entry points accept only an owner-routed surface', () => {
     // @ts-expect-error a bare literal skips the routing owner
     await runMacOsSnapshotAction('desktop');
     // @ts-expect-error a bare literal skips the routing owner
-    await runMacOsScreenshotAction(out, { surface: 'menubar' });
+    await runMacOsScreenshotAction(out, { env: process.env, surface: 'menubar' });
     // @ts-expect-error the surface is required
     await runMacOsReadTextAction(1, 2, { bundleId: 'com.example' });
     // @ts-expect-error the surface is required

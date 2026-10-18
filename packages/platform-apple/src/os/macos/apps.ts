@@ -2,6 +2,7 @@ import type { AppsFilter } from '@agent-device/contracts/device';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { parseAppearanceAction } from '@agent-device/contracts/settings';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
@@ -82,9 +83,13 @@ export async function openMacOsApp(
   await resolveMacOsHostProvider().openBundle(bundleId);
 }
 
-export async function closeMacOsApp(_device: DeviceInfo, app: string): Promise<void> {
+export async function closeMacOsApp(
+  _device: DeviceInfo,
+  app: string,
+  env: Readonly<EnvMap>,
+): Promise<void> {
   const bundleId = await resolveMacOsApp(app);
-  const request = await quitMacOsApp(bundleId);
+  const request = await quitMacOsApp(bundleId, env);
   if (!request.running) return;
   if (!request.terminated && !request.forceTerminated) {
     throw new AppError('COMMAND_FAILED', `Failed to close macOS app ${app}`, {
@@ -96,7 +101,7 @@ export async function closeMacOsApp(_device: DeviceInfo, app: string): Promise<v
   }
   for (let attempt = 1; attempt < MACOS_APP_TERMINATION_MAX_ATTEMPTS; attempt += 1) {
     await sleep(MACOS_APP_TERMINATION_POLL_MS);
-    if (!(await quitMacOsApp(bundleId)).running) return;
+    if (!(await quitMacOsApp(bundleId, env)).running) return;
   }
   throw new AppError('COMMAND_FAILED', `Timed out waiting for macOS app ${app} to close`, {
     reason: 'MACOS_APP_TERMINATION_TIMEOUT',

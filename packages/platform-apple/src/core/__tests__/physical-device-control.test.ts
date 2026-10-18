@@ -74,7 +74,7 @@ test('app lifecycle uses runner commands for an xctrace-only physical device', a
       await openIosApp(XCTEST_IOS_DEVICE, 'com.example.app', {
         appBundleId: 'com.example.app',
       });
-      await closeIosApp(XCTEST_IOS_DEVICE, 'com.example.app');
+      await closeIosApp(XCTEST_IOS_DEVICE, 'com.example.app', undefined, process.env);
     },
   );
 
@@ -110,9 +110,13 @@ test('default interactor screenshots stay in-band without invoking devicectl', a
           },
           { deviceId: XCTEST_IOS_DEVICE.id },
           async () =>
-            await createAppleInteractor(XCTEST_IOS_DEVICE, {
-              appBundleId: 'com.example.app',
-            }).screenshot(outPath),
+            await createAppleInteractor(
+              XCTEST_IOS_DEVICE,
+              {
+                appBundleId: 'com.example.app',
+              },
+              { env: process.env, cwd: process.cwd() },
+            ).screenshot(outPath),
         ),
     );
 

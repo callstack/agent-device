@@ -14,6 +14,7 @@ test('an Apple runner capture publishes the app-window box its rects are measure
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,
     {},
+    { env: process.env, cwd: process.cwd() },
     {
       hasLiveSession: () => true,
       runCommand: async () => runnerResultFor({ command: 'snapshot' }),
@@ -40,6 +41,7 @@ test('a macOS app capture publishes no viewport (#3182)', async () => {
   const interactor = createAppleInteractor(
     MACOS_DEVICE,
     {},
+    { env: process.env, cwd: process.cwd() },
     { hasLiveSession: () => true, runCommand: async () => ({ nodes }) },
   );
 

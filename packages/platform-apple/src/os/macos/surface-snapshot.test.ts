@@ -30,10 +30,14 @@ test('an app snapshot carries the helper warning that web content may be missing
   const result = await withAppleToolProvider(
     provider,
     async () =>
-      await captureMacOsSurfaceSnapshot({
-        surface: macOsHelperSurface('app', 'native')!,
-        appBundleId: 'com.openai.codex',
-      }),
+      await captureMacOsSurfaceSnapshot(
+        {
+          surface: macOsHelperSurface('app', 'native')!,
+          appBundleId: 'com.openai.codex',
+        },
+        undefined,
+        process.env,
+      ),
   );
   expect(calls).toEqual([['snapshot', '--surface', 'app', '--bundle-id', 'com.openai.codex']]);
   expect(result.warnings).toEqual([warning]);

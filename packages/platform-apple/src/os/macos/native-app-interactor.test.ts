@@ -29,7 +29,7 @@ function runnerInteractor(reached: string[] = []): Interactor {
 }
 
 function nativeInteractor(ctx: RunnerContext = context, reached: string[] = []): Interactor {
-  return macOsNativeAppInteractor(runnerInteractor(reached), ctx);
+  return macOsNativeAppInteractor(runnerInteractor(reached), ctx, process.env);
 }
 
 async function recordHelperCalls(

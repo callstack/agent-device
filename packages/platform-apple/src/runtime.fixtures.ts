@@ -6,6 +6,7 @@ import { hostFixture } from './logs/runtime.fixtures.ts';
 export function platformRuntimeHostFixture(): PlatformRuntimeHost {
   return {
     ...hostFixture().host,
+    hostEnvironment: { env: process.env, cwd: process.cwd() },
     appLogs: {
       readRecent: async () => ({
         path: '/sessions/one/app.log',

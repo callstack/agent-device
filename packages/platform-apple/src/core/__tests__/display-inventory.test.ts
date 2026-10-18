@@ -591,6 +591,8 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
     // can tell the two sources apart rather than passing on a coincidence.
     const litPanel = displayWith({ pointScale: 2 });
     await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/duo.png', {
+      env: process.env,
+
       skipIosSimulatorBootCheck: true,
       pixelDensity: 2,
       deps: {
@@ -621,6 +623,8 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
   test('keeps the source unmeasured when a runner reports no display facts', async () => {
     const sourceScales: (number | undefined)[] = [];
     await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/duo.png', {
+      env: process.env,
+
       skipIosSimulatorBootCheck: true,
       pixelDensity: 2,
       deps: {
@@ -646,6 +650,8 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
   test('names the resolved panel as the source for a simctl capture', async () => {
     const sourceScales: (number | undefined)[] = [];
     await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/duo.png', {
+      env: process.env,
+
       skipIosSimulatorBootCheck: true,
       pixelDensity: 2,
       deps: {

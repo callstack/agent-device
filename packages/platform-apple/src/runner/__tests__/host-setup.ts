@@ -5,6 +5,7 @@ import {
   installAppleRunnerTestHost,
   loadAppleRunnerHost,
 } from '../test-host.ts';
+import { setAppleRunnerHostEnvironment } from '../../core/runner-owner-state.ts';
 
 // The apple-runner vitest project runs the package's own suites, which cannot
 // import root utilities directly (R11). This setup installs the real root host
@@ -18,4 +19,7 @@ bindTestCommandHost();
 
 beforeEach(() => {
   appleRunnerTestHost.reset();
+  // Runner configuration reads take the runtime's host (#3794). A package suite runs outside a
+  // composed runtime, so it binds the live process host the command host above carries.
+  setAppleRunnerHostEnvironment({ env: process.env, cwd: process.cwd() });
 });

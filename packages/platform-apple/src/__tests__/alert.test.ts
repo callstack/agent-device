@@ -43,7 +43,7 @@ afterEach(() => {
 test('a read spends the family default, not the caller window', async () => {
   mockRunner.mockResolvedValue({ title: 'Camera Access' });
 
-  await readAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 37 });
+  await readAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 37 }, process.env);
 
   assert.equal(mockRunner.mock.calls.length, 1);
   assert.deepEqual(mockRunner.mock.calls[0]?.[1], {
@@ -62,7 +62,12 @@ test('a wait polls until one attempt answers, and the first attempt gets the who
     return { title: 'Camera Access' };
   });
 
-  const result = await awaitAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 5_000 });
+  const result = await awaitAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    { timeoutMs: 5_000 },
+    process.env,
+  );
 
   assert.deepEqual(result, { title: 'Camera Access' });
   assert.equal(calls, 2);
@@ -76,7 +81,12 @@ test('a wait that never sees an alert reports the timeout rather than the last a
   vi.useFakeTimers();
   mockRunner.mockRejectedValue(runnerAbsence());
 
-  const outcome = awaitAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 900 }).then(
+  const outcome = awaitAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    { timeoutMs: 900 },
+    process.env,
+  ).then(
     () => undefined,
     (error: unknown) => error,
   );
@@ -93,7 +103,13 @@ test('an accept retries only while the backend says the alert is not there yet',
     throw new AppError('COMMAND_FAILED', 'runner crashed');
   });
 
-  const outcome = actOnAppleAlert(IOS_SIMULATOR, runnerOptions, 'accept').then(
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
     () => undefined,
     (error: unknown) => error,
   );
@@ -107,7 +123,13 @@ test('an exhausted accept carries the scoped-snapshot fallback the agent needs n
   vi.useFakeTimers();
   mockRunner.mockRejectedValue(runnerAbsence());
 
-  const outcome = actOnAppleAlert(IOS_SIMULATOR, runnerOptions, 'accept').then(
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
     () => undefined,
     (error: unknown) => error,
   );
@@ -130,7 +152,12 @@ test('a wait propagates a non-absence failure instead of spending it as poll bud
     throw new AppError('COMMAND_FAILED', 'runner transport closed: alert not found');
   });
 
-  const outcome = awaitAppleAlert(IOS_SIMULATOR, runnerOptions, { timeoutMs: 5_000 }).then(
+  const outcome = awaitAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    { timeoutMs: 5_000 },
+    process.env,
+  ).then(
     () => undefined,
     (error: unknown) => error,
   );
@@ -148,7 +175,13 @@ test('an action does not retry a failure that only reads like an absence', async
     throw new AppError('COMMAND_FAILED', 'no alert service on this runner');
   });
 
-  const outcome = actOnAppleAlert(IOS_SIMULATOR, runnerOptions, 'dismiss').then(
+  const outcome = actOnAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    'dismiss',
+    undefined,
+    process.env,
+  ).then(
     () => undefined,
     (error: unknown) => error,
   );
@@ -168,7 +201,13 @@ test('the macOS helper states absence as a typed reason, and the family retries 
     throw helperAbsence();
   });
 
-  const outcome = actOnAppleAlert(MACOS_DEVICE, runnerOptions, 'accept').then(
+  const outcome = actOnAppleAlert(
+    MACOS_DEVICE,
+    runnerOptions,
+    'accept',
+    undefined,
+    process.env,
+  ).then(
     () => undefined,
     (error: unknown) => error,
   );
@@ -183,13 +222,21 @@ test('the macOS helper states absence as a typed reason, and the family retries 
 test('the macOS host reads through its helper, and a frontmost-app session names no bundle', async () => {
   mockHelper.mockResolvedValue({ title: 'Allow access' });
 
-  await readAppleAlert(MACOS_DEVICE, runnerOptions, {
-    surface: 'frontmost-app',
-    appBundleId: 'com.example.app',
-  });
+  await readAppleAlert(
+    MACOS_DEVICE,
+    runnerOptions,
+    {
+      surface: 'frontmost-app',
+      appBundleId: 'com.example.app',
+    },
+    process.env,
+  );
 
   assert.equal(mockRunner.mock.calls.length, 0);
-  assert.deepEqual(mockHelper.mock.calls[0], ['get', { surface: 'frontmost-app' }]);
+  assert.deepEqual(mockHelper.mock.calls[0], [
+    'get',
+    { surface: 'frontmost-app', env: process.env },
+  ]);
 });
 
 // The narrowing is the macOS helper's alone. A non-macOS Apple leaf keeps the session bundle
@@ -197,10 +244,15 @@ test('the macOS host reads through its helper, and a frontmost-app session names
 test('the XCTest runner keeps the session bundle even on a frontmost-app surface', async () => {
   mockRunner.mockResolvedValue({ title: 'Camera Access' });
 
-  await readAppleAlert(IOS_SIMULATOR, runnerOptions, {
-    surface: 'frontmost-app',
-    appBundleId: 'com.example.app',
-  });
+  await readAppleAlert(
+    IOS_SIMULATOR,
+    runnerOptions,
+    {
+      surface: 'frontmost-app',
+      appBundleId: 'com.example.app',
+    },
+    process.env,
+  );
 
   assert.deepEqual(mockRunner.mock.calls[0]?.[1], {
     command: 'alert',
@@ -213,13 +265,19 @@ test('the XCTest runner keeps the session bundle even on a frontmost-app surface
 test('a macOS app session forwards the bundle its surface is scoped to', async () => {
   mockHelper.mockResolvedValue({ action: 'dismiss' });
 
-  await actOnAppleAlert(MACOS_DEVICE, runnerOptions, 'dismiss', {
-    surface: 'app',
-    appBundleId: 'com.example.app',
-  });
+  await actOnAppleAlert(
+    MACOS_DEVICE,
+    runnerOptions,
+    'dismiss',
+    {
+      surface: 'app',
+      appBundleId: 'com.example.app',
+    },
+    process.env,
+  );
 
   assert.deepEqual(mockHelper.mock.calls[0], [
     'dismiss',
-    { bundleId: 'com.example.app', surface: 'app' },
+    { bundleId: 'com.example.app', surface: 'app', env: process.env },
   ]);
 });

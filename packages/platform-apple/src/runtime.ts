@@ -265,7 +265,9 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
   // bindings agree on it. Other Apple devices never read it, so a bad value cannot fail them.
   let resolvedMacOsAppBackend: MacOsAppBackend | undefined;
   const macOsAppBackend = (device: DeviceInfo): MacOsAppBackend =>
-    isMacOs(device) ? (resolvedMacOsAppBackend ??= hostMacOsAppBackend()) : 'xctest';
+    isMacOs(device)
+      ? (resolvedMacOsAppBackend ??= hostMacOsAppBackend(host.hostEnvironment.env))
+      : 'xctest';
   const inspectFacts = async (device: DeviceInfo) => {
     const logs = await appLogs.inspectFacts(device);
     const deployment = appleAppDeploymentFacts(device);

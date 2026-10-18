@@ -44,7 +44,7 @@ test('closeMacOsApp waits until an accepted termination has actually completed',
       forceTerminated: false,
     });
 
-  await closeMacOsApp(MACOS_DEVICE, 'com.apple.systempreferences');
+  await closeMacOsApp(MACOS_DEVICE, 'com.apple.systempreferences', process.env);
 
   expect(mockQuitMacOsApp).toHaveBeenCalledTimes(3);
 });
@@ -57,9 +57,9 @@ test('closeMacOsApp fails immediately when neither termination request is accept
     forceTerminated: false,
   });
 
-  await expect(closeMacOsApp(MACOS_DEVICE, 'com.apple.systempreferences')).rejects.toThrow(
-    'Failed to close macOS app com.apple.systempreferences',
-  );
+  await expect(
+    closeMacOsApp(MACOS_DEVICE, 'com.apple.systempreferences', process.env),
+  ).rejects.toThrow('Failed to close macOS app com.apple.systempreferences');
   expect(mockQuitMacOsApp).toHaveBeenCalledTimes(1);
 });
 
@@ -71,7 +71,9 @@ test('closeMacOsApp bounds termination confirmation', async () => {
     forceTerminated: false,
   });
 
-  await expect(closeMacOsApp(MACOS_DEVICE, 'com.apple.systempreferences')).rejects.toMatchObject({
+  await expect(
+    closeMacOsApp(MACOS_DEVICE, 'com.apple.systempreferences', process.env),
+  ).rejects.toMatchObject({
     details: { reason: 'MACOS_APP_TERMINATION_TIMEOUT', attempts: 20 },
   });
   expect(mockQuitMacOsApp).toHaveBeenCalledTimes(20);

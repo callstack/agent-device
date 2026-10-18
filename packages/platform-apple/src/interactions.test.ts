@@ -94,9 +94,13 @@ function singlePanPlan(): Extract<GesturePlan, { topology: 'single' }> {
 test('iosRunnerOverrides uses synthesized iOS coordinate taps', async () => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 
-  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   await overrides.tap(100, 200);
   await overrides.focus(110, 210);
@@ -120,9 +124,13 @@ test('iosRunnerOverrides uses synthesized iOS coordinate taps', async () => {
 test('iosRunnerOverrides uses synthesized iOS coordinate taps for selectors', async () => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 
-  const { overrides } = iosRunnerOverrides(IOS_TEST_DEVICE, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_DEVICE,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   await overrides.tapElementSelector!({
     key: 'label',
@@ -145,9 +153,13 @@ test('iosRunnerOverrides uses synthesized iOS coordinate taps for selectors', as
 test('iosRunnerOverrides does not request synthesis for visionOS coordinate taps', async () => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 
-  const { overrides } = iosRunnerOverrides(VISIONOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    VISIONOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   await overrides.tap(100, 200);
 
@@ -162,9 +174,13 @@ test('iosRunnerOverrides does not request synthesis for visionOS coordinate taps
 test('iosRunnerOverrides does not request synthesis for visionOS selector taps', async () => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 
-  const { overrides } = iosRunnerOverrides(VISIONOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    VISIONOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   await overrides.tapElementSelector!({
     key: 'label',
@@ -188,9 +204,13 @@ test('iosRunnerOverrides does not request synthesis for visionOS fused presses',
     completedSteps: 3,
     sequenceResults: Array.from({ length: 3 }, () => ({ ok: true, kind: 'tap' })),
   });
-  const { overrides } = iosRunnerOverrides(VISIONOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    VISIONOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   await overrides.pressPoint!(
     { x: 100, y: 200 },
@@ -218,9 +238,13 @@ test('iosRunnerOverrides owns fused repeated presses with deterministic jitter',
     completedSteps: 3,
     sequenceResults: Array.from({ length: 3 }, () => ({ ok: true, kind: 'tap' })),
   });
-  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   await overrides.pressPoint!(
     { x: 100, y: 200 },
@@ -245,9 +269,13 @@ test('iosRunnerOverrides owns fused repeated presses with deterministic jitter',
 
 test('iosRunnerOverrides owns alternate-button presses', async () => {
   mockRunAppleRunnerCommand.mockResolvedValue({ clicked: true });
-  const { overrides } = iosRunnerOverrides(MACOS_TEST_DEVICE, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    MACOS_TEST_DEVICE,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   await overrides.pressPoint!(
     { x: 100, y: 200 },
@@ -290,7 +318,7 @@ test('iosRunnerOverrides remaps a later chunk failure to global press indices', 
         },
       ],
     });
-  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {});
+  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {}, process.env);
 
   await assert.rejects(
     () =>
@@ -325,9 +353,13 @@ test('iosRunnerOverrides remaps a later chunk failure to global press indices', 
 
 test('iosRunnerOverrides reads and validates the fresh gesture viewport', async () => {
   mockRunAppleRunnerCommand.mockResolvedValue({ x: 10, y: 20, x2: 300, y2: 500 });
-  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
   assert.ok(overrides.gestureViewport);
   assert.deepEqual(await overrides.gestureViewport(), { x: 10, y: 20, width: 300, height: 500 });
   assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
@@ -345,9 +377,13 @@ for (const [name, device] of [
   test(`iosRunnerOverrides keeps ${name} coordinate taps on the standard path`, async () => {
     mockRunAppleRunnerCommand.mockResolvedValue({});
 
-    const { overrides } = iosRunnerOverrides(device, {
-      appBundleId: 'com.example.App',
-    });
+    const { overrides } = iosRunnerOverrides(
+      device,
+      {
+        appBundleId: 'com.example.App',
+      },
+      process.env,
+    );
 
     await overrides.tap(100, 200);
 
@@ -437,9 +473,13 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
     referenceHeight: 800,
   });
 
-  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   const result = await overrides.scroll('down', { durationMs: 50 });
 
@@ -475,9 +515,13 @@ test('iosRunnerOverrides keeps explicit iOS scroll distance with the controlled 
     referenceHeight: 800,
   });
 
-  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   await overrides.scroll('down', { pixels: 400 });
 
@@ -501,9 +545,13 @@ test('iosRunnerOverrides materializes the controlled iOS default scroll amount',
     referenceHeight: 800,
   });
 
-  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   const result = await overrides.scroll('down');
 
@@ -533,9 +581,13 @@ test('iosRunnerOverrides maps tvOS scroll duration to remote press hold duration
     ok: true,
   });
 
-  const { overrides } = iosRunnerOverrides(TVOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    TVOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   const result = await overrides.scroll('down', { durationMs: 50 });
 
@@ -557,9 +609,13 @@ test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', 
     referenceHeight: 800,
   });
 
-  const { overrides } = iosRunnerOverrides(MACOS_TEST_DEVICE, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    MACOS_TEST_DEVICE,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   const result = await overrides.scroll('down', { pixels: 200, durationMs: 50 });
 
@@ -582,9 +638,13 @@ test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', 
 });
 
 test('iosRunnerOverrides rejects macOS desktop scroll duration above the shared cap', async () => {
-  const { overrides } = iosRunnerOverrides(MACOS_TEST_DEVICE, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    MACOS_TEST_DEVICE,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   await assert.rejects(() => overrides.scroll('down', { pixels: 200, durationMs: 10_001 }), {
     code: 'INVALID_ARGS',
@@ -604,9 +664,13 @@ test('iosRunnerOverrides narrows the runner type payload to the text-entry route
     referenceHeight: 800,
   });
 
-  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   assert.deepEqual(await overrides.type('hello', 25), {
     textEntryRoute: 'synthesized-first-responder',
@@ -616,9 +680,13 @@ test('iosRunnerOverrides narrows the runner type payload to the text-entry route
 test('iosRunnerOverrides reports no route when the runner names one it does not model', async () => {
   mockRunAppleRunnerCommand.mockResolvedValueOnce({ textEntryRoute: 'unmodelled-route' });
 
-  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
-    appBundleId: 'com.example.App',
-  });
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    {
+      appBundleId: 'com.example.App',
+    },
+    process.env,
+  );
 
   assert.deepEqual(await overrides.type('hello'), {});
 });

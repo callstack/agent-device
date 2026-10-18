@@ -12,6 +12,7 @@ import {
   SNAPSHOT_BRIDGE_PREPARATION_RETRY_AFTER_MS,
 } from './preparation.ts';
 import type { SnapshotSourceBridgeBinary, SnapshotSourceHost } from './types.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const BRIDGE_SOURCES = [
   'SnapshotBridge.m',
@@ -265,7 +266,7 @@ function createPreparationHost(
     signals: (AbortSignal | undefined)[];
   } = { host: undefined as never, builds: 0, signals: [] };
   const host: SnapshotSourceHost = {
-    ...createSnapshotSourceHost(),
+    ...createSnapshotSourceHost(createLiveTestHostEnvironment()),
     cpuArch: async () => 'arm64',
     run: async (command, args, options) => {
       if (command === 'xcrun' && args.includes('clang')) {

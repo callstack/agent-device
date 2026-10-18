@@ -110,7 +110,7 @@ async function collectBiometricCalls(
       return unexpectedArgs(args);
     },
     async () => {
-      await setIosSetting(IOS_TEST_SIMULATOR, setting, state);
+      await setIosSetting(IOS_TEST_SIMULATOR, setting, state, undefined, undefined, process.env);
     },
   );
   return calls;
@@ -152,7 +152,8 @@ test('setIosSetting biometric enroll fails when the read-back state did not chan
     },
     async () => {
       await assert.rejects(
-        () => setIosSetting(IOS_TEST_SIMULATOR, 'faceid', 'enroll'),
+        () =>
+          setIosSetting(IOS_TEST_SIMULATOR, 'faceid', 'enroll', undefined, undefined, process.env),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'COMMAND_FAILED');
@@ -172,10 +173,14 @@ test('setIosSetting biometric rejects an unknown state before spawning anything'
       return unexpectedArgs(args);
     },
     async () => {
-      await assertRejectsAppError(() => setIosSetting(IOS_TEST_SIMULATOR, 'faceid', 'toggle'), {
-        code: 'INVALID_ARGS',
-        message: /Use match\|nonmatch\|enroll\|unenroll/,
-      });
+      await assertRejectsAppError(
+        () =>
+          setIosSetting(IOS_TEST_SIMULATOR, 'faceid', 'toggle', undefined, undefined, process.env),
+        {
+          code: 'INVALID_ARGS',
+          message: /Use match\|nonmatch\|enroll\|unenroll/,
+        },
+      );
     },
   );
 });
@@ -188,7 +193,8 @@ test('setIosSetting touchid reports COMMAND_FAILED with the notifyutil attempt w
     },
     async () => {
       await assert.rejects(
-        () => setIosSetting(IOS_TEST_SIMULATOR, 'touchid', 'match'),
+        () =>
+          setIosSetting(IOS_TEST_SIMULATOR, 'touchid', 'match', undefined, undefined, process.env),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'COMMAND_FAILED');
@@ -213,7 +219,14 @@ test('setIosSetting appearance toggle queries current osascript appearance on ma
       return unexpectedArgs(args);
     },
     async ({ calls }) => {
-      await setIosSetting(MACOS_TEST_DEVICE, 'appearance', 'toggle');
+      await setIosSetting(
+        MACOS_TEST_DEVICE,
+        'appearance',
+        'toggle',
+        undefined,
+        undefined,
+        process.env,
+      );
       const flat = calls.map((args) => args.join(' '));
       assert.equal(
         flat.some((line) => line.includes('get dark mode')),
@@ -245,9 +258,16 @@ test('setIosSetting permission grant accessibility uses macOS helper', async () 
       process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
 
       try {
-        const result = await setIosSetting(MACOS_TEST_DEVICE, 'permission', 'grant', undefined, {
-          permissionTarget: 'accessibility',
-        });
+        const result = await setIosSetting(
+          MACOS_TEST_DEVICE,
+          'permission',
+          'grant',
+          undefined,
+          {
+            permissionTarget: 'accessibility',
+          },
+          process.env,
+        );
         const logged = await fs.readFile(argsLogPath, 'utf8');
         assert.equal(logged, 'permission\ngrant\naccessibility\n');
         assert.deepEqual(result, {
@@ -269,9 +289,16 @@ test('setIosSetting permission grant accessibility uses macOS helper', async () 
 test('setIosSetting rejects unsupported macOS permission deny action', async () => {
   await assertRejectsAppError(
     () =>
-      setIosSetting(MACOS_TEST_DEVICE, 'permission', 'deny', undefined, {
-        permissionTarget: 'accessibility',
-      }),
+      setIosSetting(
+        MACOS_TEST_DEVICE,
+        'permission',
+        'deny',
+        undefined,
+        {
+          permissionTarget: 'accessibility',
+        },
+        process.env,
+      ),
     { code: 'INVALID_ARGS', message: /grant\|reset, not deny/ },
   );
 });
@@ -282,10 +309,17 @@ test('setIosSetting location runs the simctl plan on the simulator udid and retu
   await withFakeAppleTool(
     () => '',
     async ({ calls }) => {
-      const result = await setIosSetting(IOS_TEST_SIMULATOR, 'location', 'set', undefined, {
-        latitude: 37.3349,
-        longitude: -122.009,
-      });
+      const result = await setIosSetting(
+        IOS_TEST_SIMULATOR,
+        'location',
+        'set',
+        undefined,
+        {
+          latitude: 37.3349,
+          longitude: -122.009,
+        },
+        process.env,
+      );
       assert.deepEqual(calls, [['simctl', 'location', 'sim-1', 'set', '37.3349,-122.009']]);
       assert.deepEqual(result, { latitude: 37.3349, longitude: -122.009 });
     },
@@ -299,7 +333,15 @@ test('setIosSetting clear-app-state refuses an appless session with the publishe
     (args) => unexpectedArgs(args),
     async () => {
       await assertRejectsAppError(
-        () => setIosSetting(IOS_TEST_SIMULATOR, 'clear-app-state', 'clear'),
+        () =>
+          setIosSetting(
+            IOS_TEST_SIMULATOR,
+            'clear-app-state',
+            'clear',
+            undefined,
+            undefined,
+            process.env,
+          ),
         {
           code: 'INVALID_ARGS',
           reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
@@ -320,7 +362,14 @@ test('setIosSetting appearance runs the simctl plan on the simulator udid and re
       return unexpectedArgs(args);
     },
     async ({ calls }) => {
-      await setIosSetting(IOS_TEST_SIMULATOR, 'appearance', 'toggle');
+      await setIosSetting(
+        IOS_TEST_SIMULATOR,
+        'appearance',
+        'toggle',
+        undefined,
+        undefined,
+        process.env,
+      );
       assert.deepEqual(calls, [
         ['simctl', 'ui', 'sim-1', 'appearance'],
         ['simctl', 'ui', 'sim-1', 'appearance', 'light'],
@@ -352,6 +401,8 @@ test('setIosSetting clear-app-state refuses a system app whose simctl answer is 
         'clear-app-state',
         'clear',
         'com.apple.Preferences',
+        undefined,
+        process.env,
       ).catch((error: unknown) => error);
       assert.ok(thrown instanceof AppError);
       assert.equal(thrown.code, 'UNSUPPORTED_OPERATION');
@@ -396,7 +447,14 @@ test('setIosSetting clear-app-state refuses an empty container answer with the s
     async () => {
       await assertRejectsAppError(
         () =>
-          setIosSetting(IOS_TEST_SIMULATOR, 'clear-app-state', 'clear', 'com.apple.Preferences'),
+          setIosSetting(
+            IOS_TEST_SIMULATOR,
+            'clear-app-state',
+            'clear',
+            'com.apple.Preferences',
+            undefined,
+            process.env,
+          ),
         {
           code: 'UNSUPPORTED_OPERATION',
           reason: IOS_NO_DATA_CONTAINER_REASON,
@@ -440,6 +498,8 @@ test('setIosSetting clear-app-state leaves a fresh-install data container layout
         'clear-app-state',
         'clear',
         'com.example.app',
+        undefined,
+        process.env,
       );
       assert.equal(result?.cleared, true);
       assert.equal(result?.bundleId, 'com.example.app');
@@ -473,7 +533,14 @@ test('setIosSetting reset-keychain resets the whole simulator keychain', async (
       return unexpectedArgs(args);
     },
     async ({ calls }) => {
-      const result = await setIosSetting(IOS_TEST_SIMULATOR, 'reset-keychain', 'clear');
+      const result = await setIosSetting(
+        IOS_TEST_SIMULATOR,
+        'reset-keychain',
+        'clear',
+        undefined,
+        undefined,
+        process.env,
+      );
       assert.equal(result?.cleared, true);
       assert.equal(result?.scope, 'simulator');
 
@@ -491,7 +558,15 @@ test('setIosSetting reset-keychain rejects unsupported state', async () => {
     },
     async () => {
       await assertRejectsAppError(
-        () => setIosSetting(IOS_TEST_SIMULATOR, 'reset-keychain', 'nope'),
+        () =>
+          setIosSetting(
+            IOS_TEST_SIMULATOR,
+            'reset-keychain',
+            'nope',
+            undefined,
+            undefined,
+            process.env,
+          ),
         {
           code: 'INVALID_ARGS',
           message: /reset-keychain only supports clear/,
@@ -515,9 +590,16 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
     async ({ calls }) => {
       await assertRejectsAppError(
         () =>
-          setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'deny', 'com.example.app', {
-            permissionTarget: 'notifications',
-          }),
+          setIosSetting(
+            IOS_TEST_SIMULATOR,
+            'permission',
+            'deny',
+            'com.example.app',
+            {
+              permissionTarget: 'notifications',
+            },
+            process.env,
+          ),
         {
           code: 'UNSUPPORTED_OPERATION',
           message: /does not support setting notifications permission/i,
@@ -545,9 +627,16 @@ test('setIosSetting permission grants the bundle id a display name resolves to',
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
 
   await withFakeAppleTool(installedAppsTool, async ({ calls }) => {
-    await setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'Maps', {
-      permissionTarget: 'photos',
-    });
+    await setIosSetting(
+      IOS_TEST_SIMULATOR,
+      'permission',
+      'grant',
+      'Maps',
+      {
+        permissionTarget: 'photos',
+      },
+      process.env,
+    );
     assert.deepEqual(calls, [
       ['simctl', 'listapps', 'sim-1'],
       ['simctl', 'privacy', 'sim-1', 'grant', 'photos', 'com.apple.Maps'],
@@ -559,7 +648,14 @@ test('setIosSetting location grants an installed bundle id as named', async () =
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
 
   await withFakeAppleTool(installedAppsTool, async ({ calls }) => {
-    await setIosSetting(IOS_TEST_SIMULATOR, 'location', 'on', 'com.example.located');
+    await setIosSetting(
+      IOS_TEST_SIMULATOR,
+      'location',
+      'on',
+      'com.example.located',
+      undefined,
+      process.env,
+    );
     assert.deepEqual(calls, [
       ['simctl', 'listapps', 'sim-1'],
       ['simctl', 'privacy', 'sim-1', 'grant', 'location', 'com.example.located'],
@@ -571,9 +667,16 @@ test('setIosSetting permission resolves a dotted display name instead of passing
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
 
   await withFakeAppleTool(installedAppsTool, async ({ calls }) => {
-    await setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'Booking.com', {
-      permissionTarget: 'camera',
-    });
+    await setIosSetting(
+      IOS_TEST_SIMULATOR,
+      'permission',
+      'grant',
+      'Booking.com',
+      {
+        permissionTarget: 'camera',
+      },
+      process.env,
+    );
     assert.deepEqual(calls.at(-1), [
       'simctl',
       'privacy',
@@ -598,9 +701,16 @@ test.for([
     await withFakeAppleTool(installedAppsTool, async ({ calls }) => {
       await assertRejectsAppError(
         () =>
-          setIosSetting(IOS_TEST_SIMULATOR, setting, state, app, {
-            permissionTarget: 'photos',
-          }),
+          setIosSetting(
+            IOS_TEST_SIMULATOR,
+            setting,
+            state,
+            app,
+            {
+              permissionTarget: 'photos',
+            },
+            process.env,
+          ),
         {
           code: 'APP_NOT_INSTALLED',
           reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled,
@@ -628,6 +738,7 @@ test('setIosSetting permission keeps a failed app listing distinct from a missin
         'grant',
         'com.example.unlisted',
         { permissionTarget: 'photos' },
+        process.env,
       ).catch((error: unknown) => error);
       assert.ok(thrown instanceof AppError);
       assert.equal(thrown.code, 'COMMAND_FAILED');

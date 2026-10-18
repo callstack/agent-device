@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { writeHostBinaryFile } from '@agent-device/host-kit/host-file';
@@ -13,6 +14,8 @@ export type IosPhysicalDeviceScreenshotOptions = {
   runnerOptions?: AppleRunnerCommandOptions;
   preferRunner?: boolean;
   runRunnerCommand: AppleRunnerCommandExecutor;
+  /** The calling runtime's host environment; runner-container configuration is read from it. */
+  env: Readonly<EnvMap>;
 };
 
 export async function captureCoreDeviceScreenshot(
@@ -40,7 +43,7 @@ export async function captureCoreDeviceScreenshot(
   if (await writeInlineRunnerScreenshot(result, outPath)) return;
 
   const remoteFileName = readRunnerScreenshotPath(result);
-  await copyCoreDeviceRunnerFile(device, remoteFileName, outPath);
+  await copyCoreDeviceRunnerFile(device, remoteFileName, outPath, options.env);
 }
 
 export async function captureXctestDeviceScreenshot(

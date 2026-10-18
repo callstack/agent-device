@@ -369,8 +369,8 @@ test('the launch confirmation waits for a system prompt that is still appearing'
   runner.mockRejectedValueOnce(alertNotFound()).mockResolvedValueOnce(CONFIRMATION);
   try {
     const interactor = {
-      readAlert: (options) => readAppleAlert(simulator, {}, options),
-      awaitAlert: (options) => awaitAppleAlert(simulator, {}, options),
+      readAlert: (options) => readAppleAlert(simulator, {}, options, process.env),
+      awaitAlert: (options) => awaitAppleAlert(simulator, {}, options, process.env),
       acceptAlert: vi.fn(),
     } satisfies Pick<Interactor, 'readAlert' | 'awaitAlert' | 'acceptAlert'>;
     const device = createLaunchConfirmationPort(
@@ -398,8 +398,8 @@ test('an expired confirmation wait retains typed absence instead of an unreadabl
       simulator,
       { url: 'example://automation', appBundleId: 'com.example.app' },
       {
-        awaitAlert: (options) => awaitAppleAlert(simulator, {}, options),
-        readAlert: (options) => readAppleAlert(simulator, {}, options),
+        awaitAlert: (options) => awaitAppleAlert(simulator, {}, options, process.env),
+        readAlert: (options) => readAppleAlert(simulator, {}, options, process.env),
         acceptAlert: vi.fn(),
       },
       new AbortController().signal,
@@ -420,10 +420,10 @@ test('a failed accept checks presence once without waiting for the dismissed pro
   vi.mocked(resolveIosSimulatorDeepLinkBundleId).mockResolvedValueOnce('com.example.app');
   try {
     const readAlert = vi.fn<NonNullable<Interactor['readAlert']>>((options) =>
-      readAppleAlert(simulator, {}, options),
+      readAppleAlert(simulator, {}, options, process.env),
     );
     const awaitAlert = vi.fn<NonNullable<Interactor['awaitAlert']>>((options) =>
-      awaitAppleAlert(simulator, {}, options),
+      awaitAppleAlert(simulator, {}, options, process.env),
     );
     const interactor = {
       readAlert,
@@ -461,8 +461,8 @@ test('a no-prompt presentation probe completes within a few seconds', async () =
   runner.mockRejectedValue(alertNotFound());
   try {
     const interactor = {
-      readAlert: (options) => readAppleAlert(simulator, {}, options),
-      awaitAlert: (options) => awaitAppleAlert(simulator, {}, options),
+      readAlert: (options) => readAppleAlert(simulator, {}, options, process.env),
+      awaitAlert: (options) => awaitAppleAlert(simulator, {}, options, process.env),
       acceptAlert: vi.fn(),
     } satisfies Pick<Interactor, 'readAlert' | 'awaitAlert' | 'acceptAlert'>;
     const device = createLaunchConfirmationPort(

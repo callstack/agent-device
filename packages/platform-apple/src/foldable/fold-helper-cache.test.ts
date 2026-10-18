@@ -8,6 +8,7 @@ import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 import { execKillTimeoutError } from '../native-build/__tests__/exec-timeout-fixture.ts';
 import { createSnapshotSourceHost } from '../snapshot-source/host.ts';
 import type { SnapshotSourceHost } from '../snapshot-source/types.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import {
   buildFoldHelperCompileArgv,
   ensureFoldHelperBinary,
@@ -18,7 +19,7 @@ function fakeFoldHelperHost(
   binary: () => string,
   xcodeVersion: () => string = () => 'Xcode 16.4\nBuild version 16F6',
 ): SnapshotSourceHost {
-  const real = createSnapshotSourceHost();
+  const real = createSnapshotSourceHost(createLiveTestHostEnvironment());
   return {
     ...real,
     cpuArch: async () => 'arm64',

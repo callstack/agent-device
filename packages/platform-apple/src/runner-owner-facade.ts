@@ -1,5 +1,6 @@
 export {
   createAppleRunnerRuntimeState,
+  setAppleRunnerHostEnvironment,
   setRunnerDeviceClaimAuthorityProbe,
   setRunnerLeaseOwnerStateDir,
   type RunnerDeviceClaimAuthorityProbe,

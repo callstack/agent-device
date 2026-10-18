@@ -10,6 +10,7 @@ import type {
   RunnerCallOptions,
 } from '@agent-device/contracts/interactor-types';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
@@ -40,13 +41,15 @@ function runAppleAlert(
   device: DeviceInfo,
   runnerOptions: RunnerCallOptions,
   options: AlertInteractorOptions | undefined,
+  env: Readonly<EnvMap>,
 ): (action: NativeAlertAction, timeoutMs: number) => Promise<Record<string, unknown>> {
   if (isMacOs(device)) {
     const target =
       options?.surface === 'frontmost-app'
         ? { surface: options.surface }
         : { bundleId: options?.appBundleId, surface: options?.surface };
-    return async (action) => (await runMacOsAlertAction(action, target)) as Record<string, unknown>;
+    return async (action) =>
+      (await runMacOsAlertAction(action, { ...target, env })) as Record<string, unknown>;
   }
   return async (action, timeoutMs) =>
     (await runAppleRunnerCommand(
@@ -69,9 +72,10 @@ export async function alertIfPresent<T>(read: Promise<T>): Promise<T | undefined
 export async function readAppleAlert(
   device: DeviceInfo,
   runnerOptions: RunnerCallOptions,
-  options?: AlertInteractorOptions,
+  options: AlertInteractorOptions | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
-  return await runAppleAlert(device, runnerOptions, options)('get', DEFAULT_ALERT_TIMEOUT_MS);
+  return await runAppleAlert(device, runnerOptions, options, env)('get', DEFAULT_ALERT_TIMEOUT_MS);
 }
 
 /**
@@ -81,9 +85,10 @@ export async function readAppleAlert(
 export async function awaitAppleAlert(
   device: DeviceInfo,
   runnerOptions: RunnerCallOptions,
-  options?: AlertInteractorOptions,
+  options: AlertInteractorOptions | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
-  const runAlert = runAppleAlert(device, runnerOptions, options);
+  const runAlert = runAppleAlert(device, runnerOptions, options, env);
   const timeout = options?.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS;
   const start = Date.now();
   let firstAttempt = true;
@@ -114,9 +119,10 @@ export async function actOnAppleAlert(
   device: DeviceInfo,
   runnerOptions: RunnerCallOptions,
   action: 'accept' | 'dismiss',
-  options?: AlertInteractorOptions,
+  options: AlertInteractorOptions | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
-  const runAlert = runAppleAlert(device, runnerOptions, options);
+  const runAlert = runAppleAlert(device, runnerOptions, options, env);
   const runnerTimeoutMs = isIosFamily(device) ? DEFAULT_ALERT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS;
   const start = Date.now();
   let lastError: unknown;

@@ -12,6 +12,7 @@ import {
   type TypeTextBackendResult,
 } from '@agent-device/contracts/interactor-types';
 import { macOsHelperSurface, type MacOsHelperSurface } from '@agent-device/contracts/session';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   SCROLL_DURATION_MAX_MS,
   normalizeScrollDurationMs,
@@ -74,6 +75,7 @@ export function resolveAppleBackRunnerCommand(mode?: BackMode): AppleBackRunnerC
 export function iosRunnerOverrides(
   device: DeviceInfo,
   ctx: RunnerContext,
+  env: Readonly<EnvMap>,
 ): {
   overrides: IosRunnerOverrides;
   runnerOpts: RunnerOpts;
@@ -96,7 +98,7 @@ export function iosRunnerOverrides(
         return await runAppleRunnerCommand(device, iosTapCommand(device, ctx, x, y), runnerOpts);
       },
       pressPoint: async (point, options) =>
-        await runApplePressPoint(device, ctx, runnerOpts, point, options),
+        await runApplePressPoint(device, ctx, runnerOpts, point, options, env),
       tapElementSelector: async (selector) => {
         return await runAppleRunnerCommand(
           device,
@@ -205,11 +207,12 @@ async function runApplePressPoint(
   runnerOpts: RunnerOpts,
   point: { x: number; y: number },
   options: PressPointOptions,
+  env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   // The runner owner's routing: an app session reaches here only on the XCTest backend.
   const helper = isMacOs(device) ? macOsHelperSurface(options.surface, 'xctest') : undefined;
   if (helper) {
-    return await runMacOsSurfacePress(context, point, options, helper);
+    return await runMacOsSurfacePress(context, point, options, helper, env);
   }
   if (options.button !== 'primary') {
     return await runAppleAlternateClick(device, context, runnerOpts, point, options.button);
@@ -231,6 +234,7 @@ async function runMacOsSurfacePress(
   point: { x: number; y: number },
   options: PressPointOptions,
   surface: MacOsHelperSurface,
+  env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown>> {
   if (options.button !== 'primary') {
     throw new AppError(
@@ -249,6 +253,7 @@ async function runMacOsSurfacePress(
     doubleClick: options.doubleTap,
     intervalMs: options.intervalMs,
     signal: context.signal,
+    env,
   });
   // A hold shorter than what macOS delivers is raised before it is posted, so the
   // response carries the hold the helper actually used rather than the request.

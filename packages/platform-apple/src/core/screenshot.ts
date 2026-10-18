@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { copyHostFile } from '@agent-device/host-kit/host-file';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
@@ -64,14 +64,17 @@ type SimulatorScreenshotFlowDeps = {
   captureWithRunner: (
     device: DeviceInfo,
     outPath: string,
-    appBundleId?: string,
-    fullscreen?: boolean,
-    runnerOptions?: AppleRunnerCommandOptions,
+    appBundleId: string | undefined,
+    fullscreen: boolean | undefined,
+    runnerOptions: AppleRunnerCommandOptions | undefined,
+    env: Readonly<EnvMap>,
   ) => Promise<RunnerScreenCaptureMetadata | undefined>;
   shouldFallbackToRunner: (error: unknown) => boolean;
 };
 
 type SimulatorScreenshotFlowOptions = {
+  /** The calling runtime's host environment; runner-container configuration is read from it. */
+  env: Readonly<EnvMap>;
   appBundleId?: string;
   fullscreen?: boolean;
   pixelDensity?: number;
@@ -97,7 +100,7 @@ const iosSimulatorRunnerContainerCache = new Map<string, string>();
 export async function screenshotIos(
   device: DeviceInfo,
   outPath: string,
-  options: Omit<SimulatorScreenshotFlowOptions, 'deps'> = {},
+  options: Omit<SimulatorScreenshotFlowOptions, 'deps'>,
 ): Promise<ScreenshotCaptureFacts> {
   if (isMacOs(device)) {
     await captureScreenshotViaRunner(
@@ -106,6 +109,7 @@ export async function screenshotIos(
       options.appBundleId,
       options.fullscreen,
       options.runnerOptions,
+      options.env,
     );
     return {};
   }
@@ -118,6 +122,7 @@ export async function screenshotIos(
     fullscreen: options.fullscreen,
     runnerOptions: options.runnerOptions,
     runRunnerCommand: runAppleRunnerCommand,
+    env: options.env,
   });
   return {};
 }
@@ -125,7 +130,7 @@ export async function screenshotIos(
 export async function captureSimulatorScreenshotWithFallback(
   device: DeviceInfo,
   outPath: string,
-  options: SimulatorScreenshotFlowOptions = {},
+  options: SimulatorScreenshotFlowOptions,
 ): Promise<ScreenshotCaptureFacts> {
   if (device.kind !== 'simulator') {
     throw new AppError(
@@ -184,6 +189,7 @@ export async function captureSimulatorScreenshotWithFallback(
       options.appBundleId,
       options.fullscreen,
       options.runnerOptions,
+      options.env,
     );
     // The runner captures the display that actually hosts the app and reports the scale it encoded
     // that image at, so normalization reads the source instead of applying a panel the host guessed.
@@ -234,9 +240,10 @@ export async function captureSimulatorScreenshotWithRetry(
 export async function captureScreenshotViaRunner(
   device: DeviceInfo,
   outPath: string,
-  appBundleId?: string,
-  fullscreen?: boolean,
-  runnerOptions?: AppleRunnerCommandOptions,
+  appBundleId: string | undefined,
+  fullscreen: boolean | undefined,
+  runnerOptions: AppleRunnerCommandOptions | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<RunnerScreenCaptureMetadata | undefined> {
   if (device.kind === 'device' && !isMacOs(device)) {
     await resolveIosPhysicalDeviceControl(device).captureScreenshot(device, outPath, {
@@ -245,6 +252,7 @@ export async function captureScreenshotViaRunner(
       runnerOptions,
       preferRunner: true,
       runRunnerCommand: runAppleRunnerCommand,
+      env,
     });
     return undefined;
   }
@@ -274,7 +282,7 @@ export async function captureScreenshotViaRunner(
   }
 
   if (device.kind === 'simulator') {
-    await copyRunnerScreenshotFromSimulator(device, remoteFileName, outPath);
+    await copyRunnerScreenshotFromSimulator(device, remoteFileName, outPath, env);
     return metadata;
   }
   throw new AppError('COMMAND_FAILED', 'Unsupported Apple screenshot target');
@@ -284,6 +292,7 @@ async function copyRunnerScreenshotFromSimulator(
   device: DeviceInfo,
   remoteFileName: string,
   outPath: string,
+  env: Readonly<EnvMap>,
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS);
   let lastError = 'Unable to locate runner container for simulator screenshot';
@@ -298,7 +307,7 @@ async function copyRunnerScreenshotFromSimulator(
     lastError = cachedCopy.error;
     iosSimulatorRunnerContainerCache.delete(device.id);
   }
-  for (const bundleId of resolveRunnerContainerBundleIds(commandHostEnvironment().env)) {
+  for (const bundleId of resolveRunnerContainerBundleIds(env)) {
     const containerResult = await runSimctlForDevice(
       device,
       ['get_app_container', device.id, bundleId, 'data'],

@@ -84,7 +84,7 @@ export function createAppleSnapshotRoute(
     systemSurfacePresent?: SystemSurfacePresenceProbe;
   }> = {},
 ): AppleSnapshotRoute {
-  const source = options.source ?? createSimulatorSnapshotSource();
+  const source = options.source ?? createSimulatorSnapshotSource(host.hostEnvironment);
   const resolveTarget = options.resolveTarget ?? createSimulatorSnapshotTargetResolver();
   const systemSurfacePresent = options.systemSurfacePresent ?? createSystemSurfacePresenceProbe();
   const disabledGenerations = new Set<string>();

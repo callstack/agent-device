@@ -11,6 +11,7 @@ import {
   type SettingName,
 } from '@agent-device/contracts/settings-catalog';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   AppError,
   sessionAppRequiredDetails,
@@ -62,10 +63,11 @@ export async function setIosSetting(
   device: DeviceInfo,
   setting: string,
   state: string,
-  appBundleId?: string,
-  options?: SettingOptions,
+  appBundleId: string | undefined,
+  options: SettingOptions | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown> | void> {
-  if (isMacOs(device)) return await setMacOsHostSetting(setting, state, options);
+  if (isMacOs(device)) return await setMacOsHostSetting(setting, state, options, env);
   requireSimulatorDevice(device, 'settings');
   const normalized = APPLE_SIMULATOR_SETTINGS.find((name) => name === setting.toLowerCase());
   if (normalized === undefined)
@@ -84,7 +86,7 @@ export async function setIosSetting(
           sessionAppRequiredDetails(),
         );
       }
-      const result = await clearIosSimulatorAppState(device, appBundleId);
+      const result = await clearIosSimulatorAppState(device, appBundleId, env);
       return { bundleId: result.bundleId, containerPath: result.containerPath, cleared: true };
     }
     case 'reset-keychain': {
@@ -169,6 +171,7 @@ async function setMacOsHostSetting(
   setting: string,
   state: string,
   options: SettingOptions | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<Record<string, unknown> | void> {
   const normalized = MACOS_HOST_SETTINGS.find((name) => name === setting.toLowerCase());
   switch (normalized) {
@@ -184,7 +187,7 @@ async function setMacOsHostSetting(
         );
       }
       const permissionTarget = parseMacOsPermissionTarget(options?.permissionTarget);
-      return await runMacOsPermissionAction(action, permissionTarget);
+      return await runMacOsPermissionAction(action, permissionTarget, env);
     }
     case undefined:
       throw new AppError('UNSUPPORTED_OPERATION', `Unsupported macOS setting: ${setting}`);
@@ -257,6 +260,7 @@ async function resolveIosSettingsApp(device: DeviceInfo, app: string): Promise<s
 async function clearIosSimulatorAppState(
   device: DeviceInfo,
   app: string,
+  env: Readonly<EnvMap>,
 ): Promise<{ bundleId: string; containerPath: string }> {
   if (!isIosFamily(device) || device.kind !== 'simulator') {
     throw new AppError(
@@ -267,7 +271,7 @@ async function clearIosSimulatorAppState(
 
   const bundleId = await resolveIosSettingsApp(device, app);
   await ensureBootedSimulator(device);
-  await closeIosApp(device, bundleId);
+  await closeIosApp(device, bundleId, undefined, env);
 
   const result = requireExecSuccess(
     await runSimctlForDevice(device, ['get_app_container', device.id, bundleId, 'data'], {

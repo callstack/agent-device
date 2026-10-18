@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import type {
   Interactor,
   RunnerContext,
@@ -104,7 +104,12 @@ const LOCAL_TOOL_METHODS: Record<string, (interactor: Interactor) => Promise<unk
 };
 
 test('the runner/local partition covers the full provider-backed interactor surface', () => {
-  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, recordingRunnerProvider([]));
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    createLiveTestHostEnvironment(),
+    recordingRunnerProvider([]),
+  );
   const classified = [
     ...Object.keys(RUNNER_TRANSPORT_METHODS),
     ...Object.keys(LOCAL_TOOL_METHODS),
@@ -117,6 +122,7 @@ test('provider-backed interactor routes runner-command methods through the injec
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,
     { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
     recordingRunnerProvider(calls),
   );
   for (const [method, { invoke, runnerCommand }] of Object.entries(RUNNER_TRANSPORT_METHODS)) {
@@ -128,7 +134,12 @@ test('provider-backed interactor routes runner-command methods through the injec
 });
 
 test('provider-backed interactor rejects local Apple tooling methods with a clear error', async () => {
-  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, recordingRunnerProvider([]));
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    createLiveTestHostEnvironment(),
+    recordingRunnerProvider([]),
+  );
   for (const [method, invoke] of Object.entries(LOCAL_TOOL_METHODS)) {
     await assert.rejects(
       invoke(interactor),
@@ -147,6 +158,7 @@ test('injected transport still resolves when the runner context carries a reques
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,
     runnerContext,
+    createLiveTestHostEnvironment(),
     recordingRunnerProvider(calls),
   );
   await interactor.tap(10, 20);
@@ -160,6 +172,7 @@ test('injected transport receives the active interaction cancellation signal', a
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,
     { signal: controller.signal },
+    createLiveTestHostEnvironment(),
     recordingRunnerProvider(calls),
   );
 
@@ -175,6 +188,7 @@ test('snapshot merges its per-call cancellation signal with the interaction cont
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,
     { signal: contextController.signal },
+    createLiveTestHostEnvironment(),
     recordingRunnerProvider(calls),
   );
 
@@ -187,78 +201,79 @@ test('snapshot merges its per-call cancellation signal with the interaction cont
 });
 
 test('snapshot over the injected transport keeps the shared xctest result shape', async () => {
-  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, recordingRunnerProvider([]));
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    createLiveTestHostEnvironment(),
+    recordingRunnerProvider([]),
+  );
   const result = presentedSnapshot(await interactor.snapshot());
   assert.equal(result.backend, 'xctest');
   assert.equal(result.nodes?.length, 2);
 });
 
 test('snapshot publishes runner presentation through the engine and drops its quality view', async () => {
-  const interactor = createAppleInteractor(
-    IOS_SIMULATOR,
-    {},
-    {
-      hasLiveSession: () => true,
-      runCommand: async () => ({
+  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, createLiveTestHostEnvironment(), {
+    hasLiveSession: () => true,
+    runCommand: async () => ({
+      nodes: [
+        {
+          index: 0,
+          depth: 0,
+          type: 'Application',
+          label: 'App',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          index: 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'Table',
+          label: 'Settings',
+          rect: { x: 0, y: 40, width: 390, height: 804 },
+        },
+        {
+          index: 2,
+          depth: 2,
+          parentIndex: 1,
+          type: 'Cell',
+          label: 'General',
+          rect: { x: 16, y: 80, width: 358, height: 52 },
+        },
+        {
+          index: 3,
+          depth: 3,
+          parentIndex: 2,
+          type: 'Button',
+          label: 'General',
+          rect: { x: 16, y: 80, width: 358, height: 52 },
+          hittable: true,
+        },
+        {
+          index: 4,
+          depth: 4,
+          parentIndex: 3,
+          type: 'StaticText',
+          label: 'General',
+          rect: { x: 16, y: 80, width: 358, height: 52 },
+        },
+      ],
+      truncated: false,
+      snapshotQuality: { state: 'healthy', backend: 'tree' },
+      qualityPayload: {
         nodes: [
           {
             index: 0,
-            depth: 0,
             type: 'Application',
             label: 'App',
             rect: { x: 0, y: 0, width: 390, height: 844 },
           },
-          {
-            index: 1,
-            depth: 1,
-            parentIndex: 0,
-            type: 'Table',
-            label: 'Settings',
-            rect: { x: 0, y: 40, width: 390, height: 804 },
-          },
-          {
-            index: 2,
-            depth: 2,
-            parentIndex: 1,
-            type: 'Cell',
-            label: 'General',
-            rect: { x: 16, y: 80, width: 358, height: 52 },
-          },
-          {
-            index: 3,
-            depth: 3,
-            parentIndex: 2,
-            type: 'Button',
-            label: 'General',
-            rect: { x: 16, y: 80, width: 358, height: 52 },
-            hittable: true,
-          },
-          {
-            index: 4,
-            depth: 4,
-            parentIndex: 3,
-            type: 'StaticText',
-            label: 'General',
-            rect: { x: 16, y: 80, width: 358, height: 52 },
-          },
         ],
         truncated: false,
-        snapshotQuality: { state: 'healthy', backend: 'tree' },
-        qualityPayload: {
-          nodes: [
-            {
-              index: 0,
-              type: 'Application',
-              label: 'App',
-              rect: { x: 0, y: 0, width: 390, height: 844 },
-            },
-          ],
-          truncated: false,
-          scope: null,
-        },
-      }),
-    },
-  );
+        scope: null,
+      },
+    }),
+  });
 
   const result = presentedSnapshot(await interactor.snapshot({ interactiveOnly: true }));
 
@@ -271,22 +286,18 @@ test('snapshot publishes runner presentation through the engine and drops its qu
 
 test('a message-less runner capture leaves its disclosures to the verdict', async () => {
   const coverage = { read: 12, candidates: 19, truncated: 0, blocked: false };
-  const interactor = createAppleInteractor(
-    IOS_SIMULATOR,
-    {},
-    {
-      hasLiveSession: () => true,
-      runCommand: async () => ({
-        ...runnerResultFor({ command: 'snapshot' }),
-        snapshotQuality: {
-          state: 'healthy',
-          backend: 'tree',
-          customActions: coverage,
-          collapsedLeafIndexes: [1],
-        },
-      }),
-    },
-  );
+  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, createLiveTestHostEnvironment(), {
+    hasLiveSession: () => true,
+    runCommand: async () => ({
+      ...runnerResultFor({ command: 'snapshot' }),
+      snapshotQuality: {
+        state: 'healthy',
+        backend: 'tree',
+        customActions: coverage,
+        collapsedLeafIndexes: [1],
+      },
+    }),
+  });
 
   const result = presentedSnapshot(await interactor.snapshot());
 
@@ -297,11 +308,10 @@ test('a message-less runner capture leaves its disclosures to the verdict', asyn
 
 test('macOS app snapshots preserve runner nodes outside the iOS presentation engine', async () => {
   const nodes = [{ index: 0, type: 'Other', value: 'checkbox, unchecked' }];
-  const interactor = createAppleInteractor(
-    MACOS_DEVICE,
-    {},
-    { hasLiveSession: () => true, runCommand: async () => ({ nodes }) },
-  );
+  const interactor = createAppleInteractor(MACOS_DEVICE, {}, createLiveTestHostEnvironment(), {
+    hasLiveSession: () => true,
+    runCommand: async () => ({ nodes }),
+  });
 
   const result = presentedSnapshot(await interactor.snapshot({ interactiveOnly: true }));
 
@@ -309,14 +319,10 @@ test('macOS app snapshots preserve runner nodes outside the iOS presentation eng
 });
 
 test('snapshot reports typed runner presentation failures', async () => {
-  const interactor = createAppleInteractor(
-    IOS_SIMULATOR,
-    {},
-    {
-      hasLiveSession: () => true,
-      runCommand: async () => ({ nodes: [{ index: 0, type: 'Application' }] }),
-    },
-  );
+  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, createLiveTestHostEnvironment(), {
+    hasLiveSession: () => true,
+    runCommand: async () => ({ nodes: [{ index: 0, type: 'Application' }] }),
+  });
 
   await assert.rejects(interactor.snapshot(), (error: unknown) => {
     assert.ok(error instanceof AppError);
@@ -327,34 +333,30 @@ test('snapshot reports typed runner presentation failures', async () => {
 });
 
 test('sparse runner payloads with no viewport fail before publishing actionable nodes', async () => {
-  const interactor = createAppleInteractor(
-    IOS_SIMULATOR,
-    {},
-    {
-      hasLiveSession: () => true,
-      runCommand: async () => ({
-        nodes: [
-          { index: 0, type: 'Application', label: 'App' },
-          {
-            index: 1,
-            parentIndex: 0,
-            type: 'Button',
-            label: 'Escaped action',
-            rect: { x: 10, y: 10, width: 80, height: 40 },
-            hittable: true,
-          },
-        ],
-        truncated: true,
-        snapshotQuality: {
-          state: 'sparse',
-          backend: 'tree',
-          reason: 'no usable snapshot backend',
-          reasonCode: 'sparse-tree',
+  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, createLiveTestHostEnvironment(), {
+    hasLiveSession: () => true,
+    runCommand: async () => ({
+      nodes: [
+        { index: 0, type: 'Application', label: 'App' },
+        {
+          index: 1,
+          parentIndex: 0,
+          type: 'Button',
+          label: 'Escaped action',
+          rect: { x: 10, y: 10, width: 80, height: 40 },
+          hittable: true,
         },
-        systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
-      }),
-    },
-  );
+      ],
+      truncated: true,
+      snapshotQuality: {
+        state: 'sparse',
+        backend: 'tree',
+        reason: 'no usable snapshot backend',
+        reasonCode: 'sparse-tree',
+      },
+      systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
+    }),
+  });
 
   await assert.rejects(interactor.snapshot(), (error: unknown) => {
     assert.ok(error instanceof AppError);
@@ -377,17 +379,13 @@ test('sparse runner payloads with no viewport fail before publishing actionable 
 });
 
 test('snapshot rejects a scoped quality payload at the runner boundary', async () => {
-  const interactor = createAppleInteractor(
-    IOS_SIMULATOR,
-    {},
-    {
-      hasLiveSession: () => true,
-      runCommand: async () => ({
-        nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } }],
-        qualityPayload: { nodes: [], truncated: false, scope: 'Settings' },
-      }),
-    },
-  );
+  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, createLiveTestHostEnvironment(), {
+    hasLiveSession: () => true,
+    runCommand: async () => ({
+      nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } }],
+      qualityPayload: { nodes: [], truncated: false, scope: 'Settings' },
+    }),
+  });
 
   await assert.rejects(
     interactor.snapshot(),
@@ -406,7 +404,12 @@ test('snapshot accepts only structured healthy empty scope results', async () =>
       snapshotQuality: { state: 'healthy', backend: 'tree' },
     }),
   };
-  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, healthyEmptyProvider);
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    createLiveTestHostEnvironment(),
+    healthyEmptyProvider,
+  );
 
   const scoped = presentedSnapshot(await interactor.snapshot({ scope: 'missing' }));
   assert.deepEqual(scoped.nodes, []);
@@ -420,14 +423,10 @@ test('snapshot accepts only structured healthy empty scope results', async () =>
       error.message === 'XCTest snapshot returned 0 nodes on iOS simulator.',
   );
 
-  const legacyEmpty = createAppleInteractor(
-    IOS_SIMULATOR,
-    {},
-    {
-      hasLiveSession: () => true,
-      runCommand: async () => ({ nodes: [] }),
-    },
-  );
+  const legacyEmpty = createAppleInteractor(IOS_SIMULATOR, {}, createLiveTestHostEnvironment(), {
+    hasLiveSession: () => true,
+    runCommand: async () => ({ nodes: [] }),
+  });
   await assert.rejects(legacyEmpty.snapshot({ scope: 'missing' }), {
     code: 'COMMAND_FAILED',
   });
@@ -439,7 +438,12 @@ test('snapshot accepts only structured healthy empty scope results', async () =>
 // forwarding preferredBackend into the emitted RunnerCommand.
 test('snapshot forwards either forceable preferredBackend into the emitted runner command', async () => {
   const calls: RecordedRunnerCall[] = [];
-  const interactor = createAppleInteractor(IOS_SIMULATOR, {}, recordingRunnerProvider(calls));
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    createLiveTestHostEnvironment(),
+    recordingRunnerProvider(calls),
+  );
 
   await interactor.snapshot({ preferredBackend: 'tree' });
   await interactor.snapshot();
