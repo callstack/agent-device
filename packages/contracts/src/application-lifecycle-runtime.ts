@@ -182,8 +182,8 @@ export type LaunchConfirmationUnansweredReason = 'alert-unrecognized' | 'url-own
 /**
  * A launch-confirmation probe step that failed or whose result could not be verified, so whether a
  * prompt is up is unknown. Not an outcome of the confirmation itself: the open reports no
- * confirmation for it and the daemon warns instead, keeping probe failure separate from what a
- * completed probe saw.
+ * confirmation for it and carries this step on the response beside a warning, keeping probe
+ * failure separate from what a completed probe saw.
  */
 export type LaunchConfirmationProbeFailure = 'alert-read' | 'alert-accept' | 'runner';
 
@@ -193,6 +193,19 @@ export type LaunchConfirmationOutcome =
   | Readonly<{
       launchConfirmation: 'unanswered';
       launchConfirmationReason: LaunchConfirmationUnansweredReason;
+      launchConfirmationProbeFailure?: undefined;
+    }>;
+
+/**
+ * What a client reports about a launch confirmation. The platform always pairs an `unanswered`
+ * outcome with its reason; a version-skewed daemon may not, so this adds the arm where only the
+ * outcome survives and the unknown reason is omitted.
+ */
+export type LaunchConfirmationClientOutcome =
+  | LaunchConfirmationOutcome
+  | Readonly<{
+      launchConfirmation: 'unanswered';
+      launchConfirmationReason?: undefined;
       launchConfirmationProbeFailure?: undefined;
     }>;
 

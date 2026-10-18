@@ -3,7 +3,7 @@
 import type { AppsFilter } from './app-inventory.ts';
 import type {
   LaunchConfirmationAbsent,
-  LaunchConfirmationOutcome,
+  LaunchConfirmationClientOutcome,
 } from './application-lifecycle-runtime.ts';
 import type { JsonObject } from './json.ts';
 import type { SessionSurface } from './session-surface.ts';
@@ -101,8 +101,9 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
 
 export type AppOpenResult = AppOpenResultBase &
   // The same discriminated report the platform outcome carries: a seen confirmation pairs its
-  // reason, and only the absent arm can name a probe step that could not read one.
-  (LaunchConfirmationOutcome | LaunchConfirmationAbsent);
+  // reason, and only the absent arm can name a probe step that could not read one. The extra arm
+  // covers a daemon older than the reason field, which answers `unanswered` without one.
+  (LaunchConfirmationClientOutcome | LaunchConfirmationAbsent);
 
 type AppOpenResultBase = {
   session: string;

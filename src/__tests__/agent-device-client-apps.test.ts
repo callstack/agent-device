@@ -184,6 +184,29 @@ test('apps.open drops an unrecognized launch confirmation outcome instead of gue
   assert.equal('launchConfirmationReason' in result, false);
 });
 
+test('apps.open keeps an unanswered outcome whose reason predates this client', async () => {
+  const setup = createTransport(async (req) => {
+    if (req.command === 'open') {
+      return {
+        ok: true,
+        data: {
+          session: 'qa',
+          appBundleId: 'com.example.app',
+          launchConfirmation: 'unanswered',
+          launchConfirmationReason: 'a-reason-from-a-newer-daemon',
+        },
+      };
+    }
+    throw new Error(`Unexpected command: ${req.command}`);
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+
+  assert.equal(result.launchConfirmation, 'unanswered');
+  assert.equal('launchConfirmationReason' in result, false);
+});
+
 test('apps.open reports a typed probe-failure step and drops an unrecognized one', async () => {
   const responses = [
     { step: 'alert-accept', reported: true },

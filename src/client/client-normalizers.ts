@@ -2,7 +2,7 @@ import type { DaemonWireRequest, InternalRequestOptions } from '@agent-device/co
 import type {
   LaunchConfirmation,
   LaunchConfirmationAbsent,
-  LaunchConfirmationOutcome,
+  LaunchConfirmationClientOutcome,
   LaunchConfirmationProbeFailure,
   LaunchConfirmationUnansweredReason,
 } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -387,19 +387,22 @@ export function normalizeOpenForegroundComposition(data: Record<string, unknown>
 }
 
 /**
- * The launch confirmation an open response reports, keyed on the typed outcome. The daemon pairs
- * an `unanswered` outcome with its reason, so an outcome or reason it does not recognize is dropped
- * rather than guessed, as is a probe step outside the typed set; warnings travel separately and
- * still reach the caller. With no outcome, the only report left is the typed probe-failure step.
+ * The launch confirmation an open response reports, keyed on the typed outcome. An outcome or
+ * reason outside the typed set is dropped rather than guessed, as is a probe step outside its
+ * typed set; warnings travel separately and still reach the caller. An `unanswered` whose reason
+ * the client does not recognize (version skew) stays `unanswered` without a reason: the prompt is
+ * on the device either way. With no outcome, the only report left is the typed probe-failure step.
  */
 export function normalizeLaunchConfirmation(
   data: Record<string, unknown>,
-): LaunchConfirmationOutcome | LaunchConfirmationAbsent {
+): LaunchConfirmationClientOutcome | LaunchConfirmationAbsent {
   const outcome = readLaunchConfirmationOutcome(data.launchConfirmation);
   if (outcome === 'accepted') return { launchConfirmation: 'accepted' };
   if (outcome === 'unanswered') {
     const reason = readLaunchConfirmationReason(data.launchConfirmationReason);
-    return reason ? { launchConfirmation: 'unanswered', launchConfirmationReason: reason } : {};
+    return reason
+      ? { launchConfirmation: 'unanswered', launchConfirmationReason: reason }
+      : { launchConfirmation: 'unanswered' };
   }
   const probeFailure = readLaunchConfirmationProbeFailure(data.launchConfirmationProbeFailure);
   return probeFailure ? { launchConfirmationProbeFailure: probeFailure } : {};
