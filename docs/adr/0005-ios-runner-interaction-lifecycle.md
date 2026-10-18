@@ -7,7 +7,7 @@ Accepted
 ## Rules at a glance
 
 - For iOS/macOS selector taps on an element with a frame, use coordinate-first resolved element activation. tvOS remains focus/remote-driven.
-- Before a command to a ready session, send an `uptime` preflight, except for the stated startup, readiness, and recent-mutation cases.
+- Before a command to a ready session, send an `uptime` preflight, except for the stated startup, readiness, exempt-command, and recent-mutation cases.
 - Keep recent-mutation health only on the `RunnerSession` and only for the stated app, commands, response checks, and 5-second window.
 - Never count snapshots or other read-only responses as health signals.
 - Future optimization work should reduce the `uptime` preflights only after runner status survives command-induced XCTest teardown and can prove that the session still serves new requests.
@@ -45,6 +45,7 @@ tvOS remains focus/remote-driven because tvOS does not support normal coordinate
 Before command send, ready runner sessions receive a short `uptime` preflight.
 Read-only startup commands still skip that preflight because, for a newly launched runner, the first successful command is the readiness proof.
 Readiness probe commands skip preflight to avoid recursion.
+A ready session also skips the preflight for the preflight-exempt commands `activate`, `terminate`, and `targetReset` (`readinessPreflightExempt` in `RUNNER_COMMAND_TRAITS`).
 
 The daemon may also skip the ready-session `uptime` preflight for an explicit allowlist of mutating interactions:
 
@@ -53,6 +54,8 @@ The daemon may also skip the ready-session `uptime` preflight for an explicit al
 - `drag`.
 - `swipe`.
 - `scroll`.
+- `desktopScroll`.
+- `gesture`.
 - `sequence`.
 
 The skip requires that the same session produced a healthy mutating response for the same `appBundleId` within 5 seconds.
