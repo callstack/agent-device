@@ -98,8 +98,14 @@ public final class AccessibilityReadBatchTest {
         throw new AssertionError("Expected a running child read");
       }
       closer.start();
-      if (closed.await(50, TimeUnit.MILLISECONDS)) {
-        throw new AssertionError("The parent cannot be released while its child read is pending");
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+      while (closer.getState() != Thread.State.WAITING
+          && closed.getCount() != 0
+          && System.nanoTime() < deadline) {
+        Thread.yield();
+      }
+      if (closer.getState() != Thread.State.WAITING || closed.getCount() == 0) {
+        throw new AssertionError("Cleanup must block on the pending child read before release");
       }
     } finally {
       release.countDown();

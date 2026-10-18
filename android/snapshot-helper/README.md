@@ -104,6 +104,10 @@ closes that connection; the process stays alive for the next connection:
 the XML body after the header block, as described below. The response protocol literal is always
 `android-snapshot-helper-v1`, regardless of session or one-shot transport.
 
+When an input method window overlaps the application's vertical swipe path, `viewport` responses
+also include `keyboardX`, `keyboardY`, `keyboardWidth`, and `keyboardHeight`. All four fields are
+omitted when no such window is reported; their absence does not establish that the keyboard is hidden.
+
 ## Output Contract
 
 The APK emits instrumentation status records using
