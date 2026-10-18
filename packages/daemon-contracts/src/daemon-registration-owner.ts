@@ -51,7 +51,8 @@ export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 
 /**
  * Startup phase markers: a per-launch record, named for the writing pid, of how far that startup
  * got, so a waiting client tells "slow but progressing" from "stuck" without a timestamp and with
- * no heartbeat. The writer removes it on completion, the launching client after a joined exit.
+ * no heartbeat. The writer removes it on completion, the launching client after a joined exit, and
+ * each new registration owner sweeps the files of provably dead pids.
  */
 const DAEMON_STARTUP_PHASES = Object.freeze([
   'modules-loaded',

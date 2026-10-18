@@ -1,9 +1,5 @@
 import { asAppError, normalizeError } from '@agent-device/kernel/errors';
-import {
-  daemonStartupExitCode,
-  reportDaemonClose,
-  startDaemonRuntime,
-} from '@agent-device/daemon';
+import { daemonStartupExitCode, reportDaemonClose, startDaemonRuntime } from '@agent-device/daemon';
 import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import {
   claimDaemonStartupPhasesFile,
@@ -12,8 +8,7 @@ import {
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
-// Marker failures go to stderr, redirected into the daemon log; a refused append never stops a
-// startup that can still register.
+// A refused marker append goes to stderr, which the launcher redirects into the daemon log.
 function reportMarkerFailure(error: unknown): void {
   process.stderr.write(`Daemon startup marker write failed: ${normalizeError(error).message}\n`);
 }
@@ -28,9 +23,9 @@ recordDaemonStartupMarker(ownPhasesPath, 'modules-loaded', reportMarkerFailure);
 
 // The executable owns the process: signals, fatal-error handlers and the exit code. The runtime
 // only reports when it has closed, whoever closed it.
-// Composition enters as a factory behind `await import`: startup order is unchanged and this
-// entry's eager closure stays the operational server's (ADR 0019). The factory records
-// `composition-loaded` when that import and dep build finish.
+// The root's composition enters as a factory behind a function-scoped `await import`: the server
+// calls it before it acquires the registration, so startup order is unchanged, and the eager
+// closure of this entry stays exactly the operational server's (ADR 0019).
 async function runDaemon(): Promise<void> {
   const runtime = await startDaemonRuntime({
     host: captureHostEnvironment(process),

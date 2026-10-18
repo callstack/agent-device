@@ -18,8 +18,7 @@ import {
 } from './registered-daemon-fixture.ts';
 
 test('args built before any launch keep their own entry script under a concurrent second build', async () => {
-  // Both arg sets are built before either child starts — the overwrite window. Under a shared
-  // entry path child 1 would run child 2's switches and its record would carry the wrong marker.
+  // Under a shared entry path child 1 would run child 2's switches and carry the wrong marker.
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-fixture-entry-isolation-'));
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');

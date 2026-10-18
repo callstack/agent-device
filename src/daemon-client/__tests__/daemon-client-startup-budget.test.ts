@@ -416,8 +416,7 @@ test('a child gone at the deadline without an observed exit and no live startup 
 });
 
 test('an observed exit on a reused launch pid is not a live startup at the deadline', async () => {
-  // A delivered exit is authoritative: the reused pid (pinned alive) is not a startup to wait
-  // for. The busy exit resolves in the poll that carries the clock past the ceiling.
+  // A delivered exit is authoritative: the reused pid (pinned alive) is not a startup to wait for.
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '2000');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-reused-pid-exit-'));
   const reusedPid = 997_603;
