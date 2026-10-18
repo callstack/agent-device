@@ -6,6 +6,7 @@ Accepted (2026-09-20).
 The pose-settle amendment is dated 2026-09-21 under #2730.
 The touch-overlay export diagnosis was corrected on 2026-09-22 under #2707.
 The Android emulator pose amendment is dated 2026-10-10.
+The no-panel refusal correction (#3761) is dated 2026-10-18.
 This ADR covers iPhone Duo (iOS 27.1, `iPhone19,4`) and Apple devices with more than one integrated CoreDevice display.
 The amendment below also covers foldable Android emulators.
 
@@ -20,9 +21,10 @@ Only inference answers the second question.
 | Situation | Behavior |
 | --- | --- |
 | iOS simulator capture through `simctl` | First resolve the CoreDevice display table. Capture the panel that the system currently lights. |
-| Runner fallback after a `simctl` failure | Follow the target app's window and capture the display that hosts it. Use the facts that the runner reports. |
+| Runner fallback after an eligible `simctl` failure | Follow the target app's window and capture the display that hosts it. Use the facts that the runner reports. Only a failure the fallback policy (`shouldFallbackToRunner`) accepts reaches the runner; other failures rethrow. |
 | More than one integrated panel | Pass `--display=<panel name>` on every `simctl io screenshot`. Never use the implicit default. |
 | Zero or multiple lit panels | Name the `primary` panel. Emit `apple_display_capture_ambiguous`. Report pose as `unknown`. |
+| No sole lit panel and no `primary` panel | Refuse with `COMMAND_FAILED` and `details.reason: capture-panel-unidentified`. Never choose a panel by array order. |
 | One integrated panel | Preserve pre-panel behavior exactly: no display flag, no pose, unchanged scale probe. |
 | Density normalization | Use the captured panel's `pointScale`. For runner fallback, use that capture's reported pixels-per-point. |
 | Pose report | From panel power alone, report only `closed`, `fully-open`, or `unknown`, never a narrower pose. `fold` reports an exact pose only after hinge readings verify it. |
@@ -69,10 +71,12 @@ It is the only reader of CoreDevice display information.
   If the primary panel is also largest, `primary` still decides.
   In that case, emit `apple_display_primary_geometry_conflict`. Do not silently replace identity with a geometry rule.
 - **Capture target.**
-  `resolveAppleCaptureDisplay` returns a panel for every multi-panel device.
+  `resolveAppleCaptureDisplay` resolves a panel or a refusal for every multi-panel device.
   It returns `undefined` only for a single-panel device or unresolved inventory.
   If exactly one panel is lit, name that panel.
-  Otherwise, name `primary`, set `ambiguous`, and emit `apple_display_capture_ambiguous`.
+  Otherwise, if CoreDevice marks a `primary` panel, name it, set `ambiguous`, and emit `apple_display_capture_ambiguous`.
+  If neither identifies a panel, refuse with `COMMAND_FAILED` and `details.reason: capture-panel-unidentified` (#3761, merged 2026-10-18).
+  Array order is not identity; the resolver never falls back to it.
   A multi-panel device never receives a capture without a display name.
   The implicit default caused the black-image, exit-0 failure.
   An explicitly named, possibly dark panel makes failure visible and diagnosable.
