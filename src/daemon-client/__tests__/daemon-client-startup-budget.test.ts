@@ -234,7 +234,8 @@ test('a daemon that exits during startup fails with startup-exited within one se
 });
 
 test('a live daemon that publishes no startup marker is retired as stalled before the ceiling', async () => {
-  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '120000');
+  // Unsets the variable, even when the host exports it: the resolved ceiling must be the default.
+  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', undefined);
   const now = virtualClock();
   const started = now.value;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-no-marker-'));
