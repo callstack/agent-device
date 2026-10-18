@@ -154,7 +154,9 @@ jobs:
         id: fallow-audit
         background: true
         env:
-          FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          # The event base can lag behind the merge tree checked out for a PR.
+          # Compare with its main parent so the audit measures only the PR changes.
+          FALLOW_BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
         uses: ./.github/actions/run-gate
         with:
           gate: fallow
