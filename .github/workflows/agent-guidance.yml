@@ -5,6 +5,7 @@ on:
     paths:
       - 'AGENTS.md'
       - 'CONTEXT.md'
+      - 'docs/adr/FORMAT.md'
       - 'docs/agents/**'
       - 'scripts/__tests__/agent-guidance-contract.test.ts'
       - 'scripts/check-affected/**'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'AGENTS.md'
       - 'CONTEXT.md'
+      - 'docs/adr/FORMAT.md'
       - 'docs/agents/**'
       - 'scripts/__tests__/agent-guidance-contract.test.ts'
       - 'scripts/check-affected/**'

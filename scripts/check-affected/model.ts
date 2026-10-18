@@ -539,7 +539,7 @@ const buildOwnership: OwnershipRule = ({ file }, input) => {
 // carry executable contracts and must reach their focused workflow even when the
 // main CI workflow ignores documentation.
 const COMMAND_DOCS = 'website/docs/docs/commands.md';
-const AGENT_GUIDANCE = new Set(['AGENTS.md', 'CONTEXT.md']);
+const AGENT_GUIDANCE = new Set(['AGENTS.md', 'CONTEXT.md', 'docs/adr/FORMAT.md']);
 
 function isAgentGuidance(file: string): boolean {
   return AGENT_GUIDANCE.has(file) || file.startsWith('docs/agents/');
