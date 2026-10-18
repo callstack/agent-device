@@ -12,8 +12,8 @@ import {
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
-// Marker failures go to stderr, which the launcher redirects into the daemon log; a refused
-// append is evidence, never a startup requirement.
+// Marker failures go to stderr, redirected into the daemon log; a refused append never stops a
+// startup that can still register.
 function reportMarkerFailure(error: unknown): void {
   process.stderr.write(`Daemon startup marker write failed: ${normalizeError(error).message}\n`);
 }
@@ -22,18 +22,15 @@ const ownPhasesPath = resolveDaemonStartupPhasesPath(
   resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR).baseDir,
   process.pid,
 );
-// The claim first: after pid reuse it is the only defense against reading a dead lifetime's
-// phases as this launch's own.
+// The claim first: after pid reuse it is the only defense against a dead lifetime's phases.
 claimDaemonStartupPhasesFile(ownPhasesPath, reportMarkerFailure);
 recordDaemonStartupMarker(ownPhasesPath, 'modules-loaded', reportMarkerFailure);
 
 // The executable owns the process: signals, fatal-error handlers and the exit code. The runtime
 // only reports when it has closed, whoever closed it.
-// The root's composition enters as a factory behind a function-scoped `await import`: the server
-// calls it before it acquires the registration, so startup order is unchanged, and the eager
-// closure of this entry stays exactly the operational server's (ADR 0019). The factory records
-// `composition-loaded` when that import and dep build finish: the second module-graph edge this
-// startup crosses, and a real completed boundary the waiting client can attribute progress to.
+// Composition enters as a factory behind `await import`: startup order is unchanged and this
+// entry's eager closure stays the operational server's (ADR 0019). The factory records
+// `composition-loaded` when that import and dep build finish.
 async function runDaemon(): Promise<void> {
   const runtime = await startDaemonRuntime({
     host: captureHostEnvironment(process),

@@ -386,7 +386,6 @@ for (const exit of [
 }
 
 test('a busy contender that exits sweeps its own pre-lock marker before the retried attempt', async (t) => {
-  // The second launch is refused at the spawn seam, so only the client's own cleanup can pass.
   if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-busy-retry-marker-'));
   const http = await startHttpDaemonFixture({ devices: [] });
@@ -397,13 +396,11 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
   assert.equal(claim.status, 'acquired');
   if (claim.status !== 'acquired') throw new Error('fixture claim refused');
   let released = false;
-  let contenderPid = 0;
   spawn.mockImplementation((_command, _args, options) => {
     const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options, undefined, {
       emitStartupMarkerBeforeAcquisition: true,
     });
     if (spawn.mock.calls.length === 1) {
-      contenderPid = child.pid;
       void child.exited.then((exit) => {
         assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
         if (!released) {
@@ -423,7 +420,6 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
       (error: unknown) =>
         error instanceof AppError && error.details?.kind === 'daemon_startup_failed',
     );
-    assert.ok(contenderPid > 0);
     assert.deepEqual(
       fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases')),
       [],
@@ -436,46 +432,8 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
   }
 });
 
-test('attaching to a contending winner sweeps the busy contender it exited as', async (t) => {
-  if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
-  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-winner-attach-marker-'));
-  const http = await startHttpDaemonFixture({ devices: [] });
-  const deferred = path.join(paths.baseDir, 'defer-publication');
-  fs.writeFileSync(deferred, 'wait');
-  const winner = spawnRegisteredDaemonFixture(paths, fields(http.port), { stdio: 'ignore' });
-  await awaitFile(path.join(paths.baseDir, 'registration-held'));
-  let contenderExit: ExecDetachedExit | undefined;
-  spawn.mockImplementation((_command, _args, options) => {
-    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options, undefined, {
-      emitStartupMarkerBeforeAcquisition: true,
-    });
-    void child.exited.then((exit) => {
-      contenderExit = exit;
-    });
-    return child;
-  });
-  pause.mockImplementation(async () => {
-    if (contenderExit) fs.rmSync(deferred, { force: true });
-    await actualRetry.sleep(10);
-  });
-  try {
-    const response = await sendToDaemon(request(paths));
-    assert.equal(response.ok, true);
-    assert.equal(contenderExit?.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-    assert.equal(spawn.mock.calls.length, 1);
-    assert.equal(http.rpcRequests.length, 1);
-    assert.equal(isProcessAlive(winner.pid), true);
-    assert.deepEqual(
-      fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases')),
-      [],
-      "the winner handoff must not leave the exited contender's record behind",
-    );
-  } finally {
-    await closeLoopbackServer(http.server);
-  }
-});
-
 test('a joined busy contender waits for a published winner to become ready without signaling it', async (t) => {
+  // The contender records its pre-lock phase through the real protocol; the handoff must sweep it.
   if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-delayed-ready-'));
   let probes = 0;
@@ -486,7 +444,9 @@ test('a joined busy contender waits for a published winner to become ready witho
   await awaitFile(path.join(paths.baseDir, 'registration-held'));
   let contenderExit: ExecDetachedExit | undefined;
   spawn.mockImplementation((_command, _args, options) => {
-    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options);
+    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options, undefined, {
+      emitStartupMarkerBeforeAcquisition: true,
+    });
     void child.exited.then((exit) => {
       contenderExit = exit;
     });
@@ -507,6 +467,11 @@ test('a joined busy contender waits for a published winner to become ready witho
     assert.equal(
       signal.mock.calls.some(([pid, kind]) => pid === winner.pid && kind !== 0),
       false,
+    );
+    assert.deepEqual(
+      fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases')),
+      [],
+      "the winner handoff must not leave the exited contender's record behind",
     );
   } finally {
     signal.mockRestore();
@@ -576,8 +541,7 @@ test.for([
 ])('an older winner is replaced only with enough startup time ($budget)', async (expected, t) => {
   if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-older-winner-'));
-  // The replacement-window behavior is budget-independent; pin the ceiling so this test keeps its
-  // original 15 s shape while the production default is the #3782 ceiling.
+  // The replacement-window behavior is budget-independent; this pins the original 15 s shape.
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
   const http = await startHttpDaemonFixture({ devices: [] });
   const deferred = path.join(paths.baseDir, 'defer-publication');

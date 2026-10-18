@@ -3,7 +3,7 @@ import { AppError, normalizeError, type NormalizedError } from '@agent-device/ke
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { processLockHoldsDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/host-kit/file';
-import { isProcessAlive } from '@agent-device/host-kit/process';
+import { classifyOwnerLiveness, isProcessAlive } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { type ExecDetachedExit } from '@agent-device/host-kit/command';
@@ -53,9 +53,7 @@ type DaemonStartupWaitResult =
   | { kind: 'unproven'; error: AppError }
   | { kind: 'retry' }
   | { kind: 'exit_unobserved' }
-  /** The process stayed alive but published no new startup phase within the stall window. */
   | { kind: 'stalled' }
-  /** The process stayed alive and kept progressing, but did not register before the ceiling. */
   | { kind: 'ceiling' };
 
 type StartupPhaseObservation = {
@@ -63,10 +61,7 @@ type StartupPhaseObservation = {
   markers: Partial<Record<DaemonStartupPhase, number>>;
 };
 
-/**
- * The ceiling on one local daemon startup: a live daemon that keeps publishing markers is waited
- * for. `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` overrides it.
- */
+/** The ceiling on one local daemon startup; `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` overrides it. */
 const DAEMON_STARTUP_CEILING_MS = 120_000;
 /** Silence this long ends the wait early; an env ceiling below it makes the ceiling the stop. */
 const DAEMON_STARTUP_STALL_WINDOW_MS = 60_000;
@@ -74,7 +69,6 @@ const MINIMUM_DAEMON_TAKEOVER_BUDGET_MS = 5_000;
 
 const DAEMON_STARTUP_TIMEOUT_ENV = 'AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS';
 
-/** Why a startup that never reached readiness failed, in terms a caller can branch on. */
 type DaemonStartupFailureReason = 'startup-exited' | 'startup-stalled' | 'startup-ceiling';
 
 function resolveDaemonStartupTimeoutMs(env: Readonly<EnvMap>): number {
@@ -97,10 +91,7 @@ const DAEMON_STARTUP_ATTEMPTS = 2;
 const DAEMON_STARTUP_LOG_TAIL_BYTES = 64_000;
 const DAEMON_STARTUP_MARKER_TAIL_BYTES = 16_000;
 
-/**
- * Judges the registered daemon against this client, changing nothing; acting on the judgement
- * belongs to the caller's lifecycle.
- */
+/** Judges the registered daemon against this client, changing nothing. */
 export async function observeLocalDaemon(
   settings: DaemonClientSettings,
   options: {
@@ -126,7 +117,6 @@ export async function observeLocalDaemon(
   return { info: existing, decision: await refineReplacement(existing, decision, options) };
 }
 
-/** Separates a gone registration from a live one answering on another transport. */
 async function refineReplacement(
   info: DaemonInfo,
   decision: DaemonTakeoverDecision,
@@ -218,10 +208,7 @@ export async function retireDaemonForTakeover(
   if (retirement.status === 'retained') throw daemonRetirementUnconfirmedError(retirement, paths);
 }
 
-/**
- * A live pid is probed again before being judged unreachable: this client's own event-loop stall
- * must not read a listening daemon as gone. Liveness uses signal 0, which a busy `ps` cannot miss.
- */
+/** A live pid is probed again before being judged unreachable; liveness is signal 0, not `ps`. */
 async function canReachReusableDaemon(
   info: DaemonInfo,
   preference: DaemonTransportPreference,
@@ -475,7 +462,7 @@ async function joinStartup(launch: DaemonStartupLaunch): Promise<boolean> {
   }
 }
 
-/** Sweeps a proven-exited launch's own record, after joining that exact child. */
+/** Sweeps a proven-exited launch's own record after joining that exact child. */
 async function discardExitedLaunchRecord(
   settings: DaemonClientSettings,
   launch: DaemonStartupLaunch,
@@ -521,14 +508,30 @@ async function waitForDaemonStartup(
     }
     await sleep(Math.min(100, remainingStartupBudget(deadline)));
   }
-  // A deadline passing while any startup is live is the host running out of room, never an exit.
-  if (isProcessAlive(launch.pid) || isLiveLockOwner(inspectProcessLock(settings.paths.lockPath)))
-    return { kind: 'ceiling' };
-  if (earlyExit) return { kind: 'early_exit', exit: earlyExit };
-  return { kind: 'exit_unobserved' };
+  return classifyExpiredDaemonStartup(settings, launch, earlyExit);
 }
 
-/** A lock owner is a pending startup unless provably dead or reused; never signals anything. */
+/** Judges the wait at an expired deadline; never signals anything. */
+function classifyExpiredDaemonStartup(
+  settings: DaemonClientSettings,
+  launch: DaemonStartupLaunch,
+  earlyExit: ExecDetachedExit | undefined,
+): DaemonStartupWaitResult {
+  // A live lock owner outranks an observed exit; a delivered exit is authoritative for its lifetime.
+  const liveLockOwner = isLiveLockOwner(inspectProcessLock(settings.paths.lockPath));
+  if (liveLockOwner) return { kind: 'ceiling' };
+  if (earlyExit) return { kind: 'early_exit', exit: earlyExit };
+  return isLiveLaunchedStartup(launch) ? { kind: 'ceiling' } : { kind: 'exit_unobserved' };
+}
+
+function isLiveLaunchedStartup(launch: DaemonStartupLaunch): boolean {
+  if (!isProcessAlive(launch.pid)) return false;
+  const identity = launch.readIdentity();
+  if (!identity.startTime) return true;
+  return classifyOwnerLiveness({ owner: identity }) !== 'owner-process-reused';
+}
+
+/** A lock owner is a pending startup unless provably dead or reused. */
 function isLiveLockOwner(inspection: ProcessLockInspection): boolean {
   return (
     inspection.state === 'held' &&
@@ -557,7 +560,6 @@ async function observeLiveDaemonStartup(
 ): Promise<DaemonStartupWaitResult | null> {
   const info = await readReadyLaunchedDaemon(settings, launch, deadline);
   if (info) return { kind: 'ready', daemon: { info, startedByClient: true } };
-  // A daemon still publishing markers is slow, not stuck; only silence retires it early.
   refreshStartupPhaseMarkers(settings, launch.pid, observation);
   if (
     isProcessAlive(launch.pid) &&
@@ -568,7 +570,6 @@ async function observeLiveDaemonStartup(
   return null;
 }
 
-/** Folds this launch's markers into `observation` from its own pid-named record. */
 function refreshStartupPhaseMarkers(
   settings: DaemonClientSettings,
   launchPid: number,

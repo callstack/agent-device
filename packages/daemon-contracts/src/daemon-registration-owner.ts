@@ -50,9 +50,8 @@ export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 
 
 /**
  * Startup phase markers: a per-launch record, named for the writing pid, of how far that startup
- * got, so a waiting client tells "slow but progressing" from "stuck" without any timestamp, and
- * never a heartbeat. Ownership, so it never becomes residue: the writer removes it on completion,
- * the launching client once the exit is joined, each new registration owner sweeps dead pids.
+ * got, so a waiting client tells "slow but progressing" from "stuck" without a timestamp and with
+ * no heartbeat. The writer removes it on completion, the launching client after a joined exit.
  */
 const DAEMON_STARTUP_PHASES = Object.freeze([
   'modules-loaded',
@@ -74,10 +73,7 @@ export function resolveDaemonStartupPhasesPath(stateDir: string, pid: number): s
   return path.join(stateDir, `daemon-startup-phases-${pid}.jsonl`);
 }
 
-/**
- * Appends one phase marker. A refused append must not lose a daemon that can still register, so
- * `reportFailure` carries it and a client reads a missing record as no evidence.
- */
+/** Appends one phase marker; a refused append goes to `reportFailure`, never fatal to a startup. */
 export function recordDaemonStartupMarker(
   startupPhasesPath: string,
   phase: DaemonStartupPhase,
@@ -115,8 +111,8 @@ function endsWithoutNewline(file: string): boolean {
 
 /**
  * Empties this launch's own record before its first marker: a per-pid name identifies a writer,
- * not a lifetime, so after pid reuse only this new writer can tell a same-name file apart from
- * its own. No caller resets a file named for another pid; a refused reset is reported, never fatal.
+ * not a lifetime. No caller resets a file named for another pid; a refused reset never stops the
+ * startup because the reset ran first when it could run.
  */
 export function claimDaemonStartupPhasesFile(
   startupPhasesPath: string,
@@ -157,7 +153,7 @@ function sweepDeadDaemonStartupPhasesFiles(stateDir: string): void {
 
 /**
  * The phases observed in a marker tail, keeping each phase's earliest occurrence. Unknown and
- * unparsable lines are ignored: a client never fails a startup over a line shape it doesn't know.
+ * unparsable lines are ignored: a client never fails a startup over a line it does not know.
  */
 export function readDaemonStartupPhaseMarkers(
   markerTail: string,

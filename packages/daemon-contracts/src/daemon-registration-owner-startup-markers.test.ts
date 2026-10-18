@@ -108,7 +108,6 @@ test('acquiring the registration retires files of dead or unowned pids only', as
   expect(existsSync(dead)).toBe(false);
   expect(existsSync(unparseable)).toBe(false);
   expect(existsSync(own)).toBe(true);
-  // The sweep retires only its own kind: an unknown entry stays as evidence.
   expect(existsSync(legacy)).toBe(true);
   await attempt.owner.finish();
 });

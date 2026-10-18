@@ -37,6 +37,15 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/retry')>()),
   sleep: vi.fn(),
 }));
+// A pinned fabricated pid answers the signal-0 probe from this map; afterEach drops the map.
+let livenessOverrides: Map<number, boolean> | undefined;
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
+  return {
+    ...actual,
+    isProcessAlive: (pid: number) => livenessOverrides?.get(pid) ?? actual.isProcessAlive(pid),
+  };
+});
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { sleep } from '@agent-device/host-kit/retry';
 import { sendToDaemon } from '../daemon-client.ts';
@@ -48,6 +57,7 @@ const spawn = vi.mocked(runCmdDetachedMonitored);
 const pause = vi.mocked(sleep);
 
 afterEach(async () => {
+  livenessOverrides = undefined;
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
   await finishRegisteredDaemonFixtures();
@@ -126,8 +136,7 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
   if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
   const http = await startHttpDaemonFixture({ devices: [] });
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-slow-success-'));
-  // Virtual time waits ~20 s — past the retired 15 s deadline — while markers arrive in real
-  // time from this launch's own pid-named file, keeping the wait outside the stall window.
+  // Virtual time waits ~20 s past the retired 15 s deadline; real markers hold off the stall.
   const startedAt = Date.now();
   const now = { value: startedAt };
   vi.spyOn(Date, 'now').mockImplementation(() => now.value);
@@ -219,7 +228,6 @@ test('a live daemon that publishes no startup marker is retired as stalled befor
       booted = fs.existsSync(path.join(paths.baseDir, 'registration-held'));
       if (!booted) return await realPause();
     }
-    // Freeze the clock past the window so real-time retirement cannot stretch the measurement.
     if (now.value - started < 70_000) now.value += 5_000;
     await realPause();
   });
@@ -235,7 +243,6 @@ test('a live daemon that publishes no startup marker is retired as stalled befor
     assert.equal(startupPhases(failure).spawned, 0);
     assert.match(String(failure.details?.hint), /AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS/);
     assert.equal(spawn.mock.calls.length, 1, 'a stalled daemon is not retried');
-    // The joined exit means this owned startup must leave no evidence behind.
     await (child?.exited ?? Promise.resolve());
     assert.deepEqual(
       fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases')),
@@ -294,7 +301,6 @@ test("a startup progressed by a fresh launch is not judged stalled by an earlier
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '30000');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-stale-history-'));
   fs.mkdirSync(paths.baseDir, { recursive: true });
-  // The leftover: a real daemon child SIGTERMed before publishing, record left behind.
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
   const leftover = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' }, undefined, {
     emitStartupMarker: true,
@@ -395,6 +401,7 @@ test('a busy exit while a live lock holder defers publication reaches the ceilin
 test('a child gone at the deadline without an observed exit and no live startup fails exited', async () => {
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '2000');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-gone-at-deadline-'));
+  livenessOverrides = new Map([[997_842, false]]);
   spawn.mockImplementation(() => ({
     pid: 997_842,
     exited: new Promise<ExecDetachedExit>(() => {}),
@@ -406,6 +413,39 @@ test('a child gone at the deadline without an observed exit and no live startup 
   const failure = await expectStartupFailure(sendToDaemon(request(paths)));
   assert.equal(failure.details?.reason, 'startup-exited');
   assert.equal(failure.details?.startupTimeoutMs, 2_000);
+});
+
+test('an observed exit on a reused launch pid is not a live startup at the deadline', async () => {
+  // A delivered exit is authoritative: the reused pid (pinned alive) is not a startup to wait
+  // for. The busy exit resolves in the poll that carries the clock past the ceiling.
+  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '2000');
+  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-reused-pid-exit-'));
+  const reusedPid = 997_603;
+  livenessOverrides = new Map([[reusedPid, true]]);
+  let resolveExit: ((exit: ExecDetachedExit) => void) | undefined;
+  spawn.mockImplementation(() => ({
+    pid: reusedPid,
+    exited: new Promise<ExecDetachedExit>((resolve) => {
+      resolveExit = resolve;
+    }),
+    readIdentity: () => ({ pid: reusedPid, startTime: null }),
+  }));
+  const started = Date.now();
+  const now = { value: started };
+  vi.spyOn(Date, 'now').mockImplementation(() => now.value);
+  let advanced = false;
+  pause.mockImplementation(async () => {
+    if (!advanced) {
+      advanced = true;
+      now.value += 2_000;
+      resolveExit?.({ pid: reusedPid, exitCode: DAEMON_STARTUP_EXIT_CODES.busy });
+    }
+    await realPause(20);
+  });
+  const failure = await expectStartupFailure(sendToDaemon(request(paths)));
+  assert.equal(failure.details?.reason, 'startup-exited');
+  assert.equal(failure.details?.startupTimeoutMs, 2_000);
+  assert.equal(spawn.mock.calls.length, 1, 'the deadline had passed, so no second attempt started');
 });
 
 test('an unproven registration exit reports startup-exited even under a short env ceiling', async () => {
