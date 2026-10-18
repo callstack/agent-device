@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
 import { readCurrentOwnerIdentity, isProcessAlive } from '@agent-device/host-kit/process';
-import { stopAndRetireDaemon } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import {
+  tryAcquireDaemonRegistration,
+  stopAndRetireDaemon,
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { stopRecordedDaemon } from '../daemon-client/daemon-client-stop.ts';
-import { readDaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
+import {
+  readDaemonShutdownRecord,
+  resolveDaemonShutdownReportPath,
+} from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 // What the registration owner may do to a record a host process owns: prove the lifetime is gone
@@ -38,6 +42,13 @@ vi.mock('@agent-device/daemon-contracts/daemon-process', async (importOriginal) 
   };
 });
 
+const fields = {
+  socketPort: 4210,
+  token: 'token',
+  version: '0.0.0-test',
+  codeOrigin: 'checkout' as const,
+  codeSignature: 'signature',
+};
 const ownIdentity = readCurrentOwnerIdentity();
 const deadIdentity = { pid: 999_999_999, startTime: 'dead-start' };
 
@@ -78,6 +89,16 @@ function writeEmbeddedRecord(paths: ReturnType<typeof resolveDaemonPaths>, ident
   writeRecord(paths, identity);
 }
 
+/** A live acquisition of a state directory, so the caller holds the claim it judges. */
+async function acquire(
+  paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-embedded-claim-')),
+) {
+  const attempt = await tryAcquireDaemonRegistration(paths);
+  assert.equal(attempt.status, 'acquired');
+  if (attempt.status !== 'acquired') throw new Error('registration refused');
+  return { paths, owner: attempt.owner };
+}
+
 // A host owns an embedded runtime and ends it with its own close, so retiring that record from outside
 // would take the state directory out from under a process that is still serving.
 test('retirement of an embedded record proves the lifetime is gone and signals nothing', async () => {
@@ -98,14 +119,6 @@ test('retirement of an embedded record proves the lifetime is gone and signals n
     assert.equal(result.reason, 'embedded-owner');
     assert.equal(result.termination?.status, 'retained');
   }
-
-  await assert.rejects(
-    stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), paths),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.details?.reason === 'daemon-owner-embedded' &&
-      /Close the host/.test(String(error.details.hint)),
-  );
 
   // The row that gives this file its teeth: the stub above accepts this pid for the signal path, so
   // only the record's owner stands between this stop and a SIGTERM to the test worker itself.
@@ -180,12 +193,6 @@ test('retirement refuses to signal a record whose owner it cannot recognize', as
     // The reason differs from the embedded one: nothing here proves the pid is a daemon of its own, so
     // an operator fixes this by inspecting or updating the record, not by closing a host.
     assert.equal(result.reason, 'owner-unproven', ownership);
-    if (ownership === 'sideways')
-      await assert.rejects(
-        stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), paths),
-        (error: unknown) =>
-          error instanceof AppError && error.details?.reason === 'daemon-owner-unrecognized',
-      );
     assert.deepEqual(
       signalPath.attempted,
       [],
@@ -219,3 +226,95 @@ test.each([ownIdentity, deadIdentity])(
     assert.equal(fs.existsSync(paths.infoPath), identity === ownIdentity);
   },
 );
+
+test('a close answers its stop through the release, and an acquisition clears the answer', async () => {
+  const { paths, owner } = await acquire();
+  owner.publish({ ...fields, ownership: 'embedded' });
+
+  await owner.finish(undefined, {
+    retainRegistration: false,
+    unfinished: ['1 provider release left pending'],
+  });
+  const record = readDaemonShutdownRecord(paths.baseDir).completion;
+  // The disposition is the removal this call performed, not the caller's guess about it.
+  assert.equal(record?.outcome, 'released');
+  assert.deepEqual(record?.unfinished, ['1 provider release left pending']);
+  assert.equal(record?.pid, process.pid, 'the record names the instance a stop is fenced to');
+  // This is the production write, so it is where the file mode is a fact rather than a fixture's
+  // choice: a state-directory file a stranger could read leaks what a daemon said about its own close.
+  assert.equal(
+    fs.statSync(resolveDaemonShutdownReportPath(paths.baseDir)).mode & 0o777,
+    0o600,
+    'the completion record is published at 0600',
+  );
+
+  const before = fs.readFileSync(resolveDaemonShutdownReportPath(paths.baseDir), 'utf8');
+  await assert.rejects(owner.finish(undefined, { retainRegistration: true, unfinished: ['late'] }));
+  assert.equal(fs.readFileSync(resolveDaemonShutdownReportPath(paths.baseDir), 'utf8'), before);
+
+  const next = await acquire(paths);
+  assert.equal(
+    readDaemonShutdownRecord(paths.baseDir).completion,
+    null,
+    "a new instance must not inherit an answer to somebody else's stop",
+  );
+  await next.owner.finish();
+});
+
+test.each(['intentional', 'unlink failure', 'publication failure'] as const)(
+  'embedded finalization reports actual registration disposition: %s',
+  async (scenario) => {
+    const { paths, owner } = await acquire();
+    owner.publish({ ...fields, ownership: 'embedded' });
+    const primary = new Error('registration unlink failed');
+    const originalUnlink = fs.unlinkSync;
+    const originalRename = fs.renameSync;
+    const recordPath = resolveDaemonShutdownReportPath(paths.baseDir);
+    let registrationPresentAtPublish: boolean | undefined;
+    vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
+      if (target === paths.infoPath && scenario === 'unlink failure') throw primary;
+      return originalUnlink(target);
+    });
+    vi.spyOn(fs, 'renameSync').mockImplementation((source, target) => {
+      if (target === recordPath) {
+        assert.equal(fs.existsSync(paths.lockPath), true);
+        registrationPresentAtPublish = fs.existsSync(paths.infoPath);
+        if (scenario === 'publication failure') throw new Error('publication failed');
+      }
+      return originalRename(source, target);
+    });
+    const finished = owner.finish(undefined, {
+      retainRegistration: scenario === 'intentional',
+      unfinished: ['unfinished work'],
+    });
+    if (scenario === 'unlink failure') await assert.rejects(finished, (error) => error === primary);
+    else await finished;
+    const retained = scenario !== 'publication failure';
+    assert.equal(registrationPresentAtPublish, retained);
+    assert.equal(fs.existsSync(paths.infoPath), retained);
+    assert.equal(fs.existsSync(paths.lockPath), retained);
+    assert.equal(readDaemonShutdownRecord(paths.baseDir).report, null);
+    assert.equal(
+      readDaemonShutdownRecord(paths.baseDir).completion?.outcome ?? null,
+      retained ? 'retained' : null,
+    );
+    const next = await tryAcquireDaemonRegistration(paths);
+    assert.equal(next.status, retained ? 'busy' : 'acquired');
+    if (next.status === 'acquired') await next.owner.finish();
+  },
+);
+
+test('a spent embedded owner cannot overwrite a same-host successor', async () => {
+  const { paths, owner } = await acquire();
+  owner.publish({ ...fields, ownership: 'embedded' });
+  await owner.finish(undefined, { retainRegistration: false, unfinished: [] });
+  const next = await acquire(paths);
+  next.owner.publish({ ...fields, ownership: 'embedded', token: 'next-runtime' });
+  await next.owner.finish(undefined, { retainRegistration: true, unfinished: ['next work'] });
+  const before = fs.readFileSync(resolveDaemonShutdownReportPath(paths.baseDir), 'utf8');
+  await assert.rejects(owner.finish(undefined, { retainRegistration: false, unfinished: [] }));
+  assert.equal(fs.readFileSync(resolveDaemonShutdownReportPath(paths.baseDir), 'utf8'), before);
+  assert.equal(readDaemonShutdownRecord(paths.baseDir).completion?.token, 'next-runtime');
+  assert.equal(fs.existsSync(paths.infoPath), true);
+  assert.equal(fs.existsSync(paths.lockPath), true);
+});

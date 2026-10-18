@@ -147,6 +147,12 @@ export function resolveDaemonTransportPreference(
   return 'auto';
 }
 
+// The two ways a process asks a daemon to leave, and the fence that addresses the exact instance.
+// Client and daemon share this vocabulary, so neither owns it. `quiesce` asks an idle daemon to
+// leave so a compatible one can take its state directory; `shutdown` asks a runtime whose owner is a
+// host process to close itself, work in hand included. Both ride one request envelope, one fence,
+// and one admission rule, and differ only in what the daemon may still hold when it agrees.
+
 /** What a daemon can do beyond the base RPC contract, published in its `daemon.json`. */
 export const DAEMON_CAPABILITIES = ['quiesce'] as const;
 export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
@@ -158,7 +164,7 @@ export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
  *   predates the field names.
  * - `embedded`: the host that started the runtime owns the process. Nothing in the central
  *   lifecycle signals that PID, not even hung recovery or a forced stop: the host closes the
- *   runtime through its own close, and an external stop refuses it.
+ *   runtime through its own close, and a stop from outside reaches it only as a shutdown request.
  * - `unknown`: the record states an owner this build does not recognize, so no process may be
  *   signaled on its strength. Signalling on a guess could end a host process, and a value this
  *   build cannot read is exactly the case where the safe answer is to do nothing.
@@ -197,10 +203,15 @@ export function readDaemonOwnership(value: unknown): DaemonOwnership {
       : 'unknown';
 }
 
-/** The command carrying the fenced lifecycle request. */
+/**
+ * The lifecycle requests, each named by the command that carries it. Both are the same envelope,
+ * fence and admission rule; they differ only in what the daemon may hold while it agrees.
+ */
 export const DAEMON_LIFECYCLE_COMMANDS = {
   /** Stop if idle: refuses while the daemon holds a request, a session, or a lease. */
   quiesce: 'daemon_quiesce',
+  /** Stop and drain: ends what the daemon holds, and only an embedder-owned runtime agrees. */
+  shutdown: 'daemon_shutdown',
 } as const;
 export type DaemonLifecycleMode = keyof typeof DAEMON_LIFECYCLE_COMMANDS;
 
@@ -212,6 +223,8 @@ export function readDaemonLifecycleMode(command: string): DaemonLifecycleMode | 
   switch (command) {
     case DAEMON_LIFECYCLE_COMMANDS.quiesce:
       return 'quiesce';
+    case DAEMON_LIFECYCLE_COMMANDS.shutdown:
+      return 'shutdown';
     default:
       return undefined;
   }
@@ -228,6 +241,8 @@ export const DAEMON_LIFECYCLE_REASONS = {
   instanceMismatch: 'daemon-instance-mismatch',
   /** A quiesce was refused because a host owns this runtime and ends it through its own close. */
   ownerEmbedded: 'daemon-owner-embedded',
+  /** A shutdown was refused because a detached daemon's owner ends it by signalling its process. */
+  notEmbedded: 'daemon-not-embedded',
 } as const;
 
 /**
@@ -246,7 +261,9 @@ export type DaemonLifecycleFence = Readonly<{
 
 /**
  * What a daemon holds, and the census a busy refusal carries so a caller knows what to wait for.
- * A quiesce leaves only when all four counts are zero and it is not still starting up.
+ * A quiesce leaves only when all four counts are zero and it is not still starting up, because before
+ * that it has no drain path to run. A shutdown drains whatever it finds, and refuses with this census
+ * only while the daemon is still starting; its acknowledgement carries the one `draining` outcome.
  */
 export type DaemonLifecycleCensus = Readonly<{
   /** True from process start until the daemon can drain. */

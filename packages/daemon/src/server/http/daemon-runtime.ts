@@ -48,6 +48,7 @@ import {
   type WritableOutput,
   createPluginClose,
   createStartupRollback,
+  describeUnfinishedShutdownWork,
   settleWithinBudget,
   type ShutdownReport,
   type StartupRollback,
@@ -88,6 +89,7 @@ import {
 import {
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
+  type DaemonRegistrationOwner,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
   recordDaemonStartupMarker,
@@ -219,7 +221,12 @@ export type DaemonRuntimeOptions = {
   composeDeps: ComposeDaemonRuntimeDeps;
   /** Shutdown time budgets, for hosts and tests that need other than the defaults. */
   shutdownBudgets?: { requestDrainMs?: number; pluginMs?: number; ownerMs?: number };
-  /** The process owner. An embedded runtime ends through its host's direct close. */
+  /**
+   * Who owns this process. A host that started this runtime in its own process passes `embedded`: the
+   * record says so, no idle timer ends the runtime, and it answers a shutdown request instead of a
+   * quiesce. Defaults to a detached daemon. `unknown` is not offered: it is what a reader answers for a
+   * record it cannot place, and a runtime always knows which of these two it is.
+   */
   ownership?: DaemonRuntimeOwnership;
 };
 
@@ -514,6 +521,8 @@ async function startDaemonRuntimeOnHost(
   // well after this closure captures it.
   let shuttingDown = false;
   const inFlightRequests = new Set<ReturnType<DaemonInvokeFn>>();
+  // Who owns this process decides what it publishes and which lifecycle request it answers. A host
+  // that starts the runtime passes `embedded`; the daemon executable leaves it detached.
   const ownership = options.ownership ?? 'detached';
   const idleReap = createDaemonIdleReap({
     sessionStore,
@@ -532,12 +541,11 @@ async function startDaemonRuntimeOnHost(
     leaseSessionEnd.cancel();
   });
 
-  // The quiesce request is answered before dispatch and never joins `inFlightRequests`, so the
-  // count it reads needs no allowance for it. The servers listen and `daemon.json` is published
-  // before `shutdown` exists, and a daemon answers `draining` only once it has a drain path to run.
+  // Both lifecycle requests are answered before dispatch and never join `inFlightRequests`, so the
+  // count they read needs no allowance for them. The servers listen and `daemon.json` is published
+  // before `close` exists, and a daemon answers `draining` only once it has a drain path to run.
   let startingUp = true;
-  const quiesce = createDaemonLifecycleAdmission({
-    ownership: () => ownership,
+  const lifecycleAdmission = createDaemonLifecycleAdmission({
     token,
     identity: { pid: daemonIdentity.pid, processStartTime: daemonIdentity.startTime },
     sessionStore,
@@ -547,9 +555,10 @@ async function startDaemonRuntimeOnHost(
     drain: () => {
       void close();
     },
+    ownership: () => ownership,
   });
 
-  const handleRequest: DaemonInvokeFn = quiesce.admit(async (req) => {
+  const handleRequest: DaemonInvokeFn = lifecycleAdmission.admit(async (req) => {
     if (shuttingDown) return daemonShuttingDownResponse();
     idleReap.cancel();
     const dispatch = runtimeContext.run(() => dispatchRequest(req));
@@ -597,7 +606,12 @@ async function startDaemonRuntimeOnHost(
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
   });
   rollback.onRollback(async () => {
-    await finishDaemonRegistration({ registration, infoPath, logPath });
+    await finishDaemonRegistration({
+      registration,
+      infoPath,
+      logPath,
+      close: { retainRegistration: false, unfinished: ['Daemon startup rolled back.'] },
+    });
   });
   const startupPhasesPath = resolveDaemonStartupPhasesPath(baseDir, process.pid);
   const recordStartupPhase = (phase: Parameters<typeof recordDaemonStartupMarker>[1]): void =>
@@ -744,13 +758,10 @@ async function startDaemonRuntimeOnHost(
     }).catch(() => {});
   });
 
-  let registrationFinished = false;
-  let lockConfigurationCleared = false;
-  // Work that ignored cancellation may still be running, so this process keeps the registration
-  // and lock it holds: releasing them would let a second daemon drive the same devices.
   let abandonedRequests = 0;
-  let platformOwnersPending = false;
+  let platformOwnersPending = true;
   const hasUnfinishedWork = () => abandonedRequests > 0 || platformOwnersPending;
+  let shutdownOutcome: Parameters<DaemonRegistrationOwner['finish']>[0];
   const drainInFlightRequests = async (): Promise<ShutdownReport['requests']> => {
     const total = inFlightRequests.size;
     if (total === 0) return { drained: 0, abandoned: 0 };
@@ -772,6 +783,7 @@ async function startDaemonRuntimeOnHost(
     }
     return { drained: total - abandonedRequests, abandoned: abandonedRequests };
   };
+
   const closeSteps = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
@@ -779,12 +791,10 @@ async function startDaemonRuntimeOnHost(
     clearInterval(leaseExpirySweep);
     shuttingDown = true;
     stopMetadataLossWatch();
-    if (closeOptions.cause) {
-      await emitFatalDiagnostic(closeOptions.cause);
-    }
     // Cancellation and the listener close run together: a connection held by a request that ignores
     // cancellation is force-closed at the same budget the drain gives it.
     const serversClosed = closeDaemonServers(servers, requestDrainTimeoutMs);
+    if (closeOptions.cause) await emitFatalDiagnostic(closeOptions.cause);
     const requests = await drainInFlightRequests();
     await serversClosed;
     await leaseSessionEnd.drain();
@@ -833,7 +843,6 @@ async function startDaemonRuntimeOnHost(
       },
     });
     expiredProviderLeaseReleaser.shutdown();
-    platformOwnersPending = true;
     const ownerClose = await settleWithinBudget(
       () => deviceRuntimeGateway.shutdown(),
       options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
@@ -849,24 +858,8 @@ async function startDaemonRuntimeOnHost(
       });
     }
     const stoppedRunners = await applicationLifecycle.finalizeDaemonShutdown();
-    // Best effort: stop the PNG worker so an in-flight job cannot delay exit.
-    await Promise.race([
-      releasePngWorker().catch(() => {}),
-      sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
-    ]);
-    if (!hasUnfinishedWork()) {
-      registrationFinished = true;
-      await finishDaemonRegistration({
-        registration,
-        infoPath,
-        logPath,
-        outcome: { providerReleases: providerReleaseDrain, claims: shutdownClaimLedger.claims },
-      });
-      lockConfigurationCleared = true;
-      await deps.ownerLifecycle.clearDaemonLockConfiguration();
-    }
     const unknownLeaseIds = new Set(providerReleaseDrain.unknown.map((lease) => lease.leaseId));
-    return {
+    const report: ShutdownReport = {
       providerReleases: {
         completed: providerReleaseDrain.released.map((lease) => lease.leaseId),
         pending: providerReleaseDrain.pending
@@ -880,25 +873,46 @@ async function startDaemonRuntimeOnHost(
       sessions,
       plugins,
     };
+    shutdownOutcome = {
+      providerReleases: providerReleaseDrain,
+      claims: shutdownClaimLedger.claims,
+    };
+    return report;
   };
 
-  // A step that rejects must not strand what the later steps release: the PNG worker hold, the
-  // provider runtimes, the registration and lock, and the runtime's own state.
   const closeOnHost = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
+    let report: ShutdownReport | undefined;
     try {
-      return await closeSteps(closeOptions);
+      report = await closeSteps(closeOptions);
+      return report;
     } finally {
       await Promise.allSettled([
-        releasePngWorker(),
-        pluginClose.close(),
-        registrationFinished || hasUnfinishedWork()
-          ? undefined
-          : finishDaemonRegistration({ registration, infoPath, logPath }),
-        lockConfigurationCleared || hasUnfinishedWork()
-          ? undefined
-          : deps.ownerLifecycle.clearDaemonLockConfiguration(),
+        Promise.race([
+          Promise.resolve().then(releasePngWorker),
+          sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
+        ]),
+        Promise.resolve().then(() => pluginClose.close()),
       ]);
-      if (!hasUnfinishedWork()) runtimeContext.dispose();
+      await Promise.allSettled([
+        finishDaemonRegistration({
+          registration,
+          infoPath,
+          logPath,
+          outcome: shutdownOutcome,
+          close: {
+            retainRegistration: hasUnfinishedWork(),
+            unfinished: report
+              ? describeUnfinishedShutdownWork(report)
+              : ['Daemon shutdown: a close step failed, so the runtime did not finish leaving.'],
+          },
+        }),
+      ]);
+      if (!hasUnfinishedWork()) {
+        try {
+          await deps.ownerLifecycle.clearDaemonLockConfiguration();
+        } catch {}
+        runtimeContext.dispose();
+      }
     }
   };
 

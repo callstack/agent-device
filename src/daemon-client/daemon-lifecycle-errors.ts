@@ -3,6 +3,7 @@ import {
   DAEMON_LIFECYCLE_REASONS,
   DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
   type DaemonLifecycleCensus,
+  type DaemonOwnership,
   type DaemonPaths,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
@@ -97,7 +98,7 @@ export function daemonTakeoverRetirementError(
   paths: DaemonPaths,
 ): AppError {
   if (retirement.reason === 'embedded-owner')
-    return daemonNotRetirableError({ info, stateDir: paths.baseDir });
+    return daemonNotRetirableError({ info, stateDir: paths.baseDir, owner: 'embedded' });
   if (retirement.reason === 'owner-unproven')
     return daemonRecordOwnerUnrecognizedError({ info, stateDir: paths.baseDir });
   return daemonRetirementUnconfirmedError(retirement, paths);
@@ -176,16 +177,41 @@ function daemonRecordOwnerUnrecognizedError(params: {
   );
 }
 
-/** Refuses replacement of a runtime whose host owns its lifetime. */
-export function daemonNotRetirableError(params: { info: DaemonInfo; stateDir: string }): AppError {
+/**
+ * A caller wanted this daemon gone, and its owner's rule says otherwise: a host process owns an
+ * embedded runtime and ends it, and a detached daemon is stopped by signalling its own process, which is
+ * what `daemon stop` does for a record that proves that owner.
+ *
+ * Both cases mean the same thing to a caller: this daemon is not yours to retire. `owner` is the
+ * daemon's own answer about itself, so it is trusted over this process's read of the record — except for
+ * the hint, which reads the record too. A detached answer against a record this build cannot place is a
+ * corrupt state directory, and `daemon stop` refuses that record for the same reason this client just
+ * did, so its hint names the record repair instead of sending the operator to a second refusal.
+ */
+export function daemonNotRetirableError(params: {
+  info: DaemonInfo;
+  stateDir: string;
+  owner: Exclude<DaemonOwnership, 'unknown'>;
+}): AppError {
+  const { info, stateDir, owner } = params;
+  const embedded = owner === 'embedded';
+  const recordUnreadable = !embedded && info.ownership === 'unknown';
   return new AppError(
     'COMMAND_FAILED',
-    'A host process owns this daemon, so it was not replaced.',
+    embedded
+      ? 'A host process owns this daemon, so it was not replaced.'
+      : 'This daemon is not embedder-owned, so a shutdown request is not how it is stopped.',
     {
-      reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
-      stateDir: params.stateDir,
-      daemon: daemonIdentityOf(params.info),
-      hint: 'Close the host that started this runtime.',
+      reason: embedded
+        ? DAEMON_LIFECYCLE_REASONS.ownerEmbedded
+        : DAEMON_LIFECYCLE_REASONS.notEmbedded,
+      stateDir,
+      daemon: daemonIdentityOf(info),
+      hint: embedded
+        ? `Close the host that started it, or ask this daemon to leave with ${daemonStopCommand(stateDir)}, which sends it a shutdown request instead of a signal.`
+        : recordUnreadable
+          ? `The daemon says it is a daemon of its own, so the owner its record states is wrong. Nothing was signaled. Check what owns pid ${info.pid}, then repair the record: stop that process by its own means and remove ${shellQuoteIfNeeded(stateDir)}/daemon.json so a daemon can register again.`
+          : `Stop it with ${daemonStopCommand(stateDir)}.`,
     },
   );
 }

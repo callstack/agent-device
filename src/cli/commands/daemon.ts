@@ -46,7 +46,7 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
   if (flags.clean === true && record.ownership !== 'absent' && record.ownership !== 'detached') {
     throw daemonCleanRefusedForUnprovenOwner(paths, record.ownership);
   }
-  const result = await stopRecordedDaemon(record, paths);
+  const result = await stopRecordedDaemon(record, { paths, host });
   const cleanupOwner = readStopCleanupOwner(record);
   const shouldClean = flags.clean === true && cleanupOwner !== null && result.stopped;
   if (shouldClean) {
@@ -60,7 +60,16 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
   return true;
 };
 
-/** Refuses PID-wide cleanup when the registration cannot prove a detached daemon. */
+/**
+ * `--clean` walks the owner's whole process tree, which for a host process includes everything else
+ * that host runs. An embedded runtime's own close is the only boundary a stop may cross, so this
+ * refuses instead of reaching past it, and the stop without `--clean` still works.
+ *
+ * A record whose owner cannot be read is refused too: the tree this would walk may be a host's, and
+ * the reason cleanup is allowed for a detached daemon is that its record proves the process is a
+ * daemon of its own. This is not a bad flag — the flag is fine, the record is the problem — so it
+ * reports as a failed command, like the other ownership refusals.
+ */
 function daemonCleanRefusedForUnprovenOwner(
   paths: DaemonPaths,
   record: DaemonStopIdentity['ownership'],
@@ -77,12 +86,23 @@ function daemonCleanRefusedForUnprovenOwner(
   );
 }
 
+/**
+ * What to do next, which depends on whether a plain `daemon stop` has a route left for this record.
+ * A readable record naming a host or an unfamiliar owner does: that stop asks the running process to
+ * leave and never signals it. A record that cannot be read has none — the same stop refuses it for the
+ * same reason — so its hint names the record repair instead of sending the operator to a second refusal.
+ */
 function daemonCleanRefusalHint(
   paths: DaemonPaths,
   record: DaemonStopIdentity['ownership'],
 ): string {
-  if (record === 'embedded') return 'Close the host that started this runtime.';
-  return `Nothing was signaled. Check what owns that process, then repair the record: stop it by its own means and remove ${shellQuoteIfNeeded(`${paths.baseDir}/daemon.json`)} so a daemon can register again.`;
+  if (record === 'unreadable') {
+    return `Nothing was signaled. Check what owns that process, then repair the record: stop it by its own means and remove ${shellQuoteIfNeeded(`${paths.baseDir}/daemon.json`)} so a daemon can register again.`;
+  }
+  if (record === 'embedded') {
+    return 'Stop it without --clean, which drains it through its own close, or let the host that started it close it.';
+  }
+  return 'Stop it without --clean, which asks the running process to leave and reports what it answers.';
 }
 
 function renderDaemonStop(

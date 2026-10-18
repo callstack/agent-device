@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
-import { AppError } from '@agent-device/kernel/errors';
 import {
   mkdtempForTestSync,
   bindTestCommandHost,
@@ -331,14 +330,14 @@ test.each([
     true,
     JSON.stringify({ pid: 555, processStartTime: 'start', ownership: 'embedded' }),
     'daemon-clean-not-detached',
-    /Close the host/,
+    /Stop it without --clean/,
   ],
   [
     'unknown',
     true,
     JSON.stringify({ pid: 555, processStartTime: 'start', ownership: 'sideways' }),
     'daemon-clean-not-detached',
-    /remove .*daemon\.json/,
+    /Stop it without --clean/,
   ],
   ['unreadable', true, '{not json', 'daemon-clean-not-detached', /remove .*daemon\.json/],
   ['unreadable', false, '{not json', 'daemon-record-unreadable', /Inspect or remove that record/],
@@ -386,21 +385,17 @@ test('daemon status names a record whose owner it cannot recognize', async () =>
   expect(render()).toContain('pid 321, owner-not-recognized');
 });
 
-// A host-owned record reaches the central retirement through the one router, and at this layer the
-// owner's rule is the contract: the refusal the retirement raises is what `daemon stop` reports,
-// unchanged. What the real retirement raises for a live embedded owner, without signaling it, is
-// pinned at that seam by src/__tests__/daemon-registration-embedded-owner.test.ts.
-test('daemon stop routes a host-owned record through the one router and reports its refusal', async () => {
+// A host-owned record never reaches the signal path a detached stop uses: it is answered by a shutdown
+// request over the record's own transport, so a record that states no usable transport is refused before
+// anything is asked or signaled, and the record stays. What a reachable embedded stop answers, and what
+// the retirement raises for a live owner without signaling it, are pinned at those seams by
+// src/daemon-client-embedded-stop.test.ts and src/__tests__/daemon-registration-embedded-owner.test.ts.
+test('daemon stop routes a host-owned record through the one router and never the signal path', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-command-embedded-');
   fs.writeFileSync(
     `${stateDir}/daemon.json`,
     JSON.stringify({ pid: 555, processStartTime: 'start-time', ownership: 'embedded' }),
     { mode: 0o600 },
-  );
-  mocks.stopDaemon.mockRejectedValue(
-    new AppError('COMMAND_FAILED', 'The daemon was not stopped, because its owner ends it.', {
-      reason: 'daemon-owner-embedded',
-    }),
   );
 
   try {
@@ -411,13 +406,10 @@ test('daemon stop routes a host-owned record through the one router and reports 
         flags: { help: false, json: false, stateDir, version: false },
         client: {} as never,
       }),
-    ).rejects.toMatchObject({ details: { reason: 'daemon-owner-embedded' } });
+    ).rejects.toMatchObject({ details: { reason: 'daemon-embedded-stop-unreachable' } });
 
-    // The refusal travels with the lifetime and owner from the one read, and nothing was cleaned.
-    expect(mocks.stopDaemon).toHaveBeenCalledWith({
-      paths: expect.objectContaining({ baseDir: stateDir }),
-      observed: { pid: 555, startTime: 'start-time', ownership: 'embedded' },
-    });
+    // The embedded route owns this record end to end: no detached retirement, no cleanup, no output.
+    expect(mocks.stopDaemon).not.toHaveBeenCalled();
     expect(mocks.cleanupDaemonOwner).not.toHaveBeenCalled();
     expect(mocks.writeCommandOutput).not.toHaveBeenCalled();
     expect(fs.readFileSync(`${stateDir}/daemon.json`, 'utf8')).toContain('"embedded"');

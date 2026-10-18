@@ -108,7 +108,7 @@ async function crashedStaleRegistration(ownership: 'embedded' | 'unrecognized' |
 }
 
 for (const [ownership, reason, hint] of [
-  ['embedded', DAEMON_LIFECYCLE_REASONS.ownerEmbedded, /Close the host/],
+  ['embedded', DAEMON_LIFECYCLE_REASONS.ownerEmbedded, /Close the host that started it/],
   ['sideways', 'daemon-owner-unrecognized', /Update agent-device/],
 ] as const)
   test(`a managed client preserves a ${ownership} owner`, async (t) => {

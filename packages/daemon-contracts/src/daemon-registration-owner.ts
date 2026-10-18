@@ -30,9 +30,9 @@ import {
   resolveDaemonPaths,
   type DaemonCapability,
   type DaemonOwnership,
-  type ObservedDaemonIdentity,
   type DaemonPaths,
   type DaemonServerMode,
+  type ObservedDaemonIdentity,
 } from './daemon-resolution.ts';
 import { findUnrecoveredRepairCommitFailure } from './session-repair-tombstone.ts';
 import {
@@ -44,6 +44,7 @@ import {
 import {
   buildDaemonShutdownReport,
   resolveDaemonShutdownReportPath,
+  type DaemonShutdownCompletion,
   type DaemonShutdownOutcome,
 } from './daemon-shutdown-report.ts';
 import { sweepDeadDaemonStartupPhasesFiles } from './daemon-startup-phases.ts';
@@ -61,6 +62,7 @@ export type DaemonRegistrationFields = Readonly<{
   capabilities?: readonly DaemonCapability[];
   /** The provider plugin inventory, so a client can read what this daemon registered. */
   plugins?: readonly PluginInventoryEntry[];
+  /** Who owns this process; see {@link DaemonOwnership}. Absent records are detached daemons. */
   ownership?: DaemonOwnership;
 }>;
 type DaemonRegistrationRemoval =
@@ -68,7 +70,10 @@ type DaemonRegistrationRemoval =
   | Exclude<RegisteredDaemonOwnership, { state: 'match' }>;
 export type DaemonRegistrationOwner = Readonly<{
   publish(fields: DaemonRegistrationFields): void;
-  finish(outcome?: DaemonShutdownOutcome): Promise<DaemonRegistrationRemoval>;
+  finish(
+    outcome?: DaemonShutdownOutcome,
+    close?: Readonly<{ retainRegistration: boolean; unfinished: readonly string[] }>,
+  ): Promise<DaemonRegistrationRemoval | Readonly<{ state: 'retained' }>>;
 }>;
 
 export async function tryAcquireDaemonRegistration(
@@ -93,6 +98,7 @@ export async function tryAcquireDaemonRegistration(
   } catch (error) {
     await releaseRegistrationAfterFailure(acquisition, error, boundPaths.logPath);
   }
+  let published: Pick<DaemonRegistrationFields, 'ownership' | 'token'> | undefined;
   return {
     status: 'acquired',
     owner: Object.freeze({
@@ -118,20 +124,72 @@ export async function tryAcquireDaemonRegistration(
           ),
           mode: 0o600,
         });
+        published = { ownership: fields.ownership, token: fields.token };
       },
-      async finish(outcome?: DaemonShutdownOutcome) {
-        let removal: DaemonRegistrationRemoval;
+      async finish(
+        outcome?: DaemonShutdownOutcome,
+        close?: Readonly<{ retainRegistration: boolean; unfinished: readonly string[] }>,
+      ) {
+        let removal: DaemonRegistrationRemoval | Readonly<{ state: 'retained' }>;
         try {
-          if (outcome) writeShutdownReport(boundPaths.baseDir, outcome, acquisition);
-          removal = removeRegistrationUnderLock(boundPaths.infoPath, identity, acquisition);
+          acquisition.assertHeld();
+          removal = close?.retainRegistration
+            ? { state: 'retained' }
+            : removeRegistrationUnderLock(boundPaths.infoPath, identity, acquisition);
         } catch (error) {
+          await writeShutdownRecord(
+            'retained',
+            outcome,
+            close?.unfinished ?? ['Daemon shutdown: registration removal failed.'],
+          );
+          if (published?.ownership === 'embedded') throw error;
           return await releaseRegistrationAfterFailure(acquisition, error, boundPaths.logPath);
         }
-        await acquisition.release();
+        const released = removal.state === 'removed' || removal.state === 'absent';
+        await writeShutdownRecord(
+          released ? 'released' : 'retained',
+          outcome,
+          close?.unfinished ?? ['Daemon shutdown: close details are unavailable.'],
+        );
+        if (removal.state !== 'retained' && (released || published?.ownership !== 'embedded')) {
+          await acquisition.release();
+        }
         return removal;
       },
     }),
   };
+
+  async function writeShutdownRecord(
+    disposition: DaemonShutdownCompletion['outcome'],
+    outcome: DaemonShutdownOutcome | undefined,
+    unfinished: readonly string[],
+  ): Promise<void> {
+    const completion =
+      published?.ownership === 'embedded' && identity.startTime !== null
+        ? {
+            pid: identity.pid,
+            processStartTime: identity.startTime,
+            token: published.token,
+            outcome: disposition,
+            unfinished,
+          }
+        : undefined;
+    if (!outcome && !completion) return;
+    try {
+      acquisition.assertHeld();
+      publishFileSync({
+        destination: resolveDaemonShutdownReportPath(boundPaths.baseDir),
+        contents: `${JSON.stringify({ ...(outcome ? buildDaemonShutdownReport(outcome) : {}), ...(completion ? { completion } : {}) })}\n`,
+        mode: 0o600,
+      });
+    } catch (error) {
+      await recordRegistrationWarning(
+        boundPaths.logPath,
+        'daemon_shutdown_record_failed',
+        error,
+      ).catch(() => {});
+    }
+  }
 }
 
 function removeRegistrationUnderLock(
@@ -159,24 +217,13 @@ async function releaseRegistrationAfterFailure(
   try {
     await acquisition.release();
   } catch (releaseError) {
-    await recordRegistrationWarning(logPath, 'daemon_registration_release_failed', releaseError);
+    await recordRegistrationWarning(
+      logPath,
+      'daemon_registration_release_failed',
+      releaseError,
+    ).catch(() => {});
   }
   throw error;
-}
-
-function writeShutdownReport(
-  stateDir: string,
-  outcome: DaemonShutdownOutcome,
-  acquisition: ProcessLockAcquisition,
-): void {
-  const filePath = resolveDaemonShutdownReportPath(stateDir);
-  const contents = `${JSON.stringify(buildDaemonShutdownReport(outcome))}\n`;
-  acquisition.assertHeld();
-  try {
-    publishFileSync({ destination: filePath, contents, mode: 0o600 });
-  } catch {
-    return;
-  }
 }
 
 /**

@@ -150,6 +150,7 @@ export async function readReusableLocalDaemon(
   }
 
   if (!settings.retireIncompatibleContender) throw daemonContendedError();
+
   if (remainingStartupBudget(deadline) < MINIMUM_DAEMON_TAKEOVER_BUDGET_MS) return null;
   emitDaemonTakeoverNotice(existing, decision.reason, settings.paths.baseDir);
   await retireDaemonForTakeover(existing, settings.paths);

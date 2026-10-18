@@ -50,7 +50,7 @@ export function readDaemonInfo(infoPath: string): DaemonInfo | null {
   return read.status === 'present' ? daemonInfoFromRecord(read.record) : null;
 }
 
-function daemonInfoFromRecord(parsed: Partial<DaemonInfo>): DaemonInfo | null {
+export function daemonInfoFromRecord(parsed: Partial<DaemonInfo>): DaemonInfo | null {
   const token = readRequiredDaemonToken(parsed);
   const ports = readDaemonInfoPorts(parsed);
   return token && ports ? readDaemonInfoFromRecord(parsed, token, ports) : null;

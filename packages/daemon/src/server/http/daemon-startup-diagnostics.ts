@@ -37,9 +37,10 @@ export async function finishDaemonRegistration(params: {
   infoPath: string;
   logPath: string;
   outcome?: Parameters<DaemonRegistrationOwner['finish']>[0];
+  close?: Parameters<DaemonRegistrationOwner['finish']>[1];
 }): Promise<void> {
   try {
-    const removal = await params.registration.finish(params.outcome);
+    const removal = await params.registration.finish(params.outcome, params.close);
     if (removal.state !== 'removed' && removal.state !== 'absent') {
       await emitDaemonDiagnostic(params.logPath, 'daemon_info_removal_declined', {
         infoPath: params.infoPath,

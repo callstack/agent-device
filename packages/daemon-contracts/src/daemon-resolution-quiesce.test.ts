@@ -47,9 +47,9 @@ test('a fence names an integer pid and a start time or null, nothing else', () =
   assert.equal(readDaemonLifecycleFence('7'), undefined);
 });
 
-test('a quiesce carries the original instance fence', () => {
+test('both lifecycle requests carry one fence shape under the command of their mode', () => {
   const fence = { pid: 7, processStartTime: 'Fri Oct 17 09:00:00 2026' };
-  for (const mode of ['quiesce'] as const) {
+  for (const mode of ['quiesce', 'shutdown'] as const) {
     const request = buildDaemonLifecycleRequest({ mode, token: 't0ken', fence, requestId: 'r-1' });
     assert.equal(request.command, DAEMON_LIFECYCLE_COMMANDS[mode]);
     assert.deepEqual(request.input, fence);

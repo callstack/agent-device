@@ -7,7 +7,6 @@ import { SessionStore } from '../../core/session-store.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import {
   createDaemonIdleReap,
-  createDaemonLifecycleAdmission,
   hasActiveRecording,
   hasReapBlockingOpenSessions,
   isDaemonIdle,
@@ -327,37 +326,3 @@ test("a host that owns the runtime's lifetime never has it reaped on a timer", a
   assert.equal(reaped, 0);
   assert.equal(idleReap.idleMs, 0);
 });
-
-test('a daemon that cannot prove its start time refuses every quiesce', async () => {
-  const drain = vi.fn();
-  const quiesce = createDaemonLifecycleAdmission({
-    ownership: () => 'detached',
-    token: 'daemon-token',
-    identity: { pid: process.pid, processStartTime: null },
-    sessionStore,
-    leaseRegistry: { listActiveLeases: () => [] },
-    inFlightRequestCount: () => 0,
-    startingUp: () => false,
-    drain,
-  });
-  const admitted = vi.fn(async () => ({ ok: true as const }));
-
-  const response = await quiesce.admit(admitted)({
-    token: 'daemon-token',
-    session: 'default',
-    command: 'daemon_quiesce',
-    positionals: [],
-    input: { pid: process.pid, processStartTime: null },
-  });
-
-  assert.equal(response.ok, false);
-  assert.equal(!response.ok && response.error.details?.reason, 'daemon-instance-mismatch');
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(drain.mock.calls.length, 0);
-  // Admission stays open: a refusal never leaves the daemon closed.
-  assert.deepEqual(await quiesce.admit(admitted)(makeRequest('devices')), { ok: true });
-});
-
-function makeRequest(command: string) {
-  return { token: 'daemon-token', session: 'default', command, positionals: [] };
-}
