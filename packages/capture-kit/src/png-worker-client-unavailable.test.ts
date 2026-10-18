@@ -2,34 +2,25 @@ import { EventEmitter } from 'node:events';
 import { expect, test, vi } from 'vitest';
 import { PNG } from './png.ts';
 
-test('every scope that reaches the fallback reports the unavailable worker', async () => {
+test('a worker whose entry is missing is reported once and later registrations hear it', async () => {
   vi.resetModules();
   vi.doMock('./internal-entry.ts', () => ({ resolveInternalEntryModulePath: () => null }));
-  // Loaded after the reset so the client and the scope share one diagnostics module.
-  const { countDiagnosticEventsByPhase, withDiagnosticsScope } =
-    await import('@agent-device/host-kit/diagnostics');
   const { decodePngAsync, prewarmPngWorker } = await import('./png-worker-client.ts');
   const png = PNG.sync.write(new PNG({ width: 1, height: 1 }));
+  const first = vi.fn();
+  const second = vi.fn();
 
-  const prewarmed = await withDiagnosticsScope({ command: 'daemon' }, async () => {
-    prewarmPngWorker();
-    return countDiagnosticEventsByPhase(['png_worker_unavailable']);
-  });
-  const scopes = [];
-  for (const label of ['first', 'second']) {
-    scopes.push(
-      await withDiagnosticsScope({ command: 'screenshot' }, async () => {
-        await decodePngAsync(png, label);
-        return countDiagnosticEventsByPhase(['png_worker_unavailable']);
-      }),
-    );
-  }
+  prewarmPngWorker(first);
+  const decoded = await decodePngAsync(png, 'fallback');
+  prewarmPngWorker(second);
 
-  expect({ prewarmed, scopes }).toEqual({ prewarmed: 1, scopes: [1, 1] });
+  expect(decoded.width).toBe(1);
+  expect(first.mock.calls).toEqual([[{ kind: 'entry-not-found' }]]);
+  expect(second.mock.calls).toEqual([[{ kind: 'entry-not-found' }]]);
   vi.doUnmock('./internal-entry.ts');
 });
 
-test('a worker that dies under a request is reported in that request, not only the next one', async () => {
+test('a worker that dies after it started is reported once, and its pending job still completes', async () => {
   vi.resetModules();
   class FakeWorker extends EventEmitter {
     static last: FakeWorker | undefined;
@@ -48,26 +39,19 @@ test('a worker that dies under a request is reported in that request, not only t
     ...(await importOriginal<typeof import('node:worker_threads')>()),
     Worker: FakeWorker,
   }));
-  const { countDiagnosticEventsByPhase, withDiagnosticsScope } =
-    await import('@agent-device/host-kit/diagnostics');
   const { decodePngAsync, prewarmPngWorker } = await import('./png-worker-client.ts');
   const png = PNG.sync.write(new PNG({ width: 1, height: 1 }));
-  prewarmPngWorker();
+  const unavailable = vi.fn();
+  prewarmPngWorker(unavailable);
+  expect(unavailable).not.toHaveBeenCalled();
 
-  let jobStarted!: () => void;
-  const started = new Promise<void>((resolve) => (jobStarted = resolve));
-  const scoped = withDiagnosticsScope({ command: 'screenshot' }, async () => {
-    const decoded = decodePngAsync(png, 'under-request');
-    jobStarted();
-    await decoded;
-    return countDiagnosticEventsByPhase(['png_worker_unavailable']);
-  });
-  await started;
-  // The worker's own error event carries no diagnostics scope.
+  const decoded = decodePngAsync(png, 'under-request');
   const worker = FakeWorker.last;
   if (!worker) throw new Error('the pre-warm did not start a worker');
   worker.emit('error', new Error('worker crashed'));
+  worker.emit('exit', 1);
 
-  expect(await scoped).toBe(1);
+  expect((await decoded).width).toBe(1);
+  expect(unavailable.mock.calls).toEqual([[{ kind: 'worker-error', detail: 'worker crashed' }]]);
   vi.doUnmock('node:worker_threads');
 });

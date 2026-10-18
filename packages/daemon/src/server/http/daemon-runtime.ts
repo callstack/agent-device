@@ -893,9 +893,14 @@ async function startDaemonRuntimeOnHost(
 
   // Spawn the PNG worker ahead of the first screenshot request so its
   // cold-start cost is not paid on a user-visible call. Best effort: when it
-  // cannot start, PNG processing falls back to the in-process sync path and the daemon log
-  // records why.
-  await withDaemonDiagnosticsScope({ logPath }, prewarmPngWorker);
+  // cannot start or later stops, PNG processing falls back to the in-process sync path and the
+  // daemon log records why, once, outside any request.
+  prewarmPngWorker((reason) => {
+    void emitDaemonDiagnostic(logPath, 'png_worker_unavailable', {
+      reason: reason.kind,
+      detail: reason.detail,
+    }).catch(() => {});
+  });
 
   const shutdownOnHost = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
     idleReap.cancel();
