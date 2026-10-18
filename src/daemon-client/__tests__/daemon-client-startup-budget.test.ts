@@ -297,7 +297,6 @@ test('a live daemon that keeps progressing but never registers fails at the env 
 });
 
 test("a startup progressed by a fresh launch is not judged stalled by an earlier launch's leftover markers", async () => {
-  // A reused state dir holds a dead startup's record; the fresh launch must see its own markers.
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '30000');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-stale-history-'));
   fs.mkdirSync(paths.baseDir, { recursive: true });
@@ -376,7 +375,6 @@ test('a busy exit while a live lock holder defers publication reaches the ceilin
     assert.equal(failure.details?.startupTimeoutMs, 2_000);
     assert.match(String(failure.details?.hint), /AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS/);
     assert.equal(typeof startupPhases(failure)['modules-loaded'], 'number');
-    // The winner stays running and unsignaled with its record; the contender's is swept.
     assert.equal(isProcessAlive(winner.pid), true);
     assert.equal(
       signal.mock.calls.some(([pid, kind]) => pid === winner.pid && kind !== 0),
@@ -416,7 +414,6 @@ test('a child gone at the deadline without an observed exit and no live startup 
 });
 
 test('an observed exit on a reused launch pid is not a live startup at the deadline', async () => {
-  // A delivered exit is authoritative: the reused pid (pinned alive) is not a startup to wait for.
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '2000');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-reused-pid-exit-'));
   const reusedPid = 997_603;

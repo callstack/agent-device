@@ -9,6 +9,9 @@ vi.mock('./daemon-client-lifecycle.ts', async (importOriginal) => ({
     ensured.settings = settings;
     throw new Error('stop before talking to a daemon');
   },
+}));
+vi.mock('./daemon-client-startup.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./daemon-client-startup.ts')>()),
   observeLocalDaemon: async (settings: unknown) => {
     ensured.settings = settings;
     throw new Error('stop before talking to a daemon');
