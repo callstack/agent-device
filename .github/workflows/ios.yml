@@ -169,6 +169,21 @@ jobs:
       - name: Preflight iOS runner through public CLI
         run: |
           pnpm clean:daemon
+          # The public-SDK timing record is the cold-startup evidence; the CLI `daemon_startup`
+          # timer only wraps attach, after the ensured transport already started the daemon.
+          node --input-type=module -e '
+            import { performance } from "node:perf_hooks";
+            const { ensureDaemon } = await import("./dist/src/index.js");
+            const stateDir = process.env.AGENT_DEVICE_STATE_DIR;
+            const startedAt = performance.now();
+            const connection = await ensureDaemon({ stateDir });
+            console.log(JSON.stringify({
+              phase: "daemon_cold_startup",
+              durationMs: Math.round(performance.now() - startedAt),
+              started: connection.started,
+              pid: connection.daemon.pid,
+            }));
+          '
           node bin/agent-device.mjs prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
 
       # The replay reuses the prepared runner in the same daemon. --debug keeps every step's request

@@ -9,10 +9,8 @@ import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import {
-  flushDaemonStartupDiagnostics,
-  teardownDaemonSessionForShutdown,
-} from '../http/daemon-runtime.ts';
+import { teardownDaemonSessionForShutdown } from '../http/daemon-runtime.ts';
+import { flushDaemonStartupDiagnostics } from '../http/daemon-startup-diagnostics.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { unavailableDeviceRuntimeGateway } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 

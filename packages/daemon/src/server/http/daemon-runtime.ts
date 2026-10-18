@@ -6,7 +6,7 @@ import {
   type ClaimRecoveryGatewayFactory,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
 import crypto from 'node:crypto';
-import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
+import { asAppError, AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   DAEMON_CAPABILITIES,
@@ -67,7 +67,6 @@ import {
   readCurrentOwnerIdentity,
   reapOwnedProcessRecordsAtStartup,
   type OwnedProcessRecordStore,
-  type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
 import {
@@ -79,9 +78,10 @@ import {
 import {
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
-  type DaemonRegistrationOwner,
+  recordDaemonStartupMarker,
+  removeDaemonStartupPhasesFile,
+  resolveDaemonStartupPhasesPath,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
-import { watchDaemonMetadataLoss } from './daemon-metadata-loss.ts';
 import {
   createSocketServer,
   listenHttpServer,
@@ -220,83 +220,6 @@ export type DaemonRuntimeController = {
   token: string;
 };
 
-export async function flushDaemonStartupDiagnostics(
-  logPath: string,
-  diagnostics: readonly ResourceDiagnostic[],
-): Promise<void> {
-  if (diagnostics.length === 0) return;
-  await withDaemonDiagnosticsScope({ logPath, command: 'daemon-startup', debug: false }, () => {
-    for (const diagnostic of diagnostics) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: diagnostic.phase,
-        data: { resourcePath: diagnostic.resourcePath, ...diagnostic.data },
-      });
-    }
-  });
-}
-
-/**
- * Records one daemon-level event. These run outside any request, so there is no request scope and no
- * resolved debug level to inherit; debug is forced on for the same reason the #2681 handoff forces it —
- * the event is the point of the record and must not be dropped by a level that was never set for it.
- */
-async function emitDaemonDiagnostic(
-  logPath: string,
-  phase: string,
-  data: Record<string, unknown>,
-): Promise<void> {
-  await withDaemonDiagnosticsScope({ logPath }, () => {
-    emitDiagnostic({ level: 'warn', phase, data });
-  });
-}
-
-async function finishDaemonRegistration(params: {
-  registration: DaemonRegistrationOwner;
-  infoPath: string;
-  logPath: string;
-  outcome?: Parameters<DaemonRegistrationOwner['finish']>[0];
-}): Promise<void> {
-  try {
-    const removal = await params.registration.finish(params.outcome);
-    if (removal.state !== 'removed' && removal.state !== 'absent') {
-      await emitDaemonDiagnostic(params.logPath, 'daemon_info_removal_declined', {
-        infoPath: params.infoPath,
-        removed: false,
-        reason: removal.state,
-        ...(removal.state === 'replaced' ? { registeredPid: removal.identity.pid } : {}),
-      });
-    }
-  } catch (error) {
-    await emitDaemonDiagnostic(params.logPath, 'daemon_registration_finish_failed', {
-      error: normalizeError(error),
-    });
-  }
-}
-
-/**
- * Starts the watch that reports this daemon's registration being taken over, and returns the handle
- * that stops it. It is armed only once this process has published its own record: before publication
- * the file legitimately describes a predecessor, and losing that is not this daemon's event.
- */
-function armDaemonMetadataLossWatch(
-  stateDir: string,
-  infoPath: string,
-  logPath: string,
-  owner: OwnerIdentity,
-): () => void {
-  return watchDaemonMetadataLoss({
-    infoPath,
-    stateDir,
-    owner,
-    onLoss: (loss) =>
-      void emitDaemonDiagnostic(logPath, 'daemon_metadata_lost', {
-        infoPath,
-        ...loss,
-      }).catch(() => {}),
-  });
-}
-
 async function settleDaemonTeardownStep(params: {
   session: SessionState;
   stderr: WritableOutput;
@@ -408,6 +331,13 @@ export async function startDaemonRuntime(
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
   const exit = options.exit ?? ((code: number) => process.exit(code));
+  // Function-scoped import: these helpers stay out of the daemon entry's eager closure (ADR 0019).
+  const {
+    armDaemonMetadataLossWatch,
+    emitDaemonDiagnostic,
+    finishDaemonRegistration,
+    flushDaemonStartupDiagnostics,
+  } = await import('./daemon-startup-diagnostics.ts');
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR);
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
@@ -775,6 +705,12 @@ export async function startDaemonRuntime(
     return null;
   }
   const registration = acquisition.owner;
+  const startupPhasesPath = resolveDaemonStartupPhasesPath(baseDir, process.pid);
+  const recordStartupPhase = (phase: Parameters<typeof recordDaemonStartupMarker>[1]): void =>
+    recordDaemonStartupMarker(startupPhasesPath, phase, (error) => {
+      stderr.write(`Daemon startup marker write failed: ${error.message}\n`);
+    });
+  recordStartupPhase('lock-acquired');
 
   let servers: DaemonServer[] = [];
   let socketPort: number | undefined;
@@ -830,11 +766,15 @@ export async function startDaemonRuntime(
         data: { error: error instanceof Error ? error.message : String(error) },
       });
     });
+    recordStartupPhase('recovery-finished');
     const opened = await openDaemonServers();
     servers = opened.servers;
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
+    recordStartupPhase('listening');
     publishDaemonInfo(socketPort, httpPort);
+    recordStartupPhase('registered');
+    removeDaemonStartupPhasesFile(startupPhasesPath);
     stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
     await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
     for (const plugin of deps.pluginInventory.filter(({ state }) => state === 'failed')) {
