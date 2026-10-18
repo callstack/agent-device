@@ -1,4 +1,5 @@
 import type { DeviceInfo, Platform, PlatformSelector } from '@agent-device/kernel/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PlatformGatedProviderResolverKey } from './platform-providers.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
@@ -31,8 +32,18 @@ export type PlatformPlugin = {
   readonly platforms: readonly Platform[];
   /** The multi-platform family selector, when the plugin owns more than one leaf (`apple`). */
   readonly familySelector?: PlatformSelector;
-  /** Lazily builds the {@link Interactor} for `device` — wraps today's `getInteractor` switch arm. */
-  createInteractor(device: DeviceInfo, runner: RunnerContext): Promise<Interactor>;
+  /**
+   * Lazily builds the {@link Interactor} for `device` — wraps today's `getInteractor` switch arm.
+   * `host` is the environment the calling runtime captured at its entry point. Plugins are
+   * module-level and shared by every runtime in a process, so the host arrives per call — never
+   * bound at plugin construction — and is the same object the runtime's deps and request-bound
+   * facets carry.
+   */
+  createInteractor(
+    device: DeviceInfo,
+    runner: RunnerContext,
+    host: HostEnvironment,
+  ): Promise<Interactor>;
   /**
    * The request-scope provider facet (issue #974). `platformGatedResolvers`
    * declares which PLATFORM-GATED request provider resolvers apply to this family's

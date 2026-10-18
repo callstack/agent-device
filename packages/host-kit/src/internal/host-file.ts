@@ -7,6 +7,18 @@ export function hostHomeDirectory(): string {
   return os.homedir();
 }
 
+/**
+ * The home directory a named host names for itself: its own HOME (or USERPROFILE on Windows).
+ * Returns undefined when the host env names no home; callers must fail closed or skip the
+ * home-bound lookup, never fall back to `os.homedir()`, because the process home is an ambient
+ * read that #3753 forbids. Derive per-runtime home config through this (#3794).
+ */
+export function hostHomeDirectoryFromEnv(
+  env: Record<string, string | undefined>,
+): string | undefined {
+  return env['HOME'] ?? env['USERPROFILE'];
+}
+
 export function hostTemporaryDirectory(): string {
   return os.tmpdir();
 }

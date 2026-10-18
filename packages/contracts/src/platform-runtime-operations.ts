@@ -1,5 +1,6 @@
 import type { AppLogRuntimeHost, AppLogRuntimeOperations } from './app-log-runtime.ts';
 import type { AppInventoryRuntimeOperations } from './app-inventory-runtime.ts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   AndroidAppDeploymentExecutor,
   AppDeploymentRuntimeOperations,
@@ -830,6 +831,11 @@ export const keyboardRuntimePlanUses = Object.freeze([
 export type PlatformRuntimeHost = AppLogRuntimeHost &
   NetworkRuntimeHost &
   Readonly<{
+    /**
+     * The host this runtime's entry point captured. Owners read configuration from it; it is the
+     * same object the runtime's deps carry, never a re-capture.
+     */
+    hostEnvironment: HostEnvironment;
     /** Focused native ports; deployment semantics remain in the owning family packages. */
     appleDeployment: AppleAppDeploymentExecutor;
     androidDeployment: AndroidAppDeploymentExecutor;

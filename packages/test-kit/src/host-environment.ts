@@ -4,6 +4,15 @@ import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 /**
+ * A host for tests that name one per call. Code converted to an explicit host (#3794) reads its
+ * configuration from the object it is handed, so a suite passes this instead of binding a command
+ * host. Its environment is the live `process.env` reference, so `vi.stubEnv` still reaches it.
+ */
+export function createLiveTestHostEnvironment(): HostEnvironment {
+  return { env: process.env, cwd: process.cwd() };
+}
+
+/**
  * A host for tests that boot daemon code in-process. It snapshots the process environment and
  * working directory unless a test names its own, so a suite never shares a mutable reference to
  * `process.env` with the runtime under test.

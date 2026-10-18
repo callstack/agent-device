@@ -2,6 +2,10 @@ import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import type { JsonObject, JsonValue } from './json.ts';
 import type { AndroidClipboardShellSupport } from './android-clipboard-support.ts';
 
+// The composition root names the runtime host through this contract rather than the kernel
+// substrate directly (R13): one host object is the whole configuration surface a runtime reads.
+export type { HostEnvironment } from '@agent-device/kernel/source-value';
+
 export type HostCommandRequest = Readonly<{
   executable: string;
   args: readonly string[];
