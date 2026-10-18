@@ -4,11 +4,13 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ExecDetachedExit } from '@agent-device/host-kit/command';
+import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
-  DAEMON_STARTUP_EXIT_CODES,
+  readDaemonStartupPhaseMarkers,
   recordDaemonStartupMarker,
   resolveDaemonStartupPhasesPath,
-} from '@agent-device/daemon-contracts/daemon-registration-owner';
+  type DaemonStartupPhase,
+} from '@agent-device/daemon-contracts/daemon-startup-phases';
 import {
   resolveDaemonPaths,
   type DaemonPaths,
@@ -134,9 +136,20 @@ async function awaitFile(file: string) {
 
 test('a daemon slower than the retired 15 s budget starts successfully while it keeps progressing', async (t) => {
   if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '150000');
   const http = await startHttpDaemonFixture({ devices: [] });
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-slow-success-'));
-  // Virtual time waits ~20 s past the retired 15 s deadline; real markers hold off the stall.
+  // Virtual time runs past the 60 s stall window with the ceiling above the span, so only the
+  // successive phase markers keep this wait alive: each phase is new, so the last observed
+  // progress never goes 60 s stale, while the same span with no readable markers fails as
+  // startup-stalled. A repeated rewrite of one phase would not advance progress, because the
+  // reader keeps each phase's earliest timestamp.
+  const phaseSchedule: Array<readonly [DaemonStartupPhase, number]> = [
+    ['modules-loaded', 10_000],
+    ['composition-loaded', 25_000],
+    ['lock-acquired', 40_000],
+    ['recovery-finished', 70_000],
+  ];
   const startedAt = Date.now();
   const now = { value: startedAt };
   vi.spyOn(Date, 'now').mockImplementation(() => now.value);
@@ -149,21 +162,25 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
     return child;
   });
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
-  let polls = 0;
+  let nextPhase = 0;
   pause.mockImplementation(async () => {
-    polls += 1;
     if (!booted) {
       booted = fs.existsSync(path.join(paths.baseDir, 'registration-held'));
       if (!booted) return await realPause();
     }
-    if (now.value - spawned.at < 20_000) {
+    if (spawned.child && now.value - spawned.at < 70_000) {
       now.value += 2_000;
-      if (polls % 3 === 0 && spawned.child)
+      while (
+        nextPhase < phaseSchedule.length &&
+        now.value - spawned.at >= phaseSchedule[nextPhase]![1]
+      ) {
         recordDaemonStartupMarker(
           resolveDaemonStartupPhasesPath(paths.baseDir, spawned.child.pid),
-          'lock-acquired',
+          phaseSchedule[nextPhase]![0],
         );
-      if (now.value - spawned.at >= 20_000)
+        nextPhase += 1;
+      }
+      if (nextPhase === phaseSchedule.length)
         fs.rmSync(path.join(paths.baseDir, 'defer-publication'), { force: true });
       return await realPause();
     }
@@ -172,13 +189,27 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
   try {
     const response = await sendToDaemon(request(paths));
     assert.equal(response.ok, true);
+    const elapsed = now.value - spawned.at;
     assert.ok(
-      now.value - spawned.at >= 20_000,
-      'the startup this test proves must exceed the retired 15 s budget',
+      elapsed >= 60_000,
+      `the startup this test proves must outlast the stall window (${elapsed}ms)`,
     );
     assert.equal(spawn.mock.calls.length, 1);
     assert.equal(http.rpcRequests.length, 1);
     assert.ok(spawned.child && isProcessAlive(spawned.child.pid), 'the client must not retire it');
+    assert.ok(spawned.child);
+    // The wait survived the stall window on distinct successive phases, not on one repeated
+    // marker: every scheduled phase is in this launch's own record.
+    const markers = readDaemonStartupPhaseMarkers(
+      fs.readFileSync(resolveDaemonStartupPhasesPath(paths.baseDir, spawned.child.pid), 'utf8'),
+    );
+    for (const [phase] of phaseSchedule) {
+      assert.equal(
+        typeof markers[phase],
+        'number',
+        `the observed progress must include the ${phase} phase`,
+      );
+    }
   } finally {
     await closeLoopbackServer(http.server);
   }
