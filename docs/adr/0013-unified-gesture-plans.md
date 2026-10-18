@@ -137,7 +137,7 @@ Platform adapters consume the canonical plan:
 - **Apple.** iOS lowers one-contact endpoint-hold plans to the established fast-swipe synthesis profile.
   That profile reaches the endpoint in 100 ms, then holds there for the planned duration before it lifts.
   This matches Maestro's XCTest driver.
-  One-contact plans are linear and therefore carry only their start and end samples, with the authored duration between them.
+  An endpoint-hold plan is linear and therefore carries only its start and end samples, with the authored duration between them.
   Two-contact plans convert every planned point to native orientation and send the exact arrays to the private XCTest event bridge.
   macOS lowers a one-contact plan to its drag executor.
   tvOS lowers a one-contact plan to remote direction.
