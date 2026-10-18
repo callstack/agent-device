@@ -106,12 +106,15 @@ test('the entry names its exports: export * is refused', () => {
     "export type * from './a.ts';",
     "export { a } from './a.ts';\nexport type * as ns from './b.ts';",
   ]) {
-    const found = check({}, new Map([['packages/test-kit/src/index.ts', body]]));
+    const found = check({}, new Map([...SOURCE, ['packages/test-kit/src/index.ts', body]]));
     assert.equal(found.length, 1, body);
     assert.match(found[0]!.message, /names every export explicitly/);
   }
   assert.deepEqual(
-    check({}, new Map([['packages/test-kit/src/index.ts', "export { a } from './a.ts';"]])),
+    check(
+      {},
+      new Map([...SOURCE, ['packages/test-kit/src/index.ts', "export { a } from './a.ts';"]]),
+    ),
     [],
   );
 });
@@ -120,7 +123,7 @@ test('text that only mentions a star is not an export', () => {
   const body =
     "// export * from './a.ts' is forbidden here\n" +
     "const note = `export * from './b.ts'`;\nexport { note };\nexport { a } from './a.ts';";
-  assert.deepEqual(check({}, new Map([['packages/test-kit/src/index.ts', body]])), []);
+  assert.deepEqual(check({}, new Map([...SOURCE, ['packages/test-kit/src/index.ts', body]])), []);
 });
 
 test('the daemon entry names its exports: export * is refused', () => {
@@ -154,3 +157,18 @@ test('the shared isolation walk runs under the test-kit policy', () => {
   assert.equal(found.length, 1);
   assert.match(found[0]!.message, /test-kit -> @agent-device\/daemon/);
 });
+
+for (const dir of ['daemon', 'test-kit']) {
+  test(`${dir} refuses a missing or renamed entry source`, () => {
+    for (const renamed of [false, true]) {
+      const sources = new Map(SOURCE);
+      const file = `packages/${dir}/src/index.ts`;
+      sources.delete(file);
+      if (renamed) sources.set(`packages/${dir}/src/renamed.ts`, "export * from './a.ts';");
+      const found = check({}, sources);
+      assert.equal(found.length, 1);
+      assert.equal(found[0]!.file, file);
+      assert.match(found[0]!.message, /entry source is missing/);
+    }
+  });
+}

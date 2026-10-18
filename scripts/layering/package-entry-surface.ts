@@ -24,13 +24,13 @@ import {
 } from './package-isolation.ts';
 
 const TEST_KIT_DIR = TEST_KIT_ISOLATION.dir;
-const TEST_KIT_ENTRY = './src/index.ts';
+const ENTRY_FILE = './src/index.ts';
 const DAEMON_DIR = 'packages/daemon';
 const DAEMON_PACKAGE = '@agent-device/daemon';
 
 const ENTRY_SURFACES = [
-  { packageName: TEST_KIT_PACKAGE, dir: TEST_KIT_DIR, entry: TEST_KIT_ENTRY },
-  { packageName: DAEMON_PACKAGE, dir: DAEMON_DIR, entry: './src/index.ts' },
+  { packageName: TEST_KIT_PACKAGE, dir: TEST_KIT_DIR, entry: ENTRY_FILE },
+  { packageName: DAEMON_PACKAGE, dir: DAEMON_DIR, entry: ENTRY_FILE },
 ] as const;
 
 function stringLeaves(value: unknown): string[] {
@@ -87,9 +87,15 @@ function checkEntrySurface(
     );
   }
 
-  const entryFile = `${entrySurface.dir}/src/index.ts`;
+  const entryFile = `${entrySurface.dir}/${entrySurface.entry.slice(2)}`;
   const entrySource = sources.get(entryFile);
-  const starLine = entrySource === undefined ? null : findStarExportLine(entryFile, entrySource);
+  if (entrySource === undefined) {
+    violations.push(
+      violation(entryFile, `${entrySurface.packageName} entry source is missing: ${entryFile}.`),
+    );
+    return violations;
+  }
+  const starLine = findStarExportLine(entryFile, entrySource);
   if (starLine !== null) {
     violations.push(
       violation(
