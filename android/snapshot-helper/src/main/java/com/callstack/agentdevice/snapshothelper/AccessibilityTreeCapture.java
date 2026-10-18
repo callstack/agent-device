@@ -7,12 +7,31 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /** Captures and serializes the Android accessibility window tree. */
 final class AccessibilityTreeCapture {
+  static final long DEFAULT_WAIT_FOR_IDLE_TIMEOUT_MS = 500;
+  static final long DEFAULT_WAIT_FOR_IDLE_QUIET_MS = 100;
   private static final long WINDOW_LIST_SETTLE_TIMEOUT_MS = 1_000;
 
   private AccessibilityTreeCapture() {}
+
+  static void prepare(UiAutomation automation) throws InterruptedException {
+    prepare(automation, DEFAULT_WAIT_FOR_IDLE_QUIET_MS, DEFAULT_WAIT_FOR_IDLE_TIMEOUT_MS);
+  }
+
+  static void prepare(UiAutomation automation, long quietMs, long timeoutMs)
+      throws InterruptedException {
+    enableInteractiveWindowRetrieval(automation);
+    if (timeoutMs > 0) {
+      try {
+        automation.waitForIdle(Math.min(quietMs, timeoutMs), timeoutMs);
+      } catch (TimeoutException ignored) {
+        // A busy accessibility stream can still expose usable windows and nodes.
+      }
+    }
+  }
 
   static Result capture(
       UiAutomation automation, int maxDepth, int maxNodes, long stabilizationTimeoutMs)
@@ -105,7 +124,7 @@ final class AccessibilityTreeCapture {
    * the window list to name an active window. The platform fills the list after the flag is set, so
    * a read straight after it can list only the status bar and none of the app's windows.
    */
-  static void enableInteractiveWindowRetrieval(UiAutomation automation)
+  private static void enableInteractiveWindowRetrieval(UiAutomation automation)
       throws InterruptedException {
     if (!turnOnInteractiveWindowRetrieval(automation)) {
       return;

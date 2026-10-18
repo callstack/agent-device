@@ -64,7 +64,7 @@ final class GestureViewportReader {
     // UiAutomation.getWindows() answers with an empty list until interactive retrieval is on, which
     // is the same seam the tree capture already uses. Without it this read sees no windows at all and
     // the keyboard below is invisible to it.
-    AccessibilityTreeCapture.enableInteractiveWindowRetrieval(automation);
+    AccessibilityTreeCapture.prepare(automation);
     Rect activeBounds = null;
     Rect fallbackBounds = null;
     List<WindowEdges> inputMethodWindows = new ArrayList<>();

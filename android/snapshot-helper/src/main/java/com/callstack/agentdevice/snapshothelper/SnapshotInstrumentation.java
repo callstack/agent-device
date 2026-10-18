@@ -24,10 +24,6 @@ import java.util.concurrent.TimeoutException;
 public final class SnapshotInstrumentation extends Instrumentation {
   private static final long GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS = 8_000;
   private static final int CHUNK_SIZE = 2 * 1024;
-  // Match the host default: bounded wait for microinteraction reliability without the stock
-  // uiautomator idle tax. Direct callers can pass 0 when immediate capture is preferred.
-  private static final long DEFAULT_WAIT_FOR_IDLE_TIMEOUT_MS = 500;
-  private static final long DEFAULT_WAIT_FOR_IDLE_QUIET_MS = 100;
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
   private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
   private static final int DEFAULT_MAX_DEPTH = 128;
@@ -45,9 +41,11 @@ public final class SnapshotInstrumentation extends Instrumentation {
   public void onStart() {
     super.onStart();
     long waitForIdleTimeoutMs =
-        readLongArgument(arguments, "waitForIdleTimeoutMs", DEFAULT_WAIT_FOR_IDLE_TIMEOUT_MS);
+        readLongArgument(
+            arguments, "waitForIdleTimeoutMs", AccessibilityTreeCapture.DEFAULT_WAIT_FOR_IDLE_TIMEOUT_MS);
     long waitForIdleQuietMs =
-        readLongArgument(arguments, "waitForIdleQuietMs", DEFAULT_WAIT_FOR_IDLE_QUIET_MS);
+        readLongArgument(
+            arguments, "waitForIdleQuietMs", AccessibilityTreeCapture.DEFAULT_WAIT_FOR_IDLE_QUIET_MS);
     long timeoutMs = readLongArgument(arguments, "timeoutMs", DEFAULT_TIMEOUT_MS);
     int maxDepth = readIntArgument(arguments, "maxDepth", DEFAULT_MAX_DEPTH);
     int maxNodes = readIntArgument(arguments, "maxNodes", DEFAULT_MAX_NODES);
@@ -357,18 +355,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
           InterruptedException,
           AccessibilityCaptureStabilizer.IncompleteCaptureException {
     UiAutomation automation = getConnectedUiAutomation(timeoutMs);
-    AccessibilityTreeCapture.enableInteractiveWindowRetrieval(automation);
-    if (waitForIdleTimeoutMs > 0) {
-      try {
-        // Best-effort settle: wait for the accessibility stream to become idle, but require only
-        // a short quiet window once it does. Using the full timeout as the quiet window made every
-        // stable snapshot pay a fixed 500 ms tax.
-        long quietMs = Math.min(waitForIdleQuietMs, waitForIdleTimeoutMs);
-        automation.waitForIdle(quietMs, waitForIdleTimeoutMs);
-      } catch (TimeoutException ignored) {
-        // Busy or animated apps can still expose a usable root; capture whatever is available.
-      }
-    }
+    AccessibilityTreeCapture.prepare(automation, waitForIdleQuietMs, waitForIdleTimeoutMs);
     return AccessibilityTreeCapture.capture(
         automation, maxDepth, maxNodes, ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS);
   }
