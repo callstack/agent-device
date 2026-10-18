@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { expect, test, vi } from 'vitest';
 import { PNG } from './png.ts';
 
-test('an unavailable worker is reported by the first diagnostics scope that reaches the fallback', async () => {
+test('every scope that reaches the fallback reports the unavailable worker', async () => {
   vi.resetModules();
   vi.doMock('./internal-entry.ts', () => ({ resolveInternalEntryModulePath: () => null }));
   // Loaded after the reset so the client and the scope share one diagnostics module.
@@ -11,22 +11,22 @@ test('an unavailable worker is reported by the first diagnostics scope that reac
   const { decodePngAsync, retainPngWorker } = await import('./png-worker-client.ts');
   const png = PNG.sync.write(new PNG({ width: 1, height: 1 }));
 
-  // The daemon retains the worker outside any request scope, where the report would be dropped.
-  const release = retainPngWorker();
-
-  const reported = await withDiagnosticsScope({ command: 'screenshot' }, async () => {
-    await decodePngAsync(png, 'first');
-    const afterFirst = countDiagnosticEventsByPhase(['png_worker_unavailable']);
-    await decodePngAsync(png, 'second');
-    return { afterFirst, afterSecond: countDiagnosticEventsByPhase(['png_worker_unavailable']) };
-  });
-  const laterScope = await withDiagnosticsScope({ command: 'screenshot' }, async () => {
-    await decodePngAsync(png, 'third');
+  let release!: () => Promise<void>;
+  const retained = await withDiagnosticsScope({ command: 'daemon' }, async () => {
+    release = retainPngWorker();
     return countDiagnosticEventsByPhase(['png_worker_unavailable']);
   });
+  const scopes = [];
+  for (const label of ['first', 'second']) {
+    scopes.push(
+      await withDiagnosticsScope({ command: 'screenshot' }, async () => {
+        await decodePngAsync(png, label);
+        return countDiagnosticEventsByPhase(['png_worker_unavailable']);
+      }),
+    );
+  }
 
-  expect(reported).toEqual({ afterFirst: 1, afterSecond: 1 });
-  expect(laterScope).toBe(0);
+  expect({ retained, scopes }).toEqual({ retained: 1, scopes: [1, 1] });
   await release();
   vi.doUnmock('./internal-entry.ts');
 });

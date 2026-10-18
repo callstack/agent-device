@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { resolveInternalEntryModulePath } from './internal-entry.ts';
@@ -40,29 +40,20 @@ type PendingJob = {
 let worker: Worker | null = null;
 let workerUnavailable = false;
 let workerUnavailableReason: string | undefined;
-let reportedWorkerUnavailable = false;
 let nextJobId = 0;
 const pendingJobs = new Map<number, PendingJob>();
 
-/** Permanently degrades to the sync path; the reason is reported by the first scope that sees it. */
+/** Permanently degrades to the sync path; a scope that reaches the fallback reports the reason. */
 function markWorkerUnavailable(reason: string): void {
   workerUnavailable = true;
   workerUnavailableReason ??= reason;
-  reportWorkerUnavailable();
 }
 
-/**
- * A pre-warm at daemon startup runs outside any diagnostics scope, where the event would be
- * dropped, so the report waits for the first request scope that reaches the degraded path.
- */
-function reportWorkerUnavailable(): void {
-  if (reportedWorkerUnavailable || workerUnavailableReason === undefined) return;
-  if (Object.keys(getDiagnosticsMeta()).length === 0) return;
-  reportedWorkerUnavailable = true;
+function reportWorkerUnavailable(fallbackReason: string): void {
   emitDiagnostic({
     level: 'warn',
     phase: 'png_worker_unavailable',
-    data: { reason: workerUnavailableReason },
+    data: { reason: workerUnavailableReason ?? fallbackReason },
   });
 }
 
@@ -112,10 +103,7 @@ function updateWorkerRef(): void {
 }
 
 function obtainWorker(): Worker | null {
-  if (workerUnavailable) {
-    reportWorkerUnavailable();
-    return null;
-  }
+  if (workerUnavailable) return null;
   if (worker) return worker;
   const modulePath = resolveInternalEntryModulePath(import.meta.url, PNG_WORKER_ENTRYPOINT);
   if (!modulePath) {
@@ -192,8 +180,7 @@ async function runPngJob<Kind extends PngWorkerJobKind>(
     return await runWorkerJob(job);
   } catch (error) {
     if (error instanceof PngWorkerUnavailableError) {
-      // A worker can fail while this request waits on it, from an event callback with no scope.
-      reportWorkerUnavailable();
+      reportWorkerUnavailable(error.message);
       return await runSync();
     }
     throw error;
@@ -204,11 +191,12 @@ let pngWorkerHolds = 0;
 
 /**
  * Daemon startup hook: spawns the worker before the first screenshot job and holds it for the
- * caller. The worker is shared by every runtime in the process, so it stops when the last holder
+ * caller. Run it inside a diagnostics scope so a worker that cannot start leaves its reason in the
+ * daemon log. The worker is shared by every runtime in the process, so it stops when the last holder
  * lets go; the returned release is idempotent.
  */
 export function retainPngWorker(): () => Promise<void> {
-  obtainWorker();
+  if (obtainWorker() === null) reportWorkerUnavailable('PNG worker is unavailable');
   pngWorkerHolds += 1;
   let released = false;
   return async () => {
