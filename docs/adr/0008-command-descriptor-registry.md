@@ -101,7 +101,8 @@ This design composes with ADR 0003's four invariants and is bound by them:
 
 A plain new command changes approximately 1–2 files.
 Per-platform behavior remains N implementations behind the in-daemon `execute` seam.
-The descriptor's `platformExecution` declaration names the runtime use that seam binds.
+The descriptor's `platformExecution` declaration names the execution shape: `none`, `host`, `inventory`, or `device-runtime`.
+For the `device-runtime` variants it also names the runtime use that seam binds.
 The descriptor is the prerequisite for typed per-command results.
 `src/client/client-types.ts` retains the public client interface and some `CommandRequestResult` return types.
 It also supplied the capability facet used by the platform-plugin work in ADR 0009. That facet is retired; [ADR 0009](0009-apple-platform-consolidation.md) records the retirement.
