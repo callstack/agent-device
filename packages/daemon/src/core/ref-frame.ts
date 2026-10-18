@@ -28,7 +28,9 @@ const outdatedObservations = new WeakSet<SnapshotState>();
  * issuance scope after a partial publication, and its admission matrix is
  * enforced fail-closed on every platform before dispatch (ADR 0014, "Mutation admission and read behavior").
  * Read-only ref staleness comes from frame state instead of a coarse client-stale marker.
- * An expired frame warns; an active frame does not.
+ * An expired frame warns for any ref; an active frame warns only when a pinned ref's
+ * generation differs from the frame epoch (execution/session-snapshot.ts,
+ * `resolveRefStalenessWarning`).
  */
 
 /**
