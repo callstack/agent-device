@@ -14,7 +14,7 @@ Accepted
 - When startup costs are high and an automation context is reusable, use persistent platform helper sessions.
 - The daemon owns helper lifetime policy. Platform modules own helper-manager mechanics.
 - Unless a separate cache contract has explicit invalidation, a helper must execute each command against fresh platform state.
-- On Android, snapshot capture, gesture viewport resolution, and planned-touch injection share one bundled automation helper.
+- On Android, snapshot capture, gesture viewport resolution, and instrumentation-backed planned-touch injection share one bundled automation helper.
 - On Android, after a failed session command, retry one-shot only for idempotent reads, and only after the failed session has stopped.
 - On Android, return a session gesture failure directly. Do not retry it one-shot.
 - For Android snapshots, if the packaged helper is unavailable or invalid, agent-device must fail closed. It must not substitute the legacy `adb uiautomator dump` snapshot engine.
@@ -87,7 +87,7 @@ If that helper is unavailable or invalid, agent-device must fail closed.
 It must not substitute the legacy `adb uiautomator dump` snapshot engine.
 
 Android permits only one reliable instrumentation-owned `UiAutomation` context per device.
-Thus, snapshot capture, gesture viewport resolution, and planned-touch injection share one bundled automation helper (amended 2026-07, issue #1275, consistent with ADR 0013).
+Thus, snapshot capture, gesture viewport resolution, and instrumentation-backed planned-touch injection share one bundled automation helper (amended 2026-07, issue #1275, consistent with ADR 0013).
 A live persistent helper session executes touch commands directly over its session socket.
 Without a live persistent session, the same helper runs one-shot.
 Before that amendment, touch synthesis shipped as a separate instrumentation helper.
