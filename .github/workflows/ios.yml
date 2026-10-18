@@ -169,10 +169,8 @@ jobs:
       - name: Preflight iOS runner through public CLI
         run: |
           pnpm clean:daemon
-          # Time the cold managed startup at the public SDK seam. The clean state dir above makes
-          # this ensure the cold start, and `started` says whether it truly started one. The CLI
-          # `daemon_startup` timer cannot be this evidence: it wraps only attach, which runs after
-          # the ensured transport has already finished starting the daemon.
+          # The public-SDK timing record is the cold-startup evidence; the CLI `daemon_startup`
+          # timer only wraps attach, after the ensured transport already started the daemon.
           node --input-type=module -e '
             import { performance } from "node:perf_hooks";
             const { ensureDaemon } = await import("./dist/src/index.js");

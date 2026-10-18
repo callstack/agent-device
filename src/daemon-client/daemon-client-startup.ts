@@ -41,7 +41,6 @@ import {
 } from './daemon-lifecycle-errors.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 
-/** Whether the daemon a state dir registered is reusable by this client, and what to do if not. */
 type LocalDaemonObservation = {
   info: DaemonInfo;
   decision: DaemonTakeoverDecision;
@@ -51,38 +50,30 @@ type DaemonStartupWaitResult =
   | { kind: 'ready'; daemon: EnsuredDaemon }
   | { kind: 'early_exit'; exit: ExecDetachedExit }
   | { kind: 'unproven'; error: AppError }
-  | { kind: 'retry' | 'timeout' }
+  | { kind: 'retry' }
+  | { kind: 'exit_unobserved' }
   /** The process stayed alive but published no new startup phase within the stall window. */
   | { kind: 'stalled' }
   /** The process stayed alive and kept progressing, but did not register before the ceiling. */
   | { kind: 'ceiling' };
 
-/** Startup phase markers one launch published, as absolute host-clock timestamps. */
 type StartupPhaseObservation = {
   spawnedAtMs: number;
   markers: Partial<Record<DaemonStartupPhase, number>>;
 };
 
 /**
- * #3782: the ceiling on one local daemon startup, shared by the CLI, MCP, and Node client, because
- * all three reach the daemon through `startLocalDaemon`. A slow host makes startup slower, not
- * failed: while the spawned daemon stays alive and keeps publishing phase markers, the client keeps
- * waiting. `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` overrides the ceiling for a caller that must
- * fail sooner than the host allows.
+ * The ceiling on one local daemon startup: a live daemon that keeps publishing markers is waited
+ * for. `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` overrides it.
  */
 const DAEMON_STARTUP_CEILING_MS = 120_000;
-/**
- * How long a live daemon may publish no new startup phase marker before the client stops waiting.
- * Kept beside the ceiling as one pair: a stalled daemon is retired at the stall window, a
- * progressing one is waited for up to the ceiling. An env ceiling below this window makes the
- * ceiling the only stop; the stall never fires past the ceiling, only earlier than it.
- */
+/** Silence this long ends the wait early; an env ceiling below it makes the ceiling the stop. */
 const DAEMON_STARTUP_STALL_WINDOW_MS = 60_000;
 const MINIMUM_DAEMON_TAKEOVER_BUDGET_MS = 5_000;
 
 const DAEMON_STARTUP_TIMEOUT_ENV = 'AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS';
 
-/** Why a startup that never reached readiness failed, in terms a caller can branch on (#3782). */
+/** Why a startup that never reached readiness failed, in terms a caller can branch on. */
 type DaemonStartupFailureReason = 'startup-exited' | 'startup-stalled' | 'startup-ceiling';
 
 function resolveDaemonStartupTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -106,16 +97,14 @@ const DAEMON_STARTUP_LOG_TAIL_BYTES = 64_000;
 const DAEMON_STARTUP_MARKER_TAIL_BYTES = 16_000;
 
 /**
- * Reads the registered daemon and judges it against this client, changing nothing. Whether the
- * judgement is acted on belongs to the caller's lifecycle: a managed client replaces, an attach
- * client reports, `ensureDaemon` replaces only through a quiesce.
+ * Judges the registered daemon against this client, changing nothing; acting on the judgement
+ * belongs to the caller's lifecycle.
  */
 export async function observeLocalDaemon(
   settings: DaemonClientSettings,
   options: {
     deadline?: number;
     waitForLiveStartup?: boolean;
-    /** Tell a live daemon on another transport from one that answers nowhere. */
     refineUnreachable?: boolean;
   } = {},
 ): Promise<LocalDaemonObservation | null> {
@@ -136,11 +125,7 @@ export async function observeLocalDaemon(
   return { info: existing, decision: await refineReplacement(existing, decision, options) };
 }
 
-/**
- * Tells apart what the ladder lumps together, for callers that must not kill a daemon on a guess: a
- * registration whose process is gone is unreachable whatever its version, and one that answers on
- * another transport is alive.
- */
+/** Separates a gone registration from a live one answering on another transport. */
 async function refineReplacement(
   info: DaemonInfo,
   decision: DaemonTakeoverDecision,
@@ -233,12 +218,8 @@ export async function retireDaemonForTakeover(
 }
 
 /**
- * A daemon whose pid is still alive is probed again before it can be judged unreachable. A probe's
- * budget is wall-clock time on this client's event loop, so a client that stalls past it (a large
- * synchronous parse, a GC pause on a loaded host) reads a listening daemon as unreachable, and
- * replacing it ends every session the daemon holds. Liveness is the signal-0 check, not the `ps`
- * identity read: under the load that stalls the probe, `ps` misses its deadline too, and the
- * takeover still proves identity before it signals anything.
+ * A live pid is probed again before being judged unreachable: this client's own event-loop stall
+ * must not read a listening daemon as gone. Liveness uses signal 0, which a busy `ps` cannot miss.
  */
 async function canReachReusableDaemon(
   info: DaemonInfo,
@@ -321,9 +302,7 @@ function emitDaemonTakeoverNotice(info: DaemonInfo, reason: string, stateDir: st
   try {
     const identity = info.version ? `pid ${info.pid}, v${info.version}` : `pid ${info.pid}`;
     process.stderr.write(`Replacing daemon (${identity}) in ${stateDir}: ${reason}\n`);
-  } catch {
-    // The takeover notice is best effort; never fail the command on stderr issues.
-  }
+  } catch {}
 }
 
 type FailedDaemonStartup = {
@@ -332,7 +311,6 @@ type FailedDaemonStartup = {
   startupError?: NormalizedError;
   daemonProcess?: ExecDetachedExit | { pid: number };
   retry: boolean;
-  /** Set when the wait ended on startup progress rather than on an exit or a race. */
   reason?: DaemonStartupFailureReason;
   phases?: StartupPhaseObservation;
 };
@@ -394,8 +372,8 @@ async function attemptLocalDaemonStartup(
   const observation: StartupPhaseObservation = { spawnedAtMs, markers: {} };
   const startup = await waitForDaemonStartup(deadline, settings, launch, observation);
   if (startup.kind === 'ready') {
-    // A contending winner's readiness (startedByClient false) is only reachable after this launch
-    // exited busy: its own record is this client's to sweep before the handoff.
+    // Winner readiness (startedByClient false) is only reachable after this launch exited busy:
+    // its own record is this client's to sweep before the handoff.
     if (!startup.daemon.startedByClient) await discardExitedLaunchRecord(settings, launch);
     return { daemon: startup.daemon };
   }
@@ -472,10 +450,7 @@ async function retireStartupAttempt(
     lockTimeoutMs: 0,
   });
   const joined = await joinStartup(launch);
-  // The launch's exit is joined, so nothing can append to its marker file anymore, and the file
-  // has served its last purpose (the failure record carries the phases). Removing it here is what
-  // keeps a retired startup's evidence from becoming state-dir residue. Without a joined exit the
-  // file stays: its writer may still be alive, and only that writer or a later joined exit owns it.
+  // A joined exit is what licenses removing the record; without it the file stays.
   if (joined)
     removeDaemonStartupPhasesFile(
       resolveDaemonStartupPhasesPath(settings.paths.baseDir, launch.pid),
@@ -497,13 +472,7 @@ async function joinStartup(launch: DaemonStartupLaunch): Promise<boolean> {
   }
 }
 
-/**
- * #3782: sweeps the record of a launch whose exit this client just proved — a busy or unproven
- * exit, or a launch that lost the registration to a contending winner. It joins this exact child
- * first and removes only this child's own pid-named file, the same ownership rule a retired
- * startup follows; an unjoined exit keeps its record for its writer or a later joined exit. The
- * current winner's registration and record are untouched.
- */
+/** Sweeps a proven-exited launch's own record, after joining that exact child. */
 async function discardExitedLaunchRecord(
   settings: DaemonClientSettings,
   launch: DaemonStartupLaunch,
@@ -544,16 +513,25 @@ async function waitForDaemonStartup(
       if (settled) return settled;
     } else {
       const settled = await observeLiveDaemonStartup(settings, launch, deadline, observation);
-      // An exit observed while this iteration was in flight outranks a `ready` read: the process
-      // that published is gone, and its classification owns the next step.
+      // An in-flight exit outranks a `ready` read: the publisher is gone.
       if (settled && !(settled.kind === 'ready' && earlyExit)) return settled;
     }
     await sleep(Math.min(100, remainingStartupBudget(deadline)));
   }
-  if (earlyExit || !isProcessAlive(launch.pid)) return { kind: 'timeout' };
-  // A live daemon at the ceiling registered late, not never: only its retirement is this deadline's
-  // failure, and the reason says the host, not the daemon, ran out of room.
-  return { kind: 'ceiling' };
+  // A deadline passing while any startup is live is the host running out of room, never an exit.
+  if (isProcessAlive(launch.pid) || isLiveLockOwner(inspectProcessLock(settings.paths.lockPath)))
+    return { kind: 'ceiling' };
+  if (earlyExit) return { kind: 'early_exit', exit: earlyExit };
+  return { kind: 'exit_unobserved' };
+}
+
+/** A lock owner is a pending startup unless provably dead or reused; never signals anything. */
+function isLiveLockOwner(inspection: ProcessLockInspection): boolean {
+  return (
+    inspection.state === 'held' &&
+    inspection.liveness !== 'owner-process-dead' &&
+    inspection.liveness !== 'owner-process-reused'
+  );
 }
 
 async function judgeExitedDaemonStartup(
@@ -576,8 +554,7 @@ async function observeLiveDaemonStartup(
 ): Promise<DaemonStartupWaitResult | null> {
   const info = await readReadyLaunchedDaemon(settings, launch, deadline);
   if (info) return { kind: 'ready', daemon: { info, startedByClient: true } };
-  // #3782: a live daemon that keeps publishing startup markers is slow, not stuck, and is
-  // waited for up to the ceiling. Only silence for a full stall window retires it early.
+  // A daemon still publishing markers is slow, not stuck; only silence retires it early.
   refreshStartupPhaseMarkers(settings, launch.pid, observation);
   if (
     isProcessAlive(launch.pid) &&
@@ -588,10 +565,7 @@ async function observeLiveDaemonStartup(
   return null;
 }
 
-/**
- * #3782: folds this launch's startup phase markers into `observation`. The record is one launch's
- * own file, named for the pid that wrote it, so no other launch's evidence can add to or hide it.
- */
+/** Folds this launch's markers into `observation` from its own pid-named record. */
 function refreshStartupPhaseMarkers(
   settings: DaemonClientSettings,
   launchPid: number,
@@ -704,7 +678,6 @@ async function readReadyLaunchedDaemon(
   }
 }
 
-/** Whether `info` names the daemon process this client launched: same pid and start time. */
 function isLaunchedDaemon(info: DaemonInfo, launch: DaemonStartupLaunch): boolean {
   const identity = launch.readIdentity();
   return (

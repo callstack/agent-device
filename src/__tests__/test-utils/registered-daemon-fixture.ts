@@ -20,16 +20,9 @@ const children = new Map<
 
 /** Per-child behavior switches, bound into this child's entry script at write time. */
 export type RegisteredDaemonFixtureOptions = Readonly<{
-  /**
-   * Record `lock-acquired` through the real protocol after this child acquires the registration,
-   * as the daemon runtime does. Scoped to this child: no later fixture in the same state dir
-   * inherits it.
-   */
+  /** Record `lock-acquired` after acquisition, as the daemon runtime does, for this child only. */
   emitStartupMarker?: boolean;
-  /**
-   * Record `modules-loaded` through the real protocol before acquisition attempts, as the daemon
-   * entry does, so a child that exits busy or unproven leaves a real pre-lock marker behind.
-   */
+  /** Record `modules-loaded` before acquisition, as the daemon entry does, for this child only. */
   emitStartupMarkerBeforeAcquisition?: boolean;
 }>;
 
@@ -40,10 +33,8 @@ export function registeredDaemonFixtureArgs(
   acquisitionBarrier?: string,
   fixtureOptions?: RegisteredDaemonFixtureOptions,
 ): string[] {
-  // One directory per construction: a later call must never overwrite a script an earlier
-  // launched child has not loaded yet. The per-launch directory still ends in the real daemon
-  // entry path so the daemon-command identity checks classify this child exactly as they
-  // classify a real daemon.
+  // One directory per launch so a later build cannot overwrite a script an earlier child has
+  // not loaded; the path still ends in the real daemon entry name for the identity checks.
   const launchDir = path.join(paths.baseDir, 'fixture-entries', crypto.randomUUID());
   const entry = path.join(launchDir, 'dist', 'src', 'internal', 'daemon.js');
   fs.mkdirSync(path.dirname(entry), { recursive: true });
