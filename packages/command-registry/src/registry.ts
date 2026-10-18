@@ -1614,8 +1614,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public', key: 'appSwitcher' },
     frameworkTier: 'extended',
     // R56 removed the legacy `dispatch` leaf, capability bucket, and HarmonyOS overlay membership.
-    // The daemon route remains `generic`; admission and execution use the owner's bound
-    // `appSwitcher` operation (ADR 0019 §9).
+    // The daemon route remains `generic`; admission checks the owner's `appSwitcher` fact,
+    // and execution uses that one bound operation (ADR 0019 §9).
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     // ADR 0014, "Command effects are daemon-owned and completely classified":
