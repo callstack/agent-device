@@ -157,7 +157,12 @@ export type DeviceInventoryHost = Readonly<{
   files: DeviceInventoryFileHost;
   hostOs: HostOperatingSystem;
   hostName: string;
-  homeDirectory: string;
+  /**
+   * The home this host names, or undefined when it names none (HOME and USERPROFILE both
+   * absent). A host with no home still inventories: only default paths derived from the home
+   * turn off, never the whole host.
+   */
+  homeDirectory: string | undefined;
   observations: DeviceObservationSink;
 }>;
 

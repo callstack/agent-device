@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, onTestFinished, test, vi } from 'vitest';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createAppleScreenRecordingHost } from './platform-runtime-screen-recording-apple-host.ts';
 import { startAppleSimulatorRecording } from './platform-runtime-screen-recording-apple-simulator-host.ts';
 import { withAppleSimulatorScreenRecordingTransport } from './platform-runtime-screen-recording-apple-transport.ts';
@@ -75,7 +75,7 @@ test.each([
     const error = await withTransport(
       failed.process,
       async () =>
-        await createAppleScreenRecordingHost().startSimulator(
+        await createAppleScreenRecordingHost(createLiveTestHostEnvironment()).startSimulator(
           simulator,
           path.join(root, 'failed.mp4'),
         ),
@@ -316,9 +316,9 @@ test('stops a locally launched simulator recorder after xcrun execs the simctl b
 
   const marker = process.markers?.[0];
   if (!marker) throw new Error('missing simulator recording marker');
-  await expect(createAppleScreenRecordingHost().inspectProcess(marker)).resolves.toBe(
-    'owned-alive',
-  );
+  await expect(
+    createAppleScreenRecordingHost(createLiveTestHostEnvironment()).inspectProcess(marker),
+  ).resolves.toBe('owned-alive');
   await expect(process.terminate()).resolves.toBeUndefined();
   expect(running.kill).toHaveBeenCalledWith('SIGINT');
 });
@@ -352,9 +352,9 @@ test.each([
 
   const marker = process.markers?.[0];
   if (!marker) throw new Error('missing simulator recording marker');
-  await expect(createAppleScreenRecordingHost().inspectProcess(marker)).resolves.toBe(
-    'ownership-lost',
-  );
+  await expect(
+    createAppleScreenRecordingHost(createLiveTestHostEnvironment()).inspectProcess(marker),
+  ).resolves.toBe('ownership-lost');
   await expect(process.terminate()).rejects.toThrow('process ownership changed');
   expect(running.kill).not.toHaveBeenCalled();
   running.resolveWait({ stdout: '', stderr: '', exitCode: 0 });

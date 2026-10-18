@@ -26,6 +26,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const sessionArtifacts = {
   sessionsDir: '/sessions',
@@ -51,7 +52,10 @@ const device: DeviceInfo = {
 };
 
 test('the composed gateway lists Android apps from inside the platform package', async () => {
-  const gateway = createPlatformRuntimeGateway({ env: process.env, ...sessionArtifacts });
+  const gateway = createPlatformRuntimeGateway({
+    host: createLiveTestHostEnvironment(),
+    ...sessionArtifacts,
+  });
   const binding = await gateway.bind({ device, intent: { kind: 'ordinary' }, scope });
 
   await expect(binding.operations.listApps?.({ device, filter: 'all' })).resolves.toEqual([
@@ -76,7 +80,10 @@ test('the composed gateway lists Android apps from inside the platform package',
 });
 
 test('the composed gateway reads Android app state from inside the platform package', async () => {
-  const gateway = createPlatformRuntimeGateway({ env: process.env, ...sessionArtifacts });
+  const gateway = createPlatformRuntimeGateway({
+    host: createLiveTestHostEnvironment(),
+    ...sessionArtifacts,
+  });
   const binding = await gateway.bind({ device, intent: { kind: 'ordinary' }, scope });
 
   await expect(binding.operations.appState?.()).resolves.toEqual({

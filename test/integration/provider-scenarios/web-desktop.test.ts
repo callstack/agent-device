@@ -104,6 +104,7 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
             assert.equal(matches?.length, 1, JSON.stringify(response.json?.result?.data));
             assert.equal('ref' in (matches?.[0] ?? {}), false, JSON.stringify(matches?.[0]));
             const cli = await interactionCliOutputFormatters.find({
+              env: process.env,
               input: {},
               result: response.json?.result?.data,
             });

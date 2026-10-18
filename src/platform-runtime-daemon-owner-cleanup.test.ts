@@ -13,7 +13,7 @@ import { createDaemonOwnerCleanup } from './platform-runtime-daemon-owner-cleanu
 test('composes owner cleanup with the Apple runner lease facade', async () => {
   const owner = { pid: 42, startTime: 'process-start' };
 
-  await createDaemonOwnerCleanup().cleanup(owner);
+  await createDaemonOwnerCleanup({ env: process.env, cwd: process.cwd() }).cleanup(owner);
 
   expect(mocks.cleanupRunnerLeasesForOwner).toHaveBeenCalledWith(owner);
 });

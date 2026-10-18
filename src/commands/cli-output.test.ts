@@ -32,7 +32,7 @@ const FORMATTER_COMMANDS = Object.keys(
 ).sort() as CommandName[];
 
 async function render(name: CommandName, result: unknown, input = {}) {
-  const output = await formatCliOutput({ name, input, result });
+  const output = await formatCliOutput({ env: process.env, name, input, result });
   expect(output, `${name} renders no CLI output`).toBeDefined();
   return output!;
 }

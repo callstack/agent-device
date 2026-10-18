@@ -218,7 +218,10 @@ test('non-dense browser refs survive snapshot storage and routed fill and click'
   const stateDir = mkdtempForTestSync('web-ref-route-');
   installFakeManagedAgentBrowser(stateDir);
   await withNodeRuntime({ version: '24.0.0' }, async () => {
-    const provider = await createAgentBrowserWebProvider({ stateDir });
+    const provider = await createAgentBrowserWebProvider({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     await withCommandExecutorOverride(
       async (_command, args) => {
         const [command, ref, text] = args.slice(1);

@@ -126,6 +126,7 @@ describe('system command interface', () => {
 
   test('back CLI output renders the settled observation', () => {
     const output = systemCliOutputFormatters.back({
+      env: process.env,
       input: {},
       result: {
         action: 'back',
@@ -157,6 +158,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output renders the Apple session app from the runner read', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'ios',
@@ -179,6 +181,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output falls back to the bundle id and omits absent lines', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'ios',
@@ -196,6 +199,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output renders unknown when the Apple session carries no app identity', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: { platform: 'ios', surface: 'app' },
     });
@@ -204,6 +208,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output renders the Android foreground app and activity', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'android',
@@ -218,6 +223,7 @@ describe('system command interface', () => {
     // macOS appState is never admitted by the Apple runtime facts, so the live
     // daemon always answers from the session record: no State line.
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'macos',
@@ -238,6 +244,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output renders the HarmonyOS foreground app and activity', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'harmonyos',

@@ -1,4 +1,4 @@
-import type { EnvMap } from '@agent-device/kernel/source-value';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   createOwnerScopedDeviceClaimReconciler,
   createRecoveryPlatformScope,
@@ -21,10 +21,10 @@ import { createPlatformRuntimeGateway } from './platform-runtime.ts';
  * so disposal shuts down only this transaction's handles.
  */
 export const createClaimRecoveryGatewayFor =
-  (env: EnvMap): ClaimRecoveryGatewayFactory =>
+  (host: HostEnvironment): ClaimRecoveryGatewayFactory =>
   (input) =>
     createPlatformRuntimeGateway({
-      env,
+      host,
       sessionsDir: input.sessionsDir,
       ownedProcesses: input.ownedProcesses,
       resolveSessionArtifacts: input.resolveSessionArtifacts,
@@ -39,15 +39,20 @@ export const createClaimRecoveryGatewayFor =
  */
 export async function runStaleDeviceClaimRelease(
   selectors: DeviceClaimSelectors,
-  env: EnvMap,
+  host: HostEnvironment,
   composeRecovery?: OwnerScopedClaimRecoveryComposer,
 ): Promise<DeviceClaimStaleReleaseOutcome[]> {
+  // Settling a transaction can reach runner code; this CLI process runs one host, and the
+  // runner reads its configuration from it, entered as the runtime state the daemon route binds.
+  const { setAppleRunnerHostEnvironment } =
+    await import('@agent-device/platform-apple/runner-owner');
+  setAppleRunnerHostEnvironment(host);
   return await releaseProvenStaleDeviceClaims({
     selectors,
-    env,
+    env: host.env,
     reconcile: createOwnerScopedDeviceClaimReconciler({
       scope: createRecoveryPlatformScope(),
-      composeGateway: createClaimRecoveryGatewayFor(env),
+      composeGateway: createClaimRecoveryGatewayFor(host),
       composeRecovery,
     }),
   });

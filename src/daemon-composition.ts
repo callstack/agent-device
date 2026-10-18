@@ -27,8 +27,8 @@ import {
   createRequestPlatformProviders,
 } from './platform-runtime.ts';
 import { createHostDiagnostics } from './platform-runtime-host-diagnostics.ts';
-import { platformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
-import { platformDaemonLifecycleOwners } from './platform-runtime-daemon-lifecycle.ts';
+import { createPlatformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
+import { createPlatformDaemonLifecycleOwners } from './platform-runtime-daemon-lifecycle.ts';
 import {
   createOwnedProcessRecordStore,
   type OwnedProcessRecordStore,
@@ -36,6 +36,8 @@ import {
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { ComposeDaemonRuntimeDeps, DaemonRuntimeDeps } from '@agent-device/daemon';
 
 /**
@@ -43,20 +45,24 @@ import type { ComposeDaemonRuntimeDeps, DaemonRuntimeDeps } from '@agent-device/
  * only after this process holds the daemon lock, and it never fails startup: a cleanup the host
  * refuses is a diagnostic, not a reason to keep the next daemon from serving.
  */
-export async function cleanupWebBrowserOrphansForDaemonStartup(params: {
+export function createDaemonStartupWebOrphanCleanup(
+  host: HostEnvironment,
+): (params: {
   stateDir: string;
   openWebSessionNames: readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
-}): Promise<void> {
-  try {
-    await platformDaemonLifecycleOwners.cleanupManagedWebOrphans(params);
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'web_agent_browser_orphan_cleanup_failed',
-      data: { error: error instanceof Error ? error.message : String(error) },
-    });
-  }
+}) => Promise<void> {
+  return async (params) => {
+    try {
+      await createPlatformDaemonLifecycleOwners(host).cleanupManagedWebOrphans(params);
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'web_agent_browser_orphan_cleanup_failed',
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  };
 }
 
 /**
@@ -72,7 +78,7 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
   input,
 ): Promise<DaemonRuntimeDeps> => {
   const {
-    host: { env },
+    host,
     baseDir,
     sessionsDir,
     assertShutdownAllowed,
@@ -80,19 +86,20 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
     resolveSessionArtifacts,
     openWebSessionNames,
   } = input;
+  const { env } = host;
   const ownedProcessRecords = createOwnedProcessRecordStore({
     stateDir: baseDir,
     sessionsDir,
     resolveSessionDir,
   });
-  const hostDiagnostics = createHostDiagnostics(env);
+  const hostDiagnostics = createHostDiagnostics(host);
   const providerComposition = await createDaemonProviderRuntimeComposition(env);
   // The registry has set up every plugin. Until this function returns, nothing else owns its
   // cleanup, so any later failure closes it here; success transfers ownership to the daemon.
   try {
     const providerDeviceRuntimes = [...providerComposition.runtimes];
     const deviceRuntimeGateway = createPlatformRuntimeGateway({
-      env,
+      host,
       assertShutdownAllowed,
       providerRuntimes: providerDeviceRuntimes,
       providerModules: providerComposition.platformModules,
@@ -109,13 +116,14 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
           providerRuntimeProviders.appleRunnerScreenRecordingTransport,
       },
       defaultWebProvider: {
+        host,
         stateDir: baseDir,
         openWebSessionNames,
         ownedProcessRecords,
       },
     });
     const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
-      env,
+      host,
       providerRuntimeProviders.deviceInventorySource,
     );
     // Root composition of the platform-services port and the owner-scoped claim-recovery gateway.
@@ -131,12 +139,12 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
       await import('@agent-device/platform-android/adb-host');
     return Object.freeze({
       runtimeStates: Object.freeze([
-        createAppleRunnerRuntimeState(),
+        createAppleRunnerRuntimeState(host),
         createAndroidHelperRuntimeState(),
       ]),
       ownedProcessRecords,
       hostDiagnostics,
-      ownerLifecycle: platformDaemonLifecycleOwners,
+      ownerLifecycle: createPlatformDaemonLifecycleOwners(host),
       shutdownProviderRuntimes: providerComposition.shutdown,
       pluginInventory: providerComposition.inventory,
       leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
@@ -144,13 +152,16 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
       recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,
       recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
       deviceRuntimeGateway,
-      platformResourceCleanup,
-      claimRecoveryGateway: createClaimRecoveryGatewayFor(env),
-      interactorResolution: Object.freeze({ resolve: getInteractor }),
+      platformResourceCleanup: createPlatformResourceCleanup(host),
+      claimRecoveryGateway: createClaimRecoveryGatewayFor(host),
+      interactorResolution: Object.freeze({
+        resolve: async (device: DeviceInfo, runnerContext: RunnerContext) =>
+          await getInteractor(device, runnerContext, host),
+      }),
       providerDeviceAdmission: Object.freeze({
         isActive: (device: DeviceInfo) => isActiveProviderDevice(device),
       }),
-      cleanupManagedWebOrphans: cleanupWebBrowserOrphansForDaemonStartup,
+      cleanupManagedWebOrphans: createDaemonStartupWebOrphanCleanup(host),
       requestRouter: Object.freeze({
         requestPlatformProviders,
         deviceInventoryGateways,

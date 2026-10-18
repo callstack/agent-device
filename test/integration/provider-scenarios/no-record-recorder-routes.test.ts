@@ -43,6 +43,7 @@ test('--no-record keeps gesture/back/home out of a recorded session script', asy
         command: argv[0] as CommandName,
         positionals: parseArgs(argv, { strictFlags: true }).positionals,
         flags: { ...parseArgs(argv, { strictFlags: true }).flags, ...selection },
+        env: process.env,
       });
 
     // Control: a recorded action, no flag — must land in the script, proving

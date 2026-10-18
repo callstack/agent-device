@@ -1,7 +1,14 @@
 import { expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR } from '@agent-device/test-kit';
-import { platformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
+import {
+  ANDROID_EMULATOR,
+  IOS_DEVICE,
+  IOS_SIMULATOR,
+  createLiveTestHostEnvironment,
+} from '@agent-device/test-kit';
+import { createPlatformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
+
+const platformResourceCleanup = createPlatformResourceCleanup(createLiveTestHostEnvironment());
 
 const PLAIN_CLOSE = { shutdownRequested: false, hasScreenRecording: false, hasLease: false };
 

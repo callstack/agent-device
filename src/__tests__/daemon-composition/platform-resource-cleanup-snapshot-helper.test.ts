@@ -12,8 +12,14 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit';
-import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
+import {
+  ANDROID_EMULATOR,
+  IOS_SIMULATOR,
+  createLiveTestHostEnvironment,
+} from '@agent-device/test-kit';
+import { createPlatformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
+
+const platformResourceCleanup = createPlatformResourceCleanup(createLiveTestHostEnvironment());
 
 beforeEach(() => {
   vi.clearAllMocks();

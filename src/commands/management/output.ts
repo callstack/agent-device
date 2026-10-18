@@ -1,4 +1,4 @@
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type {
   AgentDeviceCapabilitiesResult,
   AgentDeviceDevice,
@@ -185,15 +185,13 @@ function shutdownCliOutput(result: CommandRequestResult): CliOutput {
 
 export async function doctorCliOutput(
   result: CommandRequestResult,
+  env: EnvMap,
   progress?: CommandProgressState,
 ): Promise<CliOutput> {
   const { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } =
     await import('@agent-device/host-kit/doctor-lines');
   const { shouldColorStatusMarkers } = await import('@agent-device/host-kit/status-markers');
-  const useColor = shouldColorStatusMarkers(
-    commandHostEnvironment().env,
-    Boolean(process.stderr.isTTY),
-  );
+  const useColor = shouldColorStatusMarkers(env, Boolean(process.stderr.isTTY));
   const data = result as Record<string, unknown>;
   const status = typeof data.status === 'string' ? data.status : 'unknown';
   const lines = [`Doctor: ${status}`];
@@ -221,7 +219,8 @@ export const managementCliOutputFormatters = {
   shutdown: resultOutput(shutdownCliOutput),
   devices: resultOutput(devicesCliOutput),
   capabilities: resultOutput(capabilitiesCliOutput),
-  doctor: ({ result, progress }) => doctorCliOutput(result as CommandRequestResult, progress),
+  doctor: ({ result, env, progress }) =>
+    doctorCliOutput(result as CommandRequestResult, env, progress),
   apps: ({ input, result }) =>
     appsCliOutput({
       result: result as Parameters<typeof appsCliOutput>[0]['result'],

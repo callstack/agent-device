@@ -58,7 +58,12 @@ async function discoverAndroidDevices(
   scope: PlatformRequestScope,
 ): Promise<readonly DeviceInfo[]> {
   await host.toolchains.prepare('android');
-  const sdkRoots = [...config.sdkRoots, path.join(host.homeDirectory, 'Android', 'Sdk')];
+  // The ~/Android/Sdk default root exists only when the host names a home; a host with no home
+  // discovers from the configured roots and PATH instead of failing the whole inventory.
+  const sdkRoots = [
+    ...config.sdkRoots,
+    ...(host.homeDirectory === undefined ? [] : [path.join(host.homeDirectory, 'Android', 'Sdk')]),
+  ];
   const adb = await resolveTool(host, 'adb', sdkRoots, ['platform-tools', 'adb']);
   if (!adb) throw new AppError('TOOL_MISSING', 'adb not found in PATH');
   const emulator = await resolveTool(host, 'emulator', sdkRoots, ['emulator', 'emulator']);

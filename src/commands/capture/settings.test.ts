@@ -39,11 +39,20 @@ describe('settings CLI', () => {
       warnings: [warning],
     };
 
-    const output = await formatCliOutput({ name: 'settings', input: {}, result: response });
+    const output = await formatCliOutput({
+      env: process.env,
+      name: 'settings',
+      input: {},
+      result: response,
+    });
     expect(output?.text).toBe(`Updated setting: permission\nWarning: ${warning}`);
     expect(output?.data).toMatchObject({ warnings: [warning] });
 
-    const rendered = settingsCommandFacet.cliOutputFormatter!({ input: {}, result: response });
+    const rendered = settingsCommandFacet.cliOutputFormatter!({
+      env: process.env,
+      input: {},
+      result: response,
+    });
     expect(rendered.text).toBe('Updated setting: permission');
   });
 

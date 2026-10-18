@@ -1,4 +1,5 @@
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { AgentDeviceClient, CommandRequestResult } from '../agent-device-client.ts';
 import { readFillTextFromStdin } from './interaction/fill-text-stdin.ts';
 import { formatCliOutput } from './cli-output.ts';
@@ -14,6 +15,8 @@ type CliRunOptions = {
   positionals: string[];
   flags: CliFlags;
   commandProgress?: CommandProgressState;
+  /** The CLI run's own host environment; output formatters read styling from it (#3794). */
+  env: EnvMap;
 };
 
 export async function runCliCommand(options: CliRunOptions): Promise<CommandRequestResult> {
@@ -38,6 +41,7 @@ export async function runCliCommandWithOutput(options: CliRunOptions): Promise<{
       input,
       result,
       progress: options.commandProgress,
+      env: options.env,
     }),
   };
 }

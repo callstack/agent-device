@@ -96,6 +96,7 @@ describe('observability command interface', () => {
 
   test('formats events as a compact human timeline', () => {
     const output = observabilityCliOutputFormatters.events({
+      env: process.env,
       input: {},
       result: {
         path: '/tmp/session/events.ndjson',
@@ -142,6 +143,7 @@ describe('observability command interface', () => {
 
   test('formats empty events page with a readable message', () => {
     const output = observabilityCliOutputFormatters.events({
+      env: process.env,
       input: {},
       result: { path: '/tmp/session/events.ndjson', cursor: '0', limit: 100, events: [] },
     });

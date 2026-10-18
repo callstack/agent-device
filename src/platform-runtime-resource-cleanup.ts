@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { isIosFamily } from '@agent-device/kernel/device';
 import type { PlatformResourceCleanup } from '@agent-device/daemon';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -26,16 +27,20 @@ export async function restoreLegacyXctestDeviceSetRedirectRuntime(
   await restoreLegacyXctestDeviceSetRedirect(onDiagnostic);
 }
 
-export async function cleanupManagedWebRuntimeOrphans(params: {
-  stateDir: string;
-  openWebSessionNames: readonly string[];
-  ownedProcessRecords?: OwnedProcessRecordStore;
-}): Promise<void> {
+export async function cleanupManagedWebRuntimeOrphans(
+  params: {
+    stateDir: string;
+    openWebSessionNames: readonly string[];
+    ownedProcessRecords?: OwnedProcessRecordStore;
+  },
+  host: HostEnvironment,
+): Promise<void> {
   const { getManagedAgentBrowserStatus } = await import('@agent-device/platform-web');
-  const status = await getManagedAgentBrowserStatus({ stateDir: params.stateDir });
+  const status = await getManagedAgentBrowserStatus({ stateDir: params.stateDir, host });
   if (!status.installed) return;
   const { cleanupManagedAgentBrowserOrphans } = await import('@agent-device/platform-web');
   await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
+    env: host.env,
     openWebSessionNames: params.openWebSessionNames,
     ...(params.ownedProcessRecords === undefined
       ? {}
@@ -43,13 +48,17 @@ export async function cleanupManagedWebRuntimeOrphans(params: {
   });
 }
 
-async function closeManagedWebRuntimeSession(params: {
-  sessionName: string;
-  stateDir: string;
-  openWebSessionNames: () => readonly string[];
-}): Promise<void> {
+async function closeManagedWebRuntimeSession(
+  params: {
+    sessionName: string;
+    stateDir: string;
+    openWebSessionNames: () => readonly string[];
+  },
+  host: HostEnvironment,
+): Promise<void> {
   const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
   const provider = await createAgentBrowserWebProvider({
+    host,
     session: params.sessionName,
     stateDir: params.stateDir,
     openWebSessionNames: params.openWebSessionNames,
@@ -57,45 +66,50 @@ async function closeManagedWebRuntimeSession(params: {
   await provider.close();
 }
 
-export const platformResourceCleanup: PlatformResourceCleanup = Object.freeze({
-  async stopSnapshotHelper(device) {
-    if (device.platform !== 'android') return;
-    await stopAndroidSnapshotHelperRuntimeForDevice(device);
-  },
-  async closeManagedBrowser(params) {
-    if (params.device.platform !== 'web') return;
-    await closeManagedWebRuntimeSession({
-      sessionName: params.sessionName,
-      stateDir: params.stateDir,
-      openWebSessionNames: params.openSessionNames,
-    });
-  },
-  async cleanupSessionlessExecutionHost(device) {
-    if (!isIosFamily(device)) return;
-    const { resolveRunnerAppBundleId, stopIosRunnerSession } =
-      await import('@agent-device/platform-apple/runner/operations');
-    await stopIosRunnerSession(device.id);
-    const bundleId = await resolveRunnerAppBundleId();
-    const { closeIosApp } = await import('@agent-device/platform-apple/app-lifecycle');
-    await closeIosApp(device, bundleId).catch((error) => {
-      emitDiagnostic({
-        level: 'debug',
-        phase: 'ios_sessionless_runner_host_close_failed',
-        data: {
-          deviceId: device.id,
-          bundleId,
-          error: error instanceof Error ? error.message : String(error),
+export function createPlatformResourceCleanup(host: HostEnvironment): PlatformResourceCleanup {
+  return Object.freeze({
+    async stopSnapshotHelper(device) {
+      if (device.platform !== 'android') return;
+      await stopAndroidSnapshotHelperRuntimeForDevice(device);
+    },
+    async closeManagedBrowser(params) {
+      if (params.device.platform !== 'web') return;
+      await closeManagedWebRuntimeSession(
+        {
+          sessionName: params.sessionName,
+          stateDir: params.stateDir,
+          openWebSessionNames: params.openSessionNames,
         },
+        host,
+      );
+    },
+    async cleanupSessionlessExecutionHost(device) {
+      if (!isIosFamily(device)) return;
+      const { resolveRunnerAppBundleId, stopIosRunnerSession } =
+        await import('@agent-device/platform-apple/runner/operations');
+      await stopIosRunnerSession(device.id);
+      const bundleId = await resolveRunnerAppBundleId();
+      const { closeIosApp } = await import('@agent-device/platform-apple/app-lifecycle');
+      await closeIosApp(device, bundleId, undefined, host.env).catch((error) => {
+        emitDiagnostic({
+          level: 'debug',
+          phase: 'ios_sessionless_runner_host_close_failed',
+          data: {
+            deviceId: device.id,
+            bundleId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
       });
-    });
-  },
-  retainExecutionHostAfterClose(params) {
-    return (
-      isIosFamily(params.device) &&
-      params.device.kind === 'simulator' &&
-      !params.shutdownRequested &&
-      !params.hasScreenRecording &&
-      !params.hasLease
-    );
-  },
-});
+    },
+    retainExecutionHostAfterClose(params) {
+      return (
+        isIosFamily(params.device) &&
+        params.device.kind === 'simulator' &&
+        !params.shutdownRequested &&
+        !params.hasScreenRecording &&
+        !params.hasLease
+      );
+    },
+  });
+}

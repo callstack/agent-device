@@ -28,8 +28,8 @@ type SettleTextView = {
 
 /** A formatter's own success line plus the response's settled diff. */
 function messageWithSettledNotes(formatter: CliOutputFormatter): CliOutputFormatter {
-  return ({ input, result }) => {
-    const output = formatter({ input, result });
+  return (params) => {
+    const output = formatter(params);
     return output instanceof Promise ? output.then(withSettledNotes) : withSettledNotes(output);
   };
 }

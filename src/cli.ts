@@ -190,6 +190,7 @@ async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment
             await runWebCommand(positionals, {
               flags: ctx.effectiveFlags,
               stateDir: ctx.daemonPaths.baseDir,
+              host,
             }),
           );
           return;

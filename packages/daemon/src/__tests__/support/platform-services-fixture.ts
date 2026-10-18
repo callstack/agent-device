@@ -12,8 +12,8 @@ import { unavailableDeviceRuntimeGateway } from './unavailable-device-runtime-ga
  * that cares about one ask overrides just that member — per case through the `overrides`
  * argument, or by mocking this module's exported spy — and asserts the daemon's branching on
  * the answer. What the composed members actually do (surface, open-target, readiness, and boot
- * rules over the platform packages) is owned by the composition lane, which builds the real
- * port through `src/__tests__/daemon-composition/platform-services-fixture.ts`. Members are
+ * rules over the platform packages) is owned by the composition lane, which builds the real port
+ * in `src/daemon-composition.ts`. Members are
  * module-level stable references so two fixture instances deep-compare equal.
  */
 export function daemonPlatformServicesFixture(

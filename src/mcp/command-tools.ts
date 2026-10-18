@@ -3,6 +3,7 @@ import type { AgentDeviceClient } from '../client/client-types.ts';
 import type { CliOutput, CommandMetadata, JsonSchema } from '../commands/command-contract.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
 import { RESPONSE_LEVELS, type ResponseLevel } from '@agent-device/kernel/contracts';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import { formatCliOutput, isParseableOutputCommand } from '../commands/cli-output.ts';
 import {
   findCommandMetadata,
@@ -185,7 +186,11 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       const config = readMcpToolConfig(resolvedInput);
       const commandInput = stripMcpConfigFields(resolvedInput);
       const pinnedInput = refPins.pinInput(name, commandInput, config.client.stateDir);
-      const client = await createClient(deps, config.client);
+      // One host per tool call: the client's ensuring transport and the output formatter resolve
+      // the daemon and the styling from the same host the executor captured (#3794).
+      const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
+      const host = captureHostEnvironment(process);
+      const client = await createClient(deps, config.client, host);
       try {
         const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
@@ -201,6 +206,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
                 name,
                 input: commandInput,
                 result,
+                env: host.env,
                 outputFormat: config.outputFormat,
                 responseLevel: config.client.responseLevel,
               }),
@@ -245,13 +251,11 @@ export const commandToolExecutor = createCommandToolExecutor();
 async function createClient(
   deps: CommandToolExecutorDeps,
   config: AgentDeviceClientConfig,
+  host: HostEnvironment,
 ): Promise<AgentDeviceClient> {
   if (deps.createClient) return await deps.createClient(config);
   const { createAgentDeviceClient } = await import('../agent-device-client.ts');
   const { createEnsuredDaemonTransport } = await import('../daemon-client/daemon-client.ts');
-  const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
-  // One host per tool call: the ensuring transport and the client resolve the same daemon from it.
-  const host = captureHostEnvironment(process);
   // One client per tool call, so each call ensures the daemon it is about to use.
   const ensuring = createEnsuredDaemonTransport({ host });
   return createAgentDeviceClient(config, {
@@ -503,6 +507,7 @@ async function renderToolText(params: {
   name: CommandName;
   input: Record<string, unknown>;
   result: CommandExecutionResult;
+  env: EnvMap;
   outputFormat: McpOutputFormat;
   responseLevel?: ResponseLevel;
 }): Promise<string> {
@@ -521,6 +526,7 @@ async function renderToolText(params: {
     name: params.name,
     input: params.input,
     result: params.result,
+    env: params.env,
   });
   if (typeof cliOutput?.text !== 'string') return renderJsonText(cliOutput?.data ?? params.result);
   return toolTextWithWarnings(params.name, cliOutput);

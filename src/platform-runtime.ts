@@ -3,7 +3,10 @@ import type {
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
-import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
+import type {
+  HostEnvironment,
+  OwnedProcessRecordWriter,
+} from '@agent-device/contracts/platform-runtime-host';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
 import {
@@ -102,14 +105,14 @@ export function createPlatformModuleRegistryForHost(
 }
 
 export async function createPlatformDeviceInventoryGateways(
-  env: Readonly<Record<string, string | undefined>>,
+  host: HostEnvironment,
   provider?: ProviderDeviceInventorySource,
 ): Promise<ComposedDeviceInventoryGateways> {
   return await attachAppleInstalledAppProbe({
-    registry: createPlatformModuleRegistryForHost(env),
+    registry: createPlatformModuleRegistryForHost(host.env),
     loadHost: async () => {
       const { createDeviceInventoryHost } = await import('./platform-runtime-host.ts');
-      return createDeviceInventoryHost(env);
+      return createDeviceInventoryHost(host);
     },
     provider,
   });
@@ -139,7 +142,7 @@ type Platform = PlatformRuntimeModule['family'];
 
 export function createPlatformRuntimeGateway(
   options: Readonly<{
-    env: Readonly<Record<string, string | undefined>>;
+    host: HostEnvironment;
     providerRuntimes?: readonly ProviderDeviceRuntime[];
     providerModules?: readonly PlatformRuntimeProviderRegistration[];
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
@@ -154,14 +157,15 @@ export function createPlatformRuntimeGateway(
       const { createPlatformRuntimeHost, createSnapshotRuntimeHost, loadMacOsSurfaceSnapshot } =
         await import('./platform-runtime-operation-host.ts');
       return createPlatformRuntimeHost({
-        env: options.env,
+        host: options.host,
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,
         assertShutdownAllowed: options.assertShutdownAllowed,
         snapshot: createSnapshotRuntimeHost({
-          linux: captureLinuxSurfaceSnapshot,
-          macos: loadMacOsSurfaceSnapshot,
+          linux: (snapshotOptions, signal) => captureLinuxSurfaceSnapshot(snapshotOptions, signal),
+          macos: (snapshotOptions, signal) =>
+            loadMacOsSurfaceSnapshot(snapshotOptions, signal, options.host.env),
         }),
         ownedProcesses: options.ownedProcesses,
       });

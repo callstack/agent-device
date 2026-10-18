@@ -30,6 +30,7 @@ vi.mock('@agent-device/platform-apple/macos', async (importOriginal) => ({
 }));
 
 import { captureMacOsSurfaceSnapshot } from '@agent-device/platform-apple/macos';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import {
   createPlatformRuntimeHost,
   loadMacOsSurfaceSnapshot,
@@ -62,7 +63,7 @@ const shutdownLoaders = {
 
 test('operation host composes the shared lazy Apple-tool and toolchain capabilities', () => {
   const host = createPlatformRuntimeHost({
-    env: process.env,
+    host: createLiveTestHostEnvironment(),
     sessionsDir: '/tmp/sessions',
     resolveSessionArtifacts: () => ({
       outputPath: '/tmp/sessions/one/app.log',
@@ -88,7 +89,7 @@ test('composes focused deployment executors instead of a cross-family deployment
 
 test('the macOS surface loader refuses a capture the owner did not route to it', async () => {
   vi.mocked(captureMacOsSurfaceSnapshot).mockClear();
-  const refusal = loadMacOsSurfaceSnapshot({ depth: 2 });
+  const refusal = loadMacOsSurfaceSnapshot({ depth: 2 }, undefined, process.env);
   await expect(refusal).rejects.toBeInstanceOf(TypeError);
   await expect(refusal).rejects.toThrow(
     'Apple surface capture requires a helper-routed macOS surface',
@@ -99,9 +100,10 @@ test('the macOS surface loader refuses a capture the owner did not route to it',
 test('the macOS surface loader forwards a helper-routed surface unchanged', async () => {
   vi.mocked(captureMacOsSurfaceSnapshot).mockClear();
   const signal = new AbortController().signal;
-  await loadMacOsSurfaceSnapshot({ surface: 'frontmost-app', depth: 2 }, signal);
+  await loadMacOsSurfaceSnapshot({ surface: 'frontmost-app', depth: 2 }, signal, process.env);
   expect(captureMacOsSurfaceSnapshot).toHaveBeenCalledWith(
     { surface: 'frontmost-app', depth: 2 },
     signal,
+    process.env,
   );
 });

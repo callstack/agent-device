@@ -16,6 +16,7 @@ export async function runGenericClientBackedCommand({
   positionals,
   flags,
   client,
+  host,
   debug,
   replayTestReporterRuntime,
   commandProgress,
@@ -26,6 +27,7 @@ export async function runGenericClientBackedCommand({
     positionals,
     flags,
     commandProgress,
+    env: host.env,
   });
   // A non-default responseLevel returns a leveled payload (e.g. the snapshot
   // digest { nodeCount, refs }) that the per-command CLI formatters assume away —

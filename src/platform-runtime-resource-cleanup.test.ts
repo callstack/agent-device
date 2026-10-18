@@ -9,12 +9,15 @@ import { runCmd } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
-  installFakeManagedAgentBrowser,
-  mkdtempForTestSync,
   WEB_DESKTOP_DEVICE,
   bindTestCommandHost,
+  createLiveTestHostEnvironment,
+  installFakeManagedAgentBrowser,
+  mkdtempForTestSync,
 } from '@agent-device/test-kit';
-import { platformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
+import { createPlatformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
+
+const platformResourceCleanup = createPlatformResourceCleanup(createLiveTestHostEnvironment());
 
 bindTestCommandHost();
 

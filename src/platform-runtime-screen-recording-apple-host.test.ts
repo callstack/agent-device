@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { createAppleScreenRecordingHost } from './platform-runtime-screen-recording-apple-host.ts';
 import { withAppleRunnerScreenRecordingTransport } from './platform-runtime-screen-recording-apple-runner-transport.ts';
 import { withAppleSimulatorScreenRecordingTransport } from './platform-runtime-screen-recording-apple-transport.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const simulator = {
   platform: 'apple' as const,
@@ -15,7 +16,7 @@ const simulator = {
 const device = { ...simulator, id: 'device', kind: 'device' as const };
 
 test('reports unavailable facts for generic scoped Apple providers', async () => {
-  const host = createAppleScreenRecordingHost();
+  const host = createAppleScreenRecordingHost(createLiveTestHostEnvironment());
   await withAppleRunnerScreenRecordingTransport(undefined, async () => {
     await expect(host.availability(device)).resolves.toMatchObject({ available: false });
   });
@@ -25,7 +26,7 @@ test('reports unavailable facts for generic scoped Apple providers', async () =>
 });
 
 test('reports a focused simulator transport as available', async () => {
-  const host = createAppleScreenRecordingHost();
+  const host = createAppleScreenRecordingHost(createLiveTestHostEnvironment());
   await withAppleSimulatorScreenRecordingTransport(
     {
       available: true,

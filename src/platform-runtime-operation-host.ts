@@ -1,4 +1,4 @@
-import type { EnvMap } from '@agent-device/kernel/source-value';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { DeviceShutdownRuntimeLoaders } from '@agent-device/contracts/device-shutdown-runtime';
 import type {
@@ -16,7 +16,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
-import { runCmd, whichCmd, commandHostEnvironment } from '@agent-device/host-kit/command';
+import { runCmd, whichCmd } from '@agent-device/host-kit/command';
 import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
 import { createManagedAppLogProcesses } from './platform-runtime-app-log-process.ts';
@@ -41,7 +41,8 @@ export { createSnapshotRuntimeHost } from '@agent-device/capture-kit/snapshot-de
 
 export async function loadMacOsSurfaceSnapshot(
   options: CaptureSnapshotInput['options'],
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  env: Readonly<EnvMap>,
 ): Promise<SnapshotResult> {
   // The Apple owner routes and names the surface; one it did not name was never routed here.
   const surface =
@@ -50,11 +51,11 @@ export async function loadMacOsSurfaceSnapshot(
     throw new TypeError('Apple surface capture requires a helper-routed macOS surface');
   }
   const { captureMacOsSurfaceSnapshot } = await import('@agent-device/platform-apple/macos');
-  return await captureMacOsSurfaceSnapshot({ ...options, surface }, signal);
+  return await captureMacOsSurfaceSnapshot({ ...options, surface }, signal, env);
 }
 
 export function createPlatformRuntimeHost(options: {
-  env: Readonly<EnvMap>;
+  host: HostEnvironment;
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
@@ -62,17 +63,19 @@ export function createPlatformRuntimeHost(options: {
   snapshot: SnapshotRuntimeHost;
   ownedProcesses?: OwnedProcessRecordWriter;
 }): PlatformRuntimeHost {
+  const host = options.host;
+  const env = host.env;
   const processes = createManagedAppLogProcesses(options.sessionsDir);
   const localProcessTransport = Object.freeze({ mode: 'local' as const, start: processes.start });
   const appleTools = createAppleToolHost();
   const commands = Object.freeze({
     which: async (executable: string) =>
-      (await whichCmd(executable, commandHostEnvironment().env)) ? executable : undefined,
+      (await whichCmd(executable, env)) ? executable : undefined,
     run: async (request: HostCommandRequest, signal?: AbortSignal) => {
       const result = await runCmd(request.executable, guardedHostCommandArgv(request), {
         allowFailure: request.allowFailure,
         cwd: request.cwd,
-        env: request.env ? { ...commandHostEnvironment().env, ...request.env } : undefined,
+        env: request.env ? { ...env, ...request.env } : undefined,
         signal,
         timeoutMs: request.timeoutMs,
       });
@@ -86,18 +89,20 @@ export function createPlatformRuntimeHost(options: {
       if (device.platform !== 'web') return Object.freeze({ mode: 'local' as const });
       const { resolveWebNetworkTransport } =
         await import('./platform-runtime-network-web-transport.ts');
-      return await resolveWebNetworkTransport(device);
+      return await resolveWebNetworkTransport(device, host);
     },
   });
-  const appleApplications = createAppleApplicationTools();
+  const appleApplications = createAppleApplicationTools(env);
   const androidApplications = createAndroidApplicationTools();
   return Object.freeze({
+    hostEnvironment: host,
     commands,
     appleTools,
-    toolchains: createHostToolchainPreparer(options.env),
+    toolchains: createHostToolchainPreparer(env),
     artifacts: Object.freeze({ resolveSession: options.resolveSessionArtifacts }),
     outputs: Object.freeze({
-      openAppend: async (pathname: string) => await openAppLogOutput(options.sessionsDir, pathname),
+      openAppend: async (pathname: string) =>
+        await openAppLogOutput(options.sessionsDir, pathname, host),
       readTail: async (pathname: string, maxBytes: number) =>
         await readAppLogOutputTail(options.sessionsDir, pathname, maxBytes),
     }),
@@ -115,8 +120,8 @@ export function createPlatformRuntimeHost(options: {
       },
     }),
     ...network,
-    appleDeployment: createAppleAppDeploymentExecutor(),
-    androidDeployment: createAndroidAppDeploymentExecutor(options.env),
+    appleDeployment: createAppleAppDeploymentExecutor(env),
+    androidDeployment: createAndroidAppDeploymentExecutor(env),
     androidTools: createAndroidToolHost(),
     temporaryFiles: Object.freeze({
       create: async (temporaryFileOptions: { prefix: string; suffix: string }) =>
@@ -132,11 +137,14 @@ export function createPlatformRuntimeHost(options: {
       options.shutdownLoaders,
       options.assertShutdownAllowed,
     ),
-    screenRecording: createScreenRecordingRuntimeHost({ ownedProcesses: options.ownedProcesses }),
-    audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses }),
+    screenRecording: createScreenRecordingRuntimeHost({
+      ownedProcesses: options.ownedProcesses,
+      host,
+    }),
+    audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses, host }),
     perf: createPerfRuntimeHost(),
     snapshot: options.snapshot,
-    localInteractors: createLocalApplicationInteractorHost(),
+    localInteractors: createLocalApplicationInteractorHost(host),
     appleApplications,
     androidApplications,
     applicationResources: createApplicationResourceLifecycle({

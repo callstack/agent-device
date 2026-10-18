@@ -10,7 +10,11 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { runStaleDeviceClaimRelease } from '../platform-runtime-claim-recovery.ts';
 import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
+import {
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+  pinOwnProcessStartTime,
+} from '@agent-device/test-kit';
 
 pinOwnProcessStartTime(hostProcess);
 
@@ -283,16 +287,20 @@ test('recovery is composed per claim from the stale owner state dir, never the c
     process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
 
     const composedFor: string[] = [];
-    const outcomes = await runStaleDeviceClaimRelease({}, process.env, (stateDir) => {
-      composedFor.push(stateDir);
-      return {
-        reconcile: async (claim) => {
-          assert.equal(claim.stateDir, stateDir);
-          return { status: 'reconciled' };
-        },
-        dispose: async () => {},
-      };
-    });
+    const outcomes = await runStaleDeviceClaimRelease(
+      {},
+      createLiveTestHostEnvironment(),
+      (stateDir) => {
+        composedFor.push(stateDir);
+        return {
+          reconcile: async (claim) => {
+            assert.equal(claim.stateDir, stateDir);
+            return { status: 'reconciled' };
+          },
+          dispose: async () => {},
+        };
+      },
+    );
 
     assert.deepEqual([...composedFor].sort(), [ownerDirA, ownerDirB].sort());
     assert.equal(outcomes.filter((outcome) => outcome.status === 'released').length, 2);

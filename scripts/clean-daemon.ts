@@ -41,8 +41,14 @@ if (retirement.status === 'retained') {
 if (retirement.status === 'retired') {
   const { cleanupRunnerLeasesForOwner } =
     await import('@agent-device/platform-apple/runner/operations');
+  const { setAppleRunnerHostEnvironment } =
+    await import('@agent-device/platform-apple/runner-owner');
+  const host = captureHostEnvironment(process);
+  // Runner configuration reads take the runtime's host (#3794); this script is the whole
+  // process here, so it seeds the runner state with the same host it enters as a command host.
+  setAppleRunnerHostEnvironment(host);
   await withCommandHost(
-    { host: captureHostEnvironment(process), requestEnv: undefined },
+    { host, requestEnv: undefined },
     async () => await cleanupRunnerLeasesForOwner(retirement.termination.identity),
   );
 }

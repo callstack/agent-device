@@ -8,6 +8,7 @@ import { setActiveProviderDeviceRuntimes } from '../../provider-device-runtime.t
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 
 import { getInteractor, getLocalInteractor } from '../interactors.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const iosSimulator: DeviceInfo = {
   platform: 'apple',
@@ -73,7 +74,10 @@ test('provider device interactor receives runner context from core resolution', 
   };
   setActiveProviderDeviceRuntimes([runtime]);
 
-  assert.equal(await getInteractor(device, runnerContext), interactor);
+  assert.equal(
+    await getInteractor(device, runnerContext, createLiveTestHostEnvironment()),
+    interactor,
+  );
 });
 
 test('local interactor resolution ignores an ambient provider owner', async () => {
@@ -88,9 +92,13 @@ test('local interactor resolution ignores an ambient provider owner', async () =
   };
   setActiveProviderDeviceRuntimes([provider]);
 
-  const localInteractor = await getLocalInteractor(iosSimulator, {
-    appBundleId: 'com.example.app',
-  });
+  const localInteractor = await getLocalInteractor(
+    iosSimulator,
+    {
+      appBundleId: 'com.example.app',
+    },
+    createLiveTestHostEnvironment(),
+  );
 
   assert.notEqual(localInteractor, providerInteractor);
 });
@@ -114,7 +122,11 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
     }
     throw new Error(`Unexpected runner command: ${command.command}`);
   });
-  const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    iosSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
   const result = await withRunner(() => interactor.scroll('down', { pixels: 120 }));
 
   // The common iOS scroll path issues exactly one lifecycle command and NO 'interactionFrame'.
@@ -156,7 +168,11 @@ test('ios amount-based scroll recomputes pixels from the runner reference frame'
     }
     throw new Error(`Unexpected runner command: ${command.command}`);
   });
-  const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    iosSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
   const result = await withRunner(() => interactor.scroll('down', { amount: 0.5 }));
 
   assert.deepEqual(commands, [
@@ -184,7 +200,11 @@ test('tvOS scroll sends only a remotePress command (behavior unchanged)', async 
     commands.push(withoutRunnerCommandId(command));
     return {};
   });
-  const interactor = await getInteractor(tvOsSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    tvOsSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
 
   await withRunner(() => interactor.scroll('down'), tvOsSimulator);
 
@@ -199,7 +219,11 @@ test('tvOS back navigates focus via the remote Menu button, not a coordinate tap
     commands.push(withoutRunnerCommandId(command));
     return {};
   });
-  const interactor = await getInteractor(tvOsSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    tvOsSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
 
   await withRunner(() => interactor.back(), tvOsSimulator);
 
@@ -215,7 +239,11 @@ test('tvOS home navigates focus via the remote Home button', async () => {
     commands.push(withoutRunnerCommandId(command));
     return {};
   });
-  const interactor = await getInteractor(tvOsSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    tvOsSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
 
   await withRunner(() => interactor.home!(), tvOsSimulator);
 
@@ -230,7 +258,11 @@ test('iOS back keeps the in-app navigation path, not the tvOS remote', async () 
     commands.push(withoutRunnerCommandId(command));
     return {};
   });
-  const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    iosSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
 
   await withRunner(() => interactor.back());
 
@@ -240,7 +272,11 @@ test('iOS back keeps the in-app navigation path, not the tvOS remote', async () 
 
 test('ios scroll rejects non-positive amount before sending any runner command', async () => {
   mockRunAppleRunnerCommand.mockImplementation(async () => ({}));
-  const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    iosSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
 
   await assert.rejects(
     () => withRunner(() => interactor.scroll('down', { amount: 0 })),
@@ -259,7 +295,11 @@ test('ios scroll without reference dims derives pixels from endpoint travel', as
     }
     throw new Error(`Unexpected runner command: ${command.command}`);
   });
-  const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    iosSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
   const result = await withRunner(() => interactor.scroll('down', { pixels: 120 }));
 
   const pixels =
@@ -274,7 +314,11 @@ test('ios coordinate fill uses replacement text-entry mode', async () => {
     commands.push(withoutRunnerCommandId(command));
     return {};
   });
-  const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    iosSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
 
   await withRunner(() => interactor.fill(120, 240, 'hunter2'));
 
@@ -297,7 +341,11 @@ test('ios type uses verified append text-entry mode', async () => {
     commands.push(withoutRunnerCommandId(command));
     return { textEntryRoute: 'synthesized-first-responder' };
   });
-  const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
+  const interactor = await getInteractor(
+    iosSimulator,
+    { appBundleId: 'com.example.app' },
+    createLiveTestHostEnvironment(),
+  );
 
   const result = await withRunner(() => interactor.type('hello', 25));
 
@@ -311,4 +359,49 @@ test('ios type uses verified append text-entry mode', async () => {
     },
   ]);
   assert.deepEqual(result, { textEntryRoute: 'synthesized-first-responder' });
+});
+
+test('two runtimes create interactors that route the same macOS device by their own host (#3794)', async () => {
+  const macOsDevice: DeviceInfo = {
+    platform: 'apple',
+    appleOs: 'macos',
+    id: 'host-mac',
+    name: 'Host Mac',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  };
+  // Runtime A's host opted the host into the native app backend; runtime B's host did not.
+  // One process, one ambient environment: only the per-call host may decide the backend.
+  const nativeRuntimeHost = {
+    env: { ...process.env, AGENT_DEVICE_MACOS_APP_BACKEND: 'native' },
+    cwd: process.cwd(),
+  };
+  const xctestRuntimeHost = {
+    env: { ...process.env, AGENT_DEVICE_MACOS_APP_BACKEND: '' },
+    cwd: process.cwd(),
+  };
+  const nativeInteractor = await getLocalInteractor(macOsDevice, {}, nativeRuntimeHost);
+  const xctestInteractor = await getLocalInteractor(macOsDevice, {}, xctestRuntimeHost);
+
+  const commands: RunnerCommand[] = [];
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
+    commands.push(withoutRunnerCommandId(command));
+    return {};
+  });
+
+  await withRunner(async () => {
+    // Runtime A: the native backend refuses a runner-only back at admission and never dispatches.
+    await assert.rejects(
+      nativeInteractor.back(),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'UNSUPPORTED_OPERATION' &&
+        error.details?.reason === 'unsupported-device-backend',
+    );
+    // Runtime B: the same call on the same device routes through the XCTest runner.
+    await xctestInteractor.back();
+  }, macOsDevice);
+
+  assert.deepEqual(commands, [{ command: 'backInApp', appBundleId: undefined }]);
 });

@@ -1,7 +1,10 @@
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
-export function createAppleScreenRecordingHost(): ScreenRecordingRuntimeHost['apple'] {
+export function createAppleScreenRecordingHost(
+  host: HostEnvironment,
+): ScreenRecordingRuntimeHost['apple'] {
   return Object.freeze({
     availability: appleScreenRecordingAvailability,
     runRunner: async (device, request, signal) => {
@@ -32,7 +35,7 @@ export function createAppleScreenRecordingHost(): ScreenRecordingRuntimeHost['ap
     retrieveRunnerRecording: async (device, remotePath, outputPath, signal) => {
       const { retrieveAppleRunnerRecording } =
         await import('./platform-runtime-screen-recording-apple-runner-host.ts');
-      await retrieveAppleRunnerRecording(device, remotePath, outputPath, signal);
+      await retrieveAppleRunnerRecording(device, remotePath, outputPath, host.env, signal);
     },
     captureClockAnchor: async (device, appBundleId, signal) => {
       const { captureAppleClockAnchor } =
@@ -42,7 +45,7 @@ export function createAppleScreenRecordingHost(): ScreenRecordingRuntimeHost['ap
     isRunnerBundleId: async (bundleId) => {
       const { isAppleRunnerBundleId } =
         await import('./platform-runtime-screen-recording-apple-runner-host.ts');
-      return await isAppleRunnerBundleId(bundleId);
+      return await isAppleRunnerBundleId(bundleId, host.env);
     },
   });
 }

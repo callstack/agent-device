@@ -19,9 +19,8 @@ import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 import { createDaemonOwnerCleanup } from '../../platform-runtime-daemon-owner-cleanup.ts';
 
-const daemonOwnerCleanup = createDaemonOwnerCleanup();
-
 export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
+  const daemonOwnerCleanup = createDaemonOwnerCleanup(host);
   const subcommand = positionals[0];
   if ((subcommand !== 'stop' && subcommand !== 'status') || positionals.length !== 1) {
     throw new AppError('INVALID_ARGS', 'daemon accepts only: stop, status');

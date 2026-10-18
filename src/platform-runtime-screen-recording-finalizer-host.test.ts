@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import {
   OVERLAY_BUDGET_MS,
   type overlayRecordingTouches,
@@ -43,7 +43,7 @@ beforeEach(() => {
 });
 
 test('requires stable playable media before publishing finalization telemetry', async () => {
-  const result = await createScreenRecordingFinalizer().complete({
+  const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: false,
     gestureEvents: [],
@@ -61,7 +61,7 @@ test('names the retry and the escape for a recording that never became playable'
   video.isPlayable.mockResolvedValueOnce(false);
 
   await expect(
-    createScreenRecordingFinalizer().complete({
+    createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
       outputPath: '/tmp/capture.mp4',
       showTouches: false,
       gestureEvents: [],
@@ -79,7 +79,7 @@ test('names the retry and the escape for a recording that never became playable'
 });
 
 test('burns touches into a playable recording without a warning', async () => {
-  const result = await createScreenRecordingFinalizer().complete({
+  const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: true,
     gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
@@ -91,7 +91,7 @@ test('burns touches into a playable recording without a warning', async () => {
 });
 
 test('hands the caller fps to the touch overlay', async () => {
-  await createScreenRecordingFinalizer().complete({
+  await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: true,
     gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
@@ -112,7 +112,7 @@ test('the overlay budget covers the playability checks that run before the overl
       vi.setSystemTime(Date.now() + playabilityMs);
     });
 
-    await createScreenRecordingFinalizer().complete({
+    await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
       outputPath: '/tmp/capture.mp4',
       showTouches: true,
       gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
@@ -139,7 +139,7 @@ test('#2707 reports a dropped overlay and keeps the raw when compositing throws'
     ),
   );
 
-  const result = await createScreenRecordingFinalizer().complete({
+  const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: true,
     gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
@@ -161,7 +161,7 @@ test('#2707 reports a warning when a composited recording turns unplayable after
     video.isPlayable.mockResolvedValueOnce(false);
   });
 
-  const result = await createScreenRecordingFinalizer().complete({
+  const result = await createScreenRecordingFinalizer(createLiveTestHostEnvironment()).complete({
     outputPath: '/tmp/capture.mp4',
     showTouches: true,
     gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
@@ -176,12 +176,16 @@ test('#2707 reports a warning when a composited recording turns unplayable after
 test('sniffs a collected copy without spawning the validator, and refuses one with no container', async () => {
   const validatorCalls = video.isPlayable.mock.calls.length + video.playable.mock.calls.length;
   await expect(
-    createScreenRecordingFinalizer().sniff({ outputPath: '/tmp/capture.collected.mp4' }),
+    createScreenRecordingFinalizer(createLiveTestHostEnvironment()).sniff({
+      outputPath: '/tmp/capture.collected.mp4',
+    }),
   ).resolves.toBeUndefined();
   video.container.mockResolvedValueOnce(false);
 
   await expect(
-    createScreenRecordingFinalizer().sniff({ outputPath: '/tmp/capture.collected.mp4' }),
+    createScreenRecordingFinalizer(createLiveTestHostEnvironment()).sniff({
+      outputPath: '/tmp/capture.collected.mp4',
+    }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: { reason: 'recording-output-unplayable', retriable: true },

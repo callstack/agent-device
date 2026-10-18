@@ -4,7 +4,11 @@ import path from 'node:path';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { afterEach, expect, test } from 'vitest';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
-import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 
 bindTestCommandHost();
 
@@ -27,9 +31,13 @@ test('reads a bounded trusted app.log suffix and rejects paths outside sessions'
   await expect(
     readAppLogOutputTail(sessionsDir, path.join(root, 'outside', 'app.log'), 10),
   ).rejects.toThrow('outside the daemon-owned sessions directory');
-  await expect(openAppLogOutput(sessionsDir, path.join(sessionDir, 'other.log'))).rejects.toThrow(
-    'outside the daemon-owned sessions directory',
-  );
+  await expect(
+    openAppLogOutput(
+      sessionsDir,
+      path.join(sessionDir, 'other.log'),
+      createLiveTestHostEnvironment(),
+    ),
+  ).rejects.toThrow('outside the daemon-owned sessions directory');
 });
 
 test('rejects a symlinked session directory that escapes the sessions root', async () => {
@@ -41,15 +49,19 @@ test('rejects a symlinked session directory that escapes the sessions root', asy
   fs.mkdirSync(outside);
   fs.symlinkSync(outside, path.join(sessionsDir, 'linked'));
   await expect(
-    openAppLogOutput(sessionsDir, path.join(sessionsDir, 'linked', 'app.log')),
+    openAppLogOutput(
+      sessionsDir,
+      path.join(sessionsDir, 'linked', 'app.log'),
+      createLiveTestHostEnvironment(),
+    ),
   ).rejects.toThrow('resolves outside');
 });
 
 test('rejects a final app.log symlink before append and preserves the outside file', async () => {
   const fixture = finalSymlinkFixture('append');
-  await expect(openAppLogOutput(fixture.sessionsDir, fixture.outputPath)).rejects.toThrow(
-    'symbolic link',
-  );
+  await expect(
+    openAppLogOutput(fixture.sessionsDir, fixture.outputPath, createLiveTestHostEnvironment()),
+  ).rejects.toThrow('symbolic link');
   expect(fs.readFileSync(fixture.outsidePath, 'utf8')).toBe('outside-append');
 });
 
@@ -80,7 +92,9 @@ test('rejects an asynchronous stream-open failure without an unhandled error', a
   const outputPath = path.join(sessionsDir, 'one', 'app.log');
   fs.mkdirSync(outputPath, { recursive: true });
 
-  await expect(openAppLogOutput(sessionsDir, outputPath)).rejects.toThrow('regular file');
+  await expect(
+    openAppLogOutput(sessionsDir, outputPath, createLiveTestHostEnvironment()),
+  ).rejects.toThrow('regular file');
 });
 
 function finalSymlinkFixture(label: string) {
@@ -109,7 +123,10 @@ test('redacts with the patterns of the command host, not the process', async () 
       requestEnv: undefined,
     },
     async () => {
-      const sink = await openAppLogOutput(sessionsDir, outputPath);
+      const sink = await openAppLogOutput(sessionsDir, outputPath, {
+        env: { AGENT_DEVICE_APP_LOG_REDACT_PATTERNS: 'secret-\\d+' },
+        cwd: root,
+      });
       await sink.write('token secret-42 leaked\n');
       await sink[Symbol.asyncDispose]();
     },

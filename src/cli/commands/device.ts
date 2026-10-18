@@ -77,7 +77,7 @@ async function runDeviceRelease(flags: CliFlags, host: HostEnvironment): Promise
       udid: flags.udid,
       serial: flags.serial,
     },
-    host.env,
+    host,
   );
   const data = {
     released: outcomes.filter((outcome) => outcome.status === 'released').map(serializeOutcome),

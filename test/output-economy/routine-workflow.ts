@@ -158,12 +158,13 @@ function readCliText(output: { text?: string | null }): string {
 }
 
 function interactionText(result: CommandRequestResult): string {
-  return readCliText(interactionCliOutputFormatters.press({ input: {}, result }));
+  return readCliText(interactionCliOutputFormatters.press({ env: process.env, input: {}, result }));
 }
 
 async function renderMcpSnapshot(): Promise<unknown> {
   return await createCommandToolExecutor({
-    createClient: () => ({}) as AgentDeviceClient,
+    createClient: () =>
+      ({ host: { env: process.env, cwd: process.cwd() } }) as unknown as AgentDeviceClient,
     runCommand: async () => SNAPSHOT_DAEMON_RESULT,
   }).execute('snapshot', {});
 }
@@ -222,7 +223,11 @@ export async function renderRoutineWorkflow(): Promise<{
       samples: {
         cli: {
           text: readCliText(
-            interactionCliOutputFormatters.get({ input: { format: 'text' }, result: READ_RESULT }),
+            interactionCliOutputFormatters.get({
+              env: process.env,
+              input: { format: 'text' },
+              result: READ_RESULT,
+            }),
           ),
         },
       },

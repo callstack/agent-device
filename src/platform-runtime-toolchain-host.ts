@@ -13,7 +13,7 @@ export function createHostToolchainPreparer(env: Readonly<EnvMap>): HostToolchai
       if (family === 'harmonyos') {
         const { ensureHarmonyToolchainPathConfigured } =
           await import('@agent-device/platform-harmonyos');
-        await ensureHarmonyToolchainPathConfigured();
+        await ensureHarmonyToolchainPathConfigured(env);
       }
     },
   });

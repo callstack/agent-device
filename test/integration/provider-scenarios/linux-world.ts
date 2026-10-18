@@ -45,6 +45,9 @@ export async function createLinuxDesktopWorld(): Promise<LinuxDesktopWorld> {
   let clipboardText = '';
 
   const linuxToolProvider = await createLocalLinuxToolProvider({
+    // The harness names the display env on the process before this line; snapshot it as this
+    // scenario's host (#3794).
+    host: { env: { ...process.env }, cwd: process.cwd() },
     whichCommand: async (cmd) =>
       cmd === 'gnome-calculator' || cmd === 'xdotool' || cmd === 'wmctrl',
     runCommand: async (cmd, args) => {
@@ -161,7 +164,9 @@ const inventoryScope: PlatformRequestScope = Object.freeze({
 });
 
 async function discoverLocalLinuxInventory(): Promise<DeviceInfo[]> {
-  const source = await linuxInventoryModule.loadInventory(createDeviceInventoryHost(process.env));
+  const source = await linuxInventoryModule.loadInventory(
+    createDeviceInventoryHost({ env: process.env, cwd: process.cwd() }),
+  );
   return [...(await source.discover({ platform: 'linux' }, inventoryScope))];
 }
 

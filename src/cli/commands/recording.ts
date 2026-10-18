@@ -39,6 +39,7 @@ export const recordingCommand: ClientCommandHandler = async ({ positionals, flag
   });
 
   const result = await runtime.recording.contactSheet({
+    host,
     video: { kind: 'path', path: recordingPath },
     ...(outputPath ? { out: { kind: 'path', path: outputPath } } : {}),
   });

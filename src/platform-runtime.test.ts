@@ -1,4 +1,4 @@
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { describe, expect, test, vi } from 'vitest';
 
@@ -66,27 +66,32 @@ describe('platform module metadata composition', () => {
       diagnostics: { emit: () => {} },
       progress: { report: () => {} },
     } as const;
-    const providerGateways = await createPlatformDeviceInventoryGateways(process.env, {
-      discover: async () => ({
-        kind: 'inventory',
-        devices: [
-          {
-            platform: 'web',
-            id: 'provider-web',
-            name: 'Provider Web',
-            kind: 'device',
-            target: 'desktop',
-            booted: true,
-          },
-        ],
-      }),
-    });
+    const providerGateways = await createPlatformDeviceInventoryGateways(
+      createLiveTestHostEnvironment(),
+      {
+        discover: async () => ({
+          kind: 'inventory',
+          devices: [
+            {
+              platform: 'web',
+              id: 'provider-web',
+              name: 'Provider Web',
+              kind: 'device',
+              target: 'desktop',
+              booted: true,
+            },
+          ],
+        }),
+      },
+    );
     expect(await providerGateways.providerFirst.discover({ platform: 'web' }, scope)).toHaveLength(
       1,
     );
     expect(hostAdapter.evaluations).toBe(0);
 
-    const localGateways = await createPlatformDeviceInventoryGateways(process.env);
+    const localGateways = await createPlatformDeviceInventoryGateways(
+      createLiveTestHostEnvironment(),
+    );
     expect(await localGateways.localOnly.discover({ platform: 'web' }, scope)).toHaveLength(1);
     expect(hostAdapter.evaluations).toBe(0);
 

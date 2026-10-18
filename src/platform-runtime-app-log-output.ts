@@ -1,16 +1,17 @@
 import { ensureAppLogPath } from '@agent-device/capture-kit/app-log-files';
 import type { AppLogOutputSink } from '@agent-device/contracts/app-log-runtime';
 import fs from 'node:fs';
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { openVerifiedFileForAppend, openVerifiedFileForRead } from '@agent-device/host-kit/file';
 import { requireManagedSessionArtifactPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 
 export async function openAppLogOutput(
   sessionsDir: string,
   pathname: string,
+  host: HostEnvironment,
 ): Promise<AppLogOutputSink> {
   pathname = requireManagedOutputPath(sessionsDir, pathname);
-  ensureAppLogPath(pathname, commandHostEnvironment().env);
+  ensureAppLogPath(pathname, host.env);
   const descriptor = openVerifiedFileForAppend(pathname);
   let stream: fs.WriteStream;
   try {
@@ -23,7 +24,7 @@ export async function openAppLogOutput(
   stream.on('error', (error) => {
     streamError ??= error;
   });
-  const { env } = commandHostEnvironment();
+  const { env } = host;
   const patterns = redactionPatterns(env);
   let pending = '';
   let writes = Promise.resolve();

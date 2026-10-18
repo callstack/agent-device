@@ -5,8 +5,8 @@ import type {
   AndroidScreenRecordingTransport,
 } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { type ShellWord, shellFragment, shellQuote } from '@agent-device/kernel/device-shell';
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { isPlayableVideo } from '@agent-device/capture-kit/recording-video';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
@@ -16,6 +16,7 @@ const BIT_RATE = { medium: 8_000_000, high: 20_000_000 } as const;
 
 export async function createAndroidScreenRecordingTransport(
   device: DeviceInfo,
+  host: HostEnvironment,
 ): Promise<AndroidScreenRecordingTransport> {
   const { resolveAndroidAdbExecutor, resolveScopedAndroidAdbBackgroundTransport, runAdbShell } =
     await loadAndroidMechanics();
@@ -108,8 +109,7 @@ export async function createAndroidScreenRecordingTransport(
       });
       return {
         ...result,
-        playable:
-          result.exitCode === 0 && (await isPlayableVideo(outputPath, commandHostEnvironment())),
+        playable: result.exitCode === 0 && (await isPlayableVideo(outputPath, host)),
       };
     },
     remove: async (remotePath, signal) =>

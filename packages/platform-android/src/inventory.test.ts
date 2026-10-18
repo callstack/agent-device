@@ -198,6 +198,32 @@ test('Android inventory prepares the legacy toolchain before an ANDROID_HOME-onl
   assert.deepEqual(preparedFamilies, ['android']);
 });
 
+test('Android inventory omits the home SDK root when the host names no home', async () => {
+  // The rule: a host that names no home turns off only the home-derived default paths. Discovery
+  // must still resolve adb from PATH and list devices, not fail the family (#3794 review).
+  const probed: string[] = [];
+  const host: DeviceInventoryHostFor<'android'> = {
+    ...createHost(async () => result('List of devices attached\n')),
+    homeDirectory: undefined,
+    files: {
+      isExecutable: async (candidate) => {
+        probed.push(candidate);
+        return false;
+      },
+      createTemporaryTextFile: async () => {
+        throw new Error('unused');
+      },
+    },
+  };
+
+  await createAndroidInventory(host, { sdkRoots: ['/configured-sdk'] }).discover({}, scope);
+
+  // The configured root is still probed; only the home-derived default root turns off. Without
+  // the guard, path.join(undefined, 'Android', 'Sdk') throws before adb is ever resolved.
+  assert.ok(probed.includes('/configured-sdk/platform-tools/adb'));
+  assert.ok(probed.every((candidate) => !candidate.includes('Android')));
+});
+
 test('Android inventory classifies a killed adb probe as a timeout', async () => {
   // The exec layer kills a wedged adb with `timeoutMs` in details and no stderr, so discovery
   // must classify it rather than report an unclassified command failure.

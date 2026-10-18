@@ -7,6 +7,7 @@ import type {
   PrepareAppleRunnerInput,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 
 /**
@@ -47,9 +48,9 @@ let retryModule: Promise<typeof import('@agent-device/host-kit/retry')> | undefi
 const loadRetry = () => (retryModule ??= import('@agent-device/host-kit/retry'));
 
 /** Lazy Apple tools; the Apple package owns lifecycle sequencing around these primitives. */
-export function createAppleApplicationTools(): AppleApplicationTools {
+export function createAppleApplicationTools(env: Readonly<EnvMap>): AppleApplicationTools {
   return Object.freeze({
-    resolveOpenTarget: async (device, input) => await resolveAppleOpenTarget(device, input),
+    resolveOpenTarget: async (device, input) => await resolveAppleOpenTarget(device, input, env),
     prewarmRunnerCache: async (device, execution, signal) => {
       const { prewarmAppleRunnerCache } = await loadRunnerOperations();
       await prewarmAppleRunnerCache(device, appleRunnerOptions(execution, signal));
@@ -111,7 +112,7 @@ export function createAppleApplicationTools(): AppleApplicationTools {
       const { clearRuntimeHintValues } = await loadRuntimeHints();
       await clearRuntimeHintValues({ device, ...input });
     },
-    dismissCloseAlerts: async (device, input) => await dismissMacOsCloseAlerts(device, input),
+    dismissCloseAlerts: async (device, input) => await dismissMacOsCloseAlerts(device, input, env),
     detachRunnerSessionsForShutdown: async () => {
       const { detachIosRunnerSessionsForShutdown } = await loadRunnerOperations();
       return await detachIosRunnerSessionsForShutdown();
@@ -126,6 +127,7 @@ export function createAppleApplicationTools(): AppleApplicationTools {
 async function resolveAppleOpenTarget(
   device: DeviceInfo,
   input: OpenTargetResolutionInput,
+  env: Readonly<EnvMap>,
 ): Promise<OpenTargetResolution> {
   if (input.foreground) {
     const foreground = await resolveAppleForegroundTarget(device);
@@ -139,7 +141,7 @@ async function resolveAppleOpenTarget(
       },
     );
   }
-  const macOsSurface = await resolveMacOsSurface(device, input.surface);
+  const macOsSurface = await resolveMacOsSurface(device, input.surface, env);
   const { resolveSessionAppBundleIdForTarget } = await loadOpenTarget();
   return {
     appBundleId:
@@ -161,12 +163,13 @@ async function resolveAppleForegroundTarget(
 async function resolveMacOsSurface(
   device: DeviceInfo,
   surface: OpenTargetResolutionInput['surface'],
+  env: Readonly<EnvMap>,
 ): Promise<OpenTargetResolution> {
   if (!isMacOs(device) || surface === 'app' || surface === 'desktop' || surface === 'menubar') {
     return {};
   }
   const { resolveFrontmostMacOsApp } = await loadMacOs();
-  const frontmost = await resolveFrontmostMacOsApp();
+  const frontmost = await resolveFrontmostMacOsApp(env);
   return { appBundleId: frontmost.bundleId, appName: frontmost.appName };
 }
 
@@ -187,6 +190,7 @@ function appleRunnerOptions(execution: PrepareAppleRunnerInput['execution'], sig
 async function dismissMacOsCloseAlerts(
   device: DeviceInfo,
   input: CloseApplicationFinalizationInput,
+  env: Readonly<EnvMap>,
 ): Promise<void> {
   if (!isMacOs(device)) return;
   const { runMacOsAlertAction } = await loadMacOs();
@@ -196,5 +200,5 @@ async function dismissMacOsCloseAlerts(
       : input.appBundleId
         ? { bundleId: input.appBundleId }
         : {};
-  await runMacOsAlertAction('dismiss', dismissOptions);
+  await runMacOsAlertAction('dismiss', { ...dismissOptions, env });
 }

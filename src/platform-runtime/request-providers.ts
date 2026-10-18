@@ -17,6 +17,7 @@ import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provid
 import type { LinuxToolProvider } from '@agent-device/platform-linux';
 import type { VegaToolProvider } from '@agent-device/platform-vega';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { AppleSimulatorScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-transport.ts';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
 import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
@@ -64,6 +65,8 @@ export type PlatformProviderResolvers = {
 };
 
 export type DefaultWebProviderOptions = Readonly<{
+  /** The composing runtime's host; the default web provider spawns managed backends with it. */
+  host: HostEnvironment;
   stateDir?: string;
   openWebSessionNames: () => readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
@@ -148,6 +151,7 @@ async function providersForContext(
   }
   const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
   const defaultProvider = await createAgentBrowserWebProvider({
+    host: defaultWebProvider.host,
     session: context.session?.name ?? context.requestedSession,
     stateDir: defaultWebProvider.stateDir,
     openWebSessionNames: defaultWebProvider.openWebSessionNames,

@@ -24,7 +24,7 @@ import {
 } from './selection-fixtures.ts';
 
 function interactionText(result: Record<string, unknown>): string {
-  return interactionCliOutputFormatters.press({ input: {}, result }).text ?? '';
+  return interactionCliOutputFormatters.press({ env: process.env, input: {}, result }).text ?? '';
 }
 
 export async function renderOutputFixtures() {
@@ -35,7 +35,8 @@ export async function renderOutputFixtures() {
   const error = normalizeError(ACTIONABLE_ERROR);
   const errorPolicyNormalized = normalizeError(POLICY_NORMALIZED_ERROR);
   const mcpSnapshot = await createCommandToolExecutor({
-    createClient: () => ({}) as AgentDeviceClient,
+    createClient: () =>
+      ({ host: { env: process.env, cwd: process.cwd() } }) as unknown as AgentDeviceClient,
     runCommand: async () => SNAPSHOT_DAEMON_RESULT,
   }).execute('snapshot', {});
   const workflow = await renderRoutineWorkflow();

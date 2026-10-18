@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
-import { installFakeManagedAgentBrowser, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createLiveTestHostEnvironment,
+  installFakeManagedAgentBrowser,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 
 const { cleanupManagedAgentBrowserOrphansMock } = vi.hoisted(() => ({
   cleanupManagedAgentBrowserOrphansMock: vi.fn(),
@@ -15,7 +19,11 @@ vi.mock('@agent-device/platform-web', async (importOriginal) => {
   };
 });
 
-import { cleanupWebBrowserOrphansForDaemonStartup } from './daemon-composition.ts';
+import { createDaemonStartupWebOrphanCleanup } from './daemon-composition.ts';
+
+const cleanupWebBrowserOrphansForDaemonStartup = createDaemonStartupWebOrphanCleanup(
+  createLiveTestHostEnvironment(),
+);
 
 const mockCleanupManagedAgentBrowserOrphans = vi.mocked(cleanupManagedAgentBrowserOrphansMock);
 
@@ -35,6 +43,7 @@ test('daemon-startup web cleanup passes open web sessions to the reaper', async 
     assert.equal(mockCleanupManagedAgentBrowserOrphans.mock.calls.length, 1);
     assert.equal(mockCleanupManagedAgentBrowserOrphans.mock.calls[0]?.[1], 'daemon-startup');
     assert.deepEqual(mockCleanupManagedAgentBrowserOrphans.mock.calls[0]?.[2], {
+      env: process.env,
       openWebSessionNames: ['web-session'],
     });
   } finally {

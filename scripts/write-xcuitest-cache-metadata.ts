@@ -73,6 +73,11 @@ async function writeXcuitestCacheMetadata(
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const host = captureHostEnvironment(process);
+    // Runner configuration reads take the runtime's host (#3794); this script is the whole
+    // process here, so it seeds the runner state with the same host it enters as a command host.
+    const { setAppleRunnerHostEnvironment } =
+      await import('@agent-device/platform-apple/runner-owner');
+    setAppleRunnerHostEnvironment(host);
     await withCommandHost(
       { host, requestEnv: undefined },
       async () => await writeXcuitestCacheMetadata(process.argv.slice(2), host.cwd),

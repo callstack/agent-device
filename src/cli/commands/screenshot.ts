@@ -12,12 +12,18 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
-export const screenshotCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
+export const screenshotCommand: ClientCommandHandler = async ({
+  positionals,
+  flags,
+  client,
+  host,
+}) => {
   const result = (await runCliCommand({
     client,
     command: 'screenshot',
     positionals,
     flags,
+    env: host.env,
   })) as CaptureScreenshotResult;
   // A non-default responseLevel returns a leveled (digest) payload — overlayCount,
   // artifacts, leveled overlayRefs. Rebuilding the default { path, overlayRefs }
@@ -39,7 +45,13 @@ export const screenshotCommand: ClientCommandHandler = async ({ positionals, fla
 
 export const diffCommand: ClientCommandHandler = async ({ positionals, flags, client, host }) => {
   if (positionals[0] === 'snapshot') {
-    const result = await runCliCommand({ client, command: 'diff', positionals, flags });
+    const result = await runCliCommand({
+      client,
+      command: 'diff',
+      positionals,
+      flags,
+      env: host.env,
+    });
     await writeCommandOutput(flags, result, () => formatSnapshotDiffText(result));
     return true;
   }

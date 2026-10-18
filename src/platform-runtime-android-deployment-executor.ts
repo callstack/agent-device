@@ -3,7 +3,6 @@ import type {
   AndroidAppDeploymentExecutor,
   MaterializeAppSourceInput,
 } from '@agent-device/contracts/app-deployment-runtime';
-import { commandHostEnvironment } from '@agent-device/host-kit/command';
 import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 /** Android deployment adapter; native command construction remains package-owned. */
@@ -20,7 +19,7 @@ export function createAndroidAppDeploymentExecutor(
       const { prepareAndroidInstallArtifact } = await loadAndroidMechanics();
       return await prepareAndroidInstallArtifact(input.source, {
         ...options,
-        environment: commandHostEnvironment().env,
+        environment: env,
       });
     },
     resolveAppPackage: async (device, app, options) => {

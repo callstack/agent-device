@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
 import { createPerfRuntimeHost } from './platform-runtime-perf-host.ts';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
@@ -47,7 +47,7 @@ test('the composed Android perf operation reports an unavailable ADB memory samp
   adb.calls.length = 0;
   const sessionsDir = mkdtempForTestSync('platform-runtime-perf-host-');
   const gateway = createPlatformRuntimeGateway({
-    env: process.env,
+    host: createLiveTestHostEnvironment(),
     sessionsDir,
     resolveSessionArtifacts: (sessionId) => ({
       outputPath: `${sessionsDir}/${sessionId}/app.log`,

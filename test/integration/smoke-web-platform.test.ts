@@ -182,7 +182,10 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
 
     const stateDir = context.env.AGENT_DEVICE_STATE_DIR;
     assert.ok(stateDir, 'expected the smoke context to configure a state dir');
-    status = await getManagedAgentBrowserStatus({ stateDir });
+    status = await getManagedAgentBrowserStatus({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
 
     const before = await inspectManagedAgentBrowserProcesses(status);
     assert.ok(

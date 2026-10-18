@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { bindTestCommandHost } from '@agent-device/test-kit';
+import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import { beforeEach, test, vi } from 'vitest';
 import {
   buildRecordingContactSheet,
@@ -102,6 +102,7 @@ beforeEach(() => {
 
 test('record contact-sheet defaults to the sheet beside the recording it was given', async () => {
   const result = await device().recording.contactSheet({
+    host: createLiveTestHostEnvironment(),
     video: { kind: 'path', path: '/tmp/recording.mp4' },
   });
 
@@ -114,6 +115,7 @@ test('record contact-sheet defaults to the sheet beside the recording it was giv
 
 test('record contact-sheet passes the pixel budget and honours an explicit output', async () => {
   await device().recording.contactSheet({
+    host: createLiveTestHostEnvironment(),
     video: { kind: 'path', path: '/tmp/recording.mp4' },
     out: { kind: 'path', path: '/tmp/named/sheet.png' },
     changedPixelThreshold: 0.2,
@@ -127,6 +129,7 @@ test('record contact-sheet passes the pixel budget and honours an explicit outpu
 
 test('record contact-sheet reports the caller-visible path of a downloaded artifact', async () => {
   const result = await device().recording.contactSheet({
+    host: createLiveTestHostEnvironment(),
     video: { kind: 'uploadedArtifact', id: 'rec-1' },
     out: { kind: 'downloadableArtifact' },
   });
@@ -139,6 +142,7 @@ test('record contact-sheet requires an output when the recording has no caller-s
   await assert.rejects(
     () =>
       device().recording.contactSheet({
+        host: createLiveTestHostEnvironment(),
         video: { kind: 'uploadedArtifact', id: 'rec-1' },
       }),
     /needs an output path/,
@@ -154,6 +158,7 @@ test('record contact-sheet releases a downloaded recording once the sheet fails'
   await assert.rejects(
     () =>
       device().recording.contactSheet({
+        host: createLiveTestHostEnvironment(),
         video: { kind: 'uploadedArtifact', id: 'rec-1' },
         out: { kind: 'downloadableArtifact' },
       }),
@@ -168,6 +173,7 @@ test('record contact-sheet refuses a change threshold that is not a share of the
     await assert.rejects(
       () =>
         device().recording.contactSheet({
+          host: createLiveTestHostEnvironment(),
           video: { kind: 'path', path: '/tmp/recording.mp4' },
           changedPixelThreshold,
         }),
@@ -184,6 +190,7 @@ test('record contact-sheet file paths are policy-gated on both sides', async () 
   await assert.rejects(
     () =>
       device(restrictedCommandPolicy()).recording.contactSheet({
+        host: createLiveTestHostEnvironment(),
         video: { kind: 'path', path: '/tmp/recording.mp4' },
       }),
     /Local video paths are not allowed by command policy/,
@@ -191,6 +198,7 @@ test('record contact-sheet file paths are policy-gated on both sides', async () 
   await assert.rejects(
     () =>
       device(localCommandPolicy({ allowLocalOutputPaths: false })).recording.contactSheet({
+        host: createLiveTestHostEnvironment(),
         video: { kind: 'path', path: '/tmp/recording.mp4' },
         out: { kind: 'path', path: '/tmp/sheet.png' },
       }),
@@ -204,6 +212,7 @@ test('a failed sheet releases the output it reserved', async () => {
   await assert.rejects(
     () =>
       device().recording.contactSheet({
+        host: createLiveTestHostEnvironment(),
         video: { kind: 'path', path: '/tmp/recording.mp4' },
       }),
     /decoder refused the clip/,
@@ -215,7 +224,11 @@ test('a failed sheet releases the output it reserved', async () => {
 
 test('record contact-sheet needs a recording to read', async () => {
   await assert.rejects(
-    () => device().recording.contactSheet({ video: undefined as never }),
+    () =>
+      device().recording.contactSheet({
+        host: createLiveTestHostEnvironment(),
+        video: undefined as never,
+      }),
     /requires a recording/,
   );
 });

@@ -8,8 +8,9 @@ import {
   ANDROID_EMULATOR,
   IOS_DEVICE,
   MACOS_DEVICE,
-  mkdtempForTest,
   bindTestCommandHost,
+  createLiveTestHostEnvironment,
+  mkdtempForTest,
 } from '@agent-device/test-kit';
 import { getInteractor } from './interactors.ts';
 
@@ -19,7 +20,8 @@ async function triggerEvent(device: DeviceInfo, eventUrl: string, appBundleId?: 
   const operations = bindAdmittedLocalInteractorOperations({
     device,
     signal: new AbortController().signal,
-    resolveInteractor: async (owned, runner) => await getInteractor(owned, runner),
+    resolveInteractor: async (owned, runner) =>
+      await getInteractor(owned, runner, createLiveTestHostEnvironment()),
     facts: { triggerAppEvent: { available: true } },
   });
   await operations.triggerAppEvent?.({

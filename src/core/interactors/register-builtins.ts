@@ -32,9 +32,9 @@ const linuxPlugin = {
   // Declares the platform-gated request provider resolver the linux family owns (the
   // linux tool provider, formerly gated by `device.platform === 'linux'`).
   providers: { platformGatedResolvers: ['linuxToolProvider'] },
-  createInteractor: async () => {
+  createInteractor: async (_device, _runner, host) => {
     const { createLinuxInteractor } = await import('@agent-device/platform-linux/interactor');
-    return createLinuxInteractor();
+    return createLinuxInteractor(host);
   },
 } as const satisfies PlatformPlugin;
 
@@ -44,9 +44,9 @@ const webPlugin = {
   // Declares the platform-gated request provider resolver the web family owns (the web
   // provider, formerly gated by `device.platform === 'web'`).
   providers: { platformGatedResolvers: ['webProvider'] },
-  createInteractor: async () => {
+  createInteractor: async (_device, _runner, host) => {
     const { createWebInteractor } = await import('@agent-device/platform-web/interactor');
-    return await createWebInteractor();
+    return await createWebInteractor(host);
   },
 } as const satisfies PlatformPlugin;
 

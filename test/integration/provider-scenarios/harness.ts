@@ -149,7 +149,7 @@ export async function createProviderScenarioHarness(
       platformRuntime?.providerModules ??
       createProviderPlatformRuntimeRegistrations(configuredRuntimes);
     const defaultDeviceRuntimeGateway = createPlatformRuntimeGateway({
-      env: input.host.env,
+      host: input.host,
       assertShutdownAllowed: input.assertShutdownAllowed,
       providerRuntimes: configuredRuntimes,
       providerModules,
@@ -189,6 +189,7 @@ export async function createProviderScenarioHarness(
           appleSimulatorScreenRecordingTransport,
         },
         defaultWebProvider: {
+          host: input.host,
           stateDir: input.baseDir,
           openWebSessionNames: input.openWebSessionNames,
           ownedProcessRecords: rootDeps.ownedProcessRecords,

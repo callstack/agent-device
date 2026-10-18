@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
 
 const unsupportedRecordingDevices = [
@@ -20,7 +20,7 @@ test.each(unsupportedRecordingDevices)(
   async (device) => {
     const sessionsDir = mkdtempForTestSync('platform-runtime-recording-');
     const gateway = createPlatformRuntimeGateway({
-      env: process.env,
+      host: createLiveTestHostEnvironment(),
       sessionsDir,
       resolveSessionArtifacts: (sessionId) => ({
         outputPath: path.join(sessionsDir, sessionId, 'app.log'),

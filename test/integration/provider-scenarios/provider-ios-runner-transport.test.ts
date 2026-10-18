@@ -296,7 +296,10 @@ function createRunnerTransportInteractor(
   runnerContext: RunnerContext | undefined,
 ): Interactor {
   const runner = runnerContext ?? {};
-  const implementation = applePlugin.createInteractor(DEVICE, runner);
+  const implementation = applePlugin.createInteractor(DEVICE, runner, {
+    env: process.env,
+    cwd: process.cwd(),
+  });
   return new Proxy({} as Interactor, {
     get(_target, property) {
       if (property === 'then') return undefined;

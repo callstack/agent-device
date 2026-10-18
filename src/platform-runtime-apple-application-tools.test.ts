@@ -46,7 +46,7 @@ const macOsDevice: DeviceInfo = {
 test('the runner session prewarm forwards the request execution, signal, and error policy to the runner module', async () => {
   const signal = new AbortController().signal;
 
-  await createAppleApplicationTools().prewarmRunnerSession(
+  await createAppleApplicationTools(process.env).prewarmRunnerSession(
     iosSimulator,
     { requestId: 'req-1', logPath: '/tmp/daemon.log', verbose: true },
     signal,
@@ -68,7 +68,7 @@ test('the runner session prewarm forwards the request execution, signal, and err
 test('preparing the runner spends the requested budget on stale-bundle cleanup, build, health, and startup', async () => {
   const signal = new AbortController().signal;
 
-  const result = await createAppleApplicationTools().prepareRunner(
+  const result = await createAppleApplicationTools(process.env).prepareRunner(
     iosSimulator,
     {
       timeoutMs: 240_000,
@@ -105,7 +105,7 @@ test('a macOS frontmost-app open resolves the identity of the frontmost applicat
   });
 
   await expect(
-    createAppleApplicationTools().resolveOpenTarget(macOsDevice, {
+    createAppleApplicationTools(process.env).resolveOpenTarget(macOsDevice, {
       surface: 'frontmost-app',
       currentAppBundleId: 'com.apple.TextEdit',
     }),

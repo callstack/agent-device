@@ -28,7 +28,7 @@ beforeEach(() => {
 const finalization = { retainRunner: false, stateDir: '/tmp' } as const;
 
 test('close dismisses the automation alert of the closed macOS app', async () => {
-  await createAppleApplicationTools().dismissCloseAlerts(MACOS_DEVICE, {
+  await createAppleApplicationTools(process.env).dismissCloseAlerts(MACOS_DEVICE, {
     ...finalization,
     surface: 'app',
     appBundleId: 'com.apple.systempreferences',
@@ -36,30 +36,34 @@ test('close dismisses the automation alert of the closed macOS app', async () =>
 
   expect(runMacOsAlertAction).toHaveBeenCalledWith('dismiss', {
     bundleId: 'com.apple.systempreferences',
+    env: process.env,
   });
 });
 
 test('close of the frontmost-app surface dismisses the frontmost automation alert', async () => {
-  await createAppleApplicationTools().dismissCloseAlerts(MACOS_DEVICE, {
+  await createAppleApplicationTools(process.env).dismissCloseAlerts(MACOS_DEVICE, {
     ...finalization,
     surface: 'frontmost-app',
     appBundleId: 'com.apple.systempreferences',
   });
 
-  expect(runMacOsAlertAction).toHaveBeenCalledWith('dismiss', { surface: 'frontmost-app' });
+  expect(runMacOsAlertAction).toHaveBeenCalledWith('dismiss', {
+    surface: 'frontmost-app',
+    env: process.env,
+  });
 });
 
 test('close without a macOS app bundle dismisses with no target', async () => {
-  await createAppleApplicationTools().dismissCloseAlerts(MACOS_DEVICE, {
+  await createAppleApplicationTools(process.env).dismissCloseAlerts(MACOS_DEVICE, {
     ...finalization,
     surface: 'app',
   });
 
-  expect(runMacOsAlertAction).toHaveBeenCalledWith('dismiss', {});
+  expect(runMacOsAlertAction).toHaveBeenCalledWith('dismiss', { env: process.env });
 });
 
 test('close on a non-macOS device dismisses nothing', async () => {
-  await createAppleApplicationTools().dismissCloseAlerts(IOS_SIMULATOR, {
+  await createAppleApplicationTools(process.env).dismissCloseAlerts(IOS_SIMULATOR, {
     ...finalization,
     surface: 'app',
     appBundleId: 'com.example.app',

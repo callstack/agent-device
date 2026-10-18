@@ -1,5 +1,6 @@
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { getPlugin } from './platform-plugin-registry.ts';
@@ -12,6 +13,7 @@ registerBuiltinPlatformPlugins();
 export async function getInteractor(
   device: DeviceInfo,
   runnerContext: RunnerContext,
+  host: HostEnvironment,
 ): Promise<Interactor> {
   if (isActiveProviderDevice(device)) {
     const providerInteractor = getProviderDeviceInteractor(device, runnerContext);
@@ -23,22 +25,24 @@ export async function getInteractor(
     );
   }
 
-  return await getLocalInteractor(device, runnerContext);
+  return await getLocalInteractor(device, runnerContext, host);
 }
 
 /**
  * Resolves a local platform interactor after its runtime owner has already been selected.
  * Lifecycle bindings use this exact-owner path so an ambient provider request scope cannot
- * redirect a local binding to a provider interactor.
+ * redirect a local binding to a provider interactor. `host` is the calling runtime's host;
+ * plugins are shared across runtimes, so it arrives per call.
  */
 export async function getLocalInteractor(
   device: DeviceInfo,
   runnerContext: RunnerContext,
+  host: HostEnvironment,
 ): Promise<Interactor> {
   // Byte-identical replacement for the former per-platform switch: each plugin's
   // `createInteractor` is the SAME lazy dynamic import + factory call the switch
   // arm performed, and `getPlugin` throws the SAME `UNSUPPORTED_PLATFORM` AppError
   // the switch default threw. Registry exhaustiveness (BuiltinPluginsCoverAllPlatforms)
   // guarantees every leaf `Platform` resolves.
-  return await getPlugin(device.platform).createInteractor(device, runnerContext);
+  return await getPlugin(device.platform).createInteractor(device, runnerContext, host);
 }
