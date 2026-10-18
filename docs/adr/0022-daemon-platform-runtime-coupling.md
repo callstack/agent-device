@@ -119,8 +119,8 @@ The ADR 0019 trace recorded routes of approximately 24 files without an accepted
    - Runtime lifecycle participation deepens through the existing lifecycle phases, with no generic hook bag (#2333).
    - Open-target planning separates plan/result from platform mechanics and preserves one construction path.
    - Session state/store authority retains its access structure and ratchets the handler-owned portion through R75.
-   - Route depth records the re-traced routes and collapses only the proven pass-through hops.
-     This change collapses none.
+   - Route depth records the re-traced routes and collapses only the hops that the deletion test proves removable.
+     The deletion test covers pass-through and translation hops. This change collapses none.
 
 ## 3. Rationale
 
