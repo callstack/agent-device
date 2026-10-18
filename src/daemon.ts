@@ -12,34 +12,20 @@ import {
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
-// Marker failures go to stderr, which the launcher redirects into the daemon log — the same tail a
-// startup failure already ships as evidence. A marker is evidence, not a requirement, so a refused
-// append never stops a startup that can still register; it must only stay observable.
+// Marker failures go to stderr, which the launcher redirects into the daemon log; a refused
+// append is evidence, never a startup requirement.
 function reportMarkerFailure(error: unknown): void {
   process.stderr.write(`Daemon startup marker write failed: ${normalizeError(error).message}\n`);
 }
 
-// #3782: the first marker the waiting client can read. It says this entry's module graph evaluated,
-// which on an overloaded host is the slowest thing a daemon start does before it can prove itself.
-// The file is named for this process's pid, so the client attributes every line to this launch.
-// The claim first: a host that reused this pid after an old launch died before either cleanup ran
-// would otherwise leave that lifetime's phases in this same file, and this launch's timings would
-// read as older and farther-progressed than they are.
-claimDaemonStartupPhasesFile(
-  resolveDaemonStartupPhasesPath(
-    resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR).baseDir,
-    process.pid,
-  ),
-  reportMarkerFailure,
+const ownPhasesPath = resolveDaemonStartupPhasesPath(
+  resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR).baseDir,
+  process.pid,
 );
-recordDaemonStartupMarker(
-  resolveDaemonStartupPhasesPath(
-    resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR).baseDir,
-    process.pid,
-  ),
-  'modules-loaded',
-  reportMarkerFailure,
-);
+// The claim first: after pid reuse it is the only defense against reading a dead lifetime's
+// phases as this launch's own.
+claimDaemonStartupPhasesFile(ownPhasesPath, reportMarkerFailure);
+recordDaemonStartupMarker(ownPhasesPath, 'modules-loaded', reportMarkerFailure);
 
 // The executable owns the process: signals, fatal-error handlers and the exit code. The runtime
 // only reports when it has closed, whoever closed it.
