@@ -156,7 +156,7 @@ export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
     module: 'packages/daemon-contracts/src/daemon-startup-phases.ts',
     issue: '#3782',
     reason:
-      'The startup phase record owner the #3791 review asked for (its own file/format/writer/reader/sweep beside daemon-shutdown-report). The daemon entry records its earliest `modules-loaded` marker at module load, so the owner must be eager there; the entry pays for the record it writes first.',
+      'The startup phase record owner the #3791 review asked for. The daemon entry records its earliest `modules-loaded` marker at module load, so the owner must be eager there; the entry pays for the record it writes first.',
     owner: 'thymikee',
   },
 ]);

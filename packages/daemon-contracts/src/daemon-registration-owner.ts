@@ -47,7 +47,6 @@ import {
 import { sweepDeadDaemonStartupPhasesFiles } from './daemon-startup-phases.ts';
 
 export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
-
 export type DaemonRegistrationFields = Readonly<{
   socketPort?: number;
   httpPort?: number;

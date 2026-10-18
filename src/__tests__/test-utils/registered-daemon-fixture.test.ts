@@ -11,6 +11,7 @@ import {
   launchRegisteredDaemonFixtureArgs,
   registeredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
+  waitForFixtureFile,
   waitForRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
 } from './registered-daemon-fixture.ts';
@@ -36,21 +37,12 @@ test('args built before any launch keep their own entry script under a concurren
   assert.notEqual(firstArgs[1], secondArgs[1]);
   const first = launchRegisteredDaemonFixtureArgs(paths, firstArgs, { stdio: 'ignore' });
   try {
-    const held = path.join(paths.baseDir, `registration-held-${first.pid}`);
-    for (let attempt = 0; !fs.existsSync(held); attempt += 1) {
-      assert.ok(attempt < 400, 'child 1 never acquired the registration');
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await waitForFixtureFile(path.join(paths.baseDir, `registration-held-${first.pid}`));
     const second = launchRegisteredDaemonFixtureArgs(paths, secondArgs, { stdio: 'ignore' });
     assert.equal((await second.exited).exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
-    const ownRecord = resolveDaemonStartupPhasesPath(paths.baseDir, first.pid);
-    const text = fs.readFileSync(ownRecord, 'utf8');
+    const text = fs.readFileSync(resolveDaemonStartupPhasesPath(paths.baseDir, first.pid), 'utf8');
     assert.match(text, /modules-loaded/);
-    assert.doesNotMatch(
-      text,
-      /lock-acquired/,
-      "child 1 must run the script built for it, not the second build's switches",
-    );
+    assert.doesNotMatch(text, /lock-acquired/, 'child 1 must run the script built for it');
   } finally {
     await finishRegisteredDaemonFixture(paths.baseDir);
   }

@@ -52,7 +52,7 @@ export function registeredDaemonFixtureArgs(
     `import fs from 'node:fs';
 import path from 'node:path';
 import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration } from ${JSON.stringify(registrationUrl)};
-import { claimDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(phasesUrl)};
+import { removeDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(phasesUrl)};
 const paths = ${JSON.stringify(paths)};
 const barrier = ${JSON.stringify(acquisitionBarrier)};
 const emitBefore = ${fixtureOptions?.emitStartupMarkerBeforeAcquisition ? 'true' : 'false'};
@@ -61,11 +61,7 @@ if (barrier) {
   fs.writeFileSync(barrier + '.ready-' + process.pid, 'ready');
   while (!fs.existsSync(barrier)) await new Promise(resolve => setTimeout(resolve, 10));
 }
-if (emitBefore) {
-  const ownRecord = resolveDaemonStartupPhasesPath(paths.baseDir, process.pid);
-  claimDaemonStartupPhasesFile(ownRecord);
-  recordDaemonStartupMarker(ownRecord, 'modules-loaded');
-}
+if (emitBefore) { const own = resolveDaemonStartupPhasesPath(paths.baseDir, process.pid); removeDaemonStartupPhasesFile(own); recordDaemonStartupMarker(own, 'modules-loaded'); }
 const acquired = await tryAcquireDaemonRegistration(paths);
 if (acquired.status !== 'acquired') process.exit(DAEMON_STARTUP_EXIT_CODES[acquired.status]);
 if (emitAfter)
@@ -115,6 +111,14 @@ export function spawnRegisteredDaemonFixture(
     registeredDaemonFixtureArgs(paths, fields, acquisitionBarrier, fixtureOptions),
     options,
   );
+}
+
+/** Waits up to 4 s for a fixture child to publish `file`; one shared wait for every probe. */
+export async function waitForFixtureFile(file: string): Promise<void> {
+  for (let attempt = 0; !fs.existsSync(file); attempt += 1) {
+    assert.ok(attempt < 400, `fixture did not publish ${file}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 export async function waitForRegisteredDaemonFixture(

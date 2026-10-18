@@ -5,7 +5,6 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
-  claimDaemonStartupPhasesFile,
   readDaemonStartupPhaseMarkers,
   recordDaemonStartupMarker,
   removeDaemonStartupPhasesFile,
@@ -50,7 +49,7 @@ test('marker reading ignores unknown phases and unparsable lines', () => {
 });
 
 test('the producer lifetime claim empties a same-pid leftover', async () => {
-  // Pid reuse after both the old client and daemon died before either cleanup: the entry claims
+  // Pid reuse after both the old client and daemon died before either cleanup: the entry removes
   // its record before its first marker; this child repeats that producer sequence itself.
   const stateDir = await mkdtempForTest('agent-device-markers-');
   writeFileSync(path.join(stateDir, 'package.json'), '{"type":"module"}');
@@ -58,11 +57,11 @@ test('the producer lifetime claim empties a same-pid leftover', async () => {
   const registrationUrl = new URL('./daemon-startup-phases.ts', import.meta.url).href;
   writeFileSync(
     entry,
-    `import { claimDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
+    `import { removeDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
 const file = resolveDaemonStartupPhasesPath(${JSON.stringify(stateDir)}, process.pid);
 recordDaemonStartupMarker(file, 'listening');
 recordDaemonStartupMarker(file, 'registered');
-claimDaemonStartupPhasesFile(file);
+removeDaemonStartupPhasesFile(file);
 recordDaemonStartupMarker(file, 'modules-loaded');
 `,
   );
@@ -76,13 +75,19 @@ recordDaemonStartupMarker(file, 'modules-loaded');
   expect(phases).toEqual({ 'modules-loaded': expect.any(Number) });
 });
 
-test('a refused claim reset reports through the callback instead of throwing', async () => {
+test.each([
+  ['remove', (p: string, cb: (e: unknown) => void) => removeDaemonStartupPhasesFile(p, cb)],
+  [
+    'record',
+    (p: string, cb: (e: unknown) => void) => recordDaemonStartupMarker(p, 'modules-loaded', cb),
+  ],
+] as const)('a refused %s reports through the callback instead of throwing', async (_name, run) => {
   const stateDir = await mkdtempForTest('agent-device-markers-');
-  const markerPath = resolveDaemonStartupPhasesPath(stateDir, 778);
+  const markerPath = resolveDaemonStartupPhasesPath(stateDir, 777);
   mkdirSync(markerPath, { recursive: true });
   const reported: unknown[] = [];
   expect(() =>
-    claimDaemonStartupPhasesFile(markerPath, (error) => {
+    run(markerPath, (error) => {
       reported.push(error);
     }),
   ).not.toThrow();
@@ -119,20 +124,6 @@ test('removeDaemonStartupPhasesFile removes a file and tolerates one already gon
   removeDaemonStartupPhasesFile(file);
   expect(existsSync(file)).toBe(false);
   expect(() => removeDaemonStartupPhasesFile(file)).not.toThrow();
-});
-
-test('a marker write failure reports through the callback, keeping startup running', async () => {
-  const stateDir = await mkdtempForTest('agent-device-markers-');
-  const markerPath = resolveDaemonStartupPhasesPath(stateDir, 777);
-  mkdirSync(markerPath, { recursive: true });
-  const reported: unknown[] = [];
-  expect(() =>
-    recordDaemonStartupMarker(markerPath, 'modules-loaded', (error) => {
-      reported.push(error);
-    }),
-  ).not.toThrow();
-  expect(reported).toHaveLength(1);
-  expect(reported[0]).toHaveProperty('message');
 });
 
 test('a crash-replay append keeps the file valid JSONL', async () => {

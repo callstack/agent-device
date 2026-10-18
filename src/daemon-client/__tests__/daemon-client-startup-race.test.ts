@@ -421,7 +421,7 @@ test('a busy contender that exits sweeps its own pre-lock marker before the retr
         error instanceof AppError && error.details?.kind === 'daemon_startup_failed',
     );
     assert.deepEqual(
-      fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases')),
+      fs.readdirSync(paths.baseDir).filter((e) => e.startsWith('daemon-startup-phases')),
       [],
       "the retry result must not leave the joined busy contender's record behind",
     );
@@ -469,7 +469,7 @@ test('a joined busy contender waits for a published winner to become ready witho
       false,
     );
     assert.deepEqual(
-      fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases')),
+      fs.readdirSync(paths.baseDir).filter((e) => e.startsWith('daemon-startup-phases')),
       [],
       "the winner handoff must not leave the exited contender's record behind",
     );

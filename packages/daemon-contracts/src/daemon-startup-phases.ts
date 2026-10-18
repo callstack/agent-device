@@ -5,9 +5,9 @@ import { isProcessAlive } from '@agent-device/host-kit/process';
 
 /**
  * Startup phase markers: a per-launch record, named for the writing pid, of how far that startup
- * got, so a waiting client tells "slow but progressing" from "stuck" without a timestamp and with
- * no heartbeat. The writer removes it on completion, the launching client after a joined exit, and
- * each new registration owner sweeps the files of provably dead pids.
+ * got, so a waiting client tells "slow but progressing" from "stuck" without a heartbeat. The
+ * writer removes it on completion, the client after a joined exit, and each new registration
+ * owner sweeps the files of provably dead pids.
  */
 const DAEMON_STARTUP_PHASES = Object.freeze([
   'modules-loaded',
@@ -66,11 +66,11 @@ function endsWithoutNewline(file: string): boolean {
 }
 
 /**
- * Empties this launch's own record before its first marker: a per-pid name identifies a writer,
- * not a lifetime. No caller resets a file named for another pid; a refused reset never stops the
- * startup because the reset ran first when it could run.
+ * Removes this launch's record: before its first marker (a per-pid name identifies a writer, not
+ * a lifetime, so the entry claims its file first), and after a finished startup or joined exit.
+ * A refused removal only reports through `reportFailure`; it never stops a startup.
  */
-export function claimDaemonStartupPhasesFile(
+export function removeDaemonStartupPhasesFile(
   startupPhasesPath: string,
   reportFailure?: (error: NormalizedError) => void,
 ): void {
@@ -79,13 +79,6 @@ export function claimDaemonStartupPhasesFile(
   } catch (error) {
     reportFailure?.(normalizeError(error));
   }
-}
-
-/** Removes a marker file whose writer is provably gone: a finished startup or a joined exit. */
-export function removeDaemonStartupPhasesFile(startupPhasesPath: string): void {
-  try {
-    fs.rmSync(startupPhasesPath, { force: true });
-  } catch {}
 }
 
 /** Sweeps marker files of provably dead (or unnameable) pids; a live pid's file is kept. */

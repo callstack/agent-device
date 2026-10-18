@@ -25,6 +25,7 @@ import { readVersion } from '@agent-device/host-kit/version';
 import {
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixtures,
+  waitForFixtureFile,
 } from '../../__tests__/test-utils/registered-daemon-fixture.ts';
 import {
   startHttpDaemonFixture,
@@ -127,11 +128,21 @@ async function realPause(ms = 5) {
   await actualRetry.sleep(ms);
 }
 
-async function awaitFile(file: string) {
-  for (let attempt = 0; !fs.existsSync(file); attempt += 1) {
-    assert.ok(attempt < 400, `fixture did not publish ${file}`);
-    await actualRetry.sleep(10);
-  }
+/** Pins `Date.now` to a mutable value: advancing the wait costs no real time. */
+function virtualClock(): { value: number } {
+  const now = { value: Date.now() };
+  vi.spyOn(Date, 'now').mockImplementation(() => now.value);
+  return now;
+}
+
+/** The startup phase records left in this state dir, by file name. */
+function phaseRecordEntries(paths: DaemonPaths): string[] {
+  return fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases'));
+}
+
+function registrationBooted(paths: DaemonPaths): () => boolean {
+  let booted = false;
+  return () => (booted ||= fs.existsSync(path.join(paths.baseDir, 'registration-held')));
 }
 
 test('a daemon slower than the retired 15 s budget starts successfully while it keeps progressing', async (t) => {
@@ -139,22 +150,18 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '150000');
   const http = await startHttpDaemonFixture({ devices: [] });
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-slow-success-'));
-  // Virtual time runs past the 60 s stall window with the ceiling above the span, so only the
-  // successive phase markers keep this wait alive: each phase is new, so the last observed
-  // progress never goes 60 s stale, while the same span with no readable markers fails as
-  // startup-stalled. A repeated rewrite of one phase would not advance progress, because the
-  // reader keeps each phase's earliest timestamp.
-  const phaseSchedule: Array<readonly [DaemonStartupPhase, number]> = [
-    ['modules-loaded', 10_000],
-    ['composition-loaded', 25_000],
-    ['lock-acquired', 40_000],
-    ['recovery-finished', 70_000],
+  // The success must rest on the markers: four successive phases 20 s apart across 80 s of virtual
+  // time under a 150 s ceiling keep progress inside the 60 s stall window; the same span with no
+  // readable markers fails as startup-stalled, one rewritten phase never advances progress.
+  const phases: readonly DaemonStartupPhase[] = [
+    'modules-loaded',
+    'composition-loaded',
+    'lock-acquired',
+    'recovery-finished',
   ];
-  const startedAt = Date.now();
-  const now = { value: startedAt };
-  vi.spyOn(Date, 'now').mockImplementation(() => now.value);
+  const now = virtualClock();
   const spawned = { at: 0, child: undefined as { pid: number } | undefined };
-  let booted = false;
+  const booted = registrationBooted(paths);
   spawn.mockImplementation((_command, _args, options) => {
     const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options);
     spawned.at = now.value;
@@ -164,23 +171,17 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
   fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
   let nextPhase = 0;
   pause.mockImplementation(async () => {
-    if (!booted) {
-      booted = fs.existsSync(path.join(paths.baseDir, 'registration-held'));
-      if (!booted) return await realPause();
-    }
-    if (spawned.child && now.value - spawned.at < 70_000) {
-      now.value += 2_000;
-      while (
-        nextPhase < phaseSchedule.length &&
-        now.value - spawned.at >= phaseSchedule[nextPhase]![1]
-      ) {
+    if (!booted()) return await realPause();
+    if (spawned.child && now.value - spawned.at < 80_000) {
+      now.value += 20_000;
+      if (nextPhase < phases.length) {
         recordDaemonStartupMarker(
           resolveDaemonStartupPhasesPath(paths.baseDir, spawned.child.pid),
-          phaseSchedule[nextPhase]![0],
+          phases[nextPhase]!,
         );
         nextPhase += 1;
       }
-      if (nextPhase === phaseSchedule.length)
+      if (nextPhase === phases.length)
         fs.rmSync(path.join(paths.baseDir, 'defer-publication'), { force: true });
       return await realPause();
     }
@@ -189,26 +190,16 @@ test('a daemon slower than the retired 15 s budget starts successfully while it 
   try {
     const response = await sendToDaemon(request(paths));
     assert.equal(response.ok, true);
-    const elapsed = now.value - spawned.at;
-    assert.ok(
-      elapsed >= 60_000,
-      `the startup this test proves must outlast the stall window (${elapsed}ms)`,
-    );
+    assert.ok(now.value - spawned.at >= 60_000, 'this startup must outlast the stall window');
     assert.equal(spawn.mock.calls.length, 1);
     assert.equal(http.rpcRequests.length, 1);
     assert.ok(spawned.child && isProcessAlive(spawned.child.pid), 'the client must not retire it');
-    assert.ok(spawned.child);
-    // The wait survived the stall window on distinct successive phases, not on one repeated
-    // marker: every scheduled phase is in this launch's own record.
+    // The wait survived on four distinct phases, not one repeated marker.
     const markers = readDaemonStartupPhaseMarkers(
-      fs.readFileSync(resolveDaemonStartupPhasesPath(paths.baseDir, spawned.child.pid), 'utf8'),
+      fs.readFileSync(resolveDaemonStartupPhasesPath(paths.baseDir, spawned.child!.pid), 'utf8'),
     );
-    for (const [phase] of phaseSchedule) {
-      assert.equal(
-        typeof markers[phase],
-        'number',
-        `the observed progress must include the ${phase} phase`,
-      );
+    for (const phase of phases) {
+      assert.equal(typeof markers[phase], 'number', `the ${phase} phase was never observed`);
     }
   } finally {
     await closeLoopbackServer(http.server);
@@ -244,21 +235,17 @@ test('a daemon that exits during startup fails with startup-exited within one se
 
 test('a live daemon that publishes no startup marker is retired as stalled before the ceiling', async () => {
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '120000');
-  const started = Date.now();
-  const now = { value: started };
-  vi.spyOn(Date, 'now').mockImplementation(() => now.value);
+  const now = virtualClock();
+  const started = now.value;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-no-marker-'));
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
   spawn.mockImplementation((_command, _args, options) => {
     child = spawnUnregisteredDaemonChild(paths, options);
     return child;
   });
-  let booted = false;
+  const booted = registrationBooted(paths);
   pause.mockImplementation(async () => {
-    if (!booted) {
-      booted = fs.existsSync(path.join(paths.baseDir, 'registration-held'));
-      if (!booted) return await realPause();
-    }
+    if (!booted()) return await realPause();
     if (now.value - started < 70_000) now.value += 5_000;
     await realPause();
   });
@@ -276,7 +263,7 @@ test('a live daemon that publishes no startup marker is retired as stalled befor
     assert.equal(spawn.mock.calls.length, 1, 'a stalled daemon is not retried');
     await (child?.exited ?? Promise.resolve());
     assert.deepEqual(
-      fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases')),
+      phaseRecordEntries(paths),
       [],
       'a joined startup must sweep its own phase-marker file',
     );
@@ -287,25 +274,17 @@ test('a live daemon that publishes no startup marker is retired as stalled befor
 
 test('a live daemon that keeps progressing but never registers fails at the env ceiling with phases', async () => {
   vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '30000');
-  const started = Date.now();
-  const now = { value: started };
-  vi.spyOn(Date, 'now').mockImplementation(() => now.value);
+  const now = virtualClock();
+  const started = now.value;
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-ceiling-'));
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
-  let booted = false;
-  const spawned = { at: 0 };
+  const booted = registrationBooted(paths);
   spawn.mockImplementation((_command, _args, options) => {
     child = spawnUnregisteredDaemonChild(paths, options, true);
-    spawned.at = now.value;
     return child;
   });
-  let polls = 0;
   pause.mockImplementation(async () => {
-    polls += 1;
-    if (!booted) {
-      booted = fs.existsSync(path.join(paths.baseDir, 'registration-held'));
-      if (!booted) return await realPause();
-    }
+    if (!booted()) return await realPause();
     if (now.value - started < 30_000) now.value += 1_000;
     await realPause();
   });
@@ -335,18 +314,15 @@ test("a startup progressed by a fresh launch is not judged stalled by an earlier
   const leftover = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' }, undefined, {
     emitStartupMarker: true,
   });
-  await awaitFile(registrationHeldFor(paths, leftover.pid));
+  await waitForFixtureFile(registrationHeldFor(paths, leftover.pid));
   process.kill(leftover.pid, 'SIGTERM');
   await leftover.exited;
-  const leftoverRecords = () =>
-    fs.readdirSync(paths.baseDir).filter((entry) => entry.startsWith('daemon-startup-phases'));
   assert.ok(
-    leftoverRecords().length > 0,
+    phaseRecordEntries(paths).length > 0,
     'the leftover launch must have left a real daemon-written marker record',
   );
-  const started = Date.now();
-  const now = { value: started };
-  vi.spyOn(Date, 'now').mockImplementation(() => now.value);
+  const now = virtualClock();
+  const started = now.value;
   let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
   let booted = false;
   spawn.mockImplementation((_command, _args, options) => {
@@ -372,7 +348,7 @@ test("a startup progressed by a fresh launch is not judged stalled by an earlier
     );
     await (child?.exited ?? Promise.resolve());
     assert.ok(
-      !leftoverRecords().some((entry) => entry.includes(String(child?.pid))),
+      !phaseRecordEntries(paths).some((entry) => entry.includes(String(child?.pid))),
       "the joined exit must sweep this launch's own marker file",
     );
   } finally {
@@ -388,7 +364,7 @@ test('a busy exit while a live lock holder defers publication reaches the ceilin
   const winner = spawnRegisteredDaemonFixture(paths, fields(1), { stdio: 'ignore' }, undefined, {
     emitStartupMarker: true,
   });
-  await awaitFile(registrationHeldFor(paths, winner.pid));
+  await waitForFixtureFile(registrationHeldFor(paths, winner.pid));
   let contender: ReturnType<typeof runCmdDetachedMonitored> | undefined;
   spawn.mockImplementation((_command, _args, options) => {
     contender = spawnRegisteredDaemonFixture(paths, fields(1), options, undefined, {
@@ -413,10 +389,7 @@ test('a busy exit while a live lock holder defers publication reaches the ceilin
     );
     assert.ok(contender);
     assert.deepEqual(
-      fs
-        .readdirSync(paths.baseDir)
-        .filter((entry) => entry.startsWith('daemon-startup-phases'))
-        .sort(),
+      phaseRecordEntries(paths).sort(),
       [path.basename(resolveDaemonStartupPhasesPath(paths.baseDir, winner.pid))],
       'the exited contender record must be swept; only the live winner record may remain',
     );
@@ -457,9 +430,7 @@ test('an observed exit on a reused launch pid is not a live startup at the deadl
     }),
     readIdentity: () => ({ pid: reusedPid, startTime: null }),
   }));
-  const started = Date.now();
-  const now = { value: started };
-  vi.spyOn(Date, 'now').mockImplementation(() => now.value);
+  const now = virtualClock();
   let advanced = false;
   pause.mockImplementation(async () => {
     if (!advanced) {
