@@ -79,7 +79,9 @@ Nothing documented the conventions, so each new site decided them again.
    Rehydration helpers (`throwDaemonError`, `toDaemonHttpRpcError`) copy all fields.
    `NormalizedError` hoists the typed signals, so `--json` consumers see them.
 6. **Observability.** Failed requests always flush diagnostics.
-   A `diagnosticId` and an ndjson `logPath` accompany every error.
+   A `diagnosticId` and an ndjson `logPath` accompany every error produced on the local machine.
+   On a remote path, the client keeps only a `logPath` it can open.
+   When it cannot produce one, `logPathUnavailable` replaces `logPath` and names the reason (#1801).
    Daemon-side diagnostics are under the session state dir.
    Client-side diagnostics are under `~/.agent-device/logs`.
    Messages must not embed raw stderr dumps or secrets.
