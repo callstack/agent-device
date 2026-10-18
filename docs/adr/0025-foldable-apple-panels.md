@@ -23,7 +23,7 @@ Only inference answers the second question.
 | iOS simulator capture through `simctl` | First resolve the CoreDevice display table. Capture the panel that the system currently lights. |
 | Runner fallback after an eligible `simctl` failure | Follow the target app's window and capture the display that hosts it. Use the facts that the runner reports. Only a failure the fallback policy (`shouldFallbackToRunner`) accepts reaches the runner; other failures rethrow. |
 | More than one integrated panel | Pass `--display=<panel name>` on every `simctl io screenshot`. Never use the implicit default. |
-| Zero or multiple lit panels | Name the `primary` panel. Emit `apple_display_capture_ambiguous`. Report pose as `unknown`. |
+| Zero or multiple lit panels with a `primary` panel | Name the `primary` panel. Emit `apple_display_capture_ambiguous`. Report pose as `unknown`. |
 | No sole lit panel and no `primary` panel | Refuse with `COMMAND_FAILED` and `details.reason: capture-panel-unidentified`. Never choose a panel by array order. |
 | One integrated panel | Preserve pre-panel behavior exactly: no display flag, no pose, unchanged scale probe. |
 | Density normalization | Use the captured panel's `pointScale`. For runner fallback, use that capture's reported pixels-per-point. |
