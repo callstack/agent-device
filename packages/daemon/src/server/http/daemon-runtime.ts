@@ -13,7 +13,6 @@ import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
 } from '@agent-device/daemon-contracts/daemon-resolution';
-import { openDaemonServers, reconcileDeviceClaimsForDaemonStartup } from './server-startup.ts';
 import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import {
   installProviderDeviceAdmission,
@@ -714,6 +713,8 @@ async function startDaemonRuntimeOnHost(
       data: { error: error instanceof Error ? error.message : String(error) },
     });
   });
+  const { openDaemonServers, reconcileDeviceClaimsForDaemonStartup } =
+    await import('./server-startup.ts');
   const { servers, socketPort, httpPort } = await openDaemonServers(
     daemonServerMode,
     {
