@@ -87,10 +87,12 @@ import {
 import {
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
+import {
   recordDaemonStartupMarker,
   removeDaemonStartupPhasesFile,
   resolveDaemonStartupPhasesPath,
-} from '@agent-device/daemon-contracts/daemon-registration-owner';
+} from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { retainPngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';

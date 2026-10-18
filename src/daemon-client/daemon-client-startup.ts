@@ -9,16 +9,18 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { type ExecDetachedExit } from '@agent-device/host-kit/command';
 import {
   DAEMON_STARTUP_EXIT_CODES,
-  readDaemonStartupPhaseMarkers,
   recoverAbandonedDaemonRegistration,
-  removeDaemonStartupPhasesFile,
-  resolveDaemonStartupPhasesPath,
   type DaemonRetirementResult,
-  type DaemonStartupPhase,
   launchDaemonProcess,
   stopAndRetireDaemon,
   type DaemonStartupLaunch,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import {
+  readDaemonStartupPhaseMarkers,
+  removeDaemonStartupPhasesFile,
+  resolveDaemonStartupPhasesPath,
+  type DaemonStartupPhase,
+} from '@agent-device/daemon-contracts/daemon-startup-phases';
 import type {
   DaemonPaths,
   DaemonTransportPreference,

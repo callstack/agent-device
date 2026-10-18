@@ -4,10 +4,8 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
-import {
-  DAEMON_STARTUP_EXIT_CODES,
-  resolveDaemonStartupPhasesPath,
-} from '@agent-device/daemon-contracts/daemon-registration-owner';
+import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import { resolveDaemonStartupPhasesPath } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   launchRegisteredDaemonFixtureArgs,

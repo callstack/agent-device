@@ -10,7 +10,6 @@ import {
   type DaemonTerminationResult,
 } from './daemon-process.ts';
 import {
-  isProcessAlive,
   readCurrentOwnerIdentity,
   readProcessStartTime,
   type OwnerIdentity,
@@ -45,148 +44,10 @@ import {
   resolveDaemonShutdownReportPath,
   type DaemonShutdownOutcome,
 } from './daemon-shutdown-report.ts';
+import { sweepDeadDaemonStartupPhasesFiles } from './daemon-startup-phases.ts';
 
 export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
 
-/**
- * Startup phase markers: a per-launch record, named for the writing pid, of how far that startup
- * got, so a waiting client tells "slow but progressing" from "stuck" without a timestamp and with
- * no heartbeat. The writer removes it on completion, the launching client after a joined exit, and
- * each new registration owner sweeps the files of provably dead pids.
- */
-const DAEMON_STARTUP_PHASES = Object.freeze([
-  'modules-loaded',
-  'composition-loaded',
-  'lock-acquired',
-  'recovery-finished',
-  'listening',
-  'registered',
-] as const);
-
-export type DaemonStartupPhase = (typeof DAEMON_STARTUP_PHASES)[number];
-
-const DAEMON_STARTUP_PHASE_SET: ReadonlySet<string> = new Set<string>(DAEMON_STARTUP_PHASES);
-
-const DAEMON_STARTUP_PHASES_ENTRY = /^daemon-startup-phases-(\d*)\.jsonl$/;
-
-/** The marker file the daemon process `pid` writes in `stateDir`; an absent file is no evidence. */
-export function resolveDaemonStartupPhasesPath(stateDir: string, pid: number): string {
-  return path.join(stateDir, `daemon-startup-phases-${pid}.jsonl`);
-}
-
-/** Appends one phase marker; a refused append goes to `reportFailure`, never fatal to a startup. */
-export function recordDaemonStartupMarker(
-  startupPhasesPath: string,
-  phase: DaemonStartupPhase,
-  reportFailure?: (error: NormalizedError) => void,
-): void {
-  try {
-    const timestampMs = Date.now();
-    fs.mkdirSync(path.dirname(startupPhasesPath), { recursive: true });
-    // A crash mid-append can leave no trailing newline; glue two appends and both are lost.
-    const separator = endsWithoutNewline(startupPhasesPath) ? '\n' : '';
-    fs.appendFileSync(
-      startupPhasesPath,
-      `${separator}${JSON.stringify({ data: { startupPhase: phase, timestampMs } })}\n`,
-    );
-  } catch (error) {
-    reportFailure?.(normalizeError(error));
-  }
-}
-
-function endsWithoutNewline(file: string): boolean {
-  let fd: number | undefined;
-  try {
-    const stats = fs.statSync(file);
-    if (stats.size === 0) return false;
-    const buffer = Buffer.alloc(1);
-    fd = fs.openSync(file, 'r');
-    if (fs.readSync(fd, buffer, 0, 1, stats.size - 1) !== 1) return false;
-    return buffer[0] !== 0x0a;
-  } catch {
-    return false;
-  } finally {
-    if (fd !== undefined) fs.closeSync(fd);
-  }
-}
-
-/**
- * Empties this launch's own record before its first marker: a per-pid name identifies a writer,
- * not a lifetime. No caller resets a file named for another pid; a refused reset never stops the
- * startup because the reset ran first when it could run.
- */
-export function claimDaemonStartupPhasesFile(
-  startupPhasesPath: string,
-  reportFailure?: (error: NormalizedError) => void,
-): void {
-  try {
-    fs.rmSync(startupPhasesPath, { force: true });
-  } catch (error) {
-    reportFailure?.(normalizeError(error));
-  }
-}
-
-/** Removes a marker file whose writer is provably gone: a finished startup or a joined exit. */
-export function removeDaemonStartupPhasesFile(startupPhasesPath: string): void {
-  try {
-    fs.rmSync(startupPhasesPath, { force: true });
-  } catch {}
-}
-
-/** Sweeps marker files of provably dead (or unnameable) pids; a live pid's file is kept. */
-function sweepDeadDaemonStartupPhasesFiles(stateDir: string): void {
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(stateDir);
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    const match = DAEMON_STARTUP_PHASES_ENTRY.exec(entry);
-    if (match === null) continue;
-    const deadPid = Number(match[1]);
-    if (deadPid === process.pid) continue;
-    if (!Number.isSafeInteger(deadPid) || deadPid <= 0 || !isProcessAlive(deadPid)) {
-      removeDaemonStartupPhasesFile(path.join(stateDir, entry));
-    }
-  }
-}
-
-/**
- * The phases observed in a marker tail, keeping each phase's earliest occurrence. Unknown and
- * unparsable lines are ignored: a client never fails a startup over a line it does not know.
- */
-export function readDaemonStartupPhaseMarkers(
-  markerTail: string,
-): Partial<Record<DaemonStartupPhase, number>> {
-  const phases: Partial<Record<DaemonStartupPhase, number>> = {};
-  for (const line of markerTail.split('\n')) {
-    if (!line.includes('"startupPhase"')) continue;
-    let record: DaemonStartupMarkerRecord;
-    try {
-      record = JSON.parse(line) as DaemonStartupMarkerRecord;
-    } catch {
-      continue;
-    }
-    const phase = record.data?.startupPhase;
-    const timestampMs = record.data?.timestampMs;
-    if (
-      typeof phase !== 'string' ||
-      !DAEMON_STARTUP_PHASE_SET.has(phase) ||
-      typeof timestampMs !== 'number' ||
-      !Number.isFinite(timestampMs)
-    ) {
-      continue;
-    }
-    const seen = phases[phase as DaemonStartupPhase];
-    if (seen === undefined || timestampMs < seen) phases[phase as DaemonStartupPhase] = timestampMs;
-  }
-  return phases;
-}
-
-type DaemonStartupMarkerRecord = {
-  data?: { startupPhase?: unknown; timestampMs?: unknown };
-};
 export type DaemonRegistrationFields = Readonly<{
   socketPort?: number;
   httpPort?: number;

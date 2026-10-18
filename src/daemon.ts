@@ -5,7 +5,7 @@ import {
   claimDaemonStartupPhasesFile,
   recordDaemonStartupMarker,
   resolveDaemonStartupPhasesPath,
-} from '@agent-device/daemon-contracts/daemon-registration-owner';
+} from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 // A refused marker append goes to stderr, which the launcher redirects into the daemon log.
@@ -13,8 +13,11 @@ function reportMarkerFailure(error: unknown): void {
   process.stderr.write(`Daemon startup marker write failed: ${normalizeError(error).message}\n`);
 }
 
+// Captured once: the earliest marker and the runtime resolve the state dir from this one host,
+// so a relative AGENT_DEVICE_STATE_DIR cannot land the markers beside another directory's lock.
+const host = captureHostEnvironment(process);
 const ownPhasesPath = resolveDaemonStartupPhasesPath(
-  resolveDaemonPaths(process.env.AGENT_DEVICE_STATE_DIR).baseDir,
+  resolveDaemonPaths(host.env.AGENT_DEVICE_STATE_DIR, { env: host.env, cwd: host.cwd }).baseDir,
   process.pid,
 );
 // The claim first: after pid reuse it is the only defense against a dead lifetime's phases.
@@ -28,7 +31,7 @@ recordDaemonStartupMarker(ownPhasesPath, 'modules-loaded', reportMarkerFailure);
 // closure of this entry stays exactly the operational server's (ADR 0019).
 async function runDaemon(): Promise<void> {
   const runtime = await startDaemonRuntime({
-    host: captureHostEnvironment(process),
+    host,
     composeDeps: async (input) => {
       const deps = await (await import('./daemon-composition.ts')).createDaemonRuntimeDeps(input);
       recordDaemonStartupMarker(

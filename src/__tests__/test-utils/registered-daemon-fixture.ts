@@ -43,11 +43,16 @@ export function registeredDaemonFixtureArgs(
     '../../../packages/daemon-contracts/src/daemon-registration-owner.ts',
     import.meta.url,
   ).href;
+  const phasesUrl = new URL(
+    '../../../packages/daemon-contracts/src/daemon-startup-phases.ts',
+    import.meta.url,
+  ).href;
   fs.writeFileSync(
     entry,
     `import fs from 'node:fs';
 import path from 'node:path';
-import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration, claimDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(registrationUrl)};
+import { DAEMON_STARTUP_EXIT_CODES, tryAcquireDaemonRegistration } from ${JSON.stringify(registrationUrl)};
+import { claimDaemonStartupPhasesFile, recordDaemonStartupMarker, resolveDaemonStartupPhasesPath } from ${JSON.stringify(phasesUrl)};
 const paths = ${JSON.stringify(paths)};
 const barrier = ${JSON.stringify(acquisitionBarrier)};
 const emitBefore = ${fixtureOptions?.emitStartupMarkerBeforeAcquisition ? 'true' : 'false'};
