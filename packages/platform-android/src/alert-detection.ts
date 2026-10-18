@@ -89,14 +89,14 @@ function isReachableAlertNode(node: RawSnapshotNode): boolean {
 
 /**
  * Android's acting policy on the shared choice boundary: the action's role-named button chosen
- * by declared preference — the permissioncontroller grant ids first (foreground-only over
- * always over one-time, whatever language their labels are in), the shared label vocabulary
- * where no grant id exists; else, for dismiss, the first neutral button (Android dialogs
- * commonly name the leaving path only neutrally); else, for accept, a single-button dialog's
- * only affirmative path. Two choices that tie on one rank (the same label or the same grant id
- * at two points) or a candidate no rank source reaches refuse at the shared boundary rather
- * than resolving by tree order — the driver turns that refusal into a Back key for dismiss, or
- * a typed refusal.
+ * by declared preference — the permissioncontroller grant ids first (their role and rank come
+ * from one declaration: full-access and foreground grants over picker-limited and one-time
+ * ones, whatever language their labels are in), the shared label vocabulary where no grant id
+ * exists; else, for dismiss, the first neutral button (Android dialogs commonly name the
+ * leaving path only neutrally); else, for accept, a single-button dialog's only affirmative
+ * path. Two choices that tie on one rank (the same label or the same grant id at two points) or
+ * a candidate no rank source reaches refuse at the shared boundary rather than resolving by
+ * tree order — the driver turns that refusal into a Back key for dismiss, or a typed refusal.
  */
 export function chooseAndroidAlertButton(
   buttons: AndroidAlertButton[],
@@ -112,26 +112,52 @@ export function chooseAndroidAlertButton(
 }
 
 /**
- * The permissioncontroller grant ids in the order Android's own dialog prefers them: a lasting
- * foreground grant over an always grant over a one-time grant. Earlier entries outrank later
- * ones; a lower number wins. These ids reach production on every grant sheet: they are the same
- * `permission_allow` ids the platform-id classifier already reads (and the ids main tapped),
- * stable across locales while their labels are not.
+ * The AOSP permissioncontroller grant ids with the role and the rank each one states — the
+ * single declaration the id classifier and the backend rank both read, so an accepted
+ * permissioncontroller id can never carry a role without a rank. One slot per rank: earlier
+ * slots win, and two ids inside one slot tie (the shared boundary refuses between them rather
+ * than ordering ids Android never separated). The accept scale prefers a lasting grant: full
+ * access ("Allow all": Android 13+ files, Android 14+ partial media) over foreground-only over
+ * plain/always over a picker-limited grant ("Select photos and videos") over a one-time grant.
+ * The dismiss scale then prefers the reversible decline: the plain deny over its don't-ask-again
+ * variants. A controller id this table does not know (a vendor fork's own grant) keeps the
+ * prefix-only role with no rank, so beside a ranked grant it can only refuse — it is never
+ * silently dropped or ordered by tree position.
  */
-const ANDROID_GRANT_ID_RANKS: readonly RegExp[] = [
-  /(?:^|:)id\/permission_allow_foreground_only(?:_button)?$/i,
-  /(?:^|:)id\/permission_allow(?:_all_time|_always)?(?:_button)?$/i,
-  /(?:^|:)id\/permission_allow_one_time(?:_button)?$/i,
+const PERMISSION_GRANT_ID_SLOTS: ReadonlyArray<{
+  role: AlertButtonRole;
+  ids: readonly RegExp[];
+}> = [
+  { role: 'accept', ids: [/(?:^|:)id\/permission_allow_all(?:_button)?$/i] },
+  { role: 'accept', ids: [/(?:^|:)id\/permission_allow_foreground_only(?:_button)?$/i] },
+  {
+    role: 'accept',
+    ids: [/(?:^|:)id\/permission_allow(?:_all_time|_always)?(?:_button)?$/i],
+  },
+  { role: 'accept', ids: [/(?:^|:)id\/permission_allow_selected(?:_button)?$/i] },
+  { role: 'accept', ids: [/(?:^|:)id\/permission_allow_one_time(?:_button)?$/i] },
+  { role: 'dismiss', ids: [/(?:^|:)id\/permission_deny(?:_button)?$/i] },
+  {
+    role: 'dismiss',
+    ids: [/(?:^|:)id\/permission_deny(?:_and)?_dont_ask_again(?:_button)?$/i],
+  },
 ];
 
+/** The declared scale position of a known permissioncontroller grant id, or null. */
+function permissionGrantIdSlot(identifier: string): number {
+  return PERMISSION_GRANT_ID_SLOTS.findIndex((slot) =>
+    slot.ids.some((pattern) => pattern.test(identifier)),
+  );
+}
+
 /**
- * The backend-owned rank of a button named by a grant id — the label-independent preference the
- * resource id states. Deny ids carry no declared order (their labels rank them), and any other
- * id ranks nothing here.
+ * The backend-owned rank of a button named by a known grant id — the label-independent
+ * preference the resource id states, on the same scale the id's role comes from. Any other id
+ * ranks nothing here.
  */
 function rankAndroidAlertButtonById(button: AndroidAlertButton): number | null {
-  const index = ANDROID_GRANT_ID_RANKS.findIndex((pattern) => pattern.test(button.identifier));
-  return index === -1 ? null : index;
+  const slot = permissionGrantIdSlot(button.identifier);
+  return slot === -1 ? null : slot;
 }
 
 function findAndroidAlertNodes(nodes: RawSnapshotNode[]): {
@@ -220,7 +246,16 @@ function classifyAndroidAlertButton(node: RawSnapshotNode, label: string): Alert
   return classifyAlertButtonRole(label);
 }
 
+/**
+ * The role a resource id states. A known permissioncontroller id answers from the one slot
+ * table that also ranks it; the `android:id/button1..3` positions carry a role Android's dialog
+ * owns with no grant to rank; a controller-prefixed id the table does not know (a vendor fork's
+ * own grant) keeps the prefix-only role with no declared rank, which the shared choice boundary
+ * reads as a refusal, never a position to press.
+ */
 function classifyAndroidAlertButtonById(identifier: string): AlertButtonRole | null {
+  const slot = permissionGrantIdSlot(identifier);
+  if (slot !== -1) return PERMISSION_GRANT_ID_SLOTS[slot]!.role;
   if (/(?:^|:)id\/button1$/i.test(identifier)) return 'accept';
   if (/(?:^|:)id\/button2$/i.test(identifier)) return 'dismiss';
   if (/(?:^|:)id\/button3$/i.test(identifier)) return 'neutral';

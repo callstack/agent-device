@@ -11,9 +11,9 @@ import { createLimrunIosInteractor, type LimrunIosSession } from './ios.ts';
 import type { IosTreeNode } from './snapshot.ts';
 
 // The legs load `./alert.ts` per call (ADR-0019 laziness inside the provider), and that module
-// carries the shared tree-alert driver from platform-android's mechanics facet. Warm it at
-// collection, like `platform-android`'s own alert test does, so the first timed leg measures
-// the legs, not the module graph's first transform.
+// carries the shared tree-alert driver from `@agent-device/capture-kit/alert-tree-driver`. Warm
+// it at collection, like `platform-android`'s own alert test does, so the first timed leg
+// measures the legs, not the module graph's first transform.
 await import('./alert.ts');
 
 /**

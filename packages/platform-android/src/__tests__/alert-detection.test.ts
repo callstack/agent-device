@@ -172,6 +172,138 @@ test('the Android 10 sheet grants foreground-only by its id', () => {
   assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, "Don't allow");
 });
 
+test('the Android 14+ partial-media sheet resolves "Allow all" by the id-derived rank', () => {
+  // The AOSP READ_MEDIA_IMAGES/VIDEO partial sheet: permission_allow_all_button ("Allow all")
+  // and permission_allow_selected_button ("Select photos and videos") both classify accept by
+  // id. On the English sheet the label table ranks "Allow all" but no label reaches the other,
+  // so a mixed-source pair would refuse where main pressed the lasting grant. The ids carry the
+  // rank: the full grant outranks the picker-limited grant.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(
+      1,
+      'Allow Probe to access photos and videos on your device?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(2, 'Allow all', 'permission_allow_all_button', { x: 32, y: 1420 }, true),
+    button(
+      3,
+      'Select photos and videos',
+      'permission_allow_selected_button',
+      {
+        x: 32,
+        y: 1490,
+      },
+      true,
+    ),
+    button(4, "Don't allow", 'permission_deny_button', { x: 32, y: 1560 }, true),
+  ]);
+
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept')?.label, 'Allow all');
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, "Don't allow");
+});
+
+test('a localized Android 14+ partial-media sheet resolves "Allow all" by the id alone', () => {
+  // The pure id-driven twin: with both media labels outside the English vocabulary, only the
+  // declared ids order the pair.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(
+      1,
+      '¿Permitir que Probe acceda a tus fotos y vídeos?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(2, 'Permitir todo', 'permission_allow_all_button', { x: 32, y: 1420 }, true),
+    button(
+      3,
+      'Seleccionar fotos y vídeos',
+      'permission_allow_selected_button',
+      {
+        x: 32,
+        y: 1490,
+      },
+      true,
+    ),
+    button(4, 'No permitir', 'permission_deny_button', { x: 32, y: 1560 }, true),
+  ]);
+
+  assert.equal(
+    chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept')?.label,
+    'Permitir todo',
+  );
+});
+
+test('every declared permissioncontroller grant id carries a rank beside its role', () => {
+  // The maintainer's cohesion rule: no accepted permissioncontroller id may state a role from an
+  // id while no rank reaches it. Pair each known grant id with another known grant id: the two
+  // accept candidates come from one source, so a missing rank shows up as a refusal.
+  const knownGrantIds = [
+    'permission_allow_all_button',
+    'permission_allow_foreground_only_button',
+    'permission_allow_always_button',
+    'permission_allow_button',
+    'permission_allow_selected_button',
+    'permission_allow_one_time_button',
+    'permission_deny_button',
+    'permission_deny_and_dont_ask_again_button',
+  ];
+  for (const identifier of knownGrantIds) {
+    const candidate = findAndroidAlertCandidate([
+      node(0, 'android.widget.FrameLayout', {
+        bundleId: 'com.google.android.permissioncontroller',
+      }),
+      text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
+      button(2, 'Grant one', identifier, { x: 32, y: 1420 }, true),
+      button(3, 'Grant two', 'permission_allow_one_time_button', { x: 32, y: 1490 }, true),
+      button(4, 'Deny', 'permission_deny_button', { x: 32, y: 1560 }, true),
+    ]);
+    const chosen = chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept');
+    if (identifier === 'permission_allow_one_time_button') {
+      // The one declared tie: the last-ranked accept id named at two points, which refuses.
+      assert.equal(chosen, null, `grant id ${identifier} resolved against its own tie`);
+      continue;
+    }
+    assert.notEqual(chosen, null, `grant id ${identifier} carries no declared rank`);
+    if (!identifier.includes('deny')) {
+      // Every other accept id outranks the last-ranked slot on the one declared scale.
+      assert.equal(chosen?.label, 'Grant one', `grant id ${identifier} ranked out of order`);
+    }
+  }
+});
+
+test('the two deny ids resolve on one declared dismiss scale', () => {
+  // Deny ids rank inside the same declaration: on a localized sheet that names both declines,
+  // the plain deny outranks the don't-ask-again variant instead of refusing on unread labels.
+  const candidate = findAndroidAlertCandidate([
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(
+      1,
+      '¿Permitir que Probe acceda?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(2, 'Permitir', 'permission_allow_button', { x: 32, y: 1420 }, true),
+    button(3, 'Rechazar', 'permission_deny_button', { x: 32, y: 1490 }, true),
+    button(
+      4,
+      'Rechazar y no volver a preguntar',
+      'permission_deny_and_dont_ask_again_button',
+      {
+        x: 32,
+        y: 1560,
+      },
+      true,
+    ),
+  ]);
+
+  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label, 'Rechazar');
+});
+
 test('a grant id outside the declared ranks keeps the refusal against a known label', () => {
   // The closest negative to the id-rank positives: a vendor fork's own allow id is a real
   // grant (the id classifier reads `permission_allow*`), yet no declared rank reaches it.

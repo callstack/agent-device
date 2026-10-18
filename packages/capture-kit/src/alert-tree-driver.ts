@@ -18,21 +18,17 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import { successText } from '@agent-device/kernel/success-text';
 
 /**
- * THE tree-based alert driver: every backend that reads alerts out of a capture tree — the
- * Android ADB legs and the Limrun iOS legs — reaches poll, confirm, same-alert, refusal, and
- * response building through this one neutral module, and its button roles through the shared
- * label vocabulary in `contracts/alert-contract`. A backend supplies only its own observation
- * (`capture` + `findCandidate`), its platform's acting policy (`choose`), and its press seam
- * (`press`). It lives in the capture kit, not in a platform package: an iOS provider must not
- * depend on the Android package to poll a tree.
+ * The one driver for every backend that reads alerts from a capture tree (Android ADB, Limrun
+ * iOS). A backend supplies only its observation (`capture` + `findCandidate`), its acting
+ * policy (`choose`), and its press seam (`press`). It lives in the capture kit: an iOS provider
+ * must not depend on the Android package to poll a tree.
  *
- * The budget rule is the whole cancellation story, and `pollUntilSettled` owns it: every probe
- * that started inside the budget is awaited to its answer and that answer counts — a started
- * capture finishes — and the deadline only ends the LOOP, never a capture in flight. Only the
+ * The budget rule: `pollUntilSettled` owns it — every probe started inside the budget is
+ * awaited and counts; the deadline ends only the LOOP, never a capture in flight. Only the
  * caller's cancellation stops a transport. A quiet screen therefore answers `alert-not-found`
- * on every backend instead of a timing-dependent window failure. The cost of the rule is stated
- * in the docs: a transport with no abort (Limrun's client) can overrun the budget by one call,
- * and a capture that never returns keeps the leg open until the caller cancels it.
+ * on every backend. The cost: a transport with no abort (Limrun's client) can overrun the
+ * budget by one call, and a capture that never returns keeps the leg open until the caller
+ * cancels it.
  */
 
 /** The point a press seam aims at: a button's center in the backend's own coordinate space. */

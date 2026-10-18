@@ -126,6 +126,43 @@ test('accepting the Android 11+ permission sheet taps the preferred grant once',
   assert.equal(runAndroidAdb.mock.calls.filter(([, args]) => args.includes('tap')).length, 1);
 });
 
+test('accepting the Android 14+ partial-media sheet taps "Allow all" once', async () => {
+  runAndroidAdb.mockClear();
+  // The media-sheet regression at the action seam: "Allow all" and "Select photos and videos"
+  // both classify accept, and only the declared id scale orders them; the tap must land on the
+  // lasting grant exactly once.
+  const sheet = [
+    node(0, 'android.widget.FrameLayout', {
+      bundleId: 'com.google.android.permissioncontroller',
+    }),
+    text(
+      1,
+      'Allow Probe to access photos and videos on your device?',
+      'com.android.permissioncontroller:id/permission_message',
+    ),
+    button(2, 'Allow all', 'permission_allow_all_button', { x: 32, y: 1420 }, true),
+    button(
+      3,
+      'Select photos and videos',
+      'permission_allow_selected_button',
+      {
+        x: 32,
+        y: 1490,
+      },
+      true,
+    ),
+    button(4, "Don't allow", 'permission_deny_button', { x: 32, y: 1560 }, true),
+  ];
+  const result = await handleAndroidAlert(device, 'accept', {
+    captureNodes: dialogUntilPressed(sheet),
+  });
+
+  assert.equal(result.kind, 'alertHandled');
+  assert.equal(result.kind === 'alertHandled' ? result.button : undefined, 'Allow all');
+  assert.deepEqual('coordinates' in result ? result.coordinates : undefined, { x: 96, y: 1446 });
+  assert.equal(runAndroidAdb.mock.calls.filter(([, args]) => args.includes('tap')).length, 1);
+});
+
 test('a fallback Back dismissal (no matching button) carries no coordinates', async () => {
   runAndroidAdb.mockClear();
   const result = await handleAndroidAlert(device, 'dismiss', {
