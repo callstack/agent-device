@@ -36,19 +36,19 @@ Do not record these in an ADR. Send each to its owner:
 - Implementation inventories and file maps: the registries, types, and gates that own them.
 - Measurements: `docs/evidence/`.
 - Rollout and migration plans: the package docs, the help, or the umbrella issue.
-- PR logs and status change-logs: delete them. Git history keeps them.
+- PR logs and status change-logs: the umbrella issue.
 
 Do not repeat general repo guidance that `AGENTS.md` already gives.
 
 ## The record stays current
 
-An ADR states the current truth. It is not a log of the discussion around the decision. If the direction really changed, add one dated "Decision history" line with its reason and a link.
+An ADR states the current truth. It is not a log of the discussion around the decision. An optional dated "Decision history" line records a real change of direction. If the direction really changed, you may add one such line with its reason and a link.
 
 ## Before you amend
 
 1. Check the current code against the decision the record intends to keep.
 2. Check the code comments and issues that cite the record.
-3. If the code changed on purpose: update the record to the new truth. Record the reason. Add a "Decision history" line when the direction changed.
+3. If the code changed on purpose: update the record to the new truth. Record the reason. When the direction changed, you may add the optional "Decision history" line.
 4. If the code drifted by mistake: record the drift in an issue. Keep the constraint in the record.
 5. Preserve constraints that the code cannot show.
 6. If you change a section name or a decision number, update the code citations that point at it.
@@ -63,6 +63,6 @@ An amendment that changes the modality, scope, or exceptions of an accepted deci
 
 ## Size and naming
 
-Keep each ADR near 8 KB. Prefer less.
+Keep ADRs short. Aim below about 8 KB.
 
 Name files `NNNN-slug.md` in `docs/adr/`. Scan the directory and use the next number. Add a row to the index in `docs/adr/README.md`.
