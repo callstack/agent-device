@@ -234,6 +234,48 @@ extension RunnerTests {
     XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
   }
 
+  @MainActor
+  func testFillFailsWhenAppRemovesMaskedInputBeforeTextIsDelivered() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-masked-value",
+      "--agent-device-text-entry-disappear-after-input"
+    )
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-disappearing-masked-input", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(textField.exists)
+    XCTAssertEqual(app.textFields.count, 0)
+  }
+
+  @MainActor
+  func testFillFailsWhenAppReplacesMaskedInputBeforeTextIsDelivered() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-masked-value",
+      "--agent-device-text-entry-replace-after-input"
+    )
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-replaced-masked-input", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(textField.exists)
+    let nextScreenField = app.textFields["agent-device-auto-submit-next-screen-input"]
+    XCTAssertTrue(nextScreenField.exists)
+    XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
+  }
+
   // Neither input has an identifier, so the successor carries the same identity as the code field.
   // The runner cannot tell them apart and must not clear and retype the successor: it reports the
   // mismatch it read instead of repairing.
