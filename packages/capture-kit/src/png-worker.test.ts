@@ -1,6 +1,9 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
+import { MessageChannel } from 'node:worker_threads';
 import assert from 'node:assert/strict';
 import { resultTransferList } from './png-worker.ts';
+import { PNG } from './png.ts';
+import type { PngWorkerResponse } from './png-worker-contract.ts';
 
 test('resultTransferList transfers a buffer that fully owns its ArrayBuffer', () => {
   const owned = new Uint8Array(8).fill(1);
@@ -52,4 +55,32 @@ test('resultTransferList transfers only the fully-owned views of a mixed result'
   });
 
   assert.deepEqual(transfers, [ownedDiffData.buffer]);
+});
+
+test('worker encode replies preserve request identity and RGBA pixels across the message port', async () => {
+  vi.resetModules();
+  const { port1, port2 } = new MessageChannel();
+  vi.doMock('node:worker_threads', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('node:worker_threads')>()),
+    parentPort: port1,
+  }));
+  try {
+    await import('./png-worker.ts');
+    const pixels = Uint8Array.from([255, 0, 0, 0, 0, 255, 0, 127, 0, 0, 255, 255, 73, 81, 99, 25]);
+    const reply = new Promise<PngWorkerResponse>((resolve) => port2.once('message', resolve));
+
+    port2.postMessage({ id: 41, kind: 'encode', width: 2, height: 2, data: pixels });
+    const response = await reply;
+
+    assert.equal(response.id, 41);
+    assert.ok(response.ok, JSON.stringify(response));
+    assert.ok(response.result.kind === 'encode', 'Expected the encode result kind');
+    const decoded = PNG.sync.read(Buffer.from(response.result.png));
+    assert.deepEqual([decoded.width, decoded.height], [2, 2]);
+    assert.deepEqual(decoded.data, Buffer.from(pixels));
+  } finally {
+    port1.close();
+    port2.close();
+    vi.doUnmock('node:worker_threads');
+  }
 });
