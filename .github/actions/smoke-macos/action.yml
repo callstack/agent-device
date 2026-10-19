@@ -72,6 +72,9 @@ runs:
       uses: ./.github/actions/run-gate
       with:
         gate: macos-helper
+    - name: Decline the hosted runner local-network prompt
+      run: osascript scripts/decline-hosted-compute-local-network.applescript
+      shell: bash
     - name: Run macOS integration test
       uses: ./.github/actions/run-gate
       with:
