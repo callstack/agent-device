@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import { classifyAlertButtonRole } from '@agent-device/contracts/alert-contract';
 import {
   chooseLimrunAlertButton,
   isLimrunAlertHostRoot,
@@ -245,5 +247,33 @@ describe('chooseLimrunAlertButton', () => {
     const doubled = buttonsOf(alertTreeWithButtons('Allow', 'Deny', 'Allow'));
     expect(chooseLimrunAlertButton(doubled, 'accept')).toBeNull();
     expect(chooseLimrunAlertButton(doubled, 'dismiss')?.label).toBe('Deny');
+  });
+});
+
+// Selection over admitted buttons only: capture's two-button minimum is outside this table.
+type AlertChoiceCase = {
+  name: string;
+  labels: string[];
+  action: 'accept' | 'dismiss';
+  expected: number | null;
+  xctestPopupMarkerExpected?: number | null;
+};
+const alertChoiceCases = JSON.parse(
+  fs.readFileSync(
+    new URL('../../../contracts/fixtures/ios-alert-button-choice.json', import.meta.url),
+    'utf8',
+  ),
+) as AlertChoiceCase[];
+
+describe('chooseLimrunAlertButton shared Apple label choices', () => {
+  it.each(alertChoiceCases)('$name', ({ labels, action, expected }) => {
+    const buttons = labels.map((label, index) => ({
+      label,
+      role: classifyAlertButtonRole(label),
+      x: index,
+      y: 0,
+    }));
+    const chosen = chooseLimrunAlertButton(buttons, action);
+    expect(chosen === null ? null : buttons.indexOf(chosen)).toBe(expected);
   });
 });

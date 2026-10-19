@@ -1,7 +1,43 @@
 import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+private struct AlertButtonChoiceFixture: Decodable {
+  let name: String
+  let labels: [String]
+  let action: String
+  let expected: Int?
+  let xctestPopupMarkerExpected: Int?
+  let xctestPopupMarker: Bool?
+}
+
 extension RunnerTests {
+  func testAlertButtonChoicesMatchGoldenFixture() throws {
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("contracts/fixtures/ios-alert-button-choice.json")
+    let fixtures = try JSONDecoder().decode([AlertButtonChoiceFixture].self, from: Data(contentsOf: fixtureURL))
+    XCTAssertFalse(fixtures.isEmpty)
+    for fixture in fixtures {
+      XCTAssertEqual(
+        RunnerAlertButtonChoice.buttonIndex(for: fixture.labels, action: fixture.action),
+        fixture.expected, fixture.name
+      )
+      if fixture.xctestPopupMarker == true {
+        XCTAssertEqual(
+          RunnerAlertButtonChoice.buttonIndex(
+            for: fixture.labels, action: fixture.action, popupMarkerSurface: true
+          ),
+          fixture.xctestPopupMarkerExpected, fixture.name
+        )
+      }
+    }
+  }
+
   func testAlertAcceptTreatsOpenAsAffirmative() {
     XCTAssertTrue(RunnerAlertButtonChoice.isAcceptButton("Open"))
   }

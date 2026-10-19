@@ -60,7 +60,7 @@ export type AlertCapture<TCandidate> =
 /**
  * The one alert button label vocabulary every tree-based alert backend classifies with,
  * declared as a per-role preference table: each entry names one English label (regex only for
- * spelling variants of the *same* label), earlier entries outrank later ones, so a sheet
+ * spelling variants or the established "Confirm…" family), earlier entries outrank later ones. A sheet
  * offering several grants resolves by declared preference ("while using the app" over "only
  * this time") instead of tree order. The table ranks labels, not buttons it cannot read: a
  * backend owning a fact no label carries — Android's permission-grant ids — supplies its own
@@ -80,9 +80,11 @@ const ACCEPT_LABEL_PREFERENCES: readonly RegExp[] = [
   /^yes$/i,
   /^continue$/i,
   /^save$/i,
-  /^confirm$/i,
+  /^confirm/i,
   /^turn on$/i,
   /^open settings$/i,
+  /^done$/i,
+  /^open$/i,
   // One-time grants last: a sheet offering a lasting grant should not spend the tap here.
   /^allow once$/i,
   /^only this time$/i,
@@ -100,6 +102,7 @@ const DISMISS_LABEL_PREFERENCES: readonly RegExp[] = [
   /^later$/i,
   /^skip$/i,
   /^ask app not to track$/i,
+  /^keep browsing$/i,
 ];
 
 const LABEL_PREFERENCES: Record<'accept' | 'dismiss', readonly RegExp[]> = {

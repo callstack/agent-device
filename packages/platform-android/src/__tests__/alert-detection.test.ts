@@ -392,20 +392,22 @@ test('an unknown grant id cannot earn a role from an affirmative label', () => {
   // allow/deny-shaped grant id is not such a button: letting English copy alone classify it
   // would re-admit the accept-by-id-without-rank the declaration exists to make impossible,
   // and the single candidate would then be pressed.
-  const candidate = findAndroidAlertCandidate([
-    node(0, 'android.widget.FrameLayout', { bundleId: 'com.vendor.permissioncontroller' }),
-    text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
-    button(
-      2,
-      'Allow all',
-      'com.vendor.permissioncontroller:id/permission_allow_fine_location_and_sync_button',
-      { x: 32, y: 1420 },
-      false,
-    ),
-  ]);
+  for (const label of ['Allow all', 'Open', 'Done', 'Confirm purchase', 'Keep Browsing']) {
+    const candidate = findAndroidAlertCandidate([
+      node(0, 'android.widget.FrameLayout', { bundleId: 'com.vendor.permissioncontroller' }),
+      text(1, 'Allow Probe?', 'com.android.permissioncontroller:id/permission_message'),
+      button(
+        2,
+        label,
+        'com.vendor.permissioncontroller:id/permission_allow_fine_location_and_sync_button',
+        { x: 32, y: 1420 },
+        false,
+      ),
+    ]);
 
-  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
-  assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss'), null);
+    assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+    assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss'), null);
+  }
 });
 
 test('an unknown deny-shaped grant standing alone refuses dismiss instead of being pressed', () => {
@@ -572,4 +574,24 @@ test('the same label at two distinct centers keeps two candidates so the choice 
 
   assert.deepEqual(candidate?.alert.buttons, ['OK', 'OK']);
   assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept'), null);
+});
+
+test('shared Apple label additions also name ordinary Android dialog actions', () => {
+  for (const label of ['Open', 'Done', 'Confirm purchase']) {
+    const candidate = findAndroidAlertCandidate([
+      node(0, 'android.app.AlertDialog'),
+      text(1, 'Leave this page?', 'android:id/alertTitle'),
+      button(2, 'Keep Browsing', 'com.example:id/stay', { x: 52, y: 612 }),
+      button(3, label, 'com.example:id/proceed', { x: 210, y: 612 }),
+    ]);
+    assert.deepEqual(
+      candidate?.buttons.map(({ role }) => role),
+      ['dismiss', 'accept'],
+    );
+    assert.equal(chooseAndroidAlertButton(candidate?.buttons ?? [], 'accept')?.label, label);
+    assert.equal(
+      chooseAndroidAlertButton(candidate?.buttons ?? [], 'dismiss')?.label,
+      'Keep Browsing',
+    );
+  }
 });
