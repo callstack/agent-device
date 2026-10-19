@@ -1,0 +1,108 @@
+name: Run macOS smoke tests
+description: Run macOS smoke tests
+runs:
+  using: composite
+  steps:
+    - name: Run macOS command coverage contract
+      uses: ./.github/actions/run-gate
+      with:
+        gate: macos-coverage
+    - name: Check the packaged runner Swift parses and keeps its line numbering
+      uses: ./.github/actions/run-gate
+      with:
+        gate: packaged-runner-swift
+    - name: Run iOS snapshot Swift/TypeScript differential
+      uses: ./.github/actions/run-gate
+      with:
+        gate: ios-snapshot-differential
+    - name: Restore and build macOS XCTest runner
+      uses: ./.github/actions/setup-apple-runner-build
+      with:
+        derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
+        cache-key-prefix: macos-runner-prebuilt
+        gate: swift-runner-macos
+        xcuitest-platform: macos
+        xcuitest-destination: platform=macOS,arch=arm64
+    - name: Run the host-runnable runner XCTests
+      run: |
+        set -euo pipefail
+        XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
+        test -n "$XCTESTRUN_PATH"
+        mkdir -p "$(dirname "$RESULT_BUNDLE_PATH")"
+        xcodebuild test-without-building \
+          -xctestrun "$XCTESTRUN_PATH" \
+          -destination 'platform=macOS,arch=arm64' \
+          -skip-testing:AgentDeviceRunnerUITests/RunnerTests/testCommand \
+          -resultBundlePath "$RESULT_BUNDLE_PATH"
+      shell: bash
+    - name: Extract the test-results summary
+      if: always()
+      run: |
+        set -uo pipefail
+        [ -d "$RESULT_BUNDLE_PATH" ] || exit 0
+        xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE_PATH" --compact \
+          > "$RESULT_SUMMARY_PATH" 2>/dev/null ||
+          xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE_PATH" \
+            > "$RESULT_SUMMARY_PATH" 2>/dev/null ||
+          rm -f "$RESULT_SUMMARY_PATH"
+        exit 0
+      shell: bash
+    - name: Report the run and assert it executed the source-derived set
+      if: always()
+      run: |
+        set -euo pipefail
+        if [ ! -s "$RESULT_SUMMARY_PATH" ]; then
+          echo 'No usable test-results summary was produced, so nothing here can show a test ran.'
+          echo 'The suite step above failed before or during the run; read its log first.'
+          echo '### iOS runner host XCTest lane' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No result-bundle summary; see the run log and the uploaded bundle.' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
+        node --experimental-strip-types scripts/xctest-run-summary.ts
+      shell: bash
+    - name: Upload result bundle
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: xctest-host-results-${{ github.run_id }}-${{ github.run_attempt }}
+        include-hidden-files: true
+        path: .tmp/xctest-host
+        if-no-files-found: warn
+    - name: macOS helper build and tests
+      uses: ./.github/actions/run-gate
+      with:
+        gate: macos-helper
+    - name: Run macOS integration test
+      uses: ./.github/actions/run-gate
+      with:
+        gate: replay-macos
+        args: |
+          --retries
+          2
+          --report-junit
+          test/artifacts/replays-macos.junit.xml
+    - name: Select Apple bridge proof
+      if: github.event_name == 'pull_request'
+      id: bridge-impact
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        node --experimental-strip-types scripts/apple-ci-impact.ts bridge
+      shell: bash
+    - name: Verify the darwin-only native source proofs (snapshot bridge, fold-helper -Werror, recording scripts)
+      if: github.event_name == 'pull_request' && steps.bridge-impact.outputs.run != 'false'
+      run: |
+        pnpm exec vitest run \
+          packages/platform-apple/src/snapshot-source/cache-native-runtime.test.ts \
+          packages/platform-apple/src/foldable/fold-helper-cache.test.ts \
+          packages/platform-apple/src/foldable/simulator-hid-native.test.ts \
+          packages/capture-kit/src/recording/__tests__/swift-cache-recording-scripts.test.ts
+        pnpm check:package -- --verify-snapshot-bridge-preparation
+      shell: bash
+    - name: Upload macOS artifacts
+      if: always()
+      uses: ./.github/actions/upload-agent-device-artifacts
+      with:
+        artifact-name: macos-artifacts
+        agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
+        runner-derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}

@@ -1,0 +1,60 @@
+name: Select and run iOS smoke tests
+description: Route the simulator phase without allocating a second Apple runner
+inputs:
+  paths-ignore:
+    description: PR paths that do not reach the iOS phase; checked against gate ownership
+    required: false
+    default: |
+      docs/**
+      website/**
+      README.md
+      AGENTS.md
+      CONTEXT.md
+      CONTRIBUTING.md
+      LICENSE
+      SECURITY.md
+      .github/actions/build-docs/action.yml
+      .github/workflows/deploy.yml
+      .github/workflows/pr-preview.yml
+      .github/workflows/pr-preview-cleanup.yml
+      **/*.md
+      src/**/*.test.ts
+      src/**/__tests__/**/*.ts
+      packages/*/src/**/*.test.ts
+      packages/*/src/**/__tests__/**/*.ts
+      packages/platform-android/src/**
+      packages/capture-kit/src/snapshot/snapshot-presentation/android/**
+      packages/platform-harmonyos/src/**
+      packages/platform-linux/src/**
+      packages/platform-vega/src/**
+      packages/platform-web/src/**
+      android/**
+      linux/**
+      test/integration/replays/android/**
+      test/integration/replays/linux/**
+      test/integration/replays/macos/**
+      test/integration/android-**
+      test/integration/smoke-android-**
+      test/integration/smoke-linux-**
+      test/integration/linux-e2e/**
+      test/integration/smoke-macos-**
+      test/integration/smoke-web-**
+      test/integration/macos-e2e/**
+      test/integration/web-e2e/**
+outputs:
+  selected:
+    description: Whether the iOS phase was selected
+    value: ${{ steps.impact.outputs.run }}
+runs:
+  using: composite
+  steps:
+    - name: Select iOS smoke tests
+      id: impact
+      shell: bash
+      env:
+        IOS_SMOKE_PATHS_IGNORE: ${{ inputs.paths-ignore }}
+      run: |
+        node --experimental-strip-types scripts/apple-ci-impact.ts smoke
+    - name: Run selected iOS smoke tests
+      if: steps.impact.outputs.run != 'false'
+      uses: ./.github/actions/smoke-ios-run

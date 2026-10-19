@@ -2,8 +2,24 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { selectChecks } from './check-affected/model.ts';
+import { matchesGlob } from './gate/workflows.ts';
 
 type Selection = { run: boolean; reason: string };
+
+export function selectIosSmoke(
+  eventName: string,
+  changedPaths: readonly string[] | null,
+  pathsIgnore: readonly string[],
+): Selection {
+  if (eventName !== 'pull_request') return { run: true, reason: 'main runs exercise iOS smoke' };
+  if (changedPaths === null || changedPaths.length === 0) {
+    return { run: true, reason: 'the PR change set could not be established' };
+  }
+  const input = changedPaths.find((file) => !pathsIgnore.some((glob) => matchesGlob(glob, file)));
+  return input
+    ? { run: true, reason: `iOS smoke input changed: ${input}` }
+    : { run: false, reason: 'all PR paths are outside the iOS smoke route' };
+}
 
 function checkOwnership(
   changedPaths: readonly string[] | null,
@@ -62,18 +78,25 @@ function changedPathsFromGit(baseSha: string): string[] | null {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const target = process.argv[2];
-  if (target !== 'xctest' && target !== 'bridge') {
-    process.stderr.write('Expected xctest or bridge target\n');
+  if (target !== 'xctest' && target !== 'bridge' && target !== 'smoke') {
+    process.stderr.write('Expected xctest, bridge, or smoke target\n');
     process.exitCode = 2;
   } else {
     const eventName = process.env.GITHUB_EVENT_NAME ?? '';
     const changedPaths =
       eventName === 'pull_request' ? changedPathsFromGit(process.env.BASE_SHA ?? '') : [];
     const selection =
-      target === 'xctest'
-        ? selectIosXctests(eventName, changedPaths)
-        : selectAppleBridgeProof(changedPaths);
-    const label = target === 'xctest' ? 'iOS XCTest' : 'Apple bridge proof';
+      target === 'smoke'
+        ? selectIosSmoke(
+            eventName,
+            changedPaths,
+            (process.env.IOS_SMOKE_PATHS_IGNORE ?? '').split(/\r?\n/).filter(Boolean),
+          )
+        : target === 'xctest'
+          ? selectIosXctests(eventName, changedPaths)
+          : selectAppleBridgeProof(changedPaths);
+    const label =
+      target === 'smoke' ? 'iOS smoke' : target === 'xctest' ? 'iOS XCTest' : 'Apple bridge proof';
     process.stdout.write(`${label}: ${selection.run ? 'run' : 'skip'}; ${selection.reason}\n`);
     if (process.env.GITHUB_OUTPUT) {
       fs.appendFileSync(process.env.GITHUB_OUTPUT, `run=${selection.run}\n`);
