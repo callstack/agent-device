@@ -31,7 +31,7 @@ private struct AudioProbeBucket {
   var peak: Double = 0
 }
 
-private final class AudioProbeStatusWriter {
+final class AudioProbeStatusWriter {
   private let outPath: String
   private let startedAt = Date()
   private let durationMs: Int
@@ -61,6 +61,9 @@ private final class AudioProbeStatusWriter {
     else {
       return
     }
+    // AVAudioPCMBuffer starts with frameLength 0, so every mDataByteSize is 0 until
+    // frameLength is set. Copying first leaves the destination empty (-12731).
+    pcmBuffer.frameLength = frameCount
     let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
       sampleBuffer,
       at: 0,
@@ -70,7 +73,6 @@ private final class AudioProbeStatusWriter {
     guard status == noErr else {
       return
     }
-    pcmBuffer.frameLength = frameCount
     add(audioBufferList: pcmBuffer.mutableAudioBufferList, format: format)
   }
 
