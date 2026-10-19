@@ -80,49 +80,6 @@ test('path filters use GitHub glob semantics', () => {
   assert.equal(matchesGlob('*.md', 'docs/README.md'), false, '* must not span a separator');
 });
 
-test('a composite phase route derives filters and gate ownership from the called action', () => {
-  const files = {
-    '.github/workflows/planted.yml': `name: Planted
-on:
-  pull_request:
-jobs:
-  smoke:
-    steps:
-      - uses: ./.github/actions/phase
-        with:
-          paths-ignore: 'packages/platform-android/**'
-`,
-    '.github/actions/phase/action.yml': `inputs:
-  paths-ignore:
-    default: 'packages/platform-linux/**'
-runs:
-  steps:
-    - uses: ./.github/actions/run-gate
-      with:
-        gate: swift-runner-ios
-`,
-  };
-  const [lane] = planted(files);
-  assert.deepEqual(lane?.phases, [
-    {
-      action: './.github/actions/phase',
-      pathsIgnore: ['packages/platform-android/**'],
-      gates: ['swift-runner-ios'],
-    },
-  ]);
-  assert.throws(
-    () =>
-      planted({
-        ...files,
-        '.github/workflows/planted.yml': files['.github/workflows/planted.yml'].replace(
-          'packages/platform-android/**',
-          '${{ env.FILTER }}',
-        ),
-      }),
-    /must declare literal paths-ignore/,
-  );
-});
-
 test('lanes carry the workflow spelling the catalog used, and only real triggers qualify', () => {
   const labels = model.lanes.map((lane) => lane.label);
   assert.ok(labels.includes('Coverage'), 'CI jobs are named bare');

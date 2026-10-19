@@ -80,22 +80,13 @@ export const MANUAL_ONLY_OWNERS: Readonly<Record<string, ManualOnlyOwner>> = {
  * (checks the lane runs a slice of through raw shell, invisible to the loader), must start the
  * lane; a path the selector places on another family's device-lane surface, or classifies as
  * a unit test, must not. GitHub evaluates the list before a runner is allocated, so the
- * decision costs no macOS time and adds no job to the critical path. A composite phase uses
- * its paths-ignore input for the same routing inside an already allocated shared job.
+ * decision costs no macOS time and adds no job to the critical path.
  */
 export type RoutedLane = {
   /** Lane label, exactly as the loader builds it: `<workflow name> / <job name>`. */
   readonly lane: string;
   /** Checks the lane samples without declaring, in addition to its run-gate declarations. */
   readonly sampled: readonly string[];
-  /** Composite phase whose paths-ignore input routes work within a shared runner job. */
-  readonly action?: string;
 };
 
-export const ROUTED_LANES: readonly RoutedLane[] = [
-  {
-    lane: 'Apple / Smoke Tests',
-    action: './.github/actions/smoke-ios',
-    sampled: ['replay-ios', 'replay-ios-device'],
-  },
-];
+export const ROUTED_LANES: readonly RoutedLane[] = [];

@@ -9,12 +9,6 @@ import { commandSegments } from './shell.ts';
 
 const RUN_GATE_ACTION = './.github/actions/run-gate';
 
-type RoutedPhase = {
-  readonly action: string;
-  readonly pathsIgnore: readonly string[];
-  readonly gates: readonly CheckId[];
-};
-
 export type Lane = {
   readonly workflow: string;
   readonly label: string;
@@ -36,7 +30,6 @@ export type Lane = {
   readonly paths: readonly string[];
   readonly pathsIgnore: readonly string[];
   readonly unsupported: readonly string[];
-  readonly phases?: readonly RoutedPhase[];
 };
 
 type RawStep = {
@@ -53,10 +46,7 @@ type WorkflowDoc = {
   true?: Record<string, never>;
   jobs?: Record<string, Job>;
 };
-type ActionDoc = {
-  inputs?: Record<string, { default?: string }>;
-  runs?: { steps?: RawStep[] };
-};
+type ActionDoc = { runs?: { steps?: RawStep[] } };
 
 function laneLabel(workflow: string, job: string): string {
   return workflow === 'CI' ? job : `${workflow} / ${job}`;
@@ -150,25 +140,6 @@ function triggerPaths(on: Record<string, { paths?: string[]; 'paths-ignore'?: st
   return { paths: pr.paths ?? [], pathsIgnore: pr['paths-ignore'] ?? [] };
 }
 
-function routedPhases(steps: readonly RawStep[], root: string): RoutedPhase[] {
-  return steps.flatMap((step) => {
-    const action = readLocalAction(step.uses, root);
-    const declared = action?.inputs?.['paths-ignore'];
-    if (!action || !declared || !step.uses) return [];
-    const value = step.with?.['paths-ignore'] ?? declared.default;
-    if (typeof value !== 'string' || value.includes('${{')) {
-      throw new Error(`${step.uses} must declare literal paths-ignore for phase routing`);
-    }
-    return [
-      {
-        action: step.uses,
-        pathsIgnore: value.split(/\r?\n/).filter(Boolean),
-        gates: [...new Set(declaredGates(action.runs?.steps ?? [], root, [], step.with ?? {}))],
-      },
-    ];
-  });
-}
-
 function workflowLanes(
   file: string,
   doc: WorkflowDoc,
@@ -196,7 +167,6 @@ function workflowLanes(
       paths,
       pathsIgnore,
       unsupported,
-      phases: routedPhases(steps, root),
     };
   });
 }
