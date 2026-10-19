@@ -90,7 +90,7 @@ if ('cloudArtifacts' in result) {
 
 A client talks to one local daemon per state directory. `daemonLifecycle` says who owns that daemon.
 
-A host-owned runtime records its ownership. A managed client reuses it while it matches. Every takeover, stop, drain, and timeout recovery asks the central retirement, which judges the record's owner once: a live host-owned or unrecognized owner is refused without a signal, while a record whose owner provably exited is retired like any abandoned one, so the state directory stays usable. The host closes its live runtime directly. `daemon stop` refuses a live host-owned or unrecognized owner without signaling it; `--clean` also requires a proven detached owner. An unreadable `daemon.json` fails stop with `daemon-record-unreadable`.
+A host-owned runtime records its ownership. A managed client reuses it while it matches. Every takeover, stop, drain, and timeout recovery asks the central retirement, which judges the record's owner once: a live host-owned or unrecognized owner is refused without a signal, while a record whose owner provably exited is retired like any abandoned one, so the state directory stays usable. The host closes its live runtime directly. `daemon stop` refuses a live host-owned or unrecognized owner without signaling it; `--clean` also requires a proven detached owner and refuses host-owned, unrecognized and unreadable records with `daemon-clean-not-detached`. Without `--clean`, an unreadable `daemon.json` fails stop with `daemon-record-unreadable`.
 
 | Mode | What the client does with the daemon |
 | --- | --- |
