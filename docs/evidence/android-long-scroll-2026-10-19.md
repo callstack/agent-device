@@ -50,7 +50,7 @@ await client.interactions.scroll({
 });
 ```
 
-The comparison route repeatedly calls `client.interactions.scroll({ direction: 'down' })` and `client.capture.snapshot({ interactiveOnly: true })` until that snapshot contains `row-512`. Both routes take a final interactive snapshot and press the target with that snapshot's generation-pinned ref. This reproduces the request boundary under comparison without including app launch.
+The comparison route repeatedly calls `client.interactions.scroll({ direction: 'down' })` and `client.capture.snapshot({ interactiveOnly: true })` until that snapshot contains `row-512`. It reuses the last loop snapshot for the target press. The until route takes an interactive snapshot after the search. Both press the target with that snapshot's generation-pinned ref. This reproduces the request boundary under comparison without including app launch.
 
 ## Rejected primitive changes
 
@@ -71,5 +71,7 @@ At `ce71f344a3`:
 - Live test-app snapshots reported `android-helper`, version 0.21.29-dev, with invalidated accessibility cache.
 
 The new runtime cases failed on unchanged base: six failures covering a budget above 12, a smaller budget and invalid inputs. Recording admission and round-trip tests failed twice before the recording fix. Cancellation tests that use the real context builder and request registry failed twice before request-signal wiring, then passed. Focused recording/scroll/visibility tests passed 141 cases; the final context/socket/HTTP/scroll group passed 50 cases. These overlapping groups are not summed.
+
+Provider integration now tests arrival after 13 gestures with maxPasses 14 and refusal after one gesture with maxPasses 1. The same test file reports two failures and three passes on unchanged base production code: the longer search stops at 12, and the smaller budget is ignored. The feature passes all five cases. The visible page label changes with each capture so the longer search proves real progress through the existing no-progress detector.
 
 The pass loop's sparse-capture refusal, edge detection, no-progress detection and visibility predicates remain in place. No gesture retry or recovery tap was added. Live verification covers the local Android helper, not Appium, HarmonyOS or Apple devices. The serialized affected gate and hosted CI remain separate validation obligations.

@@ -321,5 +321,22 @@
     "passes": [55, 61, 61, 55],
     "workflowMs": [47462.889248, 48826.80208400002, 45803.86145000001, 44127.14453900001],
     "decision": "Shorter swipes reduced single-command latency but made less progress and did not improve this workflow."
+  },
+  "providerIntegration": {
+    "command": "pnpm exec vitest run --project provider-integration test/integration/provider-scenarios/scroll-until.test.ts",
+    "baseCommit": "507ef2376621d78aa76cf531bedc5abdf30e7a5a",
+    "base": {
+      "passed": 3,
+      "failed": 2,
+      "failures": [
+        "search limited to 12 despite maxPasses 14",
+        "maxPasses 1 ignored; missing expected rejection"
+      ]
+    },
+    "feature": {
+      "passed": 5,
+      "failed": 0
+    },
+    "specSha256": "9cc972d09643dda62e0afe12fc55c8a4607cac104b7270da39beebab7013eed9"
   }
 }

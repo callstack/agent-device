@@ -1,6 +1,9 @@
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
-import { DEFAULT_SCROLL_UNTIL_PASSES } from '@agent-device/contracts/scroll-command';
+import {
+  DEFAULT_SCROLL_UNTIL_PASSES,
+  SCROLL_UNTIL_MAX_PASSES,
+} from '@agent-device/contracts/scroll-command';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
@@ -188,7 +191,7 @@ function scrollUntilNotFoundError(
       selector,
       direction,
       passes,
-      hint: `Raise the step with an amount (scroll ${direction} 0.8 --until <selector>), or run snapshot -i to confirm the selector matches something on this screen.`,
+      hint: `Allow more gestures with --max-passes <n> (up to ${SCROLL_UNTIL_MAX_PASSES}), raise the step with an amount (scroll ${direction} 0.8 --until <selector>), or run snapshot -i to inspect the current screen.`,
     },
   );
 }

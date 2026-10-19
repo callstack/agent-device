@@ -7,18 +7,18 @@ import { withProviderScenarioResource } from './harness.ts';
 /**
  * `scroll --until <selector>` through the real daemon, provider admission, and capture path.
  *
- * The row climbs one screen per capture, so it is off-screen for the first captures and on screen
- * from the third: the loop's stop condition is observed rather than asserted. Keyed on captures
+ * The row climbs one screen per capture and arrives after the configured number of passes.
+ * The loop's stop condition is observed rather than asserted. Keyed on captures
  * rather than on injected gestures because the Android gesture path runs through the persistent
  * helper, not an adb shell command the world can count.
  */
 /** Two screens below the fold, climbing one screen per capture: visible on the third capture. */
 const ARRIVAL_PASSES = 2;
 
-function climbingRow(): () => number {
+function climbingRow(arrivalPasses = ARRIVAL_PASSES): () => number {
   let captures = 0;
   return () => {
-    const top = Math.max(200, 1400 - captures * 600);
+    const top = Math.max(200, 200 + (arrivalPasses - captures) * 600);
     captures += 1;
     return top;
   };
@@ -33,7 +33,7 @@ function climbingHierarchy(targetTop: () => number): () => string {
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<hierarchy rotation="0">',
       '  <node index="0" text="" resource-id="com.android.settings:id/main_content_scrollable_container" class="android.widget.ScrollView" package="com.android.settings" content-desc="" bounds="[0,0][390,600]" clickable="false" enabled="true">',
-      '    <node index="0" text="Apps" resource-id="android:id/title" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,124][152,178]" clickable="true" enabled="true" focusable="true" focused="false" />',
+      `    <node index="0" text="Page ${top}" resource-id="android:id/title" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,124][152,178]" clickable="true" enabled="true" focusable="true" focused="false" />`,
       `    <node index="1" text="Terms" resource-id="com.android.settings:id/terms" class="android.widget.TextView" package="com.android.settings" content-desc="" bounds="[24,${top}][374,${top + 54}]" clickable="true" enabled="true" focusable="true" focused="false" />`,
       '  </node>',
       '</hierarchy>',
@@ -66,6 +66,44 @@ test('Provider-backed integration scroll --until stops on the capture that bring
     },
   );
 });
+
+test.each([
+  { maxPasses: 14, arrivalPasses: 13 },
+  { maxPasses: 1, arrivalPasses: 2 },
+])(
+  'Provider-backed integration scroll honors maxPasses $maxPasses',
+  async ({ maxPasses, arrivalPasses }) => {
+    await withProviderScenarioResource(
+      async () =>
+        await createAndroidSettingsWorld({
+          snapshotXml: climbingHierarchy(climbingRow(arrivalPasses)),
+        }),
+      async (world) => {
+        const client = world.daemon.client();
+        await client.apps.open({ app: 'settings', ...world.selection });
+        const search = () =>
+          client.interactions.scroll({
+            direction: 'down',
+            until: 'text=Terms',
+            maxPasses,
+            ...world.selection,
+          });
+        if (maxPasses < arrivalPasses) {
+          await assert.rejects(search, (error: unknown) => {
+            assert.ok(error instanceof AppError);
+            assert.equal(error.details?.reason, 'scroll_until_pass_limit');
+            assert.equal(error.details?.passes, maxPasses);
+            return true;
+          });
+        } else {
+          const result = await search();
+          assert.equal(result.until, 'text=Terms');
+          assert.equal(result.passes, arrivalPasses);
+        }
+      },
+    );
+  },
+);
 
 test('Provider-backed integration scroll --until reports the end of the content as a typed failure', async () => {
   await withProviderScenarioResource(
