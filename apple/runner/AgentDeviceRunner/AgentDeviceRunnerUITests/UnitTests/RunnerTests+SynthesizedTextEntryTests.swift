@@ -210,12 +210,12 @@ extension RunnerTests {
   }
 
   /// A later Command-A can also be dropped by XCTest/iOS, so neither case relies on it succeeding.
-  /// Three characters require more than the old two clear passes; five exceed the four-pass budget.
+  /// Three characters require more than the old two clear passes; refusal exceeds the clear budget.
   @MainActor
   func testSynthesizedReplacementClearsPastDroppedSelectAlls() throws {
     let cases: [(seed: String, failure: TextEntryFailure?)] = [
       ("old", nil),
-      ("stale", .clearNotObserved),
+      (String(repeating: "x", count: SynthesizedTextPlan.Step.maxClearPassCount + 1), .clearNotObserved),
     ]
 
     for testCase in cases {

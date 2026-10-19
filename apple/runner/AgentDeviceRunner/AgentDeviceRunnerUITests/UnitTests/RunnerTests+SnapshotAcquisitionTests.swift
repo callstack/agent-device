@@ -2,17 +2,19 @@
 import XCTest
 import AgentDeviceSnapshotPresentation
 
-/// An element's attributes as XCTest hands them to a query predicate.
+/// Snapshot attributes shared by query-predicate and capture-plan fixtures.
 @MainActor
-private final class ElementAttributesFixture: NSObject, XCUIElementSnapshot {
+final class ElementAttributesFixture: NSObject, XCUIElementSnapshot {
   let elementType: XCUIElement.ElementType
   let frame: CGRect
   let label: String
+  let children: [XCUIElementSnapshot]
 
-  init(_ elementType: XCUIElement.ElementType, _ frame: CGRect, label: String = "") {
+  init(_ elementType: XCUIElement.ElementType, _ frame: CGRect, label: String = "", children: [XCUIElementSnapshot] = []) {
     self.elementType = elementType
     self.frame = frame
     self.label = label
+    self.children = children
   }
 
   var identifier: String { "" }
@@ -26,7 +28,6 @@ private final class ElementAttributesFixture: NSObject, XCUIElementSnapshot {
 #if !os(macOS)
   var hasFocus: Bool { false }
 #endif
-  var children: [XCUIElementSnapshot] { [] }
   var dictionaryRepresentation: [XCUIElement.AttributeName: Any] { [:] }
 }
 

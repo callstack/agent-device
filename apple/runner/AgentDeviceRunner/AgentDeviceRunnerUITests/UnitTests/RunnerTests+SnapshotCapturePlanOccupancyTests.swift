@@ -70,35 +70,33 @@ private final class RunnerSlowSweepQueryStub: NSObject {
   }
 }
 
-/// Per-run state for `RunnerSlowRootSnapshotStub`: the swizzled IMP cannot capture the original
-/// implementation or a test-local flag.
+/// The root-read delay exhausts the collapsed-tab query's processing slice. All other facts are
+/// fixed, so XCTest's viewport, orientation, keyboard, and large-tree XPCs cannot consume the slice.
 private enum RunnerSlowRootSnapshotGate {
-  /// Longer than half the plan deadline the test passes, so whatever slice is left after the root
-  /// read is shorter than the read itself, while the real read still has most of `delay` to finish.
   static let delay: TimeInterval = 3
-  static var original: IMP?
   static var delayed = false
+  static var root: XCUIElementSnapshot?
 }
 
-/// Stands in for `-[XCUIElement snapshotWithError:]` so the capture's root read, the plan's first
-/// tree snapshot, takes at least `RunnerSlowRootSnapshotGate.delay` and then reads the real tree.
 private final class RunnerSlowRootSnapshotStub: NSObject {
   @objc(snapshotWithError:)
   func snapshot() throws -> XCUIElementSnapshot {
-    if !RunnerSlowRootSnapshotGate.delayed {
-      RunnerSlowRootSnapshotGate.delayed = true
-      Thread.sleep(forTimeInterval: RunnerSlowRootSnapshotGate.delay)
+    RunnerSlowRootSnapshotGate.delayed = true
+    Thread.sleep(forTimeInterval: RunnerSlowRootSnapshotGate.delay)
+    guard let root = RunnerSlowRootSnapshotGate.root else {
+      throw NSError(domain: "AgentDeviceRunner.tests", code: 2)
     }
-    typealias Read = @convention(c) (
-      AnyObject, Selector, AutoreleasingUnsafeMutablePointer<NSError?>?
-    ) -> XCUIElementSnapshot?
-    let read = unsafeBitCast(RunnerSlowRootSnapshotGate.original, to: Read.self)
-    var error: NSError?
-    guard let snapshot = read(self, #selector(XCUIElement.snapshot), &error) else {
-      throw error ?? NSError(domain: "AgentDeviceRunner.tests", code: 2)
-    }
-    return snapshot
+    return root
   }
+}
+
+/// XCTest getters used by the plan's prerequisites and query-sweep fallback. The method swaps are
+/// process-wide and restored after this serial XCTest case, as the blocking snapshot stub is above.
+private final class RunnerSnapshotFactsStub: NSObject {
+  @objc var frame: CGRect { CGRect(x: 0, y: 0, width: 390, height: 844) }
+  @objc var exists: Bool { false }
+  @objc var allElementsBoundByIndex: [XCUIElement] { [] }
+  @objc class func interfaceOrientation(forApplication application: AnyObject) -> Int { 1 }
 }
 
 extension RunnerTests {
@@ -476,48 +474,57 @@ extension RunnerTests {
     XCTAssertEqual(quality.reasonCode, "budget")
   }
 
-  /// A childless tab bar makes the tree tier run the collapsed tab query, and a slow root read leaves too
-  /// little of the processing slice for it to start. The plan must treat that tree as a tier that
-  /// ran out of time and move on, not accept the truncated tree as a healthy capture.
+  /// A childless tab bar needs a query whose estimated cost exceeds the remaining processing slice.
+  /// The plan must reject that incomplete tree even though its visible buttons otherwise look healthy.
   func testPlanMovesPastATreeTierWhoseCollapsedTabQueryCannotStart() throws {
-    guard
-      let snapshotMethod = class_getInstanceMethod(
-        XCUIApplication.self,
-        #selector(XCUIElement.snapshot)
-      ),
-      let stubMethod = class_getInstanceMethod(
-        RunnerSlowRootSnapshotStub.self,
-        #selector(RunnerSlowRootSnapshotStub.snapshot)
-      )
-    else {
-      XCTFail("unable to install the slow root snapshot stub")
-      return
+    let swaps: [(Method?, Method?)] = [
+      (class_getInstanceMethod(XCUIApplication.self, #selector(XCUIElement.snapshot)),
+       class_getInstanceMethod(RunnerSlowRootSnapshotStub.self, #selector(RunnerSlowRootSnapshotStub.snapshot))),
+      (class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.frame)),
+       class_getInstanceMethod(RunnerSnapshotFactsStub.self, #selector(getter: RunnerSnapshotFactsStub.frame))),
+      (class_getInstanceMethod(XCUIElement.self, #selector(getter: XCUIElement.exists)),
+       class_getInstanceMethod(RunnerSnapshotFactsStub.self, #selector(getter: RunnerSnapshotFactsStub.exists))),
+      (class_getInstanceMethod(XCUIElementQuery.self, #selector(getter: XCUIElementQuery.allElementsBoundByIndex)),
+       class_getInstanceMethod(RunnerSnapshotFactsStub.self, #selector(getter: RunnerSnapshotFactsStub.allElementsBoundByIndex))),
+      (class_getClassMethod(RunnerSynthesizedGesture.self, #selector(RunnerSynthesizedGesture.interfaceOrientation(forApplication:))),
+       class_getClassMethod(RunnerSnapshotFactsStub.self, #selector(RunnerSnapshotFactsStub.interfaceOrientation(forApplication:)))),
+    ]
+    var originals: [(Method, IMP)] = []
+    let previousPrivateAX = privateAXAcquisitionOverrideForTesting
+    defer {
+      for (method, original) in originals.reversed() { method_setImplementation(method, original) }
+      RunnerSlowRootSnapshotGate.root = nil
+      privateAXAcquisitionOverrideForTesting = previousPrivateAX
+      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
+      MainActor.assumeIsolated { invalidateCachedTarget(reason: "unit_test_cleanup") }
     }
-    app.launchArguments = ["--agent-device-crowded-screen", "--agent-device-collapsed-tab-bar"]
-    app.launch()
-    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
+    for (method, stub) in swaps {
+      let method = try XCTUnwrap(method)
+      let stub = try XCTUnwrap(stub)
+      originals.append((method, method_setImplementation(method, method_getImplementation(stub))))
+    }
     let captureTarget = MainActor.assumeIsolated {
+      let windowFrame = CGRect(x: 0, y: 0, width: 390, height: 844)
+      let buttons: [XCUIElementSnapshot] = (0..<13).map { index in
+        ElementAttributesFixture(
+          .button,
+          CGRect(x: 20, y: 20 + index * 45, width: 100, height: 30),
+          label: "Row \(index)"
+        )
+      }
+      let tabBar = ElementAttributesFixture(.tabBar, CGRect(x: 0, y: 790, width: 390, height: 50))
+      RunnerSlowRootSnapshotGate.root = ElementAttributesFixture(
+        .application, windowFrame, label: "Fixture",
+        children: [ElementAttributesFixture(.window, windowFrame, children: buttons + [tabBar])]
+      )
       mainOwned.app = app
       mainOwned.bundleId = "com.callstack.agentdevice.runner.collapsed-tab-query-test"
       return takeSnapshotCaptureTarget(app: app)
     }
+    privateAXAcquisitionOverrideForTesting = { nil }
     snapshotXCTestPenaltyWarmupExemption.isPending = false
     clearSnapshotXCTestChannelPenalty(reason: "test-setup")
     RunnerSlowRootSnapshotGate.delayed = false
-    RunnerSlowRootSnapshotGate.original = method_setImplementation(
-      snapshotMethod,
-      method_getImplementation(stubMethod)
-    )
-    defer {
-      if let original = RunnerSlowRootSnapshotGate.original {
-        method_setImplementation(snapshotMethod, original)
-      }
-      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
-      MainActor.assumeIsolated {
-        invalidateCachedTarget(reason: "unit_test_cleanup")
-      }
-      app.terminate()
-    }
 
     let payload = try runDeferredPlanOffMain(
       target: captureTarget,
