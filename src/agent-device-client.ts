@@ -162,7 +162,7 @@ export function createAgentDeviceClient(
     command: DaemonCommandName,
     options: InternalRequestOptions = {},
   ): Promise<T> => {
-    const request = await prepareDaemonCommandRequest(command, options);
+    const request = await prepareDaemonCommandRequest(command, options, host);
     return (await execute(
       request.command,
       request.positionals,

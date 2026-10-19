@@ -1,3 +1,4 @@
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { resolveRemoteConfigProfile as resolveRemoteConfigProfileOnHost } from '@agent-device/remote/remote-config';
 import type {
   RemoteConfigProfileOptions,
@@ -10,5 +11,8 @@ export type { RemoteConfigProfile } from '@agent-device/remote/remote-config-sch
 export function resolveRemoteConfigProfile(
   options: RemoteConfigProfileOptions,
 ): ResolvedRemoteConfigProfile {
-  return resolveRemoteConfigProfileOnHost({ ...options, env: options.env ?? process.env });
+  return resolveRemoteConfigProfileOnHost({
+    ...options,
+    env: options.env ?? captureHostEnvironment(process).env,
+  });
 }

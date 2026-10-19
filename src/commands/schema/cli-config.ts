@@ -20,9 +20,9 @@ export function resolveConfigBackedFlagDefaults(options: {
   command: string | null;
   cwd: string;
   cliFlags: CliFlags;
-  env?: EnvMap;
+  env: EnvMap;
 }): Partial<CliFlags> {
-  const env = options.env ?? process.env;
+  const env = options.env;
   const defaults = mergeDefinedFlags(
     {} as Partial<CliFlags>,
     loadConfigFileDefaults(resolveConfigPaths(options.cwd, options.cliFlags.config, env)),

@@ -83,7 +83,12 @@ describe('system command interface', () => {
 
   test('parameterless daemon writers emit command names with no positionals', () => {
     for (const command of parameterless) {
-      expect(systemCommandFamily.daemonWriters?.[command]?.({})).toMatchObject({
+      expect(
+        systemCommandFamily.daemonWriters?.[command]?.(
+          {},
+          { env: process.env, cwd: process.cwd() },
+        ),
+      ).toMatchObject({
         command,
         positionals: [],
       });

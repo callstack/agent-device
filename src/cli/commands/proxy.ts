@@ -106,7 +106,7 @@ export function renderProxyStartup(
   startup: ProxyStartup,
   options: { useColor?: boolean } = {},
 ): string {
-  const useColor = options.useColor ?? supportsColor();
+  const useColor = options.useColor ?? supportsColor(process.env);
   const checkmark = formatProxyOutputValue('✓', 'green', useColor);
   const proxyBaseUrl = formatProxyOutputValue(startup.proxyBaseUrl, 'cyan', useColor);
   const daemonBaseUrl = formatProxyOutputValue('<tunnel URL>', 'cyan', useColor);

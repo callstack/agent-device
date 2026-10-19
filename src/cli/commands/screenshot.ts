@@ -52,7 +52,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
       flags,
       env: host.env,
     });
-    await writeCommandOutput(flags, result, () => formatSnapshotDiffText(result));
+    await writeCommandOutput(flags, result, () => formatSnapshotDiffText(result, host.env));
     return true;
   }
 
@@ -104,7 +104,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
   });
 
   await writeCommandOutput(flags, result, () =>
-    formatScreenshotDiffText(result as ScreenshotDiffResult),
+    formatScreenshotDiffText(result as ScreenshotDiffResult, host),
   );
   return true;
 };

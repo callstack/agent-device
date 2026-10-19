@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createBatchDaemonWriter } from './batch/index.ts';
 import type { AnyDaemonWriter, CommandInput, DaemonCommandRequest } from './cli-grammar/types.ts';
 import { findCommandMetadata } from './command-metadata.ts';
@@ -17,6 +18,7 @@ async function prepareBatchDaemonCommandRequest(
   command: string,
   input: CommandInput,
   stepNumber: number,
+  host: HostEnvironment,
 ): Promise<DaemonCommandRequest> {
   const writer = (daemonWriters as Readonly<Record<string, AnyDaemonWriter>>)[command];
   if (!writer) {
@@ -31,6 +33,7 @@ async function prepareBatchDaemonCommandRequest(
       writer,
       metadata,
       metadata.readInput(input) as CommandInput,
+      host,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -46,6 +49,7 @@ async function prepareBatchDaemonCommandRequest(
 export async function prepareDaemonCommandRequest(
   command: DaemonCommandName,
   input: CommandInput,
+  host: HostEnvironment,
 ): Promise<DaemonCommandRequest> {
   const writer = daemonWriters[command];
   if (!writer) {
@@ -53,15 +57,16 @@ export async function prepareDaemonCommandRequest(
   }
   refuseRetiredCommonInput(input as Record<string, unknown>);
   const metadata = findCommandMetadata(command);
-  return await prepareRequestWithMetadataFlags(writer, metadata, input);
+  return await prepareRequestWithMetadataFlags(writer, metadata, input, host);
 }
 
 async function prepareRequestWithMetadataFlags(
   writer: AnyDaemonWriter,
   metadata: ReturnType<typeof findCommandMetadata>,
   input: CommandInput,
+  host: HostEnvironment,
 ): Promise<DaemonCommandRequest> {
-  const request = await writer(input);
+  const request = await writer(input, host);
   return {
     ...request,
     ...(metadata ? { metadataFlags: readMetadataCommandFlags(metadata, request.options) } : {}),

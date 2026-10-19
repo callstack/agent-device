@@ -242,10 +242,10 @@ export const testCliReader: CliReader = (positionals, flags) => ({
   testIme: flags.testIme,
 });
 
-export const replayDaemonWriter: AsyncDaemonWriter = async (input) => {
+export const replayDaemonWriter: AsyncDaemonWriter = async (input, host) => {
   const inputPath = requiredDaemonString(input.path, 'replay requires path');
   const replayBackend = readReplayBackend(input);
-  const replayShellEnv = collectReplayClientShellEnv(process.env);
+  const replayShellEnv = collectReplayClientShellEnv(host.env);
   return request(REPLAY_COMMAND_NAME, [inputPath], {
     ...input,
     replayUpdate: input.update,
@@ -257,7 +257,7 @@ export const replayDaemonWriter: AsyncDaemonWriter = async (input) => {
     // the daemon executes only what arrives in this bundle.
     replayScriptSource: await loadReplayScriptSourceBundle({
       inputPath,
-      cwd: readReplayClientCwd(input),
+      cwd: readReplayClientCwd(input, host.cwd),
       replayBackend,
       env: readReplayScriptSourceEnv(input, replayShellEnv),
     }),
@@ -268,11 +268,11 @@ export const replayDaemonWriter: AsyncDaemonWriter = async (input) => {
   });
 };
 
-export const testDaemonWriter: AsyncDaemonWriter = async (input) => {
+export const testDaemonWriter: AsyncDaemonWriter = async (input, host) => {
   const inputs = input.paths ?? [];
   const replayBackend = readReplayBackend(input);
-  const cwd = readReplayClientCwd(input);
-  const replayShellEnv = collectReplayClientShellEnv(process.env);
+  const cwd = readReplayClientCwd(input, host.cwd);
+  const replayShellEnv = collectReplayClientShellEnv(host.env);
   const env = readReplayScriptSourceEnv(input, replayShellEnv);
   return request(TEST_COMMAND_NAME, inputs, {
     ...stripReplayTestPresentationInput(input),
@@ -344,8 +344,8 @@ function readReplayScriptSourceEnv(
   };
 }
 
-function readReplayClientCwd(input: CommandInput): string {
-  return typeof input.cwd === 'string' && input.cwd.length > 0 ? input.cwd : process.cwd();
+function readReplayClientCwd(input: CommandInput, hostCwd: string): string {
+  return typeof input.cwd === 'string' && input.cwd.length > 0 ? input.cwd : hostCwd;
 }
 
 function readReplayBackend(input: CommandInput): string | undefined {

@@ -148,16 +148,30 @@ describe('replay command interface', () => {
     });
   });
 
+  test('collects replay files and shell variables from the explicit host', async () => {
+    process.env.AD_VAR_REPLAY_TEST = 'process';
+    const host = { env: { AD_VAR_REPLAY_TEST: 'host' }, cwd: SCRIPT_ROOT };
+    for (const result of [
+      await replayDaemonWriter({ path: './checkout.ad' }, host),
+      await testDaemonWriter({ paths: ['./suite.ad'] }, host),
+    ]) {
+      expect(result.options.replayShellEnv).toEqual({ AD_VAR_REPLAY_TEST: 'host' });
+    }
+  });
+
   test('writes daemon replay and test requests with replay flags', async () => {
     process.env.AD_VAR_REPLAY_TEST = 'enabled';
     expect(
-      await replayDaemonWriter({
-        path: './checkout.ad',
-        cwd: SCRIPT_ROOT,
-        update: true,
-        backend: 'maestro',
-        env: ['FOO=bar'],
-      }),
+      await replayDaemonWriter(
+        {
+          path: './checkout.ad',
+          cwd: SCRIPT_ROOT,
+          update: true,
+          backend: 'maestro',
+          env: ['FOO=bar'],
+        },
+        { env: process.env, cwd: process.cwd() },
+      ),
     ).toMatchObject({
       command: 'replay',
       positionals: ['./checkout.ad'],
@@ -169,14 +183,17 @@ describe('replay command interface', () => {
       },
     });
 
-    const testRequest = await testDaemonWriter({
-      paths: ['./suite.ad'],
-      cwd: SCRIPT_ROOT,
-      maestro: true,
-      metroHost: '127.0.0.1',
-      metroPort: 8083,
-      reportJunit: './junit.xml',
-    });
+    const testRequest = await testDaemonWriter(
+      {
+        paths: ['./suite.ad'],
+        cwd: SCRIPT_ROOT,
+        maestro: true,
+        metroHost: '127.0.0.1',
+        metroPort: 8083,
+        reportJunit: './junit.xml',
+      },
+      { env: process.env, cwd: process.cwd() },
+    );
     expect(testRequest).toMatchObject({
       command: 'test',
       positionals: ['./suite.ad'],
@@ -193,7 +210,12 @@ describe('replay command interface', () => {
     const input = replayCliReader(['./probe-hang.ad'], flags({ timeoutMs: 1_000 }));
 
     expect(input).toMatchObject({ path: './probe-hang.ad', timeoutMs: 1_000 });
-    expect(await replayDaemonWriter({ ...input, cwd: SCRIPT_ROOT })).toMatchObject({
+    expect(
+      await replayDaemonWriter(
+        { ...input, cwd: SCRIPT_ROOT },
+        { env: process.env, cwd: process.cwd() },
+      ),
+    ).toMatchObject({
       command: 'replay',
       positionals: ['./probe-hang.ad'],
       options: { timeoutMs: 1_000 },
@@ -262,12 +284,15 @@ describe('replay resume (ADR 0012 decision 4 / migration step 5)', () => {
 
   test('writes resumeFrom/resumePlanDigest onto the daemon request as replayFrom/replayPlanDigest', async () => {
     expect(
-      await replayDaemonWriter({
-        path: './checkout.ad',
-        cwd: SCRIPT_ROOT,
-        resumeFrom: 3,
-        resumePlanDigest: 'deadbeef',
-      }),
+      await replayDaemonWriter(
+        {
+          path: './checkout.ad',
+          cwd: SCRIPT_ROOT,
+          resumeFrom: 3,
+          resumePlanDigest: 'deadbeef',
+        },
+        { env: process.env, cwd: process.cwd() },
+      ),
     ).toMatchObject({
       command: 'replay',
       positionals: ['./checkout.ad'],
@@ -279,7 +304,10 @@ describe('replay resume (ADR 0012 decision 4 / migration step 5)', () => {
   });
 
   test('test daemon writer never emits replayFrom/replayPlanDigest', async () => {
-    const request = await testDaemonWriter({ paths: ['./suite.ad'], cwd: SCRIPT_ROOT });
+    const request = await testDaemonWriter(
+      { paths: ['./suite.ad'], cwd: SCRIPT_ROOT },
+      { env: process.env, cwd: process.cwd() },
+    );
     expect(request.options).not.toHaveProperty('replayFrom');
     expect(request.options).not.toHaveProperty('replayPlanDigest');
   });
@@ -289,7 +317,12 @@ describe('replay --keep-session', () => {
   test('projects the CLI flag through structured replay input and the daemon request', async () => {
     const input = replayCliReader(['./checkout.ad'], flags({ replayKeepSession: true }));
     expect(input).toMatchObject({ path: './checkout.ad', keepSession: true });
-    expect(await replayDaemonWriter({ ...input, cwd: SCRIPT_ROOT })).toMatchObject({
+    expect(
+      await replayDaemonWriter(
+        { ...input, cwd: SCRIPT_ROOT },
+        { env: process.env, cwd: process.cwd() },
+      ),
+    ).toMatchObject({
       command: 'replay',
       positionals: ['./checkout.ad'],
       options: { replayKeepSession: true },
@@ -301,9 +334,14 @@ describe('replay --keep-session', () => {
     const input = testCliReader(['./suite.ad'], flags({ replayKeepSession: true } as never));
     expect(input).not.toHaveProperty('keepSession');
     expect(testCommandMetadata.inputSchema.properties).not.toHaveProperty('keepSession');
-    expect((await testDaemonWriter({ ...input, cwd: SCRIPT_ROOT })).options).not.toHaveProperty(
-      'replayKeepSession',
-    );
+    expect(
+      (
+        await testDaemonWriter(
+          { ...input, cwd: SCRIPT_ROOT },
+          { env: process.env, cwd: process.cwd() },
+        )
+      ).options,
+    ).not.toHaveProperty('replayKeepSession');
   });
 });
 
@@ -326,14 +364,20 @@ describe('replay --save-script arming (ADR 0012 decision 6, R1/R6)', () => {
 
   test('writes saveScript onto the daemon request unchanged', async () => {
     expect(
-      await replayDaemonWriter({ path: './checkout.ad', cwd: SCRIPT_ROOT, saveScript: true }),
+      await replayDaemonWriter(
+        { path: './checkout.ad', cwd: SCRIPT_ROOT, saveScript: true },
+        { env: process.env, cwd: process.cwd() },
+      ),
     ).toMatchObject({
       command: 'replay',
       positionals: ['./checkout.ad'],
       options: { saveScript: true },
     });
     expect(
-      await replayDaemonWriter({ path: './checkout.ad', cwd: SCRIPT_ROOT, saveScript: './out.ad' }),
+      await replayDaemonWriter(
+        { path: './checkout.ad', cwd: SCRIPT_ROOT, saveScript: './out.ad' },
+        { env: process.env, cwd: process.cwd() },
+      ),
     ).toMatchObject({
       command: 'replay',
       positionals: ['./checkout.ad'],

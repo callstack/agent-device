@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { isFlagSupportedForCommand } from '../commands/schema/option-schema.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
@@ -10,10 +11,12 @@ export function resolveMcpConfigDefaults(
   name: CommandName,
   explicitInput: Record<string, unknown>,
   supportedProperties: Readonly<Record<string, JsonSchema>>,
+  host: HostEnvironment,
 ): Record<string, unknown> {
   const defaults = resolveConfigBackedFlagDefaults({
     command: name,
-    cwd: process.cwd(),
+    cwd: host.cwd,
+    env: host.env,
     cliFlags: explicitInput as CliFlags,
   });
   const applicableDefaults: Record<string, unknown> = {};

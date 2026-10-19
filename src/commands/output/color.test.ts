@@ -9,8 +9,8 @@ test('supportsColor uses the stream TTY state by default', () => {
   delete process.env.FORCE_COLOR;
   delete process.env.NO_COLOR;
   try {
-    assert.equal(supportsColor({ isTTY: true }), true);
-    assert.equal(supportsColor({ isTTY: false }), false);
+    assert.equal(supportsColor(process.env, { isTTY: true }), true);
+    assert.equal(supportsColor(process.env, { isTTY: false }), false);
   } finally {
     if (typeof originalForceColor === 'string') process.env.FORCE_COLOR = originalForceColor;
     else delete process.env.FORCE_COLOR;
@@ -25,14 +25,14 @@ test('supportsColor honors explicit environment overrides', () => {
   try {
     process.env.FORCE_COLOR = '0';
     delete process.env.NO_COLOR;
-    assert.equal(supportsColor({ isTTY: true }), false);
+    assert.equal(supportsColor(process.env, { isTTY: true }), false);
 
     process.env.FORCE_COLOR = '1';
-    assert.equal(supportsColor({ isTTY: false }), true);
+    assert.equal(supportsColor(process.env, { isTTY: false }), true);
 
     delete process.env.FORCE_COLOR;
     process.env.NO_COLOR = '1';
-    assert.equal(supportsColor({ isTTY: true }), false);
+    assert.equal(supportsColor(process.env, { isTTY: true }), false);
   } finally {
     if (typeof originalForceColor === 'string') process.env.FORCE_COLOR = originalForceColor;
     else delete process.env.FORCE_COLOR;

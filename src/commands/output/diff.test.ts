@@ -23,7 +23,7 @@ test('formatSnapshotDiffText renders plain text when color is disabled', () => {
   process.env.FORCE_COLOR = '0';
   delete process.env.NO_COLOR;
   try {
-    const text = formatSnapshotDiffText({ ...DIFF_DATA });
+    const text = formatSnapshotDiffText({ ...DIFF_DATA }, process.env);
     assert.match(text, /^@e2 \[window\]/m);
     assert.match(text, /^- {2}@e3 \[text\] "67"$/m);
     assert.match(text, /^\+ {2}@e3 \[text\] "134"$/m);
@@ -38,7 +38,7 @@ test('formatSnapshotDiffText renders plain text when color is disabled', () => {
 });
 
 test('formatSnapshotDiffText renders ANSI colors when forced', () => {
-  const text = withColor(() => formatSnapshotDiffText({ ...DIFF_DATA }));
+  const text = withColor(() => formatSnapshotDiffText({ ...DIFF_DATA }, process.env));
   const plainText = stripVTControlCharacters(text);
   assert.notEqual(text, plainText);
   assert.match(plainText, /^@e2 \[window\]/m);
@@ -49,10 +49,13 @@ test('formatSnapshotDiffText renders ANSI colors when forced', () => {
 
 test('formatSnapshotDiffText prints warnings before the diff body', () => {
   const text = withNoColor(() =>
-    formatSnapshotDiffText({
-      ...DIFF_DATA,
-      warnings: ['Recent press was followed by a nearly identical snapshot.'],
-    }),
+    formatSnapshotDiffText(
+      {
+        ...DIFF_DATA,
+        warnings: ['Recent press was followed by a nearly identical snapshot.'],
+      },
+      process.env,
+    ),
   );
   assert.match(text, /^Recent press was followed by a nearly identical snapshot\.$/m);
   assert.match(text, /^@e2 \[window\]$/m);
@@ -61,12 +64,15 @@ test('formatSnapshotDiffText prints warnings before the diff body', () => {
 
 test('formatScreenshotDiffText renders match success without color', () => {
   const text = withNoColor(() =>
-    formatScreenshotDiffText({
-      match: true,
-      differentPixels: 0,
-      totalPixels: 100,
-      mismatchPercentage: 0,
-    }),
+    formatScreenshotDiffText(
+      {
+        match: true,
+        differentPixels: 0,
+        totalPixels: 100,
+        mismatchPercentage: 0,
+      },
+      { env: process.env, cwd: process.cwd() },
+    ),
   );
   assert.match(text, /✓ Screenshots match\./);
   assert.equal(text.includes('\u001b['), false);
@@ -74,41 +80,44 @@ test('formatScreenshotDiffText renders match success without color', () => {
 
 test('formatScreenshotDiffText renders mismatch with pixel counts without color', () => {
   const text = withNoColor(() =>
-    formatScreenshotDiffText({
-      match: false,
-      differentPixels: 500,
-      totalPixels: 10000,
-      mismatchPercentage: 5,
-      diffPath: '/tmp/test/diff.png',
-      currentOverlayPath: '/tmp/test/diff.current-overlay.png',
-      currentOverlayRefCount: 1,
-      regions: [
-        {
-          index: 1,
-          rect: { x: 10, y: 20, width: 100, height: 40 },
-          normalizedRect: normalizedRect({ x: 10, y: 20, width: 100, height: 40 }),
-          differentPixels: 350,
-          shareOfDiffPercentage: 70,
-          densityPercentage: 87.5,
-          shape: 'horizontal-band',
-          size: 'small',
-          location: 'top-left',
-          averageBaselineColorHex: '#000000',
-          averageCurrentColorHex: '#ffffff',
-          baselineLuminance: 0,
-          currentLuminance: 255,
-          dominantChange: 'brighter',
-          currentOverlayMatches: [
-            {
-              ref: 'e1',
-              label: 'Continue',
-              rect: { x: 1, y: 2, width: 3, height: 4 },
-              regionCoveragePercentage: 12,
-            },
-          ],
-        },
-      ],
-    }),
+    formatScreenshotDiffText(
+      {
+        match: false,
+        differentPixels: 500,
+        totalPixels: 10000,
+        mismatchPercentage: 5,
+        diffPath: '/tmp/test/diff.png',
+        currentOverlayPath: '/tmp/test/diff.current-overlay.png',
+        currentOverlayRefCount: 1,
+        regions: [
+          {
+            index: 1,
+            rect: { x: 10, y: 20, width: 100, height: 40 },
+            normalizedRect: normalizedRect({ x: 10, y: 20, width: 100, height: 40 }),
+            differentPixels: 350,
+            shareOfDiffPercentage: 70,
+            densityPercentage: 87.5,
+            shape: 'horizontal-band',
+            size: 'small',
+            location: 'top-left',
+            averageBaselineColorHex: '#000000',
+            averageCurrentColorHex: '#ffffff',
+            baselineLuminance: 0,
+            currentLuminance: 255,
+            dominantChange: 'brighter',
+            currentOverlayMatches: [
+              {
+                ref: 'e1',
+                label: 'Continue',
+                rect: { x: 1, y: 2, width: 3, height: 4 },
+                regionCoveragePercentage: 12,
+              },
+            ],
+          },
+        ],
+      },
+      { env: process.env, cwd: process.cwd() },
+    ),
   );
   assert.match(text, /✗ 5% pixels differ/);
   assert.match(text, /Diff image:/);
@@ -123,16 +132,19 @@ test('formatScreenshotDiffText renders mismatch with pixel counts without color'
 
 test('formatScreenshotDiffText renders dimension mismatch', () => {
   const text = withNoColor(() =>
-    formatScreenshotDiffText({
-      match: false,
-      differentPixels: 100,
-      totalPixels: 100,
-      mismatchPercentage: 100,
-      dimensionMismatch: {
-        expected: { width: 1170, height: 2532 },
-        actual: { width: 1080, height: 1920 },
+    formatScreenshotDiffText(
+      {
+        match: false,
+        differentPixels: 100,
+        totalPixels: 100,
+        mismatchPercentage: 100,
+        dimensionMismatch: {
+          expected: { width: 1170, height: 2532 },
+          actual: { width: 1080, height: 1920 },
+        },
       },
-    }),
+      { env: process.env, cwd: process.cwd() },
+    ),
   );
   assert.match(text, /✗ Screenshots have different dimensions/);
   assert.match(text, /expected 1170x2532/);
@@ -143,13 +155,16 @@ test('formatScreenshotDiffText renders dimension mismatch', () => {
 test('formatScreenshotDiffText renders diff path relative to cwd', () => {
   const cwd = process.cwd();
   const text = withNoColor(() =>
-    formatScreenshotDiffText({
-      match: false,
-      differentPixels: 10,
-      totalPixels: 100,
-      mismatchPercentage: 10,
-      diffPath: `${cwd}/diff.png`,
-    }),
+    formatScreenshotDiffText(
+      {
+        match: false,
+        differentPixels: 10,
+        totalPixels: 100,
+        mismatchPercentage: 10,
+        diffPath: `${cwd}/diff.png`,
+      },
+      { env: process.env, cwd: process.cwd() },
+    ),
   );
   assert.match(text, /\.\/diff\.png/);
   assert.equal(text.includes(cwd), false);
@@ -161,13 +176,16 @@ test('formatScreenshotDiffText keeps absolute diff path outside cwd', () => {
   const siblingDir = path.join(parentDir, `${path.basename(cwd)}-sibling`);
   const diffPath = path.join(siblingDir, 'diff.png');
   const text = withNoColor(() =>
-    formatScreenshotDiffText({
-      match: false,
-      differentPixels: 10,
-      totalPixels: 100,
-      mismatchPercentage: 10,
-      diffPath,
-    }),
+    formatScreenshotDiffText(
+      {
+        match: false,
+        differentPixels: 10,
+        totalPixels: 100,
+        mismatchPercentage: 10,
+        diffPath,
+      },
+      { env: process.env, cwd: process.cwd() },
+    ),
   );
   assert.match(text, new RegExp(diffPath.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)));
   assert.equal(text.includes('./'), false);
@@ -175,13 +193,16 @@ test('formatScreenshotDiffText keeps absolute diff path outside cwd', () => {
 
 test('formatScreenshotDiffText uses ANSI colors when enabled', () => {
   const text = withColor(() =>
-    formatScreenshotDiffText({
-      match: false,
-      differentPixels: 10,
-      totalPixels: 100,
-      mismatchPercentage: 10,
-      diffPath: '/tmp/diff.png',
-    }),
+    formatScreenshotDiffText(
+      {
+        match: false,
+        differentPixels: 10,
+        totalPixels: 100,
+        mismatchPercentage: 10,
+        diffPath: '/tmp/diff.png',
+      },
+      { env: process.env, cwd: process.cwd() },
+    ),
   );
   assert.equal(text.includes('\u001b[31m'), true);
   assert.equal(text.includes('\u001b[32m'), true);
@@ -190,13 +211,16 @@ test('formatScreenshotDiffText uses ANSI colors when enabled', () => {
 
 test('formatScreenshotDiffText does not show diff path when images match', () => {
   const text = withNoColor(() =>
-    formatScreenshotDiffText({
-      match: true,
-      differentPixels: 0,
-      totalPixels: 100,
-      mismatchPercentage: 0,
-      diffPath: '/tmp/diff.png',
-    }),
+    formatScreenshotDiffText(
+      {
+        match: true,
+        differentPixels: 0,
+        totalPixels: 100,
+        mismatchPercentage: 0,
+        diffPath: '/tmp/diff.png',
+      },
+      { env: process.env, cwd: process.cwd() },
+    ),
   );
   assert.equal(text.includes('Diff image'), false);
   assert.equal(text.includes('diff.png'), false);
