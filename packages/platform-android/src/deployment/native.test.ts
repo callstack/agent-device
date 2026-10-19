@@ -39,6 +39,7 @@ function hostFixture(options: { bundletool?: boolean; bundletoolJar?: string } =
             executable: 'adb-install',
             args: [packagePath],
             replace: options.replace,
+            timeoutMs: options.timeoutMs,
           },
           signal,
         ),
@@ -73,6 +74,7 @@ test('constructs a signal-bound adb install in the Android package', async () =>
       executable: 'adb-install',
       args: ['/tmp/app.apk'],
       replace: true,
+      timeoutMs: 120_000,
     }),
     signal,
   );
@@ -98,9 +100,14 @@ test('owns bundletool command construction and temporary output cleanup', async 
 
   await installAndroidArtifact(host, device, '/tmp/app.aab', 'com.example.app', signal);
 
-  expect(run.mock.calls.map(([request]) => request.args[0])).toEqual([
-    'build-apks',
-    'install-apks',
+  expect(
+    run.mock.calls.map(([request]) => ({
+      command: request.args[0],
+      timeoutMs: request.timeoutMs,
+    })),
+  ).toEqual([
+    { command: 'build-apks', timeoutMs: 120_000 },
+    { command: 'install-apks', timeoutMs: 120_000 },
   ]);
   expect(run.mock.calls.every(([, actualSignal]) => actualSignal === signal)).toBe(true);
   expect(dispose).toHaveBeenCalledOnce();

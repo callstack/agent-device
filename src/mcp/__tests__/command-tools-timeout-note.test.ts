@@ -37,5 +37,6 @@ test('every MCP tool description declares its timeout envelope', () => {
 test('the declared envelopes carry the known tier values', () => {
   const descriptions = new Map(listCommandTools().map((tool) => [tool.name, tool.description]));
   assert.match(descriptions.get('devices') ?? '', / Times out after 90s\.$/);
-  assert.match(descriptions.get('install') ?? '', / Times out after 180s\.$/);
+  assert.match(descriptions.get('install') ?? '', / Times out after 330s\.$/);
+  assert.match(descriptions.get('install-from-source') ?? '', / Times out after 420s\.$/);
 });

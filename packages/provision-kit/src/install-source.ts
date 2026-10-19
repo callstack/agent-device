@@ -45,7 +45,7 @@ const INTERNAL_ARCHIVE_EXTENSIONS = ['.zip', '.tar', '.tar.gz', '.tgz'] as const
  * @public Archive extensions accepted by install-source resolution.
  */
 export const ARCHIVE_EXTENSIONS = Object.freeze([...INTERNAL_ARCHIVE_EXTENSIONS] as const);
-const DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS = 120_000;
+export const INSTALL_SOURCE_DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export async function materializeInstallablePath(
   options: MaterializeInstallableOptions,
@@ -124,7 +124,7 @@ async function downloadToTempFile(
   if (requestSignal?.aborted) {
     throw createRequestCanceledError();
   }
-  const timeoutSignal = AbortSignal.timeout(DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS);
+  const timeoutSignal = AbortSignal.timeout(INSTALL_SOURCE_DOWNLOAD_TIMEOUT_MS);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   try {
     return await downloadInstallSource({
@@ -139,7 +139,7 @@ async function downloadToTempFile(
       error,
       requestSignal,
       timeoutSignal,
-      DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS,
+      INSTALL_SOURCE_DOWNLOAD_TIMEOUT_MS,
     );
   }
 }
