@@ -37,8 +37,6 @@ The old verifier dropped a focused input when its raw text became empty. If that
 
 The fix carries the captured target through native-helper verification. Moved-field corroboration requires complete, freshly invalidated captures before and after the mutation, no missing window roots, and exactly one raw package/resource-ID match in both trees. The observed field must retain its class, be the sole focused edit, belong to the app, be nonsensitive, and have an exactly empty value. Missing or ambiguous evidence retains the existing point-verification behavior. Provider-native and shell/IME paths do not gain this corroboration.
 
-The 150 ms sampling interval, two-success rule, 1500 ms deadline, input path, and retries remain unchanged. The capture owner now exposes structured capture metadata so the verifier can use its existing completeness facts.
-
 The native fixture places a decoy at the target's old point after moving the target. With adapter transition zero in both arms, the unchanged base passed two static controls and returned four errors after correctly clearing the moving target. The measured runtime passed all six trials. Moving clears measured 299–413 ms, median 322.5 ms, versus 1620–1646 ms, median 1636.5 ms. Every trial recorded one target clear, unchanged decoy text, and no decoy edits or clicks. This is a verifier improvement, not proof that point dispatch is atomic.
 
 ## Validation

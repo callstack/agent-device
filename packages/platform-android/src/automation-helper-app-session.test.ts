@@ -12,13 +12,13 @@ import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT as artifact } from './__tests_
 import { ANDROID_EMULATOR as device } from './__tests__/test-utils/device-fixtures.ts';
 afterEach(resetAndroidSnapshotHelperSessions);
 
-test.each(['advertised', 'unsupported', 'ended'] as const)(
+test.each(['advertised', 'unsupported', 'ended', 'non-native-name'] as const)(
   'app open through an %s session uses exactly one launch transport',
   async (mode) => {
     const calls: (readonly string[])[] = [],
       requests: string[] = [],
       processes: FakeAndroidProcess[] = [];
-    const pkg = 'com.example.app';
+    const pkg = mode === 'non-native-name' ? '_com.example.app' : 'com.example.app';
     const provider = createPersistentSnapshotHelperProvider({
       calls,
       processes,
