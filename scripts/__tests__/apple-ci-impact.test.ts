@@ -53,7 +53,59 @@ test('Apple smoke shares setup and build while keeping platform state and native
     expect(cleanup.if).toContain('always()');
     expect(cleanup['continue-on-error']).toBe(true);
     expect(cleanup.env?.AGENT_DEVICE_STATE_DIR).toBe(phase.env?.AGENT_DEVICE_STATE_DIR);
-    expect(cleanup.run).toContain('daemon stop --clean --state-dir "$AGENT_DEVICE_STATE_DIR"');
+    expect(cleanup.run?.trim()).toBe('pnpm clean:daemon');
+  }
+});
+
+test('Apple uploads shared diagnostics once and retains both platform logs after cleanup', () => {
+  const { steps } = appleJob();
+  const uploads = steps.filter(
+    (step) => step.uses === './.github/actions/upload-agent-device-artifacts',
+  );
+  expect(uploads).toHaveLength(1);
+  const upload = uploads[0]!;
+  expect(upload.if).toBe('always()');
+  for (const platform of ['ios', 'macos']) {
+    const phase = steps.find((step) => step.id === platform)!;
+    const cleanup = steps.find((step) => step.id === `${platform}-cleanup`)!;
+    expect(steps.indexOf(upload)).toBeGreaterThan(steps.indexOf(cleanup));
+    const state = phase.env!.AGENT_DEVICE_STATE_DIR!;
+    const derived = phase.env!.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH!;
+    if (platform === 'ios') {
+      expect(upload.with?.['agent-state-dir']).toBe(state);
+      expect(upload.with?.['runner-derived-path']).toBe(derived);
+    } else {
+      expect(upload.with?.['additional-paths']?.trim().split(/\r?\n/)).toEqual([
+        `${state}/daemon.log`,
+        `${state}/sessions/**`,
+        `${derived}/.agent-device-runner-cache.json`,
+        `${derived}/Logs/**`,
+      ]);
+    }
+    const action = fs.readFileSync(
+      path.join(
+        repoRoot,
+        `.github/actions/smoke-${platform === 'ios' ? 'ios-run' : platform}/action.yml`,
+      ),
+      'utf8',
+    );
+    expect(action).not.toContain('./.github/actions/upload-agent-device-artifacts');
+  }
+  const helper = parse(
+    fs.readFileSync(
+      path.join(repoRoot, '.github/actions/upload-agent-device-artifacts/action.yml'),
+      'utf8',
+    ),
+  ) as { inputs: Record<string, { default?: string }>; runs: { steps: AppleStep[] } };
+  expect(helper.inputs['additional-paths']?.default).toBe('');
+  const paths = helper.runs.steps[0]!.with!.path!;
+  for (const path of [
+    'test/artifacts/**',
+    'test/screenshots/**',
+    '~/.agent-device/logs/**',
+    '${{ inputs.additional-paths }}',
+  ]) {
+    expect(paths.split(/\r?\n/).filter((entry) => entry === path)).toHaveLength(1);
   }
 });
 
