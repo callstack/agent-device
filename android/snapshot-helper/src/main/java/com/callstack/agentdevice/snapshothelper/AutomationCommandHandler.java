@@ -28,7 +28,9 @@ final class AutomationCommandHandler {
     Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
     InputDispatch dispatch = new InputDispatch();
     try {
-      if ("screenshot".equals(action)) {
+      if ("app".equals(action)) {
+        ApplicationCommandHandler.execute(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), result);
+      } else if ("screenshot".equals(action)) {
         screenshot(result, automation);
       } else if ("focus".equals(action)) {
         focus(result, automation);

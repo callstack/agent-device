@@ -38,6 +38,7 @@ test('parses the session envelope and snapshot metadata', () => {
       maxDepth: undefined,
       maxNodes: undefined,
       rootPresent: undefined,
+      cacheInvalidated: undefined,
       truncated: undefined,
       elapsedMs: undefined,
       displayWidth: undefined,

@@ -236,7 +236,7 @@ agent-device capabilities --session checkout --json
 
 - `devices` lists available targets after applying `--platform` and [isolation scopes](#device-isolation-scopes).
 - Each device carries `model` (such as `iPhone 17 Pro` or `Pixel 9`) and `osVersion` (such as `26.1` or `16`) when platform tooling reports them: `simctl` for iOS simulators, `devicectl` or `xctrace` for physical iOS devices, and `ro.product.model` and `ro.build.version.release` for running Android devices. Android emulators report the system image model, such as `sdk_gphone64_arm64`. Stopped AVDs and other platforms omit both fields. They describe a device and are not selectors.
-- `capabilities` lists the commands the session device, or an explicit `--platform`/`--device`/`--udid`/`--serial` target, supports. JSON output is `{ device, availableCommands }`; use `availableCommands` instead of keeping your own platform support table.
+- `capabilities` lists the commands the session device, or an explicit `--platform`/`--device`/`--udid`/`--serial` target, supports. JSON output includes `device` and `availableCommands`; use `availableCommands` instead of keeping your own platform support table. Android also reports `targetReadiness.press: "bounded-geometry"` when element presses check moving targets before dispatch. Test harnesses can use that capability to delegate tap readiness instead of adding a fixed transition delay. It does not wait for the result of the tap.
 
 ### HarmonyOS command boundary
 

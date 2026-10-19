@@ -17,6 +17,7 @@ Completed process history is in git history.
 - The Apple runner does not resend a mutating command whose first send may have run.
 - Multiple mutating selector matches collapse only if they form one ancestor–descendant chain and every member resolves to the same actionable node. Otherwise, the mutation fails with `AMBIGUOUS_MATCH`. Maestro's explicit expected-point/non-hittable compatibility path stays separate.
 - Keep synthesized iOS gesture policy outside the element dispatch-path matrix.
+- On Android, the press/click moving-target guard samples fresh geometry until the target remains on one surface at one position for 100 ms, within a 1,500 ms transition window. A target that cannot establish that evidence is refused. Other platforms retain their existing guard schedule.
 
 ## Context
 

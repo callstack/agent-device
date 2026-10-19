@@ -222,6 +222,9 @@ export function createAgentDeviceClient(
         return {
           device: normalizeDevice(data.device),
           availableCommands,
+          ...(asOptionalRecord(data.targetReadiness)?.press === 'bounded-geometry'
+            ? { targetReadiness: { press: 'bounded-geometry' as const } }
+            : {}),
         };
       },
       boot: async (options = {}) => await executeCommand<CommandResult<'boot'>>('boot', options),

@@ -289,6 +289,7 @@ function readSessionMetadata(headers: Record<string, string>): AndroidSnapshotHe
     maxDepth: readInstrumentationResultNumber(headers.maxDepth),
     maxNodes: readInstrumentationResultNumber(headers.maxNodes),
     rootPresent: readInstrumentationResultBoolean(headers.rootPresent),
+    cacheInvalidated: readInstrumentationResultBoolean(headers.cacheInvalidated),
     captureMode:
       headers.captureMode === 'interactive-windows' || headers.captureMode === 'active-window'
         ? headers.captureMode

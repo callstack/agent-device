@@ -517,6 +517,7 @@ function formatAndroidHelperCaptureResult(
       maxDepth: capture.metadata.maxDepth,
       maxNodes: capture.metadata.maxNodes,
       rootPresent: capture.metadata.rootPresent,
+      cacheInvalidated: capture.metadata.cacheInvalidated,
       captureMode: capture.metadata.captureMode,
       windowCount: capture.metadata.windowCount,
       missingRootWindowTypes: capture.metadata.missingRootWindowTypes,

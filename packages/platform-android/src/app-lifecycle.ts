@@ -222,6 +222,30 @@ async function startAndroidApp(
   if (options.url !== undefined) {
     return await openAndroidAppBoundDeepLink(device, app, options);
   }
+  if (
+    device.target !== 'tv' &&
+    options.activity === undefined &&
+    !androidLaunchArgs(options).length &&
+    !options.terminateRunningApp &&
+    /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/.test(app)
+  ) {
+    const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+    const result = await runAndroidAutomationHelper(device, 'app', {
+      kind: 'open',
+      packageName: app,
+    });
+    if (result) {
+      if (result.notInstalled === 'true') throw buildAndroidPackageNotInstalledError(app);
+      const stdout = result.launchOutput ?? '';
+      if (!/^Status: ok$/m.test(stdout)) {
+        throw new AppError('COMMAND_FAILED', 'Android helper could not launch the application', {
+          packageName: app,
+          stdout,
+        });
+      }
+      return { stdout, stderr: '', exitCode: 0 };
+    }
+  }
   const resolved = await resolveAndroidApp(device, app);
   const launchCategory = resolveAndroidLauncherCategory(device);
   if (resolved.type === 'intent') {
@@ -558,6 +582,23 @@ async function resolveAndroidPackageToEnd(
 }
 
 async function stopAndroidPackage(device: DeviceInfo, packageName: string): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  const result = await runAndroidAutomationHelper(device, 'app', { kind: 'stop', packageName });
+  if (result) {
+    if (result.closePhase === 'foreground' || result.closePhase === 'process') {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Android application termination was not confirmed (${result.closePhase})`,
+        {
+          ...androidCloseTimeoutError(packageName, result.closePhase).details,
+          observedPackage: result.foregroundPackage,
+        },
+      );
+    }
+    if (result.stopped !== 'true')
+      throw new AppError('COMMAND_FAILED', 'Android helper did not prove application termination');
+    return;
+  }
   await runAndroidShell(device, ['am', 'force-stop', packageName]);
   const expired = await waitForAndroidPackageStopped(device, packageName);
   if (expired) throw androidCloseTimeoutError(packageName, expired);

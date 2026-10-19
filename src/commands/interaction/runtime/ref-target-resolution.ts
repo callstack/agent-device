@@ -171,6 +171,7 @@ async function resolveSnapshotForRef(
   // element. The caller re-observes (snapshot) or uses a selector.
   if (outcome.kind !== 'resolved') throw refMissRefusal(outcome, target.ref);
   return reconcileFreshObservation({
+    platform: runtime.backend.platform,
     session,
     frameTree,
     target,
@@ -190,6 +191,7 @@ async function resolveSnapshotForRef(
  * authorized frame node so a positional coincidence cannot retarget the action.
  */
 function reconcileFreshObservation(params: {
+  platform: string;
   session: CommandSessionRecord;
   frameTree: SnapshotState;
   target: Extract<InteractionTarget, { kind: 'ref' }>;
@@ -203,6 +205,32 @@ function reconcileFreshObservation(params: {
   }
   if (observation === frameTree) {
     return { snapshot: frameTree, resolved: authorized, adoptedFrom: 'observation' };
+  }
+  const identity = readNodeLocalIdentity(authorized.node);
+  const authorizedMatches = frameTree.nodes.filter((node) =>
+    localIdentitiesEqual(identity, readNodeLocalIdentity(node)),
+  );
+  if (
+    params.platform === 'android' &&
+    authorized.node.identifier &&
+    authorizedMatches.length === 1 &&
+    surfaceScopedNodes(frameTree).surfaceBundleId ===
+      surfaceScopedNodes(observation).surfaceBundleId
+  ) {
+    const candidates = observation.nodes.filter(
+      (node) => hasSnapshotRef(node) && localIdentitiesEqual(identity, readNodeLocalIdentity(node)),
+    );
+    if (candidates.length !== 1)
+      return { snapshot: frameTree, resolved: authorized, adoptedFrom: 'authorized-frame' };
+    if (candidates.length === 1) {
+      const node = candidates[0]!;
+      if (hasSnapshotRef(node))
+        return {
+          snapshot: observation,
+          resolved: buildRefResolution(authorized.ref, node, 'exact'),
+          adoptedFrom: 'observation',
+        };
+    }
   }
   const observed = tryResolveRefNode(observation.nodes, target.ref, { fallbackLabel });
   if (

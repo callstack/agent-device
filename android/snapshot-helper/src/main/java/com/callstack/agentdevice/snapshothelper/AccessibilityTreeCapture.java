@@ -36,13 +36,13 @@ final class AccessibilityTreeCapture {
   static Result capture(
       UiAutomation automation, int maxDepth, int maxNodes, long stabilizationTimeoutMs)
       throws InterruptedException, AccessibilityCaptureStabilizer.IncompleteCaptureException {
-    clearAccessibilityCache(automation);
     return AccessibilityCaptureStabilizer.capture(
         () -> captureOnce(automation, maxDepth, maxNodes), stabilizationTimeoutMs);
   }
 
   @SuppressWarnings("deprecation")
   private static Result captureOnce(UiAutomation automation, int maxDepth, int maxNodes) {
+    boolean cacheInvalidated = clearAccessibilityCache(automation);
     AccessibilityTreeXml.Stats stats = new AccessibilityTreeXml.Stats();
     StringBuilder xml = new StringBuilder();
     xml.append("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>");
@@ -87,10 +87,11 @@ final class AccessibilityTreeCapture {
         windowCount,
         stats.nodeCount,
         stats.truncated,
-        missingRootWindowTypes);
+        missingRootWindowTypes,
+        cacheInvalidated);
   }
 
-  static void clearAccessibilityCache(UiAutomation automation) {
+  static boolean clearAccessibilityCache(UiAutomation automation) {
     // Navigation 3 and any in-place content swap that keeps the same window/Activity render every
     // destination inside one AndroidComposeView. A persistent helper session reuses a single
     // UiAutomation connection across captures, and its per-connection accessibility node cache is
@@ -98,16 +99,16 @@ final class AccessibilityTreeCapture {
     //
     // Declared residue (agent-device #1832): the reset mechanism differs by API level — the public
     // clearCache() on 34+, a setServiceInfo() re-apply below — and the two are not known to be
-    // equivalent. This is an acquisition-freshness difference the payload does not disclose.
+    // equivalent. Only the public cache reset establishes cacheInvalidated evidence.
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       try {
-        automation.clearCache();
-        return;
+        return automation.clearCache();
       } catch (RuntimeException ignored) {
         // Fall back to the setServiceInfo() flush below if the platform rejects the public API.
       }
     }
     clearAccessibilityCacheViaServiceInfo(automation);
+    return false;
   }
 
   private static void clearAccessibilityCacheViaServiceInfo(UiAutomation automation) {
@@ -269,6 +270,7 @@ final class AccessibilityTreeCapture {
     final int windowCount;
     final int nodeCount;
     final boolean truncated;
+    final boolean cacheInvalidated;
     // AccessibilityWindowInfo types of listed windows whose root read null or threw, so the host
     // can tell a window it could not read (an input method, say) from one that was not on screen.
     final List<Integer> missingRootWindowTypes;
@@ -281,7 +283,8 @@ final class AccessibilityTreeCapture {
         int windowCount,
         int nodeCount,
         boolean truncated,
-        List<Integer> missingRootWindowTypes) {
+        List<Integer> missingRootWindowTypes,
+        boolean cacheInvalidated) {
       this.xml = xml;
       this.rootPresent = rootPresent;
       this.foregroundWindowRootsPresent = foregroundWindowRootsPresent;
@@ -289,6 +292,7 @@ final class AccessibilityTreeCapture {
       this.windowCount = windowCount;
       this.nodeCount = nodeCount;
       this.truncated = truncated;
+      this.cacheInvalidated = cacheInvalidated;
       this.missingRootWindowTypes = missingRootWindowTypes;
     }
 

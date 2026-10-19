@@ -82,7 +82,12 @@ async function projectAndroidCapabilities(sessionName: string) {
   });
   expect(response?.ok).toBe(true);
   const data = response?.ok ? response.data : undefined;
-  return { runtime, device: data?.device, availableCommands: data?.availableCommands };
+  return {
+    runtime,
+    device: data?.device,
+    availableCommands: data?.availableCommands,
+    targetReadiness: data?.targetReadiness,
+  };
 }
 
 test('capabilities reports supported commands for the selected session device', async () => {
@@ -771,4 +776,9 @@ const dumpEmptyAndroidNetwork: PlatformRuntimeOperations['networkDump'] = async 
     },
   },
   notes: [],
+});
+
+test('Android advertises the bounded press geometry guard to consuming harnesses', async () => {
+  const { targetReadiness } = await projectAndroidCapabilities('android-target-readiness');
+  expect(targetReadiness).toEqual({ press: 'bounded-geometry' });
 });

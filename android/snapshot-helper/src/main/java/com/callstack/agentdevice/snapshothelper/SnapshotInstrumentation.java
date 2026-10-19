@@ -122,6 +122,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
       DisplayExtent.Extent display,
       long elapsedMs) {
     result.putString("rootPresent", Boolean.toString(capture.rootPresent));
+    result.putString("cacheInvalidated", Boolean.toString(capture.cacheInvalidated));
     result.putString("captureMode", capture.captureMode);
     result.putString("windowCount", Integer.toString(capture.windowCount));
     result.putString(
@@ -180,7 +181,8 @@ public final class SnapshotInstrumentation extends Instrumentation {
       putBaseMetadata(
           ready, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
       ready.putString("sessionReady", "true");
-      ready.putString("sessionCommands", "input,screenshot,focus,snapshot-immediate");
+      ready.putString("sessionCommands", "input,screenshot,focus,snapshot-immediate"
+          + (android.os.Build.VERSION.SDK_INT >= 31 ? ",app" : ""));
       ready.putString("sessionPort", Integer.toString(sessionPort));
       sendStatus(2, ready);
 
@@ -202,7 +204,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
             SessionResponseWriter.writeSessionOk(socket.getOutputStream(), requestId);
             return;
           }
-          if ("input".equals(action) || "screenshot".equals(action) || "focus".equals(action)) {
+          if ("input".equals(action) || "screenshot".equals(action) || "focus".equals(action) || "app".equals(action)) {
             AutomationCommandHandler.writeSessionResponse(
                 socket.getOutputStream(), requestId, action,
                 parts.length > 2 ? parts[2] : "", getConnectedUiAutomationUnchecked());

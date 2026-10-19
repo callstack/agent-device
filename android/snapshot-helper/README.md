@@ -162,3 +162,7 @@ The release manifest is a stable provider contract for the current helper protoc
 resolve the APK from `apkUrl`, verify `sha256`, install it with `adb install -r <apk>`, and run
 `instrumentationRunner`. Manifests up to 0.21.3 also carried an `installArgs` array; it only ever
 spelled `install -r` (plus `-t` while the helper was `testOnly`), so consumers can ignore it.
+
+Capture metadata reports `cacheInvalidated` when the capture cleared the platform node cache through `UiAutomation.clearCache()`. A complete capture with that evidence need not change routes after a control press. Incomplete captures and captures without that evidence retain freshness recovery.
+
+Warm application open and stop commands use the same automation session. Stop confirms that the package is not foreground and observes process absence twice, 150 ms apart. A failed application command is never resent.

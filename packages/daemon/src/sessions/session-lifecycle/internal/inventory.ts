@@ -285,6 +285,9 @@ async function capabilitiesInventoryResponse(params: {
     ok: true,
     data: {
       device: publicDeviceInfo(device),
+      ...(device.platform === 'android' && factOwnedCapabilityAvailable('press', facts)
+        ? { targetReadiness: { press: 'bounded-geometry' } }
+        : {}),
       availableCommands: listRuntimeFactCommands().filter((command) => {
         // A session that already owns an app identity answers appstate itself, so it stays
         // available even when the sessionless runtime probe cannot see a foreground app.

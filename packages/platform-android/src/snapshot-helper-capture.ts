@@ -376,6 +376,7 @@ function readHelperMetadata(finalResult: Record<string, string>): AndroidSnapsho
     maxDepth: readOptionalNumber(finalResult.maxDepth),
     maxNodes: readOptionalNumber(finalResult.maxNodes),
     rootPresent: readOptionalBoolean(finalResult.rootPresent),
+    cacheInvalidated: readOptionalBoolean(finalResult.cacheInvalidated),
     captureMode: readOptionalCaptureMode(finalResult.captureMode),
     windowCount: readOptionalNumber(finalResult.windowCount),
     missingRootWindowTypes: readInstrumentationResultIntegerList(

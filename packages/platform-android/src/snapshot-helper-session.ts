@@ -97,7 +97,13 @@ async function captureFromAndroidSnapshotHelperSession(params: {
 // (a second instrumentation for the helper package would force-stop the session that has it). They
 // never start a session: without one, callers use the same helper APK through a one-shot
 // `am instrument` run instead.
-export type AndroidTouchHelperAction = 'gesture' | 'viewport' | 'input' | 'screenshot' | 'focus';
+export type AndroidTouchHelperAction =
+  | 'gesture'
+  | 'viewport'
+  | 'input'
+  | 'screenshot'
+  | 'focus'
+  | 'app';
 
 /**
  * Gestures and input commands mutate the app, so their failures disclose whether input reached it. A
