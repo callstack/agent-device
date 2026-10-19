@@ -1,5 +1,5 @@
 import type { AppStateRuntimeResult } from './app-state-runtime.ts';
-import type { ElementTextTarget } from './element-text-runtime.ts';
+import type { ElementTextTarget } from './element-text-target.ts';
 import type { BackMode } from './back-mode.ts';
 import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
 import type { DeviceRotation } from './device-rotation.ts';
