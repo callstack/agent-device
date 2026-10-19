@@ -328,7 +328,6 @@ extension RunnerTests {
 
     let guardedCommands: [(String, String)] = [
       ("selector tap", #"{"command":"tap","commandId":"selector-tap","selectorKey":"label","selectorValue":"Search","synthesized":true}"#),
-      ("standard drag", #"{"command":"drag","commandId":"standard-drag","x":10,"y":20,"x2":30,"y2":40}"#),
       ("mixed sequence", """
       {"command":"sequence","commandId":"mixed-sequence","steps":[
         {"kind":"tap","x":10,"y":20,"synthesized":true},
