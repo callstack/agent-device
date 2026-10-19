@@ -48,15 +48,19 @@ test('the shared diagnostics artifact includes hidden files only from its declar
     '${{ inputs.runner-derived-path }}/Logs/**',
     'test/artifacts/**',
     'test/screenshots/**',
+    '${{ inputs.additional-paths }}',
   ]);
+  expect(action.inputs['additional-paths']).toMatchObject({ required: false, default: '' });
   expect(
-    paths(upload!).every((entry) =>
-      [
-        '${{ inputs.agent-state-dir }}/',
-        '${{ inputs.runner-derived-path }}/',
-        '~/.agent-device/logs/',
-        'test/',
-      ].some((prefix) => entry.startsWith(prefix)),
+    paths(upload!).every(
+      (entry) =>
+        entry === '${{ inputs.additional-paths }}' ||
+        [
+          '${{ inputs.agent-state-dir }}/',
+          '${{ inputs.runner-derived-path }}/',
+          '~/.agent-device/logs/',
+          'test/',
+        ].some((prefix) => entry.startsWith(prefix)),
     ),
   ).toBe(true);
 });

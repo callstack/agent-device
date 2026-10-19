@@ -57,6 +57,18 @@ test('Apple smoke shares setup and build while keeping platform state and native
   }
 });
 
+test('the workflow resolves the optional physical device variable before entering composites', () => {
+  const ios = appleJob().steps.find((step) => step.id === 'ios')!;
+  expect(ios.env?.IOS_UDID).toBe('${{ vars.IOS_UDID }}');
+  for (const action of ['smoke-ios', 'smoke-ios-run']) {
+    const source = fs.readFileSync(
+      path.join(repoRoot, `.github/actions/${action}/action.yml`),
+      'utf8',
+    );
+    expect(source).not.toMatch(/\$\{\{\s*vars\./);
+  }
+});
+
 test('Apple uploads shared diagnostics once and retains both platform logs after cleanup', () => {
   const { steps } = appleJob();
   const uploads = steps.filter(
