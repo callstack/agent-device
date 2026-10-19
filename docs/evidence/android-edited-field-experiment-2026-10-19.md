@@ -45,14 +45,6 @@ The native fixture places a decoy at the target's old point after moving the tar
 
 The original regression test failed on the unchanged base: one failed, four passed. Focused final coverage passed all 40 tests. Independent review found missing pre-action uniqueness proof in an earlier candidate; that finding was fixed. The matched helper-transport regression then changed from four failures and one pass at `2aaf2c6c59` to five passes at the measured runtime. The final independent source review found no remaining issues.
 
-| Final validation | Result |
-| --- | --- |
-| Original benchmark, measured runtime | 42 passed, 1 authored skip; 309.967 s |
-| Original benchmark, contemporaneous unchanged base | 42 passed, 1 authored skip; 304.726 s |
-| Final test-app workflows | 4 passed; 46.556 s |
-| Full Android CLI test-app | 10 scenarios, 41 commands, 15 behaviors; no infrastructure reissues |
-| Helper provenance | `android-helper`, `persistent-session`, version `0.21.29-dev` matching the package |
-
 Both original benchmark runs had zero fixture recoveries and zero extra attempts. The historical 273.122 s run is not treated as a contemporary base. In the new pair, fill totals were 14.119/13.911 s, clear 1.731/1.754 s, and taps 83.809/83.802 s (base/head). Scrolling totals were 66.961/73.162 s. One pair cannot establish a statistical improvement or regression. The test-app scenario, command, and behavior identities match the previous full verification. Eight expected negative visibility probes preceded scroll-to-visible actions; they were not infrastructure reissues or failed mutations.
 
 The first full CLI attempt stopped before any fill: Android was in non-touch mode after the Enter-key workflow, and focus scrolled the Automation lab heading offscreen. A visible fixture tap changed the observed input event to `inTouchMode=true`. The unchanged suite then ran with that explicit precondition. The failed setup, an interrupted premature rerun, and the repair commands remain in the archive; they are excluded from passing-run counts.

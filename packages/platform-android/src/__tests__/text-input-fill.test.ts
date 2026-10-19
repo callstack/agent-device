@@ -633,11 +633,11 @@ test('readAndroidTextAtPointInHierarchy reads the EditText under the requested p
   assert.equal(readAndroidTextAtPointInHierarchy(hierarchy, 100, 250), 'fallback@example.com');
 });
 
-test('fillAndroid runs the whole attempt on one warm daemon-session helper', async () => {
+test('fillAndroid confirms a moved clear through one warm helper', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
-  let typed = '';
+  let typed = 'before';
   let captureCount = 0;
   const provider = createPersistentSnapshotHelperProvider({
     calls,
@@ -646,9 +646,18 @@ test('fillAndroid runs the whole attempt on one warm daemon-session helper', asy
     sessionInput: (input) => {
       if (input.kind === 'fill') typed = input.text ?? '';
     },
+    sessionSnapshotMetadata: () => ({ cacheInvalidated: 'true', missingRootWindowTypes: '' }),
     sessionXml: () => {
       captureCount += 1;
-      return androidInputXml({ text: typed });
+      const xml = phoneInputXml(typed);
+      return captureCount === 1
+        ? xml
+        : xml
+            .replace('[0,0][200,100]', '[400,0][600,100]')
+            .replace(
+              '</hierarchy>',
+              '<node package="com.example" class="android.widget.EditText" text="D" resource-id="decoy" focused="false" bounds="[0,0][200,100]"/></hierarchy>',
+            );
     },
   });
 
@@ -666,13 +675,14 @@ test('fillAndroid runs the whole attempt on one warm daemon-session helper', asy
     },
     { serial: ANDROID_EMULATOR.id },
     async () => {
-      await fillAndroid(ANDROID_EMULATOR, 10, 10, 'chips', 0, {
+      await fillAndroid(ANDROID_EMULATOR, 10, 10, '', 0, {
         helperSessionScope: 'daemon-session',
       });
     },
   );
 
   // One pre-action target read plus the two settling samples the text held for.
+  assert.equal(typed, '');
   assert.equal(captureCount, 3);
   assert.equal(spawnArgs.length, 1);
   assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 0);

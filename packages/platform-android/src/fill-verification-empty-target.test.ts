@@ -40,11 +40,6 @@ function verify(
     { targetInput: before, uniqueIdentity: true },
   );
 }
-test('confirms a uniquely identified focused empty field after it moves away from the original point', () => {
-  const r = verify(field('app:id/decoy', 'D', 0, false) + field('app:id/target', '', 200, true));
-  expect(r.ok).toBe(true);
-  expect(r.actualInput?.resourceId).toBe('app:id/target');
-});
 test('does not accept a different empty focused field instead of the requested target', () => {
   expect(
     verify(field('app:id/target', 'G', 0, false) + field('app:id/other', '', 200, true)).ok,
