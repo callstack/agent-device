@@ -12,21 +12,14 @@ import {
   runAndroidExecOut as runAndroidExecOutOnHost,
   runAndroidShell as runAndroidShellOnHost,
 } from '@agent-device/platform-android/mechanics';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
-import { withCommandHost } from '@agent-device/host-kit/command';
+import { withSdkHost } from './host.ts';
 
 export async function runAndroidShell(...args: Parameters<typeof runAndroidShellOnHost>) {
-  const host = captureHostEnvironment(process);
-  return await withCommandHost({ host, requestEnv: undefined }, () =>
-    runAndroidShellOnHost(...args),
-  );
+  return await withSdkHost(() => runAndroidShellOnHost(...args));
 }
 
 export async function runAndroidExecOut(...args: Parameters<typeof runAndroidExecOutOnHost>) {
-  const host = captureHostEnvironment(process);
-  return await withCommandHost({ host, requestEnv: undefined }, () =>
-    runAndroidExecOutOnHost(...args),
-  );
+  return await withSdkHost(() => runAndroidExecOutOnHost(...args));
 }
 export type { ShellWord } from '@agent-device/kernel/device-shell';
 

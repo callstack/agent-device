@@ -1,5 +1,5 @@
 import * as devServer from '@agent-device/react-native';
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureSdkHost } from './host.ts';
 
 export {
   normalizeBaseUrl,
@@ -16,5 +16,5 @@ export {
 export async function prepareMetroRuntime(
   input: Parameters<typeof devServer.prepareMetroRuntime>[0] = {},
 ): ReturnType<typeof devServer.prepareMetroRuntime> {
-  return await devServer.prepareMetroRuntime(input, captureHostEnvironment(process));
+  return await devServer.prepareMetroRuntime(input, captureSdkHost());
 }

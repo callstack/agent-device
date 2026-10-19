@@ -1,4 +1,4 @@
-import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { captureSdkHost } from './sdk/host.ts';
 import type {
   DeviceInventoryProvider,
   LeaseLifecycleProvider,
@@ -27,7 +27,7 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   constructor(options: LimrunRuntimeOptions) {
     this.implementation = createLimrunRuntime(
       options,
-      createLimrunRuntimeDependencies(captureHostEnvironment(process)),
+      createLimrunRuntimeDependencies(captureSdkHost()),
     );
   }
 
