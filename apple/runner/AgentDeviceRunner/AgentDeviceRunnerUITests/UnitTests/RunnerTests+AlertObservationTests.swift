@@ -51,7 +51,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let alert = try resolveAlertBeforeTheCommand()
     let response = handleAlert(alert, action: "accept", deadline: .distantPast)
     XCTAssertFalse(response.ok)
@@ -69,7 +69,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let alert = try resolveAlertBeforeTheCommand()
     alertButtonHittabilityProbeOverrideForTesting = { probeDeadline in
       while Date() < probeDeadline {
@@ -92,7 +92,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let alert = try resolveAlertBeforeTheCommand()
     let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
     let frame = button.frame
@@ -112,7 +112,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let alert = try resolveAlertBeforeTheCommand()
     let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
     let frame = button.frame
@@ -153,7 +153,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let alert = try resolveAlertBeforeTheCommand()
 
     let response = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline))
@@ -224,7 +224,7 @@ extension RunnerTests {
       _ = banner.waitForNonExistence(timeout: 15)
     }
     try acceptNotificationAuthorizationUntilAlertAppears()
-    XCTAssertTrue(banner.waitForExistence(timeout: appExistenceTimeout), "the fixture keeps a banner up")
+    XCTAssertTrue(banner.waitForFixtureExistence(timeout: appExistenceTimeout), "the fixture keeps a banner up")
     let alert = try resolveAlertBeforeTheCommand()
 
     try assertions(alert)
@@ -275,7 +275,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let original = try resolveAlertBeforeTheCommand()
     alertResolutionOverrideForTesting = { _ in original }
     let timeoutMs = Int(RunnerTests.alertActivationDeadline * 1000)

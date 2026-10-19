@@ -81,7 +81,7 @@ extension RunnerTests {
         invalidateCachedTarget(reason: "unit_test_cleanup")
         app.terminate()
       }
-      XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+      XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
       XCTAssertEqual(
         app.windows.allElementsBoundByIndex.filter(\.exists).count,
         2,

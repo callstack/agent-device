@@ -643,7 +643,7 @@ extension RunnerTests {
   private func startMacTargetAndLoseTheForeground() throws -> XCUIApplication {
     let target = XCUIApplication(bundleIdentifier: Self.macBackgroundTargetBundleId)
     target.launch()
-    XCTAssertTrue(target.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(target.waitForFixtureExistence(timeout: appExistenceTimeout))
     _ = XCUIApplication(bundleIdentifier: Self.macForegroundStealBundleId).activate()
     XCTAssertTrue(
       target.wait(for: .runningBackground, timeout: 10),

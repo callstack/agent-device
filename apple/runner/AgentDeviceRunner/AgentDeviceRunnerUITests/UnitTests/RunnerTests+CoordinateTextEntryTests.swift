@@ -31,12 +31,12 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
 
     let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(textField.waitForFixtureExistence(timeout: appExistenceTimeout))
     let nonTextTarget = app.staticTexts["Agent Device Runner"]
-    XCTAssertTrue(nonTextTarget.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(nonTextTarget.waitForFixtureExistence(timeout: appExistenceTimeout))
     let nonTextFrame = nonTextTarget.frame
     XCTAssertFalse(nonTextFrame.isEmpty)
     mainOwned.app = app
@@ -89,11 +89,11 @@ extension RunnerTests {
     XCTAssertTrue(seeded.ok, String(describing: seeded.error))
 
     let nonTextTarget = app.buttons["agent-device-tap-witness"]
-    XCTAssertTrue(nonTextTarget.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(nonTextTarget.waitForFixtureExistence(timeout: appExistenceTimeout))
     let nonTextFrame = nonTextTarget.frame
     XCTAssertFalse(nonTextFrame.isEmpty)
     let pressCount = app.staticTexts["agent-device-tap-witness-presses"]
-    XCTAssertTrue(pressCount.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(pressCount.waitForFixtureExistence(timeout: appExistenceTimeout))
 
     let fillCommand = try runnerCommandFixture(
       #"{"command":"type","commandId":"fill-penalized-non-text-point","text":"must-not-replace","textEntryMode":"replace","x":\#(nonTextFrame.midX),"y":\#(nonTextFrame.midY)}"#

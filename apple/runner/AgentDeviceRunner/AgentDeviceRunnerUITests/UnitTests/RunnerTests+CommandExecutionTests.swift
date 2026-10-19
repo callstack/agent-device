@@ -81,12 +81,12 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
 
     let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(textField.waitForFixtureExistence(timeout: appExistenceTimeout))
     let otherElement = app.staticTexts["Agent Device Runner"]
-    XCTAssertTrue(otherElement.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(otherElement.waitForFixtureExistence(timeout: appExistenceTimeout))
     XCTAssertFalse(
       keyboardFocusConfirmed(app: app, element: textField),
       "an untapped field must not confirm focus, or the fallback would fire immediately"
@@ -144,9 +144,9 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
     let field = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     let frame = field.frame
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
@@ -191,9 +191,9 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
     XCTAssertTrue(
-      app.textFields["agent-device-hardware-keyboard-input"].waitForExistence(timeout: appExistenceTimeout)
+      app.textFields["agent-device-hardware-keyboard-input"].waitForFixtureExistence(timeout: appExistenceTimeout)
     )
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
@@ -234,9 +234,9 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
     let field = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     // The fixture keeps its keyboard down with an empty inputView, but a simulator with the software
     // keyboard forced on takes the fill's keyboard-visible branch, which has different resolution.
     // That is an environment fact, so the test that pins the hidden-keyboard branch skips on it.

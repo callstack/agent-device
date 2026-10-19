@@ -381,7 +381,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForFixtureExistence(timeout: appExistenceTimeout))
     let hint = CaptureHint(
       projection: .regular,
       depth: nil,
@@ -419,7 +419,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForFixtureExistence(timeout: appExistenceTimeout))
     let hint = CaptureHint(
       projection: .regular,
       depth: nil,
