@@ -1,6 +1,6 @@
 # Other iOS interaction and image paths — 2026-10-19
 
-Profiling found a four-second readiness wait on an already-focused input and avoidable PNG encoding work. Three changes are retained: corroborate focus on the chosen input, use the existing fast PNG encoder for worker jobs and their inline execution path, and simplify resampling weights for whole-pixel boxes. The earlier rejected clearing shortcuts remain excluded.
+Profiling found a four-second readiness wait on an already-focused input and avoidable PNG encoding work. Two changes are retained: corroborate focus on the chosen input and use the existing fast PNG encoder for worker jobs and their inline execution path. The earlier rejected clearing shortcuts remain excluded.
 
 ## Measurements
 
@@ -13,9 +13,9 @@ Conventional medians, milliseconds. Native probes used the unchanged `dev.e2e.be
 | Native replacement fill, 19 characters | 3,337.75 | 3,342.05 | Same command entrypoint and independent value check |
 | PNG worker encode, 402 × 874 | 10.65 | 3.30 | Same captured pixels, including worker round trip |
 | PNG worker encode, 1206 × 2622 | 89.83 | 24.13 | Same captured pixels, including worker round trip |
-| Box resize, 1206 × 2622 → 402 × 874 | 10.78 | 8.20 | Whole-pixel 3× reduction |
-| Box resize, 1206 × 2622 → 603 × 1311 | 13.41 | 10.89 | Whole-pixel 2× reduction |
-| Box resize, 1206 × 2622 → 481 × 1047 | 15.07 | 15.90 | Fractional control; no speed improvement |
+| Box resize, 1206 × 2622 → 402 × 874 | 10.78 | 8.20 | Rejected candidate; whole-pixel 3× reduction |
+| Box resize, 1206 × 2622 → 603 × 1311 | 13.41 | 10.89 | Rejected candidate; whole-pixel 2× reduction |
+| Box resize, 1206 × 2622 → 481 × 1047 | 15.07 | 15.90 | Rejected candidate; fractional control slowed |
 
 The selector result applies to the native selector route used by the narrow Maestro compatibility path. Ordinary CLI presses use canonical capture and coordinate dispatch; their baseline median was 770.09 ms. This is not a general tap or full-suite speed claim. Ordinary fills were effectively unchanged. The pixel-stage savings do not establish a total screenshot latency improvement.
 
@@ -27,7 +27,7 @@ The regression test starts with an independently focused UIKit responder and req
 
 PNG worker encoding and inline encoding now call `encodePngPixels` with four channels. Worker scheduling, transfer rules, error routing, image dimensions, and RGBA contents are preserved. Compression bytes change. Tests decode with `pngjs` and compare every channel, including transparent pixels, through both execution paths.
 
-The resampler retains its box average. When both scale ratios are integers, each contributing source pixel has weight one. Fractional geometry keeps the overlap weights. Unequal integer factors and fractional RGBA averages have independent expected-value tests. Forcing whole-pixel weights on fractional geometry changed the expected pixels: the control passed three tests; the mutant failed one and passed two. The small fractional timing increase is retained in the table.
+An isolated resampling candidate assigned weight one when both scale ratios were integers. All pixels matched the original resampler. The approximately 2.5 ms integer gain came with a fractional slowdown and breached the complexity gate for `resizePngBox` (cognitive complexity 24). The final change excludes this fast path and its two added tests. The candidate's independent expected-value tests passed; forcing whole-pixel weights on fractional geometry failed one test. These measurements and the mutation result describe the rejected candidate only.
 
 ## Where the remaining time goes
 
@@ -40,7 +40,7 @@ The installed `0.21.25` CLI's request logs put screenshot acquisition at 428.5 m
 The [samples, instrumentation, manual native probe, and exact commands](ios-other-paths-latency-2026-10-19.json) support this report. `*MsCsv` fields preserve observations in time order. The native comparison uses the same diagnostic instrumentation on both builds. The final source removes that instrumentation and the upstream-app-dependent test.
 
 - Final source: 22 native tests passed, zero failures or skips. iOS and macOS builds passed.
-- PNG worker, encoder, fallback, and resize suites: 28 tests passed.
+- PNG worker, encoder, fallback, and unchanged resize suites: 26 tests passed.
 - The source screenshot pipeline captured the live upstream app at densities 1, 1.25, and 3 with the expected dimensions and portrait metadata. Resized captures used the optimized None-filter encoder.
 - Ordinary CLI smoke: two rounds, 12 successful operations, with independent fill/append read-back.
 - A four-step Maestro focus/type/assert flow passed after CLI navigation to the form. Diagnostics recorded selector dispatch. A separate full-navigation flow reached `Sticky Chrome Target` and failed before the input tap; its cause is unproven and it is excluded from the comparison.

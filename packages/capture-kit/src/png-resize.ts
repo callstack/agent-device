@@ -41,8 +41,6 @@ export async function resizePngFile(
 
 export function resizePngBox(source: PNG, width: number, height: number): PNG {
   const output = new PNG({ width, height });
-  const wholePixelBoxes =
-    Number.isInteger(source.width / width) && Number.isInteger(source.height / height);
   for (let y = 0; y < height; y += 1) {
     const sourceTop = (y * source.height) / height;
     const sourceBottom = ((y + 1) * source.height) / height;
@@ -57,13 +55,10 @@ export function resizePngBox(source: PNG, width: number, height: number): PNG {
       let weight = 0;
 
       for (let sourceY = Math.floor(sourceTop); sourceY < Math.ceil(sourceBottom); sourceY += 1) {
-        const yWeight = wholePixelBoxes
-          ? 1
-          : Math.min(sourceY + 1, sourceBottom) - Math.max(sourceY, sourceTop);
+        const yWeight = Math.min(sourceY + 1, sourceBottom) - Math.max(sourceY, sourceTop);
         for (let sourceX = Math.floor(sourceLeft); sourceX < Math.ceil(sourceRight); sourceX += 1) {
-          const pixelWeight = wholePixelBoxes
-            ? 1
-            : yWeight * (Math.min(sourceX + 1, sourceRight) - Math.max(sourceX, sourceLeft));
+          const pixelWeight =
+            yWeight * (Math.min(sourceX + 1, sourceRight) - Math.max(sourceX, sourceLeft));
           const sourceOffset = (sourceY * source.width + sourceX) * 4;
           red += (source.data[sourceOffset] ?? 0) * pixelWeight;
           green += (source.data[sourceOffset + 1] ?? 0) * pixelWeight;

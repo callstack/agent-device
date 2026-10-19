@@ -180,7 +180,7 @@
       }
     },
     "pngFocusedTests": {
-      "passed": 28,
+      "passed": 26,
       "failed": 0
     },
     "fractionalWeightMutation": {
@@ -266,5 +266,9 @@
     "screenshot": "703,573,606,609",
     "screenshotCapture": "428,416,433,429",
     "screenshotDisplayProbe": "188,95,89,96"
+  },
+  "pixelResamplingDisposition": {
+    "retained": false,
+    "reason": "Approximately 2.5 ms integer gain, fractional slowdown, and cognitive complexity 24 above the gate threshold. Final source retains the original resampler and tests. Resampling samples and mutation evidence describe the isolated rejected candidate only."
   }
 }
