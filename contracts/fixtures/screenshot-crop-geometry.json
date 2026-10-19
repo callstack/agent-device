@@ -18,6 +18,15 @@
     "expectedIntersection": { "x": 48, "y": 880, "width": 1110, "height": 156 }
   },
   {
+    "name": "iOS physical 3x capture (iPhone 12): a fractional points rect scales by imgW/bounds.width and rounds",
+    "space": "viewport-points",
+    "bounds": { "x": 0, "y": 0, "width": 390, "height": 844 },
+    "rect": { "x": 255.6667, "y": 73.6667, "width": 54.3333, "height": 14.3333 },
+    "image": { "width": 1170, "height": 2532 },
+    "expectedProjection": { "x": 767, "y": 221, "width": 163, "height": 43 },
+    "expectedIntersection": { "x": 767, "y": 221, "width": 163, "height": 43 }
+  },
+  {
     "name": "Android: device-pixel rects project 1:1 with no bounds lookup",
     "space": "device-pixels",
     "bounds": null,

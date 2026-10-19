@@ -14,7 +14,7 @@ import {
 } from './snapshot-rect-projection.ts';
 
 // Golden geometry table for `screenshot --crop-on`: the numbers are the live
-// evidence baseline (iOS simulator 402/1206, Android 1080, macOS 586/1172),
+// evidence baseline (iOS simulator 402/1206, iOS physical 390/1170, Android 1080, macOS 586/1172),
 // so a projection-law change that moves any accepted cell's crop box turns this
 // red before the pixel-identity cross-check could ever notice.
 

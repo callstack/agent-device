@@ -46,7 +46,7 @@ export const SCREENSHOT_CROP_TARGET_CELLS: readonly CropTargetCell[] = [
   { target: 'android-emulator', status: 'accepted' },
   { target: 'android-device', status: 'rejected', rejectionReason: PENDING },
   { target: 'macos-app-window', status: 'rejected', rejectionReason: PENDING },
-  { target: 'ios-physical', status: 'rejected', rejectionReason: PENDING },
+  { target: 'ios-physical', status: 'accepted' },
   { target: 'macos-helper', status: 'rejected', rejectionReason: PENDING },
   { target: 'web', status: 'rejected', rejectionReason: PENDING },
   { target: 'linux', status: 'rejected', rejectionReason: PENDING },

@@ -3,6 +3,7 @@ import {
   ANDROID_EMULATOR,
   IOS_DEVICE,
   IOS_SIMULATOR,
+  IPADOS_SIMULATOR,
   LINUX_DEVICE,
   MACOS_DEVICE,
   TVOS_SIMULATOR,
@@ -59,7 +60,11 @@ test('the classifier and the acceptance matrix agree one-to-one, and the accepte
   }
   expect(CROP_TARGET_DEVICES.map((row) => row.target)).toEqual(matrixTargets);
   for (const cell of SCREENSHOT_CROP_TARGET_CELLS) {
-    if (cell.target === 'ios-simulator' || cell.target === 'android-emulator') {
+    if (
+      cell.target === 'ios-simulator' ||
+      cell.target === 'android-emulator' ||
+      cell.target === 'ios-physical'
+    ) {
       expect(cell.status).toBe('accepted');
     } else {
       expect(cell).toEqual({
@@ -69,6 +74,12 @@ test('the classifier and the acceptance matrix agree one-to-one, and the accepte
       });
     }
   }
+});
+
+test('a physical iPad classifies into the ios-physical cell', () => {
+  expect(classifyScreenshotCropTarget({ ...IPADOS_SIMULATOR, kind: 'device' }, undefined)).toBe(
+    'ios-physical',
+  );
 });
 
 const MACOS_SURFACE_BACKENDS: Record<SessionSurface, MacOsSurfaceBackend> = {
@@ -168,7 +179,9 @@ test('a matrix-rejected target is refused with the pending-evidence reason', () 
 });
 
 test('an accepted target with a valid selector passes the policy', () => {
-  expect(() =>
-    assertScreenshotCropPolicy({ device: ANDROID_EMULATOR, surface: undefined, ...POLICY_BASE }),
-  ).not.toThrow();
+  for (const device of [IOS_SIMULATOR, ANDROID_EMULATOR, IOS_DEVICE]) {
+    expect(() =>
+      assertScreenshotCropPolicy({ device, surface: undefined, ...POLICY_BASE }),
+    ).not.toThrow();
+  }
 });
