@@ -1,4 +1,5 @@
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
+import { HARDWARE_KEY_USAGE } from '@agent-device/contracts/tv-remote';
 import { getReplayBackendDeclaration } from '@agent-device/replay-port/replay-backend-declarations';
 import { normalizeCliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
 import { helpBody } from '@agent-device/command-registry/command-text';
@@ -268,7 +269,7 @@ Buttons:
 
 Android TV:
   Android TV uses ADB keyevents behind agent-device tv-remote. Keep command plans on agent-device; do not switch to raw adb keyevent.
-  For playback, volume, and channel keys, use hardware-key media-play-pause|media-next|media-previous|media-rewind|media-fast-forward|volume-up|volume-down|mute|channel-up|channel-down|last-channel|guide|info|captions|tv-input|color-red|color-green|color-yellow|color-blue. For a vendor remote button, use hardware-key android-keycode:<n>.
+  For playback, volume, power, and channel keys, use hardware-key ${HARDWARE_KEY_USAGE}.
   Use --target tv when a host has both phone/tablet and TV emulators/devices.
 
 tvOS:
