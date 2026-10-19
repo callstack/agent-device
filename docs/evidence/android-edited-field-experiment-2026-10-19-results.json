@@ -200,5 +200,22 @@
     "reviewedStatusUnchanged": true,
     "ownedDaemonStatesStopped": 27,
     "daemonStopFailures": 0
+  },
+  "postReview": {
+    "runtimeCommit": "14a2d7a28dfa0e509e02247323aa56b72c98e1fc",
+    "change": "Behavior-equivalent separation of identity corroboration from point scanning to satisfy complexity gate.",
+    "focusedTestsPassed": 40,
+    "fallowPassed": true,
+    "nativePublicSdkTrialsPassed": 6,
+    "nativeTrialCounters": "Each target clear=1, decoy unchanged, decoy edits=0, cover clicks=0.",
+    "independentReview": "No findings; predicates and ownership equivalent.",
+    "firstHarnessRun": "Six correct cases; duplicate final close returned SESSION_NOT_FOUND. Corrected harness rerun exited 0.",
+    "additionalOwnedDaemonStatesStopped": 1,
+    "fullBenchmarkAndTestAppEvidenceCommit": "86d42d43ea2a06cc4290fb1bef56b780765b7d1c",
+    "archive": {
+      "filename": "android-edited-field-post-review-2026-10-19.tar.gz",
+      "sha256": "ba0df22db185ea4d5134082866687a1a9317e26e94b4bcb815fbfe03f8dce28e",
+      "localOnly": true
+    }
   }
 }

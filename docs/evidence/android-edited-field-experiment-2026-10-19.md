@@ -1,6 +1,6 @@
 # Android edited-field experiments, 2026-10-19
 
-The safe result is a clear-verification fix: a field that moves after being cleared now confirms its empty value by a corroborated identity. Four moving-field trials previously changed the correct field but returned an error after a median 1636.5 ms. At the final runtime, all four succeeded, with a median 322.5 ms: 1314 ms saved per affected clear.
+The safe result is a clear-verification fix: a field that moves after being cleared now confirms its empty value by a corroborated identity. Four moving-field trials previously changed the correct field but returned an error after a median 1636.5 ms. At the measured runtime, all four succeeded, with a median 322.5 ms: 1314 ms saved per affected clear.
 
 The larger adapter timer shortcut was rejected. It saved seconds in normal tests but clicked a covering button in three oracle trials, even though the requested field was correctly cleared. Exact value assertions alone miss that side effect.
 
@@ -8,7 +8,7 @@ The larger adapter timer shortcut was rejected. It saved seconds in normal tests
 
 ## Inputs and isolation
 
-The runtime base was `8b29f466fc2941eb24f9b3df8b60b3aef862d8cd`. The final runtime was `86d42d43ea2a06cc4290fb1bef56b780765b7d1c`. The adapter was `5e1d8952f4b0fd0d6a12b084ed8151e71e7cd889`. Separate disposable checkouts received independent dependency installations and builds. Runs used Pixel_7_CI / emulator-5554, Android 16 API 36, sequentially, one worker, and zero runner retries. No heavy tests or builds ran beside device timings.
+The runtime base was `8b29f466fc2941eb24f9b3df8b60b3aef862d8cd`. The measured runtime was `86d42d43ea2a06cc4290fb1bef56b780765b7d1c`. The adapter was `5e1d8952f4b0fd0d6a12b084ed8151e71e7cd889`. Separate disposable checkouts received independent dependency installations and builds. Runs used Pixel_7_CI / emulator-5554, Android 16 API 36, sequentially, one worker, and zero runner retries. No heavy tests or builds ran beside device timings.
 
 The benchmark APK SHA-256 remained `b163e985ebd8340bf10447cdf6826aea37e429ee8c4382f9179c863c8c0619b2`. The test-app APK remained `4f332d39e76899b86e7006cda5d43ade6211733fe85ffe4552735e3e56c867b4`.
 
@@ -39,15 +39,15 @@ The fix carries the captured target through native-helper verification. Moved-fi
 
 The 150 ms sampling interval, two-success rule, 1500 ms deadline, input path, and retries remain unchanged. The capture owner now exposes structured capture metadata so the verifier can use its existing completeness facts.
 
-The native fixture places a decoy at the target's old point after moving the target. With adapter transition zero in both arms, the unchanged base passed two static controls and returned four errors after correctly clearing the moving target. The final runtime passed all six trials. Moving clears measured 299–413 ms, median 322.5 ms, versus 1620–1646 ms, median 1636.5 ms. Every trial recorded one target clear, unchanged decoy text, and no decoy edits or clicks. This is a verifier improvement, not proof that point dispatch is atomic.
+The native fixture places a decoy at the target's old point after moving the target. With adapter transition zero in both arms, the unchanged base passed two static controls and returned four errors after correctly clearing the moving target. The measured runtime passed all six trials. Moving clears measured 299–413 ms, median 322.5 ms, versus 1620–1646 ms, median 1636.5 ms. Every trial recorded one target clear, unchanged decoy text, and no decoy edits or clicks. This is a verifier improvement, not proof that point dispatch is atomic.
 
 ## Validation
 
-The original regression test failed on the unchanged base: one failed, four passed. Focused final coverage passed all 40 tests. Independent review found missing pre-action uniqueness proof in an earlier candidate; that finding was fixed. The matched helper-transport regression then changed from four failures and one pass at `2aaf2c6c59` to five passes at the final runtime. The final independent source review found no remaining issues.
+The original regression test failed on the unchanged base: one failed, four passed. Focused final coverage passed all 40 tests. Independent review found missing pre-action uniqueness proof in an earlier candidate; that finding was fixed. The matched helper-transport regression then changed from four failures and one pass at `2aaf2c6c59` to five passes at the measured runtime. The final independent source review found no remaining issues.
 
 | Final validation | Result |
 | --- | --- |
-| Original benchmark, final runtime | 42 passed, 1 authored skip; 309.967 s |
+| Original benchmark, measured runtime | 42 passed, 1 authored skip; 309.967 s |
 | Original benchmark, contemporaneous unchanged base | 42 passed, 1 authored skip; 304.726 s |
 | Final test-app workflows | 4 passed; 46.556 s |
 | Full Android CLI test-app | 10 scenarios, 41 commands, 15 behaviors; no infrastructure reissues |
@@ -65,4 +65,6 @@ Two Claude Opus public-source review rounds challenged the shortcut. The follow-
 
 Promote only the verifier fix. Retain the adapter timer and native input guards. The next larger experiment is identity-bound native fill/clear that can resolve and validate the target without injecting an unconditional point tap. It needs counter-based tests for overlays, duplicate IDs, remounts, keyboard movement, and touch-handler fidelity before any host wait is removed. A native accessibility action alone does not establish fidelity to custom touch handlers.
 
-The local archive retains runtime patches/source, rejected adapter patches, fixture source/APK, harnesses, reports, logs, and per-file checksums: `android-edited-field-experiment-2026-10-19.tar.gz`, SHA-256 `a8ac1266326861aaaf821344433e7b6c4c507caa0eb56d30d864e97498f68626`. It is a local handoff artifact, not a repository-hosted download. All 27 owned daemon states were stopped. Both disposable checkouts were removed. The reviewed SHA and clean status were verified unchanged before promotion. Only the final guarded verifier fix was promoted.
+The local archive retains runtime patches/source, rejected adapter patches, fixture source/APK, harnesses, reports, logs, and per-file checksums: `android-edited-field-experiment-2026-10-19.tar.gz`, SHA-256 `a8ac1266326861aaaf821344433e7b6c4c507caa0eb56d30d864e97498f68626`. It is a local handoff artifact, not a repository-hosted download. The initial 27 owned daemon states were stopped. Both disposable checkouts were removed. The reviewed SHA and clean status were verified unchanged before promotion. Only the final guarded verifier fix was promoted.
+
+The final code at `14a2d7a28dfa0e509e02247323aa56b72c98e1fc` separates identity corroboration from point scanning to satisfy the complexity gate. Independent review confirmed equivalent checks. All 40 focused tests and six native counter trials through the public SDK passed on this refactor. Whole-suite benchmark and test-app evidence above remains attributed to `86d42d43ea`. The first new harness run completed six correct cases but failed a duplicate final close; the corrected harness exited zero. One additional owned daemon was stopped. The post-review archive is `android-edited-field-post-review-2026-10-19.tar.gz`, SHA-256 `ba0df22db185ea4d5134082866687a1a9317e26e94b4bcb815fbfe03f8dce28e`.
