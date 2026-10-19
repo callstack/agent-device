@@ -295,7 +295,7 @@ scale, and rotation values for one simultaneous two-finger gesture.
 `gesture pan`'s requested duration is actually observed by the app (a bucketed
 `pan duration` status on the Home screen), rather than just that the gesture activated.
 It's split out of `gesture-lab.ad` so it can run as an automatic PR-tier check
-(`.github/workflows/ios.yml`) without depending on `gesture-lab.ad`'s multi-touch commands,
+(`.github/workflows/apple.yml`) without depending on `gesture-lab.ad`'s multi-touch commands,
 which stay full-tier only.
 
 To target a specific iOS simulator or an installed Expo development build, run the

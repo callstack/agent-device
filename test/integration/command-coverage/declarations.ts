@@ -644,7 +644,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'Android prepare fails closed through its unavailable prepareAppleRunner fact',
     ),
     iosSimulator: iosSimulator.workflowLive(
-      '.github/workflows/ios.yml',
+      '.github/actions/smoke-ios-run/action.yml',
       'Preflight iOS runner through public CLI',
       'cached XCTest runner is prepared once before Settings and fixture suites',
     ),

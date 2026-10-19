@@ -83,7 +83,7 @@ export const IOS_SIMULATOR_BEHAVIOR_COVERAGE = {
       'when the hosted runner can establish a Finder canary, it remains frontmost across simulator automation',
     level: 'workflow-live',
     owner: {
-      path: '.github/workflows/ios.yml',
+      path: '.github/actions/smoke-ios-run/action.yml',
       test: 'Assert simulator automation preserved host focus',
     },
   },
