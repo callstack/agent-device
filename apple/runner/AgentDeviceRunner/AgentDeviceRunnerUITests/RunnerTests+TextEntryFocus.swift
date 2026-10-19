@@ -83,6 +83,11 @@ extension RunnerTests {
       if keyboardBecameVisible(app: app, wasVisibleAtEntry: keyboardVisibleAtEntry) {
         return TextEntryStabilization(element: latest, focusConfirmed: true)
       }
+#if os(iOS)
+      if let latest, keyboardFocusConfirmed(app: app, element: latest) {
+        return TextEntryStabilization(element: latest, focusConfirmed: true)
+      }
+#endif
       sleepFor(TextEntryTiming.pollInterval)
     }
     return TextEntryStabilization(element: latest, focusConfirmed: false)

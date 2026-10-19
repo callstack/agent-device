@@ -96,7 +96,7 @@ extension RunnerTests {
   /// field is then, which is the moment the read it replaced ran at.
   func waitForTextEntryReadinessAfterTap(app: XCUIApplication, element: XCUIElement) {
 #if os(iOS)
-    if waitForFocusedTextInput(app: app, timeout: TextEntryTiming.readinessTimeout) != nil {
+    if waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout) {
       return
     }
     guard let settled = safely("TEXT_ENTRY_READINESS_FRAME", { try? element.snapshot() }) else {
@@ -105,20 +105,20 @@ extension RunnerTests {
     let frame = settled.frame
     if !frame.isEmpty {
       _ = tapAt(app: app, x: frame.midX, y: frame.midY)
-      _ = waitForFocusedTextInput(app: app, timeout: TextEntryTiming.readinessTimeout)
+      _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)
     }
 #endif
   }
 
-  private func waitForFocusedTextInput(app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
+  private func waitForTextEntryFocus(app: XCUIApplication, element: XCUIElement, timeout: TimeInterval) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
-      if let focused = focusedTextInput(app: app) {
-        return focused
+      if keyboardFocusConfirmed(app: app, element: element) {
+        return true
       }
       sleepFor(TextEntryTiming.pollInterval)
     }
-    return focusedTextInput(app: app)
+    return keyboardFocusConfirmed(app: app, element: element)
   }
 
   func keyboardBecameVisible(app: XCUIApplication, wasVisibleAtEntry: Bool) -> Bool {
@@ -142,18 +142,17 @@ extension RunnerTests {
       // An element that no longer resolves reads as identifier "" and frame `.zero`, which would
       // match any focused element that also reports an empty frame. Require a real frame first,
       // so a dead handle cannot corroborate anything.
-      let frame = element.frame
-      guard !frame.isEmpty else {
+      guard element.exists, let expected = try? element.snapshot(), !expected.frame.isEmpty else {
         return false
       }
       let focused = app
         .descendants(matching: .any)
         .matching(NSPredicate(format: "hasKeyboardFocus == 1"))
         .firstMatch
-      guard focused.exists else {
+      guard focused.exists, let observed = try? focused.snapshot() else {
         return false
       }
-      return focused.identifier == element.identifier && focused.frame == frame
+      return observed.identifier == expected.identifier && observed.frame == expected.frame
     }
 #else
     return false
