@@ -308,7 +308,7 @@ function prWorkflowWiringFailures(text: string | null): string[] {
     .join('\n');
   const failures: string[] = [];
   if (!active.includes('scripts/check-xctest-selection.ts --ios-pr-tests')) {
-    failures.push('PR workflow does not invoke the generated platform-branch XCTest selector.');
+    failures.push('PR workflow does not invoke the generated iOS branch XCTest selector.');
   }
   if (!active.includes('-only-testing:$test_id') || !active.includes('"${IOS_PR_TEST_ARGS[@]}"')) {
     failures.push('PR workflow does not pass each generated XCTest identifier to xcodebuild.');
@@ -449,7 +449,7 @@ export function reportFailures(report: SelectionReport): string[] {
       `${report.dark.length} declared XCTest method(s) are reachable by no lane:`,
       ...report.dark.map((identifier) => `  - ${identifier}`),
       'The host lane runs everything the macOS build compiles, the nightly everything the iOS',
-      'build compiles, and the PR lane selects platform-branch methods; a method outside all three — usually',
+      'build compiles, and the PR lane selects shared iOS branch methods; a method outside all three — usually',
       'a guard naming a platform no lane runs — is dark from the day it is written. Widen the',
       'guard or delete it.',
     );
@@ -470,7 +470,7 @@ export function formatSummary(report: SelectionReport): string {
   const { declared, host, pr, nightly, dark } = counts(report);
   return (
     `xctest selection: ${declared} declared ${report.target} methods — host lane ` +
-    `(${HOST_XCTEST_SOURCE_FILE}, macOS, every PR) reaches ${host}, PR platform-branch lane (${PR_XCTEST_SOURCE_FILE}, ` +
+    `(${HOST_XCTEST_SOURCE_FILE}, macOS, every PR) reaches ${host}, PR iOS branch lane (${PR_XCTEST_SOURCE_FILE}, ` +
     `iOS Simulator, selected PRs and main) selects ${pr}, nightly (${NIGHTLY_WORKFLOW_FILE}, iOS Simulator) ` +
     `reaches ${nightly}; ${dark} reachable by no lane; ${ENTRY_POINT_METHOD} skipped everywhere.\n`
   );
@@ -493,7 +493,7 @@ function main(): number {
   if (process.argv.slice(2).includes('--ios-pr-tests')) {
     const failures = reportFailures(report);
     if (report.reach.pr.size === 0)
-      failures.push('The PR lane selected no platform-branch XCTest methods.');
+      failures.push('The PR lane selected no shared iOS branch XCTest methods.');
     if (failures.length > 0) {
       process.stderr.write(`${failures.join('\n')}\n`);
       return 1;

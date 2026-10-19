@@ -47,7 +47,7 @@ runs:
       with:
         runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
         preferred-device-name: iPhone 17 Pro
-    - name: Run iOS runner platform-branch checks
+    - name: Run iOS runner platform checks
       id: ios-xctest
       if: steps.xctest-impact.outputs.run != 'false'
       run: |

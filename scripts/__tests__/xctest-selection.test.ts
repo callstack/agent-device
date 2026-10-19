@@ -491,7 +491,7 @@ describe('the summary line', () => {
     const { declared, host, pr, nightly, dark } = counts(report);
     const summary = formatSummary(report);
     expect(summary).toContain(`${declared} declared`);
-    expect(summary).toContain(`reaches ${host}, PR platform-branch lane`);
+    expect(summary).toContain(`reaches ${host}, PR iOS branch lane`);
     expect(summary).toContain(`selects ${pr}, nightly`);
     expect(summary).toContain(`reaches ${nightly};`);
     expect(summary).toContain(`${dark} reachable by no lane`);

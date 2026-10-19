@@ -433,7 +433,7 @@ test('the PR workflow applies the impact decision to the XCTest step', () => {
   );
   expect(workflow).toContain('node --experimental-strip-types scripts/apple-ci-impact.ts xctest');
   expect(workflow).toMatch(
-    /- name: Run iOS runner platform-branch checks\n\s+id: ios-xctest\n\s+if: steps\.xctest-impact\.outputs\.run != 'false'/,
+    /- name: Run iOS runner platform checks\n\s+id: ios-xctest\n\s+if: steps\.xctest-impact\.outputs\.run != 'false'/,
   );
   expect(workflow).toContain('if [ "$SELECTED" = \'true\' ] && [ "$OUTCOME" = \'skipped\' ]');
 });
