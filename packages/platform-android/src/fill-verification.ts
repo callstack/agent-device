@@ -12,7 +12,8 @@ import {
 } from './fill-diagnostics.ts';
 import { getAndroidKeyboardState } from './device-input-state.ts';
 import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/android-input-ownership';
-import { captureAndroidUiHierarchyXml } from './snapshot.ts';
+import { captureAndroidUiHierarchy, captureAndroidUiHierarchyXml } from './snapshot.ts';
+import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 import { ANDROID_WINDOW_TYPE_INPUT_METHOD } from './ui-hierarchy-node.ts';
@@ -40,6 +41,7 @@ type AndroidTextAtPointScan = {
 };
 
 type AndroidFillVerificationContext = {
+  captureMetadata?: AndroidSnapshotBackendMetadata;
   activeInputMethodPackage?: string | null;
   inputMethodPackages?: ReadonlySet<string>;
 };
@@ -62,17 +64,28 @@ export async function verifyAndroidFilledText(
   beforeTarget?: AndroidFillVerificationNode | null,
 ): Promise<AndroidFillVerification> {
   const deadline = Deadline.fromTimeoutMs(FILL_VERIFICATION_DEADLINE_MS);
-  let initialXml: string | undefined = await captureAndroidUiHierarchyXml(device, {
-    ...helper,
-    skipIdleWait: true,
-  });
-  const context = await readAndroidFillVerificationContext(device, initialXml);
+  let initialCapture: Awaited<ReturnType<typeof captureAndroidUiHierarchy>> | undefined =
+    await captureAndroidUiHierarchy(device, {
+      ...helper,
+      skipIdleWait: true,
+    });
+  const context = await readAndroidFillVerificationContext(device, initialCapture.xml);
   const { value } = await pollUntilSettled({
     probe: async () => {
-      if (initialXml !== undefined) {
-        const xml = initialXml;
-        initialXml = undefined;
-        return verifyAndroidFilledTextInHierarchy(xml, x, y, expected, context, beforeTarget);
+      if (initialCapture) {
+        const capture = initialCapture;
+        initialCapture = undefined;
+        return verifyAndroidFilledTextInHierarchy(
+          capture.xml,
+          x,
+          y,
+          expected,
+          {
+            ...context,
+            captureMetadata: capture.metadata,
+          },
+          beforeTarget,
+        );
       }
       return await inspectAndroidFilledText(device, x, y, expected, context, helper, beforeTarget);
     },
@@ -211,7 +224,9 @@ export function verifyAndroidFilledTextInHierarchy(
     x,
     y,
     context,
-    expected === '' ? beforeTarget : undefined,
+    expected === '' && completeFreshAndroidFillCapture(context.captureMetadata)
+      ? beforeTarget
+      : undefined,
   );
   if (isAndroidImeCapture(inspection)) {
     return {
@@ -295,13 +310,24 @@ async function inspectAndroidFilledText(
 ): Promise<AndroidFillVerification> {
   // Each delay samples the live hierarchy again — settling is what the samples observe, so they
   // share the helper session but never a capture.
+  const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
   return verifyAndroidFilledTextInHierarchy(
-    await captureAndroidUiHierarchyXml(device, { ...helper, skipIdleWait: true }),
+    capture.xml,
     x,
     y,
     expected,
-    context,
+    { ...context, captureMetadata: capture.metadata },
     beforeTarget,
+  );
+}
+
+function completeFreshAndroidFillCapture(metadata?: AndroidSnapshotBackendMetadata): boolean {
+  return (
+    metadata?.rootPresent === true &&
+    metadata.cacheInvalidated === true &&
+    metadata.helperTruncated === false &&
+    metadata.systemSurfaceOnly !== true &&
+    metadata.missingRootWindowTypes?.length === 0
   );
 }
 

@@ -119,16 +119,14 @@ export async function captureAndroidUiHierarchyXml(
   device: DeviceInfo,
   options: AndroidSnapshotOptions = {},
 ): Promise<string> {
-  const adb = resolveAndroidAdbProvider(device, options.helperAdb).exec;
-  return (await captureAndroidUiHierarchy(device, options, adb)).xml;
+  return (await captureAndroidUiHierarchy(device, options)).xml;
 }
 
 export async function snapshotAndroid(
   device: DeviceInfo,
   options: AndroidSnapshotOptions = {},
 ): Promise<AndroidSnapshotCapture> {
-  const adb = resolveAndroidAdbProvider(device, options.helperAdb).exec;
-  const capture = await captureAndroidUiHierarchy(device, options, adb);
+  const capture = await captureAndroidUiHierarchy(device, options);
   // The one place Android answers the viewport question (#3182): the helper's own display read,
   // through the shared guard, so both the healthy and the presentation-failed capture below publish
   // the same box the tree was measured against, and a display the helper could not address stays
@@ -281,10 +279,9 @@ function applyHiddenContentHintsToInteractiveSnapshot(params: {
   );
 }
 
-async function captureAndroidUiHierarchy(
+export async function captureAndroidUiHierarchy(
   device: DeviceInfo,
-  options: AndroidSnapshotOptions,
-  adb: AndroidAdbExecutor,
+  options: AndroidSnapshotOptions = {},
 ): Promise<AndroidUiHierarchyCapture> {
   const adbProvider = resolveAndroidAdbProvider(device, options.helperAdb);
   const helper = await withDiagnosticTimer(
@@ -295,7 +292,12 @@ async function captureAndroidUiHierarchy(
       ),
   );
   if (helper.artifact) {
-    return await captureAndroidUiHierarchyWithHelper(device, options, adb, helper.artifact);
+    return await captureAndroidUiHierarchyWithHelper(
+      device,
+      options,
+      adbProvider.exec,
+      helper.artifact,
+    );
   }
 
   emitDiagnostic({
