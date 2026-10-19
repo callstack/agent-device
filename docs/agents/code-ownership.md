@@ -1,11 +1,8 @@
 # Code ownership
 
-Read this for shared contracts, package boundaries, request routing, or diagnostics.
 Before you edit a module with many callers, run `pnpm depgraph affected <path>` to identify callers and guarantees.
 
 ## Declarations
-
-Read the owner. Do not copy its policy into consumers.
 
 | Question | Owner |
 | --- | --- |
@@ -15,8 +12,11 @@ Read the owner. Do not copy its policy into consumers.
 | Interaction guarantees | `packages/contracts/src/interaction-guarantees.ts` |
 | Runtime-fact admission | `packages/daemon/src/core/runtime-admission.ts`, `src/platform-runtime-gateway.ts` |
 | Input fields and audiences | `src/commands/common-input-fields.ts`, `src/commands/input-audience.ts` |
+| Released SDK default hosts | `src/sdk/host.ts` |
 
-Shared selectors belong in `@agent-device/selectors`.
+For SDK entries `android-adb`, `artifacts`, `limrun`, `metro`, and `remote-config`, use `captureSdkHost` for defaults.
+For command-host readers, use `withSdkHost`.
+Keep provider callbacks on their supplied host.
 Request cancellation and progress belong in `@agent-device/host-kit/request`.
 Per-call abort guards belong beside transports in `src/daemon-client/daemon-client-transport.ts`.
 Contracts shared across layers belong in `packages/contracts/src`.
@@ -32,16 +32,9 @@ Before you add behavior, split files over 1,000 lines, except generated or fixtu
 Split a source module and its tests together.
 Do not extend legacy interaction or platform index test aggregations.
 Keep tests beside their named module. Put repository artifact guards in `test/repo-guards/`.
-Shared helpers belong in `@agent-device/test-kit`, a devDependency.
-Production code never imports test-kit.
-Test-kit never depends on:
-
-- Platforms.
-- Providers.
-- The daemon.
-- Root.
-
-Do not export test support from production packages.
+Shared test support belongs in `@agent-device/test-kit`, a devDependency.
+Production code must not import test-kit.
+Test-kit must not depend on platforms, providers, the daemon, or root.
 
 ## Diagnostics
 
