@@ -183,7 +183,7 @@ test('a golden table owns the parity unit test and both runner builds', () => {
 
 test('a tooling change beside an Android-only change still fails open to the full set', () => {
   for (const tooling of [
-    '.github/workflows/ios.yml',
+    '.github/workflows/apple.yml',
     '.github/actions/setup-apple-runner-build/action.yml',
     'package.json',
     'pnpm-lock.yaml',

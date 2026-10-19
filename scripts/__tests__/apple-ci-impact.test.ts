@@ -360,7 +360,7 @@ test('native runner and golden-table changes run XCTest; TypeScript runtime chan
     'apple/snapshot-presentation/Sources/Presenter.swift',
     'packages/platform-apple/src/runner/runner-icon.ts',
     'contracts/fixtures/scroll-gesture.json',
-    '.github/workflows/ios.yml',
+    '.github/workflows/apple.yml',
     'scripts/apple-ci-impact.ts',
   ]) {
     expect(selectIosXctests('pull_request', [file]).run, file).toBe(true);
@@ -391,7 +391,7 @@ test('bridge proof runs for its owning sources and uncertain tooling changes', (
     'packages/platform-apple/src/foldable/fold-helper-cache.ts',
     'packages/platform-apple/src/new-module/runtime.ts',
     'scripts/check-package.ts',
-    '.github/workflows/macos.yml',
+    '.github/workflows/apple.yml',
   ]) {
     expect(selectAppleBridgeProof([file]).run, file).toBe(true);
   }
