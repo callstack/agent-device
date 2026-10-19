@@ -55,8 +55,7 @@ export function resetFindTouchRuntimeFixture(): void {
  * One `handleFindCommands` click/focus/type scenario: seeds a session (default or given),
  * stubs the snapshot capture with `nodes` when supplied, and records every `invoke` call.
  *
- * It lives here rather than in any one `find*.test.ts` file because several split test files
- * over the module-size tripwire share this scenario runner (docs/agents/testing.md).
+ * Shared scenario runner for the find interaction tests.
  */
 export async function runFindClickScenario(options: {
   positionals: string[];

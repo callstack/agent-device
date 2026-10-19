@@ -7,9 +7,6 @@ import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/te
 // iOS install and open on a proxy lease and demanded `connect --force` for a connection that had
 // not changed. These pin both directions: the family and leaf selectors name the same devices, and
 // a genuinely different platform is still refused.
-//
-// Kept out of `remote-connection.test.ts`, which is already over the test-file size tripwire and
-// may not grow (docs/agents/testing.md).
 
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';

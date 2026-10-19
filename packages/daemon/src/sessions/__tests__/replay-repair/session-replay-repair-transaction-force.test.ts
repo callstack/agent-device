@@ -7,9 +7,7 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  * `--force` opts in; the opt-in is sticky across a `--from` continuation on the SAME target, but a
  * retarget to a different path drops it unless the retarget leg carries its own live `--force`.
  *
- * Split out of `session-replay-repair-transaction.test.ts` once that file crossed the module-size
- * tripwire (docs/agents/testing.md) — see that file's own header for the shared repair-transaction
- * background (Fix 1/2/3).
+ * See `session-replay-repair-transaction.test.ts` for the shared repair-transaction background.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 

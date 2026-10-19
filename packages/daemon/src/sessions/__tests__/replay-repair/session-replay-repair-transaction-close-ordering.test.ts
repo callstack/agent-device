@@ -9,9 +9,7 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  * COMPLETE artifact, and close identity is tracked per TARGETED app so an untargeted close or a
  * differently-targeted retry never wrongly skips the platform close.
  *
- * Split out of `session-replay-repair-transaction.test.ts` once that file crossed the module-size
- * tripwire (docs/agents/testing.md) — see that file's own header for the shared repair-transaction
- * background (Fix 1/2/3).
+ * See `session-replay-repair-transaction.test.ts` for the shared repair-transaction background.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 

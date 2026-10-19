@@ -2,8 +2,7 @@
 // explicitly, its lists stay exhaustive over their sources, and the moves here
 // stay owned. These real-tree structural gates mirror the façade question, not
 // the R11 rule internals (package-boundaries.test.ts) or the export-form
-// parser (facade-exports.test.ts); they were split out when the R11 family
-// crossed the test-size tripwire, move-only.
+// parser (facade-exports.test.ts).
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

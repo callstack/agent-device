@@ -94,9 +94,7 @@ import { withRunnerCommandId } from '../runner-contract.ts';
 
 const TEST_OWNER_START_TIME = 'fixed-test-owner-start-time';
 
-// Split from runner-session.test.ts, which is over the test-size tripwire: the speculative
-// session family (#2198: a proven observation-only plan retains no runner it did not ask for)
-// answers its own domain question here with the same seam scaffolding.
+// A proven observation-only plan retains no runner it did not ask for (#2198).
 beforeEach(async () => {
   appleRunnerTestHost.update({
     runCmdBackground: mockRunCmdBackground,

@@ -211,9 +211,7 @@ const SNAPSHOT_ROUTE_RUNTIME_COMMANDS = new Set(['snapshot', 'diff', 'settings',
 
 /**
  * `handleSnapshotCommands` bound to the suite's snapshot runtime fixture for the
- * runtime-bound route commands, and to `platformResourceCleanup` always. It lives here rather than
- * in any one `snapshot-handler*.test.ts` file because several split test files over the
- * module-size tripwire share it (docs/agents/testing.md).
+ * runtime-bound route commands, and to `platformResourceCleanup` always.
  */
 export function handleSnapshotCommands(
   params: Parameters<typeof handleProductionSnapshotCommands>[0],

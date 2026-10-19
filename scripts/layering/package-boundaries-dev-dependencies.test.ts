@@ -1,8 +1,7 @@
 // R11 and devDependencies: a private package declares siblings in `dependencies`, and only test
 // support (tests, `*.fixtures.*` files, test trees) may also resolve through its `devDependencies`,
 // so a test-only sibling such as test-kit never becomes a runtime dependency. Production source
-// still needs the production field. Compact sibling of package-boundaries.test.ts, which sits at
-// its size ratchet.
+// still needs the production field.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

@@ -3,8 +3,7 @@
 // A beat that finds the device's lease gone aborts the upload protecting that lease. An upload is a
 // piped `node:http` request, so the only way to stop bytes already in flight is the request's own
 // abort signal — a rejection the caller swallows would keep streaming a full app bundle to a device
-// nobody owns. Kept out of `upload-client.test.ts`, which is already over the test-file size
-// tripwire and may not grow (docs/agents/testing.md).
+// nobody owns.
 
 import { afterEach, test } from 'vitest';
 import assert from 'node:assert/strict';

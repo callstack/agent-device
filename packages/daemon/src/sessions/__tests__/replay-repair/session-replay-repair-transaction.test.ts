@@ -24,9 +24,7 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  * retry. `--force`/`--overwrite` preflight (#1258) and platform-close
  * ordering (BLOCKER 2/3 sequencing) live in the sibling
  * `session-replay-repair-transaction-force.test.ts` and
- * `session-replay-repair-transaction-close-ordering.test.ts` — both split
- * off this file once it crossed the module-size tripwire
- * (docs/agents/testing.md).
+ * `session-replay-repair-transaction-close-ordering.test.ts`.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 

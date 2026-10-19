@@ -1,8 +1,7 @@
 // R11's ./testing/ façade rule bites: test data stays behind the package's
 // `./testing/` namespace — named `./testing/<fixture>` entries and per-folder
 // `./testing/<dir>/*` patterns — that only test files may import (owner review
-// #3546). Compact sibling of package-boundaries.test.ts, which sits at its size
-// ratchet.
+// #3546).
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

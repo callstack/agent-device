@@ -101,9 +101,6 @@ import { AppError } from '@agent-device/kernel/errors';
 const TEST_OWNER_START_TIME = 'fixed-test-owner-start-time';
 let leaseOwnerStateDirOverride: string | undefined;
 
-// Split from runner-session.test.ts: that file is over the test-size tripwire
-// and may only shrink, so the stale-bundle cleanup family answers its own
-// domain question here with the same seam scaffolding.
 beforeEach(async () => {
   appleRunnerTestHost.update({
     runCmdBackground: mockRunCmdBackground,

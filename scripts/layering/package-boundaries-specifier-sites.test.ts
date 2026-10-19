@@ -1,6 +1,5 @@
 // `specifierSites` is the one literal-site extractor every R11/R83/R85 walk shares: import edges
-// plus Vitest mock-family module arguments. Compact sibling of package-boundaries.test.ts, which
-// sits at its size ratchet.
+// plus Vitest mock-family module arguments.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

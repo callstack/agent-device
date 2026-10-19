@@ -18,7 +18,7 @@ import './test-utils/android-host-test-setup.ts';
  * accessibility hierarchy never arrived, and it publishes that decision as the typed reason
  * `accessibility-timeout`. These tests assert both halves in one place: that the producer tags
  * exactly the shapes that mean it, and that the daemon's timeout-evidence policy recognizes the
- * value it publishes. Split out of `snapshot.test.ts`, which is over the file-size tripwire.
+ * value it publishes.
  */
 
 const device: DeviceInfo = {
