@@ -350,7 +350,7 @@
   "artifact": {
     "name": "android-startup-experiment-2026-10-19.tar.gz",
     "sha256": "9d7a7cda4f2c465069ad640efb90182127ae60d5c86f492355bb5eefecc7decd",
-    "files": 259
+    "checksummedFiles": 259
   },
   "cleanup": {
     "ownedDaemonStatesStopped": 22,
