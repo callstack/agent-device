@@ -1,5 +1,8 @@
 # iOS XCTest fixture reuse
 
+This report records the initial fixture reuse batch at its named historical SHAs.
+The [full-suite profile and nightly policy](ios-xctest-cost-profile-2026-10-19.md) record the later work.
+
 ## Scope
 
 The base is `b5f47e7542e274fc84a193c4e111e6c73ac3b1f3`.

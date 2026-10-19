@@ -125,7 +125,7 @@ jobs:
       # guards (XCTEST_LANE above), so a guard that compiles a file of tests out of iOS reads
       # as red too. The failure list is capped so a badly red night cannot blow the 1 MiB
       # job-summary limit and lose the headline with it.
-      - name: Report the run and assert it executed the source-derived set
+      - name: Report the run and assert the source-derived count
         if: always()
         run: |
           set -euo pipefail

@@ -156,7 +156,7 @@ final class RunnerTests: XCTestCase {
   // `-D AGENT_DEVICE_RUNNER_UNIT_TESTS` and are classified by their `#if` guard (#1781 A7):
   //   - `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` alone: a pure runner decision (rule table,
   //     geometry, parser, policy, journal, dispatch bookkeeping) that needs no launched app.
-  //     Runs on the macOS host lane on every PR (ci.yml, no simulator) and on the iOS lanes.
+  //     Runs on the macOS host lane on every PR and on the full iOS nightly lane.
   //   - `… && os(iOS)` (or a nested `#if os(iOS)`): runner/XCTest semantics — launches the
   //     host app, routes through SpringBoard, swizzles XCUIApplication, or asserts an
   //     iOS-only branch. Full simulator coverage runs nightly (xctest-nightly.yml).
