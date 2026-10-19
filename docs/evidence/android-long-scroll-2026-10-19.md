@@ -75,3 +75,13 @@ The new runtime cases failed on unchanged base: six failures covering a budget a
 Provider integration now tests arrival after 13 gestures with maxPasses 14 and refusal after one gesture with maxPasses 1. The same test file reports two failures and three passes on unchanged base production code: the longer search stops at 12, and the smaller budget is ignored. The feature passes all five cases. The visible page label changes with each capture so the longer search proves real progress through the existing no-progress detector.
 
 The pass loop's sparse-capture refusal, edge detection, no-progress detection and visibility predicates remain in place. No gesture retry or recovery tap was added. Live verification covers the local Android helper, not Appium, HarmonyOS or Apple devices. The serialized affected gate and hosted CI remain separate validation obligations.
+
+## Shared platform and provider applicability
+
+Source inspection confirms that the search policy already lives above platform execution. `resolveScrollRuntimePlan` requires both `scrollDirection` and `captureSnapshot`; `executeUntilScroll` applies the same budget, visibility, readability, edge, progress and request-cancellation decisions to the admitted binding. No Android branch owns this policy.
+
+Apple, web and Linux local runtimes use `bindLocalScrollInteractor`. WebDriver and Limrun bindings use `bindProviderScrollInteractor`. Both delegate one gesture through the same `bindScrollDirection` owner, preserving the selected backend's options and request signal. These bindings establish a common adoption path, not measured performance parity. Backend snapshots must still supply usable visibility and scroll geometry.
+
+The transferable optimization is to let that bounded loop inspect its captures instead of adding a public snapshot/stabilization request after every page. The external adapter can adopt the existing shared API for eligible local or provider targets. Android's 300 ms pacing, idle handling and input transport are not a cross-platform default to copy. The rejected 150 ms experiment also shows why whole-search progress matters more than individual gesture latency.
+
+The first hosted Coverage job failed an existing import-budget assertion before coverage thresholds ran: flag metadata pulled `scroll-command.ts` and its execution helpers into the eager flag-registry closure, increasing it from 30 to 31 modules. A type-only policy link now checks the static schema bound against `SCROLL_UNTIL_MAX_PASSES` without evaluating that module. The existing eager-import test reproduces the failure before the fix and passes afterward. No tests were added for this correction.
