@@ -68,6 +68,7 @@ const TYPING_NUMERIC_FLAG_MAP = new Map<string, 'delayMs'>([['--delay-ms', 'dela
  */
 const SCROLL_SCRIPT_FLAG_MAP = new Map<string, ScriptFlagEntry>([
   ['--until', { key: 'until', kind: 'string' }],
+  ['--max-passes', { key: 'maxPasses', kind: 'int' }],
 ]);
 
 /**
@@ -89,7 +90,7 @@ const WAIT_SCRIPT_FLAG_MAP = new Map<string, ScriptFlagEntry>([
 
 /** How one script flag token carries its value. */
 type ScriptFlagEntry = {
-  key: 'until' | 'snapshotRaw' | 'snapshotDepth' | 'snapshotScope';
+  key: 'until' | 'maxPasses' | 'snapshotRaw' | 'snapshotDepth' | 'snapshotScope';
   kind: 'boolean' | 'int' | 'string';
 };
 
@@ -384,11 +385,11 @@ export function appendGenericActionScriptArgs(parts: string[], action: SessionAc
   if (action.command === 'fold' && action.flags?.keyframes !== undefined) {
     parts.push('--keyframes', formatScriptArg(action.flags.keyframes));
   }
-  // #3197: `scroll`'s stop condition is part of the step's meaning, so the writer
-  // emits it beside the parser that reads it back. Only `--until` is declared
-  // recorded, so only `--until` can arrive here on a recorded action.
   if (action.command === 'scroll' && typeof action.flags?.until === 'string') {
     parts.push('--until', formatScriptArg(action.flags.until));
+  }
+  if (action.command === 'scroll' && typeof action.flags?.maxPasses === 'number') {
+    parts.push('--max-passes', String(action.flags.maxPasses));
   }
   if (action.command === 'wait') {
     appendWaitSnapshotScriptFlags(parts, action.flags);

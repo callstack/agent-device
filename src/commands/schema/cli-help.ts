@@ -1,3 +1,7 @@
+import {
+  DEFAULT_SCROLL_UNTIL_PASSES,
+  SCROLL_UNTIL_MAX_PASSES,
+} from '@agent-device/contracts/scroll-command';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { getReplayBackendDeclaration } from '@agent-device/replay-port/replay-backend-declarations';
 import { normalizeCliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
@@ -208,7 +212,7 @@ Shapes:
   agent-device gesture pinch 0.5 200 400
   agent-device gesture rotate 35 200 420
   agent-device gesture transform 200 420 80 -40 2 35 700
-  scroll <dir> --until <selector> repeats scroll-and-check passes until that element is on screen, then stops: one request instead of a scroll-then-snapshot loop, and it stops on the target rather than overshooting it. It reports the passes it spent, fails when the content runs out first, and is refused on top/bottom, which already stop themselves. The default limit is 12 gestures. For a longer list, add --max-passes <n> (1–200); it requires --until and does not extend request timeouts.
+  scroll <dir> --until <selector> repeats scroll-and-check passes until that element is on screen, then stops: one request instead of a scroll-then-snapshot loop, and it stops on the target rather than overshooting it. It reports the passes it spent, fails when the content runs out first, and is refused on top/bottom, which already stop themselves. The default limit is ${DEFAULT_SCROLL_UNTIL_PASSES} gestures. For a longer list, add --max-passes <n> (1–${SCROLL_UNTIL_MAX_PASSES}); it requires --until and does not extend request timeouts.
   longpress accepts coordinates, @refs, or selectors; prefer @ref/selector, coordinates only as a fallback. Duration and gesture scale/center are positional. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan. Keep count/pause/pattern on one swipe: --count (cap 200), --pause-ms (cap 10000ms), --pattern ping-pong; the combined swipe/pause schedule is capped at 60000ms.
   For repeated iOS smoke checks: press <x> <y> --count <n> --jitter-px <n> for tap series, swipe <x1> <y1> <x2> <y2> --count <n> for drag series.
 

@@ -353,8 +353,14 @@ async function executeUntilScroll(
     direction: target.direction,
     platform: publicPlatformString(device),
     passLimit: context.maxPasses,
-    capture: async () => await runtime.operations.captureSnapshot(scrollCaptureInput(context)),
-    scroll: async () => await scrollOnce(runtime, target, options, context),
+    capture: async () => {
+      context.signal?.throwIfAborted();
+      return await runtime.operations.captureSnapshot(scrollCaptureInput(context));
+    },
+    scroll: async () => {
+      context.signal?.throwIfAborted();
+      return await scrollOnce(runtime, target, options, context);
+    },
   });
   return withSuccessText(
     {

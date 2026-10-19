@@ -1,6 +1,9 @@
 import { RESPONSE_LEVELS } from '@agent-device/kernel/contracts';
 import { RECORDING_SCOPE_VALUES } from '@agent-device/contracts/recording';
-import { SCROLL_UNTIL_MAX_PASSES } from '@agent-device/contracts/scroll-command';
+import {
+  DEFAULT_SCROLL_UNTIL_PASSES,
+  SCROLL_UNTIL_MAX_PASSES,
+} from '@agent-device/contracts/scroll-command';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
@@ -183,7 +186,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     max: SCROLL_UNTIL_MAX_PASSES,
     usageLabel: '--max-passes <n>',
-    usageDescription: 'Scroll --until: maximum gestures (default 12, up to 200)',
+    usageDescription: `Scroll --until: maximum gestures (default ${DEFAULT_SCROLL_UNTIL_PASSES}, up to ${SCROLL_UNTIL_MAX_PASSES})`,
     projectConfig: false,
     recorded: true,
   },

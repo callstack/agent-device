@@ -5,6 +5,7 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 
 export const SCROLL_DURATION_MAX_MS = 10_000;
 export const SCROLL_UNTIL_MAX_PASSES = 200;
+export const DEFAULT_SCROLL_UNTIL_PASSES = 12;
 export const DEFAULT_MOBILE_SCROLL_DURATION_MS = 300;
 export const DEFAULT_IOS_SCROLL_DURATION_MS = 400;
 export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;

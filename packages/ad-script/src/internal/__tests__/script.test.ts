@@ -224,6 +224,22 @@ test('scroll replay script keeps an amount positional beside the stop condition'
   assert.equal(parsed[0]?.flags.until, 'label=Email');
 });
 
+test('scroll replay script preserves an explicit long-search budget', () => {
+  const actions: SessionAction[] = [
+    {
+      ts: Date.now(),
+      command: 'scroll',
+      positionals: ['down'],
+      flags: { until: 'id="row-512"', maxPasses: 90 },
+    },
+  ];
+  const script = formatReplayScriptForTest(actions);
+  assert.match(script, /--max-passes 90/);
+  const reparsed = parseReplayScriptDetailed(script).actions[0];
+  assert.deepEqual(reparsed?.positionals, ['down']);
+  assert.deepEqual(reparsed?.flags, { until: 'id="row-512"', maxPasses: 90 });
+});
+
 test('a scroll --until value with spaces survives as one selector when quoted', () => {
   const parsed = parseReplayScriptDetailed(
     String.raw`scroll down --until "label=\"Sign in\" || label=\"Log in\""`,

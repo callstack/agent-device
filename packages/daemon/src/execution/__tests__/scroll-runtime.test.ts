@@ -622,6 +622,40 @@ test('bound scroll --until stops at a smaller explicit pass budget', async () =>
   assert.equal(scrolls, 2);
 });
 
+test.each(['capture', 'scroll'] as const)(
+  'bound scroll --until stops after cancellation during %s',
+  async (phase) => {
+    const controller = new AbortController();
+    const reason = new AppError('COMMAND_FAILED', 'request canceled', {
+      reason: 'request_canceled',
+    });
+    let captures = 0;
+    let scrolls = 0;
+    await assert.rejects(
+      () =>
+        runScroll(
+          ['down'],
+          { until: 'label=Email', maxPasses: 200, signal: controller.signal },
+          {
+            captureSnapshot: async () => {
+              captures += 1;
+              if (phase === 'capture') controller.abort(reason);
+              return { nodes: untilNodes(2400 - scrolls * 100, true) };
+            },
+            scroll: async () => {
+              scrolls += 1;
+              controller.abort(reason);
+              return {};
+            },
+          },
+        ),
+      (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    );
+    assert.equal(captures, 1);
+    assert.equal(scrolls, phase === 'capture' ? 0 : 1);
+  },
+);
+
 test.each([
   { until: undefined, maxPasses: 2 },
   { until: 'label=Email', maxPasses: 0 },

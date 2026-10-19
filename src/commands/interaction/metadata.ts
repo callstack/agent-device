@@ -11,6 +11,7 @@ import {
   readGesturePayload,
 } from '@agent-device/contracts/gesture-input';
 import {
+  DEFAULT_SCROLL_UNTIL_PASSES,
   SCROLL_DURATION_MAX_MS,
   SCROLL_UNTIL_MAX_PASSES,
 } from '@agent-device/contracts/scroll-command';
@@ -160,7 +161,7 @@ const scrollFields = {
     'Repeat scroll passes until this selector is visible on screen, then stop. Not valid with the top/bottom edge directions, which carry their own stop condition.',
   ),
   maxPasses: integerField(
-    'Maximum scroll gestures for an until search (default 12). Requires until.',
+    `Maximum scroll gestures for an until search (default ${DEFAULT_SCROLL_UNTIL_PASSES}). Requires until.`,
     {
       min: 1,
       max: SCROLL_UNTIL_MAX_PASSES,
