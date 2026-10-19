@@ -570,6 +570,9 @@ test('a detached daemon refuses a shutdown request and keeps serving', async () 
     null,
   );
   await daemon.runtime.close();
+  expect(readDaemonShutdownRecord(resolveDaemonPaths(daemon.stateDir).baseDir).completion).toBe(
+    null,
+  );
 });
 
 test('an embedded runtime outlives the idle window a detached daemon reaps itself on', async () => {
