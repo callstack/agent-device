@@ -42,9 +42,7 @@ import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecy
 import { runtimeHintValues } from '../../sessions/session-runtime.ts';
 import {
   closeDaemonServers,
-  createRuntimeContext,
   teardownDaemonSessionForShutdown,
-  type RuntimeContext,
   type WritableOutput,
   createPluginClose,
   createStartupRollback,
@@ -71,7 +69,10 @@ import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { cancelAllRequests } from '@agent-device/host-kit/request';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import {
+  createRuntimeStateHandle,
+  type RuntimeStateHandle,
+} from '@agent-device/host-kit/runtime-slots';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
@@ -134,8 +135,6 @@ const DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS = 5_000;
  * same factory, so the production assembly is the one every runtime test boots.
  */
 export type DaemonRuntimeDeps = Readonly<{
-  /** State the composition's platform modules keep per daemon runtime (the Apple runner's). */
-  runtimeStates: readonly RuntimeStateHandle[];
   ownedProcessRecords: OwnedProcessRecordStore;
   hostDiagnostics: HostDiagnostics;
   ownerLifecycle: PlatformOwnerLifecycle;
@@ -254,17 +253,23 @@ export function daemonStartupExitCode(error: unknown): number {
   return typeof exitCode === 'number' ? exitCode : 1;
 }
 
+/**
+ * Starts one daemon runtime: the single entered runtime-state store, the command host, then the
+ * composition and servers built inside both. Every read of per-runtime state (requests, close,
+ * timers the startup spawns) runs within this handle, so two runtimes in one process never share
+ * it and no module exposes a store of its own (#3794).
+ */
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions,
 ): Promise<DaemonRuntimeController> {
-  const runtimeContext = createRuntimeContext();
-  return await runtimeContext.run(
+  const runtimeState = createRuntimeStateHandle();
+  return await runtimeState.run(
     async () =>
       await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
         const rollback = createStartupRollback();
-        rollback.onRollback(() => runtimeContext.dispose());
+        rollback.onRollback(() => runtimeState.dispose());
         try {
-          return await startDaemonRuntimeOnHost(options, rollback, runtimeContext);
+          return await startDaemonRuntimeOnHost(options, rollback, runtimeState);
         } catch (error) {
           await rollback.run();
           throw error;
@@ -276,7 +281,7 @@ export async function startDaemonRuntime(
 async function startDaemonRuntimeOnHost(
   options: DaemonRuntimeOptions,
   rollback: StartupRollback,
-  runtimeContext: RuntimeContext,
+  runtimeState: RuntimeStateHandle,
 ): Promise<DaemonRuntimeController> {
   const { host } = options;
   const { env } = host;
@@ -316,7 +321,6 @@ async function startDaemonRuntimeOnHost(
     }),
     openWebSessionNames: () => openWebSessionNames(sessionStore),
   });
-  runtimeContext.extend(deps.runtimeStates);
   const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const audioProbeAdmissionLedger = createAudioProbeAdmissionLedger();
   const perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger();
@@ -561,7 +565,7 @@ async function startDaemonRuntimeOnHost(
   const handleRequest: DaemonInvokeFn = lifecycleAdmission.admit(async (req) => {
     if (shuttingDown) return daemonShuttingDownResponse();
     idleReap.cancel();
-    const dispatch = runtimeContext.run(() => dispatchRequest(req));
+    const dispatch = runtimeState.run(() => dispatchRequest(req));
     inFlightRequests.add(dispatch);
     try {
       return await dispatch;
@@ -911,7 +915,7 @@ async function startDaemonRuntimeOnHost(
         try {
           await deps.ownerLifecycle.clearDaemonLockConfiguration();
         } catch {}
-        runtimeContext.dispose();
+        runtimeState.dispose();
       }
     }
   };
@@ -928,7 +932,7 @@ async function startDaemonRuntimeOnHost(
   closed.catch(() => {});
   const close = (closeOptions: { cause?: unknown } = {}): Promise<ShutdownReport> => {
     if (!closing) {
-      closing = runtimeContext.run(() =>
+      closing = runtimeState.run(() =>
         withCommandHost(
           { host, requestEnv: undefined },
           async () => await closeOnHost(closeOptions),
@@ -945,7 +949,7 @@ async function startDaemonRuntimeOnHost(
     httpPort,
     close,
     closed,
-    run: runtimeContext.run,
+    run: runtimeState.run,
     socketPort,
     token,
   };

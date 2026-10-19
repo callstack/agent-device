@@ -1,4 +1,4 @@
-import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -50,10 +50,9 @@ type ArtifactTrackingState = {
   uploads: Map<string, UploadEntry>;
 };
 
-const artifactTrackingRuntime = defineRuntimeSlots();
 const ARTIFACT_TRACKING_SLOT = Symbol('artifactTracking');
 const artifactTracking = (): ArtifactTrackingState =>
-  artifactTrackingRuntime.slot(
+  runtimeSlot(
     ARTIFACT_TRACKING_SLOT,
     (): ArtifactTrackingState => ({ artifacts: new Map(), uploads: new Map() }),
     (state) => {
@@ -70,10 +69,6 @@ const artifactTracking = (): ArtifactTrackingState =>
   );
 const pendingArtifacts = () => artifactTracking().artifacts;
 const pendingUploads = () => artifactTracking().uploads;
-
-/** The artifacts and uploads one daemon runtime tracks; disposing it stops their expiry timers. */
-export const createArtifactTrackingRuntimeState = (): RuntimeStateHandle =>
-  artifactTrackingRuntime.createHandle();
 
 /** What a finished request registers for each artifact it hands back to the client. */
 export type DownloadableArtifactRegistration = {
