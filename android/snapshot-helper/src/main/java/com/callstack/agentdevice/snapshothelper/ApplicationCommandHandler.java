@@ -35,7 +35,7 @@ final class ApplicationCommandHandler {
       result.putString("componentUnavailable", "true");
       return;
     }
-    String output = shell(automation, "am start -W -n '" + component + "'");
+    String output = shell(automation, "am start -W -a android.intent.action.MAIN -c android.intent.category.DEFAULT -c android.intent.category.LAUNCHER -n '" + component + "'");
     result.putString("launchOutputBase64", Base64.encodeToString(output.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP));
   }
 
