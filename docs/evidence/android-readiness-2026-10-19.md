@@ -2,6 +2,8 @@
 
 The final candidate passed all 42 original Android cases without runner retries or the fixture's authored second-tap recovery. Runtime fell from 321.25 to 273.12 seconds, a 48.13-second reduction (15.0%). This measures the combined agent-device and e2e adapter changes. It does not establish parity with the experimental engine.
 
+[Follow-up startup experiments](android-startup-experiment-2026-10-19.md) reached 229.672 seconds but failed timed-overlay safety tests. Those policies were rejected. The follow-up also reproduces a capture-to-input race near the retained timer's boundary.
+
 The runtime is `fc612424d16cbaa6418107cb2552157f33a6e410`. The adapter runtime is `59307b157079b0b1a665b82afd0aa6b3845c2e2c`; final adapter commit `5e1d8952f4b0fd0d6a12b084ed8151e71e7cd889` changes only test assertions. The parent is `0d4b58c341bda7372d05e69a6bf58db6248e4f47`, whose runtime code is `ddba75f5b474cb4cdac11b15f75292f2870396c7`. The original app, tests, runner, and direct engine are [tester-army/e2e#1234](https://github.com/tester-army/e2e/pull/1234), commit `2593e45025edc52b2c381e809b41cb63d5878e2b`.
 
 [Machine-readable results](android-readiness-2026-10-19-results.json) retain every selected test identity, status, duration, comparison, and validation boundary.
