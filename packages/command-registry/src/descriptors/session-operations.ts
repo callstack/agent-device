@@ -17,6 +17,7 @@ import {
   ownerFilesEnabled,
   type RawCommandDescriptor,
 } from '../descriptor-traits.ts';
+import { INSTALL_SOURCE_REQUEST_TIMEOUT_MS } from '../timeout-policy.ts';
 import { INSTALL_TIMEOUT_POLICY } from '../descriptor-timeout-policies.ts';
 import {
   deployAppUse,
@@ -284,7 +285,7 @@ export const SESSION_OPERATION_COMMAND_DESCRIPTORS = [
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
     platformExecution: { kind: 'device-runtime', use: readyMaterializeAndDeployAppUse },
-    timeoutPolicy: INSTALL_TIMEOUT_POLICY,
+    timeoutPolicy: { ...INSTALL_TIMEOUT_POLICY, envelopeMs: INSTALL_SOURCE_REQUEST_TIMEOUT_MS },
     batchable: false,
   },
   {

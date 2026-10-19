@@ -18,7 +18,7 @@ import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { isMissingAppErrorOutput } from '../core/physical-device-apps.ts';
-import { IOS_DEVICE_INSTALL_TIMEOUT_MS } from '../core/config.ts';
+import { IOS_APP_UNINSTALL_TIMEOUT_MS, IOS_DEVICE_INSTALL_TIMEOUT_MS } from '../core/config.ts';
 import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from '../core/devicectl.ts';
 import { ensureAppleReady } from '../readiness/runtime.ts';
 import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
@@ -178,6 +178,7 @@ async function installAppleApp(
       ? {
           tool: 'simctl',
           args: scopeSimctlArgsForDevice(device, ['install', device.id, installablePath]),
+          timeoutMs: IOS_DEVICE_INSTALL_TIMEOUT_MS,
         }
       : {
           tool: 'devicectl',
@@ -202,10 +203,12 @@ async function uninstallAppleApp(
       ? {
           tool: 'simctl',
           args: scopeSimctlArgsForDevice(device, ['uninstall', device.id, bundleId]),
+          timeoutMs: IOS_APP_UNINSTALL_TIMEOUT_MS,
         }
       : {
           tool: 'devicectl',
           args: ['device', 'uninstall', 'app', '--device', device.id, bundleId],
+          timeoutMs: IOS_APP_UNINSTALL_TIMEOUT_MS,
         },
     signal,
     `Apple app uninstall failed for ${bundleId}`,

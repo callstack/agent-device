@@ -5,6 +5,9 @@ import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-she
 import { AppError } from '@agent-device/kernel/errors';
 import path from 'node:path';
 
+const ANDROID_APP_INSTALL_TIMEOUT_MS = 120_000;
+const ANDROID_APP_DEPLOYMENT_ADB_TIMEOUT_MS = 15_000;
+
 export async function installAndroidArtifact(
   host: PlatformRuntimeHost,
   device: DeviceInfo,
@@ -19,7 +22,7 @@ export async function installAndroidArtifact(
     const result = await host.androidTools.installPackage(
       device,
       installablePath,
-      { replace: true },
+      { replace: true, timeoutMs: ANDROID_APP_INSTALL_TIMEOUT_MS },
       signal,
     );
     assertCommandSuccess(result, 'adb install failed');
@@ -36,7 +39,13 @@ export async function uninstallAndroidPackage(
   packageName: string,
   signal: AbortSignal,
 ): Promise<void> {
-  const result = await runAdb(host, device, ['uninstall', packageName], signal);
+  const result = await runAdb(
+    host,
+    device,
+    ['uninstall', packageName],
+    signal,
+    ANDROID_APP_DEPLOYMENT_ADB_TIMEOUT_MS,
+  );
   if (result.exitCode === 0) return;
   const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
   if (output.includes('unknown package') || output.includes('not installed')) return;
@@ -100,7 +109,16 @@ async function installAndroidBundle(
   bundlePath: string,
   signal: AbortSignal,
 ): Promise<void> {
-  if (await host.androidTools.installBundle(device, bundlePath, 'universal', signal)) return;
+  if (
+    await host.androidTools.installBundle(
+      device,
+      bundlePath,
+      'universal',
+      { timeoutMs: ANDROID_APP_INSTALL_TIMEOUT_MS },
+      signal,
+    )
+  )
+    return;
   const bundletool = await host.commands.which('bundletool');
   const jar = host.androidDeployment.bundletoolJar;
   if (!bundletool && !jar) {
@@ -131,6 +149,7 @@ async function installAndroidBundle(
             '--mode',
             'universal',
           ],
+          timeoutMs: ANDROID_APP_INSTALL_TIMEOUT_MS,
         },
         signal,
       ),
@@ -141,6 +160,7 @@ async function installAndroidBundle(
         {
           executable,
           args: [...prefix, 'install-apks', '--apks', apksPath, '--device-id', device.id],
+          timeoutMs: ANDROID_APP_INSTALL_TIMEOUT_MS,
         },
         signal,
       ),
@@ -189,7 +209,7 @@ async function runAdb(
   device: DeviceInfo,
   args: readonly string[],
   signal: AbortSignal,
-  timeoutMs = 15_000,
+  timeoutMs = ANDROID_APP_DEPLOYMENT_ADB_TIMEOUT_MS,
 ) {
   return await host.androidTools.runAdb(device, args, { timeoutMs, allowFailure: true }, signal);
 }
