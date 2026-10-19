@@ -1,4 +1,4 @@
-// Routed-lane witnesses (#1781 A9-2): the live ios.yml agrees with the selector, and each
+// Routed-lane witnesses (#1781 A9-2): the live Apple iOS phase agrees with the selector, and each
 // planted disagreement below is reported — an ignore that hides an Apple path or a tooling
 // glob, and a missing ignore for a tree the selector says is another family's.
 

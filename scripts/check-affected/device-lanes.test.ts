@@ -1,5 +1,5 @@
 // Device-lane ownership (#1781 A9-2): planted paths per family, and the two properties the
-// ios.yml routing leans on — an Apple-owned change carries its iOS checks in a narrow plan, and
+// Apple iOS phase routing leans on — an Apple-owned change carries its iOS checks in a narrow plan, and
 // a tooling change beside it still fails open to the full set.
 
 import assert from 'node:assert/strict';

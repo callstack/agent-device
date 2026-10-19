@@ -1,7 +1,7 @@
 // Regression pin for #1781 A9: the five root-level docs files
 // (AGENTS.md, CONTEXT.md, CONTRIBUTING.md, LICENSE, SECURITY.md)
 // must stay in the `pull_request` `paths-ignore` list of every workflow that
-// also ignores `docs/**`/`website/**`/`README.md` — the four device lanes plus
+// also ignores `docs/**`/`website/**`/`README.md` — the three device lanes plus
 // `ci.yml` and `size.yml`. Nothing else derives this: `check:gate-manifest`
 // only asks whether a *registered check* is reachable, generic Markdown
 // coverage does not look at workflow trigger config at all, and `actionlint`
@@ -20,7 +20,7 @@ import { matchesGlob } from '../../scripts/gate/workflows.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
-const WORKFLOWS = ['ios.yml', 'android.yml', 'linux.yml', 'macos.yml', 'ci.yml', 'size.yml'];
+const WORKFLOWS = ['apple.yml', 'android.yml', 'linux.yml', 'ci.yml', 'size.yml'];
 
 const ROOT_DOCS = ['AGENTS.md', 'CONTEXT.md', 'CONTRIBUTING.md', 'LICENSE', 'SECURITY.md'];
 
