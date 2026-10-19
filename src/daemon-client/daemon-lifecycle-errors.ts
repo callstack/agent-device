@@ -85,6 +85,24 @@ export function daemonRetirementUnconfirmedError(
   });
 }
 
+/**
+ * The refusal a takeover reports when its retirement kept the state, keyed on the reason that retirement
+ * gives for itself. Ownership is judged inside the retirement, so this is the one place that answer
+ * becomes a client error: an owner's rule keeps the reason every other surface uses for that owner, and
+ * anything else stays a replacement this client could not confirm.
+ */
+export function daemonTakeoverRetirementError(
+  retirement: Extract<DaemonRetirementResult, { status: 'retained' }>,
+  info: DaemonInfo,
+  paths: DaemonPaths,
+): AppError {
+  if (retirement.reason === 'embedded-owner')
+    return daemonNotRetirableError({ info, stateDir: paths.baseDir });
+  if (retirement.reason === 'owner-unproven')
+    return daemonRecordOwnerUnrecognizedError({ info, stateDir: paths.baseDir });
+  return daemonRetirementUnconfirmedError(retirement, paths);
+}
+
 export function isDaemonNotRunningError(error: unknown): boolean {
   return (
     error instanceof AppError && error.details?.reason === DAEMON_UNAVAILABLE_REASONS.notRunning
@@ -141,7 +159,7 @@ export function daemonBusyError(
 }
 
 /** Refuses managed replacement when the record cannot prove a detached owner. */
-export function daemonRecordOwnerUnrecognizedError(params: {
+function daemonRecordOwnerUnrecognizedError(params: {
   info: DaemonInfo;
   stateDir: string;
 }): AppError {

@@ -15,6 +15,7 @@ import {
   type DaemonOwnership,
   type DaemonPaths,
   type DaemonServerMode,
+  type ObservedDaemonIdentity,
 } from './daemon-resolution.ts';
 
 /**
@@ -24,8 +25,8 @@ import {
  * however alive it is.
  */
 export function readRegisteredDaemonIdentity(infoPath: string): OwnerIdentity | null {
-  const record = readRegistration(infoPath);
-  return record.status === 'registered' ? record.identity : null;
+  const reading = readDaemonRegistration(infoPath);
+  return reading.status === 'present' ? reading.identity : null;
 }
 
 export function processLockHoldsDaemonIdentity(
@@ -46,26 +47,29 @@ type ParsedRegistration = { pid: number | null; startTime: string | null };
 type DaemonRecord = Readonly<Record<string, unknown>>;
 
 /**
- * Whether `daemon.json` registers a daemon: a projection of the one record reader that adds the
- * identity, so a record that names no owner is `ownerless` however it came to.
+ * The one read of `daemon.json` behind every projection of that record in this module. `identity` is
+ * null for a record that names no process, and `ownership` is what the record states, read the way a
+ * reader must read it before anything is signaled.
  */
-function readRegistration(
-  infoPath: string,
-):
-  | Readonly<{ status: 'registered'; identity: OwnerIdentity; record: DaemonRecord }>
-  | Readonly<{ status: 'absent' | 'unreadable' | 'ownerless' }> {
+type DaemonRegistrationReading =
+  | Readonly<{
+      status: 'present';
+      record: DaemonRecord;
+      identity: OwnerIdentity | null;
+      ownership: DaemonOwnership;
+    }>
+  | Readonly<{ status: 'absent' | 'unreadable' | 'invalid' }>;
+
+function readDaemonRegistration(infoPath: string): DaemonRegistrationReading {
   const read = readDaemonRecord(infoPath);
-  if (read.status !== 'present') {
-    return { status: read.status === 'invalid' ? 'ownerless' : read.status };
-  }
+  if (read.status !== 'present') return { status: read.status };
   const parsed = parseRegistration(read.record);
-  return parsed.pid === null
-    ? { status: 'ownerless' }
-    : {
-        status: 'registered',
-        identity: { pid: parsed.pid, startTime: parsed.startTime },
-        record: read.record,
-      };
+  return {
+    status: 'present',
+    record: read.record,
+    identity: parsed.pid === null ? null : { pid: parsed.pid, startTime: parsed.startTime },
+    ownership: readDaemonOwnership(read.record.ownership),
+  };
 }
 
 function parseRegistration(parsed: {
@@ -102,15 +106,18 @@ export function readRegisteredDaemonOwnership(
   infoPath: string,
   owner: OwnerIdentity | null,
 ): RegisteredDaemonOwnership {
-  const record = readRegistration(infoPath);
-  if (record.status !== 'registered') return { state: record.status };
+  const reading = readDaemonRegistration(infoPath);
+  if (reading.status !== 'present')
+    return { state: reading.status === 'invalid' ? 'ownerless' : reading.status };
+  // A record that names no process describes nothing a caller can own, however it came to that.
+  if (!reading.identity) return { state: 'ownerless' };
   if (!owner) return { state: 'unproven' };
-  if (ownerIdentityDiffers(record.identity, owner)) {
-    return { state: 'replaced', identity: record.identity };
+  if (ownerIdentityDiffers(reading.identity, owner)) {
+    return { state: 'replaced', identity: reading.identity };
   }
   // Two missing start times agree, and agreeing on nothing is not ownership: this is the pid-only
   // fallback the fence exists to refuse, so it falls to `unproven` rather than to `match`.
-  if (ownerIdentityMatches(record.identity, owner) && record.identity.startTime !== null) {
+  if (ownerIdentityMatches(reading.identity, owner) && reading.identity.startTime !== null) {
     return { state: 'match' };
   }
   return { state: 'unproven' };
@@ -152,16 +159,15 @@ export function isUnusableRecord(status: Pick<DaemonStatus, 'state'>): boolean {
  */
 export function readDaemonStatus(paths: DaemonPaths): DaemonStatus {
   const base = { stateDir: paths.baseDir } as const;
-  const read = readDaemonRecord(paths.infoPath);
-  if (read.status !== 'present') {
-    return read.status === 'absent'
+  const reading = readDaemonRegistration(paths.infoPath);
+  if (reading.status !== 'present') {
+    return reading.status === 'absent'
       ? { state: 'stopped', ...base }
-      : { state: read.status, ...base };
+      : { state: reading.status, ...base };
   }
-  const { record } = read;
-  const parsed = parseRegistration(record);
-  if (parsed.pid === null) return { state: 'stopped', ...base };
-  const identity = { pid: parsed.pid, startTime: parsed.startTime };
+  const { record } = reading;
+  if (reading.identity === null) return { state: 'stopped', ...base };
+  const identity = reading.identity;
   if (identity.startTime === null || !isProcessAlive(identity.pid)) {
     return { state: 'stopped', ...base };
   }
@@ -178,7 +184,7 @@ export function readDaemonStatus(paths: DaemonPaths): DaemonStatus {
     state: 'running',
     stateDir: paths.baseDir,
     pid: identity.pid,
-    ownership: readDaemonOwnership(record.ownership),
+    ownership: reading.ownership,
     ...(typeof record.version === 'string' ? { version: record.version } : {}),
     ...(transport ? { transport } : {}),
     plugins: record.plugins,
@@ -211,16 +217,23 @@ export type DaemonStopIdentity = Readonly<{
  * record written before the ownership field named.
  */
 export function readDaemonStopIdentity(infoPath: string): DaemonStopIdentity {
-  const read = readDaemonRecord(infoPath);
-  if (read.status !== 'present') {
-    return {
-      ownership: read.status === 'absent' ? 'absent' : 'unreadable',
-      identity: null,
-    };
-  }
-  const parsed = parseRegistration(read.record);
-  const identity = parsed.pid === null ? null : { pid: parsed.pid, startTime: parsed.startTime };
-  return { ownership: readDaemonOwnership(read.record.ownership), identity };
+  const reading = readDaemonRegistration(infoPath);
+  if (reading.status !== 'present')
+    return { ownership: reading.status === 'absent' ? 'absent' : 'unreadable', identity: null };
+  return { ownership: reading.ownership, identity: reading.identity };
+}
+
+/**
+ * The observation a retirement judges, from a stop's read of the record. `absent` names no process at
+ * all, and `unreadable` describes one this read cannot use, so neither travels as an owner; the stop
+ * route refuses the unreadable record before it gets here.
+ */
+export function observedDaemonIdentityOfRegistration(
+  record: DaemonStopIdentity,
+): ObservedDaemonIdentity | null {
+  if (!record.identity || record.ownership === 'absent' || record.ownership === 'unreadable')
+    return null;
+  return { ...record.identity, ownership: record.ownership };
 }
 
 /**

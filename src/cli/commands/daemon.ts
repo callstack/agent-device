@@ -46,7 +46,7 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
   if (flags.clean === true && record.ownership !== 'absent' && record.ownership !== 'detached') {
     throw daemonCleanRefusedForUnprovenOwner(paths, record.ownership);
   }
-  const result = await stopRecordedDaemon(record, { paths, host });
+  const result = await stopRecordedDaemon(record, paths);
   const cleanupOwner = readStopCleanupOwner(record);
   const shouldClean = flags.clean === true && cleanupOwner !== null && result.stopped;
   if (shouldClean) {

@@ -60,14 +60,15 @@ LOOPBACK_BLOCK_LIST.addSubnet('127.0.0.0', 8, 'ipv4');
 LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
 LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 
+/**
+ * Whether a timed-out request may retire the daemon it was waiting on. An attach client never may: the
+ * daemon is not its to kill, and `ensureDaemon` is where an unresponsive one is replaced. Every other
+ * caller asks the retirement, which judges the record's owner before it signals anything.
+ */
 export function resolveTimeoutRecovery(
   settings: DaemonClientSettings,
-  info: DaemonInfo,
 ): 'retire-unresponsive' | 'none' {
   if (settings.daemonLifecycle === 'attach') return 'none';
-  // Only a record that proves a detached daemon authorizes a kill: an embedded one belongs to a host,
-  // and one whose owner this build cannot read says nothing about what is safe to signal.
-  if (info.ownership !== 'detached') return 'none';
   return 'retire-unresponsive';
 }
 

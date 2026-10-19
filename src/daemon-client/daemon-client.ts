@@ -149,7 +149,7 @@ async function sendToDaemonOnHost(
               host,
               onProgress: options.onProgress,
               signal: options.signal,
-              timeoutRecovery: resolveTimeoutRecovery(settings, info),
+              timeoutRecovery: resolveTimeoutRecovery(settings),
             },
           ),
         { requestId, command: req.command },

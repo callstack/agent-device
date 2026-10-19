@@ -1,7 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRetirementResult } from './daemon-registration-owner.ts';
 
-import type { DaemonPaths, ObservedDaemonIdentity } from './daemon-resolution.ts';
+import {
+  DAEMON_LIFECYCLE_REASONS,
+  DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+  type DaemonPaths,
+  type ObservedDaemonIdentity,
+} from './daemon-resolution.ts';
 import type { OwnerIdentity } from '@agent-device/host-kit/process';
 import type {
   DaemonShutdownReport,
@@ -43,8 +48,9 @@ export type DaemonStopResult = {
  * Retires the daemon whose lifetime the caller read, and shapes that retirement as a stop result.
  *
  * The caller hands over the lifetime and the owner its own read proved, so routing and retirement judge
- * one record. Only a detached daemon reaches here: a host owns an embedded runtime and ends it with its
- * own close, and a record this build cannot place proves nothing about what is safe to signal.
+ * one record. Ownership is judged here and nowhere else: an embedded runtime belongs to its host, and a
+ * record this build cannot place proves nothing about what is safe to signal, so both come back as the
+ * refusal that names their owner, with nothing signaled.
  */
 export async function stopDaemon(params: {
   paths: DaemonPaths;
@@ -95,6 +101,25 @@ export async function stopDaemon(params: {
   };
 }
 
+/**
+ * What a retirement that refused because of the record's owner answers with. This is the one place
+ * those two retained reasons become a stop's own reason: a caller that may not signal this process
+ * hears the owner's rule, not a retirement that could not be confirmed.
+ */
+function ownerRefusal(
+  reason: 'embedded-owner' | 'owner-unproven',
+): Readonly<{ reason: string; hint: string }> {
+  return reason === 'embedded-owner'
+    ? {
+        reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
+        hint: 'Nothing was signaled. Close the host that started this runtime, or repair its record after the process has exited.',
+      }
+    : {
+        reason: DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
+        hint: 'Nothing was signaled. Check what owns that process, then repair the record: stop it by its own means and remove its daemon.json so a daemon can register again.',
+      };
+}
+
 function daemonRetirementError(
   info: OwnerIdentity,
   retirement: Exclude<DaemonRetirementResult, { status: 'retired' }>,
@@ -103,17 +128,29 @@ function daemonRetirementError(
   const failure = termination?.status === 'retained' ? termination : undefined;
   const error = retirement.status === 'retained' ? retirement.error : undefined;
   const { hint, diagnosticId, logPath } = error ?? {};
-  return new AppError('COMMAND_FAILED', 'Daemon retirement could not be confirmed.', {
-    pid: info.pid,
-    processStartTime: info.startTime,
-    reason: failure ? 'daemon_exit_unconfirmed' : 'daemon_retirement_unconfirmed',
-    terminationReason: failure?.reason,
-    signal: failure?.signal,
-    retirement,
-    hint,
-    diagnosticId,
-    logPath,
-  });
+  const refusal =
+    retirement.status === 'retained' &&
+    (retirement.reason === 'embedded-owner' || retirement.reason === 'owner-unproven')
+      ? ownerRefusal(retirement.reason)
+      : undefined;
+  return new AppError(
+    'COMMAND_FAILED',
+    refusal
+      ? 'The daemon was not stopped, because its owner ends it.'
+      : 'Daemon retirement could not be confirmed.',
+    {
+      pid: info.pid,
+      processStartTime: info.startTime,
+      reason:
+        refusal?.reason ?? (failure ? 'daemon_exit_unconfirmed' : 'daemon_retirement_unconfirmed'),
+      terminationReason: failure?.reason,
+      signal: failure?.signal,
+      retirement,
+      hint: hint ?? refusal?.hint,
+      diagnosticId,
+      logPath,
+    },
+  );
 }
 
 function daemonNotRunningStopResult(): DaemonStopResult {

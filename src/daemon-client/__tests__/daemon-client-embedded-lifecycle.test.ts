@@ -83,6 +83,30 @@ async function startStaleRegistration(ownership?: 'embedded') {
   return { stateDir, paths, daemon, ...registered };
 }
 
+/**
+ * The same stale registration left behind by an owner that died: a real child publishes it and is then
+ * killed without retiring anything, so the record names a lifetime the process table can disprove. Its
+ * record and lock stay, which is the wedged state directory every managed command must get past.
+ */
+async function crashedStaleRegistration(ownership: 'embedded' | 'unrecognized' | 'detached') {
+  const { stateDir, paths } = stateDirAndPaths();
+  const registered = await registerDaemon(paths, {
+    // Nothing answers this port: the point is that the client never asks the dead owner anything.
+    httpPort: 1,
+    version: '0.0.0-stale',
+    ...(ownership === 'embedded' ? { ownership: 'embedded' } : {}),
+  });
+  if (ownership === 'unrecognized') {
+    const record = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8'));
+    fs.writeFileSync(paths.infoPath, JSON.stringify({ ...record, ownership: 'sideways' }));
+    assert.equal(readDaemonInfo(paths.infoPath)?.ownership, 'unknown');
+  }
+  process.kill(registered.child.pid, 'SIGKILL');
+  await registered.child.exited;
+  assert.equal(isProcessAlive(registered.child.pid), false);
+  return { stateDir, paths, ...registered };
+}
+
 for (const [ownership, reason, hint] of [
   ['embedded', DAEMON_LIFECYCLE_REASONS.ownerEmbedded, /Close the host/],
   ['sideways', 'daemon-owner-unrecognized', /Update agent-device/],
@@ -145,24 +169,52 @@ test('the same record with no host owner is still the takeover this client perfo
   }
 });
 
-test.each(['unknown', 'embedded', 'detached'] as const)(
-  'timeout recovery respects %s ownership',
-  (ownership) => {
-    const { stateDir } = stateDirAndPaths();
-    const settings = resolveClientSettings(
-      request(stateDir),
-      undefined,
-      createTestHostEnvironment(),
-      'managed',
-    );
-    assert.equal(
-      resolveTimeoutRecovery(settings, {
-        token: 'token',
-        pid: 4242,
-        processStartTime: 'start',
-        ownership,
-      }),
-      ownership === 'detached' ? 'retire-unresponsive' : 'none',
-    );
-  },
-);
+for (const ownership of ['embedded', 'unrecognized', 'detached'] as const)
+  test(`a managed command recovers the record a crashed ${ownership} owner left behind`, async (t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    // The wedged state directory: an incompatible-version record and its lock, naming a lifetime the
+    // process table disproves. Ownership is judged inside the retirement, so all three recover: the
+    // dead owner is proven gone, nothing is signaled, and the managed command starts a fresh daemon.
+    const { stateDir, paths, child } = await crashedStaleRegistration(ownership);
+    const fresh = await startScriptedDaemon(okResult({ devices: [] }));
+    launchesFreshDaemonAt(spawn, paths, fresh.port);
+    const killSpy = vi.spyOn(process, 'kill');
+
+    try {
+      const response = await createDaemonTransport(createTestHostEnvironment())(request(stateDir));
+
+      assert.equal(response.ok, true, JSON.stringify(response));
+      assert.equal(spawn.mock.calls.length, 1, 'the state directory was taken over, not wedged');
+      // The dead owner's record is gone: the fresh daemon's registration names a live process, and the
+      // dead lifetime received no signal — its exit was proved from the process table, not caused.
+      assert.notEqual(readDaemonInfo(paths.infoPath)?.pid, child.pid);
+      assert.deepEqual(
+        signalsSent(killSpy).filter(([target]) => target === child.pid),
+        [],
+      );
+    } finally {
+      await closeLoopbackServer(fresh.server);
+    }
+  });
+
+test('timeout recovery asks only whether this client may, and attach never may', () => {
+  const { stateDir } = stateDirAndPaths();
+  const managed = resolveClientSettings(
+    request(stateDir),
+    undefined,
+    createTestHostEnvironment(),
+    'managed',
+  );
+  const attach = resolveClientSettings(
+    request(stateDir),
+    undefined,
+    createTestHostEnvironment(),
+    'attach',
+  );
+  // Recovery is the retirement's judgement, so the client decides only whether it may ask at all: an
+  // attach client never does, and every other lifecycle asks. The retirement answers for the record's
+  // owner — a live embedded or unrecognized one is refused without a signal, which
+  // daemon-registration-embedded-owner.test.ts pins at that seam for both modes.
+  assert.equal(resolveTimeoutRecovery(managed), 'retire-unresponsive');
+  assert.equal(resolveTimeoutRecovery(attach), 'none');
+});

@@ -7,7 +7,7 @@ import { stopAndRetireDaemon } from '@agent-device/daemon-contracts/daemon-regis
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { stopRecordedDaemon } from '../daemon-client/daemon-client-stop.ts';
 import { readDaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
-import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 // What the registration owner may do to a record a host process owns: prove the lifetime is gone
 // before removing anything, and never signal the process the record names.
@@ -100,10 +100,7 @@ test('retirement of an embedded record proves the lifetime is gone and signals n
   }
 
   await assert.rejects(
-    stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), {
-      paths,
-      host: createTestHostEnvironment(),
-    }),
+    stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), paths),
     (error: unknown) =>
       error instanceof AppError &&
       error.details?.reason === 'daemon-owner-embedded' &&
@@ -185,10 +182,7 @@ test('retirement refuses to signal a record whose owner it cannot recognize', as
     assert.equal(result.reason, 'owner-unproven', ownership);
     if (ownership === 'sideways')
       await assert.rejects(
-        stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), {
-          paths,
-          host: createTestHostEnvironment(),
-        }),
+        stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), paths),
         (error: unknown) =>
           error instanceof AppError && error.details?.reason === 'daemon-owner-unrecognized',
       );
