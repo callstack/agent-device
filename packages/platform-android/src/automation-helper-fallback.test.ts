@@ -91,7 +91,7 @@ test.each([undefined, 'true', 'unknown'])(
   },
 );
 
-test.each([
+test.each<Record<string, string>>([
   {
     ok: 'false',
     errorType: 'java.lang.IllegalStateException',

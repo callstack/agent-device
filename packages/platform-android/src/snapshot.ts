@@ -313,7 +313,7 @@ async function captureAndroidUiHierarchyWithHelper(
   artifact: AndroidSnapshotHelperArtifact,
 ): Promise<AndroidUiHierarchyCapture> {
   const helperDeviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
-  const releaseHelperSession = releasesHelperSessionAfterCapture(options, helperDeviceKey);
+  const releaseHelperSession = await releasesHelperSessionAfterCapture(options, helperDeviceKey);
   try {
     return await captureAndroidHelperContentWithinWindow({
       options,
@@ -385,11 +385,12 @@ function resolveContentRecaptureDeadlineMs(options: AndroidSnapshotOptions): num
 }
 
 /** A transient read keeps a session it found running and releases one it had to start. */
-function releasesHelperSessionAfterCapture(
+async function releasesHelperSessionAfterCapture(
   options: AndroidSnapshotOptions,
   helperDeviceKey: string,
-): boolean {
-  if (options.transient) return getLiveAndroidSnapshotHelperSession(helperDeviceKey) === undefined;
+): Promise<boolean> {
+  if (options.transient)
+    return (await getLiveAndroidSnapshotHelperSession(helperDeviceKey)) === undefined;
   return options.helperSessionScope !== 'daemon-session';
 }
 

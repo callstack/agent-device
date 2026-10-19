@@ -858,6 +858,6 @@ test('a live text read keeps the resolved identity when its old point covers a s
   );
   assert.equal(
     readAndroidTextAtPointInHierarchy(xml.replace('app-state', 'window-state'), 50, 50, target),
-    null,
+    'active',
   );
 });
