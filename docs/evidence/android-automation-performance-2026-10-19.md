@@ -4,6 +4,8 @@ The comparison starts from `eef1a3f76d7216da006ff59c975620c8b9dd7182`.
 The reference experiment is [tester-army/e2e#1234](https://github.com/tester-army/e2e/pull/1234), inspected at `2593e45025edc52b2c381e809b41cb63d5878e2b`.
 Its measurements are author-reported. Its direct engine sets text through `ACTION_SET_TEXT`, injects input through `UiAutomation`, and captures screenshots inside its instrumentation process.
 
+The follow-up [original-app comparison](android-e2e-parity-2026-10-19.md) runs the exact 42 Android cases and operation benchmark. Both agent-device variants passed all 42 cases; the direct engine passed 40 and failed two. The base/head suite times were 327.95/321.25 seconds. The fixture primitive gains below do not establish the reference experiment's total-suite gain.
+
 ## Reproduce
 
 Use a dedicated Pixel 7 API 36 emulator and the current `examples/test-app` Release APK.
