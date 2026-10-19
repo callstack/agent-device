@@ -7,7 +7,6 @@ import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-ru
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
-import { runAndroidAutomationHelper } from './automation-helper.ts';
 import {
   ANDROID_FOCUS_MARKERS,
   ANDROID_FOCUSED_WINDOW_MARKER,
@@ -44,6 +43,7 @@ export function createAndroidObservationAdapter(
     readAppState: async (device) => await readAppState(host, device),
     readBlockingDialog: async (device) => await readBlockingDialog(host, device),
     async readAppFocus(device, appBundleId, options = {}) {
+      const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
       const focus = await runAndroidAutomationHelper(device, 'focus');
       if (focus?.focusedPackage === appBundleId && focus.windowType === '1') return true;
       const read = createDumpReader(host, device);
@@ -113,6 +113,7 @@ async function readBlockingDialog(
   device: DeviceInfo,
   read: DumpReader = createDumpReader(host, device),
 ): Promise<AndroidBlockingDialogObservation> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   const focus = await runAndroidAutomationHelper(device, 'focus');
   if (focus?.windowType === '1' && focus.focusedPackage && focus.focusedPackage !== 'android') {
     return { status: 'clear' };

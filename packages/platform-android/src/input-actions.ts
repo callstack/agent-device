@@ -29,7 +29,6 @@ import { runAndroidShell } from './adb.ts';
 import { androidAdbResultError, discloseAdbInputDispatch } from './adb-failure.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
-import { runAndroidAutomationHelper } from './automation-helper.ts';
 
 /**
  * What a caller may steer on a dispatched input command: cancellation only. The wider executor
@@ -44,6 +43,7 @@ export async function pressAndroid(
   y: number,
   options?: AndroidInputDispatchOptions,
 ): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   try {
     if (!options?.signal && (await runAndroidAutomationHelper(device, 'input', { kind: 'tap', x, y }))) return;
     // Picked field by field so no runtime caller can smuggle `allowFailure: true` past the type.
@@ -85,6 +85,7 @@ export async function backAndroid(
   device: DeviceInfo,
   options?: AndroidInputDispatchOptions,
 ): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (!options?.signal && (await runAndroidAutomationHelper(device, 'input', { kind: 'key', keyCode: 4 }))) return;
   await runAndroidShell(
     device,
@@ -94,11 +95,13 @@ export async function backAndroid(
 }
 
 export async function homeAndroid(device: DeviceInfo): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (await runAndroidAutomationHelper(device, 'input', { kind: 'key', keyCode: 3 })) return;
   await runAndroidShell(device, ['input', 'keyevent', '3']);
 }
 
 export async function pressAndroidEnter(device: DeviceInfo): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (await runAndroidAutomationHelper(device, 'input', { kind: 'key', keyCode: 66 })) return;
   await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
 }
@@ -216,6 +219,7 @@ export async function probeAndroidDisplayRotation(
 }
 
 export async function appSwitcherAndroid(device: DeviceInfo): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (await runAndroidAutomationHelper(device, 'input', { kind: 'key', keyCode: 187 })) return;
   await runAndroidShell(device, ['input', 'keyevent', '187']);
 }

@@ -5,7 +5,6 @@ import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { runAndroidExecOut, runAndroidShell, sleep } from './adb.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import { probeAndroidDisplayRotation } from './input-actions.ts';
-import { runAndroidAutomationHelper } from './automation-helper.ts';
 
 // PNG file signature: 0x89 P N G \r \n 0x1A \n
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -100,6 +99,7 @@ async function settledWithin<T>(pending: Promise<T>, graceMs: number): Promise<T
 }
 
 async function captureAndroidScreenshot(device: DeviceInfo, outPath: string): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   const helper = await runAndroidAutomationHelper(device, 'screenshot');
   const bytes = helper
     ? Buffer.from(helper.payloadBase64 ?? '', 'base64')

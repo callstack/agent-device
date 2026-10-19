@@ -146,7 +146,7 @@ export function createPersistentSnapshotHelperProvider(
           process.stdout.write(
             [
               'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-              'INSTRUMENTATION_STATUS: sessionCommands=input,screenshot,focus,snapshot-immediate',
+              `INSTRUMENTATION_STATUS: sessionCommands=${options.sessionInput ? 'input,' : ''}snapshot-immediate`,
               'INSTRUMENTATION_STATUS: sessionReady=true',
               'INSTRUMENTATION_STATUS_CODE: 2',
               '',
@@ -280,7 +280,7 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
         process.stdout.write(
           [
             'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-            'INSTRUMENTATION_STATUS: sessionCommands=input,screenshot,focus,snapshot-immediate',
+            'INSTRUMENTATION_STATUS: sessionCommands=snapshot-immediate',
             'INSTRUMENTATION_STATUS: sessionReady=true',
             'INSTRUMENTATION_STATUS_CODE: 2',
             '',

@@ -1,7 +1,3 @@
-import {
-  prepareAndroidAutomationHelper,
-  androidAutomationHelperIdentity,
-} from './automation-helper-artifact.ts';
 import type { PointerTrajectory } from '@agent-device/contracts/gesture-plan-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
@@ -57,6 +53,8 @@ export async function executeAndroidTouchHelperPlan(
   device: DeviceInfo,
   plan: AndroidLoweredTouchPlan,
 ): Promise<Record<string, unknown>> {
+  const { prepareAndroidAutomationHelper, androidAutomationHelperIdentity } =
+    await import('./automation-helper-artifact.ts');
   const prepared = await prepareAndroidAutomationHelper(device);
   const request = normalizeAndroidTouchHelperGestureRequest(plan);
   const timeoutMs = Math.max(
@@ -111,6 +109,8 @@ export async function readAndroidTouchHelperViewportReading(
   device: DeviceInfo,
   helper: AndroidHelperSessionOptions = {},
 ): Promise<AndroidGestureViewportReading> {
+  const { prepareAndroidAutomationHelper, androidAutomationHelperIdentity } =
+    await import('./automation-helper-artifact.ts');
   const prepared = await prepareAndroidAutomationHelper(device);
   if (helper.helperSessionScope === 'daemon-session') {
     // Without a live session both this read and the gesture that follows would each start their

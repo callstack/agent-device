@@ -336,6 +336,7 @@ async function pressThenForegroundReadRefused(): Promise<unknown> {
   const readRefusal = new AppError('COMMAND_FAILED', 'adb device offline', { dispatched: 'no' });
   const androidObservation: AndroidObservationAdapter = {
     ...clearAndroidObservationFixture,
+    readAppFocus: async () => false,
     readAppState: async () => {
       if (mockTapPoint.mock.calls.length > 0) throw readRefusal;
       return { package: 'com.example.app' };
