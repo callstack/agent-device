@@ -1,8 +1,5 @@
 import { APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS } from './multitouch-support.ts';
-import {
-  PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
-  TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
-} from '@agent-device/contracts/gesture-admission';
+import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import type {
   RuntimeOperationFact,
@@ -19,11 +16,6 @@ const gestureLeafUnavailable = Object.freeze({
 const gestureKindUnavailable = unsupportedAppleDeviceKind(
   'Gestures are supported only for Apple simulators and devices.',
 );
-const physicalIosMultiTouchUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
-} as const);
 const targetAuthoredDragUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -76,7 +68,7 @@ function appleMultiTouchGestureFact(device: DeviceInfo): RuntimeOperationFact {
       ...(hint === undefined ? {} : { hint }),
     } as const);
   }
-  return device.kind === 'simulator' ? available : physicalIosMultiTouchUnavailable;
+  return available;
 }
 
 function appleTargetAuthoredDragFact(device: DeviceInfo): RuntimeOperationFact {

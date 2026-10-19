@@ -329,7 +329,7 @@ test('usageForCommand resolves gestures help topic', async () => {
   assert.match(help, /press <x> <y> --count <n> --jitter-px <n> for tap series/);
   assert.match(
     help,
-    /iOS simulator transform\/pinch\/rotate use private XCTest synthesis for a continuous two-finger/,
+    /iOS transform\/pinch\/rotate use private XCTest synthesis for a continuous two-finger/,
   );
   assert.match(help, /Android transform injects a geometric two-finger path/);
   assert.match(help, /verify semantic app state or coarse per-component effects/);

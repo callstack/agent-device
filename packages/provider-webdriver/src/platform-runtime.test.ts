@@ -513,8 +513,8 @@ function host(run: PlatformRuntimeHost['commands']['run']): PlatformRuntimeHost 
 }
 
 // R52/R53: gestures and scrolling ride the same reachability gate the captures do. The one extra
-// gate is the retired multi-touch policy — this provider owns physical devices only, and
-// two-finger synthesis on a physical iOS device was refused before this migration too.
+// gate is multi-touch: this provider reaches iOS through its own WebDriver interactor, which has no
+// two-finger synthesis.
 test.each([
   ['Android physical', device, true],
   ['iOS physical', { ...device, platform: 'apple' as const, appleOs: 'ios' as const }, false],
@@ -534,8 +534,10 @@ test.each([
   expect(facts.operations.scrollDirection).toEqual({ available: true });
   expect(facts.operations.performMultiTouchGesturePlan.available).toBe(multiTouch);
   if (!multiTouch) {
-    expect(facts.operations.performMultiTouchGesturePlan).toMatchObject({
-      hint: 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.',
+    expect(facts.operations.performMultiTouchGesturePlan).toEqual({
+      available: false,
+      reason: 'unsupported-provider-mode',
+      hint: 'Two-finger gesture synthesis is not available on iOS devices reached through a WebDriver provider.',
     });
   }
 });

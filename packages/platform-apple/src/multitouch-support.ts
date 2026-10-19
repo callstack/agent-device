@@ -10,9 +10,9 @@ import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 
 export const APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS: Partial<Record<AppleOS, string>> = {
   visionos: 'visionOS uses spatial input and does not support two-finger touch synthesis.',
-  tvos: 'tvOS has no touch input — this gesture is supported on Android and the iOS simulator only.',
+  tvos: 'tvOS has no touch input — this gesture is supported on Android, iOS, and iPadOS.',
   macos:
-    'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.',
+    'macOS automation has no multi-touch input — this gesture is supported on Android, iOS, and iPadOS.',
 };
 
 /** One policy shared by command admission and the defensive Apple adapter check. */
@@ -24,16 +24,7 @@ export function assertAppleMultiTouchSupported(
     throw unsupported(intent, device.platform);
   }
   const appleOs = resolveDeviceAppleOs(device);
-  if ((appleOs === 'ios' || appleOs === 'ipados') && device.kind === 'simulator') return;
-  if (appleOs === 'ios' || appleOs === 'ipados') {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      `gesture ${intent} is not supported on physical iOS devices`,
-      {
-        hint: 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.',
-      },
-    );
-  }
+  if (appleOs === 'ios' || appleOs === 'ipados') return;
   throw unsupported(
     intent,
     APPLE_OS_DISPLAY_NAMES[appleOs],

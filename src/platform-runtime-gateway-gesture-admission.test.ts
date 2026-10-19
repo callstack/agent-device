@@ -62,7 +62,7 @@ test('target-authored drag is admitted only where adapters preserve every author
   }
 });
 
-test('iOS and iPadOS simulators admit multi-touch while physical devices do not', async () => {
+test('iOS and iPadOS simulators and physical devices admit multi-touch', async () => {
   for (const appleOs of ['ios', 'ipados'] as const) {
     const simulator = await gateway.inspectFacts(
       device({ platform: 'apple', appleOs, kind: 'simulator' }),
@@ -73,10 +73,7 @@ test('iOS and iPadOS simulators admit multi-touch while physical devices do not'
     expect(simulator.operations.performGesturePlan.available).toBe(true);
     expect(simulator.operations.performMultiTouchGesturePlan.available).toBe(true);
     expect(physical.operations.performGesturePlan.available).toBe(true);
-    expect(physical.operations.performMultiTouchGesturePlan).toMatchObject({
-      available: false,
-      hint: expect.stringMatching(/iOS-simulator only/),
-    });
+    expect(physical.operations.performMultiTouchGesturePlan.available).toBe(true);
   }
 });
 

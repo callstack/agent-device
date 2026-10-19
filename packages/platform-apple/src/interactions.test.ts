@@ -9,10 +9,8 @@ import {
 } from './interactions.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  gestureRefusalMessage,
-  PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
-} from '@agent-device/contracts/gesture-admission';
+import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
+import { APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS } from './multitouch-support.ts';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { RunnerCommand } from './runner/index.ts';
 import { TEXT_ENTRY_ROUTES } from '@agent-device/contracts/interactor-types';
@@ -415,19 +413,38 @@ test('performGestureApple sends exact two-pointer pan samples through gesture', 
   });
 });
 
+test('performGestureApple sends two-pointer samples to a physical iOS device', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({ transformed: true });
+  const plan = twoFingerPanPlan();
+
+  const result = await performGestureApple(
+    IOS_TEST_DEVICE,
+    { appBundleId: 'com.example.App' },
+    {},
+    plan,
+  );
+
+  assert.deepEqual(result, { transformed: true });
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'gesture',
+    gesturePlan: plan,
+    appBundleId: 'com.example.App',
+  });
+});
+
 test('Apple admission and execution share the same multi-touch refusal', async () => {
   // Admission is now the Apple owner's `performMultiTouchGesturePlan` fact composed with the
   // shared refusal wording (R42); execution keeps its defensive adapter check. The two must
   // still say the same thing, which is what this pins.
-  const admissionMessage = gestureRefusalMessage(IOS_TEST_DEVICE, 'multi-touch', 'pan');
+  const admissionMessage = gestureRefusalMessage(MACOS_TEST_DEVICE, 'multi-touch', 'pan');
 
   await assert.rejects(
-    () => performGestureApple(IOS_TEST_DEVICE, {}, {}, twoFingerPanPlan()),
+    () => performGestureApple(MACOS_TEST_DEVICE, {}, {}, twoFingerPanPlan()),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'UNSUPPORTED_OPERATION' &&
       error.message === admissionMessage &&
-      error.details?.hint === PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
+      error.details?.hint === APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS.macos,
   );
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });

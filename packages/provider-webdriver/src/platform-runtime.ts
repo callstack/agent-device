@@ -14,7 +14,6 @@ import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
-import { PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
 import {
   bindProviderGestureInteractor,
   gestureRuntimeOperationFacts,
@@ -147,9 +146,9 @@ const scrollUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'This WebDriver provider runtime does not expose scrolling for this device.',
 );
-const physicalIosMultiTouchUnavailable = unavailableFact(
-  'unsupported-device-kind',
-  PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
+const iosMultiTouchUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Two-finger gesture synthesis is not available on iOS devices reached through a WebDriver provider.',
 );
 const elementTextUnavailable = unavailableFact(
   'unsupported-provider-mode',
@@ -574,9 +573,8 @@ function webDriverFacts(
         fillRef: typeUnavailable,
       }),
       // Gestures and scrolling ride the same provider interactor the captures do, so they need the
-      // same reachability. The one extra gate is the retired multi-touch policy: this provider only
-      // ever owns physical devices, and two-finger synthesis on a physical iOS device was refused
-      // before this migration exactly as it is refused here.
+      // same reachability. The one extra gate is multi-touch: this provider reaches iOS only through
+      // its own WebDriver interactor, which has no two-finger synthesis, not the Apple runner.
       ...gestureRuntimeOperationFacts({
         unsupported: gestureUnavailable,
         plan: interactorCell(reachable, gestureUnavailable),
@@ -662,10 +660,10 @@ function webDriverFacts(
   });
 }
 
-/** Two-finger synthesis is iOS-simulator only, and this provider owns no simulators. */
+/** Two-finger synthesis is an Apple runner capability, and this provider never uses the runner. */
 function webDriverMultiTouchCell(device: DeviceInfo, reachable: boolean): RuntimeOperationFact {
   if (!reachable) return gestureUnavailable;
-  return device.platform === 'apple' ? physicalIosMultiTouchUnavailable : available;
+  return device.platform === 'apple' ? iosMultiTouchUnavailable : available;
 }
 
 /** The device shapes this provider can reach at all through its own WebDriver interactor. */

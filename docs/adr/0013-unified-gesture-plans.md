@@ -142,7 +142,7 @@ Platform adapters consume the canonical plan:
   macOS lowers a one-contact plan to its drag executor.
   tvOS lowers a one-contact plan to remote direction.
   Core admission and the Apple adapter both consume the same shared multi-touch support policy.
-  Multi-touch remains capability-gated to iOS simulators.
+  Multi-touch is capability-gated to iOS and iPadOS, on simulators and physical devices, through the XCTest runner.
 
   iOS deliberately retains three one-contact motion schedules behind the shared private-XCTest event bridge.
   Apple's public drag API models the phases independently as an [initial hold, movement velocity, and destination hold](https://developer.apple.com/documentation/xcuiautomation/xcuicoordinate/press%28forduration%3Athendragto%3Awithvelocity%3Athenholdforduration%3A%29).

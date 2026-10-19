@@ -483,7 +483,7 @@ test('carries the retired Android TV hints verbatim', async () => {
   expect(facts.operations.performMultiTouchGesturePlan).toEqual({
     available: false,
     reason: 'unsupported-platform-leaf',
-    hint: 'Android TV has no touch input — this gesture is supported on Android phones, tablets, and the iOS simulator only.',
+    hint: 'Android TV has no touch input — this gesture is supported on Android phones, tablets, iOS, and iPadOS.',
   });
   expect(facts.operations.performTargetAuthoredDrag).toMatchObject({
     available: false,
