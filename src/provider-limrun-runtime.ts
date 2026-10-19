@@ -1,3 +1,4 @@
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import type {
   DeviceInventoryProvider,
   LeaseLifecycleProvider,
@@ -24,7 +25,10 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   readonly provider = LIMRUN_PROVIDER;
 
   constructor(options: LimrunRuntimeOptions) {
-    this.implementation = createLimrunRuntime(options, createLimrunRuntimeDependencies());
+    this.implementation = createLimrunRuntime(
+      options,
+      createLimrunRuntimeDependencies(captureHostEnvironment(process)),
+    );
   }
 
   get leaseLifecycle(): LeaseLifecycleProvider {

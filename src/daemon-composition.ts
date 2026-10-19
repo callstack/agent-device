@@ -93,7 +93,7 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
     resolveSessionDir,
   });
   const hostDiagnostics = createHostDiagnostics(host);
-  const providerComposition = await createDaemonProviderRuntimeComposition(env);
+  const providerComposition = await createDaemonProviderRuntimeComposition(host);
   // The registry has set up every plugin. Until this function returns, nothing else owns its
   // cleanup, so any later failure closes it here; success transfers ownership to the daemon.
   try {

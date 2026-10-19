@@ -8,7 +8,26 @@ export {
 } from '@agent-device/platform-android/mechanics';
 export { listAndroidAppsWithAdb } from '@agent-device/platform-android/mechanics';
 export { runAdbExecOut, runAdbShell } from '@agent-device/platform-android/mechanics';
-export { runAndroidExecOut, runAndroidShell } from '@agent-device/platform-android/mechanics';
+import {
+  runAndroidExecOut as runAndroidExecOutOnHost,
+  runAndroidShell as runAndroidShellOnHost,
+} from '@agent-device/platform-android/mechanics';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import { withCommandHost } from '@agent-device/host-kit/command';
+
+export async function runAndroidShell(...args: Parameters<typeof runAndroidShellOnHost>) {
+  const host = captureHostEnvironment(process);
+  return await withCommandHost({ host, requestEnv: undefined }, () =>
+    runAndroidShellOnHost(...args),
+  );
+}
+
+export async function runAndroidExecOut(...args: Parameters<typeof runAndroidExecOutOnHost>) {
+  const host = captureHostEnvironment(process);
+  return await withCommandHost({ host, requestEnv: undefined }, () =>
+    runAndroidExecOutOnHost(...args),
+  );
+}
 export type { ShellWord } from '@agent-device/kernel/device-shell';
 
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';

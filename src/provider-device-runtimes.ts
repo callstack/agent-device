@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type {
   PluginCleanupOutcome,
@@ -6,8 +7,6 @@ import type {
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
 import { builtinProviderCandidates } from './builtin-provider-plugins.ts';
 import { PROVIDER_PLUGIN_POLICY } from './provider-plugin-policy.ts';
-
-export type DefaultProviderDeviceRuntimeEnv = NodeJS.ProcessEnv;
 
 export type ProviderRuntimeComposition = Readonly<{
   runtimes: readonly ProviderDeviceRuntime[];
@@ -23,8 +22,9 @@ export type ProviderRuntimeComposition = Readonly<{
  * that cannot register is listed in the inventory; the others still register.
  */
 export async function createDaemonProviderRuntimeComposition(
-  env: DefaultProviderDeviceRuntimeEnv = process.env,
+  host: HostEnvironment,
 ): Promise<ProviderRuntimeComposition> {
+  const { env } = host;
   // This daemon's sources: the built-in providers, then the plugin store. A host that embeds the
   // daemon picks its own candidates; the registry takes whatever candidates it is given.
   const [{ resolveProviderPlugins, startProviderRegistry }, { storePluginCandidates }] =
@@ -33,7 +33,7 @@ export async function createDaemonProviderRuntimeComposition(
       import('@agent-device/plugins/store'),
     ]);
   const resolved = await resolveProviderPlugins([
-    ...builtinProviderCandidates(env),
+    ...builtinProviderCandidates(host),
     ...(await storePluginCandidates(env)),
   ]);
   const registry = await startProviderRegistry(resolved, env, PROVIDER_PLUGIN_POLICY);

@@ -5,7 +5,7 @@ import {
   type CloudWebDriverProviderDeclaration,
 } from '@agent-device/provider-webdriver/providers';
 import { LIMRUN_ID } from './builtin-provider-ids.ts';
-import type { EnvMap } from '@agent-device/kernel/source-value';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   limrunCredentialDeclaration,
   readLimrunCredentials,
@@ -17,14 +17,14 @@ import {
  * load only when a runtime is set up; a candidate that needs configuration claims its id without
  * registering until the environment holds it.
  */
-export function builtinProviderCandidates(env: EnvMap): PluginCandidate[] {
+export function builtinProviderCandidates(host: HostEnvironment): PluginCandidate[] {
   return [
     ...CLOUD_WEBDRIVER_PROVIDER_DECLARATIONS.map((declaration): PluginCandidate => ({
       source: 'builtin',
       provider: declaration.provider,
       load: () => cloudWebDriverPlugin(declaration),
     })),
-    limrunCandidate(env),
+    limrunCandidate(host),
   ];
 }
 
@@ -64,11 +64,11 @@ function cloudWebDriverPlugin(declaration: CloudWebDriverProviderDeclaration): A
   };
 }
 
-function limrunCandidate(env: EnvMap): PluginCandidate {
+function limrunCandidate(host: HostEnvironment): PluginCandidate {
   const base = { source: 'builtin', provider: LIMRUN_ID } as const;
   let credentials: LimrunCredentials | undefined;
   try {
-    credentials = readLimrunCredentials(env);
+    credentials = readLimrunCredentials(host.env);
   } catch (error) {
     return { ...base, load: () => Promise.reject(error) };
   }
@@ -85,9 +85,13 @@ function limrunCandidate(env: EnvMap): PluginCandidate {
           import('@agent-device/provider-limrun'),
           import('./sdk/limrun-runtime-dependencies.ts'),
         ]);
-        return runtime.createLimrunRuntime(limrun, dependencies.createLimrunRuntimeDependencies(), {
-          includePlatformModule: true,
-        });
+        return runtime.createLimrunRuntime(
+          limrun,
+          dependencies.createLimrunRuntimeDependencies(host),
+          {
+            includePlatformModule: true,
+          },
+        );
       },
     }),
   };

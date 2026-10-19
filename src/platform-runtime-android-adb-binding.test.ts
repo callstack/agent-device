@@ -26,7 +26,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 });
 
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
-import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
+import { bindTestCommandHost, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const sessionArtifacts = {
   sessionsDir: '/sessions',
@@ -102,3 +102,5 @@ test('the composed gateway reads Android app state from inside the platform pack
 
   await gateway.shutdown();
 });
+
+bindTestCommandHost();

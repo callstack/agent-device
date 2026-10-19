@@ -1,5 +1,9 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  bindTestCommandHost,
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
 import { createPerfRuntimeHost } from './platform-runtime-perf-host.ts';
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
@@ -74,3 +78,5 @@ test('the composed Android perf operation reports an unavailable ADB memory samp
     await gateway.shutdown();
   }
 });
+
+bindTestCommandHost();

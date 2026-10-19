@@ -1,3 +1,5 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import { AppError } from '@agent-device/kernel/errors';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import '../platform-runtime-android-adb-host.ts';
@@ -10,14 +12,18 @@ import {
   androidAdbSerialTarget,
   runAndroidHostAdb,
 } from '@agent-device/platform-android/mechanics';
-import { execFailureDetails, runCmd } from '@agent-device/host-kit/command';
+import { execFailureDetails, runCmd, withCommandHost } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
 
-export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
+export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRuntimeDependencies {
   return {
     clientVersion: readVersion(),
     android: {
-      createInteractor: (device, adb) => createAndroidInteractor(device, adb),
+      createInteractor: (device, adb) =>
+        withMethodScope(
+          createAndroidInteractor(device, adb),
+          async (task) => await withCommandHost({ host, requestEnv: undefined }, task),
+        ),
       createPortReverse: async (adb, options) => {
         const { createAndroidPortReverseManager } =
           await import('@agent-device/platform-android/mechanics');
@@ -87,7 +93,10 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
       },
     },
     host: {
-      runAdb: async (invocation, options) => await runAndroidHostAdb(invocation, options),
+      runAdb: async (invocation, options) =>
+        await withCommandHost({ host, requestEnv: undefined }, () =>
+          runAndroidHostAdb(invocation, options),
+        ),
       downloadFile: async (options) => {
         const { downloadLimrunFile } = await import('./limrun-download-file.ts');
         await downloadLimrunFile(options);

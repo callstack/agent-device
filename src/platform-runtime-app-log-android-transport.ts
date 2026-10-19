@@ -3,6 +3,7 @@ import type {
   AppLogProcessTransport,
 } from '@agent-device/contracts/app-log-runtime';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbProcess } from '@agent-device/platform-android/mechanics';
 import {
@@ -15,20 +16,21 @@ export async function resolveAndroidAppLogProcessTransport(
   sessionsDir: string,
   device: DeviceInfo,
   local: AppLogProcessTransport,
+  env: EnvMap,
 ): Promise<AppLogProcessTransport> {
   const { resolveScopedAndroidAdbBackgroundTransport } = await loadAndroidMechanics();
   const transport = resolveScopedAndroidAdbBackgroundTransport(device);
   if (transport.mode === 'local') return local;
   if (!transport.spawn) return Object.freeze({ mode: 'transport-composed' });
   const spawn = transport.spawn;
-  const processes = createManagedAppLogProcesses(sessionsDir, {
+  const processes = createManagedAppLogProcesses(sessionsDir, env, {
     launch: async (command, signal) => {
       signal?.throwIfAborted();
       const adb = providerAdbCommand(command, device.id);
       const child = spawn([...adb.args], {
         allowFailure: adb.options?.allowFailure,
         cwd: adb.options?.cwd,
-        env: adb.options?.env ? { ...process.env, ...adb.options.env } : undefined,
+        env: { ...env, ...adb.options?.env },
         captureOutput: false,
         signal,
       });

@@ -8,7 +8,7 @@ import { builtinProviderCandidates } from '../../builtin-provider-plugins.ts';
  */
 export async function builtinPluginInventory(): Promise<readonly PluginInventoryEntry[]> {
   const resolved = await resolveProviderPlugins(
-    builtinProviderCandidates({ LIMRUN_API_KEY: 'configured' }),
+    builtinProviderCandidates({ env: { LIMRUN_API_KEY: 'configured' }, cwd: process.cwd() }),
   );
   return resolved.inventory();
 }

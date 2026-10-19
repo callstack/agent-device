@@ -65,7 +65,7 @@ export function createPlatformRuntimeHost(options: {
 }): PlatformRuntimeHost {
   const host = options.host;
   const env = host.env;
-  const processes = createManagedAppLogProcesses(options.sessionsDir);
+  const processes = createManagedAppLogProcesses(options.sessionsDir, env);
   const localProcessTransport = Object.freeze({ mode: 'local' as const, start: processes.start });
   const appleTools = createAppleToolHost();
   const commands = Object.freeze({
@@ -116,6 +116,7 @@ export function createPlatformRuntimeHost(options: {
           options.sessionsDir,
           device,
           localProcessTransport,
+          env,
         );
       },
     }),

@@ -11,7 +11,7 @@ import {
   parseAndroidAdbArgv,
   runAndroidHostAdb,
 } from '@agent-device/platform-android/mechanics';
-import { ANDROID_EMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import { bindTestCommandHost, ANDROID_EMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import './platform-runtime-android-adb-host.ts';
 
 const UNGUARDED_DEVICE_SHELL = {
@@ -324,3 +324,5 @@ test.skipIf(process.platform === 'win32')(
     assert.equal(fs.existsSync(markerPath), true);
   },
 );
+
+bindTestCommandHost();

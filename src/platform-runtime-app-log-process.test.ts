@@ -41,9 +41,21 @@ afterEach(() => {
 });
 
 describe('managed app-log process host', () => {
+  test('starts an app-log command with its construction host even without an env overlay', async () => {
+    const fixture = processFixture();
+    await createManagedAppLogProcesses(fixture.sessionsDir, { ONLY_HOST_VALUE: 'host' }).start(
+      fixture.request,
+    );
+    expect(exec.run).toHaveBeenCalledWith(
+      'adb',
+      ['logcat', '--pid', '123'],
+      expect.objectContaining({ env: { ONLY_HOST_VALUE: 'host' } }),
+    );
+  });
+
   test('publishes a complete marker atomically and preserves invalid evidence', async () => {
     const fixture = processFixture();
-    const processes = createManagedAppLogProcesses(fixture.sessionsDir);
+    const processes = createManagedAppLogProcesses(fixture.sessionsDir, process.env);
     const running = await processes.start(fixture.request);
     expect(await processes.readMarker(fixture.markerPath)).toEqual({
       status: 'decoded',
@@ -64,7 +76,7 @@ describe('managed app-log process host', () => {
   test('authorizes cleanup by exact process identity instead of command vocabulary', async () => {
     processIdentity.command = '/opt/acme/bin/device-output --stream session-1';
     const fixture = processFixture({ settled: true });
-    const processes = createManagedAppLogProcesses(fixture.sessionsDir);
+    const processes = createManagedAppLogProcesses(fixture.sessionsDir, process.env);
 
     const running = await processes.start(fixture.request);
 
@@ -80,7 +92,7 @@ describe('managed app-log process host', () => {
     processIdentity.startTime = null;
     const fixture = processFixture({ settled: true });
     await expect(
-      createManagedAppLogProcesses(fixture.sessionsDir).start(fixture.request),
+      createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(fixture.request),
     ).rejects.toThrow('complete ownership marker');
     expect(fixture.child.kill).toHaveBeenCalledWith('SIGKILL');
     expect(fs.existsSync(fixture.markerPath)).toBe(false);
@@ -95,7 +107,7 @@ describe('managed app-log process host', () => {
       kill: vi.fn(() => true),
     });
     await expect(
-      createManagedAppLogProcesses(fixture.sessionsDir, {
+      createManagedAppLogProcesses(fixture.sessionsDir, process.env, {
         launch: async () => ({
           child,
           wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
@@ -116,7 +128,7 @@ describe('managed app-log process host', () => {
     });
 
     await expect(
-      createManagedAppLogProcesses(fixture.sessionsDir, { launch }).start(
+      createManagedAppLogProcesses(fixture.sessionsDir, process.env, { launch }).start(
         fixture.request,
         controller.signal,
       ),
@@ -128,7 +140,7 @@ describe('managed app-log process host', () => {
     const fixture = processFixture({ settled: true });
     fs.writeFileSync(fixture.markerPath, '{retained');
     await expect(
-      createManagedAppLogProcesses(fixture.sessionsDir).start(fixture.request),
+      createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(fixture.request),
     ).rejects.toThrow('must be recovered before start');
     expect(exec.run).not.toHaveBeenCalled();
     expect(fs.readFileSync(fixture.markerPath, 'utf8')).toBe('{retained');
@@ -136,7 +148,7 @@ describe('managed app-log process host', () => {
 
   test('treats PID command reuse as ownership lost and never terminates it', async () => {
     const fixture = processFixture();
-    const processes = createManagedAppLogProcesses(fixture.sessionsDir);
+    const processes = createManagedAppLogProcesses(fixture.sessionsDir, process.env);
     const running = await processes.start(fixture.request);
     processIdentity.command = 'unrelated process';
     expect(await processes.inspect(running.marker!)).toBe('ownership-lost');
@@ -147,7 +159,9 @@ describe('managed app-log process host', () => {
 
   test('handles output rejection immediately and fails the managed wait', async () => {
     const fixture = processFixture({ rejectOutput: true });
-    const running = await createManagedAppLogProcesses(fixture.sessionsDir).start(fixture.request);
+    const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(
+      fixture.request,
+    );
     fixture.child.stdout.write('line\n');
     await vi.waitFor(() => expect(fixture.child.kill).toHaveBeenCalledWith('SIGKILL'));
     fixture.resolveWait();
@@ -156,7 +170,9 @@ describe('managed app-log process host', () => {
 
   test('terminates the owned child exactly once across terminate and async disposal', async () => {
     const fixture = processFixture();
-    const running = await createManagedAppLogProcesses(fixture.sessionsDir).start(fixture.request);
+    const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(
+      fixture.request,
+    );
     const terminating = running.terminate();
     fixture.resolveWait();
     await terminating;
@@ -167,7 +183,9 @@ describe('managed app-log process host', () => {
 
   test('retains a marker that is corrupted before the managed child exits', async () => {
     const fixture = processFixture();
-    const running = await createManagedAppLogProcesses(fixture.sessionsDir).start(fixture.request);
+    const running = await createManagedAppLogProcesses(fixture.sessionsDir, process.env).start(
+      fixture.request,
+    );
     fs.writeFileSync(fixture.markerPath, '{corrupt');
     fixture.resolveWait();
     await running.wait;
@@ -177,7 +195,7 @@ describe('managed app-log process host', () => {
   test('rejects marker paths outside the sessions root', async () => {
     const fixture = processFixture({ settled: true });
     await expect(
-      createManagedAppLogProcesses(fixture.sessionsDir).start({
+      createManagedAppLogProcesses(fixture.sessionsDir, process.env).start({
         ...fixture.request,
         markerPath: path.join(path.dirname(fixture.sessionsDir), 'app-log.pid'),
       }),
@@ -191,7 +209,7 @@ describe('managed app-log process host', () => {
     fs.mkdirSync(outside);
     fs.symlinkSync(outside, linked);
     await expect(
-      createManagedAppLogProcesses(fixture.sessionsDir).start({
+      createManagedAppLogProcesses(fixture.sessionsDir, process.env).start({
         ...fixture.request,
         markerPath: path.join(linked, 'app-log.pid'),
       }),
@@ -209,7 +227,7 @@ describe('managed app-log process host', () => {
     };
     fs.writeFileSync(outsidePath, `${JSON.stringify(outsideMarker)}\n`);
     fs.symlinkSync(outsidePath, fixture.markerPath);
-    const processes = createManagedAppLogProcesses(fixture.sessionsDir);
+    const processes = createManagedAppLogProcesses(fixture.sessionsDir, process.env);
 
     await expect(processes.readMarker(fixture.markerPath)).resolves.toMatchObject({
       status: 'invalid',
