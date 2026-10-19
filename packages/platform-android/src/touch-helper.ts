@@ -1,3 +1,7 @@
+import {
+  prepareAndroidAutomationHelper,
+  androidAutomationHelperIdentity,
+} from './automation-helper-artifact.ts';
 import type { PointerTrajectory } from '@agent-device/contracts/gesture-plan-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
@@ -6,12 +10,7 @@ import { attachAdbFailureHint } from './adb-failure.ts';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 
-import {
-  resolveAndroidAdbProvider,
-  runAdbShell,
-  type AndroidAdbExecutor,
-  type AndroidAdbProvider,
-} from './adb-executor.ts';
+import { runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   parseInstrumentationRecords,
   readInstrumentationResultNumber,
@@ -21,9 +20,6 @@ import {
   type AndroidGestureViewportReading,
 } from './gesture-viewport.ts';
 import type { AndroidLoweredTouchPlan } from './touch-plan-lowering.ts';
-import { resolveAndroidHelperArtifact } from './helper-package-install.ts';
-import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
-import { ensureAndroidSnapshotHelper } from './snapshot-helper-install.ts';
 import {
   discloseHelperTouchDispatch,
   runAndroidSnapshotHelperSessionTouchCommand,
@@ -33,23 +29,16 @@ import {
   ensureAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSession,
 } from './snapshot-helper-session-lifecycle.ts';
-import {
-  getAndroidSnapshotHelperSessionDeviceKey,
-  recoverAndroidSnapshotHelperRetirement,
-} from './snapshot-helper-retirement.ts';
 import { buildAndroidSnapshotHelperCaptureOptions } from './snapshot-helper-capture.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
   type AndroidHelperSessionOptions,
-  type AndroidSnapshotHelperArtifact,
-  type AndroidSnapshotHelperInstallResult,
 } from './snapshot-helper-types.ts';
 
 export const ANDROID_TOUCH_PLAN_PROTOCOL = 'android-touch-plan-v1';
 const HELPER_GESTURE_TIMEOUT_MS = 45_000;
 const HELPER_GESTURE_TIMEOUT_OVERHEAD_MS = 15_000;
 const HELPER_VIEWPORT_TIMEOUT_MS = 45_000;
-const HELPER_INSTALL_TIMEOUT_MS = 30_000;
 const HELPER_NO_FINAL_RESULT = 'ANDROID_TOUCH_HELPER_NO_FINAL_RESULT';
 const HELPER_REPORTED_FAILURE = 'ANDROID_TOUCH_HELPER_REPORTED_FAILURE';
 
@@ -64,19 +53,11 @@ type AndroidTouchHelperGestureRequest = {
   pointers: AndroidPlannedPointerTrajectory[];
 };
 
-type PreparedAndroidTouchHelper = {
-  adb: AndroidAdbExecutor;
-  adbProvider: AndroidAdbProvider;
-  artifact: AndroidSnapshotHelperArtifact;
-  install: AndroidSnapshotHelperInstallResult;
-  deviceKey: string;
-};
-
 export async function executeAndroidTouchHelperPlan(
   device: DeviceInfo,
   plan: AndroidLoweredTouchPlan,
 ): Promise<Record<string, unknown>> {
-  const prepared = await prepareAndroidTouchHelper(device);
+  const prepared = await prepareAndroidAutomationHelper(device);
   const request = normalizeAndroidTouchHelperGestureRequest(plan);
   const timeoutMs = Math.max(
     HELPER_GESTURE_TIMEOUT_MS,
@@ -94,7 +75,7 @@ export async function executeAndroidTouchHelperPlan(
       const sessionHeaders = await runAndroidSnapshotHelperSessionTouchCommand({
         deviceKey: prepared.deviceKey,
         action: 'gesture',
-        helper: touchSessionHelperIdentity(prepared.artifact),
+        helper: androidAutomationHelperIdentity(prepared.artifact),
         payloadBase64,
         timeoutMs,
       });
@@ -130,7 +111,7 @@ export async function readAndroidTouchHelperViewportReading(
   device: DeviceInfo,
   helper: AndroidHelperSessionOptions = {},
 ): Promise<AndroidGestureViewportReading> {
-  const prepared = await prepareAndroidTouchHelper(device);
+  const prepared = await prepareAndroidAutomationHelper(device);
   if (helper.helperSessionScope === 'daemon-session') {
     // Without a live session both this read and the gesture that follows would each start their
     // own `am instrument`. The session outlives the command under this scope, so warming it here
@@ -148,7 +129,7 @@ export async function readAndroidTouchHelperViewportReading(
     const sessionHeaders = await runAndroidSnapshotHelperSessionTouchCommand({
       deviceKey: prepared.deviceKey,
       action: 'viewport',
-      helper: touchSessionHelperIdentity(prepared.artifact),
+      helper: androidAutomationHelperIdentity(prepared.artifact),
       timeoutMs: HELPER_VIEWPORT_TIMEOUT_MS,
     });
     if (sessionHeaders) return readViewportResult(sessionHeaders);
@@ -170,79 +151,6 @@ export async function readAndroidTouchHelperViewportReading(
     extraArgs: [],
     timeoutMs: HELPER_VIEWPORT_TIMEOUT_MS,
     readResult: readViewportResult,
-  });
-}
-
-// Sessions are keyed by device, so reuse must also prove the live session runs the helper binary
-// this command selected; a mismatch stops the session and the command falls back to one-shot.
-function touchSessionHelperIdentity(artifact: AndroidSnapshotHelperArtifact): {
-  packageName: string;
-  runner: string;
-  helperVersion: string;
-  helperVersionCode: number;
-  sha256: string;
-} {
-  return {
-    packageName: artifact.manifest.packageName,
-    runner: artifact.manifest.instrumentationRunner,
-    helperVersion: artifact.manifest.version,
-    helperVersionCode: artifact.manifest.versionCode,
-    sha256: artifact.manifest.sha256,
-  };
-}
-
-async function prepareAndroidTouchHelper(device: DeviceInfo): Promise<PreparedAndroidTouchHelper> {
-  const adbProvider = resolveAndroidAdbProvider(device);
-  // Same artifact precedence as snapshot capture: a provider-supplied helper artifact overrides
-  // the bundled one so both transports install and run the single shared helper (issue #1275).
-  const artifact =
-    adbProvider.snapshotHelperArtifact ?? (await resolveAndroidTouchHelperArtifact());
-  const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
-  await recoverAndroidSnapshotHelperRetirement({
-    deviceKey,
-    adb: adbProvider.exec,
-  });
-  const install = await withDiagnosticTimer(
-    'android_touch_helper_install',
-    async () =>
-      await ensureAndroidSnapshotHelper({
-        adb: adbProvider.exec,
-        adbProvider,
-        artifact,
-        deviceKey,
-        timeoutMs: HELPER_INSTALL_TIMEOUT_MS,
-      }),
-    {
-      packageName: artifact.manifest.packageName,
-      versionCode: artifact.manifest.versionCode,
-    },
-  );
-  emitDiagnostic({
-    phase: 'android_touch_helper_install_decision',
-    data: install,
-  });
-  if (install.installed) {
-    // An APK replacement kills the running instrumentation, so a persistent session started
-    // against the previous binary must not serve this command; the next snapshot restarts it.
-    await stopAndroidSnapshotHelperSession(deviceKey);
-  }
-  return { adb: adbProvider.exec, adbProvider, artifact, install, deviceKey };
-}
-
-async function resolveAndroidTouchHelperArtifact(): Promise<AndroidSnapshotHelperArtifact> {
-  return await resolveAndroidHelperArtifact({
-    helperDirName: 'snapshot-helper',
-    manifestFileName: (version) => `agent-device-android-snapshot-helper-${version}.manifest.json`,
-    parseManifest: (value) => {
-      const manifest = parseAndroidSnapshotHelperManifest(value);
-      return {
-        ...manifest,
-        assetName:
-          manifest.assetName ?? `agent-device-android-snapshot-helper-${manifest.version}.apk`,
-      };
-    },
-    unavailableMessage:
-      'Android touch gestures require the bundled Android automation helper artifact, but it was not found or could not be read',
   });
 }
 

@@ -31,6 +31,7 @@ export async function detectAndroidEscapeSurface(
     );
   }
 
+  if (await observation.readAppFocus(session.device, session.appBundleId)) return null;
   const foreground = await observation.readAppState(session.device);
   const foregroundPackage = foreground.package?.trim();
   if (!foregroundPackage || foregroundPackage === session.appBundleId) return null;

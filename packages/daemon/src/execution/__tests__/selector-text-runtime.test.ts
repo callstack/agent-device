@@ -129,3 +129,24 @@ describe('readTextForNode', () => {
     ).rejects.toThrow(/runner transport closed/);
   });
 });
+
+describe('Android text identity', () => {
+  it('carries the selected resource identity into the live read', async () => {
+    readTextAtPoint.mockClear();
+    await readTextForNode({
+      ...baseParams,
+      device: { platform: 'android' } as never,
+      node: node({
+        type: 'android.widget.TextView',
+        identifier: 'window-state',
+        bundleId: 'com.example',
+        label: 'portrait',
+      }),
+    });
+    expect(readTextAtPoint.mock.calls[0]?.[0].options?.target).toEqual({
+      identifier: 'window-state',
+      bundleId: 'com.example',
+      type: 'android.widget.TextView',
+    });
+  });
+});

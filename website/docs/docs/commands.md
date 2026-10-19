@@ -962,7 +962,7 @@ agent-device screenshot page.png        # Explicit screenshot path
 agent-device screenshot page.png --scale 0.3  # Resize both dimensions to 30% for agent context
 agent-device screenshot page.png --overlay-refs  # Draw current @eN refs and target rectangles onto the PNG
 agent-device screenshot page.png --crop-on 'label="Save"'  # Crop the capture to the frame the selector resolves on the same screen
-agent-device screenshot baseline.png --normalize-status-bar  # Normalize iOS simulator chrome for reusable diff baselines
+agent-device screenshot baseline.png --normalize-status-bar  # Normalize iOS simulator or Android chrome for reusable diff baselines
 agent-device screenshot page.png --platform web --fullscreen  # On web, --fullscreen/--full/-f captures the entire document
 agent-device viewport 1280 900 --platform web                # Resize the active web viewport for fixed-layout or 100vh apps
 agent-device screenshot textedit.png    # App-session window capture on macOS
@@ -983,6 +983,7 @@ agent-device record stop                # Stop active recording
 **Screenshots**
 
 - `--scale <factor>` resizes both dimensions, from `0.01` to `1` (full resolution). Set `AGENT_DEVICE_SCREENSHOT_SCALE=0.3` or `screenshotScale` in config as a token-conscious default; an explicit `--scale` overrides it. Leave it unset or pass `--scale 1` for pixel-diff baselines. `--max-size` is refused everywhere (CLI, `.ad` scripts, Node options, config, `AGENT_DEVICE_SCREENSHOT_MAX_SIZE`) with guidance to use `--scale`.
+- Android screenshots capture immediately by default. Use `--normalize-status-bar` to set deterministic status-bar chrome and wait for transient UI to fade. In the Node client, `stabilize: true` also enables this wait.
 - `--overlay-refs` takes a fresh snapshot and burns visible `@eN` refs and their rectangles into the PNG. With `--scale`, refs are drawn at the final size, so avoid scales where labels become unreadable. In `--json` mode each ref also has a screenshot-space `center` for `press <x> <y>` fallback.
 - `--crop-on <selector>` crops the capture to the frame the selector resolves on the same screen. It works only on iOS simulators and Android emulators, needs exactly one framed node, cannot be combined with `--overlay-refs` or `--fullscreen`, and warns when the frame is clipped. The crop is re-encoded, so do not byte-compare it with an older crop.
 - `--fullscreen` on macOS applies only to app sessions. Other surfaces (`desktop`, `menubar`, `frontmost-app`) always capture the main display and refuse `--fullscreen` with `INVALID_ARGS`.

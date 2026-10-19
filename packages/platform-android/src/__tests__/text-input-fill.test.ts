@@ -643,6 +643,9 @@ test('fillAndroid runs the whole attempt on one warm daemon-session helper', asy
     calls,
     spawnArgs,
     processes,
+    sessionInput: (input) => {
+      if (input.kind === 'fill') typed = input.text ?? '';
+    },
     sessionXml: () => {
       captureCount += 1;
       return androidInputXml({ text: typed });
@@ -835,5 +838,26 @@ test('fillAndroid with an empty text fails, not unconfirmed, when a provider fil
         },
       );
     },
+  );
+});
+
+test('a live text read keeps the resolved identity when its old point covers a sibling', () => {
+  const xml = `<hierarchy>
+    <node package="com.example" class="android.widget.TextView" resource-id="window-state" text="portrait" bounds="[200,0][300,100]" />
+    <node package="com.example" class="android.widget.TextView" resource-id="app-state" text="active" bounds="[0,0][100,100]" />
+  </hierarchy>`;
+  const target = {
+    identifier: 'window-state',
+    bundleId: 'com.example',
+    type: 'android.widget.TextView',
+  };
+  assert.equal(readAndroidTextAtPointInHierarchy(xml, 50, 50, target), 'portrait');
+  assert.equal(
+    readAndroidTextAtPointInHierarchy(xml, 50, 50, { ...target, bundleId: 'other.app' }),
+    null,
+  );
+  assert.equal(
+    readAndroidTextAtPointInHierarchy(xml.replace('app-state', 'window-state'), 50, 50, target),
+    null,
   );
 });

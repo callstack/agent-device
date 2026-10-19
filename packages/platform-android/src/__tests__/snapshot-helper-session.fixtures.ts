@@ -57,6 +57,8 @@ export type PersistentSnapshotHelperProviderOptions = {
   processes: FakeAndroidProcess[];
   sessionResponseMode?: 'ok' | 'malformed';
   sessionXml?: (sessionIndex: number, snapshotCount: number) => string;
+  sessionRequests?: string[];
+  sessionInput?: (input: { kind: string; text?: string }) => void;
   stalledSessionCleanup?: boolean;
   oneShotAttempts?: (readonly string[])[];
   oneShotXml?: string;
@@ -84,6 +86,7 @@ export function createPersistentSnapshotHelperProvider(
       const server = net.createServer((socket) => {
         socket.once('data', (chunk) => {
           const command = chunk.toString('utf8').trim();
+          options.sessionRequests?.push(command);
           const [, requestId = ''] = command.split(/\s+/, 2);
           if (command.startsWith('quit')) {
             socket.end(sessionResponse({ requestId, body: '' }));
@@ -92,6 +95,13 @@ export function createPersistentSnapshotHelperProvider(
           }
           if (options.sessionResponseMode === 'malformed') {
             socket.end('malformed session response');
+            return;
+          }
+          if (command.startsWith('input')) {
+            options.sessionInput?.(
+              JSON.parse(Buffer.from(command.split(' ')[2]!, 'base64').toString('utf8')),
+            );
+            socket.end(sessionResponse({ requestId, body: '' }));
             return;
           }
           if (command.startsWith('viewport')) {
@@ -136,6 +146,7 @@ export function createPersistentSnapshotHelperProvider(
           process.stdout.write(
             [
               'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+              'INSTRUMENTATION_STATUS: sessionCommands=input,screenshot,focus,snapshot-immediate',
               'INSTRUMENTATION_STATUS: sessionReady=true',
               'INSTRUMENTATION_STATUS_CODE: 2',
               '',
@@ -269,6 +280,7 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
         process.stdout.write(
           [
             'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+            'INSTRUMENTATION_STATUS: sessionCommands=input,screenshot,focus,snapshot-immediate',
             'INSTRUMENTATION_STATUS: sessionReady=true',
             'INSTRUMENTATION_STATUS_CODE: 2',
             '',

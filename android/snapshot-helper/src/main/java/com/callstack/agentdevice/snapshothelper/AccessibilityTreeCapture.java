@@ -90,7 +90,7 @@ final class AccessibilityTreeCapture {
         missingRootWindowTypes);
   }
 
-  private static void clearAccessibilityCache(UiAutomation automation) {
+  static void clearAccessibilityCache(UiAutomation automation) {
     // Navigation 3 and any in-place content swap that keeps the same window/Activity render every
     // destination inside one AndroidComposeView. A persistent helper session reuses a single
     // UiAutomation connection across captures, and its per-connection accessibility node cache is

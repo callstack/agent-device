@@ -180,6 +180,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
       putBaseMetadata(
           ready, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
       ready.putString("sessionReady", "true");
+      ready.putString("sessionCommands", "input,screenshot,focus,snapshot-immediate");
       ready.putString("sessionPort", Integer.toString(sessionPort));
       sendStatus(2, ready);
 
@@ -201,6 +202,12 @@ public final class SnapshotInstrumentation extends Instrumentation {
             SessionResponseWriter.writeSessionOk(socket.getOutputStream(), requestId);
             return;
           }
+          if ("input".equals(action) || "screenshot".equals(action) || "focus".equals(action)) {
+            AutomationCommandHandler.writeSessionResponse(
+                socket.getOutputStream(), requestId, action,
+                parts.length > 2 ? parts[2] : "", getConnectedUiAutomationUnchecked());
+            continue;
+          }
           if ("viewport".equals(action)) {
             TouchCommandHandler.writeSessionViewport(
                 socket.getOutputStream(), requestId, getConnectedUiAutomationUnchecked());
@@ -214,7 +221,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
                 getConnectedUiAutomationUnchecked());
             continue;
           }
-          if (!"snapshot".equals(action)) {
+          if (!"snapshot".equals(action) && !"snapshot-immediate".equals(action)) {
             SessionResponseWriter.writeSessionError(
                 socket.getOutputStream(),
                 requestId,
@@ -226,7 +233,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
               socket.getOutputStream(),
               requestId,
               waitForIdleQuietMs,
-              waitForIdleTimeoutMs,
+              "snapshot-immediate".equals(action) ? 0 : waitForIdleTimeoutMs,
               timeoutMs,
               maxDepth,
               maxNodes);

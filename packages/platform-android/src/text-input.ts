@@ -36,6 +36,7 @@ import { getAndroidTestImeOwnership } from './ime-state.ts';
 import { discloseAdbInputDispatch } from './adb-failure.ts';
 import { focusAndroid } from './input-actions.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
+import { runAndroidAutomationHelper } from './automation-helper.ts';
 
 /**
  * `input text` truncates long strings in some app/IME states (#531), so ASCII is written in short
@@ -81,6 +82,14 @@ export async function fillAndroid(
   if (providerText) {
     await providerText({ action: 'fill', target: { x, y }, text, delayMs });
     emitAndroidTextDiagnostic('fill', 'provider-native', text);
+    const verification = await verifyAndroidFilledText(device, x, y, text, helper);
+    return completeAndroidFillVerification(text, beforeTarget, verification);
+  }
+  if (
+    delayMs === 0 &&
+    (await runAndroidAutomationHelper(device, 'input', { kind: 'fill', x, y, text }))
+  ) {
+    emitAndroidTextDiagnostic('fill', 'android-helper', text);
     const verification = await verifyAndroidFilledText(device, x, y, text, helper);
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
@@ -530,7 +539,7 @@ function chunkAndroidInputText(text: string, chunkSize: number): string[] {
 
 function emitAndroidTextDiagnostic(
   action: AndroidTextInputAction,
-  backend: 'provider-native' | 'adb-shell' | 'test-ime',
+  backend: 'provider-native' | 'adb-shell' | 'test-ime' | 'android-helper',
   text: string,
 ): void {
   emitDiagnostic({

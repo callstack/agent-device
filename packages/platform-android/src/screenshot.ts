@@ -5,6 +5,7 @@ import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { runAndroidExecOut, runAndroidShell, sleep } from './adb.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import { probeAndroidDisplayRotation } from './input-actions.ts';
+import { runAndroidAutomationHelper } from './automation-helper.ts';
 
 // PNG file signature: 0x89 P N G \r \n 0x1A \n
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -17,6 +18,7 @@ const ANDROID_SCREENSHOT_ROTATION_GRACE_MS = 250;
 
 export type AndroidScreenshotOptions = {
   stabilize?: boolean;
+  normalizeStatusBar?: boolean;
 };
 
 export async function screenshotAndroid(
@@ -24,7 +26,7 @@ export async function screenshotAndroid(
   outPath: string,
   options: AndroidScreenshotOptions = {},
 ): Promise<ScreenshotCaptureFacts> {
-  if (options.stabilize === false) {
+  if (!(options.stabilize ?? options.normalizeStatusBar ?? false)) {
     return await captureAndroidScreenshotWithRotation(device, outPath);
   }
 
@@ -98,30 +100,28 @@ async function settledWithin<T>(pending: Promise<T>, graceMs: number): Promise<T
 }
 
 async function captureAndroidScreenshot(device: DeviceInfo, outPath: string): Promise<void> {
-  const result = await runAndroidExecOut(device, ['screencap', '-p'], {
-    binaryStdout: true,
-  });
-  if (!result.stdoutBuffer) {
+  const helper = await runAndroidAutomationHelper(device, 'screenshot');
+  const bytes = helper
+    ? Buffer.from(helper.payloadBase64 ?? '', 'base64')
+    : (await runAndroidExecOut(device, ['screencap', '-p'], { binaryStdout: true })).stdoutBuffer;
+  if (!bytes) {
     throw new AppError('COMMAND_FAILED', 'Failed to capture screenshot');
   }
 
   // On multi-display devices (e.g. Galaxy Z Fold), adb screencap may write a
   // warning to stdout before the PNG data. Strip any leading garbage by
   // locating the PNG signature and discarding everything before it.
-  const pngOffset = result.stdoutBuffer.indexOf(PNG_SIGNATURE);
+  const pngOffset = bytes.indexOf(PNG_SIGNATURE);
   if (pngOffset < 0) {
     throw new AppError('COMMAND_FAILED', 'Screenshot data does not contain a valid PNG header');
   }
 
-  const pngEndOffset = findPngEndOffset(result.stdoutBuffer, pngOffset);
+  const pngEndOffset = findPngEndOffset(bytes, pngOffset);
   if (!pngEndOffset) {
     throw new AppError('COMMAND_FAILED', 'Screenshot data does not contain a complete PNG payload');
   }
 
-  await requireAndroidAdbHost().files.writeBytes(
-    outPath,
-    result.stdoutBuffer.subarray(pngOffset, pngEndOffset),
-  );
+  await requireAndroidAdbHost().files.writeBytes(outPath, bytes.subarray(pngOffset, pngEndOffset));
 }
 
 function findPngEndOffset(buffer: Buffer, pngStartOffset: number): number | null {

@@ -177,6 +177,7 @@ function createFakeTouchHelperSessionProvider(
         process.stdout.write(
           [
             'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+            'INSTRUMENTATION_STATUS: sessionCommands=input,screenshot,focus,snapshot-immediate',
             'INSTRUMENTATION_STATUS: sessionReady=true',
             'INSTRUMENTATION_STATUS_CODE: 2',
             '',
@@ -811,3 +812,148 @@ for (const row of SESSION_DISPATCH_ROWS) {
     });
   });
 }
+
+test('input actions reuse the live automation socket without adb input calls', async () => {
+  const { pressAndroid, backAndroid, pressAndroidEnter } = await import('../input-actions.ts');
+  const device = makeIsolatedDevice();
+  const inputs: unknown[] = [];
+  const provider = createFakeTouchHelperSessionProvider((command, requestId) => {
+    if (command.startsWith('snapshot')) return snapshotSessionResponse(requestId);
+    if (command.startsWith('input')) {
+      inputs.push(JSON.parse(Buffer.from(command.split(' ')[2]!, 'base64').toString('utf8')));
+    }
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+    });
+  });
+  const adbCalls: (readonly string[])[] = [];
+  await withAndroidAdbProvider(
+    {
+      ...provider,
+      exec: currentVersionAdb(async (args) => {
+        adbCalls.push(args);
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }),
+    },
+    { serial: device.id },
+    async () => {
+      await captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: getAndroidSnapshotHelperSessionDeviceKey(device),
+        packageName: manifest.packageName,
+        instrumentationRunner: manifest.instrumentationRunner,
+      });
+      await pressAndroid(device, 12, 34);
+      await backAndroid(device);
+      await pressAndroidEnter(device);
+    },
+  );
+  assert.deepEqual(inputs, [
+    { kind: 'tap', x: 12, y: 34 },
+    { kind: 'key', keyCode: 4 },
+    { kind: 'key', keyCode: 66 },
+  ]);
+  assert.equal(
+    adbCalls.some((args) => args.includes('input')),
+    false,
+  );
+});
+
+test('a failed helper input is not resent through adb', async () => {
+  const { pressAndroid } = await import('../input-actions.ts');
+  const device = makeIsolatedDevice();
+  let inputCalls = 0;
+  const provider = createFakeTouchHelperSessionProvider((command, requestId) => {
+    if (command.startsWith('snapshot')) return snapshotSessionResponse(requestId);
+    inputCalls++;
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'false',
+      errorType: 'java.lang.IllegalStateException',
+      message: 'Input dispatch failed',
+    });
+  });
+  const adbCalls: (readonly string[])[] = [];
+  await withAndroidAdbProvider(
+    {
+      ...provider,
+      exec: currentVersionAdb(async (args) => {
+        adbCalls.push(args);
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }),
+    },
+    { serial: device.id },
+    async () => {
+      await captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: getAndroidSnapshotHelperSessionDeviceKey(device),
+        packageName: manifest.packageName,
+        instrumentationRunner: manifest.instrumentationRunner,
+      });
+      await assert.rejects(
+        pressAndroid(device, 12, 34),
+        (error: AppError) => error.details?.dispatched === 'unknown',
+      );
+    },
+  );
+  assert.equal(inputCalls, 1);
+  assert.equal(
+    adbCalls.some((args) => args.includes('input')),
+    false,
+  );
+});
+
+test('fresh helper focus answers app guards while system windows retain ANR diagnostics', async () => {
+  const { createAndroidObservationAdapter } = await import('../observation.ts');
+  const device = makeIsolatedDevice();
+  let systemWindow = false;
+  const provider = createFakeTouchHelperSessionProvider((command, requestId) => {
+    if (command.startsWith('snapshot')) return snapshotSessionResponse(requestId);
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+      focusedPackage: systemWindow ? 'android' : 'com.example.app',
+      windowType: systemWindow ? '3' : '1',
+    });
+  });
+  const runAdb = vi.fn(async () => ({
+    exitCode: 0,
+    stderr: '',
+    stdout: 'mCurrentFocus=Window{1 u0 Application Not Responding: com.example.app}',
+  }));
+  const observer = createAndroidObservationAdapter({
+    runAdb,
+    readSnapshotNodes: async () => [],
+    openApp: async () => {},
+  });
+  await withAndroidAdbProvider(
+    { ...provider, exec: currentVersionAdb(async () => ({ exitCode: 0, stdout: '', stderr: '' })) },
+    { serial: device.id },
+    async () => {
+      await captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: getAndroidSnapshotHelperSessionDeviceKey(device),
+        packageName: manifest.packageName,
+        instrumentationRunner: manifest.instrumentationRunner,
+      });
+      assert.deepEqual(await observer.readBlockingDialog(device), { status: 'clear' });
+      assert.equal(
+        await observer.readAppFocus(device, 'com.example.app', { requireNoBlockingDialog: true }),
+        true,
+      );
+      assert.equal(runAdb.mock.calls.length, 0);
+      systemWindow = true;
+      const blocked = await observer.readBlockingDialog(device);
+      assert.equal(blocked.status, 'dialog');
+      if (blocked.status === 'dialog') assert.equal(blocked.focus.package, 'com.example.app');
+      assert.equal(runAdb.mock.calls.length, 1);
+    },
+  );
+});

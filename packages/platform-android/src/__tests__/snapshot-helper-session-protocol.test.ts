@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   assertAndroidSnapshotHelperTouchSessionHeaders,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
@@ -139,3 +140,32 @@ function sessionResponse(params: {
     .map(([key, value]) => `${key}=${value}`)
     .join('\n')}\n\n${params.xml}`;
 }
+
+test('helper timeout diagnostics omit encoded text input', async () => {
+  const net = await import('node:net');
+  const { sendAndroidSnapshotHelperSessionCommand } =
+    await import('../snapshot-helper-session-protocol.ts');
+  const sockets = new Set<import('node:net').Socket>();
+  const server = net.createServer((socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const encoded = Buffer.from(JSON.stringify({ text: 'private fill value' })).toString('base64');
+  try {
+    await assert.rejects(
+      sendAndroidSnapshotHelperSessionCommand(address.port, `input request-1 ${encoded}`, 20),
+      (error) => {
+        assert(error instanceof AppError);
+        assert(!JSON.stringify(error).includes(encoded));
+        assert.equal(error.details?.command, 'input');
+        return true;
+      },
+    );
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

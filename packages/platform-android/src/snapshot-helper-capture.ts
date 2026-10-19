@@ -65,11 +65,17 @@ export async function captureAndroidSnapshotWithHelper(
   });
   let result: Awaited<ReturnType<AndroidSnapshotHelperCaptureOptions['adb']>>;
   try {
-    result = await options.adb(buildAndroidSnapshotHelperArgs(resolved), {
-      allowFailure: true,
-      timeoutMs: resolved.commandTimeoutMs,
-      signal: options.signal,
-    });
+    result = await options.adb(
+      buildAndroidSnapshotHelperArgs({
+        ...resolved,
+        ...(options.skipIdleWait ? { waitForIdleTimeoutMs: 0 } : {}),
+      }),
+      {
+        allowFailure: true,
+        timeoutMs: resolved.commandTimeoutMs,
+        signal: options.signal,
+      },
+    );
   } catch (error) {
     if (!options.signal?.aborted) throw error;
     await retireCanceledAndroidSnapshotHelperCapture({

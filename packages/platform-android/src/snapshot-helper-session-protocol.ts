@@ -48,7 +48,7 @@ export function sendAndroidSnapshotHelperSessionCommand(
       socket.destroy();
       reject(
         new AppError('COMMAND_FAILED', 'Android snapshot helper session request timed out', {
-          command,
+          command: command.split(' ', 1)[0],
           timeoutMs,
           port,
         }),
@@ -85,6 +85,7 @@ export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
   port: number;
   commandTimeoutMs: number;
   signal?: AbortSignal;
+  skipIdleWait?: boolean;
 }): Promise<AndroidSnapshotHelperOutput> {
   const requestId = `snapshot-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   // The socket waits out the whole command budget the session was given. The device-side
@@ -92,7 +93,7 @@ export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
   // built from that wait plus a fixed overhead cut off slow-but-healthy captures (tester-army/e2e#841).
   const response = await sendAndroidSnapshotHelperSessionCommand(
     params.port,
-    `snapshot ${requestId}`,
+    `${params.skipIdleWait ? 'snapshot-immediate' : 'snapshot'} ${requestId}`,
     params.commandTimeoutMs,
     params.signal,
   );
@@ -106,7 +107,7 @@ export function waitForAndroidSnapshotHelperSessionReady(
   childProcess: AndroidAdbProcess,
   timeoutMs: number,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<ReadonlySet<string>> {
   return new Promise((resolve, reject) => {
     let output = '';
     const timer = setTimeout(() => {
@@ -123,11 +124,13 @@ export function waitForAndroidSnapshotHelperSessionReady(
       output += chunk.toString();
       if (
         output.includes(`agentDeviceProtocol=${ANDROID_SNAPSHOT_HELPER_PROTOCOL}`) &&
-        output.includes('sessionReady=true')
+        output.includes('sessionReady=true') &&
+        output.includes('INSTRUMENTATION_STATUS_CODE: 2')
       ) {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
-        resolve();
+        const commands = output.match(/INSTRUMENTATION_STATUS: sessionCommands=([^\r\n]*)\r?\n/);
+        resolve(new Set(commands?.[1]?.split(',').filter(Boolean)));
       }
     };
     const onAbort = () => {

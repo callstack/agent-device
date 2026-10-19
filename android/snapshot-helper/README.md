@@ -95,10 +95,16 @@ connection: the client connects, sends a single command line, reads the response
 closes that connection; the process stays alive for the next connection:
 
 - `snapshot <requestId>` — capture and return an XML snapshot, same semantics as the default mode
+- `snapshot-immediate <requestId>` — capture fresh XML without an idle wait when the caller owns settling
+- `input <requestId> <payloadBase64>` — inject a tap, key, or point-targeted text replacement
+- `focus <requestId>` — read the focused window type and root package after clearing the accessibility cache
+- `screenshot <requestId>` — return a PNG in the `payloadBase64` header
 - `viewport <requestId>` — return interactive-window viewport bounds
 - `gesture <requestId> <payloadBase64>` — inject a planned touch gesture (same payload as the
   one-shot `gesture` mode)
 - `quit <requestId>` — acknowledge and stop the session
+
+The ready record advertises optional operations in `sessionCommands`. A host must check support before sending them. Text replacement retains a focus tap; the host owns post-write verification. Input failures must not be resent because a mutation may already have reached the app.
 
 `viewport` and `gesture` responses are headers-only (no body): `kind`, `injectedEvents`,
 `elapsedMs` for `gesture`, and `x`, `y`, `width`, `height` for `viewport`. `snapshot` responses carry

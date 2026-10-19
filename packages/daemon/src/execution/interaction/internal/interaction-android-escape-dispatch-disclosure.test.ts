@@ -21,6 +21,7 @@ async function pressThatLeftTheApp(): Promise<unknown> {
     appBundleId: 'com.example.app',
   });
   const observation = {
+    readAppFocus: async () => false,
     readAppState: async () => ({ package: 'com.android.settings' }),
     isPermissionPackage: async () => false,
   } as unknown as AndroidObservationAdapter;

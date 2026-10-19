@@ -44,7 +44,15 @@ export async function readTextForNode(params: {
   const context = contextFromFlags(flags, appBundleId, traceOutPath);
   const outcome = await readTextAtPoint({
     point: center,
-    options: { appBundleId, surface },
+    options: {
+      appBundleId,
+      surface,
+      ...(device.platform === 'android' && node.identifier
+        ? {
+            target: { identifier: node.identifier, bundleId: node.bundleId, type: node.type },
+          }
+        : {}),
+    },
     execution: runtimeExecutionFromContext(context),
   });
   if (outcome.status === 'read') return outcome.text;

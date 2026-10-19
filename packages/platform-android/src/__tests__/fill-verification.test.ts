@@ -162,10 +162,15 @@ test('the pre-action target read shares the daemon-session helper with the sampl
   assert.equal(target?.resourceId, 'com.example:id/field');
   assert.equal(session.captureCount(), 3);
   assert.equal(session.spawnArgs.length, 1);
+  assert.equal(
+    session.requests.filter((command) => command.startsWith('snapshot-immediate ')).length,
+    session.captureCount(),
+  );
   assert.equal(session.forwardRemovals(), 0);
 });
 
 type FillHelperSession = {
+  requests: string[];
   provider: AndroidAdbProvider;
   spawnArgs: (readonly string[])[];
   processes: FakeAndroidProcess[];
@@ -179,11 +184,13 @@ function createFillHelperSession(
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
+  const requests: string[] = [];
   let captureCount = 0;
   const provider = createPersistentSnapshotHelperProvider({
     calls,
     spawnArgs,
     processes,
+    sessionRequests: requests,
     sessionXml: () => {
       captureCount += 1;
       return filledFieldXml(options.textForCapture?.(captureCount) ?? 'chips');
@@ -194,6 +201,7 @@ function createFillHelperSession(
     spawnArgs,
     processes,
     captureCount: () => captureCount,
+    requests,
     forwardRemovals: () => calls.filter(isAndroidHelperForwardRemoval).length,
   };
 }
@@ -259,4 +267,34 @@ test('a commit counts as dropped when the field shows its hint or keeps its old 
   );
   assert.equal(isAndroidFillCommitDropped(observed('Jan'), before), false);
   assert.equal(isAndroidFillCommitDropped(observed('Jan'), null), false);
+});
+
+test('helper window provenance identifies a custom IME without an adb keyboard probe', async () => {
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const processes: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls,
+    spawnArgs,
+    processes,
+    sessionXml: () => `<hierarchy>
+      <node text="Form" window-type="1" window-active="true" window-focused="true" class="android.widget.FrameLayout" bounds="[0,0][400,800]" package="com.example">${filledFieldXml('chips').replace('focused="true"', 'focused="false"').replace('<?xml version="1.0" encoding="UTF-8"?>', '').replace('<hierarchy>', '').replace('</hierarchy>', '')}<node class="android.widget.TextView" text="Form" bounds="[0,100][200,150]" /></node>
+      <node window-type="2" package="dev.custom.keyboard"><node package="dev.custom.keyboard" class="android.widget.EditText" text="chips" focused="true" bounds="[0,200][200,300]" /></node>
+    </hierarchy>`,
+  });
+  let probes = 0;
+  const verification = await withFillHelperProvider(
+    {
+      ...provider,
+      exec: async (args, options) => {
+        if (args.includes('input_method')) probes++;
+        return await provider.exec(args, options);
+      },
+    },
+    () =>
+      verifyAndroidFilledText(device, 10, 10, 'chips', { helperSessionScope: 'daemon-session' }),
+  );
+  assert.equal(probes, 0);
+  assert.equal(verification.reason, 'ime_capture');
+  assert.equal(verification.actualInput?.packageName, 'dev.custom.keyboard');
 });

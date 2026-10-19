@@ -1,18 +1,22 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { Point } from '@agent-device/kernel/snapshot';
+import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import { invalidRuntimeContract } from './runtime-contract-error.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
-/**
- * Neutral intent for one point-addressed element read. The point is already resolved from the
- * node the caller matched, so the operation names no command, request, session, or CLI flag.
- */
+/** Identity carried from a resolved node into its live text read. */
+export type ElementTextTarget = Pick<SnapshotNode, 'identifier' | 'bundleId' | 'type'>;
+
+/** A live text read at a resolved point, with optional identity to preserve the selected control. */
 export type ReadTextAtPointInput = Readonly<{
   point: Point;
-  options?: Readonly<{ appBundleId?: string; surface?: SessionSurface }>;
+  options?: Readonly<{
+    appBundleId?: string;
+    surface?: SessionSurface;
+    target?: ElementTextTarget;
+  }>;
   /** Same runner metadata a capture needs; reuses that type rather than restating it. */
   execution?: SnapshotRuntimeExecution;
 }>;
@@ -113,6 +117,7 @@ export function bindElementTextRuntime(
           appBundleId: input.options?.appBundleId,
           surface: input.options?.surface,
           signal,
+          ...(input.options?.target ? { target: input.options.target } : {}),
         }),
       );
     },
