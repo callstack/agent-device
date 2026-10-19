@@ -3,7 +3,7 @@ import {
   parseTelephonyEventInput,
   parseTelephonyPositionals,
   telephonyPositionals,
-} from './device-rotation.ts';
+} from './telephony-input.ts';
 
 test('parses each action with its number, normalizing the action and trimming the number', () => {
   expect(parseTelephonyEventInput({ action: ' CALL ', number: ' 5551234 ' })).toEqual({

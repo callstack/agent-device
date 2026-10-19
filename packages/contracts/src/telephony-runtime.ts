@@ -1,4 +1,4 @@
-import type { TelephonyEventInput } from './device-rotation.ts';
+import type { TelephonyEventInput } from './telephony-input.ts';
 
 /**
  * One simulated telephony event. The owner returns nothing: the emulator console acknowledges the

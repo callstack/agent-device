@@ -152,7 +152,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
     },
     ['action', 'button', 'message'],
   ),
-  // packages/contracts/src/device-rotation.ts — discriminated union on `action`.
+  // packages/contracts/src/telephony-input.ts — discriminated union on `action`.
   telephony: {
     type: 'object',
     oneOf: [
