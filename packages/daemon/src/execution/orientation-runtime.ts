@@ -25,15 +25,18 @@ export function readRequestedOrientation(positionals: readonly string[]): Orient
 }
 
 /** The neutral intent one orientation change carries, projected from a resolved command context. */
+function orientationIntent(context: DaemonCommandContext): Omit<SetOrientationInput, 'rotation'> {
+  return {
+    ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
+    execution: runtimeExecutionFromContext(context),
+  };
+}
+
 function setOrientationInput(
   rotation: DeviceRotation,
   context: DaemonCommandContext,
 ): SetOrientationInput {
-  return {
-    rotation,
-    ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
-    execution: runtimeExecutionFromContext(context),
-  };
+  return { rotation, ...orientationIntent(context) };
 }
 
 /**
@@ -59,12 +62,7 @@ export async function resolveBoundOrientationRuntime(
         bindDevice: params.bindDevice,
       },
       async (runtime, context) => {
-        await runtime.operations.unlockOrientation({
-          ...(context.appBundleId === undefined
-            ? {}
-            : { options: { appBundleId: context.appBundleId } }),
-          execution: runtimeExecutionFromContext(context),
-        });
+        await runtime.operations.unlockOrientation(orientationIntent(context));
         return {
           action: 'orientation',
           orientation: 'auto',
