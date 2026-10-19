@@ -125,8 +125,6 @@ runs:
       shell: bash
     - name: Run iOS physical device smoke replay
       if: env.IOS_UDID != ''
-      env:
-        IOS_UDID: ${{ vars.IOS_UDID }}
       run: |
         pnpm clean:daemon
         node bin/agent-device.mjs test test/integration/replays/ios/device/01-physical-lifecycle.ad --udid "$IOS_UDID" --retries 2 --artifacts-dir test/artifacts/replays-ios-device-smoke --report-junit test/artifacts/replays-ios-device-smoke.junit.xml

@@ -69,6 +69,7 @@ jobs:
         timeout-minutes: 80
         env:
           IOS_RUNTIME_VERSION: '26.2'
+          IOS_UDID: ${{ vars.IOS_UDID }}
           AGENT_DEVICE_STATE_DIR: ${{ env.IOS_STATE_DIR }}
           AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ env.IOS_DERIVED_PATH }}
           AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS: '420000'
