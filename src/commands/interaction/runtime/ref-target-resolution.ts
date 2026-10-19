@@ -213,12 +213,16 @@ function reconcileFreshObservation(params: {
   if (
     params.platform === 'android' &&
     authorized.node.identifier &&
+    authorized.node.bundleId &&
     authorizedMatches.length === 1 &&
     surfaceScopedNodes(frameTree).surfaceBundleId ===
       surfaceScopedNodes(observation).surfaceBundleId
   ) {
     const candidates = observation.nodes.filter(
-      (node) => hasSnapshotRef(node) && localIdentitiesEqual(identity, readNodeLocalIdentity(node)),
+      (node) =>
+        hasSnapshotRef(node) &&
+        node.bundleId === authorized.node.bundleId &&
+        localIdentitiesEqual(identity, readNodeLocalIdentity(node)),
     );
     if (candidates.length !== 1)
       return { snapshot: frameTree, resolved: authorized, adoptedFrom: 'authorized-frame' };

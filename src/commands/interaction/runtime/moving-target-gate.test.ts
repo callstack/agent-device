@@ -46,6 +46,7 @@ function slideTree(x: number, over?: { label?: string; surfaceBundleId?: string 
         depth: 1,
         parentIndex: 0,
         type: 'Button',
+        bundleId: 'com.example.app',
         label: over?.label ?? 'Slide target',
         rect: { x, y: BUTTON_Y, width: 120, height: 50 },
         hittable: true,
@@ -589,6 +590,31 @@ test('Android refuses to certify an identity duplicated in the new observation',
     ref: 'e3',
     rect: { x: 160, y: BUTTON_Y, width: 120, height: 50 },
   });
+  const device = createGuardedDevice({
+    stored: frame,
+    refFrame: frame,
+    trees: [fresh],
+    ...DISTURBING_HISTORY,
+  });
+  await assert.rejects(
+    () => device.press('ref'),
+    (error: unknown) => {
+      assert.equal(
+        (error as AppError).details?.reason,
+        INTERACTION_ERROR_REASONS.targetStillMoving,
+      );
+      return true;
+    },
+  );
+  assert.deepEqual(device.taps(), []);
+});
+
+test('Android refuses to adopt matching identity from another application', async () => {
+  const frame = slideTree(MID_FLIGHT_X);
+  frame.nodes[1]!.identifier = 'stable-target';
+  const fresh = slideTree(RESTING_X);
+  fresh.nodes[1]!.identifier = 'stable-target';
+  fresh.nodes[1]!.bundleId = 'com.example.other';
   const device = createGuardedDevice({
     stored: frame,
     refFrame: frame,
