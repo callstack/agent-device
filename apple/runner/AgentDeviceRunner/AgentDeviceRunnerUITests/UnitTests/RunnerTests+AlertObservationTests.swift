@@ -165,7 +165,7 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testAlertActivationDoesNotConsultInterruptionHandlingWithANotificationBanner() throws {
+  func testAlertActivationConfirmsBeforeDeadlineWithoutHandlingTheNotificationBanner() throws {
     try withNotificationBannerAlert { alert in
       var consultedInterruptions: [String] = []
       let monitor = addUIInterruptionMonitor(withDescription: "alert activation banner") { element in
@@ -174,18 +174,10 @@ extension RunnerTests {
       }
       defer { removeUIInterruptionMonitor(monitor) }
 
-      _ = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline))
-
-      XCTAssertEqual(consultedInterruptions, [], "alert activation consulted XCTest's interruption handling")
-    }
-  }
-
-  @MainActor
-  func testAlertActivationConfirmsBeforeDeadlineWithANotificationBanner() throws {
-    try withNotificationBannerAlert { alert in
       let deadline = Date().addingTimeInterval(RunnerTests.alertActivationDeadline)
       let response = handleAlert(alert, action: "accept", deadline: deadline)
 
+      XCTAssertEqual(consultedInterruptions, [], "alert activation consulted XCTest's interruption handling")
       XCTAssertTrue(response.ok, String(describing: response.error))
       XCTAssertLessThan(Date(), deadline)
       XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")
