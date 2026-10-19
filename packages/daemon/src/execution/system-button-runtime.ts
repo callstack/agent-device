@@ -119,3 +119,20 @@ export async function resolveBoundHardwareKeyRuntime(
     },
   );
 }
+
+/** The family's commands: the no-argument buttons plus `hardware-key`, its one keyed control. */
+type SystemControlCommand = SystemButtonCommand | 'hardware-key';
+
+export function isSystemControlCommand(command: string): command is SystemControlCommand {
+  return command === 'hardware-key' || isSystemButtonCommand(command);
+}
+
+/** The generic route's one arm for the system-button family. */
+export async function resolveBoundSystemControlRuntime(
+  command: SystemControlCommand,
+  params: { device: DeviceInfo; positionals: readonly string[] } & RuntimeAdmissionBindings,
+): Promise<ResolvedGenericExecution> {
+  return command === 'hardware-key'
+    ? await resolveBoundHardwareKeyRuntime(params)
+    : await resolveBoundSystemButtonRuntime(command, params);
+}

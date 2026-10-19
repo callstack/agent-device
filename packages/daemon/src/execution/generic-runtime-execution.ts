@@ -9,9 +9,8 @@ import type { SessionState } from '../core/session-state.ts';
 import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
 import { resolveBoundBackRuntime } from './back-runtime.ts';
 import {
-  isSystemButtonCommand,
-  resolveBoundHardwareKeyRuntime,
-  resolveBoundSystemButtonRuntime,
+  isSystemControlCommand,
+  resolveBoundSystemControlRuntime,
 } from './system-button-runtime.ts';
 import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
 import { resolveBoundFoldRuntime } from './fold-runtime.ts';
@@ -40,9 +39,11 @@ export async function resolveGenericRuntimeExecution(
   }> &
     ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution> {
-  if (isSystemButtonCommand(params.req.command)) {
-    return await resolveBoundSystemButtonRuntime(params.req.command, {
+  const positionals = params.req.positionals ?? [];
+  if (isSystemControlCommand(params.req.command)) {
+    return await resolveBoundSystemControlRuntime(params.req.command, {
       device: params.session.device,
+      positionals,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
       bindDevice: params.bindDevice,
@@ -58,7 +59,7 @@ export async function resolveGenericRuntimeExecution(
     case 'focus':
       return await resolveBoundFocusRuntime({
         device: params.session.device,
-        positionals: params.req.positionals ?? [],
+        positionals,
         inspectFacts: params.inspectFacts,
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,
@@ -66,7 +67,7 @@ export async function resolveGenericRuntimeExecution(
     case 'scroll':
       return await resolveBoundScrollRuntime({
         device: params.session.device,
-        positionals: params.req.positionals ?? [],
+        positionals,
         context: params.context,
         // The scroll's own observation is decided here rather than in its execution closure: this is
         // the last moment the session's stored tree is still the newest observation, before the
@@ -80,7 +81,7 @@ export async function resolveGenericRuntimeExecution(
     case 'viewport':
       return await resolveBoundViewportRuntime({
         device: params.session.device,
-        positionals: params.req.positionals ?? [],
+        positionals,
         inspectFacts: params.inspectFacts,
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,
@@ -95,7 +96,7 @@ export async function resolveGenericRuntimeExecution(
     case 'orientation':
       return await resolveBoundOrientationRuntime({
         device: params.session.device,
-        positionals: params.req.positionals ?? [],
+        positionals,
         inspectFacts: params.inspectFacts,
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,
@@ -104,7 +105,7 @@ export async function resolveGenericRuntimeExecution(
       return await resolveBoundFoldRuntime({
         keyframes: params.req.flags?.keyframes,
         device: params.session.device,
-        positionals: params.req.positionals ?? [],
+        positionals,
         inspectFacts: params.inspectFacts,
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,
@@ -114,7 +115,7 @@ export async function resolveGenericRuntimeExecution(
       const { resolveBoundTelephonyRuntime } = await import('./telephony-runtime.ts');
       return await resolveBoundTelephonyRuntime({
         device: params.session.device,
-        positionals: params.req.positionals ?? [],
+        positionals,
         inspectFacts: params.inspectFacts,
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,
@@ -123,16 +124,8 @@ export async function resolveGenericRuntimeExecution(
     case 'tv-remote':
       return await resolveBoundTvRemoteRuntime({
         device: params.session.device,
-        positionals: params.req.positionals ?? [],
+        positionals,
         durationMs: params.req.flags?.durationMs,
-        inspectFacts: params.inspectFacts,
-        platformServices: params.platformServices,
-        bindDevice: params.bindDevice,
-      });
-    case 'hardware-key':
-      return await resolveBoundHardwareKeyRuntime({
-        device: params.session.device,
-        positionals: params.req.positionals ?? [],
         inspectFacts: params.inspectFacts,
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,
