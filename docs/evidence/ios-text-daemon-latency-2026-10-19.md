@@ -71,6 +71,18 @@ The first text baseline was interrupted by this investigation's cleanup and cont
 
 This follow-up does not rerun the full upstream 42-case suite or test a physical device. It does not establish a general speed lead over the Swift engine. The earlier cross-engine report remains the comparison for the full suite and screenshots. Field clearing still costs about 1.1–1.2 seconds in these samples; it is the larger remaining text-entry cost.
 
+## Follow-up: can replacement reach two seconds?
+
+The next experiment replaced the caret edge-tap and delete burst with public, element-scoped XCTest calls: `typeKey("a", modifierFlags: .command)` followed by one delete. The warmup split, binding, and final read-back stayed unchanged. The candidate ran only in a disposable checkout. No further runtime optimization was accepted.
+
+This follow-up used T3's installed `0.21.25` CLI, with explicit runner artifact paths, on the same upstream app and simulator. It therefore has a separate baseline from the SDK measurements above. Four baseline password replacements had a median of 3,219.0 ms, and all four reached successful login. Their median native clearing phase was 1,097.7 ms. A confirmed fresh candidate runner returned one replacement in 2,553.4 ms, with a 709.9 ms clearing phase. The next snapshot was routed to `com.apple.SafariViewService` and failed with an `invalid-viewport` timeout, so login was not verified. The evidence does not establish why that surface was selected. That timer is provisional and does not establish a successful-fill speed improvement.
+
+The native safety comparison rejected the shortcut independently of that capture failure. A masked, prefilled fixture ignored Select All and exposed a separate app-owned exact-match indicator. The candidate returned success while that indicator showed that stale text remained. The candidate passed the existing two early-navigation regressions but failed the new whole-value replacement case: **2 passed, 1 failed**. The same fixture, test selection, and environment with the current clearing implementation passed **3 of 3**. This control's runtime source matched commit `6a47e6177bf91be8ce1896b5dc789d1fe1ba9e4b` byte-for-byte.
+
+The [samples, phase timings, complete candidate/probe patch, and reproduction command](ios-fill-clear-latency-2026-10-19.json) preserve this result. An initial harness attempt omitted noninteractive success text; another candidate attempt reused the retained baseline runner. Both are excluded. The valid candidate was confirmed by its fresh xcodebuild artifact path and logged Command-A dispatches. The simulator was restarted between artifacts and shut down after the experiments.
+
+There is no demonstrated safe two-second replacement here. Select All does not prove that a masked input was cleared, and final literal verification cannot supply that proof. The next design work is an identity-bound clear operation with observable completion, plus consolidating duplicate native reads within each observation. Keep the existing opaque-field clearing path until that evidence exists. Removing the first-character guard or globally increasing typing speed does not address these failures.
+
 ## Validation and reproduction
 
 Base: `8f3eb3d2efde3654a560fddb39127d556e068352`, with the preserved implementation patch. Device: iPhone 17 Pro, iOS 27.0, `BC54AC11-CD86-4C10-8C4E-5101C773FFEB`. Host: M4 Pro, Xcode 27.1, Node 26.11.1. The live runs used the worktree patch; the PR records the published validation commit.

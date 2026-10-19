@@ -1,0 +1,172 @@
+{
+  "sourceCommit": "6a47e6177bf91be8ce1896b5dc789d1fe1ba9e4b",
+  "upstream": "https://github.com/tester-army/e2e/pull/1236",
+  "app": "dev.e2e.benchmark",
+  "device": "BC54AC11-CD86-4C10-8C4E-5101C773FFEB",
+  "os": "iOS 27.0",
+  "cliVersion": "0.21.25",
+  "baseline": {
+    "samples": [
+      {
+        "kind": "secure-replace",
+        "ms": 3206.373416999999,
+        "ok": true
+      },
+      {
+        "kind": "ordinary-replace",
+        "ms": 3818.350292000003,
+        "ok": true
+      },
+      {
+        "kind": "secure-replace",
+        "ms": 3225.345207999999,
+        "ok": true
+      },
+      {
+        "kind": "ordinary-replace",
+        "ms": 3774.5687499999985,
+        "ok": true
+      },
+      {
+        "kind": "secure-replace",
+        "ms": 3218.5184169999993,
+        "ok": true
+      },
+      {
+        "kind": "ordinary-replace",
+        "ms": 3638.0006250000006,
+        "ok": true
+      },
+      {
+        "kind": "secure-replace",
+        "ms": 3219.4461249999877,
+        "ok": true
+      },
+      {
+        "kind": "ordinary-replace",
+        "ms": 3995.6581250000017,
+        "ok": true
+      }
+    ],
+    "nativePasswordPhases": [
+      {
+        "commandId": "runner-b82cbf9c-4242-4e9a-a3de-c167caec3ae3",
+        "phasesMs": {
+          "focus": 554.8,
+          "initial-resolve": 71.7,
+          "clear": 1098.6,
+          "type-first": 318.6,
+          "warmup": 66.7,
+          "type-remaining": 439.2,
+          "verify": 46.8,
+          "total": 2096.0
+        }
+      },
+      {
+        "commandId": "runner-1882b089-67a8-44f7-ae83-cbb6f3810599",
+        "phasesMs": {
+          "focus": 569.7,
+          "initial-resolve": 67.4,
+          "clear": 1092.0,
+          "type-first": 309.9,
+          "warmup": 63.7,
+          "type-remaining": 456.6,
+          "verify": 45.4,
+          "total": 2081.0
+        }
+      },
+      {
+        "commandId": "runner-192297dc-c264-4059-9118-a786f6837cfd",
+        "phasesMs": {
+          "focus": 544.9,
+          "initial-resolve": 64.1,
+          "clear": 1100.5,
+          "type-first": 307.6,
+          "warmup": 79.1,
+          "type-remaining": 472.1,
+          "verify": 45.9,
+          "total": 2119.7
+        }
+      },
+      {
+        "commandId": "runner-8b702125-ca4f-4b6f-a8e7-cf23438f6c14",
+        "phasesMs": {
+          "focus": 544.6,
+          "initial-resolve": 67.2,
+          "clear": 1096.8,
+          "type-first": 318.8,
+          "warmup": 68.9,
+          "type-remaining": 449.1,
+          "verify": 45.5,
+          "total": 2098.2
+        }
+      }
+    ],
+    "nativeTotalExcludesFocus": true
+  },
+  "rejectedCandidate": {
+    "samples": [
+      {
+        "kind": "secure-replace",
+        "ms": 2553.417874999999,
+        "ok": false
+      }
+    ],
+    "nativePasswordPhases": [
+      {
+        "commandId": "runner-10f9f1f5-956d-41a4-b180-cd776eac14d7",
+        "phasesMs": {
+          "focus": 562.7,
+          "initial-resolve": 62.3,
+          "clear": 709.9,
+          "type-first": 307.9,
+          "warmup": 72.6,
+          "type-remaining": 450.8,
+          "verify": 47.3,
+          "total": 1696.8
+        }
+      }
+    ],
+    "passwordLoginVerified": false,
+    "failure": "The next snapshot routed to com.apple.SafariViewService and failed with invalid-viewport; the surface-selection cause is unproven. Timer is provisional, not a successful fill speed claim."
+  },
+  "rejectedHarnessRuns": {
+    "baseline": "interactive-only snapshot omitted success-message",
+    "selectall": "retained baseline runner reused; not candidate evidence"
+  },
+  "guardTest": {
+    "newTest": "testExperimentalClearMustRemoveTheWholeMaskedValueWhenSelectAllIsIgnored",
+    "otherTests": [
+      "testFillFailsWhenAppReplacesInputBeforeTextIsDelivered",
+      "testFillFailsWhenAppRemovesInputBeforeTextIsDelivered"
+    ],
+    "candidate": {
+      "passedTests": 2,
+      "failedTests": 1,
+      "skippedTests": 0,
+      "testFailures": [
+        {
+          "failureText": "XCTAssertFalse failed - fill reported success while the app retained stale text",
+          "targetName": "AgentDeviceRunnerUITests",
+          "testIdentifier": 1,
+          "testIdentifierString": "RunnerTests/testExperimentalClearMustRemoveTheWholeMaskedValueWhenSelectAllIsIgnored()",
+          "testIdentifierURL": "test://com.apple.xcode/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests/testExperimentalClearMustRemoveTheWholeMaskedValueWhenSelectAllIsIgnored",
+          "testName": "testExperimentalClearMustRemoveTheWholeMaskedValueWhenSelectAllIsIgnored()"
+        }
+      ]
+    },
+    "control": {
+      "passedTests": 3,
+      "failedTests": 0,
+      "skippedTests": 0
+    },
+    "candidateExit": 65,
+    "controlExit": 0,
+    "controlRuntimeMatchesCommit": true
+  },
+  "candidateAndProbePatch": "diff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerApp.m b/apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerApp.m\nindex 03e77eac81..4329ddb1aa 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerApp.m\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunner/AgentDeviceRunnerApp.m\n@@ -69,6 +69,13 @@ @interface AgentDeviceMaskedTextField : UITextField\n \n @implementation AgentDeviceMaskedTextField\n \n+- (void)selectAll:(id)sender {\n+  if ([NSProcessInfo.processInfo.arguments containsObject:@\"--agent-device-ignore-select-all\"]) {\n+    return;\n+  }\n+  [super selectAll:sender];\n+}\n+\n - (NSString *)accessibilityValue {\n   NSUInteger length = self.text.length;\n   if (length == 0) {\n@@ -468,7 +475,10 @@ static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(void) {\n \n - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {\n   if (self.maskedDeliveryStatus != nil) {\n-    self.maskedDeliveryStatus.text = [textField.text hasSuffix:@\"not-a-secret-123\"] ? @\"delivered\" : @\"pending\";\n+    BOOL exact = [NSProcessInfo.processInfo.arguments containsObject:@\"--agent-device-exact-clear-probe\"];\n+    BOOL delivered = exact ? [textField.text isEqualToString:@\"not-a-secret-123\"]\n+                          : [textField.text hasSuffix:@\"not-a-secret-123\"];\n+    self.maskedDeliveryStatus.text = delivered ? @\"delivered\" : @\"pending\";\n   }\n   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst\n   // typed faster than the app renders loses the characters that arrived while a render was in\ndiff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift\nindex 02b936bda3..870622a333 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift\n@@ -254,6 +254,11 @@ extension RunnerTests {\n        existing.isEmpty {\n       return\n     }\n+#if os(iOS)\n+    element.typeKey(\"a\", modifierFlags: .command)\n+    element.typeText(XCUIKeyboardKey.delete.rawValue)\n+    return\n+#endif\n #if !os(tvOS)\n     moveCaretToEnd(app: app, element: element)\n #endif\ndiff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+TextTypingTests.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+TextTypingTests.swift\nindex ef7475e197..df0201e020 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+TextTypingTests.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+TextTypingTests.swift\n@@ -4,6 +4,35 @@ import XCTest\n // `textEntryMode: \"append\"`, and the bare submit key with no mode.\n extension RunnerTests {\n #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)\n+  @MainActor\n+  func testExperimentalClearMustRemoveTheWholeMaskedValueWhenSelectAllIsIgnored() throws {\n+    app.launchArguments = [\n+      \"--agent-device-text-entry-regression\",\n+      \"--agent-device-text-entry-masked-value\",\n+      \"--agent-device-text-entry-prefilled\",\n+      \"--agent-device-ignore-select-all\",\n+      \"--agent-device-exact-clear-probe\",\n+    ]\n+    app.launch()\n+    defer { invalidateCachedTarget(reason: \"unit_test_cleanup\"); app.terminate() }\n+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))\n+    let field = app.textFields[\"agent-device-hardware-keyboard-input\"]\n+    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))\n+    try tapHardwareKeyboardInput(commandId: \"tap-select-all-probe\")\n+    let response = executeTypeCommand(\n+      activeApp: app,\n+      command: try runnerCommandFixture(\n+        #\"{\"command\":\"type\",\"commandId\":\"fill-select-all-probe\",\"text\":\"not-a-secret-123\",\"textEntryMode\":\"replace\"}\"#\n+      )\n+    )\n+    let delivered = app.staticTexts[\"agent-device-masked-delivery\"]\n+    let exact = XCTNSPredicateExpectation(predicate: NSPredicate(format: \"label == %@\", \"delivered\"), object: delivered)\n+    let committed = XCTWaiter.wait(for: [exact], timeout: 2) == .completed\n+    XCTAssertFalse(response.ok && !committed, \"fill reported success while the app retained stale text\")\n+    XCTAssertTrue(response.ok, String(describing: response.error))\n+    XCTAssertTrue(committed, \"the app did not receive exactly the replacement\")\n+  }\n+\n   @MainActor\n   func testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText() throws {\n     let command = try runnerCommandFixture(\n",
+  "reproduction": {
+    "setup": "Create a disposable checkout at sourceCommit; run pnpm install --frozen-lockfile && pnpm build. Apply candidateAndProbePatch. Build iOS with AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 and a distinct AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH. For control, remove only the five-line Select All runtime change; keep the probe fixture/test patch unchanged. Build into another DerivedData directory. Run sequentially with no competing device processes.",
+    "testCommand": "xcodebuild test-without-building -xctestrun <derived>/Build/Products/AgentDeviceRunner_AgentDeviceRunnerUITests_iphonesimulator27.1-arm64.xctestrun -destination platform=iOS\\ Simulator,id=BC54AC11-CD86-4C10-8C4E-5101C773FFEB -parallel-testing-enabled NO -only-testing:AgentDeviceRunnerUITests/RunnerTests/testExperimentalClearMustRemoveTheWholeMaskedValueWhenSelectAllIsIgnored -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillFailsWhenAppReplacesInputBeforeTextIsDelivered -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillFailsWhenAppRemovesInputBeforeTextIsDelivered"
+  }
+}
