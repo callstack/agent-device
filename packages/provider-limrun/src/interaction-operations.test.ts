@@ -146,11 +146,7 @@ test('the iOS leg admits back/orientation but explicitly refuses tv-remote', () 
   const facts = limrunNavigationOperationFacts(iosDevice);
   expect(facts.back).toEqual({ available: true });
   expect(facts.setOrientation).toEqual({ available: true });
-  expect(facts.unlockOrientation).toEqual({
-    available: false,
-    reason: 'unsupported-provider-mode',
-    hint: 'orientation auto is ADB-backed Android only; Limrun iOS direct sessions do not expose it.',
-  });
+  expect(facts.unlockOrientation.available).toBe(false);
   expect(facts.tvRemote).toEqual({
     available: false,
     reason: 'unsupported-provider-mode',

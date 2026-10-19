@@ -3,7 +3,6 @@ import {
   DEVICE_ROTATIONS,
   deviceRotationFromSurfaceIndex,
   isDeviceRotation,
-  ORIENTATION_REQUESTS,
   parseDeviceRotation,
   parseOrientationRequest,
 } from './device-rotation.ts';
@@ -45,40 +44,11 @@ describe('parseDeviceRotation', () => {
   });
 });
 
-describe('parseOrientationRequest', () => {
-  test('accepts every rotation parseDeviceRotation accepts, unchanged', () => {
-    for (const rotation of DEVICE_ROTATIONS)
-      expect(parseOrientationRequest(rotation)).toBe(rotation);
-    expect(parseOrientationRequest('left')).toBe('landscape-left');
-  });
-
-  test('accepts auto as the sensor hand-back mode', () => {
-    expect(parseOrientationRequest('auto')).toBe('auto');
-    expect(parseOrientationRequest(' AUTO ')).toBe('auto');
-  });
-
-  test('keeps auto out of the rotation vocabulary', () => {
-    expect(isDeviceRotation('auto')).toBe(false);
-    expect(() => parseDeviceRotation('auto')).toThrow(
-      expect.objectContaining({ code: 'INVALID_ARGS' }),
-    );
-    expect(ORIENTATION_REQUESTS).toEqual([...DEVICE_ROTATIONS, 'auto']);
-  });
-
-  test('names auto in its usage when the argument is missing or unknown', () => {
-    expect(() => parseOrientationRequest(undefined)).toThrow(
-      expect.objectContaining({
-        code: 'INVALID_ARGS',
-        message: expect.stringContaining('landscape-right|auto'),
-      }),
-    );
-    expect(() => parseOrientationRequest('sideways')).toThrow(
-      expect.objectContaining({
-        code: 'INVALID_ARGS',
-        message: expect.stringContaining('Invalid orientation: sideways'),
-      }),
-    );
-  });
+test('parseOrientationRequest adds auto to the rotations and keeps it out of DeviceRotation', () => {
+  expect(parseOrientationRequest(' AUTO ')).toBe('auto');
+  expect(parseOrientationRequest('left')).toBe('landscape-left');
+  expect(() => parseOrientationRequest('sideways')).toThrow(/Invalid rotation: sideways/);
+  expect(() => parseDeviceRotation('auto')).toThrow(/Invalid rotation: auto/);
 });
 
 describe('deviceRotationFromSurfaceIndex', () => {

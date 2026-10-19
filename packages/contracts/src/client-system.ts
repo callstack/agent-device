@@ -88,7 +88,7 @@ export type BackCommandOptions = DeviceCommandBaseOptions & {
 export type HomeCommandOptions = DeviceCommandBaseOptions;
 
 export type OrientationCommandOptions = DeviceCommandBaseOptions & {
-  /** A fixed rotation, or `auto` to hand rotation back to the device sensor (Android). */
+  /** A fixed rotation, or `auto` to hand rotation back to the sensor (ADB-backed Android only). */
   orientation: OrientationRequest;
 };
 

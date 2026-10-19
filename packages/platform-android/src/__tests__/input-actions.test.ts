@@ -547,36 +547,13 @@ test('setAndroidOrientation leaves a display that reports no rotation to the set
   });
 });
 
-const UNLOCK_CALLS = [
-  ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '1'],
-  ['shell', 'settings', 'get', 'system', 'accelerometer_rotation'],
-];
-
-test('unlockAndroidOrientation hands rotation to the sensor and reads the setting back', async () => {
-  await withFakeAdb(
-    (args) => (args[2] === 'get' ? '1\n' : undefined),
-    async ({ calls, device }) => {
-      await unlockAndroidOrientation(device);
-      // No `user_rotation` write and no display poll: the sensor decides the next rotation.
-      assert.deepEqual(calls, UNLOCK_CALLS);
-    },
-  );
-});
-
-test('unlockAndroidOrientation fails when the setting does not take', async () => {
-  await withFakeAdb(
-    (args) => (args[2] === 'get' ? '0\n' : undefined),
-    async ({ calls, device }) => {
-      await assert.rejects(unlockAndroidOrientation(device), (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(error.message, /orientation auto did not take effect/);
-        const details = (error as { details?: Record<string, unknown> }).details ?? {};
-        assert.equal(details.observedAccelerometerRotation, '0');
-        return true;
-      });
-      assert.deepEqual(calls, UNLOCK_CALLS);
-    },
-  );
+test('unlockAndroidOrientation turns auto-rotate on and neither writes user_rotation nor polls', async () => {
+  await withFakeAdb(displayReporting(['1']), async ({ calls, device }) => {
+    await unlockAndroidOrientation(device);
+    assert.deepEqual(calls, [
+      ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '1'],
+    ]);
+  });
 });
 
 test('probeAndroidDisplayRotation reads the rotation of the only display', async () => {

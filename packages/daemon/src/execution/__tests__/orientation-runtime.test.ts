@@ -155,13 +155,8 @@ test('auto admits the unlock use alone and reports the sensor mode without a rot
   expect(harness.setOrientation).not.toHaveBeenCalled();
 });
 
-test('auto is refused before binding on an owner whose unlock fact is unavailable', async () => {
-  // A rotation is admitted (Apple, WebDriver) while the sensor hand-back is not: the owner's
-  // `setOrientation` fact must not stand in for the `unlockOrientation` cell `auto` names.
-  const facts = orientationRuntimeOperationFacts({
-    orientation: available,
-    unlock: { available: false, reason: 'unsupported-platform-leaf', hint: 'Android only.' },
-  });
+test('auto is refused before binding on an owner that rotates but declares no unlock', async () => {
+  const facts = orientationRuntimeOperationFacts({ orientation: available });
   const harness = runtimeHarness(facts.setOrientation, undefined, facts.unlockOrientation);
 
   const resolved = await resolveBoundOrientationRuntime({
@@ -180,7 +175,7 @@ test('auto is refused before binding on an owner whose unlock fact is unavailabl
       code: 'UNSUPPORTED_OPERATION',
       message: 'orientation auto is not supported on this device',
       details: { reason: 'unsupported-platform-leaf' },
-      hint: 'Android only.',
+      hint: 'orientation auto is only supported on ADB-backed Android.',
     },
   });
   expect(harness.bindDevice).not.toHaveBeenCalled();
@@ -189,7 +184,7 @@ test('auto is refused before binding on an owner whose unlock fact is unavailabl
 test('resolves one admitted binding and reports the owner-observed rotation', async () => {
   const setOrientation = vi.fn(async () => ({ orientation: 'landscape-left' as const }));
   const harness = runtimeHarness(
-    orientationRuntimeOperationFacts({ orientation: available, unlock: available }).setOrientation,
+    orientationRuntimeOperationFacts({ orientation: available }).setOrientation,
     setOrientation,
   );
 
@@ -260,7 +255,7 @@ test('rejects an unavailable exact-owner fact before binding', async () => {
 test('request router joins orientation admission to execution and ref invalidation', async () => {
   const setOrientation = vi.fn(async () => ({ orientation: 'landscape-left' as const }));
   const harness = runtimeHarness(
-    orientationRuntimeOperationFacts({ orientation: available, unlock: available }).setOrientation,
+    orientationRuntimeOperationFacts({ orientation: available }).setOrientation,
     setOrientation,
   );
   const sessionStore = makeSessionStore('agent-device-orientation-generic-');

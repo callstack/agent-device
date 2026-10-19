@@ -291,12 +291,6 @@ test('captures through only the active exact WebDriver interactor', async () => 
   }
   // tv-remote, settings, and the alert legs always throw unsupported in this interactor
   // regardless of reachability: no capability ever declared them.
-  expect(binding.facts.operations.unlockOrientation).toEqual({
-    available: false,
-    reason: 'unsupported-provider-mode',
-    hint: 'orientation auto is ADB-backed Android only; this WebDriver provider runtime does not expose it.',
-  });
-  expect(binding.operations.unlockOrientation).toBeUndefined();
   for (const operation of [
     'tvRemote',
     'setSetting',

@@ -8,10 +8,9 @@ import {
   MAX_FOLD_KEYFRAMES,
   parseFoldInput,
   parseFoldKeyframesJson,
+  ORIENTATION_REQUESTS,
   FOLD_POSES,
   FOLD_POSE_USAGE,
-  ORIENTATION_REQUEST_USAGE,
-  ORIENTATION_REQUESTS,
   parseOrientationRequest,
   TELEPHONY_ACTIONS,
   TELEPHONY_CALL_ACTIONS,
@@ -264,7 +263,7 @@ const backCommandDescription =
 const homeCommandDescription =
   'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
 const orientationCommandDescription =
-  'Set device orientation on iOS and Android. A rotation locks the device to it; auto hands rotation back to the sensor on ADB-backed Android (local and Limrun) without waiting for the display to rotate; every other backend refuses auto.';
+  'Set device orientation on iOS and Android. auto hands rotation back to the sensor on ADB-backed Android (local and Limrun); other backends refuse it.';
 const foldGuidance = {
   hingeEvent: 'simulator HID hinge event',
   permissions: 'Device Hub and host Accessibility permission are not required.',
@@ -443,7 +442,7 @@ const backCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const orientationCliSchema = {
-  usageOverride: `orientation <${ORIENTATION_REQUEST_USAGE}>`,
+  usageOverride: `orientation <${ORIENTATION_REQUESTS.join('|')}>`,
   positionalArgs: ['orientation'],
 } as const satisfies CommandSchemaOverride;
 

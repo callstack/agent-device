@@ -398,11 +398,7 @@ export type Interactor = {
    */
   home?(): Promise<void>;
   setOrientation(orientation: DeviceRotation): Promise<{ orientation?: DeviceRotation } | void>;
-  /**
-   * Optional (parity with `home`): hands rotation back to the device sensor after a
-   * `setOrientation` locked it. Only an owner whose `setOrientation` leaves a lock behind carries
-   * it; its fact refuses the request before binding everywhere else.
-   */
+  /** Hands rotation back to the sensor; only an owner whose `setOrientation` locks it carries this. */
   unlockOrientation?(): Promise<void>;
   performGesture?(plan: GesturePlan): Promise<Record<string, unknown> | void>;
   /**

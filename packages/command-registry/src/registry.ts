@@ -1500,7 +1500,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     // R44 retires this command's capability bucket and its `dispatch` leaf together: admission is
-    // the argument-selected owner fact, and the only execution is that one bound operation.
+    // the owner's `setOrientation` fact (`unlockOrientation` for `auto`); only that operation runs.
     ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: orientationRuntimePlanUses },
   },

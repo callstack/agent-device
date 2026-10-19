@@ -115,6 +115,10 @@ export const backRuntimeUse = defineUse({ required: ['back'] });
 export const homeRuntimeUse = defineUse({ required: ['home'] });
 export const orientationRuntimeUse = defineUse({ required: ['setOrientation'] });
 export const orientationUnlockRuntimeUse = defineUse({ required: ['unlockOrientation'] });
+export const orientationRuntimePlanUses = Object.freeze([
+  orientationRuntimeUse,
+  orientationUnlockRuntimeUse,
+] as const);
 export const foldRuntimeUse = defineUse({ required: ['setFoldPose'] });
 export const telephonyRuntimeUse = defineUse({ required: ['sendTelephonyEvent'] });
 export const tvRemoteRuntimeUse = defineUse({ required: ['tvRemote'] });
@@ -814,15 +818,6 @@ export const alertRuntimePlanUses = Object.freeze([
   alertWaitUse,
   alertAcceptUse,
   alertDismissUse,
-] as const);
-
-/**
- * `orientation`'s two argument-selected uses: a fixed rotation binds `setOrientation`, `auto`
- * binds `unlockOrientation`. The daemon admits exactly one per request, never both.
- */
-export const orientationRuntimePlanUses = Object.freeze([
-  orientationRuntimeUse,
-  orientationUnlockRuntimeUse,
 ] as const);
 
 /**

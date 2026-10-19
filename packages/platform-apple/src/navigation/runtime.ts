@@ -89,12 +89,6 @@ const orientationOsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
-/** The runner sets `XCUIDevice.orientation`; there is no sensor hand-back on Apple targets. */
-const orientationUnlockUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'orientation auto is ADB-backed Android only; on Apple targets request a rotation, for example orientation portrait.',
-} as const);
 function appleOrientationFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return orientationKindUnavailable;
   return appleMobileInputEligible(device) ? available : orientationOsUnavailable;
@@ -178,10 +172,7 @@ export function appleNavigationFacts(device: DeviceInfo) {
       appSwitcher: appleSpringboardFact(device, appSwitcherKindUnavailable),
       actionButton: appleActionButtonFact(device),
     }),
-    ...orientationRuntimeOperationFacts({
-      orientation: appleOrientationFact(device),
-      unlock: orientationUnlockUnavailable,
-    }),
+    ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),
     ...keyboardRuntimeOperationFacts({
       unsupported: keyboardCellUnavailable,

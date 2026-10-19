@@ -1,7 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import {
   FOLD_POSES,
-  ORIENTATION_AUTO,
   ORIENTATION_REQUESTS,
   TELEPHONY_ACTIONS,
 } from '@agent-device/contracts/device';
@@ -210,7 +209,7 @@ function buildTelephonyActionSummary(result: Record<string, unknown>): string {
 function buildOrientationActionSummary(result: Record<string, unknown>): string {
   const orientation = readEnum(result.orientation, ORIENTATION_REQUESTS);
   if (!orientation) return 'Changed orientation';
-  if (orientation === ORIENTATION_AUTO) return 'Rotation follows the device sensor';
+  if (orientation === 'auto') return 'Rotation follows the device sensor';
   // An unconfirmed rotation is not a rotation: the daemon keeps the requested
   // value for compatibility, so the recorded action must disclose it instead of
   // asserting that the device rotated.

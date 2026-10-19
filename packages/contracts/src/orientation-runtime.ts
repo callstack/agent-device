@@ -1,7 +1,7 @@
 import type { DeviceRotation } from './device-rotation.ts';
 import { requireInteractorMethod } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
+import { unavailableFact, type RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
@@ -21,18 +21,9 @@ export type SetOrientationInput = Readonly<{
  */
 export type SetOrientationResult = Readonly<{ orientation?: DeviceRotation }>;
 
-/**
- * Neutral intent for handing rotation back to the device sensor (`orientation auto`). Carries
- * runner metadata only: the mode is which operation the daemon binds, never an argument here.
- */
-export type UnlockOrientationInput = Readonly<{
-  options?: Readonly<{ appBundleId?: string }>;
-  execution?: SnapshotRuntimeExecution;
-}>;
-
 export type OrientationRuntimeOperations = Readonly<{
   setOrientation(input: SetOrientationInput): Promise<SetOrientationResult | void>;
-  unlockOrientation(input: UnlockOrientationInput): Promise<void>;
+  unlockOrientation(input: Omit<SetOrientationInput, 'rotation'>): Promise<void>;
 }>;
 
 export type OrientationRuntimeOperationFacts = Readonly<{
@@ -40,15 +31,19 @@ export type OrientationRuntimeOperationFacts = Readonly<{
   unlockOrientation: RuntimeOperationFact;
 }>;
 
-/**
- * Both cells are stated by every owner: a fixed rotation and the sensor hand-back are different
- * mechanisms (ADB writes two system settings for one and clears one for the other; no other
- * backend exposes a hand-back), so neither fact is derived from the other.
- */
+const unlockUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'orientation auto is only supported on ADB-backed Android.',
+);
+
+/** An owner that leaves `unlock` undeclared refuses `orientation auto`. */
 export function orientationRuntimeOperationFacts(
-  input: Readonly<{ orientation: RuntimeOperationFact; unlock: RuntimeOperationFact }>,
+  input: Readonly<{ orientation: RuntimeOperationFact; unlock?: RuntimeOperationFact }>,
 ): OrientationRuntimeOperationFacts {
-  return Object.freeze({ setOrientation: input.orientation, unlockOrientation: input.unlock });
+  return Object.freeze({
+    setOrientation: input.orientation,
+    unlockOrientation: input.unlock ?? unlockUnavailable,
+  });
 }
 
 /**
@@ -73,17 +68,12 @@ export function bindOrientation(
   });
 }
 
-/**
- * Binds the sensor hand-back the same way. `unlockOrientation` is an optional interactor member;
- * facts admit it only for owners that implement it, so a missing method at call time is a
- * runtime-contract error, never a successful no-op (parity with the system-button binder).
- */
 export function bindOrientationUnlock(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): Pick<OrientationRuntimeOperations, 'unlockOrientation'> {
   return Object.freeze({
-    unlockOrientation: async (input: UnlockOrientationInput) => {
+    unlockOrientation: async (input: Omit<SetOrientationInput, 'rotation'>) => {
       signal.throwIfAborted();
       const interactor = await resolveInteractor({
         ...input.execution,

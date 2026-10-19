@@ -43,12 +43,10 @@ export {
   deviceRotationSurfaceDegrees,
   foldPoseForHingeAngle,
   isDeviceRotation,
-  ORIENTATION_AUTO,
   ORIENTATION_REQUESTS,
-  ORIENTATION_REQUEST_USAGE,
   parseDeviceRotation,
-  parseFoldPose,
   parseOrientationRequest,
+  parseFoldPose,
 } from '../device-rotation.ts';
 export {
   TELEPHONY_ACTIONS,

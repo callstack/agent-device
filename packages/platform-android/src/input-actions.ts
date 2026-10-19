@@ -75,39 +75,16 @@ export async function setAndroidOrientation(
   orientation: DeviceRotation,
 ): Promise<void> {
   const userRotation = resolveAndroidUserRotation(orientation);
-  await runAndroidShell(device, ['settings', 'put', 'system', ACCELEROMETER_ROTATION_KEY, '0']);
+  await runAndroidShell(device, ['settings', 'put', 'system', 'accelerometer_rotation', '0']);
   await runAndroidShell(device, ['settings', 'put', 'system', 'user_rotation', userRotation]);
   await settleAndroidOrientation(device, orientation, userRotation);
 }
 
-/**
- * Hands rotation back to the sensor after `setAndroidOrientation` locked it. Only
- * `accelerometer_rotation` changes: `user_rotation` keeps the last requested index, which the
- * sensor overrides as soon as the device moves. There is no rotation to settle on, so the setting
- * is read back once instead of polling the display, whose next rotation is the sensor's choice
- * (an emulator usually reports portrait).
- */
+/** No display settle: the sensor picks the next rotation, so there is no target to wait for. */
 export async function unlockAndroidOrientation(device: DeviceInfo): Promise<void> {
-  await runAndroidShell(device, ['settings', 'put', 'system', ACCELEROMETER_ROTATION_KEY, '1']);
-  const result = await runAndroidShell(device, [
-    'settings',
-    'get',
-    'system',
-    ACCELEROMETER_ROTATION_KEY,
-  ]);
-  const observed = result.stdout.trim();
-  if (observed === '1') return;
-  throw new AppError(
-    'COMMAND_FAILED',
-    `orientation auto did not take effect: ${ACCELEROMETER_ROTATION_KEY} still reads ${observed || '(empty)'}`,
-    {
-      observedAccelerometerRotation: observed,
-      hint: 'A device policy may pin the rotation setting. Check `adb shell settings get system accelerometer_rotation`.',
-    },
-  );
+  await runAndroidShell(device, ['settings', 'put', 'system', 'accelerometer_rotation', '1']);
 }
 
-const ACCELEROMETER_ROTATION_KEY = 'accelerometer_rotation';
 const ORIENTATION_SETTLE_TIMEOUT_MS = 15_000;
 const ORIENTATION_SETTLE_POLL_MS = 500;
 
