@@ -32,6 +32,13 @@ runs:
         mkdir -p .tmp
         echo "$FRONTMOST" > .tmp/ios-host-focus-before
       shell: bash
+    - name: Boot iOS test simulator
+      id: ios-simulator
+      uses: ./.github/actions/boot-ios-test-simulator
+      with:
+        runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
+        preferred-device-name: iPhone 17 Pro
+        wait-for-boot: 'false'
     - name: Restore and build iOS XCTest runner
       uses: ./.github/actions/setup-apple-runner-build
       with:
@@ -41,12 +48,12 @@ runs:
         gate: swift-runner-ios
         xcuitest-platform: ios
         xcuitest-destination: generic/platform=iOS Simulator
-    - name: Boot iOS test simulator
-      id: ios-simulator
-      uses: ./.github/actions/boot-ios-test-simulator
-      with:
-        runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
-        preferred-device-name: iPhone 17 Pro
+    - name: Wait for iOS test simulator
+      run: |
+        bash scripts/wait-for-ios-simulator.sh \
+          "${{ steps.ios-simulator.outputs.simulator-udid }}" \
+          "${{ steps.ios-simulator.outputs.boot-timeout-seconds }}"
+      shell: bash
     - name: Run iOS runner platform checks
       id: ios-xctest
       if: steps.xctest-impact.outputs.run != 'false'

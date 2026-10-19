@@ -14,7 +14,15 @@ inputs:
     required: false
     default: '300'
 
+  wait-for-boot:
+    description: 'Wait for boot completion before returning'
+    required: false
+    default: 'true'
+
 outputs:
+  boot-timeout-seconds:
+    description: 'Boot wait budget for a deferred readiness check'
+    value: ${{ inputs.boot-timeout-seconds }}
   simulator-udid:
     description: 'UDID of the booted iOS simulator'
     value: ${{ steps.boot.outputs.simulator-udid }}
@@ -24,8 +32,14 @@ runs:
   steps:
     - name: Resolve and boot iOS test simulator
       id: boot
+      env:
+        WAIT_FOR_BOOT: ${{ inputs.wait-for-boot }}
       run: |
         set -euo pipefail
+        if [[ "$WAIT_FOR_BOOT" != 'true' && "$WAIT_FOR_BOOT" != 'false' ]]; then
+          echo 'wait-for-boot must be true or false' >&2
+          exit 1
+        fi
         RUNTIME_VERSION="${{ inputs.runtime-version }}"
         RUNTIME_TOKEN="SimRuntime.iOS-${RUNTIME_VERSION//./-}"
         export RUNTIME_TOKEN
@@ -58,15 +72,7 @@ runs:
         echo "simulator-udid=$UDID" >> "$GITHUB_OUTPUT"
         xcrun simctl shutdown all || true
         xcrun simctl boot "$UDID" || true
-        TIMEOUT_SECONDS="${{ inputs.boot-timeout-seconds }}"
-        set +e
-        perl -e 'alarm shift; exec @ARGV' "$TIMEOUT_SECONDS" xcrun simctl bootstatus "$UDID" -b
-        BOOTSTATUS_EXIT="$?"
-        set -e
-        if [ "$BOOTSTATUS_EXIT" -eq 142 ]; then
-          echo "Timed out waiting ${TIMEOUT_SECONDS}s for simulator $UDID to boot" >&2
-          xcrun simctl list devices || true
-          exit 1
+        if [ "$WAIT_FOR_BOOT" = 'true' ]; then
+          bash scripts/wait-for-ios-simulator.sh "$UDID" "${{ inputs.boot-timeout-seconds }}"
         fi
-        exit "$BOOTSTATUS_EXIT"
       shell: bash

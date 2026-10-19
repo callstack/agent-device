@@ -547,3 +547,158 @@ test('a shallow PR merge still yields a known change set for all Apple selectors
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('iOS boot overlaps the native build and readiness remains mandatory before XCTest', () => {
+  const document = parse(
+    fs.readFileSync(path.join(repoRoot, '.github/actions/smoke-ios-run/action.yml'), 'utf8'),
+  ) as { runs: { steps: AppleStep[] } };
+  const steps = document.runs.steps;
+  const boot = steps.findIndex((step) => step.id === 'ios-simulator');
+  const build = steps.findIndex(
+    (step) => step.uses === './.github/actions/setup-apple-runner-build',
+  );
+  const wait = steps.findIndex((step) => step.run?.includes('scripts/wait-for-ios-simulator.sh'));
+  const tests = steps.findIndex((step) => step.id === 'ios-xctest');
+  expect(boot).toBeGreaterThanOrEqual(0);
+  expect(build).toBeGreaterThan(boot);
+  expect(wait).toBeGreaterThan(build);
+  expect(tests).toBeGreaterThan(wait);
+  expect(steps[boot]!.with?.['wait-for-boot']).toBe('false');
+  expect(steps[wait]!.run).toContain('steps.ios-simulator.outputs.simulator-udid');
+  expect(steps[wait]!.run).toContain('steps.ios-simulator.outputs.boot-timeout-seconds');
+  expect(steps[wait]!.if).toBeUndefined();
+  expect(steps[wait]!['continue-on-error']).not.toBe(true);
+});
+
+function simulatorBootFixture(mode: 'ready' | 'failed' | 'stalled') {
+  const directory = mkdtempForTestSync('ios-boot-wait-');
+  const calls = path.join(directory, 'calls.ndjson');
+  fs.writeFileSync(
+    path.join(directory, 'xcrun'),
+    `#!${process.execPath}
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.FIXTURE_CALLS, JSON.stringify(args) + '\\n');
+if (args.includes('list')) console.log(JSON.stringify({ devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-2': [{ udid: 'owned-ios', name: 'iPhone 17 Pro', isAvailable: true, state: 'Shutdown' }] } }));
+if (args.includes('bootstatus')) {
+  if (process.env.FIXTURE_BOOT_MODE === 'failed') process.exit(7);
+  if (process.env.FIXTURE_BOOT_MODE === 'stalled') setInterval(() => {}, 1000);
+}
+`,
+    { mode: 0o755 },
+  );
+  if (mode === 'stalled')
+    fs.writeFileSync(
+      path.join(directory, 'perl'),
+      `#!${process.execPath}
+const fs = require('node:fs');
+fs.appendFileSync(process.env.FIXTURE_CALLS, JSON.stringify(['alarm', ...process.argv.slice(2)]) + '\\n');
+process.exit(142);
+`,
+      { mode: 0o755 },
+    );
+  return {
+    directory,
+    env: {
+      ...process.env,
+      PATH: `${directory}:${process.env.PATH}`,
+      FIXTURE_CALLS: calls,
+      FIXTURE_BOOT_MODE: mode,
+    },
+    calls: () =>
+      fs.existsSync(calls)
+        ? fs
+            .readFileSync(calls, 'utf8')
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as string[])
+        : [],
+  };
+}
+
+function bootActionRun(waitForBoot?: string, mode: 'ready' | 'failed' = 'ready') {
+  const fixture = simulatorBootFixture(mode);
+  const doc = parse(
+    fs.readFileSync(
+      path.join(repoRoot, '.github/actions/boot-ios-test-simulator/action.yml'),
+      'utf8',
+    ),
+  ) as { inputs: Record<string, { default?: string }>; runs: { steps: AppleStep[] } };
+  const inputs = {
+    'runtime-version': '26.2',
+    'preferred-device-name': 'iPhone 17 Pro',
+    'boot-timeout-seconds': '2',
+  };
+  const script = doc.runs.steps[0]!.run!.replaceAll(
+    /\$\{\{ inputs\.([\w-]+) \}\}/g,
+    (_whole, key: keyof typeof inputs) => inputs[key],
+  );
+  const result = spawnSync('/bin/bash', ['-c', script], {
+    cwd: repoRoot,
+    env: {
+      ...fixture.env,
+      WAIT_FOR_BOOT: waitForBoot ?? doc.inputs['wait-for-boot']!.default,
+      GITHUB_OUTPUT: path.join(fixture.directory, 'outputs'),
+    },
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  return { result, calls: fixture.calls() };
+}
+
+test('deferred boot starts the selected simulator without waiting on its readiness', () => {
+  const { result, calls } = bootActionRun('false', 'failed');
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
+  expect(calls).toContainEqual(['simctl', 'boot', 'owned-ios']);
+  expect(calls.some((args) => args.includes('bootstatus'))).toBe(false);
+});
+
+test('existing boot action callers still wait and propagate a bootstatus failure', () => {
+  const { result, calls } = bootActionRun(undefined, 'failed');
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(7);
+  expect(calls).toContainEqual(['simctl', 'bootstatus', 'owned-ios', '-b']);
+});
+
+test('invalid deferred-boot policy fails before changing simulator state', () => {
+  const { result, calls } = bootActionRun('unexpected');
+  expect(result.status).toBe(1);
+  expect(calls).toEqual([]);
+});
+
+test.each([
+  ['ready', '2', 0],
+  ['failed', '2', 7],
+  ['stalled', '1', 1],
+  ['ready', '0', 1],
+] as const)(
+  'deferred readiness barrier keeps native outcome and deadline: %s, %s seconds',
+  (mode, timeout, expected) => {
+    const fixture = simulatorBootFixture(mode);
+    const result = spawnSync(
+      '/bin/bash',
+      [path.join(repoRoot, 'scripts/wait-for-ios-simulator.sh'), 'owned-ios', timeout],
+      { env: fixture.env, encoding: 'utf8', timeout: 5000 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(expected);
+    if (mode === 'stalled')
+      expect(result.stderr).toContain('Timed out waiting 1s for simulator owned-ios');
+    if (timeout === '0') expect(fixture.calls()).toEqual([]);
+    else if (mode === 'stalled')
+      expect(fixture.calls()).toContainEqual([
+        'alarm',
+        '-e',
+        'alarm shift; exec @ARGV',
+        timeout,
+        'xcrun',
+        'simctl',
+        'bootstatus',
+        'owned-ios',
+        '-b',
+      ]);
+    else expect(fixture.calls()).toContainEqual(['simctl', 'bootstatus', 'owned-ios', '-b']);
+  },
+);
