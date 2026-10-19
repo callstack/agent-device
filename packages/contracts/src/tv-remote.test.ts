@@ -56,6 +56,17 @@ test('every hardware key maps to its Android KeyEvent keycode', () => {
       'media-previous': 88,
       'media-rewind': 89,
       'media-fast-forward': 90,
+      'channel-up': 166,
+      'channel-down': 167,
+      'last-channel': 229,
+      guide: 172,
+      info: 165,
+      captions: 175,
+      'tv-input': 178,
+      'color-red': 183,
+      'color-green': 184,
+      'color-yellow': 185,
+      'color-blue': 186,
     },
   );
 });

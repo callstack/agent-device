@@ -120,7 +120,12 @@ Back, orientation, and hardware buttons:
 - `orientation portrait|portrait-upside-down|landscape-left|landscape-right` works on iOS and Android mobile targets only.
 - `action-button` presses the iPhone or iPad Action Button once. It takes no arguments, no hold duration, and no `--settle`, and it doesn't activate the session app or drive Camera Control. Other platforms refuse it, and a model without the button (an iPhone SE, most iPad simulators) fails with `UNSUPPORTED_OPERATION`.
 - `action-button` reports that the press was dispatched, not what it triggered. Simulators run no Shortcuts or App Intents, so verify the outcome on a physical iPhone. Expect a press to take about five seconds on a Simulator.
-- `hardware-key <key>` presses one volume, power, or media key: `volume-up`, `volume-down`, `mute`, `power`, `sleep`, `wake`, `media-play-pause`, `media-next`, `media-previous`, `media-rewind`, or `media-fast-forward`. Use it to check volume and mute handling, standby and wake during playback, and media-key handling. `power` toggles the screen; `sleep` and `wake` turn it off or on.
+- `hardware-key <key>` presses one volume, power, media, or TV key:
+  - Volume: `volume-up`, `volume-down`, `mute`.
+  - Power: `power` toggles the screen; `sleep` and `wake` turn it off or on.
+  - Media: `media-play-pause`, `media-next`, `media-previous`, `media-rewind`, `media-fast-forward`.
+  - TV remote: `channel-up`, `channel-down`, `last-channel`, `guide`, `info`, `captions`, `tv-input`, `color-red`, `color-green`, `color-yellow`, `color-blue`.
+- Use `hardware-key` to check volume and mute handling, standby and wake during playback, and media and channel keys, on a phone or an Android TV target.
 - `hardware-key` works on Android emulators and devices over ADB (`input keyevent`), including Limrun Android sessions. iOS, tvOS, macOS, web, Linux, Vega OS, HarmonyOS, Limrun iOS, and the Appium (WebDriver) backend report `UNSUPPORTED_OPERATION`. The key goes to the system and the foreground media session, and nothing is re-observed afterwards, so take a snapshot or screenshot to check the effect.
 
 Fold a foldable device:

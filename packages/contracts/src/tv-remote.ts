@@ -119,8 +119,8 @@ const TV_REMOTE_BUTTON_ALIAS_MAP = new Map<string, TvRemoteButton>(
 );
 
 /**
- * Volume, power, and media keys: named presses that, like the remote buttons above, each map to
- * one platform key event. Only Android sends them; no other owner carries a key-event channel.
+ * Volume, power, media, and TV keys: named presses that, like the remote buttons above, each map
+ * to one platform key event. Only Android sends them; no other owner carries a key-event channel.
  */
 const HARDWARE_KEY_DEFINITIONS = {
   'volume-up': { androidKeycode: 24 },
@@ -134,6 +134,17 @@ const HARDWARE_KEY_DEFINITIONS = {
   'media-previous': { androidKeycode: 88 },
   'media-rewind': { androidKeycode: 89 },
   'media-fast-forward': { androidKeycode: 90 },
+  'channel-up': { androidKeycode: 166 },
+  'channel-down': { androidKeycode: 167 },
+  'last-channel': { androidKeycode: 229 },
+  guide: { androidKeycode: 172 },
+  info: { androidKeycode: 165 },
+  captions: { androidKeycode: 175 },
+  'tv-input': { androidKeycode: 178 },
+  'color-red': { androidKeycode: 183 },
+  'color-green': { androidKeycode: 184 },
+  'color-yellow': { androidKeycode: 185 },
+  'color-blue': { androidKeycode: 186 },
 } as const satisfies Record<string, { androidKeycode: number }>;
 
 export const HARDWARE_KEYS = Object.keys(

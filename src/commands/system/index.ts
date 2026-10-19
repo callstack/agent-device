@@ -317,7 +317,7 @@ const actionButtonCommandDescription =
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 const hardwareKeyCommandDescription =
-  'Press one hardware key: volume-up, volume-down, mute, power, sleep, wake, or a media key (media-play-pause, media-next, media-previous, media-rewind, media-fast-forward). Use it to check volume and mute handling, standby and wake during playback, and media-key handling. power toggles the screen; sleep and wake set it to off or on. The key goes to the system and the foreground media session, and nothing is re-observed afterwards. Supported on Android emulators and devices through ADB key events, including Limrun Android sessions; other platforms and the WebDriver (Appium) backend report UNSUPPORTED_OPERATION.';
+  'Press one hardware key: volume-up, volume-down, mute, power, sleep, wake, a media key (media-play-pause, media-next, media-previous, media-rewind, media-fast-forward), or a TV remote key (channel-up, channel-down, last-channel, guide, info, captions, tv-input, color-red, color-green, color-yellow, color-blue). Use it to check volume and mute handling, standby and wake during playback, and media and channel keys. power toggles the screen; sleep and wake set it to off or on. The key goes to the system and the foreground media session, and nothing is re-observed afterwards. Supported on Android emulators and devices through ADB key events, including Limrun Android sessions; other platforms and the WebDriver (Appium) backend report UNSUPPORTED_OPERATION.';
 
 const telephonyCommandDescription =
   'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
@@ -732,7 +732,7 @@ const telephonyCommandFacet = defineCommandFacet({
 const hardwareKeyCommandFacet = defineCommandFacet({
   name: HARDWARE_KEY_COMMAND_NAME,
   text: {
-    summary: 'Press a volume, power, or media hardware key',
+    summary: 'Press a volume, power, media, or TV hardware key',
     cliDetail: 'Android only (ADB key events, local or Limrun).',
   },
   metadata: hardwareKeyCommandMetadata,
