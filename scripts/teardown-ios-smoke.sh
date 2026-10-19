@@ -19,6 +19,8 @@ if (booted.length) throw new Error(`Simulators remain booted: ${booted.map((devi
 const remaining = execFileSync('ps', ['-axo', 'comm='], { encoding: 'utf8' }).split('\n').map((entry) => path.basename(entry.trim())).filter((name) => /^(?:AgentDeviceRunner.*|xcodebuild|xctest|XCTRunner|Simulator)$/.test(name));
 if (remaining.length) throw new Error(`iOS smoke processes remain: ${remaining.join(', ')}`);
 JS
+mkdir -p test/screenshots
+screencapture -x test/screenshots/apple-host-after-ios.png || echo "Could not capture the host teardown screenshot." >&2
 osascript scripts/decline-hosted-compute-local-network.applescript || status=1
 osascript -e 'tell application "Finder" to activate' || status=1
 frontmost="$(osascript -e 'tell application "System Events" to get bundle identifier of first application process whose frontmost is true')" || status=1

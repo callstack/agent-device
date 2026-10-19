@@ -102,6 +102,14 @@ jobs:
           RESULT_SUMMARY_PATH: ${{ github.workspace }}/.tmp/xctest-host/test-results-summary.json
           XCTEST_LANE: host
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-cleanup.outcome == 'success' }}
+      - name: Diagnose the Apple host after a phase failure
+        if: ${{ always() && (steps.ios.outcome == 'failure' || steps.macos.outcome == 'failure' || steps.ios-cleanup.outcome == 'failure') }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p test/screenshots
+          screencapture -x test/screenshots/apple-host-after-failure.png
+          osascript scripts/decline-hosted-compute-local-network.applescript diagnose
       - name: Clean macOS daemon and retained runners
         id: macos-cleanup
         if: ${{ always() && steps.build.outcome == 'success' }}

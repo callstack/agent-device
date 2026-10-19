@@ -106,7 +106,7 @@ if (name === 'xcrun' && args.includes('list')) console.log(JSON.stringify({ devi
 if (name === 'ps') console.log(process.env.FIXTURE_PROCESSES || '');
 if (name === 'osascript' && args.join(' ').includes('get bundle identifier')) console.log(process.env.FIXTURE_FOCUS || 'com.apple.finder');
 `;
-    for (const command of ['pnpm', 'xcrun', 'osascript', 'ps'])
+    for (const command of ['pnpm', 'xcrun', 'osascript', 'ps', 'screencapture'])
       fs.writeFileSync(path.join(directory, command), stub, { mode: 0o755 });
     const result = spawnSync('/bin/bash', [path.join(repoRoot, 'scripts/teardown-ios-smoke.sh')], {
       env: {
