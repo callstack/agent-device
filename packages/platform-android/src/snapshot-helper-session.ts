@@ -120,7 +120,7 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   payloadBase64?: string;
   timeoutMs: number;
 }): Promise<Record<string, string> | undefined> {
-  const session = getLiveAndroidSnapshotHelperSession(params.deviceKey);
+  const session = await getLiveAndroidSnapshotHelperSession(params.deviceKey);
   if (!session) return undefined;
   if (!matchesSessionHelperIdentity(session.helper, params.helper)) {
     // A different helper binary was selected for this device (e.g. a provider-supplied artifact).
@@ -159,14 +159,14 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   }
   if (headers.ok !== 'true') {
     // The helper ran and reported a structured failure; the session itself stays healthy.
-    throw discloseHelperTouchDispatch(
-      params.action,
-      new AppError(
-        'COMMAND_FAILED',
-        headers.message || headers.errorType || `Android automation helper ${params.action} failed`,
-        { errorType: headers.errorType, helper: headers },
-      ),
+    const failure = new AppError(
+      'COMMAND_FAILED',
+      headers.message || headers.errorType || `Android automation helper ${params.action} failed`,
+      { errorType: headers.errorType, helper: headers },
     );
+    throw params.action === 'input' && headers.injected === 'false'
+      ? discloseDispatch(failure, 'no')
+      : discloseHelperTouchDispatch(params.action, failure);
   }
   return headers;
 }

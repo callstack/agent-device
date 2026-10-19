@@ -234,8 +234,13 @@ export function readAndroidTextAtPointInHierarchy(
         (!target.bundleId || node.packageName === target.bundleId) &&
         (!target.type || node.className === target.type),
     );
-    if (matches.length !== 1) return null;
-    return androidFillCandidateFromNode(matches[0]!, {})?.text ?? null;
+    const candidates = matches.flatMap((node) => {
+      const candidate = androidFillCandidateFromNode(node, {});
+      return candidate ? [candidate] : [];
+    });
+    if (matches.length === 1 && candidates.length === 1) return candidates[0]!.text;
+    const atPoint = candidates.filter((candidate) => containsPoint(candidate.rect, x, y));
+    if (atPoint.length === 1) return atPoint[0]!.text;
   }
   // Reads are point-targeted: a focused sibling may be a different app field or an IME
   // composing surface, so it must not override the node that contains the requested point.

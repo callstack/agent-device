@@ -26,52 +26,61 @@ final class AutomationCommandHandler {
       OutputStream output, String requestId, String action, String payload, UiAutomation automation)
       throws IOException {
     Bundle result = SessionResponseWriter.sessionResponseBundle(requestId);
+    InputDispatch dispatch = new InputDispatch();
     try {
       if ("screenshot".equals(action)) {
         screenshot(result, automation);
       } else if ("focus".equals(action)) {
         focus(result, automation);
       } else {
-        input(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)));
+        input(automation, new JSONObject(new String(Base64.decode(payload, Base64.DEFAULT), StandardCharsets.UTF_8)), dispatch);
       }
       result.putString("ok", "true");
       SessionResponseWriter.writeSessionResponse(output, result, "");
     } catch (Throwable error) {
-      SessionResponseWriter.writeSessionError(output, requestId, error.getClass().getName(),
-          error.getMessage() == null ? error.getClass().getName() : error.getMessage());
+      result.putString("ok", "false");
+      result.putString("errorType", error.getClass().getName());
+      result.putString("message", error.getMessage() == null ? error.getClass().getName() : error.getMessage());
+      if ("input".equals(action) && !dispatch.attempted) result.putString("injected", "false");
+      SessionResponseWriter.writeSessionResponse(output, result, "");
     }
   }
 
-  private static void input(UiAutomation automation, JSONObject input) throws Exception {
+  private static final class InputDispatch {
+    boolean attempted;
+  }
+
+  private static void input(UiAutomation automation, JSONObject input, InputDispatch dispatch) throws Exception {
     switch (input.getString("kind")) {
       case "tap":
-        tap(automation, input.getDouble("x"), input.getDouble("y"));
+        tap(automation, input.getDouble("x"), input.getDouble("y"), dispatch);
         return;
       case "key":
-        key(automation, input.getInt("keyCode"));
+        key(automation, input.getInt("keyCode"), dispatch);
         return;
       case "fill":
-        fill(automation, input.getInt("x"), input.getInt("y"), input.getString("text"));
+        fill(automation, input.getInt("x"), input.getInt("y"), input.getString("text"), dispatch);
         return;
       default:
         throw new IllegalArgumentException("Unknown input kind");
     }
   }
 
-  private static void tap(UiAutomation automation, double x, double y) {
+  private static void tap(UiAutomation automation, double x, double y, InputDispatch dispatch) {
     if (Double.isNaN(x) || Double.isInfinite(x) || Double.isNaN(y) || Double.isInfinite(y)
         || x < 0 || y < 0) {
       throw new IllegalArgumentException("Invalid tap coordinates");
     }
     long down = SystemClock.uptimeMillis();
-    touch(automation, down, MotionEvent.ACTION_DOWN, (float) x, (float) y);
-    touch(automation, down, MotionEvent.ACTION_UP, (float) x, (float) y);
+    touch(automation, down, MotionEvent.ACTION_DOWN, (float) x, (float) y, dispatch);
+    touch(automation, down, MotionEvent.ACTION_UP, (float) x, (float) y, dispatch);
   }
 
-  private static void touch(UiAutomation automation, long down, int action, float x, float y) {
+  private static void touch(UiAutomation automation, long down, int action, float x, float y, InputDispatch dispatch) {
     MotionEvent event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0);
     event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
     try {
+      dispatch.attempted = true;
       if (!automation.injectInputEvent(event, true)) {
         throw new IllegalStateException("Touch injection was refused");
       }
@@ -80,19 +89,20 @@ final class AutomationCommandHandler {
     }
   }
 
-  private static void key(UiAutomation automation, int code) {
+  private static void key(UiAutomation automation, int code, InputDispatch dispatch) {
     if (code < 0 || code > KeyEvent.getMaxKeyCode()) throw new IllegalArgumentException("Invalid key code");
     long down = SystemClock.uptimeMillis();
     for (int action : new int[] {KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP}) {
       KeyEvent event = new KeyEvent(down, SystemClock.uptimeMillis(), action, code, 0, 0,
           KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD);
+      dispatch.attempted = true;
       if (!automation.injectInputEvent(event, true)) {
         throw new IllegalStateException("Key injection was refused");
       }
     }
   }
 
-  private static void fill(UiAutomation automation, int x, int y, String text) {
+  private static void fill(UiAutomation automation, int x, int y, String text, InputDispatch dispatch) {
     AccessibilityNodeInfo target = null;
     try {
       for (AccessibilityWindowInfo window : automation.getWindows()) {
@@ -117,7 +127,7 @@ final class AutomationCommandHandler {
         }
       }
       if (target == null) throw new IllegalStateException("No editable field at the fill point");
-      tap(automation, x, y);
+      tap(automation, x, y, dispatch);
       if (!target.refresh()) throw new IllegalStateException("Fill target disappeared after focus");
       if (!target.isFocused() && !target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) {
         throw new IllegalStateException("Field focus was refused");

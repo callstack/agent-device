@@ -174,7 +174,7 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     type: 'boolean',
     usageLabel: '--normalize-status-bar',
     usageDescription:
-      'Screenshot: temporarily normalize iOS simulator or Android status-bar chrome for deterministic screenshot diffs; Android waits for transient UI to fade',
+      'Screenshot: temporarily normalize iOS simulator or ADB-backed Android status-bar chrome for deterministic screenshot diffs; ADB-backed Android waits for transient UI to fade',
     projectConfig: true,
     recorded: true,
   },

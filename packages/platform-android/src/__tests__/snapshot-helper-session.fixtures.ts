@@ -59,6 +59,8 @@ export type PersistentSnapshotHelperProviderOptions = {
   sessionXml?: (sessionIndex: number, snapshotCount: number) => string;
   sessionRequests?: string[];
   sessionInput?: (input: { kind: string; text?: string }) => void;
+  sessionCommands?: string[];
+  sessionCommand?: (command: string) => Record<string, string> | undefined;
   stalledSessionCleanup?: boolean;
   oneShotAttempts?: (readonly string[])[];
   oneShotXml?: string;
@@ -95,6 +97,11 @@ export function createPersistentSnapshotHelperProvider(
           }
           if (options.sessionResponseMode === 'malformed') {
             socket.end('malformed session response');
+            return;
+          }
+          const response = options.sessionCommand?.(command);
+          if (response) {
+            socket.end(sessionResponse({ requestId, body: '', metadata: response }));
             return;
           }
           if (command.startsWith('input')) {
@@ -146,7 +153,7 @@ export function createPersistentSnapshotHelperProvider(
           process.stdout.write(
             [
               'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
-              `INSTRUMENTATION_STATUS: sessionCommands=${options.sessionInput ? 'input,' : ''}snapshot-immediate`,
+              `INSTRUMENTATION_STATUS: sessionCommands=${options.sessionCommands?.join(',') ?? `${options.sessionInput ? 'input,' : ''}snapshot-immediate`}`,
               'INSTRUMENTATION_STATUS: sessionReady=true',
               'INSTRUMENTATION_STATUS_CODE: 2',
               '',

@@ -95,7 +95,10 @@ Thus, the daemon had to stop the persistent snapshot session before every gestur
 After a failed session command, one-shot retry applies only to idempotent reads, such as viewport resolution.
 The retry runs only after the failed session has stopped.
 Pointer, key, text, and gesture injection are not idempotent because a mutation may have reached the app before the response fails.
-Thus, session mutation failures return directly without a one-shot retry.
+Thus, session mutation failures return directly without a one-shot retry unless a validated helper response proves that no input injection was attempted.
+This exception permits the existing host input path only after the session has stopped.
+Idempotent screenshot and focus failures also stop the session before the host read.
+Piggyback commands retire a cached session whose process has ended before using a host path.
 The helper advertises optional session commands in its ready record.
 The host sends an optional command only when the helper advertises it.
 Text replacement retains the focus tap and host verification.

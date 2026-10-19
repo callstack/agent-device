@@ -148,10 +148,15 @@ export async function acquireAndroidSnapshotHelperSession(
  * The live session for a device, or `undefined` when none is running. Commands that may only
  * piggyback on an existing session — never start one — read ownership through this.
  */
-export function getLiveAndroidSnapshotHelperSession(
+export async function getLiveAndroidSnapshotHelperSession(
   deviceKey: string,
-): AndroidSnapshotHelperSession | undefined {
-  return sessions().get(deviceKey);
+): Promise<AndroidSnapshotHelperSession | undefined> {
+  const session = sessions().get(deviceKey);
+  if (session && hasAndroidSnapshotHelperProcessEnded(session.process)) {
+    await stopAndroidSnapshotHelperSession(deviceKey, { force: true });
+    return undefined;
+  }
+  return session;
 }
 
 async function resolveAndroidSnapshotHelperSession(params: {
