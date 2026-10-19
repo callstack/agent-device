@@ -57,6 +57,38 @@ test('Apple smoke shares setup and build while keeping platform state and native
   }
 });
 
+test('the macOS phase clears the hosted runner prompt before its live replay', () => {
+  const action = parse(
+    fs.readFileSync(path.join(repoRoot, '.github/actions/smoke-macos/action.yml'), 'utf8'),
+  ) as { runs: { steps: AppleStep[] } };
+  const steps = action.runs.steps;
+  const cleanup = steps.findIndex(
+    (step) => step.run === 'osascript scripts/decline-hosted-compute-local-network.applescript',
+  );
+  const helper = steps.findIndex((step) => step.with?.gate === 'macos-helper');
+  const replay = steps.findIndex((step) => step.with?.gate === 'replay-macos');
+  expect(cleanup).toBeGreaterThan(helper);
+  expect(cleanup).toBeLessThan(replay);
+});
+
+test.runIf(process.platform === 'darwin')(
+  'hosted prompt cleanup refuses local execution before inspecting UI',
+  () => {
+    const result = spawnSync(
+      'osascript',
+      [path.join(repoRoot, 'scripts/decline-hosted-compute-local-network.applescript')],
+      {
+        env: { ...process.env, GITHUB_ACTIONS: 'false' },
+        encoding: 'utf8',
+        timeout: 10_000,
+      },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('This cleanup is only for GitHub Actions runners.');
+  },
+);
+
 test('the workflow resolves the optional physical device variable before entering composites', () => {
   const ios = appleJob().steps.find((step) => step.id === 'ios')!;
   expect(ios.env?.IOS_UDID).toBe('${{ vars.IOS_UDID }}');
