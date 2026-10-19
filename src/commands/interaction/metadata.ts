@@ -10,7 +10,10 @@ import {
   type TransformGesturePayload,
   readGesturePayload,
 } from '@agent-device/contracts/gesture-input';
-import { SCROLL_DURATION_MAX_MS } from '@agent-device/contracts/scroll-command';
+import {
+  SCROLL_DURATION_MAX_MS,
+  SCROLL_UNTIL_MAX_PASSES,
+} from '@agent-device/contracts/scroll-command';
 import { IS_PREDICATES } from '@agent-device/contracts/is-predicate';
 import {
   SCROLL_DIRECTIONS,
@@ -155,6 +158,13 @@ const scrollFields = {
   pixels: integerField('Pixel scroll amount.', { min: 0 }),
   until: stringField(
     'Repeat scroll passes until this selector is visible on screen, then stop. Not valid with the top/bottom edge directions, which carry their own stop condition.',
+  ),
+  maxPasses: integerField(
+    'Maximum scroll gestures for an until search (default 12). Requires until.',
+    {
+      min: 1,
+      max: SCROLL_UNTIL_MAX_PASSES,
+    },
   ),
   durationMs: integerField('Scroll duration in milliseconds when the backend supports pacing.', {
     min: 0,

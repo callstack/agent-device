@@ -125,6 +125,7 @@ export async function resolveBoundScrollRuntime(
   const stopCondition = {
     ...(target.edge === undefined ? {} : { edge: target.edge }),
     ...(until === undefined ? {} : { until }),
+    ...(params.context.maxPasses === undefined ? {} : { maxPasses: params.context.maxPasses }),
   };
   assertScrollUntilCompatible(stopCondition);
   const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
@@ -351,6 +352,7 @@ async function executeUntilScroll(
     selector,
     direction: target.direction,
     platform: publicPlatformString(device),
+    passLimit: context.maxPasses,
     capture: async () => await runtime.operations.captureSnapshot(scrollCaptureInput(context)),
     scroll: async () => await scrollOnce(runtime, target, options, context),
   });

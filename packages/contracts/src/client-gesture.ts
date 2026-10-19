@@ -151,4 +151,6 @@ export type ScrollOptions = DeviceCommandBaseOptions &
     durationMs?: number;
     /** Repeat scroll passes until this selector is visible on screen, then stop. */
     until?: string;
+    /** Maximum scroll gestures for an until search (1–200, default 12). */
+    maxPasses?: number;
   };
