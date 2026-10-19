@@ -60,7 +60,25 @@ const refusalCases = [
       hint: 'Two-finger gesture synthesis is not available on iOS devices reached through a WebDriver provider.',
     },
     hint: /WebDriver provider/,
-    message: 'gesture pinch is not supported on ios',
+    message: 'gesture pinch is not supported on iOS',
+  },
+  {
+    name: 'provider-refused iPadOS',
+    device: {
+      platform: 'apple',
+      appleOs: 'ipados',
+      id: 'ipad-device',
+      name: 'iPad',
+      kind: 'device',
+      target: 'mobile',
+    },
+    fact: {
+      available: false,
+      reason: 'unsupported-provider-mode',
+      hint: 'Two-finger gesture synthesis is not available on iOS devices reached through a WebDriver provider.',
+    },
+    hint: /WebDriver provider/,
+    message: 'gesture pinch is not supported on iPadOS',
   },
 ] as const;
 

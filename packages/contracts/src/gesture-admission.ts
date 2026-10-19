@@ -34,7 +34,7 @@ export const ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT =
 /**
  * How a refused cell names itself, reproducing every subject the retired admission produced.
  *
- * Three owner-specific subjects, then the plain platform name. The special cases resolve the
+ * Owner-specific subjects, then the plain platform name. The special cases resolve the
  * Apple OS the way `assertAppleMultiTouchSupported` does; the default reads `appleOs` raw, the way
  * the retired `gesturePlatformMessage` did — an Apple device with no declared OS therefore still
  * reports `apple`, exactly as before.
@@ -51,14 +51,20 @@ function gestureRefusalSubject(device: DeviceInfo, tier: GestureRuntimeTier): st
 
 /**
  * The owner-specific subjects two-contact synthesis refusals use, or `undefined` for the plain
- * platform name. iOS and iPadOS have none: their owner admits multi-touch on simulators and
- * devices, so only a provider can refuse it there, and its hint says why.
+ * platform name. iOS and iPadOS are named only for a provider refusal: the Apple owner admits
+ * multi-touch on simulators and devices, and the provider's hint says why it does not.
  */
 function multiTouchRefusalSubject(device: DeviceInfo): string | undefined {
   if (device.platform === 'android') return device.target === 'tv' ? 'Android TV' : undefined;
   if (!isApplePlatform(device.platform)) return undefined;
   const appleOs = resolveDeviceAppleOs(device);
-  if (appleOs === 'macos' || appleOs === 'tvos' || appleOs === 'visionos') {
+  if (
+    appleOs === 'ios' ||
+    appleOs === 'ipados' ||
+    appleOs === 'macos' ||
+    appleOs === 'tvos' ||
+    appleOs === 'visionos'
+  ) {
     return APPLE_OS_DISPLAY_NAMES[appleOs];
   }
   return undefined;
