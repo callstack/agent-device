@@ -5,6 +5,7 @@ import ObjectiveC.runtime
 
 private final class AlertTapDeadlineStub: NSObject {
   static var status: RunnerTapSynthesisStatus?
+  static var interruptionHandlingDisabled: Bool?
 
   @objc(synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:)
   class func synthesizeTap(
@@ -15,7 +16,8 @@ private final class AlertTapDeadlineStub: NSObject {
     deadline: NSDate?,
     errorMessage: AutoreleasingUnsafeMutablePointer<NSString?>?
   ) -> RunnerTapSynthesisStatus {
-    status ?? (deadline == nil ? .succeeded : .deadlineExceeded)
+    interruptionHandlingDisabled = (application.value(forKey: "doesNotHandleUIInterruptions") as? NSNumber)?.boolValue
+    return status ?? (deadline == nil ? .succeeded : .deadlineExceeded)
   }
 }
 #endif
@@ -121,6 +123,7 @@ extension RunnerTests {
     method_setImplementation(method, method_getImplementation(stub))
     defer {
       AlertTapDeadlineStub.status = nil
+      AlertTapDeadlineStub.interruptionHandlingDisabled = nil
       method_setImplementation(method, original)
     }
 
@@ -174,6 +177,7 @@ extension RunnerTests {
       }
       defer { removeUIInterruptionMonitor(monitor) }
 
+      try assertAlertActivationDisablesInterruptionHandling(alert)
       let deadline = Date().addingTimeInterval(RunnerTests.alertActivationDeadline)
       let response = handleAlert(alert, action: "accept", deadline: deadline)
 
@@ -182,6 +186,30 @@ extension RunnerTests {
       XCTAssertLessThan(Date(), deadline)
       XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")
     }
+  }
+
+  @MainActor
+  private func assertAlertActivationDisablesInterruptionHandling(_ alert: RunnerAlert) throws {
+    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let frame = button.frame
+    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:")
+    let method = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedGesture.self, selector))
+    let stub = try XCTUnwrap(class_getClassMethod(AlertTapDeadlineStub.self, selector))
+    let original = method_getImplementation(method)
+    AlertTapDeadlineStub.status = .deadlineExceeded
+    AlertTapDeadlineStub.interruptionHandlingDisabled = nil
+    method_setImplementation(method, method_getImplementation(stub))
+    defer {
+      AlertTapDeadlineStub.status = nil
+      AlertTapDeadlineStub.interruptionHandlingDisabled = nil
+      method_setImplementation(method, original)
+    }
+
+    let outcome = activateAlertButton(
+      alert, button: button, action: "accept", frame: frame, deadline: .distantFuture
+    )
+    XCTAssertNil(outcome)
+    XCTAssertEqual(AlertTapDeadlineStub.interruptionHandlingDisabled, true)
   }
 
   @MainActor
