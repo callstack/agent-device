@@ -133,15 +133,13 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
     const { createDaemonPlatformServices } = await import('./platform-runtime-daemon-services.ts');
     const { createClaimRecoveryGatewayFor } = await import('./platform-runtime-claim-recovery.ts');
 
-    const { createAppleRunnerRuntimeState } =
+    // The Apple runner reads its configuration from this runtime's host. Composition runs inside
+    // the runtime's entered state, so binding the host here writes that state's slot directly;
+    // the Android helper needs no binding — its modules declare slot keys on the same store.
+    const { setAppleRunnerHostEnvironment } =
       await import('@agent-device/platform-apple/runner-owner');
-    const { createAndroidHelperRuntimeState } =
-      await import('@agent-device/platform-android/adb-host');
+    setAppleRunnerHostEnvironment(host);
     return Object.freeze({
-      runtimeStates: Object.freeze([
-        createAppleRunnerRuntimeState(host),
-        createAndroidHelperRuntimeState(),
-      ]),
       ownedProcessRecords,
       hostDiagnostics,
       ownerLifecycle: createPlatformDaemonLifecycleOwners(host),
