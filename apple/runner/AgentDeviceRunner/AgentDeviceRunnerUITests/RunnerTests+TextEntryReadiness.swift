@@ -1,9 +1,5 @@
 import XCTest
 
-// Text-entry readiness: whether the target is actually able to receive text yet. The waits, the
-// keyboard signals they read, and the focus corroboration that ends the hardware-keyboard window.
-// RunnerTests+TextEntryFocus.swift is the only caller of the two non-private entries here; nothing
-// in this file reaches back into it.
 extension RunnerTests {
   func focusedTextInput(app: XCUIApplication) -> XCUIElement? {
 #if os(iOS)
@@ -35,7 +31,7 @@ extension RunnerTests {
     timeout: TimeInterval = TextEntryTiming.readinessTimeout
   ) -> XCUIElement? {
 #if os(iOS)
-    var latest = resolveTextEntryElement(app: app, target: target)
+    let candidate = resolveTextEntryElement(app: app, target: target)
     let keyboardVisibleAtEntry = isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(timeout)
     var hardwareKeyboardFallback = Date().addingTimeInterval(
@@ -43,19 +39,13 @@ extension RunnerTests {
     )
     var sawSoftwareKeyboard = false
     while Date() < deadline {
-      if let focused = focusedTextInput(app: app) {
-        latest = focused
-        if isKeyboardVisible(app: app) {
-          return focused
-        }
-      }
       // Fast-path on a keyboard hidden->visible transition: our tapped field gained focus, so
       // return immediately instead of burning the full readinessTimeout (warmup-first-char echo
       // + post-type verify/repair remain as drop safety nets). When the keyboard was ALREADY up
       // (back-to-back fills), this isn't a focus signal — fall through to the settle/timeout so
       // text isn't sent to the previously-focused field.
       if keyboardBecameVisible(app: app, wasVisibleAtEntry: keyboardVisibleAtEntry) {
-        return latest
+        return candidate
       }
       sawSoftwareKeyboard = sawSoftwareKeyboard || keyboardElementExists(app: app)
       // A responder that takes no software keyboard (hardware keyboard connected, or a custom
@@ -64,7 +54,7 @@ extension RunnerTests {
       // simulator state (#1874): on a loaded host the keyboard is merely late, and returning here
       // handed the caller an element that had not taken focus yet. Ask the target itself instead,
       // and re-arm rather than re-asking every poll — the query is cheap, not free.
-      if !sawSoftwareKeyboard, Date() >= hardwareKeyboardFallback, let candidate = latest {
+      if !sawSoftwareKeyboard, Date() >= hardwareKeyboardFallback, let candidate {
         if keyboardFocusConfirmed(app: app, element: candidate) {
           return candidate
         }
@@ -74,7 +64,7 @@ extension RunnerTests {
       }
       sleepFor(TextEntryTiming.pollInterval)
     }
-    return focusedTextInput(app: app) ?? latest
+    return candidate
 #else
     return resolveTextEntryElement(app: app, target: target)
 #endif
