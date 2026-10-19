@@ -62,7 +62,7 @@ test.each(['advertised', 'unsupported', 'ended'] as const)(
           processes[0]!.kill();
           await exited;
         }
-        await expect(openAndroidApp(device, pkg)).resolves.toBe(pkg);
+        await expect(openAndroidApp(device, ` ${pkg} `)).resolves.toBe(pkg);
       },
     );
     const appRequests = requests.filter((request) => request.startsWith('app '));

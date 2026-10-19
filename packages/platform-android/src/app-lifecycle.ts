@@ -248,26 +248,30 @@ async function tryAndroidHelperLaunch(
   app: string,
   options: OpenAndroidAppOptions,
 ): Promise<AndroidAdbExecutorResult | undefined> {
+  const packageName = app.trim();
   if (
     device.target === 'tv' ||
     options.activity !== undefined ||
     androidLaunchArgs(options).length > 0 ||
     options.terminateRunningApp ||
-    classifyAndroidAppTarget(app) !== 'package'
+    classifyAndroidAppTarget(packageName) !== 'package'
   )
     return undefined;
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   const result = await runAndroidAutomationHelper(device, 'app', {
     kind: 'open',
-    packageName: app,
+    packageName,
   });
   if (!result) return undefined;
-  if (result.componentUnavailable === 'true' && !(await isAndroidPackageInstalled(device, app)))
-    throw buildAndroidPackageNotInstalledError(app);
+  if (
+    result.componentUnavailable === 'true' &&
+    !(await isAndroidPackageInstalled(device, packageName))
+  )
+    throw buildAndroidPackageNotInstalledError(packageName);
   const stdout = Buffer.from(result.launchOutputBase64 ?? '', 'base64').toString('utf8');
   if (!/^Status: ok\r?$/m.test(stdout)) {
     throw new AppError('COMMAND_FAILED', 'Android helper could not launch the application', {
-      packageName: app,
+      packageName,
       stdout,
     });
   }
