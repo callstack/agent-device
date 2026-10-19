@@ -2,7 +2,7 @@ import { requireInteractorMethod } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
-import type { HardwareKey } from './tv-remote.ts';
+import type { HardwareKeyToken } from './tv-remote.ts';
 
 /**
  * The system buttons: one press each, no arguments, nothing returned. `home` and `appSwitcher`
@@ -39,7 +39,7 @@ export type SystemButtonInput = Readonly<{
 }>;
 
 /** One hardware key press: the parsed key plus the same runner metadata a button carries. */
-type HardwareKeyInput = SystemButtonInput & Readonly<{ key: HardwareKey }>;
+type HardwareKeyInput = SystemButtonInput & Readonly<{ key: HardwareKeyToken }>;
 
 /** A press returns nothing; every leaf discarded whatever the interactor answered. */
 export type SystemButtonRuntimeOperations = Readonly<

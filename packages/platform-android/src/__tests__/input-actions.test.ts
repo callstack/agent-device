@@ -422,10 +422,12 @@ test('pressAndroidHardwareKey sends the numeric keyevent for volume, power, and 
       await pressAndroidHardwareKey(device, 'volume-down');
       await pressAndroidHardwareKey(device, 'sleep');
       await pressAndroidHardwareKey(device, 'media-fast-forward');
+      await pressAndroidHardwareKey(device, 'android-keycode:300');
       assert.deepEqual(calls, [
         ['shell', 'input', 'keyevent', '25'],
         ['shell', 'input', 'keyevent', '223'],
         ['shell', 'input', 'keyevent', '90'],
+        ['shell', 'input', 'keyevent', '300'],
       ]);
     },
   );

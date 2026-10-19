@@ -43,6 +43,7 @@ import {
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import type { JsonSchema } from '../command-contract.ts';
 import {
+  customField,
   enumField,
   integerField,
   requiredField,
@@ -56,7 +57,7 @@ import {
   objectSchema,
   stringSchema,
 } from '../command-input.ts';
-import { compactRecord } from '../input-readers.ts';
+import { compactRecord, optionalString as optionalInputString } from '../input-readers.ts';
 import {
   defineCommandFacet,
   defineCommandFamilyFromFacets,
@@ -182,7 +183,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   'hardware-key': objectSchema(
     {
       action: constSchema('hardware-key'),
-      key: enumSchema(HARDWARE_KEYS),
+      key: stringSchema('The key name, or android-keycode:N for a raw Android keycode N.'),
       message: stringSchema(),
     },
     ['action', 'key', 'message'],
@@ -317,7 +318,7 @@ const actionButtonCommandDescription =
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 const hardwareKeyCommandDescription =
-  'Press one hardware key: volume-up, volume-down, mute, power, sleep, wake, a media key (media-play-pause, media-next, media-previous, media-rewind, media-fast-forward), or a TV remote key (channel-up, channel-down, last-channel, guide, info, captions, tv-input, color-red, color-green, color-yellow, color-blue). Use it to check volume and mute handling, standby and wake during playback, and media and channel keys. power toggles the screen; sleep and wake set it to off or on. The key goes to the system and the foreground media session, and nothing is re-observed afterwards. Supported on Android emulators and devices through ADB key events, including Limrun Android sessions; other platforms and the WebDriver (Appium) backend report UNSUPPORTED_OPERATION.';
+  'Press one hardware key: volume-up, volume-down, mute, power, sleep, wake, a media key (media-play-pause, media-next, media-previous, media-rewind, media-fast-forward), or a TV remote key (channel-up, channel-down, last-channel, guide, info, captions, tv-input, color-red, color-green, color-yellow, color-blue). Use it to check volume and mute handling, standby and wake during playback, and media and channel keys. power toggles the screen; sleep and wake set it to off or on. The key goes to the system and the foreground media session, and nothing is re-observed afterwards. A key of the form android-keycode:N sends Android keycode N, for a vendor remote button that no name covers. Supported on Android emulators and devices through ADB key events, including Limrun Android sessions; other platforms and the WebDriver (Appium) backend report UNSUPPORTED_OPERATION.';
 
 const telephonyCommandDescription =
   'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
@@ -454,9 +455,14 @@ const hardwareKeyCommandMetadata = defineFieldCommandMetadata(
   hardwareKeyCommandDescription,
   {
     key: requiredField(
-      enumField(
-        HARDWARE_KEYS,
-        'Key to press. power toggles the screen; sleep and wake turn it off or on.',
+      customField(
+        stringSchema(
+          `Key to press: ${HARDWARE_KEYS.join(', ')}. power toggles the screen; sleep and wake turn it off or on. For a vendor remote button no name covers, pass android-keycode:N, where N is its Android keycode.`,
+        ),
+        (record, key) => {
+          const value = optionalInputString(record, key);
+          return value === undefined ? undefined : parseHardwareKey(value);
+        },
       ),
     ),
   },
@@ -818,7 +824,7 @@ function readHardwareKeyPositional(positionals: string[]) {
   if (positionals.length !== 1) {
     throw new AppError(
       'INVALID_ARGS',
-      `hardware-key requires exactly one key: ${HARDWARE_KEYS.join(', ')}.`,
+      `hardware-key requires exactly one key: ${HARDWARE_KEY_USAGE}.`,
     );
   }
   return parseHardwareKey(positionals[0]);

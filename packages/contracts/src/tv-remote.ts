@@ -151,24 +151,46 @@ export const HARDWARE_KEYS = Object.keys(
   HARDWARE_KEY_DEFINITIONS,
 ) as (keyof typeof HARDWARE_KEY_DEFINITIONS)[];
 
-export const HARDWARE_KEY_USAGE = `<${HARDWARE_KEYS.join('|')}>`;
+const ANDROID_KEYCODE_PREFIX = 'android-keycode:';
+
+/** A Java `int`, the type of an Android `KeyEvent` keycode. */
+const MAX_ANDROID_KEYCODE = 2_147_483_647;
+
+export const HARDWARE_KEY_USAGE = `<${HARDWARE_KEYS.join('|')}|${ANDROID_KEYCODE_PREFIX}<n>>`;
 
 export type HardwareKey = (typeof HARDWARE_KEYS)[number];
 
-export function parseHardwareKey(value: string | undefined): HardwareKey {
+/**
+ * A named key, or a raw Android keycode for a vendor remote button that no name covers, such as
+ * an operator-specific channel or app key.
+ */
+export type HardwareKeyToken = HardwareKey | `${typeof ANDROID_KEYCODE_PREFIX}${number}`;
+
+export function parseHardwareKey(value: string | undefined): HardwareKeyToken {
   const normalized = value?.toLowerCase();
-  if (isHardwareKey(normalized)) return normalized;
+  if (isHardwareKeyToken(normalized)) return normalized;
   throw new AppError(
     'INVALID_ARGS',
-    `hardware-key key must be one of: ${HARDWARE_KEYS.join(', ')}.`,
+    `hardware-key key must be one of: ${HARDWARE_KEYS.join(', ')}, or ${ANDROID_KEYCODE_PREFIX}<n> with n from 1 to ${MAX_ANDROID_KEYCODE}.`,
   );
 }
 
-function isHardwareKey(value: string | undefined): value is HardwareKey {
-  return value !== undefined && Object.hasOwn(HARDWARE_KEY_DEFINITIONS, value);
+export function isHardwareKeyToken(value: unknown): value is HardwareKeyToken {
+  if (typeof value !== 'string') return false;
+  if (isHardwareKey(value)) return true;
+  const digits = value.startsWith(ANDROID_KEYCODE_PREFIX)
+    ? value.slice(ANDROID_KEYCODE_PREFIX.length)
+    : '';
+  return /^[1-9]\d{0,9}$/.test(digits) && Number(digits) <= MAX_ANDROID_KEYCODE;
+}
+
+function isHardwareKey(value: string): value is HardwareKey {
+  return Object.hasOwn(HARDWARE_KEY_DEFINITIONS, value);
 }
 
 /** The `KeyEvent` keycode `adb shell input keyevent` sends for the key. */
-export function toAndroidHardwareKeycode(key: HardwareKey): number {
-  return HARDWARE_KEY_DEFINITIONS[key].androidKeycode;
+export function toAndroidHardwareKeycode(key: HardwareKeyToken): number {
+  return isHardwareKey(key)
+    ? HARDWARE_KEY_DEFINITIONS[key].androidKeycode
+    : Number(key.slice(ANDROID_KEYCODE_PREFIX.length));
 }

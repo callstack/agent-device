@@ -6,7 +6,7 @@ import type { DeviceRotation } from './device-rotation.ts';
 import type { FillUnconfirmedVerification } from './fill-evidence.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
 import type { ScrollExecutionOptions } from './scroll-command.ts';
-import type { HardwareKey, TvRemoteButton } from './tv-remote.ts';
+import type { HardwareKeyToken, TvRemoteButton } from './tv-remote.ts';
 import type { GesturePlan } from './gesture-plan-types.ts';
 import type { ReadSettingResult, SettingOptions } from './settings.ts';
 import type { ReadableSetting } from './settings-catalog.ts';
@@ -425,7 +425,7 @@ export type Interactor = {
    * refuses the press before binding, and the hardware-key binder fails closed rather than
    * resolving an absent member as a silent no-op.
    */
-  hardwareKey?(key: HardwareKey): Promise<void>;
+  hardwareKey?(key: HardwareKeyToken): Promise<void>;
   /**
    * Optional (parity with `keyboardDismiss`): presses the iPhone/iPad Action Button, hardware only
    * the Apple owner carries. An owner without the button leaves it undefined; its fact refuses the

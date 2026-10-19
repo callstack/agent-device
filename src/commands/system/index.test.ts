@@ -390,6 +390,9 @@ describe('system command interface', () => {
   test('hardware-key reader parses one key and the writer forwards it', () => {
     expect(hardwareKeyCliReader(['volume-down'], flags())).toMatchObject({ key: 'volume-down' });
     expect(hardwareKeyCliReader(['Media-Next'], flags())).toMatchObject({ key: 'media-next' });
+    expect(hardwareKeyCliReader(['android-keycode:300'], flags())).toMatchObject({
+      key: 'android-keycode:300',
+    });
     expect(hardwareKeyDaemonWriter({ key: 'wake' } as Record<string, unknown>).positionals).toEqual(
       ['wake'],
     );
@@ -405,6 +408,10 @@ describe('system command interface', () => {
       'hardware-key requires exactly one key',
     );
     expectInvalidArgs(() => hardwareKeyCliReader(['camera'], flags()), 'key must be one of');
+    expectInvalidArgs(
+      () => hardwareKeyCliReader(['android-keycode:0'], flags()),
+      'key must be one of',
+    );
   });
 });
 

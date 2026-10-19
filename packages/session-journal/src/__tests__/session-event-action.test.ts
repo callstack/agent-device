@@ -241,6 +241,12 @@ test('hardware-key action events name only a known key', () => {
     command: 'hardware-key',
     key: 'media-play-pause',
   });
+  const raw = action('hardware-key', { action: 'hardware-key', key: 'android-keycode:300' });
+  assert.equal(buildActionSummary(raw), 'Pressed hardware key android-keycode:300');
+  assert.deepEqual(buildActionDetails(raw), {
+    command: 'hardware-key',
+    key: 'android-keycode:300',
+  });
   assert.equal(buildActionSummary(unknown), 'Pressed hardware key');
   assert.deepEqual(buildActionDetails(unknown), { command: 'hardware-key' });
 });

@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, FOLD_POSES, TELEPHONY_ACTIONS } from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
-import { HARDWARE_KEYS, TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
+import { isHardwareKeyToken, TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isKeyboardAction } from './keyboard-actions.ts';
 import {
@@ -111,7 +111,7 @@ export function buildStructuredActionDetails(action: SessionAction): Record<stri
         durationMs: readSessionEventNumber(result.durationMs),
       });
     case PUBLIC_COMMANDS.hardwareKey:
-      return compactDetails({ key: readEnum(result.key, HARDWARE_KEYS) });
+      return compactDetails({ key: readHardwareKeyToken(result.key) });
     case PUBLIC_COMMANDS.gesture:
     case PUBLIC_COMMANDS.swipe:
       return buildGestureActionDetails(result);
@@ -265,8 +265,12 @@ function buildTvRemoteActionSummary(result: Record<string, unknown>): string {
   return button ? `Pressed TV remote ${button}` : 'Used TV remote';
 }
 
+function readHardwareKeyToken(value: unknown): string | undefined {
+  return isHardwareKeyToken(value) ? value : undefined;
+}
+
 function buildHardwareKeyActionSummary(result: Record<string, unknown>): string {
-  const key = readEnum(result.key, HARDWARE_KEYS);
+  const key = readHardwareKeyToken(result.key);
   return key ? `Pressed hardware key ${key}` : 'Pressed hardware key';
 }
 

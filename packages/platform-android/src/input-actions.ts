@@ -21,7 +21,7 @@ import {
   scrollKeyboardOccludesSurfaceError,
 } from '@agent-device/contracts/scroll-gesture';
 import {
-  type HardwareKey,
+  type HardwareKeyToken,
   type TvRemoteButton,
   toAndroidHardwareKeycode,
   toAndroidTvRemoteKeyevent,
@@ -90,7 +90,10 @@ export async function pressAndroidTvRemote(
   await runAndroidShell(device, ['input', ...keyeventArgs, keyevent]);
 }
 
-export async function pressAndroidHardwareKey(device: DeviceInfo, key: HardwareKey): Promise<void> {
+export async function pressAndroidHardwareKey(
+  device: DeviceInfo,
+  key: HardwareKeyToken,
+): Promise<void> {
   await runAndroidShell(device, ['input', 'keyevent', toAndroidHardwareKeycode(key)]);
 }
 

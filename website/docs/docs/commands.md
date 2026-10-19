@@ -57,6 +57,7 @@ agent-device app-switcher
 agent-device action-button
 agent-device hardware-key volume-down
 agent-device hardware-key media-play-pause
+agent-device hardware-key android-keycode:300
 agent-device fold closed
 agent-device fold half-open
 agent-device fold open
@@ -126,6 +127,7 @@ Back, orientation, and hardware buttons:
   - Media: `media-play-pause`, `media-next`, `media-previous`, `media-rewind`, `media-fast-forward`.
   - TV remote: `channel-up`, `channel-down`, `last-channel`, `guide`, `info`, `captions`, `tv-input`, `color-red`, `color-green`, `color-yellow`, `color-blue`.
 - Use `hardware-key` to check volume and mute handling, standby and wake during playback, and media and channel keys, on a phone or an Android TV target.
+- For a vendor remote button that no name covers, pass its Android keycode as `android-keycode:<n>`, for example `hardware-key android-keycode:300`. `n` is an integer from 1 to 2147483647; agent-device sends it as is and does not check what the device maps it to.
 - `hardware-key` works on Android emulators and devices over ADB (`input keyevent`), including Limrun Android sessions. iOS, tvOS, macOS, web, Linux, Vega OS, HarmonyOS, Limrun iOS, and the Appium (WebDriver) backend report `UNSUPPORTED_OPERATION`. The key goes to the system and the foreground media session, and nothing is re-observed afterwards, so take a snapshot or screenshot to check the effect.
 
 Fold a foldable device:

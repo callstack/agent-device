@@ -7,7 +7,7 @@ import type { DeviceCommandBaseOptions } from './client-connection.ts';
 import type { SettleCommandOptions } from './client-gesture.ts';
 import type { DeviceRotation, SetFoldPoseInput } from './device-rotation.ts';
 import type { TelephonyEventInput } from './telephony-input.ts';
-import type { HardwareKey, TvRemoteButton } from './tv-remote.ts';
+import type { HardwareKeyToken, TvRemoteButton } from './tv-remote.ts';
 
 export type WaitCommandTarget =
   | {
@@ -105,7 +105,7 @@ export type TvRemoteCommandOptions = DeviceCommandBaseOptions & {
 export type TelephonyCommandOptions = DeviceCommandBaseOptions & TelephonyEventInput;
 
 export type HardwareKeyCommandOptions = DeviceCommandBaseOptions & {
-  key: HardwareKey;
+  key: HardwareKeyToken;
 };
 
 export type KeyboardCommandOptions = DeviceCommandBaseOptions & {

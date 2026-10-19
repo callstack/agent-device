@@ -10,7 +10,7 @@ import type {
   SystemButton,
   SystemButtonInput,
 } from '@agent-device/contracts/system-button-runtime';
-import { parseHardwareKey, type HardwareKey } from '@agent-device/contracts/tv-remote';
+import { parseHardwareKey, type HardwareKeyToken } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
@@ -89,7 +89,7 @@ export async function resolveBoundSystemButtonRuntime(
   );
 }
 
-function readHardwareKey(positionals: readonly string[]): HardwareKey {
+function readHardwareKey(positionals: readonly string[]): HardwareKeyToken {
   if (positionals.length !== 1) {
     throw new AppError('INVALID_ARGS', 'hardware-key requires exactly one key');
   }

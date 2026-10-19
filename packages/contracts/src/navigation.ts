@@ -2,7 +2,7 @@ import type { BackMode } from './back-mode.ts';
 import type { DeviceRotation, FoldPose } from './device-rotation.ts';
 import type { FoldScreenReport } from './fold-runtime.ts';
 import type { SettleObservation } from './interaction.ts';
-import type { HardwareKey, TvRemoteButton } from './tv-remote.ts';
+import type { HardwareKeyToken, TvRemoteButton } from './tv-remote.ts';
 
 /**
  * Closed results of the navigation/global action commands. Each mirrors its
@@ -93,6 +93,6 @@ export type TvRemoteCommandResult = {
 /** `hardware-key` — `{ action: 'hardware-key', key, message }`. */
 export type HardwareKeyCommandResult = {
   action: 'hardware-key';
-  key: HardwareKey;
+  key: HardwareKeyToken;
   message: string;
 };
