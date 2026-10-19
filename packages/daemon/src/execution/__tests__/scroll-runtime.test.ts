@@ -14,7 +14,13 @@ import {
   resolveScrollRuntimePlan,
   type ScrollRuntimePlan,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type { DaemonCommandContext } from '../../core/context.ts';
+import { contextFromFlags, type DaemonCommandContext } from '../../core/context.ts';
+import {
+  clearRequestAbortRegistration,
+  clearRequestCanceled,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 import { resolveBoundScrollRuntime } from '../scroll-runtime.ts';
 import type {
   BindDeviceRuntime,
@@ -625,34 +631,41 @@ test('bound scroll --until stops at a smaller explicit pass budget', async () =>
 test.each(['capture', 'scroll'] as const)(
   'bound scroll --until stops after cancellation during %s',
   async (phase) => {
-    const controller = new AbortController();
-    const reason = new AppError('COMMAND_FAILED', 'request canceled', {
-      reason: 'request_canceled',
-    });
-    let captures = 0;
-    let scrolls = 0;
-    await assert.rejects(
-      () =>
-        runScroll(
-          ['down'],
-          { until: 'label=Email', maxPasses: 200, signal: controller.signal },
-          {
+    const requestId = `scroll-until-canceled-${phase}`;
+    const registration = registerRequestAbort(requestId);
+    const context = contextFromFlags(
+      '/tmp/scroll-cancellation.log',
+      { until: 'label=Email', maxPasses: 200 },
+      undefined,
+      undefined,
+      requestId,
+    );
+    try {
+      let captures = 0;
+      let scrolls = 0;
+      await assert.rejects(
+        () =>
+          runScroll(['down'], context, {
             captureSnapshot: async () => {
               captures += 1;
-              if (phase === 'capture') controller.abort(reason);
+              if (phase === 'capture') markRequestCanceled(requestId);
               return { nodes: untilNodes(2400 - scrolls * 100, true) };
             },
             scroll: async () => {
               scrolls += 1;
-              controller.abort(reason);
+              markRequestCanceled(requestId);
               return {};
             },
-          },
-        ),
-      (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
-    );
-    assert.equal(captures, 1);
-    assert.equal(scrolls, phase === 'capture' ? 0 : 1);
+          }),
+        (error: unknown) =>
+          error instanceof AppError && error.details?.reason === 'request_canceled',
+      );
+      assert.equal(captures, 1);
+      assert.equal(scrolls, phase === 'capture' ? 0 : 1);
+    } finally {
+      clearRequestAbortRegistration(registration);
+      clearRequestCanceled(requestId);
+    }
   },
 );
 
