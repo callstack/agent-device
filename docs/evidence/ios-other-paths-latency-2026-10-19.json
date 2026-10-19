@@ -1,0 +1,270 @@
+{
+  "baseCommit": "8a3931a9c4fd8188636b7f5a36d5e56b6b97b038",
+  "app": "dev.e2e.benchmark",
+  "device": "BC54AC11-CD86-4C10-8C4E-5101C773FFEB",
+  "os": "iOS 27.0",
+  "cliVersion": "0.21.25",
+  "sampleFormat": "*MsCsv fields contain comma-separated millisecond observations in execution order. Encoder/resizer groups exclude two warmups; 20 observations remain. Native command groups contain four rounds. Function totals are nested diagnostics and must not be added together.",
+  "nativeProfiles": [
+    {
+      "kind": "fill-empty",
+      "baseMsCsv": "2066.741,2050.742,2041.365,2040.759",
+      "baseFunctionTotals": {
+        "point-query": {
+          "msCsv": "264.767,269.812,263.913,265.903",
+          "callsPerCommand": 1
+        },
+        "resolve": {
+          "msCsv": "206.777,204.873,203.862,209.455",
+          "callsPerCommand": 8
+        },
+        "bind": {
+          "msCsv": "104.37,96.862,107.82400000000001,107.181",
+          "callsPerCommand": 3
+        },
+        "value-read": {
+          "msCsv": "71.103,71.235,70.99600000000001,72.998",
+          "callsPerCommand": 7
+        },
+        "observation": {
+          "msCsv": "71.483,71.462,69.968,73.764",
+          "callsPerCommand": 5
+        }
+      },
+      "headMsCsv": "2131.242,2077.609,2057.501,2059.508",
+      "headFunctionTotals": {
+        "point-query": {
+          "msCsv": "271.827,269.159,274.126,273.848",
+          "callsPerCommand": 1
+        },
+        "resolve": {
+          "msCsv": "227.535,220.37,203.823,211.507",
+          "callsPerCommand": [9, 8, 8, 8]
+        },
+        "bind": {
+          "msCsv": "108.609,109.63499999999999,90.857,97.62899999999999",
+          "callsPerCommand": 3
+        },
+        "value-read": {
+          "msCsv": "71.318,71.461,72.464,74.723",
+          "callsPerCommand": [8, 7, 7, 7]
+        },
+        "observation": {
+          "msCsv": "85.218,80.276,74.65599999999999,77.307",
+          "callsPerCommand": [6, 5, 5, 5]
+        }
+      }
+    },
+    {
+      "kind": "fill-replace",
+      "baseMsCsv": "3371.563,3276.471,3325.195,3350.314",
+      "headMsCsv": "3353.166,3418.703,3289.302,3330.925"
+    },
+    {
+      "kind": "selector-input",
+      "baseMsCsv": "5484.673,5324.559,5453.824,5515.205",
+      "headMsCsv": "672.401,664.799,669.686,658.997"
+    }
+  ],
+  "confirmedReadinessMs": {
+    "base": 4491.554,
+    "head": 27.198
+  },
+  "pngWorkerEncode": [
+    {
+      "version": "base",
+      "width": 402,
+      "height": 874,
+      "samplesMsCsv": "12.010000000000005,10.601500000000016,11.980374999999981,10.434458000000006,10.343000000000018,11.95666700000001,10.297207999999983,10.63945799999999,10.775040999999959,10.625124999999969,12.144124999999974,10.825207999999975,10.216999999999985,10.660040999999978,10.182749999999999,10.095041999999978,12.090582999999981,11.960125000000005,10.180834000000004,11.144583000000011",
+      "encodedBytes": [30267],
+      "allPixelsMatched": true
+    },
+    {
+      "version": "base",
+      "width": 1206,
+      "height": 2622,
+      "samplesMsCsv": "91.19058299999995,89.88745800000004,99.69170799999995,102.13941599999998,89.78066600000011,88.48374999999987,88.60300000000007,88.40029200000004,90.59820800000011,90.77549999999997,90.70720899999992,88.78683399999977,88.21283300000005,93.8455829999998,104.29904099999976,88.46179200000006,88.47429199999988,87.90254200000027,99.25795900000003,88.81541700000025",
+      "encodedBytes": [106219],
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "width": 402,
+      "height": 874,
+      "samplesMsCsv": "3.3733330000000024,4.1597500000000025,3.3055829999999844,4.075332999999972,3.2182909999999936,3.1429170000000113,3.9061659999999847,4.0330000000000155,3.5250000000000057,3.2576670000000263,3.1966670000000192,3.2964170000000195,3.2623749999999916,3.1562079999999924,3.8912920000000213,3.1228749999999934,3.0982079999999996,3.753582999999992,3.0603749999999934,3.7347090000000094",
+      "encodedBytes": [19859],
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "width": 1206,
+      "height": 2622,
+      "samplesMsCsv": "25.54454099999998,24.201542000000018,25.13499999999999,24.029540999999995,25.288792,23.65995799999996,23.975084000000038,23.992124999999987,25.50691699999993,24.100458000000003,23.89995799999997,24.252207999999996,24.073208000000022,23.700667000000067,24.256124999999997,24.16283300000009,24.099958000000015,24.756167000000005,23.721667000000025,24.15429199999994",
+      "encodedBytes": [67169],
+      "allPixelsMatched": true
+    }
+  ],
+  "pixelResampling": [
+    {
+      "version": "base",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 402,
+      "height": 874,
+      "samplesMsCsv": "10.645834000000008,10.754541000000017,10.719667000000015,10.73195899999999,11.701999999999998,10.671458999999999,10.754333000000003,10.690458000000007,10.712499999999977,11.648750000000007,10.836500000000001,10.872250000000008,10.825040999999999,10.874249999999961,10.855457999999999,10.839875000000006,10.808875,10.891209000000003,10.344708999999966,10.426750000000027",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "base",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 603,
+      "height": 1311,
+      "samplesMsCsv": "13.956041999999968,13.422500000000014,13.381541000000027,13.439999999999998,13.331249999999955,13.306167000000016,13.336792000000003,13.396374999999978,13.385499999999979,13.338415999999995,13.48849999999993,17.838082999999983,13.826374999999985,19.77283399999999,18.634500000000003,14.138666999999941,13.029457999999977,13.000667000000021,12.956166999999937,13.874957999999992",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "base",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 481,
+      "height": 1047,
+      "samplesMsCsv": "28.395457999999962,15.232790999999906,14.916166999999973,15.015374999999949,15.075917000000004,14.843375000000037,14.974959000000013,15.555374999999913,15.247041999999965,15.134915999999976,14.951625000000035,15.244875000000093,15.056375000000003,14.940500000000043,14.96550000000002,14.93500000000006,14.97787500000004,15.099166999999966,15.245541999999887,15.083208000000013",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 402,
+      "height": 874,
+      "samplesMsCsv": "8.181874999999991,8.226666999999992,8.267959000000019,8.244875000000008,8.217290999999989,8.237458000000004,8.208416,8.221708000000007,8.196499999999986,8.184708,8.16187499999998,8.293457999999987,7.954958000000005,8.101292,8.121792,8.195792000000012,8.171582999999998,8.162624999999991,8.298959000000025,8.246583999999984",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 603,
+      "height": 1311,
+      "samplesMsCsv": "10.862500000000011,10.82858299999998,10.756416999999999,10.824124999999981,11.766291000000024,10.885958000000016,11.056332999999995,10.960749999999962,11.162459000000013,14.450249999999983,10.898082999999986,16.793624999999963,16.267709000000025,11.791375000000016,10.841000000000008,10.741917,10.955749999999966,10.673875000000066,10.67658300000005,10.673999999999978",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 481,
+      "height": 1047,
+      "samplesMsCsv": "30.40816600000005,30.201791999999955,16.112209000000007,15.763042000000041,15.746167000000014,15.831542000000013,15.863833,16.56441700000005,15.898209000000065,15.916000000000054,15.898249999999962,15.900083999999993,15.798541,15.841374999999971,15.932042000000024,15.85895800000003,15.886666999999989,15.884457999999995,15.998917000000006,16.473499999999945",
+      "allPixelsMatched": true
+    }
+  ],
+  "checks": {
+    "native": {
+      "base": {
+        "passedTests": 1,
+        "failedTests": 1,
+        "skippedTests": 0,
+        "failure": "Confirmed readiness exceeded its window: 4491.554 ms versus 2000 ms. The upstream profiling scenario passed."
+      },
+      "head": {
+        "passedTests": 9,
+        "failedTests": 0,
+        "skippedTests": 0
+      },
+      "final": {
+        "passedTests": 22,
+        "failedTests": 0,
+        "skippedTests": 0
+      }
+    },
+    "pngFocusedTests": {
+      "passed": 28,
+      "failed": 0
+    },
+    "fractionalWeightMutation": {
+      "controlPassed": 3,
+      "mutantPassed": 2,
+      "mutantFailed": 1,
+      "reason": "Forcing whole-pixel weights on fractional geometry changed the independent expected RGBA averages."
+    },
+    "liveSourceCapture": [
+      {
+        "density": 1,
+        "width": 402,
+        "height": 874,
+        "bytes": 41182,
+        "facts": {
+          "displayRotation": "portrait"
+        },
+        "ok": true
+      },
+      {
+        "density": 1.25,
+        "width": 503,
+        "height": 1093,
+        "bytes": 66395,
+        "facts": {
+          "displayRotation": "portrait"
+        },
+        "ok": true
+      },
+      {
+        "density": 3,
+        "width": 1206,
+        "height": 2622,
+        "bytes": 186073,
+        "facts": {
+          "displayRotation": "portrait"
+        },
+        "ok": true
+      }
+    ],
+    "ordinaryCliSmoke": {
+      "rounds": 2,
+      "successfulOperations": 12,
+      "allFillsAndAppendsReadBack": true,
+      "nativeArtifact": "/private/tmp/agent-device-other-final-ios"
+    },
+    "maestro": {
+      "focusedFlow": {
+        "success": true,
+        "replayed": 4,
+        "setup": "Navigate to Login Form with ordinary CLI first; the flow asserts the input, taps it, types, and asserts its value.",
+        "dispatchEvidence": "maestro_tap_dispatch kind=selector, selectorKey=id, expectedPoint=(201,454)",
+        "flow": "appId: dev.e2e.benchmark\n---\n- assertVisible:\n    id: email-input\n- tapOn:\n    id: email-input\n- inputText: readiness@example.test\n- assertVisible: readiness@example.test\n"
+      },
+      "fullNavigationAttempt": {
+        "success": false,
+        "failedStep": 4,
+        "reason": "assertVisible email-input failed after home-row navigation reached Sticky Chrome Target; input readiness was not exercised. Cause not established; no baseline comparison.",
+        "flow": "appId: dev.e2e.benchmark\n---\n- launchApp:\n    clearState: false\n- assertVisible:\n    id: Login Form\n- tapOn:\n    id: Login Form\n- assertVisible:\n    id: email-input\n- tapOn:\n    id: email-input\n- inputText: readiness@example.test\n- assertVisible: readiness@example.test\n"
+      }
+    }
+  },
+  "reproduction": {
+    "setup": "Prepare separate baseCommit and candidate checkouts with pnpm install --frozen-lockfile && pnpm build. Build each iOS artifact with AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 and its own AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH. Apply instrumentationPatch and use profileTestsSwift as UnitTests/RunnerTests+TextEntryLatencyTests.swift for the manual native profile; adapt the readiness-helper hunk to its renamed function on the candidate. Run sequentially without competing builds/tests. The uninstrumented final selection is recorded separately.",
+    "nativeTests": "testConfirmedInputReadinessReturnsBeforeItsReadinessWindow; testProfileUpstreamForm",
+    "nativeFinalCommand": "#!/bin/sh\nset -eu\nxcodebuild test-without-building -xctestrun /private/tmp/agent-device-other-final-ios/Build/Products/AgentDeviceRunner_AgentDeviceRunnerUITests_iphonesimulator27.1-arm64.xctestrun -destination 'platform=iOS Simulator,id=BC54AC11-CD86-4C10-8C4E-5101C773FFEB' -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedFirstResponderTypeAdmitsOnlyTheBareSubmitKeyAfterAHiddenKeyboardTap -only-testing:AgentDeviceRunnerUITests/RunnerTests/testWarmupWaitsForPendingTextButNotAnUnreadableValue -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextValueReadOwnsTheUnreadableRule -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypePlanPeelsAWarmupCharacterAndChargesItsReadBack -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillFailsWhenAppRemovesInputBeforeTextIsDelivered -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillFailsWhenAppReplacesInputBeforeTextIsDelivered -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillSucceedsWhenAppReplacesInputAfterLastCharacter -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillSucceedsWhenAppRemovesInputAfterLastCharacter -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillWithAppWriteBackFailsWithoutRetyping -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillIntoMaskedTextFieldIsUnverifiedRatherThanAMismatch -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyUsesSynthesizedFirstResponderAfterHiddenKeyboardTap -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyRefusesWhenPrivateSynthesisIsUnavailable -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedReplacementPacesAnAppOwnedFieldAtItsAcknowledgeWindow -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillThatClearsOnSubmitIsUnverifiedAndSubmitsOnce -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillIntoTemplateCurrencyFieldReportsUnconfirmedWithoutRetyping -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillVerifiesAnUnidentifiedFieldThatMovesWhileTyping -only-testing:AgentDeviceRunnerUITests/RunnerTests/testConfirmedInputReadinessReturnsBeforeItsReadinessWindow -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSelectorTapOnInputThatLeavesTheTreeOnFocusRecordsNoFailure -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapOnInputThatLeavesTheTreeOnFocusReportsTapped -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateFillOnInputThatLeavesTheTreeOnFocusFailsTypedAndRecordsNothing -resultBundlePath /private/tmp/agent-device-other-final-tests.xcresult\n",
+    "profileTestsSwift": "import XCTest\n\nextension RunnerTests {\n#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)\n  @MainActor\n  func testConfirmedInputReadinessReturnsBeforeItsReadinessWindow() throws {\n    app.launchArguments = [\"--agent-device-text-entry-regression\"]\n    app.launch()\n    defer { invalidateCachedTarget(reason: \"unit_test_cleanup\"); app.terminate() }\n    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))\n    let field = app.textFields[\"agent-device-hardware-keyboard-input\"]\n    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))\n    field.tap()\n    XCTAssertTrue(keyboardFocusConfirmed(app: app, element: field))\n    let failures = currentXCTestFailureCount()\n    let startedAt = Date()\n    waitForTextEntryReadinessAfterTap(app: app, element: field)\n    let elapsed = Date().timeIntervalSince(startedAt)\n    NSLog(\"OTHER_PATHS_READINESS durationMs=%.3f\", elapsed * 1000)\n    XCTAssertFalse(didRecordXCTestFailure(since: failures))\n    XCTAssertTrue(keyboardFocusConfirmed(app: app, element: field))\n    XCTAssertLessThan(elapsed, TextEntryTiming.readinessTimeout)\n  }\n\n  @MainActor\n  func testProfileUpstreamForm() throws {\n    let benchmark = XCUIApplication(bundleIdentifier: \"dev.e2e.benchmark\")\n    benchmark.launch()\n    defer { invalidateCachedTarget(reason: \"unit_test_cleanup\"); benchmark.terminate() }\n    XCTAssertTrue(benchmark.waitForExistence(timeout: appExistenceTimeout))\n    let row = benchmark.descendants(matching: .any).matching(identifier: \"Login Form\").firstMatch\n    guard row.waitForExistence(timeout: appExistenceTimeout) else {\n      XCTFail(\"home row missing: \\(benchmark.debugDescription)\")\n      return\n    }\n    row.tap()\n    let field = benchmark.textFields[\"email-input\"]\n    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))\n    mainOwned.app = benchmark\n    mainOwned.bundleId = \"dev.e2e.benchmark\"\n    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: benchmark))\n    clearSnapshotXCTestChannelPenalty(reason: \"profile-baseline\")\n    func fill(_ text: String, kind: String, round: Int) throws {\n      let frame = field.frame\n      let command = try JSONDecoder().decode(Command.self, from: JSONSerialization.data(withJSONObject: [\n        \"command\": \"type\", \"commandId\": \"profile-\\(kind)-\\(round)\", \"text\": text,\n        \"textEntryMode\": \"replace\", \"x\": frame.midX, \"y\": frame.midY,\n      ]))\n      let startedAt = Date()\n      let response = try executeOnMainPrepared(command: command, activeApp: benchmark)\n      let elapsed = Date().timeIntervalSince(startedAt) * 1000\n      XCTAssertTrue(response.ok, String(describing: response.error))\n      XCTAssertEqual(field.value as? String, text.isEmpty ? \"Email\" : text)\n      NSLog(\"OTHER_PATHS_BENCH kind=%@ round=%d durationMs=%.3f\", kind, round, elapsed)\n    }\n    for round in 0..<4 {\n      try fill(\"\", kind: \"clear\", round: round)\n      try fill(\"user00@example.test\", kind: \"fill-empty\", round: round)\n      try fill(\"next00@example.test\", kind: \"fill-replace\", round: round)\n      let tap = try runnerCommandFixture(\n        #\"{\"command\":\"tap\",\"commandId\":\"profile-selector-input\",\"selectorKey\":\"id\",\"selectorValue\":\"email-input\",\"synthesized\":true}\"#\n      )\n      let startedAt = Date()\n      let tapped = try executeOnMainPrepared(command: tap, activeApp: benchmark)\n      let elapsed = Date().timeIntervalSince(startedAt) * 1000\n      XCTAssertTrue(tapped.ok, String(describing: tapped.error))\n      XCTAssertTrue(keyboardFocusConfirmed(app: benchmark, element: field))\n      XCTAssertEqual(field.value as? String, \"next00@example.test\")\n      NSLog(\"OTHER_PATHS_BENCH kind=selector-input round=%d durationMs=%.3f\", round, elapsed)\n    }\n  }\n#endif\n}\n",
+    "instrumentationPatch": "diff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift\nindex 02b936bda3..326dcd4a58 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift\n@@ -176,6 +176,8 @@ extension RunnerTests {\n     }\n \n     func withElement(_ nextElement: XCUIElement?) -> TextEntryTarget {\n+      let otherProfileStartedAt = Date()\n+      defer { NSLog(\"OTHER_PATHS_PROFILE phase=bind durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n       guard let nextElement else {\n         return self\n       }\n@@ -286,6 +288,8 @@ extension RunnerTests {\n   /// its bound identity, so every post, read-back, verification poll, and repair refuses an input\n   /// that took the bound one's place.\n   func resolveTextEntryElement(app: XCUIApplication, target: TextEntryTarget) -> XCUIElement? {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=resolve durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     guard let boundIdentity = target.boundIdentity else {\n       return resolveUnboundTextEntryElement(app: app, target: target)\n     }\n@@ -470,6 +474,8 @@ extension RunnerTests {\n     for element: (any XCUIElementAttributes)?,\n     treatingPlaceholderAsEmpty: Bool = false\n   ) -> TextValueRead {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=value-read durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     guard let element else {\n       return .unavailable\n     }\ndiff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryConfirmation.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryConfirmation.swift\nindex b86d46f752..712ea82418 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryConfirmation.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryConfirmation.swift\n@@ -126,6 +126,8 @@ extension RunnerTests {\n   /// Samples the element's readable value with its identity in one accessibility query; nil when\n   /// the element is gone or its value is unreadable (secure fields).\n   func textEntryObservation(for element: XCUIElement?) -> TextEntryObservation? {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=observation durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     guard let element,\n           let snapshot = try? element.snapshot(),\n           let value = editableTextValue(for: snapshot, treatingPlaceholderAsEmpty: true)\ndiff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryReadiness.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryReadiness.swift\nindex d87c3f7cdf..5c54446262 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryReadiness.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryReadiness.swift\n@@ -111,6 +111,8 @@ extension RunnerTests {\n   }\n \n   private func waitForFocusedTextInput(app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=selector-readiness durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     let deadline = Date().addingTimeInterval(timeout)\n     while Date() < deadline {\n       if let focused = focusedTextInput(app: app) {\ndiff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextInputProbe.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextInputProbe.swift\nindex 8b8ff0acc7..c20b28c683 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextInputProbe.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextInputProbe.swift\n@@ -157,6 +157,8 @@ extension RunnerTests {\n     point: CGPoint,\n     shouldStop: () -> Bool\n   ) -> [XCUIElement] {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=point-query durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     var candidates: [XCUIElement] = []\n     for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {\n       if shouldStop() { break }\n",
+    "pngBenchmarkScript": "import fs from 'node:fs';\nimport assert from 'node:assert/strict';\nimport {pathToFileURL} from 'node:url';\nconst [repo,label]=process.argv.slice(2);\nconst {PNG}=await import(pathToFileURL(`${repo}/packages/capture-kit/src/png.ts`));\nconst {encodePngAsync,retainPngWorker,terminatePngWorker}=await import(pathToFileURL(`${repo}/packages/capture-kit/src/png-worker-client.ts`));\nconst failures=[];const release=retainPngWorker(r=>failures.push(r));\nconst outputs=[];\ntry{\n for(const file of [new URL('./baseline-0.png',import.meta.url).pathname,'/private/tmp/e2e-ios-bench/direct/screenshots/001-bench-0.png']){\n  const png=PNG.sync.read(fs.readFileSync(file)),samples=[];\n  for(let i=0;i<22;i++){\n   const started=performance.now();\n   const bytes=await encodePngAsync(png);\n   const ms=performance.now()-started;\n   const actual=PNG.sync.read(bytes);\n   assert.equal(actual.width,png.width);assert.equal(actual.height,png.height);assert.deepEqual(actual.data,png.data);\n   assert.deepEqual(failures,[],'worker unavailable');\n   if(i>=2)samples.push({ms,bytes:bytes.length});\n  }\n  outputs.push({source:file,width:png.width,height:png.height,verifiedPixels:true,samples});\n }\n fs.writeFileSync(new URL(`./png-${label}.json`,import.meta.url),JSON.stringify(outputs,null,2));\n for(const o of outputs){const values=o.samples.map(s=>s.ms).sort((a,b)=>a-b);console.log(label,o.width,o.height,(values[9]+values[10])/2)}\n}finally{await release();await terminatePngWorker()}\n",
+    "resizeBenchmarkScript": "import fs from 'node:fs';\nimport assert from 'node:assert/strict';\nimport {pathToFileURL} from 'node:url';\nconst [root,repo,label]=process.argv.slice(2);\nconst {PNG}=await import(pathToFileURL(`${root}/packages/capture-kit/src/png.ts`));\nconst {resizePngBox:reference}=await import(pathToFileURL(`${root}/packages/capture-kit/src/png-resize.ts`));\nconst {resizePngBox:resize}=await import(pathToFileURL(`${repo}/packages/capture-kit/src/png-resize.ts`));\nconst source=PNG.sync.read(fs.readFileSync('/private/tmp/e2e-ios-bench/direct/screenshots/001-bench-0.png'));\nconst results=[];\nfor(const [width,height] of [[402,874],[603,1311],[481,1047]]){\n const expected=reference(source,width,height),samples=[];\n for(let i=0;i<22;i++){\n  const start=performance.now();const actual=resize(source,width,height);const ms=performance.now()-start;\n  assert.deepEqual(actual.data,expected.data);assert.equal(actual.width,width);assert.equal(actual.height,height);\n  if(i>=2)samples.push(ms);\n }\n const sorted=[...samples].sort((a,b)=>a-b);console.log(label,width,height,(sorted[9]+sorted[10])/2);\n results.push({sourceWidth:source.width,sourceHeight:source.height,width,height,pixelsMatchBaseline:true,samplesMs:samples});\n}\nfs.writeFileSync(new URL(`./resize-${label}.json`,import.meta.url),JSON.stringify(results,null,2));\n",
+    "liveSourceCaptureScript": "import fs from 'node:fs';\nimport assert from 'node:assert/strict';\nimport zlib from 'node:zlib';\nimport {screenshotIos} from '../../packages/platform-apple/src/core/screenshot.ts';\nimport {PNG} from '../../packages/capture-kit/src/png.ts';\nimport {retainPngWorker,terminatePngWorker} from '../../packages/capture-kit/src/png-worker-client.ts';\nconst device={platform:'apple',id:'BC54AC11-CD86-4C10-8C4E-5101C773FFEB',name:'iPhone 17 Pro',kind:'simulator',booted:true};\nconst unavailable=[],release=retainPngWorker(reason=>unavailable.push(reason)),checks=[];\nfunction filters(bytes,width,height){\n const parts=[];\n for(let offset=8;offset+12<=bytes.length;){\n  const length=bytes.readUInt32BE(offset),type=bytes.toString('ascii',offset+4,offset+8);\n  if(type==='IDAT')parts.push(bytes.subarray(offset+8,offset+8+length));offset+=length+12;\n }\n const raw=zlib.inflateSync(Buffer.concat(parts));\n return Array.from({length:height},(_,row)=>raw[row*(width*4+1)]);\n}\ntry{\n for(const [density,width,height] of [[1,402,874],[1.25,503,1093],[3,1206,2622]]){\n  const file=new URL(`./live-png-${density}.png`,import.meta.url).pathname;\n  const facts=await screenshotIos(device,file,{pixelDensity:density,skipIosSimulatorBootCheck:true});\n  const bytes=fs.readFileSync(file),image=PNG.sync.read(bytes);\n  assert.equal(image.width,width);assert.equal(image.height,height);\n  if(density!==3){assert.equal(bytes[25],6);assert(filters(bytes,width,height).every(f=>f===0),'optimized encoder did not produce None-filter rows')}\n  assert.deepEqual(unavailable,[],'PNG worker unavailable');\n  checks.push({density,width,height,bytes:bytes.length,facts,ok:true});\n  console.log('live screenshot',density,width,height,'OK');\n }\n fs.writeFileSync(new URL('./live-png-check.json',import.meta.url),JSON.stringify(checks,null,2));\n}finally{await release();await terminatePngWorker()}\n"
+  },
+  "cliBaselineMsCsv": {
+    "fill-empty": "2300.424166999999,2194.0099999999984,2163.5229580000014,2391.3227499999994",
+    "press-input": "755.0877920000003,847.9926669999986,778.5891249999986,761.586583999997",
+    "fill-replace": "3458.5552499999994,3739.052834000002,3492.720208999999,3464.7624170000054",
+    "type-append": "1369.3470839999973,1408.7641669999975,1352.8812909999979,1360.7457500000019",
+    "snapshot": "256.92995900000096,324.56275000000096,242.77883300000394,258.778250000003",
+    "screenshot": "860.6055419999975,762.8202500000007,763.7697499999995,765.8112079999992"
+  },
+  "daemonBaselineMsCsv": {
+    "snapshot": "995,115,103,94,90,103,102,102,119,124,92,153,93,97,100,100,82,103,102,107,101,101",
+    "screenshot": "703,573,606,609",
+    "screenshotCapture": "428,416,433,429",
+    "screenshotDisplayProbe": "188,95,89,96"
+  }
+}

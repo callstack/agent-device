@@ -85,6 +85,8 @@ There is no demonstrated safe two-second replacement here. Select All does not p
 
 ## Validation and reproduction
 
+The [non-clearing path follow-up](ios-other-paths-latency-2026-10-19.md) profiles target lookup, focus readiness, image encoding, and resampling, with separate measurements for the narrow selector route and ordinary CLI commands.
+
 Base: `8f3eb3d2efde3654a560fddb39127d556e068352`, with the preserved implementation patch. Device: iPhone 17 Pro, iOS 27.0, `BC54AC11-CD86-4C10-8C4E-5101C773FFEB`. Host: M4 Pro, Xcode 27.1, Node 26.11.1. The live runs used the worktree patch; the PR records the published validation commit.
 
 - The capture/routing suites passed: 43 tests.
