@@ -38,6 +38,10 @@ jobs:
     timeout-minutes: 170
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      IOS_STATE_DIR: ${{ github.workspace }}/.tmp/ios-agent-device-state
+      MACOS_STATE_DIR: ${{ github.workspace }}/.tmp/macos-agent-device-state
+      IOS_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
+      MACOS_DERIVED_PATH: ${{ github.workspace }}/.tmp/macos-runner-derived
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -65,44 +69,44 @@ jobs:
         timeout-minutes: 80
         env:
           IOS_RUNTIME_VERSION: '26.2'
-          AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/ios-agent-device-state
-          AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
+          AGENT_DEVICE_STATE_DIR: ${{ env.IOS_STATE_DIR }}
+          AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ env.IOS_DERIVED_PATH }}
           AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS: '420000'
           AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
           AGENT_DEVICE_XCUITEST_ARCHS: arm64
           AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE: agent-device-test-app:///automation?event={event}&payload={payload}
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-      - name: Clean ios daemon and retained runners
+      - name: Clean iOS daemon and retained runners
         id: ios-cleanup
         if: ${{ always() && steps.build.outcome == 'success' }}
         continue-on-error: true
         env:
-          AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/ios-agent-device-state
+          AGENT_DEVICE_STATE_DIR: ${{ env.IOS_STATE_DIR }}
         shell: bash
         run: |
-          node bin/agent-device.mjs daemon stop --clean --state-dir "$AGENT_DEVICE_STATE_DIR"
+          pnpm clean:daemon
       - name: macOS smoke tests
         id: macos
         uses: ./.github/actions/smoke-macos
         continue-on-error: true
         timeout-minutes: 80
         env:
-          AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/macos-agent-device-state
-          AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/macos-runner-derived
+          AGENT_DEVICE_STATE_DIR: ${{ env.MACOS_STATE_DIR }}
+          AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ env.MACOS_DERIVED_PATH }}
           AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
           RESULT_BUNDLE_PATH: ${{ github.workspace }}/.tmp/xctest-host/RunnerTests.xcresult
           RESULT_SUMMARY_PATH: ${{ github.workspace }}/.tmp/xctest-host/test-results-summary.json
           XCTEST_LANE: host
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-      - name: Clean macos daemon and retained runners
+      - name: Clean macOS daemon and retained runners
         id: macos-cleanup
         if: ${{ always() && steps.build.outcome == 'success' }}
         continue-on-error: true
         env:
-          AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/macos-agent-device-state
+          AGENT_DEVICE_STATE_DIR: ${{ env.MACOS_STATE_DIR }}
         shell: bash
         run: |
-          node bin/agent-device.mjs daemon stop --clean --state-dir "$AGENT_DEVICE_STATE_DIR"
+          pnpm clean:daemon
       - name: Require both Apple phases to succeed
         if: always()
         env:
@@ -118,3 +122,15 @@ jobs:
           test "$MACOS_OUTCOME" = success
           test "$IOS_CLEANUP_OUTCOME" = success
           test "$MACOS_CLEANUP_OUTCOME" = success
+      - name: Upload Apple artifacts
+        if: always()
+        uses: ./.github/actions/upload-agent-device-artifacts
+        with:
+          artifact-name: apple-artifacts
+          agent-state-dir: ${{ env.IOS_STATE_DIR }}
+          runner-derived-path: ${{ env.IOS_DERIVED_PATH }}
+          additional-paths: |
+            ${{ env.MACOS_STATE_DIR }}/daemon.log
+            ${{ env.MACOS_STATE_DIR }}/sessions/**
+            ${{ env.MACOS_DERIVED_PATH }}/.agent-device-runner-cache.json
+            ${{ env.MACOS_DERIVED_PATH }}/Logs/**

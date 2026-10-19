@@ -13,6 +13,11 @@ inputs:
     required: false
     default: '.agent-device-no-runner-derived'
 
+  additional-paths:
+    description: 'Optional additional diagnostic paths for a shared runner'
+    required: false
+    default: ''
+
 runs:
   using: 'composite'
   steps:
@@ -30,3 +35,4 @@ runs:
           ${{ inputs.runner-derived-path }}/Logs/**
           test/artifacts/**
           test/screenshots/**
+          ${{ inputs.additional-paths }}

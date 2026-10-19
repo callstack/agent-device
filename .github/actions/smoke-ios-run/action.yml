@@ -142,10 +142,3 @@ runs:
           exit 1
         fi
       shell: bash
-    - name: Upload iOS artifacts
-      if: always()
-      uses: ./.github/actions/upload-agent-device-artifacts
-      with:
-        artifact-name: ios-artifacts
-        agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
-        runner-derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}

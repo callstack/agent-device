@@ -99,10 +99,3 @@ runs:
           packages/capture-kit/src/recording/__tests__/swift-cache-recording-scripts.test.ts
         pnpm check:package -- --verify-snapshot-bridge-preparation
       shell: bash
-    - name: Upload macOS artifacts
-      if: always()
-      uses: ./.github/actions/upload-agent-device-artifacts
-      with:
-        artifact-name: macos-artifacts
-        agent-state-dir: ${{ env.AGENT_DEVICE_STATE_DIR }}
-        runner-derived-path: ${{ env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH }}
