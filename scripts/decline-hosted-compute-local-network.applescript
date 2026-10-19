@@ -17,7 +17,7 @@ on matchingDeclineButtons()
         set declineButtons to {}
         repeat with candidateElement in elements
           try
-            if role of candidateElement is "AXStaticText" and value of candidateElement is "Allow “hosted-compute” to find devices on local networks?" then set headingMatches to true
+            if role of candidateElement is "AXStaticText" and value of candidateElement is "Allow “hosted-compute-” to find devices on local networks?" then set headingMatches to true
             if role of candidateElement is "AXButton" and name of candidateElement is in {"Don’t Allow", "Don't Allow"} then set end of declineButtons to contents of candidateElement
           end try
         end repeat
