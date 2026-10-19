@@ -1,3 +1,4 @@
+import { classifyAndroidAppTarget } from './open-target.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import { Deadline, sleep } from '@agent-device/host-kit/retry';
@@ -252,7 +253,7 @@ async function tryAndroidHelperLaunch(
     options.activity !== undefined ||
     androidLaunchArgs(options).length > 0 ||
     options.terminateRunningApp ||
-    !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/.test(app)
+    classifyAndroidAppTarget(app) !== 'package'
   )
     return undefined;
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');

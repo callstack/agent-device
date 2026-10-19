@@ -71,7 +71,9 @@ test('a validated no-injection refusal completes fill through adb without a help
   const f = fixture({ ...refused, injected: 'false' });
   await withAndroidAdbProvider(f.provider, { serial: device.id }, async () => {
     await fillAndroid(device, 10, 10, 'chips', 0, helper);
-    expect((await readAndroidFillTargetBeforeMutation(device, 10, 10, helper))?.text).toBe('chips');
+    expect(
+      (await readAndroidFillTargetBeforeMutation(device, 10, 10, helper))?.targetInput?.text,
+    ).toBe('chips');
   });
   expect(f.calls.filter((args) => args[0] === 'shell' && args[2] === 'text')).toHaveLength(1);
   expect(f.requests.filter((request) => request.startsWith('input '))).toHaveLength(1);

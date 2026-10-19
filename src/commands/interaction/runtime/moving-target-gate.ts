@@ -28,7 +28,7 @@ import type { ResolveInteractionTargetParams } from './interaction-resolution-re
  * photograph of a surface that may still be rearranging itself, and the ADB-backed Android helper is
  * measured reporting frames in flight — so an interaction issued right after an action that moved
  * the UI can resolve a point the target has already left and report success on the vacancy. The exposure is the runtime path's own capture-to-dispatch
- * distance, so the gate is backend-neutral.
+ * distance. Android requires a bounded quiet interval; other platforms retain the full observation window.
  *
  * Two judgements decide when it is real: {@link movingTargetGateDecision} asks whether this position
  * is still owed a second observation, and kernel's `areCapturedRectsAtSamePosition` asks whether the
