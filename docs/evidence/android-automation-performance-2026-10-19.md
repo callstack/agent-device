@@ -15,7 +15,7 @@ Build each checkout and its Android helpers separately. Run the variants in sequ
 
 ```sh
 ANDROID_SERIAL=emulator-5554 BENCH_ROUNDS=20 \
-  node scripts/bench-android-automation.mjs /absolute/checkout /private/tmp/android-benchmark.json
+  pnpm bench:android:automation /absolute/checkout /private/tmp/android-benchmark.json
 ```
 
 The script uses the public SDK and the Checkout form's `field-email`.
