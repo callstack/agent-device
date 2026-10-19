@@ -4,6 +4,10 @@ import AgentDeviceSnapshotPresentation
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 import ObjectiveC.runtime
 
+private final class RunnerCoordinateTapObserver {
+  var count = 0
+}
+
 private final class RunnerSynthesizedTapFailureStub: NSObject {
   @objc(synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:)
   class func synthesizeTap(
@@ -20,6 +24,27 @@ private final class RunnerSynthesizedTapFailureStub: NSObject {
 }
 
 extension RunnerTests {
+  private func observeCoordinateTaps(droppingFirst: Bool = false) throws -> (
+    observer: RunnerCoordinateTapObserver, restore: () -> Void
+  ) {
+    let selector = NSSelectorFromString("tap")
+    let method = try XCTUnwrap(class_getInstanceMethod(XCUICoordinate.self, selector))
+    let original = method_getImplementation(method)
+    let observer = RunnerCoordinateTapObserver()
+    let block: @convention(block) (AnyObject) -> Void = { coordinate in
+      observer.count += 1
+      if droppingFirst && observer.count == 1 { return }
+      typealias Tap = @convention(c) (AnyObject, Selector) -> Void
+      unsafeBitCast(original, to: Tap.self)(coordinate, selector)
+    }
+    let replacement = imp_implementationWithBlock(block)
+    method_setImplementation(method, replacement)
+    return (observer, {
+      method_setImplementation(method, original)
+      imp_removeBlock(replacement)
+    })
+  }
+
   /// Makes private tap synthesis fail until the returned closure restores it.
   func forceSynthesizedTapFailure() throws -> () -> Void {
     let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:")
@@ -95,8 +120,11 @@ extension RunnerTests {
     let tapCommand = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-focus-confirmation","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
     )
+    let taps = try observeCoordinateTaps()
+    defer { taps.restore() }
     let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
     XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
+    XCTAssertEqual(taps.observer.count, 1, "confirmed focus must not dispatch a second tap")
     try XCTSkipIf(
       isKeyboardVisible(app: app),
       "software keyboard is up: this simulator cannot exercise the hidden-keyboard responder path"
@@ -113,6 +141,30 @@ extension RunnerTests {
       keyboardFocusConfirmed(app: app, element: otherElement),
       "focus held by another element must read as a refusal, never as this element's focus"
     )
+  }
+
+  @MainActor
+  func testTextInputTapRecoversWhenItsFirstTapDoesNotTakeFocus() throws {
+    app.launchArguments = ["--agent-device-text-entry-regression"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    XCTAssertFalse(keyboardFocusConfirmed(app: app, element: field))
+    let taps = try observeCoordinateTaps(droppingFirst: true)
+    defer { taps.restore() }
+    let failures = currentXCTestFailureCount()
+    let command = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-recovery-focus","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
+    )
+
+    XCTAssertTrue(try executeOnMainPrepared(command: command, activeApp: app).ok)
+    XCTAssertEqual(taps.observer.count, 2)
+    XCTAssertTrue(keyboardFocusConfirmed(app: app, element: field))
+    XCTAssertFalse(didRecordXCTestFailure(since: failures))
   }
 
   // #3060: a Flutter password field reports `TextField` through the legacy accessibility attributes and
