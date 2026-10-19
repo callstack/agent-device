@@ -1,7 +1,6 @@
 import type { DeviceRotation } from './device-rotation.ts';
-import { requireInteractorMethod } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import { unavailableFact, type RuntimeOperationFact } from './platform-runtime.ts';
+import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
@@ -31,10 +30,11 @@ export type OrientationRuntimeOperationFacts = Readonly<{
   unlockOrientation: RuntimeOperationFact;
 }>;
 
-const unlockUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'orientation auto is only supported on ADB-backed Android.',
-);
+const unlockUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'orientation auto is only supported on ADB-backed Android.',
+} as const);
 
 /** An owner that leaves `unlock` undeclared refuses `orientation auto`. */
 export function orientationRuntimeOperationFacts(
@@ -80,6 +80,7 @@ export function bindOrientationUnlock(
         appBundleId: input.options?.appBundleId,
         signal,
       });
+      const { requireInteractorMethod } = await import('./interactor-operation-binding.ts');
       await requireInteractorMethod(interactor.unlockOrientation, 'orientation auto').call(
         interactor,
       );
