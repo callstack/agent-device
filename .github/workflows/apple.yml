@@ -61,10 +61,14 @@ jobs:
         uses: ./.github/actions/run-gate
         with:
           gate: build
+      - name: Select iOS smoke tests
+        id: ios-impact
+        shell: bash
+        run: node --experimental-strip-types scripts/apple-ci-impact.ts smoke
       # The macOS clean-install proof may raise permission UI. Run the iOS focus proof first.
       - name: iOS smoke tests
         id: ios
-        uses: ./.github/actions/smoke-ios
+        uses: ./.github/actions/smoke-ios-run
         continue-on-error: true
         timeout-minutes: 80
         env:
@@ -76,16 +80,15 @@ jobs:
           AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS: '1'
           AGENT_DEVICE_XCUITEST_ARCHS: arm64
           AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE: agent-device-test-app:///automation?event={event}&payload={payload}
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-      - name: Clean iOS daemon and retained runners
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-impact.outputs.run != 'false' }}
+      - name: Restore the Apple host after iOS
         id: ios-cleanup
         if: ${{ always() && steps.build.outcome == 'success' }}
         continue-on-error: true
         env:
           AGENT_DEVICE_STATE_DIR: ${{ env.IOS_STATE_DIR }}
         shell: bash
-        run: |
-          pnpm clean:daemon
+        run: bash scripts/teardown-ios-smoke.sh
       - name: macOS smoke tests
         id: macos
         uses: ./.github/actions/smoke-macos
@@ -98,7 +101,7 @@ jobs:
           RESULT_BUNDLE_PATH: ${{ github.workspace }}/.tmp/xctest-host/RunnerTests.xcresult
           RESULT_SUMMARY_PATH: ${{ github.workspace }}/.tmp/xctest-host/test-results-summary.json
           XCTEST_LANE: host
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.ios-cleanup.outcome == 'success' }}
       - name: Clean macOS daemon and retained runners
         id: macos-cleanup
         if: ${{ always() && steps.build.outcome == 'success' }}
@@ -111,6 +114,7 @@ jobs:
       - name: Require both Apple phases to succeed
         if: always()
         env:
+          IOS_SELECTED: ${{ steps.ios-impact.outputs.run }}
           IOS_OUTCOME: ${{ steps.ios.outcome }}
           MACOS_OUTCOME: ${{ steps.macos.outcome }}
           IOS_CLEANUP_OUTCOME: ${{ steps.ios-cleanup.outcome }}
@@ -119,7 +123,11 @@ jobs:
         run: |
           set -euo pipefail
           printf "### Apple smoke phases\n\n| Phase | Outcome |\n| --- | --- |\n| iOS | %s |\n| macOS | %s |\n" "$IOS_OUTCOME" "$MACOS_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
-          test "$IOS_OUTCOME" = success
+          if [ "$IOS_SELECTED" = false ]; then
+            test "$IOS_OUTCOME" = skipped
+          else
+            test "$IOS_OUTCOME" = success
+          fi
           test "$MACOS_OUTCOME" = success
           test "$IOS_CLEANUP_OUTCOME" = success
           test "$MACOS_CLEANUP_OUTCOME" = success

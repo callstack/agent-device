@@ -2,23 +2,22 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { selectChecks } from './check-affected/model.ts';
-import { matchesGlob } from './gate/workflows.ts';
 
 type Selection = { run: boolean; reason: string };
 
 export function selectIosSmoke(
   eventName: string,
   changedPaths: readonly string[] | null,
-  pathsIgnore: readonly string[],
 ): Selection {
   if (eventName !== 'pull_request') return { run: true, reason: 'main runs exercise iOS smoke' };
-  if (changedPaths === null || changedPaths.length === 0) {
-    return { run: true, reason: 'the PR change set could not be established' };
-  }
-  const input = changedPaths.find((file) => !pathsIgnore.some((glob) => matchesGlob(glob, file)));
+  const checked = checkOwnership(changedPaths);
+  if (checked.early) return checked.early;
+  const input = checked.plan.reasons.find(
+    (entry) => entry.check === 'swift-runner-ios' || entry.check === 'replay-ios',
+  );
   return input
-    ? { run: true, reason: `iOS smoke input changed: ${input}` }
-    : { run: false, reason: 'all PR paths are outside the iOS smoke route' };
+    ? { run: true, reason: `iOS device-lane input changed: ${input.path}` }
+    : { run: false, reason: 'the affected-check model selected no iOS device lane' };
 }
 
 function checkOwnership(
@@ -87,11 +86,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       eventName === 'pull_request' ? changedPathsFromGit(process.env.BASE_SHA ?? '') : [];
     const selection =
       target === 'smoke'
-        ? selectIosSmoke(
-            eventName,
-            changedPaths,
-            (process.env.IOS_SMOKE_PATHS_IGNORE ?? '').split(/\r?\n/).filter(Boolean),
-          )
+        ? selectIosSmoke(eventName, changedPaths)
         : target === 'xctest'
           ? selectIosXctests(eventName, changedPaths)
           : selectAppleBridgeProof(changedPaths);
