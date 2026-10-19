@@ -514,7 +514,7 @@ test('usageForCommand resolves ios-system-ui help topic', async () => {
   assert.match(help, /discover them from the current snapshot/);
   assert.match(
     help,
-    /verified on iOS simulator; physical-iPhone SpringBoard support is not yet verified/,
+    /This workflow is verified on iOS simulator\. On a physical iPhone, opening SpringBoard, snapshot -i, and selector presses on visible home-screen icons are verified; the widget add\/edit\/remove steps are not yet verified on a physical iPhone/,
   );
   assert.match(help, /Do not hard-code Edit\/Done\/Add Widget or other SpringBoard label text/);
   assert.match(help, /Reopen the app bundle under test/);
