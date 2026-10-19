@@ -38,6 +38,10 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
         return currentAppBundleId;
       }
     },
+    resetFramePerfStats: async (device, appBundleId) => {
+      const { resetAndroidFramePerfStats } = await loadAndroidMechanics();
+      await resetAndroidFramePerfStats(device, appBundleId);
+    },
     applyRuntimeHints: async (device, input) => {
       const { applyRuntimeHintValues } = await loadRuntimeHints();
       await applyRuntimeHintValues({ device, ...input });

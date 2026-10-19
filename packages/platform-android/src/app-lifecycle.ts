@@ -237,7 +237,7 @@ async function startAndroidApp(
     if (result) {
       if (result.notInstalled === 'true') throw buildAndroidPackageNotInstalledError(app);
       const stdout = result.launchOutput ?? '';
-      if (!/^Status: ok$/m.test(stdout)) {
+      if (result.launchSucceeded !== 'true') {
         throw new AppError('COMMAND_FAILED', 'Android helper could not launch the application', {
           packageName: app,
           stdout,
@@ -582,23 +582,6 @@ async function resolveAndroidPackageToEnd(
 }
 
 async function stopAndroidPackage(device: DeviceInfo, packageName: string): Promise<void> {
-  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
-  const result = await runAndroidAutomationHelper(device, 'app', { kind: 'stop', packageName });
-  if (result) {
-    if (result.closePhase === 'foreground' || result.closePhase === 'process') {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `Android application termination was not confirmed (${result.closePhase})`,
-        {
-          ...androidCloseTimeoutError(packageName, result.closePhase).details,
-          observedPackage: result.foregroundPackage,
-        },
-      );
-    }
-    if (result.stopped !== 'true')
-      throw new AppError('COMMAND_FAILED', 'Android helper did not prove application termination');
-    return;
-  }
   await runAndroidShell(device, ['am', 'force-stop', packageName]);
   const expired = await waitForAndroidPackageStopped(device, packageName);
   if (expired) throw androidCloseTimeoutError(packageName, expired);

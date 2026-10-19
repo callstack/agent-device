@@ -183,6 +183,9 @@ async function openAndroidApplication(
     input.appBundleId,
     launch?.launchedAppBundleId,
   );
+  if (appBundleId) {
+    await host.androidApplications.resetFramePerfStats(binding.device, appBundleId);
+  }
   const settleStartedAtMs = Date.now();
   Object.assign(timing, await observeOpenedApp(binding, input, appBundleId));
   timing.postOpenSettleDurationMs = elapsed(settleStartedAtMs);

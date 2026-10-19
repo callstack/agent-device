@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { withAndroidAdbProvider } from './adb-executor.ts';
-import { closeAndroidApp, openAndroidApp } from './app-lifecycle.ts';
+import { openAndroidApp } from './app-lifecycle.ts';
 import { runAndroidAutomationHelper } from './automation-helper.ts';
 import { ANDROID_EMULATOR } from './__tests__/test-utils/device-fixtures.ts';
 import './__tests__/test-utils/android-host-test-setup.ts';
@@ -24,6 +24,7 @@ async function isolated<T>(run: () => Promise<T>): Promise<T> {
 
 test('a warm app open uses the helper launch result and preserves launched package identity', async () => {
   helper.mockResolvedValue({
+    launchSucceeded: 'true',
     launchOutput: 'Status: ok\nActivity: com.example.app/.MainActivity\n',
   });
   await expect(isolated(() => openAndroidApp(ANDROID_EMULATOR, pkg))).resolves.toBe(pkg);
@@ -31,33 +32,10 @@ test('a warm app open uses the helper launch result and preserves launched packa
   expect(hostShell).not.toHaveBeenCalled();
 });
 
-test('a warm close accepts only explicit termination proof', async () => {
-  helper.mockResolvedValue({ stopped: 'true' });
-  await expect(isolated(() => closeAndroidApp(ANDROID_EMULATOR, pkg))).resolves.toBeUndefined();
-  expect(hostShell).not.toHaveBeenCalled();
-  helper.mockResolvedValue({});
-  await expect(isolated(() => closeAndroidApp(ANDROID_EMULATOR, pkg))).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-  });
-});
-
-test.each(['foreground', 'process'] as const)(
-  'a helper close preserves the %s fence refusal',
-  async (phase) => {
-    helper.mockResolvedValue({ closePhase: phase });
-    await expect(isolated(() => closeAndroidApp(ANDROID_EMULATOR, pkg))).rejects.toMatchObject({
-      code: 'COMMAND_FAILED',
-      details: { reason: 'android-app-close-timeout', phase, packageName: pkg, timeoutMs: 2_000 },
-    });
-    expect(hostShell).not.toHaveBeenCalled();
-  },
-);
-
 test('a helper error after possible application mutation is returned without a shell resend', async () => {
   const failure = new AppError('COMMAND_FAILED', 'Helper transport lost after dispatch');
   helper.mockRejectedValue(failure);
   await expect(isolated(() => openAndroidApp(ANDROID_EMULATOR, pkg))).rejects.toBe(failure);
-  await expect(isolated(() => closeAndroidApp(ANDROID_EMULATOR, pkg))).rejects.toBe(failure);
   expect(hostShell).not.toHaveBeenCalled();
 });
 

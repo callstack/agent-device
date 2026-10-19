@@ -3,8 +3,6 @@ package com.callstack.agentdevice.snapshothelper;
 import android.app.UiAutomation;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
-import android.os.SystemClock;
-import android.view.accessibility.AccessibilityNodeInfo;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -20,56 +18,12 @@ final class ApplicationCommandHandler {
       throw new IllegalArgumentException("Invalid application package");
     }
     switch (input.getString("kind")) {
-      case "stop":
-        stop(automation, packageName, result);
-        return;
       case "open":
         open(automation, packageName, result);
         return;
       default:
         throw new IllegalArgumentException("Unknown application operation");
     }
-  }
-
-  private static void stop(UiAutomation automation, String packageName, Bundle result) throws Exception {
-    shell(automation, "am force-stop " + packageName);
-    long deadline = SystemClock.uptimeMillis() + 2000;
-    boolean background = false;
-    while (SystemClock.uptimeMillis() < deadline) {
-      AccessibilityTreeCapture.clearAccessibilityCache(automation);
-      AccessibilityNodeInfo root = automation.getRootInActiveWindow();
-      try {
-        if (root != null && root.getPackageName() != null) result.putString("foregroundPackage", root.getPackageName().toString());
-        if (root != null && root.getPackageName() != null && !packageName.contentEquals(root.getPackageName())) {
-          background = true;
-          break;
-        }
-      } finally {
-        if (root != null) root.recycle();
-      }
-      Thread.sleep(50);
-    }
-    if (!background) {
-      result.putString("closePhase", "foreground");
-      return;
-    }
-    deadline = SystemClock.uptimeMillis() + 2000;
-    while (SystemClock.uptimeMillis() < deadline) {
-      if (processGone(automation, packageName)) {
-        Thread.sleep(150);
-        if (SystemClock.uptimeMillis() < deadline && processGone(automation, packageName)) {
-          result.putString("stopped", "true");
-          return;
-        }
-      }
-      Thread.sleep(50);
-    }
-    result.putString("closePhase", "process");
-  }
-
-  private static boolean processGone(UiAutomation automation, String packageName) throws Exception {
-    String output = shell(automation, "pidof " + packageName + " 2>&1; echo __agent_device_exit:$?").trim();
-    return output.equals("__agent_device_exit:1") || output.equals("__agent_device_exit:0");
   }
 
   private static void open(UiAutomation automation, String packageName, Bundle result) throws Exception {
@@ -80,7 +34,9 @@ final class ApplicationCommandHandler {
       result.putString("notInstalled", "true");
       return;
     }
-    result.putString("launchOutput", shell(automation, "am start -W -n " + component));
+    String output = shell(automation, "am start -W -n '" + component + "'");
+    result.putString("launchOutput", output);
+    result.putString("launchSucceeded", String.valueOf(java.util.regex.Pattern.compile("(?m)^Status: ok\\r?$").matcher(output).find()));
   }
 
   private static String shell(UiAutomation automation, String command) throws Exception {

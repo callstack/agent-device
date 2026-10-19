@@ -165,4 +165,4 @@ spelled `install -r` (plus `-t` while the helper was `testOnly`), so consumers c
 
 Capture metadata reports `cacheInvalidated` when the capture cleared the platform node cache through `UiAutomation.clearCache()`. A complete capture with that evidence need not change routes after a control press. Incomplete captures and captures without that evidence retain freshness recovery.
 
-Warm application open and stop commands use the same automation session. Stop confirms that the package is not foreground and observes process absence twice, 150 ms apart. A failed application command is never resent.
+Warm application open commands use the same automation session. Close retains the existing foreground and process-absence checks. A failed application command is never resent.

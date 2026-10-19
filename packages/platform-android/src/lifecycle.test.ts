@@ -42,6 +42,7 @@ afterEach(() => {
 
 type LifecycleFixture = Readonly<{
   calls: string[];
+  framePerfResets: string[];
   launchReports: Array<string | undefined>;
   lifecycle: ReturnType<typeof bindAndroidApplicationLifecycle>;
 }>;
@@ -62,6 +63,7 @@ function createLifecycle(
   }> = {},
 ): LifecycleFixture {
   const calls: string[] = [];
+  const framePerfResets: string[] = [];
   const launchReports: Array<string | undefined> = [];
   const localInteractors: LocalApplicationInteractorHost = {
     resolve: async () =>
@@ -107,6 +109,9 @@ function createLifecycle(
         launchReports.push(launchedAppBundleId);
         return 'openedAppBundleId' in params ? params.openedAppBundleId : 'com.example.app';
       },
+      resetFramePerfStats: async (_device: DeviceInfo, appBundleId: string) => {
+        framePerfResets.push(appBundleId);
+      },
       applyRuntimeHints: async () => {},
       clearRuntimeHints: async () => {},
       activateTestIme: async () => {
@@ -131,7 +136,7 @@ function createLifecycle(
     device: params.device ?? device,
     signal: params.signal ?? new AbortController().signal,
   });
-  return { calls, launchReports, lifecycle };
+  return { calls, framePerfResets, launchReports, lifecycle };
 }
 
 function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicationInput {
@@ -352,7 +357,7 @@ test('an Android relaunch closes the requested package before opening it', async
 });
 
 test('an Android intent relaunch has the launch terminate its handler and records the resumed owner', async () => {
-  const { calls, lifecycle } = createLifecycle({
+  const { calls, framePerfResets, lifecycle } = createLifecycle({
     openedAppBundleId: 'com.android.settings',
   });
 
@@ -366,6 +371,7 @@ test('an Android intent relaunch has the launch terminate its handler and record
   );
 
   expect(calls).toEqual(['open:settings (terminate running)', 'observe:com.android.settings']);
+  expect(framePerfResets).toEqual(['com.android.settings']);
   expect(outcome.appBundleId).toBe('com.android.settings');
 });
 

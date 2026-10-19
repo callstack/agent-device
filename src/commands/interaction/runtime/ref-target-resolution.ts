@@ -227,7 +227,11 @@ function reconcileFreshObservation(params: {
       if (hasSnapshotRef(node))
         return {
           snapshot: observation,
-          resolved: buildRefResolution(authorized.ref, node, 'exact'),
+          resolved: buildRefResolution(
+            authorized.ref,
+            node,
+            authorized.resolution.kind === 'label-fallback' ? 'label-fallback' : 'exact',
+          ),
           adoptedFrom: 'observation',
         };
     }

@@ -16,7 +16,7 @@ export type AndroidHelperInput =
   | { kind: 'tap'; x: number; y: number }
   | { kind: 'key'; keyCode: number }
   | { kind: 'fill'; x: number; y: number; text: string }
-  | { kind: 'open' | 'stop'; packageName: string };
+  | { kind: 'open'; packageName: string };
 
 const ACTION_POLICY = {
   input: { mutation: true, timeoutMs: 30_000 },
