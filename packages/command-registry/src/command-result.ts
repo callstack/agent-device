@@ -36,7 +36,8 @@ import type { RecordingCommandResult, TraceCommandResult } from '@agent-device/c
 import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
 
 /**
- * The additive typed-result spine (ADR-0008, Phase 1 step 6).
+ * The additive typed-result spine (ADR 0008, "Consequences" result-narrowing
+ * gap).
  *
  * Maps a command name to the per-command result type from `@agent-device/contracts`. It
  * is SEEDED, not exhaustive: a command is listed here only once its accurate,

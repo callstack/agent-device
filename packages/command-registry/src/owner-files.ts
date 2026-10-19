@@ -2,8 +2,9 @@ import type { DaemonCommandRoute } from './daemon-command-descriptor.ts';
 import { RAW_COMMAND_DESCRIPTORS, type Command } from './registry.ts';
 
 /**
- * Development-only owner-file navigation claims for every command (ADR 0008
- * follow-up, https://github.com/callstack/agent-device/issues/1178).
+ * Development-only owner-file navigation claims for every command (ADR 0008,
+ * "Completeness guards"; follow-up
+ * https://github.com/callstack/agent-device/issues/1178).
  *
  * These paths point a reader at the module that owns each command's surface so
  * `explain:command` can render "where does this live". They are pure tooling

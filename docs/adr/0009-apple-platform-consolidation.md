@@ -93,7 +93,7 @@ Snapshot fidelity is uneven.
 The deep-RN AX-server fallback is iOS-simulator-only.
 Public leaf output remains a separate compatibility projection.
 
-This design composes with ADR 0003 and the descriptor `platformExecution` declaration in ADR 0008.
+This design composes with the daemon facet and the descriptor `platformExecution` declaration in ADR 0008.
 Per-OS behavior is data in request-bound runtime facts.
 
 Implementation status as of 2026-08:

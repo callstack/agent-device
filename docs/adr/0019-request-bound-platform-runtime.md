@@ -682,7 +682,7 @@ Each descriptor declares command identity and one internal-only execution mode, 
 A `none` descriptor never binds a device or carries capability admission.
 It owns no platform adapter and declares no runtime or inventory use.
 Each descriptor explicitly declares its mode. The registry has no default.
-ADR 0003's daemon-owned route table independently owns handler and request-policy traits.
+The ADR 0008 daemon-owned route table independently owns handler and request-policy traits.
 
 During adoption, the abandonment-safe migration unit was one command descriptor across its complete platform/provider denominator.
 A temporary parametrized cutover table proved that each unit deleted its old adapter, admission, and dispatch projections before merge.
@@ -863,9 +863,9 @@ Tests pass the same shared fixture instead of a platform-module mock behind the 
 - [ADR 0002](0002-persistent-platform-helper-sessions.md): persistent-helper protocols, invalidation, and explicitly safe one-shot fallback remain.
   Daemon ownership means lifetime policy.
   Platform modules own helper managers/mechanics. Request bindings never own helpers.
-- [ADR 0003](0003-daemon-command-registry.md) and [ADR 0007](0007-remote-device-leases.md): request-policy traits, lease admission, and lock order remain daemon-owned.
+- [ADR 0008](0008-command-descriptor-registry.md) and [ADR 0007](0007-remote-device-leases.md): request-policy traits, lease admission, and lock order remain daemon-owned.
   A binding occurs only after their admission requirements pass.
-- [ADR 0008](0008-command-descriptor-registry.md): the descriptor registry remains the command root.
+  The descriptor registry remains the command root.
   Device capability buckets become typed required/preferred/conditional runtime use with exact runtime facts.
   Inventory commands declare inventory use.
 - [ADR 0009](0009-apple-platform-consolidation.md): the Apple family and `AppleOS` leaf axis remain.

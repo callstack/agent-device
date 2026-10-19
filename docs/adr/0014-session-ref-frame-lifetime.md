@@ -453,7 +453,7 @@ These changes require CLI/help, changelog, `.ad` migration, and batch guidance.
 
 This decision composes with existing ADRs as follows:
 
-- ADR 0003/0008: daemon-owned effect policy is composed in the descriptor daemon facet and projected only through the daemon registry.
+- ADR 0008: daemon-owned effect policy is composed in the descriptor daemon facet and projected only through the daemon registry.
 - ADR 0004: capture plans and sparse-quality rules are unchanged, and no capture is added.
 - ADR 0005: runner liveness/preflight state remains independent from session ref authorization.
 - ADR 0006/0010: there is no RPC bump; typed `details.reason` and actionable hints follow the error contract.

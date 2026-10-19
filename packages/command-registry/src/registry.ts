@@ -153,8 +153,9 @@ export type DescriptorSessionRouteCommandName =
     : never;
 
 // ---------------------------------------------------------------------------
-// Daemon request-policy trait bundles — copied VERBATIM from
-// packages/daemon/src/core/daemon-command-registry.ts (DAEMON_COMMAND_DESCRIPTORS).
+// Daemon request-policy trait bundles — shorthand composed into each
+// descriptor's `daemon` facet (ADR 0008, "Daemon ownership"). The daemon
+// registry derives its traits from those facets.
 // ---------------------------------------------------------------------------
 
 const ADMISSION_AND_LOCK_EXEMPT = {

@@ -2,142 +2,74 @@
 
 ## Status
 
-Accepted
+Accepted. Absorbed ADR 0003 on 2026-10-19 (#3744).
 
-Completed process history is in git history.
-
-> **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** `CommandDescriptor` remains the root for command declarations.
-> Device-command capability buckets evolve into typed required and preferred runtime use joined with leaf/device/provider-specific runtime facts.
-> Inventory commands declare inventory use instead of a fabricated device binding.
-> The descriptor's other derived projections remain accepted.
->
-> **Parity gate retired (2026-09).** The completed migration deleted every hand-authored table, so a parity test has no second table to compare.
-> No byte-for-byte table parity test exists.
-> Do not add or search for one.
-> Compile-time guards (`CommandOwnerFileClaimsAreComplete`) and literal pin-set tests now enforce totality.
-> Those tests compare name sets instead of two tables.
+Amended by [ADR 0019](0019-request-bound-platform-runtime.md): device capability buckets became typed runtime use joined with request-bound runtime facts. The other derived projections remain accepted.
 
 ## Rules at a glance
 
-- Compose one `CommandDescriptor` per command from facets owned by their domains.
-- Derive every consumer table through pure projection.
-- Keep narrow command traits that affect multiple projections on the descriptor.
-- Keep the cross-process client `invoke` seam and the in-daemon `execute` seam distinct. Never collapse the process boundary.
-- Preserve all four invariants from ADR 0003.
-- The descriptor module must own the `Input`/`Result` types. The client must be derived as a view type, and a lint boundary enforces this.
-- Before client methods can stop returning `CommandRequestResult`, move the result contracts described in Consequences.
-
-## Context
-
-Before the descriptor migration, roughly ten manually maintained tables repeated command identity and required alignment by convention:
-
-- `PUBLIC_COMMANDS` in `src/command-catalog.ts`.
-- Per-command metadata and family facets in `src/commands/**`.
-- Capability matrix in `src/core/capabilities.ts`.
-- Daemon command registry in `packages/daemon/src/core/daemon-command-registry.ts` (ADR 0003).
-- Structured-batch allowlist in `src/batch-policy.ts`.
-- MCP exposure sets.
-- Node client interface and implementation in `src/client-types.ts` and `src/client.ts`.
-- Generic-dispatch `switch` in `src/core/dispatch.ts`.
-
-The switch's `default: throw` makes a missing or renamed command a runtime error instead of a compile error.
-One new command changes approximately 24 files.
-Its argument shape is serialized or deserialized approximately four times.
-Three places repeat the gesture set.
-
-`CommandFamilyFacet` in `src/commands/family/` already proves that derivation works for part of this problem.
-It derives MCP tools, CLI schema, and batch writer from one array.
-However, derivation stops at the command-surface boundary.
-Beyond it, tables remain manually maintained.
-
-ADR 0003 deliberately gives daemon route/policy a separately owned internal registry with a small predicate interface.
-Its 2026-06 update sets four invariants that any single-declaration/derivation model must preserve.
-This ADR defines that model.
+- Declare each command once in the descriptor registry. Compose the declaration from facets owned by their domains. No second table declares the same traits.
+- Derive every shared consumer table as a pure projection. Do not copy a derived classification back into a consumer as a hand-authored set.
+- Keep a narrow fact on the descriptor when several projections consume it: `timeoutPolicy`, `recordingEffect`, `postActionObservation`.
+- Keep grammar, decoding, executable surface metadata, and client invocation in `src/commands/**`. Keep shared option and result data in domain contracts. Keep the client facade in the client layer.
+- Declare daemon route and request policy in the separately typed `daemon` facet. Derive the daemon registry from it. Expose request-policy predicates only through the daemon registry.
+- Request modules consume named predicates. Handler modules own execution logic only. Neither recreates command sets or coverage tables.
+- Public grammar, client options, MCP schemas, help, and capability contracts must not derive from daemon-only traits. A diagnostic display, such as `command explain`, may show them.
+- Allow at most one `daemon` facet per command. If the facet is absent, the command uses the `generic` route and default request policy.
+- Keep the cross-process `invoke` seam and the in-daemon `execute` seam distinct. Never collapse the process boundary.
+- Enforce completeness with name, trait, and owner guards. Do not add parity tests against the deleted hand-authored tables.
+- Narrow a client method's result only after an accurate closed contract exists. Keep dynamic results as `CommandRequestResult`.
 
 ## Decision
 
-Introduce one `CommandDescriptor` per command.
-It **composes facets owned by their domains**.
-Every consumer table is **derived** through pure projection:
+### One declaration site
 
-- The descriptor composes catalog identity, command-family surface projection hooks, the `platformExecution` declaration (successor to the retired `capability` facet), a `daemon` facet, platform dispatch membership, response data transforms, and typed-result hooks.
-  `src/commands/**` remains the owner of the CLI schema/reader and executable surface metadata.
-  ADR 0003 shapes the route and request-policy traits of the `daemon` facet.
-- Narrow command traits that affect multiple projections belong to the descriptor.
-  Interaction post-action observation (`--settle` / `--verify`) is one example.
-  Thus, CLI flags, command metadata, timeout policy, and tests derive from one fact instead of repeated command-name lists.
-- These surfaces become pure projections of the descriptor set:
-  - Public catalog.
-  - Capability matrix.
-  - Daemon command registry.
-  - Batch allowlist.
-  - MCP tool list.
-  - CLI schema exposure.
-  - Descriptor-backed Node client surface.
-  A total map keyed on the command-name union replaces the `src/core/dispatch.ts` `switch`.
-  A missing handler therefore causes a compile error.
-- The cross-process client `invoke` seam and the in-daemon `execute` seam remain distinct.
-  The process boundary is never collapsed.
+Declare each command once as a `CommandDescriptor` in `packages/command-registry/src/registry.ts`. The root is synchronous: each derived view is a module-scope value. That keeps the literal-union and compile-time totality guarantees [ADR 0027](0027-descriptor-root-vs-eager-closure-budget.md) relies on.
 
-This design composes with ADR 0003's four invariants and is bound by them:
+The descriptor composes facets owned by their domains: catalog identity, command-family surface hooks, the `platformExecution` declaration, the `daemon` facet, `timeoutPolicy`, batch and MCP membership, `deviceClaimPolicy`, `postActionObservation`, response data transforms, and typed-result hooks. The public catalog, the batch allowlist, the MCP exposure list, the client timeout policy, and the daemon registry are pure projections of the descriptor set.
 
-1. Daemon-owned declaration, never inline in the public surface.
-2. Unchanged predicate interface.
-3. No daemon-only traits in public projections.
-4. One declaration per concern, enforced by types.
+Keep a narrow fact on the descriptor when more than one projection consumes it. `timeoutPolicy` replaced the two hand-maintained client timeout lists (ADR 0011). `recordingEffect` drives the daemon's recording and mutation decisions. `postActionObservation` drives `--settle` / `--verify` flags, command metadata, and tests. One descriptor trait then replaces repeated command-name lists across projections.
+
+### Domain-owned surfaces
+
+Keep CLI grammar, input decoding, executable surface metadata, and client-backed invocation in `src/commands/**`. Keep shared option and result shapes in domain contracts under `packages/contracts/src`: the layering rule forbids `commands/` importing `client/`, so a shape both surfaces need sits below both. The client facade declares its signatures in that vocabulary. Add a type projection only when it removes real duplication across consumers.
+
+The client `invoke` seam is cross-process; the daemon `execute` seam runs the platform handler inside the daemon process. Keep the two seams distinct: the process boundary is never collapsed.
+
+The `platformExecution` declaration names the execution shape: `none`, `host`, `inventory`, or `device-runtime`, each with its runtime use where required. [ADR 0019](0019-request-bound-platform-runtime.md) request-bound runtime facts and facets own platform admission and execution. Do not restore the retired capability matrix or generic dispatch switch.
+
+### Daemon ownership
+
+Declare daemon route and request-policy traits in the `daemon` facet. `DaemonCommandDescriptor` in `packages/command-registry/src/daemon-command-descriptor.ts` owns that type.
+
+`packages/daemon/src/core/daemon-command-registry.ts` derives its table through `deriveDaemonCommandDescriptors(commandDescriptors)`. Only that module exposes the named predicates, such as `getDaemonCommandRoute`, `isLeaseAdmissionExempt`, and `shouldLockSessionExecution`. A duplicate command name throws when the registry builds. Without a `daemon` facet, each predicate falls back to the `generic` route and the default request policy.
+
+No public contract may derive from daemon-only traits. This is an ownership constraint, not type enforcement: the current types neither block an accidental read by a public projection nor force a compile error for a missing facet. Reviewers and the registry tests hold the boundary. `command explain` in `src/cli/command-explain.ts` may read the facet for diagnostics.
+
+### Completeness guards
+
+Typed requirements and literal pins enforce completeness: `as const satisfies` on the descriptor array, `CommandOwnerFileClaimsAreComplete` for owner-file claims, and literal command-name pin sets in the registry tests. The hand-authored tables are all deleted, so a parity test has no second table to compare; `src/__tests__/command-descriptor-parity.test.ts` is an invariants-only guard. Do not add or search for one.
+
+## Why
+
+About ten hand-maintained tables once repeated command identity, route membership, and policy, aligned only by convention. One declaration with derived projections removes the drift. The separately typed `daemon` facet keeps daemon policy out of the public surface.
 
 ## Alternatives Considered
 
-- **Keep manually synchronized tables.** This avoids migration risk.
-  However, it is the status quo that this ADR exists to remove.
-  Each command costs approximately 24 changed files, with alignment enforced only by convention and tests.
-- **Use one flat public descriptor with inline daemon fields.** This puts daemon-only policy back into the public command surface.
-  ADR 0003 and its update explicitly forbid this ownership combination.
-- **Generate code at build time.** This is a valid option.
-  However, runtime derivation with `as const satisfies` retains the source of truth in type-checked TypeScript.
-  It requires no separate build step or generated artifacts for review.
+- **Keep manually synchronized tables.** This avoids migration risk. However, alignment held only by convention and tests.
+- **Keep the hand-authored daemon table, handler coverage tables, and request-module route checks.** The original ADR 0003 shape. It preserves the ownership boundary, but keeps second sources of route and policy membership that convention must align. The `daemon` facet plus derivation preserves the boundary and deletes the tables.
+- **Use one flat public descriptor with inline daemon fields.** This puts daemon-only policy into the public command surface, which the ownership boundary above forbids.
+- **Generate code at build time.** However, runtime derivation with `as const satisfies` keeps the source of truth in type-checked TypeScript and needs no generated artifacts.
+- **Project the client surface from descriptors as a phantom view type.** PR #2294 removed it: it had one consumer, and direct facade signatures preserved the published contract with less machinery.
 
 ## Consequences
 
-A plain new command changes approximately 1–2 files.
-Per-platform behavior remains N implementations behind the in-daemon `execute` seam.
-The descriptor's `platformExecution` declaration names the execution shape: `none`, `host`, `inventory`, or `device-runtime`.
-For the `device-runtime` variants it also names the runtime use that seam binds.
-The descriptor is the prerequisite for typed per-command results.
-`src/client/client-types.ts` retains the public client interface and some `CommandRequestResult` return types.
-It also supplied the capability facet used by the platform-plugin work in ADR 0009. That facet is retired; [ADR 0009](0009-apple-platform-consolidation.md) records the retirement.
+- When you add or move a daemon-handled command, declare its `daemon` facet in its descriptor. The daemon registry derives the entry.
+- Registry tests pin the derived tables as literal name sets, so a reclassification edits the pinned list in the same diff. Provider-backed integration scenarios verify important request-policy behavior through the real daemon request path.
+- Open gap: several client methods still return `CommandRequestResult` (`alert`, `reactNative`, most `interactions.*`). Some commands expose dynamic daemon response payloads and have no closed contract to name. The closure of issue #1153 does not establish complete result narrowing.
+- Open gap: no rule blocks a public projection from reading the `daemon` facet by accident; only review and tests detect it.
+- Open gap: a missing `daemon` facet is silent by design (generic route and default policy), so a forgotten declaration is a behavior bug, not a compile error.
 
-During the migration, the import-cycle inversion was the principal risk.
-At that time, `command-catalog.ts` had approximately 95 importers.
-The family facet imports `AgentDeviceClient`.
-Thus, the descriptor module must own the `Input`/`Result` types.
-The client must be derived as a view type, and a lint boundary enforces this.
+## Decision history
 
-As of 2026-07, the descriptor registry is live for these surfaces:
-
-- Command identity: `PUBLIC_COMMANDS`, `INTERNAL_COMMANDS`, and local CLI names.
-- Daemon registry traits.
-- Capability matrix.
-- Structured-batch allowlist.
-- Daemon-client timeout policy.
-- MCP exposure list.
-- Capability-checked CLI command list.
-- Post-action observation traits.
-- Platform dispatch command set, which then included the dispatch-only alias `read`.
-
-PR #1877 removed `read` when `get` moved to the request-bound device runtime.
-The daemon registry now derives its table from descriptor facets instead of a hand-maintained table (PR #907).
-
-Command-family surface metadata remains under `src/commands/**`, beside CLI grammar and client-backed executors.
-Coherence checks compare it with the descriptor CLI catalog.
-Thus, new surface names cannot differ from the descriptor root.
-
-[#1153](https://github.com/callstack/agent-device/issues/1153), the former tracker for public Node-client typed-result narrowing, closed on 2026-07-08.
-In `src/client/client-types.ts`, 21 client methods still return `CommandRequestResult`.
-They include `alert`, `reactNative`, and `interactions.swipe`.
-Some commands still expose dynamic daemon response payloads or retain closed result contracts in runtime modules.
-Before their client methods can stop returning `CommandRequestResult`, those contracts must move.
-Issue closure does not establish complete result narrowing.
-
-This ADR owns the decision and its constraints.
-The descriptor projections enforce the delivered end state.
+- 2026-09-05 — [#2294](https://github.com/callstack/agent-device/pull/2294) removed the navigation-only phantom-type projection: direct signatures were simpler and preserved the published contract.
