@@ -34,6 +34,7 @@ test('Provider-backed integration Android TV remote flow sends D-pad keyevents',
         app: 'com.android.settings',
         platform: 'android',
         serial: PROVIDER_SCENARIO_ANDROID_TV.id,
+        testIme: false,
       });
 
       await runProviderScenario(daemon, [
