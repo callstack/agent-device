@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted. Absorbed ADR 0003 on 2026-10-19 (#3744).
+Accepted. This record absorbed [ADR 0003](0003-daemon-command-registry.md), which now redirects here.
 
 Amended by [ADR 0019](0019-request-bound-platform-runtime.md): device capability buckets became typed runtime use joined with request-bound runtime facts. The other derived projections remain accepted.
 
@@ -24,17 +24,17 @@ Amended by [ADR 0019](0019-request-bound-platform-runtime.md): device capability
 
 ### One declaration site
 
-Declare each command once as a `CommandDescriptor` in `packages/command-registry/src/registry.ts`. The root is synchronous: each derived view is a module-scope value. That keeps the literal-union and compile-time totality guarantees [ADR 0027](0027-descriptor-root-vs-eager-closure-budget.md) relies on.
+Declare each command once as a `CommandDescriptor` in `packages/command-registry/src/registry.ts`. The root is synchronous: each derived view is a module-scope value, which keeps the literal-union and compile-time totality guarantees [ADR 0027](0027-descriptor-root-vs-eager-closure-budget.md) relies on.
 
-The descriptor composes facets owned by their domains: catalog identity, command-family surface hooks, the `platformExecution` declaration, the `daemon` facet, `timeoutPolicy`, batch and MCP membership, `deviceClaimPolicy`, `postActionObservation`, response data transforms, and typed-result hooks. The public catalog, the batch allowlist, the MCP exposure list, the client timeout policy, and the daemon registry are pure projections of the descriptor set.
+The descriptor composes facets owned by their domains: catalog identity, command-family surface hooks, the `platformExecution` declaration, the `daemon` facet, `timeoutPolicy`, batch and MCP membership, `deviceClaimPolicy`, `postActionObservation`, response data transforms, and typed-result hooks. The public catalog, the batch allowlist, the MCP exposure list, the client timeout policy, and the daemon registry are pure projections of that set.
 
-Keep a narrow fact on the descriptor when more than one projection consumes it. `timeoutPolicy` replaced the two hand-maintained client timeout lists (ADR 0011). `recordingEffect` drives the daemon's recording and mutation decisions. `postActionObservation` drives `--settle` / `--verify` flags, command metadata, and tests. One descriptor trait then replaces repeated command-name lists across projections.
+Keep a narrow fact on the descriptor when more than one projection consumes it. `timeoutPolicy` replaced the two hand-maintained client timeout lists (ADR 0011). `recordingEffect` drives the daemon's recording and mutation decisions. `postActionObservation` drives `--settle` / `--verify` flags, command metadata, and tests.
 
 ### Domain-owned surfaces
 
-Keep CLI grammar, input decoding, executable surface metadata, and client-backed invocation in `src/commands/**`. Keep shared option and result shapes in domain contracts under `packages/contracts/src`: the layering rule forbids `commands/` importing `client/`, so a shape both surfaces need sits below both. The client facade declares its signatures in that vocabulary. Add a type projection only when it removes real duplication across consumers.
+Keep CLI grammar, input decoding, executable surface metadata, and client-backed invocation in `src/commands/**`. Keep shared option and result shapes in domain contracts under `packages/contracts/src`: both surfaces need that vocabulary, so a shared shape sits below both. A type-only dependency on the `AgentDeviceClient` facade from a command module is an accepted ratchet-bounded position, not shared data that must move to contracts. The facade declares its signatures in that vocabulary. Add a type projection only when it removes real duplication across consumers.
 
-The client `invoke` seam is cross-process; the daemon `execute` seam runs the platform handler inside the daemon process. Keep the two seams distinct: the process boundary is never collapsed.
+The client `invoke` seam is cross-process; the daemon `execute` seam runs the platform handler inside the daemon process. The process boundary is never collapsed.
 
 The `platformExecution` declaration names the execution shape: `none`, `host`, `inventory`, or `device-runtime`, each with its runtime use where required. [ADR 0019](0019-request-bound-platform-runtime.md) request-bound runtime facts and facets own platform admission and execution. Do not restore the retired capability matrix or generic dispatch switch.
 
@@ -44,7 +44,7 @@ Declare daemon route and request-policy traits in the `daemon` facet. `DaemonCom
 
 `packages/daemon/src/core/daemon-command-registry.ts` derives its table through `deriveDaemonCommandDescriptors(commandDescriptors)`. Only that module exposes the named predicates, such as `getDaemonCommandRoute`, `isLeaseAdmissionExempt`, and `shouldLockSessionExecution`. A duplicate command name throws when the registry builds. Without a `daemon` facet, each predicate falls back to the `generic` route and the default request policy.
 
-No public contract may derive from daemon-only traits. This is an ownership constraint, not type enforcement: the current types neither block an accidental read by a public projection nor force a compile error for a missing facet. Reviewers and the registry tests hold the boundary. `command explain` in `src/cli/command-explain.ts` may read the facet for diagnostics.
+No public contract may derive from daemon-only traits. This is an ownership constraint, not type enforcement: the current types neither block an accidental read by a public projection nor force a compile error for a missing facet. Reviewers and the registry tests hold the boundary. `command explain` in `src/cli/command-explain.ts` may read the facet.
 
 ### Completeness guards
 
@@ -57,9 +57,11 @@ About ten hand-maintained tables once repeated command identity, route membershi
 ## Alternatives Considered
 
 - **Keep manually synchronized tables.** This avoids migration risk. However, alignment held only by convention and tests.
-- **Keep the hand-authored daemon table, handler coverage tables, and request-module route checks.** The original ADR 0003 shape. It preserves the ownership boundary, but keeps second sources of route and policy membership that convention must align. The `daemon` facet plus derivation preserves the boundary and deletes the tables.
+- **Keep the daemon groups in the public catalog file.** This keeps one file for command names. However, it mixes public command identity with daemon runtime policy and grows the catalog for internal-only decisions.
+- **Keep handler-local coverage tables.** Each handler would describe its routes locally. However, this creates a second source of route membership that can disagree with the router and the request-policy modules.
+- **Put route checks directly in request modules.** This is locally simple. However, command classification spreads across admission, locking, provider scope, replay, recording, and generic dispatch.
 - **Use one flat public descriptor with inline daemon fields.** This puts daemon-only policy into the public command surface, which the ownership boundary above forbids.
-- **Generate code at build time.** However, runtime derivation with `as const satisfies` keeps the source of truth in type-checked TypeScript and needs no generated artifacts.
+- **Generate code at build time.** This is valid. However, runtime derivation with `as const satisfies` keeps the source of truth in type-checked TypeScript and needs no generated artifacts.
 - **Project the client surface from descriptors as a phantom view type.** PR #2294 removed it: it had one consumer, and direct facade signatures preserved the published contract with less machinery.
 
 ## Consequences
