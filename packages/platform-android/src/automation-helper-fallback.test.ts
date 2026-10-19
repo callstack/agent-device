@@ -156,3 +156,23 @@ test('an uncorrelated no-injection reply cannot authorize a mutation resend', as
   ).rejects.toMatchObject({ details: { dispatched: 'unknown' } });
   expect(f.calls.some((args) => args[0] === 'shell' && args[1] === 'input')).toBe(false);
 });
+
+test.each(['tap', 'back'])(
+  'cancellable %s preserves the host signal with a live helper',
+  async (kind) => {
+    const f = fixture({ ok: 'true' });
+    const signal = new AbortController().signal;
+    const exec = f.provider.exec;
+    f.provider.exec = async (args, options) => {
+      if (args[0] === 'shell' && args[1] === 'input') expect(options?.signal).toBe(signal);
+      return await exec(args, options);
+    };
+    await withAndroidAdbProvider(f.provider, { serial: device.id }, async () => {
+      await readAndroidFillTargetBeforeMutation(device, 10, 10, helper);
+      if (kind === 'tap') await pressAndroid(device, 10, 10, { signal });
+      else await backAndroid(device, { signal });
+    });
+    expect(f.requests.some((request) => request.startsWith('input '))).toBe(false);
+    expect(f.calls.filter((args) => args[0] === 'shell' && args[1] === 'input')).toHaveLength(1);
+  },
+);
