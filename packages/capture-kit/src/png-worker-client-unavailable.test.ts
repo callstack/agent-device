@@ -2,6 +2,18 @@ import { EventEmitter } from 'node:events';
 import { expect, test, vi } from 'vitest';
 import { PNG } from './png.ts';
 
+test('an unavailable worker still encodes every RGBA channel', async () => {
+  vi.resetModules();
+  vi.doMock('./internal-entry.ts', () => ({ resolveInternalEntryModulePath: () => null }));
+  const { encodePngAsync } = await import('./png-worker-client.ts');
+  const png = new PNG({ width: 2, height: 1 });
+  png.data = Buffer.from([23, 45, 67, 0, 89, 123, 231, 127]);
+  const decoded = PNG.sync.read(await encodePngAsync(png));
+  expect([decoded.width, decoded.height]).toEqual([2, 1]);
+  expect(decoded.data).toEqual(png.data);
+  vi.doUnmock('./internal-entry.ts');
+});
+
 test('a worker whose entry is missing is reported once and later registrations hear it', async () => {
   vi.resetModules();
   vi.doMock('./internal-entry.ts', () => ({ resolveInternalEntryModulePath: () => null }));

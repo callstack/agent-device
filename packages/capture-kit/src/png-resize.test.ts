@@ -3,12 +3,33 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PNG } from './png.ts';
-import { resizePngFileToScale } from './png-resize.ts';
+import { resizePngBox, resizePngFileToScale } from './png-resize.ts';
 import { terminatePngWorker } from './png-worker-client.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 afterAll(async () => {
   await terminatePngWorker();
+});
+
+test('whole-pixel boxes average each RGBA channel across unequal axis factors', () => {
+  const source = new PNG({ width: 4, height: 6 });
+  for (let y = 0; y < 6; y += 1) {
+    for (let x = 0; x < 4; x += 1) {
+      setPngPixel(source, x, y, x * 10 + y * 20, x + y * 10, 200 - x - y * 4, (x + y) * 20);
+    }
+  }
+  const resized = resizePngBox(source, 2, 2);
+  assert.deepEqual(
+    [...resized.data],
+    [25, 11, 196, 30, 45, 13, 194, 70, 85, 41, 184, 90, 105, 43, 182, 130],
+  );
+});
+
+test('fractional boxes retain overlap weights for every RGBA channel', () => {
+  const source = new PNG({ width: 3, height: 1 });
+  source.data = Buffer.from([0, 0, 10, 0, 60, 30, 40, 90, 120, 60, 70, 180]);
+  const resized = resizePngBox(source, 2, 1);
+  assert.deepEqual([...resized.data], [20, 10, 20, 30, 100, 50, 60, 150]);
 });
 
 test('resizePngFileToScale shrinks both dimensions proportionally', async () => {

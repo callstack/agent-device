@@ -3,6 +3,7 @@ import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { resolveInternalEntryModulePath } from './internal-entry.ts';
 import { decodePng, hasPngSignature, PNG } from './png.ts';
+import { encodePngPixels } from './png-encode.ts';
 import {
   computeScreenshotDiffPixels,
   type ScreenshotDiffPixelsJob,
@@ -258,7 +259,7 @@ function toDecodedPng(result: { width: number; height: number; data: Uint8Array 
 export async function encodePngAsync(png: PNG): Promise<Buffer> {
   const result = await runPngJob(
     { kind: 'encode', width: png.width, height: png.height, data: png.data },
-    () => ({ kind: 'encode', png: PNG.sync.write(png) }),
+    () => ({ kind: 'encode', png: encodePngPixels(png.data, png.width, png.height, 4) }),
   );
   return toBuffer(result.png);
 }

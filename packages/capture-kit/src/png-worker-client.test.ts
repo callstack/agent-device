@@ -59,13 +59,18 @@ test('decodePngAsync matches the synchronous decoder byte for byte', async () =>
   assert.deepEqual(fromWorker.data, fromSync.data);
 });
 
-test('encodePngAsync matches the synchronous encoder byte for byte', async () => {
+test('encodePngAsync preserves dimensions and every RGBA channel', async () => {
   const png = buildPatternPng(13, 9, 2);
+  for (let pixel = 0; pixel < png.width * png.height; pixel += 1) {
+    png.data[pixel * 4 + 3] = pixel % 256;
+  }
 
   const fromWorker = await runOnWorkerThread('encode', () => encodePngAsync(png));
-  const fromSync = PNG.sync.write(png);
+  const decoded = PNG.sync.read(fromWorker);
 
-  assert.deepEqual(fromWorker, fromSync);
+  assert.equal(decoded.width, png.width);
+  assert.equal(decoded.height, png.height);
+  assert.deepEqual(decoded.data, png.data);
 });
 
 test('computeScreenshotDiffPixelsAsync matches the synchronous diff', async () => {
