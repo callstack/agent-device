@@ -22,8 +22,7 @@ export type Lane = {
   readonly gates: readonly CheckId[];
   /**
    * Repo-relative files of the local composite actions this job's steps use, transitively,
-   * plus the workflow file itself: the lane's own machinery. Editing one of these changes what
-   * the lane does, so the lane cannot claim to be unaffected by it (`scripts/gate/routing.ts`).
+   * plus the workflow file itself.
    */
   readonly uses: readonly string[];
   readonly verbatim: readonly string[];

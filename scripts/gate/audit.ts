@@ -6,12 +6,9 @@ import {
   MANUAL_ONLY_OWNERS,
   type ManualOnlyOwner,
   REPORTING_SCRIPTS,
-  ROUTED_LANES,
-  type RoutedLane,
   UNPROVABLE_OWNERS,
 } from './declarations.ts';
 import { categories, checkUnits, covered, scriptUnits, type Model } from './model.ts';
-import { routing } from './routing.ts';
 
 export type Failure = { readonly assertion: string; readonly message: string };
 
@@ -19,13 +16,11 @@ export type Failure = { readonly assertion: string; readonly message: string };
 export type GateDeclarations = {
   readonly manualOnly: Readonly<Record<string, ManualOnlyOwner>>;
   readonly unprovable: Readonly<Record<string, string>>;
-  readonly routed?: readonly RoutedLane[];
 };
 
 const DECLARED: GateDeclarations = {
   manualOnly: MANUAL_ONLY_OWNERS,
   unprovable: UNPROVABLE_OWNERS,
-  routed: ROUTED_LANES,
 };
 
 const HEADINGS: Readonly<Record<string, string>> = {
@@ -34,7 +29,6 @@ const HEADINGS: Readonly<Record<string, string>> = {
   gate: 'Gate ids that name no registered check',
   surface: 'Execution surfaces the manifest does not model',
   'path-coverage': 'Paths whose selected checks no triggered lane runs',
-  routing: 'Routed lanes whose paths-ignore disagrees with the selector',
   registered: 'Suites and projects no registered check covers',
 };
 
@@ -246,7 +240,6 @@ export function audit(model: Model, declarations: GateDeclarations = DECLARED): 
     ...gateIds(model),
     ...laneSurfaces(model),
     ...pathCoverage(model, declarations),
-    ...routing(model, declarations.routed ?? []),
     ...unregisteredSuites(model),
     ...orphanProjects(model),
   ];
