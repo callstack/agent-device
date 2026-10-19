@@ -16,13 +16,13 @@ import {
   ENTRY_POINT_METHOD,
   formatSummary,
   GUARDED_WORKFLOWS,
-  HOST_WORKFLOW_FILE,
+  HOST_XCTEST_SOURCE_FILE,
   iosPrTestIdentifiers,
   LANES,
   loadReport,
   NIGHTLY_WORKFLOW_FILE,
   parseFlaggedTests,
-  PR_WORKFLOW_FILE,
+  PR_XCTEST_SOURCE_FILE,
   reportFailures,
   runnerPackageSourceFailures,
   type WorkflowSource,
@@ -52,10 +52,10 @@ function realSources() {
 /** Workflow texts that skip the entry point and consume the guard-derived PR selection. */
 function laneWorkflows(): WorkflowSource[] {
   return [
-    { workflow: HOST_WORKFLOW_FILE, text: `-skip-testing:${ENTRY_POINT}` },
+    { workflow: HOST_XCTEST_SOURCE_FILE, text: `-skip-testing:${ENTRY_POINT}` },
     { workflow: NIGHTLY_WORKFLOW_FILE, text: `-skip-testing:${ENTRY_POINT}` },
     {
-      workflow: PR_WORKFLOW_FILE,
+      workflow: PR_XCTEST_SOURCE_FILE,
       text:
         'node --experimental-strip-types scripts/check-xctest-selection.ts --ios-pr-tests\n' +
         'IOS_PR_TEST_ARGS+=("-only-testing:$test_id")\n' +
@@ -189,7 +189,7 @@ describe('the real tree', () => {
 
 describe('a planted typo', () => {
   test('a disconnected PR selector fails the workflow wiring check', () => {
-    const workflow = laneWorkflows().find((entry) => entry.workflow === PR_WORKFLOW_FILE);
+    const workflow = laneWorkflows().find((entry) => entry.workflow === PR_XCTEST_SOURCE_FILE);
     if (!workflow?.text) throw new Error('Missing synthetic PR workflow');
     const report = buildReport(
       TARGET,
@@ -197,7 +197,7 @@ describe('a planted typo', () => {
         `${ENTRY_SOURCE}#if os(iOS)\nextension RunnerTests {\n  func testIosOnly() {}\n}\n#endif\n`,
       ),
       laneWorkflows().map((entry) =>
-        entry.workflow === PR_WORKFLOW_FILE
+        entry.workflow === PR_XCTEST_SOURCE_FILE
           ? { ...entry, text: workflow.text?.replace('--ios-pr-tests', '--wrong-mode') ?? null }
           : entry,
       ),
@@ -212,7 +212,7 @@ describe('a planted typo', () => {
         `${ENTRY_SOURCE}#if os(iOS)\nextension RunnerTests {\n  func testIosOnly() {}\n}\n#endif\n`,
       ),
       laneWorkflows().map((entry) =>
-        entry.workflow === PR_WORKFLOW_FILE
+        entry.workflow === PR_XCTEST_SOURCE_FILE
           ? { ...entry, text: `${entry.text}\n-only-testing:${TARGET}/RunnerTests/testIosOnly` }
           : entry,
       ),
@@ -222,7 +222,7 @@ describe('a planted typo', () => {
 
   test.each([
     ['nightly', NIGHTLY_WORKFLOW_FILE],
-    ['host', HOST_WORKFLOW_FILE],
+    ['host', HOST_XCTEST_SOURCE_FILE],
   ])(
     'a renamed `-skip-testing:` entry on the %s lane is reported as unknown AND as the hang it re-arms',
     (laneId, workflow) => {
@@ -308,7 +308,7 @@ describe('a planted typo', () => {
         `${ENTRY_SOURCE}#if os(iOS)\nextension RunnerTests {\n  func testIosOnly() {}\n}\n#endif\n`,
       ),
       laneWorkflows().map((entry) =>
-        entry.workflow === HOST_WORKFLOW_FILE
+        entry.workflow === HOST_XCTEST_SOURCE_FILE
           ? { ...entry, text: `${entry.text}\n-skip-testing:${TARGET}/RunnerTests/testIosOnly` }
           : entry,
       ),
@@ -357,9 +357,9 @@ describe('a planted guard', () => {
 
   test('a whole-bundle lane that stops skipping the entry point is reported as reaching it', () => {
     const report = buildReport(TARGET, source(ENTRY_SOURCE), [
-      { workflow: HOST_WORKFLOW_FILE, text: 'run: xcodebuild test-without-building' },
+      { workflow: HOST_XCTEST_SOURCE_FILE, text: 'run: xcodebuild test-without-building' },
       { workflow: NIGHTLY_WORKFLOW_FILE, text: `-skip-testing:${ENTRY_POINT}` },
-      laneWorkflows().find((entry) => entry.workflow === PR_WORKFLOW_FILE)!,
+      laneWorkflows().find((entry) => entry.workflow === PR_XCTEST_SOURCE_FILE)!,
     ]);
     expect(report.entryPointReachedBy).toEqual(['host']);
     expect(reportFailures(report).join('\n')).toContain('reachable by lane(s): host');
@@ -379,7 +379,7 @@ describe('the workflow scan', () => {
   test('reads both flags on the multi-line xcodebuild invocation', () => {
     expect(
       parseFlaggedTests(
-        PR_WORKFLOW_FILE,
+        PR_XCTEST_SOURCE_FILE,
         [
           '          xcodebuild test-without-building \\',
           '            -xctestrun "$XCTESTRUN_PATH" \\',
@@ -389,13 +389,13 @@ describe('the workflow scan', () => {
       ),
     ).toEqual([
       {
-        workflow: PR_WORKFLOW_FILE,
+        workflow: PR_XCTEST_SOURCE_FILE,
         flag: 'only-testing',
         identifier: `${TARGET}/RunnerTests/testOne`,
         line: 3,
       },
       {
-        workflow: PR_WORKFLOW_FILE,
+        workflow: PR_XCTEST_SOURCE_FILE,
         flag: 'skip-testing',
         identifier: `${TARGET}/RunnerTests/testTwo`,
         line: 4,
@@ -438,7 +438,9 @@ describe('the workflow scan', () => {
   });
 
   test('a bare flag mention with no identifier after it is not a selection', () => {
-    expect(parseFlaggedTests(PR_WORKFLOW_FILE, 'run: echo "-only-testing: is a flag"')).toEqual([]);
+    expect(
+      parseFlaggedTests(PR_XCTEST_SOURCE_FILE, 'run: echo "-only-testing: is a flag"'),
+    ).toEqual([]);
   });
 
   test('leaves another target alone rather than guessing about sources it cannot see', () => {
@@ -447,10 +449,10 @@ describe('the workflow scan', () => {
       source(`${ENTRY_SOURCE}extension RunnerTests {\n  func testOne() {}\n}\n`),
       [
         {
-          workflow: PR_WORKFLOW_FILE,
+          workflow: PR_XCTEST_SOURCE_FILE,
           text: `-only-testing:SomeOtherTarget/OtherTests/testUnknown\n-only-testing:${TARGET}/RunnerTests/testOne`,
         },
-        { workflow: HOST_WORKFLOW_FILE, text: `-skip-testing:${ENTRY_POINT}` },
+        { workflow: HOST_XCTEST_SOURCE_FILE, text: `-skip-testing:${ENTRY_POINT}` },
         { workflow: NIGHTLY_WORKFLOW_FILE, text: `-skip-testing:${ENTRY_POINT}` },
       ],
     );
@@ -477,7 +479,7 @@ describe('the blind-parse guards', () => {
   });
 
   test('an empty workflow scan fails instead of reporting a healthy list', () => {
-    const report = buildReport(TARGET, oneTest(), [{ workflow: PR_WORKFLOW_FILE, text: '' }]);
+    const report = buildReport(TARGET, oneTest(), [{ workflow: PR_XCTEST_SOURCE_FILE, text: '' }]);
     expect(reportFailures(report).join('\n')).toContain('stopped filtering');
   });
 });

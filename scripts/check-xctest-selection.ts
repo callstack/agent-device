@@ -1,14 +1,14 @@
-// `pnpm check:xctest-selection` — derive, from the Swift sources and the workflow files, which
+// `pnpm check:xctest-selection` — derive, from the Swift sources and CI definitions, which
 // runner XCTest methods each CI lane actually reaches, and fail when a method reaches none
 // (#1781 A7). Also ensures those unit-test methods are stripped from the Apple runner source
 // copied into the npm package.
 //
 // Three lanes run the `AgentDeviceRunnerUITests` bundle, and each reaches a different set:
 //
-//   - host    macos.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
+//   - host    smoke-macos/action.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
 //             `-skip-testing:` — the pure runner-decision tests, whose guard is
 //             `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` alone.
-//   - pr      ios.yml, iOS Simulator: tests with iOS-specific Swift bodies, when selected.
+//   - pr      smoke-ios-run/action.yml, iOS Simulator: tests with iOS-specific Swift bodies, when selected.
 //   - nightly xctest-nightly.yml, iOS Simulator, scheduled: the whole bundle as compiled for
 //             iOS, minus `-skip-testing:` — includes the simulator-only tests, whose guard is
 //             `… && os(iOS)` (they launch the host app, route through SpringBoard, or assert an
@@ -45,9 +45,9 @@ const repoRoot = path.resolve(import.meta.dirname, '..');
 const packageAppleRunnerScript = path.join(repoRoot, 'scripts/package-apple-runner-source.mjs');
 
 /** The macOS host lane, which runs the whole macOS-compiled bundle on every PR. */
-export const HOST_WORKFLOW_FILE = '.github/workflows/macos.yml';
+export const HOST_XCTEST_SOURCE_FILE = '.github/actions/smoke-macos/action.yml';
 
-export const PR_WORKFLOW_FILE = '.github/workflows/ios.yml';
+export const PR_XCTEST_SOURCE_FILE = '.github/actions/smoke-ios-run/action.yml';
 
 /** The nightly lane, whose `-skip-testing:` list decides what the full simulator suite leaves out. */
 export const NIGHTLY_WORKFLOW_FILE = '.github/workflows/xctest-nightly.yml';
@@ -67,14 +67,14 @@ export type Lane = {
 export const LANES: readonly Lane[] = [
   {
     id: 'host',
-    workflow: HOST_WORKFLOW_FILE,
+    workflow: HOST_XCTEST_SOURCE_FILE,
     platform: 'macOS',
     selection: 'whole',
     title: 'iOS runner host XCTest lane (macOS, no simulator)',
   },
   {
     id: 'pr',
-    workflow: PR_WORKFLOW_FILE,
+    workflow: PR_XCTEST_SOURCE_FILE,
     platform: 'iOS',
     selection: 'ios-specific',
     title: 'iOS-specific runner PR XCTest lane',
@@ -312,7 +312,7 @@ function prWorkflowWiringFailures(text: string | null): string[] {
   if (!active.includes('-only-testing:$test_id') || !active.includes('"${IOS_PR_TEST_ARGS[@]}"')) {
     failures.push('PR workflow does not pass each generated XCTest identifier to xcodebuild.');
   }
-  if (parseFlaggedTests(PR_WORKFLOW_FILE, active).length > 0) {
+  if (parseFlaggedTests(PR_XCTEST_SOURCE_FILE, active).length > 0) {
     failures.push('PR workflow still contains hand-maintained XCTest selection identifiers.');
   }
   return failures;
@@ -339,7 +339,7 @@ export function buildReport(
   ) as Record<LaneId, ReadonlySet<string>>;
   const entryPoint = `${target}/${ENTRY_POINT_METHOD}`;
   const reachedAnywhere = new Set(LANES.flatMap((entry) => [...reach[entry.id]]));
-  const prWorkflow = workflows.find((entry) => entry.workflow === PR_WORKFLOW_FILE);
+  const prWorkflow = workflows.find((entry) => entry.workflow === PR_XCTEST_SOURCE_FILE);
   return {
     target,
     declared,
@@ -469,7 +469,7 @@ export function formatSummary(report: SelectionReport): string {
   const { declared, host, pr, nightly, dark } = counts(report);
   return (
     `xctest selection: ${declared} declared ${report.target} methods — host lane ` +
-    `(${HOST_WORKFLOW_FILE}, macOS, every PR) reaches ${host}, PR iOS-specific lane (${PR_WORKFLOW_FILE}, ` +
+    `(${HOST_XCTEST_SOURCE_FILE}, macOS, every PR) reaches ${host}, PR iOS-specific lane (${PR_XCTEST_SOURCE_FILE}, ` +
     `iOS Simulator, selected PRs and main) selects ${pr}, nightly (${NIGHTLY_WORKFLOW_FILE}, iOS Simulator) ` +
     `reaches ${nightly}; ${dark} reachable by no lane; ${ENTRY_POINT_METHOD} skipped everywhere.\n`
   );

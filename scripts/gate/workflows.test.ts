@@ -80,10 +80,53 @@ test('path filters use GitHub glob semantics', () => {
   assert.equal(matchesGlob('*.md', 'docs/README.md'), false, '* must not span a separator');
 });
 
+test('a composite phase route derives filters and gate ownership from the called action', () => {
+  const files = {
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  pull_request:
+jobs:
+  smoke:
+    steps:
+      - uses: ./.github/actions/phase
+        with:
+          paths-ignore: 'packages/platform-android/**'
+`,
+    '.github/actions/phase/action.yml': `inputs:
+  paths-ignore:
+    default: 'packages/platform-linux/**'
+runs:
+  steps:
+    - uses: ./.github/actions/run-gate
+      with:
+        gate: swift-runner-ios
+`,
+  };
+  const [lane] = planted(files);
+  assert.deepEqual(lane?.phases, [
+    {
+      action: './.github/actions/phase',
+      pathsIgnore: ['packages/platform-android/**'],
+      gates: ['swift-runner-ios'],
+    },
+  ]);
+  assert.throws(
+    () =>
+      planted({
+        ...files,
+        '.github/workflows/planted.yml': files['.github/workflows/planted.yml'].replace(
+          'packages/platform-android/**',
+          '${{ env.FILTER }}',
+        ),
+      }),
+    /must declare literal paths-ignore/,
+  );
+});
+
 test('lanes carry the workflow spelling the catalog used, and only real triggers qualify', () => {
   const labels = model.lanes.map((lane) => lane.label);
   assert.ok(labels.includes('Coverage'), 'CI jobs are named bare');
-  assert.ok(labels.includes('iOS / Smoke Tests'), 'other workflows are prefixed');
+  assert.ok(labels.includes('Apple / Smoke Tests'), 'other workflows are prefixed');
   const deploy = model.lanes.find((lane) => lane.workflow === 'deploy.yml');
   assert.equal(deploy?.qualifying, false, 'a push-only lane gates nothing on the way in');
 });
@@ -336,9 +379,8 @@ test('device smoke lanes skip drafts and start when a draft is marked ready', ()
     );
   assert.deepEqual(smokeLanes.map(({ workflow }) => workflow.name).sort(), [
     'Android',
+    'Apple',
     'Linux',
-    'iOS',
-    'macOS',
   ]);
   for (const { workflow, job } of smokeLanes) {
     assert.deepEqual(

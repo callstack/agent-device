@@ -16,21 +16,46 @@ const tracked = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'ut
   .split('\n')
   .filter(Boolean);
 const base = loadModel(repoRoot, tracked);
-const IOS = ROUTED_LANES.find((routed) => routed.lane === 'iOS / Smoke Tests');
+const IOS = ROUTED_LANES.find((routed) => routed.lane === 'Apple / Smoke Tests');
 assert.ok(IOS, 'the iOS lane is declared routed');
-const iosLane = base.lanes.find((lane) => lane.label === IOS.lane);
-assert.ok(iosLane, 'ios.yml defines the routed lane');
+const appleLane = base.lanes.find((lane) => lane.label === IOS.lane);
+assert.ok(appleLane, 'apple.yml defines the routed lane');
+const iosPhase = appleLane.phases?.find((phase) => phase.action === IOS.action);
+assert.ok(iosPhase, 'the iOS composite phase declares its route');
+const iosLane = { ...appleLane, gates: iosPhase.gates, pathsIgnore: iosPhase.pathsIgnore };
 
 function withIos(change: (lane: Lane) => Lane): Model {
+  const changed = change(iosLane);
   return {
     ...base,
-    lanes: base.lanes.map((lane) => (lane.label === IOS.lane ? change(lane) : lane)),
+    lanes: base.lanes.map((lane) =>
+      lane.label === IOS.lane
+        ? {
+            ...lane,
+            triggers: changed.triggers,
+            phases: lane.phases?.map((phase) =>
+              phase.action === IOS.action
+                ? {
+                    ...phase,
+                    pathsIgnore: changed.pathsIgnore,
+                    gates: changed.gates,
+                  }
+                : phase,
+            ),
+          }
+        : lane,
+    ),
   };
 }
 
 const messages = (model: Model) => routing(model, ROUTED_LANES).map((failure) => failure.message);
 
-test('the live ios.yml paths-ignore agrees with the selector over every tracked path', () => {
+test('the routed iOS action cannot disappear while the shared Apple job stays green', () => {
+  const model = { ...base, lanes: base.lanes.map((lane) => ({ ...lane, phases: [] })) };
+  assert.ok(messages(model).some((message) => /routed phase.*is not called/.test(message)));
+});
+
+test('the live iOS phase paths-ignore agrees with the selector over every tracked path', () => {
   assert.deepEqual(messages(base), []);
 });
 
@@ -42,7 +67,10 @@ test('the live iOS route carries no filters for the retired src/platforms tree',
 });
 
 test('the routed lane derives its needs from its declared gate plus the sampled checks', () => {
-  assert.ok(iosLane.gates.includes('swift-runner-ios'), 'ios.yml still declares the runner build');
+  assert.ok(
+    iosLane.gates.includes('swift-runner-ios'),
+    'the iOS phase still declares the runner build',
+  );
   assert.deepEqual([...IOS.sampled], ['replay-ios', 'replay-ios-device']);
 });
 
@@ -101,7 +129,7 @@ test('the exemption cannot name an action the lane itself runs', () => {
     '.github/actions/setup-apple-runner-build/action.yml',
     '.github/actions/boot-ios-test-simulator/action.yml',
     '.github/actions/run-gate/action.yml', // reached only through a composite action
-    '.github/workflows/ios.yml', // the lane's own definition
+    '.github/workflows/apple.yml', // the shared job's own definition
   ]) {
     assert.ok(iosLane.uses.includes(own), `${own} must be in the lane's uses closure`);
     const model = withIos((lane) => ({ ...lane, pathsIgnore: [...lane.pathsIgnore, own] }));

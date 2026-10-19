@@ -1,13 +1,129 @@
 import fs from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { parse } from 'yaml';
-import { selectAppleBridgeProof, selectIosXctests } from '../apple-ci-impact.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { selectAppleBridgeProof, selectIosSmoke, selectIosXctests } from '../apple-ci-impact.ts';
 import { selectChecks } from '../check-affected/model.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
+
+type AppleStep = {
+  id?: string;
+  uses?: string;
+  if?: string;
+  run?: string;
+  env?: Record<string, string>;
+  with?: Record<string, string>;
+  'continue-on-error'?: boolean;
+};
+
+function appleJob() {
+  const doc = parse(
+    fs.readFileSync(path.join(repoRoot, '.github/workflows/apple.yml'), 'utf8'),
+  ) as {
+    jobs: Record<string, { steps: AppleStep[] }>;
+  };
+  expect(Object.keys(doc.jobs)).toHaveLength(1);
+  return Object.values(doc.jobs)[0]!;
+}
+
+test('Apple smoke shares setup and build while keeping platform state and native products separate', () => {
+  const { steps } = appleJob();
+  expect(steps.filter((step) => step.uses?.startsWith('actions/checkout@'))).toHaveLength(1);
+  expect(steps.filter((step) => step.uses === './.github/actions/setup-node-pnpm')).toHaveLength(1);
+  expect(steps.filter((step) => step.with?.gate === 'build')).toHaveLength(1);
+  const ios = steps.find((step) => step.id === 'ios')!;
+  const macos = steps.find((step) => step.id === 'macos')!;
+  expect(ios.uses).toBe('./.github/actions/smoke-ios');
+  expect(macos.uses).toBe('./.github/actions/smoke-macos');
+  expect(steps.indexOf(ios)).toBeLessThan(steps.indexOf(macos));
+  for (const variable of ['AGENT_DEVICE_STATE_DIR', 'AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH']) {
+    expect(ios.env?.[variable]).toBeTruthy();
+    expect(macos.env?.[variable]).toBeTruthy();
+    expect(ios.env?.[variable]).not.toBe(macos.env?.[variable]);
+  }
+  for (const phase of [ios, macos]) {
+    expect(phase['continue-on-error']).toBe(true);
+    const cleanup = steps.find((step) => step.id === `${phase.id}-cleanup`)!;
+    expect(steps.indexOf(cleanup)).toBeGreaterThan(steps.indexOf(phase));
+    if (phase === ios) expect(steps.indexOf(cleanup)).toBeLessThan(steps.indexOf(macos));
+    expect(cleanup.if).toContain('always()');
+    expect(cleanup['continue-on-error']).toBe(true);
+    expect(cleanup.env?.AGENT_DEVICE_STATE_DIR).toBe(phase.env?.AGENT_DEVICE_STATE_DIR);
+    expect(cleanup.run).toContain('daemon stop --clean --state-dir "$AGENT_DEVICE_STATE_DIR"');
+  }
+});
+
+test.each([
+  ['all successful', {}, 0],
+  ['iOS fails', { IOS_OUTCOME: 'failure' }, 1],
+  ['macOS fails', { MACOS_OUTCOME: 'failure' }, 1],
+  ['iOS silently skipped', { IOS_OUTCOME: 'skipped' }, 1],
+  ['macOS silently skipped', { MACOS_OUTCOME: 'skipped' }, 1],
+  ['iOS cleanup fails', { IOS_CLEANUP_OUTCOME: 'failure' }, 1],
+  ['macOS cleanup fails', { MACOS_CLEANUP_OUTCOME: 'failure' }, 1],
+] as const)('the final Apple status guard preserves failure: %s', (_label, overrides, expected) => {
+  const guard = appleJob().steps.find((step) => step.env?.IOS_OUTCOME)!;
+  expect(guard.if).toBe('always()');
+  expect(guard.env).toEqual({
+    IOS_OUTCOME: '${{ steps.ios.outcome }}',
+    MACOS_OUTCOME: '${{ steps.macos.outcome }}',
+    IOS_CLEANUP_OUTCOME: '${{ steps.ios-cleanup.outcome }}',
+    MACOS_CLEANUP_OUTCOME: '${{ steps.macos-cleanup.outcome }}',
+  });
+  const result = spawnSync('/bin/bash', ['-c', guard.run!], {
+    env: {
+      ...process.env,
+      IOS_OUTCOME: 'success',
+      MACOS_OUTCOME: 'success',
+      IOS_CLEANUP_OUTCOME: 'success',
+      MACOS_CLEANUP_OUTCOME: 'success',
+      ...overrides,
+      GITHUB_STEP_SUMMARY: path.join(mkdtempForTestSync('apple-smoke-status-'), 'summary.md'),
+    },
+    encoding: 'utf8',
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(expected);
+});
+
+test('the iOS composite uses its guarded route and skips only its nested simulator work', () => {
+  const doc = parse(
+    fs.readFileSync(path.join(repoRoot, '.github/actions/smoke-ios/action.yml'), 'utf8'),
+  ) as {
+    inputs: { 'paths-ignore': { default: string } };
+    runs: { steps: AppleStep[] };
+  };
+  const select = doc.runs.steps.find((step) => step.id === 'impact')!;
+  expect(select.run).toContain('scripts/apple-ci-impact.ts smoke');
+  expect(select.env?.IOS_SMOKE_PATHS_IGNORE).toBe('${{ inputs.paths-ignore }}');
+  const run = doc.runs.steps.find((step) => step.uses === './.github/actions/smoke-ios-run')!;
+  expect(run.if).toBe("steps.impact.outputs.run != 'false'");
+  const ignored = doc.inputs['paths-ignore'].default.split(/\r?\n/).filter(Boolean);
+  for (const file of [
+    'src/foo.test.ts',
+    'packages/platform-android/src/index.ts',
+    'test/integration/replays/macos/basic.ad',
+  ]) {
+    expect(selectIosSmoke('pull_request', [file], ignored).run, file).toBe(false);
+  }
+  for (const file of [
+    'packages/platform-apple/src/index.ts',
+    'src/index.ts',
+    '.github/actions/smoke-ios/action.yml',
+  ]) {
+    expect(selectIosSmoke('pull_request', [file], ignored).run, file).toBe(true);
+  }
+  expect(selectIosSmoke('pull_request', ['src/foo.test.ts', 'src/index.ts'], ignored).run).toBe(
+    true,
+  );
+  expect(selectIosSmoke('pull_request', null, ignored).run).toBe(true);
+  expect(selectIosSmoke('pull_request', [], ignored).run).toBe(true);
+  expect(selectIosSmoke('push', ['src/foo.test.ts'], ignored).run).toBe(true);
+});
 
 function cacheInputs(action: string, stepId = 'source-hash'): string[] {
   const doc = parse(action) as { runs?: { steps?: Array<{ id?: string; run?: string }> } };
@@ -28,10 +144,13 @@ type WorkflowStep = { run?: string; with?: { gate?: string } };
  * scope reasons — or a `run:` block reindented — is not mistaken for a sequencing regression.
  */
 function workflowStepIndex(workflow: string, matches: (step: WorkflowStep) => boolean): number {
-  const doc = parse(workflow) as { jobs?: Record<string, { steps?: WorkflowStep[] }> };
-  return Object.values(doc.jobs ?? {})
-    .flatMap((job) => job.steps ?? [])
-    .findIndex(matches);
+  const doc = parse(workflow) as {
+    jobs?: Record<string, { steps?: WorkflowStep[] }>;
+    runs?: { steps?: WorkflowStep[] };
+  };
+  return (
+    doc.runs?.steps ?? Object.values(doc.jobs ?? {}).flatMap((job) => job.steps ?? [])
+  ).findIndex(matches);
 }
 
 test('native runner build-cache inputs trigger the PR XCTest lane', () => {
@@ -153,7 +272,10 @@ test('restored native products are rebuilt before caching and icon patching', ()
 });
 
 test('the PR workflow applies the impact decision to the XCTest step', () => {
-  const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/ios.yml'), 'utf8');
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, '.github/actions/smoke-ios-run/action.yml'),
+    'utf8',
+  );
   expect(workflow).toContain('node --experimental-strip-types scripts/apple-ci-impact.ts xctest');
   expect(workflow).toMatch(
     /- name: Run targeted iOS runner XCTest regressions\n\s+id: ios-xctest\n\s+if: steps\.xctest-impact\.outputs\.run != 'false'/,
@@ -165,7 +287,10 @@ test('macOS clean-install proof follows live UI replay', () => {
   // Ordered by what each step runs, not by its title: the clean-install proof must not fire
   // before the replay that can raise local-network permission UI, and a step renamed for scope
   // reasons is not a sequencing regression.
-  const workflow = fs.readFileSync(path.join(repoRoot, '.github/workflows/macos.yml'), 'utf8');
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, '.github/actions/smoke-macos/action.yml'),
+    'utf8',
+  );
   const replay = workflowStepIndex(workflow, (step) => step.with?.gate === 'replay-macos');
   const proof = workflowStepIndex(
     workflow,
@@ -223,7 +348,7 @@ test('bridge proof runs for its owning sources and uncertain tooling changes', (
   expect(selectAppleBridgeProof([]).run).toBe(true);
 });
 
-test('a shallow PR merge still yields a known change set for both selectors', () => {
+test('a shallow PR merge still yields a known change set for all Apple selectors', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'apple-ci-impact-'));
   const source = path.join(root, 'source');
   const shallow = path.join(root, 'shallow');
@@ -253,11 +378,17 @@ test('a shallow PR merge still yields a known change set for both selectors', ()
         {
           cwd: shallow,
           encoding: 'utf8',
-          env: { ...process.env, BASE_SHA: base, GITHUB_EVENT_NAME: 'pull_request' },
+          env: {
+            ...process.env,
+            BASE_SHA: base,
+            GITHUB_EVENT_NAME: 'pull_request',
+            IOS_SMOKE_PATHS_IGNORE: 'src/**',
+          },
         },
       );
     expect(select('xctest')).toContain('skip;');
     expect(select('bridge')).toContain('skip;');
+    expect(select('smoke')).toContain('skip;');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

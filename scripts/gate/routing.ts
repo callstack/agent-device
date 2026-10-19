@@ -1,4 +1,4 @@
-// Routed lanes: a `paths-ignore` list held to the affected selector, both ways (#1781 A9-2).
+// Workflow and composite-phase path filters held to the affected selector, both ways (#1781 A9-2).
 //
 // GitHub evaluates `paths-ignore` before it allocates a runner, so it is the one routing
 // mechanism that costs no macOS time and adds no job to the critical path. Its weakness is
@@ -74,10 +74,19 @@ function mustNotStart(needs: ReadonlySet<string>, file: string): string | null {
 }
 
 function routingFor(model: Model, routed: RoutedLane): RoutingFailure[] {
-  const lane = model.lanes.find((candidate) => candidate.label === routed.lane);
-  if (!lane) {
+  const job = model.lanes.find((candidate) => candidate.label === routed.lane);
+  if (!job) {
     return [failure(`routed lane "${routed.lane}" is not defined by any workflow.`)];
   }
+  const phase = routed.action
+    ? job.phases?.find((entry) => entry.action === routed.action)
+    : undefined;
+  if (routed.action && !phase) {
+    return [failure(`routed phase "${routed.action}" is not called by ${routed.lane}.`)];
+  }
+  const lane: Lane = phase
+    ? { ...job, gates: phase.gates, pathsIgnore: [...job.pathsIgnore, ...phase.pathsIgnore] }
+    : job;
   if (!lane.triggers.includes('pull_request')) {
     return [failure(`routed lane "${routed.lane}" has no pull_request trigger to route.`)];
   }
