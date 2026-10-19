@@ -15,8 +15,9 @@ import {
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
   ANDROID_EMULATOR,
-  createTestHostEnvironment,
   bindTestCommandHost,
+  createLiveTestHostEnvironment,
+  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import {
   isolatedDeviceClaimStores,
@@ -46,7 +47,7 @@ const setup = isolatedDeviceClaimStores('agent-device-boot-shutdown-claim-');
 const OWNER_STATE_DIR_NAME = 'daemon-a';
 
 function daemonB(stateDir: string): SessionStore {
-  return new SessionStore(path.join(stateDir, 'sessions'));
+  return new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
 }
 
 async function claimForeignDaemon(root: string): Promise<string> {

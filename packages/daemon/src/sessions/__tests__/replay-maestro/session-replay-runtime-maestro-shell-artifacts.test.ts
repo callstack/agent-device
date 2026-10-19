@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
 
@@ -45,7 +45,7 @@ test('runReplayCommand writes per-action timing events to active trace', async (
   fs.writeFileSync(scriptPath, 'context platform=ios\nclick id="submit"\nwait "Done" 5000\n');
   fs.writeFileSync(tracePath, '');
 
-  const sessionStore = new SessionStore(path.join(root, 'state'));
+  const sessionStore = new SessionStore(path.join(root, 'state'), createLiveTestHostEnvironment());
   sessionStore.publish('s', {
     name: 's',
     device: {

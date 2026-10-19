@@ -42,7 +42,11 @@ export function handleSessionScriptPublication(params: {
   if (req.positionals?.[0] !== undefined && !explicitPath) {
     return failure(new AppError('INVALID_ARGS', 'session save-script path cannot be empty.'));
   }
-  retargetActivePublication(session, { explicitPath, liveForce: req.flags?.force });
+  retargetActivePublication(
+    session,
+    { explicitPath, liveForce: req.flags?.force },
+    sessionStore.host.cwd,
+  );
 
   const result = sessionStore.writeSessionLog(ref, {
     force: effectiveWriteForce(session, req.flags?.force),

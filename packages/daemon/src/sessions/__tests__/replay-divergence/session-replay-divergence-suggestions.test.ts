@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { buildReplayFailureDivergence } from '@agent-device/replay-port/session-replay-divergence';
@@ -25,7 +25,10 @@ beforeEach(() => resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInterac
 
 test('buildReplayFailureDivergence dedupes suggestions using the strongest basis', async () => {
   const root = mkdtempForTestSync('agent-device-replay-suggest-dedupe-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -78,7 +81,10 @@ test.each(['region', 'absent', 'none', 'unverifiable'] as const)(
   'suggestions rank identity, recorded region, then document order (evidence: %s)',
   async (evidence) => {
     const root = mkdtempForTestSync('agent-device-replay-suggest-region-');
-    const sessionStore = new SessionStore(path.join(root, 'sessions'));
+    const sessionStore = new SessionStore(
+      path.join(root, 'sessions'),
+      createLiveTestHostEnvironment(),
+    );
     sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
     const button = (index: number, parentIndex: number, label: string) => ({
       index,

@@ -25,12 +25,17 @@ export function tryHandleDownloadableArtifactHttpRoute(params: {
   res: http.ServerResponse;
   authorize: DownloadableArtifactHttpAuthorizer;
   retainArtifacts?: boolean;
+  /** The runtime host's environment, handed to the directory-archive spawn. */
+  hostEnv: NodeJS.ProcessEnv;
 }): boolean {
-  const { req, res, authorize, retainArtifacts } = params;
+  const { req, res, authorize, retainArtifacts, hostEnv } = params;
   const route = resolveDownloadableArtifactHttpRoute(req);
   if (route === null) return false;
 
-  void handleDownloadableArtifactHttpRoute(route, req, res, authorize, { retainArtifacts });
+  void handleDownloadableArtifactHttpRoute(route, req, res, authorize, {
+    retainArtifacts,
+    hostEnv,
+  });
   return true;
 }
 
@@ -39,11 +44,11 @@ async function handleDownloadableArtifactHttpRoute(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   authorize: DownloadableArtifactHttpAuthorizer,
-  options: { retainArtifacts?: boolean },
+  options: { retainArtifacts?: boolean; hostEnv: NodeJS.ProcessEnv },
 ): Promise<void> {
   switch (route.kind) {
     case 'inventory':
-      await handleArtifactInventory(req, res, authorize);
+      await handleArtifactInventory(req, res, authorize, options);
       return;
     case 'download':
       await handleArtifactDownload(route.artifactId, req, res, authorize, options);
@@ -68,7 +73,7 @@ async function handleArtifactDownload(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   authorize: DownloadableArtifactHttpAuthorizer,
-  options: { retainArtifacts?: boolean },
+  options: { retainArtifacts?: boolean; hostEnv: NodeJS.ProcessEnv },
 ): Promise<void> {
   if (!artifactId) {
     res.statusCode = 400;
@@ -87,7 +92,7 @@ async function handleArtifactDownload(
     });
     if (!auth) return;
 
-    const artifact = await prepareDownloadableArtifact(artifactId, auth.tenantId);
+    const artifact = await prepareDownloadableArtifact(artifactId, auth.tenantId, options.hostEnv);
     const retainArtifactAfterDownload = options.retainArtifacts === true;
     const stream = fs.createReadStream(artifact.artifactPath);
     res.statusCode = 200;
@@ -133,6 +138,7 @@ async function handleArtifactInventory(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   authorize: DownloadableArtifactHttpAuthorizer,
+  options: { hostEnv: NodeJS.ProcessEnv },
 ): Promise<void> {
   try {
     const auth = await authorize({
@@ -147,7 +153,11 @@ async function handleArtifactInventory(
 
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ artifacts: await listDownloadableArtifacts(auth.tenantId) }));
+    res.end(
+      JSON.stringify({
+        artifacts: await listDownloadableArtifacts(auth.tenantId, options.hostEnv),
+      }),
+    );
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
   }

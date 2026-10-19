@@ -36,6 +36,8 @@ async function withAuxRouteAndHook(
     token: DAEMON_TOKEN,
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
     resolveRequestDiagnosticsPath: () => path.join(root, 'unused-request-log.json'),
+    env: process.env,
+    cwd: process.cwd(),
   });
   try {
     const port = await listenOnLoopback(server);

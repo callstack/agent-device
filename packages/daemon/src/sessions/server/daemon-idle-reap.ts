@@ -48,7 +48,7 @@ const DAEMON_IDLE_REAP_DEFAULT_MS = 5 * 60_000;
 // that host, and one whose owner cannot be proven is treated the same way, because nothing here can
 // show the window's owner is nobody.
 export function resolveDaemonIdleReapMs(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv,
   ownership: DaemonRuntimeOwnership = 'detached',
 ): number {
   if (ownership !== 'detached') return 0;
@@ -119,7 +119,7 @@ export function createDaemonIdleReap(params: {
    */
   hasRetainedLeases: () => boolean;
   onIdleReap: () => void;
-  env?: NodeJS.ProcessEnv;
+  env: NodeJS.ProcessEnv;
   /**
    * Who owns the process this timer runs in. A host that started the runtime in its own process owns
    * its lifetime: an idle window tuned for a detached daemon nobody is watching would take the runtime

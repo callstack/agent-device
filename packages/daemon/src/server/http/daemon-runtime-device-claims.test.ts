@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { teardownDaemonSessionForShutdown } from './server-shutdown.ts';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 vi.mock('../../sessions/session-teardown.ts', async (importOriginal) => {
@@ -36,7 +36,10 @@ function setup(): { session: SessionState; sessionStore: SessionStore; stateDir:
     createdAt: Date.now(),
     actions: [],
   };
-  const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(stateDir, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish(session.name, session);
   return { session, sessionStore, stateDir };
 }

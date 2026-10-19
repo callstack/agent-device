@@ -12,7 +12,7 @@ import { isSessionRecording } from '../../../core/session-script-publication-cap
  * `session.actions` accumulates for real instead of staying empty.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -82,7 +82,10 @@ const SAVE_ANNOTATION =
 
 function setup(prefix: string, sessionOverrides = {}) {
   const root = mkdtempForTestSync(prefix);
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName, sessionOverrides));
   return { root, sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };
@@ -401,7 +404,10 @@ test('a --no-record state-fix action never enters session.actions', () => {
 
 test('R1 bootstrap: a session created by step 1 (open) arms in time for step 2 to get fresh evidence', async () => {
   const root = mkdtempForTestSync('agent-device-replay-repair-bootstrap-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   // No pre-existing session — `open` (step 1) creates it.
   const filePath = writeReplayFile(root, ['open "Demo"', 'click id="save"']);
@@ -428,7 +434,10 @@ test('R1 bootstrap: a session created by step 1 (open) arms in time for step 2 t
 
 test('BLOCKER 4: a minimal [open, terminal close] cold-start script arms the transaction and skips the close', async () => {
   const root = mkdtempForTestSync('agent-device-replay-repair-open-close-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   // No pre-existing session — step 1 (`open`) CREATES it, so pre-open arming is
   // a no-op and the transaction can only arm once the session exists.

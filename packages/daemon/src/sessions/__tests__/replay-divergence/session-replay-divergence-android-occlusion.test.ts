@@ -6,7 +6,7 @@ import {
   ANDROID_QS_SHADE_CAPTURE_RAW_NODES,
   walkNonRawAndroidFixture,
 } from '@agent-device/platform-android/ui-hierarchy-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { replayCoordinatorForTest, replaySessionForTest } from './replay-session-fixture.ts';
 import {
@@ -50,7 +50,10 @@ test.each([
   },
 ])('buildReplayFailureDivergence: a full-cover quick-settings shade $name', async ({ prepare }) => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-qsshade-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,

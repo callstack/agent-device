@@ -194,6 +194,7 @@ test('proxy enforces public-only Maestro HTTP policy on a local daemon', async (
         ),
       };
     },
+    cwd: process.cwd(),
   });
   const targetPort = await listenOnLoopback(loopbackTarget);
   const daemonPort = await listenOnLoopback(daemon);
@@ -267,6 +268,7 @@ test('daemon proxy cancels the upstream daemon request when its client disconnec
       await canceled;
       return { ok: false, error: { code: 'COMMAND_FAILED', message: 'request canceled' } };
     },
+    cwd: process.cwd(),
   });
   const proxy = createDaemonProxyServer({
     upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(daemon)}`,

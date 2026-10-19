@@ -1,7 +1,8 @@
 import {
   ANDROID_EMULATOR,
-  deviceClaimFilePath,
+  createLiveTestHostEnvironment,
   createTestHostEnvironment,
+  deviceClaimFilePath,
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
@@ -635,7 +636,10 @@ async function bindInRequestSession(params: {
       flags: {},
       meta: params.cwd ? { cwd: params.cwd } : undefined,
     },
-    sessionStore: new SessionStore(path.join(params.stateDir, 'sessions')),
+    sessionStore: new SessionStore(
+      path.join(params.stateDir, 'sessions'),
+      createLiveTestHostEnvironment(),
+    ),
     leaseRegistry: new LeaseRegistry(),
     deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
     platformRequestScope: {
@@ -732,7 +736,10 @@ test('the request scope covers the implicit workspace session that routed to the
   const elsewhere = path.join(root, 'other-worktree');
   fs.mkdirSync(workspace, { recursive: true });
   fs.mkdirSync(elsewhere, { recursive: true });
-  const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(stateDir, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const routedAddress = resolveEffectiveSessionName(
     {
       token: 't',

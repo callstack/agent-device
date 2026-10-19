@@ -13,6 +13,17 @@ import {
   type RecordActionEntry,
 } from '../session-action-recorder.ts';
 import { authoringPublication, makeIosSession } from '../../__tests__/support/session-factories.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
+
+// #3753: `recordActionEntry` resolves relative --save-script paths against the runtime host's
+// working directory. This wrapper keeps the pre-#3753 call shape: the live test host's cwd rides
+// in as the third argument without reshaping every fixture below.
+function recordAction(
+  session: Parameters<typeof recordActionEntry>[0],
+  entry: Parameters<typeof recordActionEntry>[1],
+) {
+  return recordActionEntry(session, entry, createLiveTestHostEnvironment().cwd);
+}
 
 test.each([
   { command: 'wait', replayPlanStep: false, intent: undefined },
@@ -30,7 +41,7 @@ test.each([
       positionals: [],
       internal: { replayPlanStep },
     };
-    const action = recordActionEntry(session, {
+    const action = recordAction(session, {
       command,
       positionals: [],
       flags: {},
@@ -51,7 +62,7 @@ test('an observation without --record is excluded while repair-armed', () => {
       boundary: 0,
     },
   });
-  const action = recordActionEntry(session, {
+  const action = recordAction(session, {
     command: 'get',
     positionals: ['attrs', 'id="save"'],
     flags: {},
@@ -71,7 +82,7 @@ test('--record forces an observation-only action through while repair-armed', ()
       boundary: 0,
     },
   });
-  const action = recordActionEntry(session, {
+  const action = recordAction(session, {
     command: 'get',
     positionals: ['attrs', 'id="save"'],
     flags: { record: true },
@@ -87,7 +98,7 @@ test('--record forces an observation-only action through while repair-armed', ()
 test('an observation-only action records normally outside a repair-armed session (ordinary authoring recording is unchanged)', () => {
   const session = makeIosSession('default');
   expect(session.scriptPublication).toBeUndefined();
-  const action = recordActionEntry(session, {
+  const action = recordAction(session, {
     command: 'is',
     positionals: ['visible', 'id="save"'],
     flags: {},
@@ -123,7 +134,8 @@ test('ordinary action history preserves authored commands, positionals, and repl
     { command: 'home', positionals: [], flags: {}, result: {} },
   ] satisfies RecordActionEntry[];
 
-  for (const entry of entries) recordActionEntry(session, entry);
+  for (const entry of entries)
+    recordActionEntry(session, entry, createLiveTestHostEnvironment().cwd);
 
   expect(
     session.actions.map(({ command, positionals, flags }) => ({ command, positionals, flags })),
@@ -139,7 +151,7 @@ test('a mutating action is never excluded, repair-armed or not', () => {
       boundary: 0,
     },
   });
-  const action = recordActionEntry(session, {
+  const action = recordAction(session, {
     command: 'press',
     positionals: ['@e5'],
     flags: {},
@@ -158,7 +170,7 @@ test('a command explicitly marked NOT observation-only (e.g. the top-level `wait
       boundary: 0,
     },
   });
-  const action = recordActionEntry(session, {
+  const action = recordAction(session, {
     command: 'wait',
     positionals: ['500'],
     flags: {},
@@ -178,7 +190,7 @@ test('--no-record still takes precedence over an observation-only action, repair
       boundary: 0,
     },
   });
-  const action = recordActionEntry(session, {
+  const action = recordAction(session, {
     command: 'get',
     positionals: ['attrs', 'id="save"'],
     flags: { noRecord: true },
@@ -191,7 +203,7 @@ test('--no-record still takes precedence over an observation-only action, repair
 
 test('--no-record suppresses a mutating coordinate press from action history', () => {
   const session = makeIosSession('default');
-  const action = recordActionEntry(session, {
+  const action = recordAction(session, {
     command: 'press',
     positionals: ['50', '60'],
     flags: { noRecord: true },
@@ -231,9 +243,9 @@ test('parameterized fills keep literals out of recording state with deterministi
     },
   };
 
-  recordActionEntry(session, passwordEntry);
-  recordActionEntry(session, passwordEntry);
-  recordActionEntry(session, {
+  recordActionEntry(session, passwordEntry, createLiveTestHostEnvironment().cwd);
+  recordActionEntry(session, passwordEntry, createLiveTestHostEnvironment().cwd);
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="token"', token],
     flags: { recordAs: 'API_TOKEN' },
@@ -263,7 +275,7 @@ test('parameterized fills keep literals out of recording state with deterministi
 
 test('a one-character parameterized fill preserves structural selector provenance', () => {
   const session = makeIosSession('default');
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', 'a'],
     flags: { recordAs: 'LETTER' },
@@ -302,7 +314,7 @@ test.each(['', '   '])(
   'parameterized fills preserve the placeholder when the resolved value is %j',
   (value) => {
     const session = makeIosSession('default');
-    recordActionEntry(session, {
+    recordAction(session, {
       command: 'fill',
       positionals: ['id="password"', value],
       flags: { recordAs: 'PASSWORD' },
@@ -319,7 +331,7 @@ test('an empty parameterized clear rewrites only its own text, never other empty
   // so it must redact nothing beyond the fill's own semantic text — an unrelated empty field or
   // empty evidence label is not an echo of the (empty) value.
   const session = makeIosSession('default');
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="search"', ''],
     flags: { recordAs: 'QUERY' },
@@ -359,7 +371,7 @@ test('an empty parameterized clear rewrites only its own text, never other empty
 test('whitespace-only fills collapse ambiguous recorder output and keys', () => {
   const session = makeIosSession('default');
   const whitespace = '   ';
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', whitespace],
     flags: { recordAs: 'PASSWORD' },
@@ -393,7 +405,7 @@ test('#1533: the --save-script ingress does not re-arm an aborted authoring life
 
   // The second `open --save-script` records its own action, carrying the flag
   // that caused the abort into the recorder's shared ingress.
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'open',
     positionals: ['com.example.other'],
     flags: { saveScript: true },
@@ -408,7 +420,7 @@ test('#1533: an aborted lifecycle cannot be retargeted by a later --save-script=
     scriptPublication: authoringPublication('aborted', { path: '/tmp/original.ad' }),
   });
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'open',
     positionals: ['com.example.other'],
     flags: { saveScript: '/tmp/hijacked.ad', force: true },
@@ -425,7 +437,7 @@ test('#1533: an ARMED authoring lifecycle still takes the ingress (retarget + fo
     scriptPublication: authoringPublication('armed'),
   });
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'close',
     positionals: [],
     flags: { saveScript: '/tmp/out.ad', force: true },
@@ -448,13 +460,13 @@ test('#1398: a landmark-mode wait recorded after a parameterized fill drops iden
   const session = makeIosSession('default');
   const literal = 'hunter2-secret';
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', literal],
     flags: { recordAs: 'PASSWORD' },
     result: { text: literal },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'wait',
     positionals: ['role="heading"'],
     flags: {},
@@ -485,13 +497,13 @@ test('#1398: a landmark-mode wait drops identity evidence when the echo is only 
   const session = makeIosSession('default');
   const literal = 'hunter2-secret';
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', literal],
     flags: { recordAs: 'PASSWORD' },
     result: { text: literal },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'wait',
     positionals: ['role="button" label="Continue"'],
     flags: {},
@@ -514,13 +526,13 @@ test('#1398: action-mode evidence (get/is) redacts an echoed label and downgrade
   const session = makeIosSession('default');
   const literal = 'hunter2-secret';
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', literal],
     flags: { recordAs: 'PASSWORD' },
     result: { text: literal },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'is',
     positionals: ['visible', 'id="password"'],
     flags: {},
@@ -549,19 +561,19 @@ test('#1398: action-mode evidence (get/is) redacts an echoed label and downgrade
 test('#1398: action-mode evidence redacts EVERY registered literal echoed in the same label, not just the first match', () => {
   const session = makeIosSession('default');
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="username"', 'bob'],
     flags: { recordAs: 'USERNAME' },
     result: { text: 'bob' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', 'hunter2-secret'],
     flags: { recordAs: 'PASSWORD' },
     result: { text: 'hunter2-secret' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'is',
     positionals: ['visible', 'id="session-banner"'],
     flags: {},
@@ -592,19 +604,19 @@ test('#1398: action-mode evidence redacts EVERY registered literal echoed in the
 test('#1398: two distinct --record-as names sharing the same literal value deterministically keep the first-registered name', () => {
   const session = makeIosSession('default');
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', 'hunter2'],
     flags: { recordAs: 'PASSWORD' },
     result: { text: 'hunter2' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="confirm"', 'hunter2'],
     flags: { recordAs: 'CONFIRM_PASSWORD' },
     result: { text: 'hunter2' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'wait',
     positionals: ['id="confirmation-banner"'],
     flags: {},
@@ -628,19 +640,19 @@ test('#1398: two distinct --record-as names sharing the same literal value deter
 test('#1398: redacting one literal never corrupts a placeholder another literal already produced (result payload)', () => {
   const session = makeIosSession('default');
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="field-one"', 'somethinglong'],
     flags: { recordAs: 'ABC' },
     result: { text: 'somethinglong' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="field-two"', 'ABC'],
     flags: { recordAs: 'OTHER' },
     result: { text: 'ABC' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'wait',
     positionals: ['id="confirmation-banner"'],
     flags: {},
@@ -656,19 +668,19 @@ test('#1398: redacting one literal never corrupts a placeholder another literal 
 test('#1398: redacting one literal never corrupts a placeholder another literal already produced (action-mode target evidence)', () => {
   const session = makeIosSession('default');
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="field-one"', 'somethinglong'],
     flags: { recordAs: 'ABC' },
     result: { text: 'somethinglong' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="field-two"', 'ABC'],
     flags: { recordAs: 'OTHER' },
     result: { text: 'ABC' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'is',
     positionals: ['visible', 'id="confirmation-banner"'],
     flags: {},
@@ -704,13 +716,13 @@ test('#1398: a literal whose own text is shaped like an existing placeholder is 
   const session = makeIosSession('default');
   const literal = '${OTHERVAR}';
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="field"', literal],
     flags: { recordAs: 'TOKEN' },
     result: { text: literal },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'wait',
     positionals: ['id="confirmation-banner"'],
     flags: {},
@@ -725,13 +737,13 @@ test('#1398: dual-endpoint (targetEvidences) evidence is protected independently
   const session = makeIosSession('default');
   const literal = 'hunter2-secret';
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', literal],
     flags: { recordAs: 'PASSWORD' },
     result: { text: literal },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'drag',
     positionals: ['id="source"', 'id="dest"'],
     flags: {},
@@ -778,19 +790,19 @@ test('#1398: dual-endpoint (targetEvidences) evidence is protected independently
 test('#1398: multiple registered literals apply longest-first so a shorter value never partially consumes a longer one', () => {
   const session = makeIosSession('default');
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', 'bob123'],
     flags: { recordAs: 'PASSWORD' },
     result: { text: 'bob123' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="username"', 'bob'],
     flags: { recordAs: 'USERNAME' },
     result: { text: 'bob' },
   });
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'wait',
     positionals: ['text="Welcome bob123!"'],
     flags: {},
@@ -804,7 +816,7 @@ test('#1398: a whitespace-only --record-as value keeps only fill-step-scoped pro
   const session = makeIosSession('default');
   const whitespace = '   ';
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', whitespace],
     flags: { recordAs: 'PASSWORD' },
@@ -812,7 +824,7 @@ test('#1398: a whitespace-only --record-as value keeps only fill-step-scoped pro
   });
   expect(session.recordedFillLiterals).toBeUndefined();
 
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'wait',
     positionals: ['text="a b c"'],
     flags: {},
@@ -824,7 +836,7 @@ test('#1398: a whitespace-only --record-as value keeps only fill-step-scoped pro
 
 test('#1398: ordinary recordings with no --record-as fill are completely unaffected', () => {
   const session = makeIosSession('default');
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'wait',
     positionals: ['role="heading" label="Home"'],
     flags: {},
@@ -854,7 +866,7 @@ test('#1398: ordinary recordings with no --record-as fill are completely unaffec
 test('a stdin fill without --record-as never enters recording state', () => {
   const session = makeIosSession('default');
   const secret = 'stdin-secret-3260';
-  const action = recordActionEntry(session, {
+  const action = recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', secret],
     flags: { textStdin: true },
@@ -869,7 +881,7 @@ test('a stdin fill without --record-as never enters recording state', () => {
 test('a stdin fill with --record-as is recorded as its ${VAR} placeholder', () => {
   const session = makeIosSession('default');
   const secret = 'stdin-secret-3260';
-  recordActionEntry(session, {
+  recordAction(session, {
     command: 'fill',
     positionals: ['id="password"', secret],
     flags: { textStdin: true, recordAs: 'PASSWORD' },

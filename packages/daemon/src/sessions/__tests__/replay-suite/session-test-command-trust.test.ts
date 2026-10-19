@@ -13,7 +13,7 @@ import {
 import { runReplayTestCommand } from '@agent-device/replay-port/test-command';
 import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
 
 const capturedCommands: ReplayCommand[] = [];
@@ -33,7 +33,10 @@ async function forwardedCommands(publicNetworkOnly?: true): Promise<readonly Rep
   const root = mkdtempForTestSync('agent-device-test-command-trust-');
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'context platform=ios\nopen "Demo"\n');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const req: DaemonRequest = {
     token: 'token',
     session: 'default',

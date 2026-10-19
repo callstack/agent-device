@@ -1,4 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -123,6 +124,7 @@ function requireForegroundIosKeyboardSession(
 
 /** The params every migrated session-route handler takes; identical across the leaves. */
 type SessionRouteHandlerParams = Readonly<{
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -134,6 +136,7 @@ type SessionRouteHandlerParams = Readonly<{
 
 type SessionRouteRuntimeResolver = (
   params: Readonly<{
+    host: HostEnvironment;
     device: DeviceInfo;
     positionals: string[];
     readiness?: boolean;
@@ -182,6 +185,7 @@ async function runBoundSessionRoute(
     ...(params.updateSession ? { updateSession: params.updateSession } : {}),
     prepare: async (device, ref) => {
       const bound = await params.resolveRuntime({
+        host: params.host,
         device,
         positionals,
         readiness: true,
@@ -215,7 +219,6 @@ export async function handleKeyboardCommand(
     resolveRuntime: (runtimeParams) => resolveBoundKeyboardRuntime(runtimeParams),
   });
 }
-
 export async function handleAppEventCommand(
   params: SessionRouteHandlerParams,
 ): Promise<DaemonResponse> {

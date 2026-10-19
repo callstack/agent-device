@@ -6,7 +6,7 @@ import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../.
 import { snapshotRuntimeFixture } from '../../../__tests__/support/snapshot-runtime-fixture.ts';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import path from 'node:path';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
@@ -27,7 +27,7 @@ const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 
 function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-snapshot-alert-');
-  return new SessionStore(path.join(root, 'sessions'));
+  return new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 }
 
 function makeSession(name: string): SessionState {

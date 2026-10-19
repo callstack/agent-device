@@ -40,21 +40,26 @@ export async function appendDeviceInventoryCheck(
   checks: DoctorCheck[],
   req: DaemonRequest,
   session: SessionState | undefined,
+  useColor: boolean,
 ): Promise<DoctorDeviceInventory | undefined> {
   const selector = deviceInventorySelector(req, session);
   try {
     const inventory = await readDoctorDeviceInventory(selector);
     const devices = filterInventoryForSelector(inventory.devices, selector);
-    appendDoctorCheck(checks, {
-      id: 'device',
-      status: devices.length === 0 ? 'fail' : 'pass',
-      summary: deviceInventorySummary(devices, selector, inventory.failures),
-      hint: devices.length === 0 ? deviceInventoryFailureHint(inventory.failures) : undefined,
-      command: devices.length === 0 ? deviceInventoryCommand(selector) : undefined,
-      evidence: deviceInventoryEvidence(devices, inventory.failures),
-    });
+    appendDoctorCheck(
+      checks,
+      {
+        id: 'device',
+        status: devices.length === 0 ? 'fail' : 'pass',
+        summary: deviceInventorySummary(devices, selector, inventory.failures),
+        hint: devices.length === 0 ? deviceInventoryFailureHint(inventory.failures) : undefined,
+        command: devices.length === 0 ? deviceInventoryCommand(selector) : undefined,
+        evidence: deviceInventoryEvidence(devices, inventory.failures),
+      },
+      useColor,
+    );
     if (devices.length > 0) {
-      appendInventoryFailureChecks(checks, inventory.failures);
+      appendInventoryFailureChecks(checks, inventory.failures, useColor);
     }
     return {
       devices,
@@ -64,14 +69,18 @@ export async function appendDeviceInventoryCheck(
     };
   } catch (error) {
     const normalized = normalizeError(error);
-    appendDoctorCheck(checks, {
-      id: 'device',
-      status: 'fail',
-      summary: normalized.message,
-      hint: normalized.hint,
-      command: 'agent-device devices',
-      evidence: { code: normalized.code, details: normalized.details },
-    });
+    appendDoctorCheck(
+      checks,
+      {
+        id: 'device',
+        status: 'fail',
+        summary: normalized.message,
+        hint: normalized.hint,
+        command: 'agent-device devices',
+        evidence: { code: normalized.code, details: normalized.details },
+      },
+      useColor,
+    );
     return { devices: [], hostDevices: [], platform: selector.platform, target: selector.target };
   }
 }
@@ -80,35 +89,40 @@ export function resolveDoctorDeviceForAppCheck(
   checks: DoctorCheck[],
   inventory: DoctorDeviceInventory | undefined,
   targetApp: string | undefined,
+  useColor: boolean,
 ): DeviceInfo | undefined {
   if (!targetApp || !inventory) return undefined;
   const booted = inventory.devices.filter((device) => device.booted === true);
   if (booted.length === 1) return booted[0];
 
-  appendDoctorCheck(checks, {
-    id: 'target-app-device',
-    status: 'fail',
-    summary:
-      booted.length === 0
-        ? 'Target app check needs one booted device; none matched.'
-        : `Target app check needs one booted device; ${booted.length} matched.`,
-    hint:
-      booted.length === 0
-        ? 'Boot a device, or adjust --platform/--target/--device/--udid/--serial.'
-        : 'Pass --platform/--target/--device/--udid/--serial so doctor checks the intended device.',
-    command: inventory.platform
-      ? `agent-device devices --platform ${inventory.platform}`
-      : 'agent-device devices',
-    evidence: {
-      targetApp,
-      booted: booted.map((device) => ({
-        // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
-        platform: publicPlatformString(device),
-        id: device.id,
-        name: device.name,
-      })),
+  appendDoctorCheck(
+    checks,
+    {
+      id: 'target-app-device',
+      status: 'fail',
+      summary:
+        booted.length === 0
+          ? 'Target app check needs one booted device; none matched.'
+          : `Target app check needs one booted device; ${booted.length} matched.`,
+      hint:
+        booted.length === 0
+          ? 'Boot a device, or adjust --platform/--target/--device/--udid/--serial.'
+          : 'Pass --platform/--target/--device/--udid/--serial so doctor checks the intended device.',
+      command: inventory.platform
+        ? `agent-device devices --platform ${inventory.platform}`
+        : 'agent-device devices',
+      evidence: {
+        targetApp,
+        booted: booted.map((device) => ({
+          // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
+          platform: publicPlatformString(device),
+          id: device.id,
+          name: device.name,
+        })),
+      },
     },
-  });
+    useColor,
+  );
   return undefined;
 }
 
@@ -170,9 +184,10 @@ function combineDiscoveries(discoveries: readonly DeviceInventoryDiscovery[]): {
 function appendInventoryFailureChecks(
   checks: DoctorCheck[],
   failures: DoctorInventoryFailure[],
+  useColor: boolean,
 ): void {
   for (const failure of failures) {
-    appendDoctorCheck(checks, inventoryFailureCheck(failure));
+    appendDoctorCheck(checks, inventoryFailureCheck(failure), useColor);
   }
 }
 

@@ -1,7 +1,11 @@
 import path from 'node:path';
 import { teardownDaemonSessionForShutdown } from './server-shutdown.ts';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
+import {
+  WEB_DESKTOP_DEVICE,
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { makeWebSession } from '../../__tests__/support/session-teardown.fixtures.ts';
 import { SessionStore } from '../../core/session-store.ts';
@@ -12,7 +16,10 @@ afterEach(() => {
 });
 
 function openStore(prefix: string): SessionStore {
-  return new SessionStore(path.join(mkdtempForTestSync(prefix), 'sessions'));
+  return new SessionStore(
+    path.join(mkdtempForTestSync(prefix), 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
 }
 
 // The agent-browser CLI call a web close makes has its own 30s internal timeout, well past the 5s

@@ -52,6 +52,8 @@ export async function resolveScreenshotGenericExecution(
     req: DaemonRequest;
     session: SessionState;
     createCommandSurface: CreateDaemonCommandSurface;
+    /** The runtime host's working directory: the fallback base for a client-typed output path. */
+    hostCwd: string;
   }> &
     ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution> {
@@ -60,7 +62,7 @@ export async function resolveScreenshotGenericExecution(
   if (retiredMaxSize) throw new AppError('INVALID_ARGS', retiredMaxSize);
   assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
 
-  const request = readScreenshotRequest(req);
+  const request = readScreenshotRequest(req, params.hostCwd);
   const cropOn =
     typeof req.flags?.screenshotCropOn === 'string' && req.flags.screenshotCropOn.length > 0
       ? req.flags.screenshotCropOn
@@ -319,11 +321,12 @@ async function annotateScreenshotWithSessionRefs(
  */
 function readScreenshotRequest(
   req: DaemonRequest,
+  hostCwd: string,
 ): Readonly<{ outPath: string | undefined; recorded: RecordedGenericRequest }> {
   const positionals = req.positionals ?? [];
   const flags = req.flags ?? {};
   const expand = (value: string | undefined) =>
-    value === undefined ? undefined : expandSessionPath(value, req.meta?.cwd ?? process.cwd());
+    value === undefined ? undefined : expandSessionPath(value, req.meta?.cwd ?? hostCwd);
   const positionalPath = expand(positionals[0]);
   const outFlag = expand(flags.out);
   return {

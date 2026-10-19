@@ -5,6 +5,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isIosFamily, publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress } from '@agent-device/host-kit/request';
+import { shouldColorStatusMarkers } from '@agent-device/host-kit/status-markers';
 import { isActiveProviderDevice } from '../../core/provider-device-admission.ts';
 import {
   listLocalDeviceInventory,
@@ -67,9 +68,11 @@ export async function handleDoctorCommand(params: {
   const session = sessionStore.get(sessionName);
   const options = readDoctorOptions(req, session);
   const stateDir = resolveDoctorStateDir(sessionStore, sessionName);
+  const useColor = shouldColorStatusMarkers(params.host.env, Boolean(process.stderr.isTTY));
   const checks: DoctorCheck[] = [];
   appendDoctorChecks(
     checks,
+    useColor,
     {
       id: 'agent-device',
       status: 'pass',
@@ -85,12 +88,12 @@ export async function handleDoctorCommand(params: {
   }
 
   const context = hostDiagnosticsContext(options, stateDir, androidAdbExecutor);
-  const inventory = await appendDeviceInventoryCheck(checks, req, session);
+  const inventory = await appendDeviceInventoryCheck(checks, req, session, useColor);
   const toolchain = await hostDiagnostics.toolchainCheck(
     session?.device.platform ?? inventory?.platform,
     context,
   );
-  if (toolchain) appendDoctorCheck(checks, toolchain);
+  if (toolchain) appendDoctorCheck(checks, toolchain, useColor);
   const appCheckDevice = await appendLocalDoctorChecks({
     checks,
     context,
@@ -102,11 +105,12 @@ export async function handleDoctorCommand(params: {
     bindDevice,
     req,
     env: params.host.env,
+    useColor,
   });
   const warmupDevice = session?.device ?? resolveHostWarmupDevice(inventory, appCheckDevice);
   if (warmupDevice) {
     const warmup = await hostDiagnostics.warmupCheck(warmupDevice, context);
-    if (warmup) appendDoctorCheck(checks, warmup);
+    if (warmup) appendDoctorCheck(checks, warmup, useColor);
   }
   return doctorResponse(checks, options, { device: appCheckDevice, includeMetro: true, inventory });
 }
@@ -175,6 +179,7 @@ async function appendLocalDoctorChecks(params: {
   bindDevice?: BindDeviceRuntime;
   req: DaemonRequest;
   env: HostEnvironment['env'];
+  useColor: boolean;
 }): Promise<DeviceInfo | undefined> {
   const {
     checks,
@@ -187,9 +192,11 @@ async function appendLocalDoctorChecks(params: {
     bindDevice,
     req,
     env,
+    useColor,
   } = params;
   const appCheckDevice =
-    session?.device ?? resolveDoctorDeviceForAppCheck(checks, inventory, options.targetApp);
+    session?.device ??
+    resolveDoctorDeviceForAppCheck(checks, inventory, options.targetApp, useColor);
   if (appCheckDevice) {
     await appendDeviceScopedDoctorChecks(checks, {
       context,
@@ -201,12 +208,17 @@ async function appendLocalDoctorChecks(params: {
       bindDevice,
       req,
       env,
+      useColor,
     });
   }
   if (options.shouldProbeMetro) {
-    appendDoctorCheck(checks, await probeMetro(options.metroHost, options.metroPort, options.kind));
+    appendDoctorCheck(
+      checks,
+      await probeMetro(options.metroHost, options.metroPort, options.kind),
+      useColor,
+    );
   }
-  appendDoctorChecks(checks, ...(await hostDiagnostics.ambientChecks(context)));
+  appendDoctorChecks(checks, useColor, ...(await hostDiagnostics.ambientChecks(context)));
   return appCheckDevice;
 }
 
@@ -222,10 +234,21 @@ async function appendDeviceScopedDoctorChecks(
     bindDevice?: BindDeviceRuntime;
     req: DaemonRequest;
     env: HostEnvironment['env'];
+    useColor: boolean;
   },
 ): Promise<void> {
-  const { context, hostDiagnostics, device, options, session, inspectFacts, bindDevice, req, env } =
-    params;
+  const {
+    context,
+    hostDiagnostics,
+    device,
+    options,
+    session,
+    inspectFacts,
+    bindDevice,
+    req,
+    env,
+    useColor,
+  } = params;
   let listInstalledApps: DoctorAppInventory | undefined;
   try {
     listInstalledApps = await resolveDoctorAppInventoryForDoctor({
@@ -248,8 +271,9 @@ async function appendDeviceScopedDoctorChecks(
     session,
     targetApp: options.targetApp,
     listInstalledApps,
+    useColor,
   });
-  appendDoctorChecks(checks, ...(await hostDiagnostics.deviceChecks(device, context)));
+  appendDoctorChecks(checks, useColor, ...(await hostDiagnostics.deviceChecks(device, context)));
 }
 
 async function resolveDoctorAppInventoryForDoctor(

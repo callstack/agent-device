@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import {
-  mkdtempForTestSync,
   bindTestCommandHost,
+  createLiveTestHostEnvironment,
   createTestHostEnvironment,
+  mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -15,7 +16,10 @@ bindTestCommandHost();
 
 function fixture() {
   const root = mkdtempForTestSync('agent-device-trace-runtime-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const session: SessionState = {
     name: 'trace-session',
     device: {

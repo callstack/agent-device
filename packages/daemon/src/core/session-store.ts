@@ -4,6 +4,7 @@ import {
   resolveSessionAppLogPidPath,
 } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
@@ -55,9 +56,17 @@ export class SessionStore {
   private readonly sessionsDir: string;
   private readonly scriptWriter: SessionScriptWriter;
 
-  constructor(sessionsDir: string) {
+  /**
+   * The runtime host this store's sessions live on. Script targets are recorded relative to its
+   * working directory, and the event-log cap is read from its environment; neither is ever taken
+   * from the process this module happens to run inside (#3753).
+   */
+  readonly host: HostEnvironment;
+
+  constructor(sessionsDir: string, host: HostEnvironment) {
     this.sessionsDir = sessionsDir;
-    this.scriptWriter = new SessionScriptWriter(sessionsDir);
+    this.host = host;
+    this.scriptWriter = new SessionScriptWriter(sessionsDir, host.cwd);
   }
 
   /**
@@ -187,14 +196,14 @@ export class SessionStore {
   }
 
   recordAction(ref: SessionRef, entry: RecordActionEntry): void {
-    const action = recordActionEntry(this.requireCurrent(ref), entry);
+    const action = recordActionEntry(this.requireCurrent(ref), entry, this.host.cwd);
     if (action) {
-      appendActionEvent(this.resolveEventLogPath(ref.address), ref.address, action);
+      appendActionEvent(this.resolveEventLogPath(ref.address), ref.address, action, this.host.env);
     }
   }
 
   recordEvent(sessionName: string, event: SessionEventLogInput): void {
-    appendSessionEvent(this.resolveEventLogPath(sessionName), sessionName, event);
+    appendSessionEvent(this.resolveEventLogPath(sessionName), sessionName, event, this.host.env);
   }
 
   readEvents(

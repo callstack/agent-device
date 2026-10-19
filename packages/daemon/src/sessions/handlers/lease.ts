@@ -81,6 +81,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           artifactScope,
           leaseRegistry,
           cloudArtifactProvider,
+          args.host.env,
         )) as Record<string, unknown>,
       };
     }
@@ -404,10 +405,11 @@ async function listArtifactsForRequest(
   leaseScope: ReturnType<typeof resolveLeaseScope>,
   leaseRegistry: LeaseRegistry,
   cloudArtifactProvider: CloudArtifactProvider | undefined,
+  hostEnv: NodeJS.ProcessEnv,
 ): Promise<AgentArtifactsResult> {
   const providerSessionId = readFlagString(req.flags, 'providerSessionId');
   if (shouldListDaemonArtifacts(leaseScope, providerSessionId)) {
-    return await listDaemonArtifacts(leaseScope.tenantId);
+    return await listDaemonArtifacts(leaseScope.tenantId, hostEnv);
   }
 
   return await listCloudArtifactsForRequest(
@@ -425,8 +427,11 @@ function shouldListDaemonArtifacts(
   return isProxyLeaseScope(leaseScope) || (!leaseScope.leaseProvider && !providerSessionId);
 }
 
-async function listDaemonArtifacts(tenantId: string | undefined): Promise<AgentArtifactsResult> {
-  const artifacts = await listDownloadableArtifacts(tenantId);
+async function listDaemonArtifacts(
+  tenantId: string | undefined,
+  hostEnv: NodeJS.ProcessEnv,
+): Promise<AgentArtifactsResult> {
+  const artifacts = await listDownloadableArtifacts(tenantId, hostEnv);
   return {
     source: 'daemon',
     status: 'ready',

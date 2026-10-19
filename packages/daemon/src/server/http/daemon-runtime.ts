@@ -308,7 +308,7 @@ async function startDaemonRuntimeOnHost(
     ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
     : undefined;
 
-  const sessionStore = new SessionStore(sessionsDir);
+  const sessionStore = new SessionStore(sessionsDir, host);
   const deps = await options.composeDeps({
     host,
     baseDir,

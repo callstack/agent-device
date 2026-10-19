@@ -37,7 +37,11 @@ async function withCommandRpcServer(
     handlerCalls += 1;
     return { ok: true, data: { ok: true } };
   };
-  const server = await createDaemonHttpServer({ handleRequest });
+  const server = await createDaemonHttpServer({
+    handleRequest,
+    env: process.env,
+    cwd: process.cwd(),
+  });
 
   try {
     const port = await listenOnLoopback(server);
@@ -102,7 +106,11 @@ test('the rpc boundary never accepts internal request fields from the wire', asy
     received.push(req);
     return { ok: true, data: { ok: true } };
   };
-  const server = await createDaemonHttpServer({ handleRequest });
+  const server = await createDaemonHttpServer({
+    handleRequest,
+    env: process.env,
+    cwd: process.cwd(),
+  });
 
   try {
     const port = await listenOnLoopback(server);
@@ -155,7 +163,11 @@ async function withInstallFromSourceRpcServer(
     dispatched.push(req);
     return { ok: true, data: { ok: true } };
   };
-  const server = await createDaemonHttpServer({ handleRequest, env });
+  const server = await createDaemonHttpServer({
+    handleRequest,
+    env: env ?? process.env,
+    cwd: process.cwd(),
+  });
 
   try {
     const port = await listenOnLoopback(server);
@@ -233,6 +245,7 @@ test('remote HTTP rejects host path install sources in the command RPC used by t
       handlerCalls += 1;
       return { ok: true, data: {} };
     },
+    cwd: process.cwd(),
   });
 
   try {
@@ -278,6 +291,7 @@ test('remote HTTP accepts an uploaded path artifact without resolving the client
       }
       return { ok: true, data: {} };
     },
+    cwd: process.cwd(),
   });
 
   try {
@@ -309,6 +323,7 @@ test('local command RPC keeps host paths unrestricted', async (t) => {
       received.push(request);
       return { ok: true, data: {} };
     },
+    cwd: process.cwd(),
   });
 
   try {
@@ -338,6 +353,8 @@ test('lease.allocate forwards retainOnClose to the handler as lease meta', async
       received.push(request);
       return { ok: true, data: {} };
     },
+    env: process.env,
+    cwd: process.cwd(),
   });
   try {
     const port = await listenOnLoopback(server);
@@ -379,6 +396,7 @@ test('only local command RPC keeps the client developer dir', async (t) => {
         received.push(request);
         return { ok: true, data: {} };
       },
+      cwd: process.cwd(),
     });
     try {
       const response = await postCommandRpc(await listenOnLoopback(server), params);
@@ -414,6 +432,7 @@ test('only local lease allocation RPC keeps the provider credential fingerprint'
         received.push(request);
         return { ok: true, data: {} };
       },
+      cwd: process.cwd(),
     });
     try {
       const response = await fetch(`http://127.0.0.1:${await listenOnLoopback(server)}/rpc`, {

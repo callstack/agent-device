@@ -58,12 +58,13 @@ export type RecordActionEntry = {
 export function recordActionEntry(
   session: SessionState,
   entry: RecordActionEntry,
+  hostCwd: string,
 ): SessionAction | undefined {
   if (entry.flags?.noRecord) return undefined;
   // Sensitive fill text stays out of session actions unless `--record-as` parameterizes it.
   if (isSensitiveFillText(entry.flags) && entry.flags.recordAs === undefined) return undefined;
   if (isExcludedRepairSegmentObservation(session, entry)) return undefined;
-  if (entry.flags) applyRecordedSaveScriptFlags(session, entry.flags);
+  if (entry.flags) applyRecordedSaveScriptFlags(session, entry.flags, hostCwd);
   const fillLiteral = readRecordedFillLiteral(entry);
   // #1398: register the literal only AFTER protecting this SAME entry, so a
   // fill's own recording is never passed through the session-wide substring

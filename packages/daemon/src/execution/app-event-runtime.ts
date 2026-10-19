@@ -2,6 +2,7 @@ import type { AppEventInput } from '@agent-device/contracts/app-event-runtime';
 import { appEventRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from '../core/context.ts';
@@ -32,9 +33,10 @@ async function executeAppEvent(
   device: DeviceInfo,
   context: DaemonCommandContext,
   positionals: readonly string[],
+  env: NodeJS.ProcessEnv,
 ): Promise<Record<string, unknown>> {
   const { eventName, payload } = parseTriggerAppEventArgs([...positionals]);
-  const eventUrl = resolveAppEventUrl(device, eventName, payload);
+  const eventUrl = resolveAppEventUrl(device, eventName, payload, env);
   const input: AppEventInput = {
     eventUrl,
     ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
@@ -56,13 +58,15 @@ async function executeAppEvent(
  */
 export async function resolveBoundAppEventRuntime(
   params: Readonly<{
+    host: HostEnvironment;
     device: DeviceInfo;
     positionals: readonly string[];
     readiness?: boolean;
   }> &
     RuntimeAdmissionBindings,
 ): Promise<ResolvedAppEventExecution> {
-  const { device, positionals, inspectFacts, bindDevice, platformServices, readiness } = params;
+  const { host, device, positionals, inspectFacts, bindDevice, platformServices, readiness } =
+    params;
   const admission = await admitRuntimeUse({
     command: 'trigger-app-event',
     device,
@@ -76,6 +80,6 @@ export async function resolveBoundAppEventRuntime(
   const runtime = admission.runtime;
   return {
     ok: true,
-    execute: (context) => executeAppEvent(runtime, device, context, positionals),
+    execute: (context) => executeAppEvent(runtime, device, context, positionals, host.env),
   };
 }

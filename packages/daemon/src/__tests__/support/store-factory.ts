@@ -1,11 +1,11 @@
 import path from 'node:path';
 import { SessionStore } from '../../core/session-store.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 
 export function makeSessionStore(prefix = 'agent-device-test-'): SessionStore {
   const tempRoot = mkdtempForTestSync(prefix);
-  return new SessionStore(path.join(tempRoot, 'sessions'));
+  return new SessionStore(path.join(tempRoot, 'sessions'), createLiveTestHostEnvironment());
 }
 
 export function makeStoredSessionRef(session: SessionState, address = session.name): SessionRef {

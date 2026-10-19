@@ -13,7 +13,7 @@ import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,
 } from '@agent-device/replay-port/replay-dispatch-envelope';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
 import {
   unavailableBindDevice,
@@ -67,7 +67,7 @@ function createRecordVideoFixture(): RecordVideoFixture {
   return {
     root,
     replayPath,
-    sessionStore: new SessionStore(path.join(root, 'sessions')),
+    sessionStore: new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment()),
     nestedRequests: [],
     events: [],
   };

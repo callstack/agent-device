@@ -14,7 +14,7 @@ import {
   commitRepairScriptBeforeClose,
   finalizeOrdinaryCloseScript,
 } from '../session-close-script.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 
 const roots: string[] = [];
@@ -33,7 +33,7 @@ function setup(name: string, session = makeIosSession(name, { appBundleId: 'com.
   const root = mkdtempForTestSync('agent-device-session-close-script-');
   roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
-  const sessionStore = new SessionStore(sessionsDir);
+  const sessionStore = new SessionStore(sessionsDir, createLiveTestHostEnvironment());
   const ref = sessionStore.publish(name, session);
   const req: DaemonRequest = {
     token: 'token',

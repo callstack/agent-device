@@ -44,6 +44,8 @@ for (const [commandClass, row] of Object.entries(CANCELLATION_ROWS)) {
         markAbortObserved();
         return { ok: true, data: { canceled: signal.aborted } };
       },
+      env: process.env,
+      cwd: process.cwd(),
     });
 
     try {

@@ -9,7 +9,7 @@ import { resolveEffectiveSessionName, resolveSessionScope } from '../session-rou
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import type { SessionScope } from '@agent-device/contracts/session';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 function makeSession(name: string): SessionState {
   return {
@@ -31,7 +31,7 @@ function makeStore(t: TestContext): SessionStore {
   t.onTestFinished(() => {
     fs.rmSync(root, { recursive: true, force: true });
   });
-  return new SessionStore(path.join(root, 'sessions'));
+  return new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 }
 
 test('does not reuse lone active session for implicit default session from another scope', (t) => {

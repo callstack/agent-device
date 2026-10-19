@@ -3,9 +3,10 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  mkdtempForTestSync,
   bindTestCommandHost,
+  createLiveTestHostEnvironment,
   createTestHostEnvironment,
+  mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { SessionStore } from '../../../../core/session-store.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
@@ -73,7 +74,10 @@ function close(
   positionals: string[] = [],
 ): { response: Promise<DaemonResponse | null>; endedLeases: EndedLeaseLedger } {
   const root = mkdtempForTestSync('agent-device-session-close-ended-lease-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish(SESSION_NAME, session);
   const endedLeases: EndedLeaseLedger = [];
   const response = handleSessionCommands({

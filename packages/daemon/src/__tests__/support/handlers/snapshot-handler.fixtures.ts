@@ -1,5 +1,9 @@
 import path from 'node:path';
-import { buildNodes, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  buildNodes,
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';
@@ -16,7 +20,7 @@ import { platformResourceCleanupFixture } from '../platform-resource-cleanup-fix
 
 export function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-snapshot-handler-');
-  return new SessionStore(path.join(root, 'sessions'));
+  return new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 }
 
 export function makeSession(

@@ -26,6 +26,7 @@ import type {
 import type { GenericPlatformExecutionParams } from '../../core/generic-leaf-execution.ts';
 import { readRequestedFoldPose, resolveBoundFoldRuntime } from '../fold-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from '../../__tests__/support/runtime-binding-conformance.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 // File-scoped id: this owner binding's `local-family` kind reaches the real on-disk device-claim
 // admission, so a shared id risks a cross-file claim collision under parallel execution.
@@ -232,11 +233,15 @@ test('recording preserves the timeline for replay', () => {
     { atMs: 0, angle: 0 },
     { atMs: 5000, angle: 180 },
   ]);
-  const action = recordActionEntry(makeSession('fold-recording'), {
-    command: 'fold',
-    positionals: [],
-    flags: { keyframes },
-    result: { pose: 'open', hingeAngleDegrees: 180 },
-  });
+  const action = recordActionEntry(
+    makeSession('fold-recording'),
+    {
+      command: 'fold',
+      positionals: [],
+      flags: { keyframes },
+      result: { pose: 'open', hingeAngleDegrees: 180 },
+    },
+    createLiveTestHostEnvironment().cwd,
+  );
   expect(action?.flags?.keyframes).toBe(keyframes);
 });

@@ -26,7 +26,13 @@ test('public HTTP marks command and lease requests before dispatch', async (t) =
     requests.push(request);
     return { ok: true, data: {} };
   });
-  const server = await createDaemonHttpServer({ token, leaseRegistry, handleRequest });
+  const server = await createDaemonHttpServer({
+    token,
+    leaseRegistry,
+    handleRequest,
+    env: process.env,
+    cwd: process.cwd(),
+  });
 
   try {
     const port = await listenOnLoopback(server);

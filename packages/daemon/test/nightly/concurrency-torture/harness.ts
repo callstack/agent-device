@@ -26,6 +26,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { LeaseRegistry } from '../../../src/resources/lease-registry.ts';
 import { SessionStore } from '../../../src/core/session-store.ts';
 import type { SessionState } from '../../../src/core/session-state.ts';
@@ -126,7 +127,10 @@ class TortureWorld {
     this.opsPerClient = config.opsPerClient ?? 6 + this.prng.int(9); // 6..14
     this.activeClients = this.clientCount;
     this.stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-torture-'));
-    this.sessionStore = new SessionStore(path.join(this.stateRoot, 'sessions'));
+    this.sessionStore = new SessionStore(
+      path.join(this.stateRoot, 'sessions'),
+      createTestHostEnvironment(),
+    );
     this.leaseRegistry = new LeaseRegistry({ maxLeaseTtlMs: 10 * 60_000 });
   }
 

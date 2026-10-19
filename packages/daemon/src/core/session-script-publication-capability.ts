@@ -41,10 +41,10 @@ export function isAuthoringArmedSession(session: SessionState | undefined): bool
 export function armAuthoringOnOpen(
   session: SessionState,
   requested: { path?: string; force?: boolean },
+  hostCwd: string,
 ): void {
   session.scriptPublication = armAuthoring({
-    path:
-      requested.path !== undefined ? expandSessionPath(requested.path, process.cwd()) : undefined,
+    path: requested.path !== undefined ? expandSessionPath(requested.path, hostCwd) : undefined,
     force: requested.force === true,
   });
 }
@@ -88,13 +88,17 @@ export function isSessionRecording(session: SessionState | undefined): boolean {
  * - `authoring{aborted}` -> nothing. The lifecycle is terminal (#1533), so the flag neither
  *   re-arms recording nor retargets: recording-time evidence stopped at the abort.
  */
-export function applyRecordedSaveScriptFlags(session: SessionState, flags: CommandFlags): void {
+export function applyRecordedSaveScriptFlags(
+  session: SessionState,
+  flags: CommandFlags,
+  hostCwd: string,
+): void {
   if (!flags.saveScript) return;
   if (isAuthoringAborted(publicationState(session))) return;
   const requested = {
     path:
       typeof flags.saveScript === 'string'
-        ? expandSessionPath(flags.saveScript, process.cwd())
+        ? expandSessionPath(flags.saveScript, hostCwd)
         : undefined,
     force: flags.force === true,
   };
@@ -124,6 +128,7 @@ export function applyRecordedSaveScriptFlags(session: SessionState, flags: Comma
 export function retargetActivePublication(
   session: SessionState,
   params: { explicitPath?: string; liveForce: boolean | undefined },
+  hostCwd: string,
 ): void {
   const state = publicationState(session);
   if (state.kind !== 'authoring') return;
@@ -132,7 +137,7 @@ export function retargetActivePublication(
     target: resolveScriptTarget(state.target, {
       path:
         params.explicitPath !== undefined
-          ? expandSessionPath(params.explicitPath, process.cwd())
+          ? expandSessionPath(params.explicitPath, hostCwd)
           : undefined,
       force: params.liveForce === true,
     }),

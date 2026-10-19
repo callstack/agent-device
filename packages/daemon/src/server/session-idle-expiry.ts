@@ -44,7 +44,7 @@ const IDLE_EXPIRY_TOMBSTONE_TTL_MS = 60 * 60_000;
  * shortest window the unit supports, not for the feature being disabled, and silently disabling a
  * feature someone just opted into is the worst possible reading of a typo.
  */
-export function resolveSessionIdleExpiryMs(env: NodeJS.ProcessEnv = process.env): number {
+export function resolveSessionIdleExpiryMs(env: NodeJS.ProcessEnv): number {
   const raw = env[SESSION_IDLE_EXPIRY_ENV]?.trim();
   if (!raw) return 0;
   const parsed = Number(raw);

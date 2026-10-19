@@ -292,13 +292,21 @@ function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: Sess
       resourcePath,
       device: session.device,
     }),
-    outputPaths: resolveRecordingStartPaths(params.req, session.device.platform),
+    outputPaths: resolveRecordingStartPaths(
+      params.req,
+      session.device.platform,
+      params.sessionStore.host.cwd,
+    ),
   };
 }
 
 type RecordingStartPaths = RecordingOutputPaths & Readonly<{ clientOutputPath?: string }>;
 
-function resolveRecordingStartPaths(req: DaemonRequest, platform: Platform): RecordingStartPaths {
+function resolveRecordingStartPaths(
+  req: DaemonRequest,
+  platform: Platform,
+  hostCwd: string,
+): RecordingStartPaths {
   const requestedPath = req.positionals?.[1];
   const clientOutputPath = req.meta?.clientArtifactPaths?.outPath;
   if (requestedPath === undefined && clientOutputPath !== undefined) {
@@ -309,7 +317,7 @@ function resolveRecordingStartPaths(req: DaemonRequest, platform: Platform): Rec
       ...resolveRecordingOutputPaths({
         requestedPath: buildRemoteTempArtifactPath('recording', extension),
         platform,
-        cwd: process.cwd(),
+        cwd: hostCwd,
       }),
       clientOutputPath: appendRecordingExtensionWhenMissing(clientOutputPath, extension),
     };
@@ -318,7 +326,7 @@ function resolveRecordingStartPaths(req: DaemonRequest, platform: Platform): Rec
     ...resolveRecordingOutputPaths({
       requestedPath,
       platform,
-      cwd: req.meta?.cwd ?? process.cwd(),
+      cwd: req.meta?.cwd ?? hostCwd,
     }),
     ...(clientOutputPath === undefined ? {} : { clientOutputPath }),
   };

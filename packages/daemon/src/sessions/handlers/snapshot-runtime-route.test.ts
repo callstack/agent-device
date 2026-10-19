@@ -18,6 +18,7 @@ vi.mock('../snapshot-runtime.ts', () => ({
 import { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { handleSnapshotCommands } from './snapshot.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 beforeEach(() => {
   dispatchSnapshotDiffViaRuntime.mockReset();
@@ -29,7 +30,10 @@ beforeEach(() => {
 test('snapshot route forwards the request runtime facts and binding seams exactly once', async () => {
   const inspectFacts = vi.fn();
   const bindDevice = vi.fn();
-  const sessionStore = new SessionStore('/tmp/agent-device-snapshot-runtime-route-test');
+  const sessionStore = new SessionStore(
+    '/tmp/agent-device-snapshot-runtime-route-test',
+    createLiveTestHostEnvironment(),
+  );
   const req: DaemonRequest = {
     command: 'snapshot',
     positionals: [],
@@ -66,7 +70,10 @@ test('snapshot route forwards the request runtime facts and binding seams exactl
 test('diff route forwards the request runtime facts and binding seams exactly once', async () => {
   const inspectFacts = vi.fn();
   const bindDevice = vi.fn();
-  const sessionStore = new SessionStore('/tmp/agent-device-snapshot-diff-route-test');
+  const sessionStore = new SessionStore(
+    '/tmp/agent-device-snapshot-diff-route-test',
+    createLiveTestHostEnvironment(),
+  );
   const req: DaemonRequest = {
     command: 'diff',
     positionals: ['snapshot'],

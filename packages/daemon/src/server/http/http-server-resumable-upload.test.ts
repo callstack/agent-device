@@ -21,6 +21,8 @@ test('chunked ranged overflow rolls back before an exact retry and finalize', as
   const server = await createDaemonHttpServer({
     token: 'resumable-token',
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    env: process.env,
+    cwd: process.cwd(),
   });
   let trackedUploadId = '';
   try {

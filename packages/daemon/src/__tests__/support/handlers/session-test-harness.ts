@@ -2,7 +2,11 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { isMacOs } from '@agent-device/kernel/device';
 import { legacyDispatchCapture } from '../legacy-snapshot-capture-fixture.ts';
 import { expect, vi, beforeEach } from 'vitest';
-import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  createLiveTestHostEnvironment,
+  createTestAppLogLiveHandle,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import type { AppLogLiveState } from '@agent-device/contracts/app-log-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
@@ -178,7 +182,7 @@ beforeEach(() => {
 
 export function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-session-handler-');
-  return new SessionStore(path.join(root, 'sessions'));
+  return new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 }
 
 export function makeSession(name: string, device: SessionState['device']): SessionState {

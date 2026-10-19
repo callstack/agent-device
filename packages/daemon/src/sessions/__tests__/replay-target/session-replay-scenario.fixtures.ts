@@ -1,6 +1,6 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeIosAppSession } from '../../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
@@ -20,7 +20,10 @@ type ReplaySessionScene = Readonly<{
 
 function iosReplayScene(prefix: string): ReplaySessionScene {
   const root = mkdtempForTestSync(prefix);
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosAppSession(sessionName));
   return { root, sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };

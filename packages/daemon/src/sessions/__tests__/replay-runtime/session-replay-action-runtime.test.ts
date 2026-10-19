@@ -6,6 +6,7 @@ import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { invokeReplayAction } from '@agent-device/replay-port/session-replay-action-runtime';
 import { replayDaemonDependencies } from '../../handlers/session-replay-command.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const REPLAY_REQUEST: DaemonRequest = {
   token: 'token',
@@ -42,12 +43,16 @@ test.each(['', '   '])(
       resolvedSessionScope: undefined,
       dependencies: replayDaemonDependencies,
       invoke: async (request) => {
-        recordActionEntry(session, {
-          command: request.command,
-          positionals: request.positionals ?? [],
-          flags: request.flags ?? {},
-          result: { text: request.positionals?.at(-1) },
-        });
+        recordActionEntry(
+          session,
+          {
+            command: request.command,
+            positionals: request.positionals ?? [],
+            flags: request.flags ?? {},
+            result: { text: request.positionals?.at(-1) },
+          },
+          createLiveTestHostEnvironment().cwd,
+        );
         return { ok: true, data: {} };
       },
     });

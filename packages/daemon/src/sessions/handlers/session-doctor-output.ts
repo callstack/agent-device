@@ -3,7 +3,6 @@ import {
   formatDoctorCheckDetailLines,
   formatDoctorCheckSummaryLine,
 } from '@agent-device/host-kit/doctor-lines';
-import { shouldColorStatusMarkers } from '@agent-device/host-kit/status-markers';
 import type { DoctorCheck, DoctorStatus } from '@agent-device/contracts/observability';
 
 export function summarizeDoctorStatus(checks: DoctorCheck[]): 'pass' | 'warn' | 'fail' {
@@ -23,26 +22,32 @@ export function sortChecks(checks: DoctorCheck[]): DoctorCheck[] {
   return [...checks].sort((a, b) => order[a.status] - order[b.status]);
 }
 
-export function appendDoctorChecks(checks: DoctorCheck[], ...items: DoctorCheck[]): void {
+export function appendDoctorChecks(
+  checks: DoctorCheck[],
+  useColor: boolean,
+  ...items: DoctorCheck[]
+): void {
   for (const check of items) {
-    appendDoctorCheck(checks, check);
+    appendDoctorCheck(checks, check, useColor);
   }
 }
 
-export function appendDoctorCheck(checks: DoctorCheck[], check: DoctorCheck): void {
+export function appendDoctorCheck(
+  checks: DoctorCheck[],
+  check: DoctorCheck,
+  useColor: boolean,
+): void {
   checks.push(check);
   emitRequestProgress({
     type: 'command',
     status: 'progress',
-    message: formatDoctorCheckProgressMessage(check),
+    message: formatDoctorCheckProgressMessage(check, useColor),
   });
 }
 
-function formatDoctorCheckProgressMessage(check: DoctorCheck): string {
+function formatDoctorCheckProgressMessage(check: DoctorCheck, useColor: boolean): string {
   return [
-    formatDoctorCheckSummaryLine(check, {
-      useColor: shouldColorStatusMarkers(process.env, Boolean(process.stderr.isTTY)),
-    }),
+    formatDoctorCheckSummaryLine(check, { useColor }),
     ...formatDoctorCheckDetailLines(check),
   ].join('\n');
 }

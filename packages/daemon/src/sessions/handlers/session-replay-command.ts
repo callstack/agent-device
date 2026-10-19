@@ -141,6 +141,7 @@ export function createReplaySession(
           update: updateSession,
           clearRepairTombstone: () => store.clearRepairTombstone(name),
         },
+        hostCwd: store.host.cwd,
       }),
     assertSelectorMatches: (flags) => {
       const ref = store.lookup(name);

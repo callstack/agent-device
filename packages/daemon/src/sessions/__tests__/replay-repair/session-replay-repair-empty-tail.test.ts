@@ -27,6 +27,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import {
   bottomTabsRealCaptureFixture,
   buildNodes,
+  createLiveTestHostEnvironment,
   mkdtempForTestSync,
   recordArticleEvidence,
 } from '@agent-device/test-kit';
@@ -85,7 +86,10 @@ beforeEach(() => {
 
 test('a record-and-heal divergence on the LAST step resumes with an empty tail and commits — but only after the corrective press is actually recorded', async () => {
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -215,7 +219,10 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
 
 test('a manual divergence (unannotated action-failure) on the LAST step resumes with an empty tail and commits — but only after the corrective press is actually recorded', async () => {
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-manual-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -332,7 +339,10 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
 
 test('a caution (identity-mismatch) divergence on the LAST step resumes with an empty tail and commits — but only after the corrective press is actually recorded', async () => {
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-caution-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -459,7 +469,10 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
 
 test('--from N stays legal for a caution divergence even after the N + 1 empty-tail watermark is stamped', async () => {
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-caution-from-n-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -556,7 +569,10 @@ test('--from N stays legal for a caution divergence even after the N + 1 empty-t
 
 test('an unauthorized --from one past the plan end is rejected on an ARMED session whose last-step divergence hint is state-repair, not record-and-heal', async () => {
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-state-repair-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -642,7 +658,10 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
 
 test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consuming the watermark, so a subsequent correct retry still succeeds', async () => {
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-digest-retry-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,

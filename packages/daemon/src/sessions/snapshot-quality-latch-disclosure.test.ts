@@ -16,7 +16,7 @@ import { SessionStore } from '../core/session-store.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { legacyDispatchCapture } from '../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { snapshotRuntimeFixture } from '../__tests__/support/snapshot-runtime-fixture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { forwardingCreateCommandSurfaceWithAnnotations as testCreateCommandSurface } from '../__tests__/support/command-surface-fake.ts';
 
 vi.mock('../core/snapshot-interactor-capture.ts', async () => {
@@ -188,7 +188,10 @@ function scenario() {
     mkdtempForTestSync('agent-device-quality-latch'),
     `agent-device-quality-latch-${crypto.randomUUID()}`,
   );
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
   sessionStore.publish(sessionName, session);

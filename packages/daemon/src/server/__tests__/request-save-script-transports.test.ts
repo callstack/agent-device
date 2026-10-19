@@ -33,10 +33,11 @@ import type { SessionState } from '../../core/session-state.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import {
   closeLoopbackServer,
+  createLiveTestHostEnvironment,
+  createTestHostEnvironment,
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
@@ -72,7 +73,10 @@ afterEach(async () => {
 function setup(): Harness {
   const root = mkdtempForTestSync('agent-device-save-script-transport-');
   roots.push(root);
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const session = makeIosSession(SESSION);
   sessionStore.publish(SESSION, session);
   const handleRequest = createRequestHandler({
@@ -125,7 +129,12 @@ async function sendOverHttp(
   handleRequest: DaemonInvokeFn,
   request: WireRequest,
 ): Promise<DaemonResponse> {
-  const server = await createDaemonHttpServer({ handleRequest, token: TOKEN });
+  const server = await createDaemonHttpServer({
+    handleRequest,
+    token: TOKEN,
+    env: process.env,
+    cwd: process.cwd(),
+  });
   try {
     const port = await listenOnLoopback(server);
     const response = await fetch(`http://127.0.0.1:${port}/rpc`, {

@@ -6,7 +6,7 @@
  * path is refused with a message that says so.
  */
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -44,7 +44,10 @@ beforeEach(() => {
 
 test('a bundled replay runs after the script file is gone from the daemon host', async () => {
   const root = mkdtempForTestSync('agent-device-replay-source-bundle-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish('default', makeIosSession('default'));
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\nclick "Save"\n');
@@ -74,7 +77,10 @@ test('a bundled replay runs after the script file is gone from the daemon host',
 
 test('a bundled Maestro replay resolves runFlow includes from the bundle, not the daemon disk', async () => {
   const root = mkdtempForTestSync('agent-device-replay-maestro-bundle-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish('default', makeIosSession('default'));
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- runFlow: included.yaml\n');
@@ -106,7 +112,10 @@ test('a bundled Maestro replay resolves runFlow includes from the bundle, not th
 
 test('a Maestro include missing from the bundle fails naming the include path', async () => {
   const root = mkdtempForTestSync('agent-device-replay-maestro-missing-include-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish('default', makeIosSession('default'));
   const flowPath = path.join(root, 'flow.yaml');
   const flow = 'appId: com.example.app\n---\n- runFlow: absent.yaml\n';
@@ -140,7 +149,10 @@ test('a Maestro include missing from the bundle fails naming the include path', 
 // being served an ENOENT for a file that exists on the machine it ran on.
 test('a request carrying only a path is refused with the client-must-send-sources message', async () => {
   const root = mkdtempForTestSync('agent-device-replay-path-only-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish('default', makeIosSession('default'));
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\n');
@@ -170,7 +182,10 @@ test('a request carrying only a path is refused with the client-must-send-source
 // produces still points at the script the operator ran — path and line alike.
 test('a failing step reports the caller-resolved script path and line', async () => {
   const root = mkdtempForTestSync('agent-device-replay-source-display-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish('default', makeIosSession('default'));
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\nclick "Nope"\n');

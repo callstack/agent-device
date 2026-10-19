@@ -24,10 +24,11 @@ import {
   makeRepairCompleteSession,
 } from '../../__tests__/support/session-factories.ts';
 import {
+  createLiveTestHostEnvironment,
+  pinOwnProcessStartTime,
+  registerFilesystemBoundaryMatrix,
   type FilesystemBoundaryFixture,
   type FilesystemBoundaryOwner,
-  registerFilesystemBoundaryMatrix,
-  pinOwnProcessStartTime,
 } from '@agent-device/test-kit';
 
 pinOwnProcessStartTime(hostProcess);
@@ -118,7 +119,10 @@ function createDeviceClaimFixture(root: string): FilesystemBoundaryFixture {
 
 function createSessionScriptFixture(root: string): FilesystemBoundaryFixture {
   const targetPath = path.join(root, 'published.ad');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment().cwd,
+  );
   const session = makeRepairCompleteSession('filesystem-fault', {
     scriptPublication: repairPublication('complete', { path: targetPath, force: true }),
     actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
@@ -156,7 +160,7 @@ function createShutdownReportFixture(root: string): FilesystemBoundaryFixture {
 
 function createSessionStoreFixture(root: string): FilesystemBoundaryFixture {
   const targetPath = path.join(root, 'published-by-teardown.ad');
-  const store = new SessionStore(path.join(root, 'sessions'));
+  const store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
   const session = makeRepairCompleteSession('filesystem-fault', {
     scriptPublication: repairPublication('complete', { path: targetPath, force: true }),
   });

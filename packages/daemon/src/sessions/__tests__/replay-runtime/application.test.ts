@@ -9,7 +9,7 @@ import {
   registerRequestAbort,
   withRequestProgressSink,
 } from '@agent-device/host-kit/request';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { withClientReplayScriptSources } from '../../../__tests__/support/replay-script-source-fixture.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -102,7 +102,10 @@ test('replay routes native and Maestro sources through one application seam and 
 
   for (const replayCase of cases) {
     const root = mkdtempForTestSync(`agent-device-replay-application-${replayCase.kind}-`);
-    const sessionStore = new SessionStore(path.join(root, 'sessions'));
+    const sessionStore = new SessionStore(
+      path.join(root, 'sessions'),
+      createLiveTestHostEnvironment(),
+    );
     sessionStore.publish('default', makeIosSession('default'));
     const req = await replayCase.buildRequest(root);
     const invoked: DaemonRequest[] = [];
@@ -130,7 +133,10 @@ test('replay routes native and Maestro sources through one application seam and 
 
 test('replay admits an annotated target before dispatching its mutation', async () => {
   const root = mkdtempForTestSync('agent-device-replay-application-admission-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
   const filePath = writeReplayFile(root, [
     '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}',
@@ -168,7 +174,10 @@ test('replay admits an annotated target before dispatching its mutation', async 
 
 test('replay projects the exact failure cause and retains artifacts from the failed step', async () => {
   const root = mkdtempForTestSync('agent-device-replay-application-failure-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish('default', makeIosSession('default'));
   const artifactPath = path.join(root, 'failure.png');
   fs.writeFileSync(artifactPath, 'artifact');
@@ -216,7 +225,10 @@ test('replay projects the exact failure cause and retains artifacts from the fai
 
 test('test hosts native and Maestro sources format-neutrally and reports replay progress', async () => {
   const root = mkdtempForTestSync('agent-device-replay-application-suite-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const nativePath = path.join(root, '01-native.ad');
   const maestroPath = path.join(root, '02-maestro.yaml');
   fs.writeFileSync(nativePath, 'context platform=ios\nopen "Native"\n');
@@ -260,7 +272,10 @@ test('test hosts native and Maestro sources format-neutrally and reports replay 
 
 test('test stops after an active cancellation and does not start the next replay', async () => {
   const root = mkdtempForTestSync('agent-device-replay-application-cancel-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const firstPath = writeReplayFile(root, ['open "First"']);
   const secondPath = path.join(root, 'second.ad');
   fs.writeFileSync(secondPath, 'open "Second"\n');

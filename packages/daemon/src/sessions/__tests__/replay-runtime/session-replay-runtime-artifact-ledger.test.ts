@@ -9,7 +9,7 @@ import {
   baseReplayRequest as baseReq,
   writeReplayFile,
 } from './session-replay-runtime.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 /**
  * #1478 P5 follow-up (one daemon-owned artifact ledger): artifact-path
@@ -29,7 +29,10 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
  */
 test('a mid-loop throw reports exactly the artifacts of the steps that ran before it', async () => {
   const root = mkdtempForTestSync('agent-device-replay-artifact-ledger-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -88,7 +91,10 @@ test('a mid-loop throw reports exactly the artifacts of the steps that ran befor
  */
 test('a completed run reports every step’s artifacts through the threaded ledger value', async () => {
   const root = mkdtempForTestSync('agent-device-replay-artifact-ledger-ok-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,

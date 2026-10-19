@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { buildReplayFailureDivergence } from '@agent-device/replay-port/session-replay-divergence';
@@ -49,7 +49,10 @@ beforeEach(() => resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInterac
 // this file, so the retry BRANCH runs without a real wall-clock wait.
 test('buildReplayFailureDivergence: routes through the freshness-retry wrapper and uses the retried fresh tree, not the first stale dump (#1264 capture parity)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-fresh-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
   const session = makeAndroidSession(sessionName, { appBundleId });
@@ -146,7 +149,10 @@ test('buildReplayFailureDivergence: routes through the freshness-retry wrapper a
 // dropped while the interactive-only policy is still applied.
 test('buildReplayFailureDivergence: divergence capture drops the action snapshotRaw/scope/depth flags (#1264 clean flags policy)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-flags-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
   sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));

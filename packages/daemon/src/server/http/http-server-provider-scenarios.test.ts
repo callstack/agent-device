@@ -22,10 +22,22 @@ import {
 
 import {
   closeLoopbackServer,
+  createLiveTestHostEnvironment,
   listenOnLoopback,
   mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
+
+/** The host facts every scenario server runs with: the live process env and cwd (#3753). */
+const scenarioHost = createLiveTestHostEnvironment();
+
+async function startScenarioServer() {
+  return await createDaemonHttpServer({
+    token: 'provider-scenario-token',
+    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    ...scenarioHost,
+  });
+}
 
 type RpcResponse = {
   status: number;
@@ -85,6 +97,7 @@ test('Provider-backed integration daemon HTTP server maps RPC methods, auth, and
         },
       };
     },
+    ...createLiveTestHostEnvironment(),
   });
 
   try {
@@ -276,6 +289,7 @@ test('Provider-backed integration daemon HTTP server cancels progress streams wh
         resolveHandlerDone();
       }
     },
+    ...createLiveTestHostEnvironment(),
   });
 
   try {
@@ -317,6 +331,7 @@ test('Provider-backed integration daemon HTTP server destroys oversized RPC requ
       handled = true;
       return { ok: true, data: {} };
     },
+    ...createLiveTestHostEnvironment(),
   });
 
   try {
@@ -360,6 +375,7 @@ test('Provider-backed integration daemon HTTP server validates malformed JSON-RP
       handled = true;
       return { ok: true, data: {} };
     },
+    ...createLiveTestHostEnvironment(),
   });
 
   try {
@@ -434,6 +450,7 @@ test('Provider-backed integration daemon HTTP server writes error envelopes afte
       });
       throw new AppError('COMMAND_FAILED', 'stream failed after headers');
     },
+    ...createLiveTestHostEnvironment(),
   });
 
   try {
@@ -483,10 +500,7 @@ test('Provider-backed integration daemon HTTP server accepts uploads and streams
     artifactType: 'screenshot',
     fileName: 'screen.png',
   });
-  const server = await createDaemonHttpServer({
-    token: 'provider-scenario-token',
-    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-  });
+  const server = await startScenarioServer();
 
   try {
     const port = await listenOnLoopback(server);
@@ -534,10 +548,7 @@ test('Provider-backed integration daemon HTTP server resumes direct uploads befo
   }
 
   const content = Buffer.from('fake-apk-resumable-content');
-  const server = await createDaemonHttpServer({
-    token: 'provider-scenario-token',
-    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-  });
+  const server = await startScenarioServer();
   let trackedUploadId = '';
 
   try {
@@ -620,10 +631,7 @@ test('Provider-backed integration daemon HTTP server isolates same-artifact uplo
   }
 
   const content = Buffer.from('same-apk-content');
-  const server = await createDaemonHttpServer({
-    token: 'provider-scenario-token',
-    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-  });
+  const server = await startScenarioServer();
   const trackedUploadIds: string[] = [];
 
   try {
@@ -708,10 +716,7 @@ test('Provider-backed integration daemon HTTP server reports unknown upload tick
     return;
   }
 
-  const server = await createDaemonHttpServer({
-    token: 'provider-scenario-token',
-    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
-  });
+  const server = await startScenarioServer();
 
   try {
     const port = await listenOnLoopback(server);
@@ -778,6 +783,8 @@ test('Provider-backed integration daemon HTTP auth hook can scope tenants and re
         observedRequest = req;
         return { ok: true, data: { meta: req.meta } };
       },
+      env: process.env,
+      cwd: process.cwd(),
     });
     const port = await listenOnLoopback(server);
     const accepted = await callRpc(

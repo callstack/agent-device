@@ -27,7 +27,10 @@ let sessionStore: SessionStore;
 
 beforeEach(() => {
   stateDir = mkdtempForTestSync('agent-device-daemon-lifecycle-admission-');
-  sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
+  sessionStore = new SessionStore(path.join(stateDir, 'sessions'), {
+    env: process.env,
+    cwd: process.cwd(),
+  });
 });
 
 afterEach(() => {

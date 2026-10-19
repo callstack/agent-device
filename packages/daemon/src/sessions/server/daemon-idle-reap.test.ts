@@ -12,7 +12,7 @@ import {
   isDaemonIdle,
   resolveDaemonIdleReapMs,
 } from './daemon-idle-reap.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 
 let stateDir: string;
@@ -20,7 +20,7 @@ let sessionStore: SessionStore;
 
 beforeEach(() => {
   stateDir = mkdtempForTestSync('agent-device-daemon-idle-reap-');
-  sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
+  sessionStore = new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment());
 });
 
 afterEach(() => {
