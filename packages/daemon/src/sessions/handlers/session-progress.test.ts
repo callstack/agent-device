@@ -33,6 +33,7 @@ const ANDROID_TWO: DeviceInfo = {
 
 async function runSuite(params: {
   root: string;
+  inputs?: string[];
   requestId: string;
   flags?: DaemonRequest['flags'];
   devices?: DeviceInfo[];
@@ -57,7 +58,7 @@ async function runSuite(params: {
             token: 't',
             session: 'default',
             command: 'test',
-            positionals: [params.root],
+            positionals: params.inputs ?? [params.root],
             flags: params.flags,
             meta: { cwd: params.root, requestId: params.requestId },
           },
@@ -91,6 +92,7 @@ test('native suite progress carries skip, retry hint, and attempt session values
 
   const { events, data } = await runSuite({
     root,
+    inputs: [skippedPath, retryPath],
     requestId: 'progress',
     flags: { platform: 'android', retries: 1 },
     invoke: async () => {
