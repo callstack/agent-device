@@ -60,9 +60,11 @@ runs:
           IOS_PR_TEST_ARGS+=("-only-testing:$test_id")
         done <<< "$IOS_PR_TEST_IDS"
         test "${#IOS_PR_TEST_ARGS[@]}" -gt 0
+        mkdir -p "$GITHUB_WORKSPACE/test/artifacts"
         xcodebuild test-without-building \
           -xctestrun "$XCTESTRUN_PATH" \
           -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
+          -resultBundlePath "$GITHUB_WORKSPACE/test/artifacts/ios-runner-regressions.xcresult" \
           "${IOS_PR_TEST_ARGS[@]}" 2>&1 | tee /tmp/agent-device-runner-regressions.log
         node --input-type=module -e '
           import { readFileSync } from "node:fs";
