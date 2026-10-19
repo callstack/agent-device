@@ -49,3 +49,14 @@ The focused coverage and harness checks pass 25 tests.
 
 Raw logs, the injection wrapper, and commands are retained under `/private/tmp/pr3831-injection`.
 The normal smoke log is `/private/tmp/pr3831-live-smoke.log`.
+
+## Relevant upstream rebase
+
+The branch was rebased onto `507ef2376621d78aa76cf531bedc5abdf30e7a5a` after #3811 and #3815 merged.
+The range-diff preserves the harness patch.
+Source `f7feeb9a72026700a71107ff63a3331a022750bb` was rebuilt with fresh native helpers.
+Its first full smoke reached keyboard status, then failed with ADB exit 255.
+The failure device evidence explicitly records `adb: device offline`.
+After a direct keyboard query confirmed transport recovery, one unchanged repeat passed all seven groups in 42320ms.
+The failed and recovered runs are both retained.
+This does not establish hosted x86_64 success.
