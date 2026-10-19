@@ -372,36 +372,44 @@ function inspectAndroidTextAtPointInHierarchy(
 
   const nodes = [...androidUiNodes(xml)];
   const observedContext = androidFillWindowContext(nodes) ?? context;
-  const identified: AndroidFillVerificationCandidate[] = [];
-  let focusedEdits = 0;
-  for (const node of nodes) {
-    const candidate = androidFillCandidateFromNode(node, observedContext);
-    if (!candidate) continue;
+  const candidates = nodes
+    .map((node) => androidFillCandidateFromNode(node, observedContext))
+    .filter((candidate) => candidate !== null);
+  for (const candidate of candidates) {
     updateAndroidTextAtPointScan(scan, candidate, x, y);
-    if (candidate.editText && candidate.focused) focusedEdits += 1;
-    if (
-      candidate.editText &&
-      beforeTarget?.resourceId &&
-      beforeTarget.packageName &&
-      !isSensitiveFillDiagnosticNode(beforeTarget) &&
-      !beforeTarget.inputMethodOwned &&
-      sameAndroidFillTarget(beforeTarget, candidate)
-    )
-      identified.push(candidate);
   }
-  const field = identified.length === 1 ? identified[0] : undefined;
+  const field = identifiedEmptyAndroidFillTarget(nodes, candidates, beforeTarget);
+  return field ? { targetInput: field, actualInput: field } : androidTextAtPointInspection(scan);
+}
+
+function identifiedEmptyAndroidFillTarget(
+  nodes: readonly AndroidUiNodeMetadata[],
+  candidates: readonly AndroidFillVerificationCandidate[],
+  beforeTarget?: AndroidFillVerificationNode | null,
+): AndroidFillVerificationCandidate | null {
+  if (
+    !beforeTarget ||
+    isSensitiveFillDiagnosticNode(beforeTarget) ||
+    beforeTarget.inputMethodOwned ||
+    !uniqueAndroidFillTarget(nodes, beforeTarget)
+  ) {
+    return null;
+  }
+  const field = candidates.find(
+    (candidate) => candidate.editText && sameAndroidFillTarget(beforeTarget, candidate),
+  );
+  const focusedEdits = candidates.filter((candidate) => candidate.editText && candidate.focused);
   if (
     field &&
-    uniqueAndroidFillTarget(nodes, beforeTarget ?? null) &&
-    focusedEdits === 1 &&
+    focusedEdits.length === 1 &&
     field.focused &&
-    field.className === beforeTarget?.className &&
+    field.className === beforeTarget.className &&
     !field.inputMethodOwned &&
     !isSensitiveFillDiagnosticNode(field) &&
     observedAndroidValue(field) === ''
   )
-    return { targetInput: field, actualInput: field };
-  return androidTextAtPointInspection(scan);
+    return field;
+  return null;
 }
 
 function isAndroidImeCapture(inspection: AndroidTextAtPointInspection): boolean {
