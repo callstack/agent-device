@@ -47,7 +47,7 @@ runs:
       with:
         runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
         preferred-device-name: iPhone 17 Pro
-    - name: Run targeted iOS runner XCTest regressions
+    - name: Run iOS runner platform-branch checks
       id: ios-xctest
       if: steps.xctest-impact.outputs.run != 'false'
       run: |
@@ -66,13 +66,11 @@ runs:
           -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
           -resultBundlePath "$GITHUB_WORKSPACE/test/artifacts/ios-runner-regressions.xcresult" \
           "${IOS_PR_TEST_ARGS[@]}" 2>&1 | tee /tmp/agent-device-runner-regressions.log
-        node --input-type=module -e '
-          import { readFileSync } from "node:fs";
-          const log = readFileSync("/tmp/agent-device-runner-regressions.log", "utf8");
-          if (!/\] AGENT_DEVICE_RUNNER_OPTIONAL_PROBE_WAIT_COMPLETED$/m.test(log)) {
-            throw new Error("Optional observation ended the runner test before its wait completed");
-          }
-        '
+        xcrun xcresulttool get test-results summary \
+          --path "$GITHUB_WORKSPACE/test/artifacts/ios-runner-regressions.xcresult" \
+          --compact > "$GITHUB_WORKSPACE/test/artifacts/ios-runner-regressions-summary.json"
+        RESULT_SUMMARY_PATH="$GITHUB_WORKSPACE/test/artifacts/ios-runner-regressions-summary.json" \
+          XCTEST_LANE=pr node --experimental-strip-types scripts/xctest-run-summary.ts
       shell: bash
     - name: Preflight iOS runner through public CLI
       run: |
