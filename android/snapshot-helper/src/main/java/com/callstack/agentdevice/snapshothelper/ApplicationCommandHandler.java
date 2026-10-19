@@ -2,6 +2,7 @@ package com.callstack.agentdevice.snapshothelper;
 
 import android.app.UiAutomation;
 import android.os.Bundle;
+import android.util.Base64;
 import android.os.ParcelFileDescriptor;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -31,12 +32,11 @@ final class ApplicationCommandHandler {
     String[] lines = resolved.split("\\n");
     String component = lines[lines.length - 1].trim();
     if (!component.matches(java.util.regex.Pattern.quote(packageName) + "/[A-Za-z_.$][A-Za-z0-9_.$]*")) {
-      result.putString("notInstalled", "true");
+      result.putString("componentUnavailable", "true");
       return;
     }
     String output = shell(automation, "am start -W -n '" + component + "'");
-    result.putString("launchOutput", output);
-    result.putString("launchSucceeded", String.valueOf(java.util.regex.Pattern.compile("(?m)^Status: ok\\r?$").matcher(output).find()));
+    result.putString("launchOutputBase64", Base64.encodeToString(output.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP));
   }
 
   private static String shell(UiAutomation automation, String command) throws Exception {

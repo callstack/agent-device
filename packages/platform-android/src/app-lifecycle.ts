@@ -235,9 +235,10 @@ async function startAndroidApp(
       packageName: app,
     });
     if (result) {
-      if (result.notInstalled === 'true') throw buildAndroidPackageNotInstalledError(app);
-      const stdout = result.launchOutput ?? '';
-      if (result.launchSucceeded !== 'true') {
+      if (result.componentUnavailable === 'true' && !(await isAndroidPackageInstalled(device, app)))
+        throw buildAndroidPackageNotInstalledError(app);
+      const stdout = Buffer.from(result.launchOutputBase64 ?? '', 'base64').toString('utf8');
+      if (!/^Status: ok\r?$/m.test(stdout)) {
         throw new AppError('COMMAND_FAILED', 'Android helper could not launch the application', {
           packageName: app,
           stdout,
