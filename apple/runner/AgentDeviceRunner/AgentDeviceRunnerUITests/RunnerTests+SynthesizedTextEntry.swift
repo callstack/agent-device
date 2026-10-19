@@ -467,9 +467,9 @@ extension RunnerTests {
     repairMode: TextTypingRepairMode,
     text: String,
     fromTapWitness: Bool,
-    softwareKeyboardVisible: Bool
+    softwareKeyboardVisible: @autoclosure () -> Bool
   ) -> Bool {
-    repairMode == .none && text == "\n" && fromTapWitness && !softwareKeyboardVisible
+    repairMode == .none && text == "\n" && fromTapWitness && !softwareKeyboardVisible()
   }
 
   /// Length of the shared prefix of two strings. Feeds value-free commit-wait logging: the

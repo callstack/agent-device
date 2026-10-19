@@ -1,0 +1,149 @@
+{
+  "sourceBase": "8f3eb3d2efde3654a560fddb39127d556e068352",
+  "app": "dev.e2e.benchmark",
+  "device": "iPhone 17 Pro, iOS 27.0",
+  "upstream": "https://github.com/tester-army/e2e/pull/1236",
+  "nativeSourceFingerprint": "a2479bea7162d3ba08450f6e88c9c53b7bbb1328f61d0dfb23b3ec9d414d2034",
+  "median": "Mean of the central pair for even sample counts.",
+  "samples": {
+    "capture-sequential-warm": {
+      "warmupsExcluded": 2,
+      "milliseconds": [
+        460.4799589999993, 91.5342499999997, 92.33041700000012, 91.33758399999988,
+        88.06654200000048, 87.57887500000015, 94.8838340000002, 90.15012500000012,
+        87.82183299999997, 88.7772500000001, 91.15179199999966, 90.45970800000032,
+        90.84708300000057, 94.55108399999881, 91.87408299999879, 89.83549999999923,
+        90.30787500000042, 87.95908400000008, 88.26158399999986, 95.80924999999843,
+        95.54483299999993, 94.87554100000125, 95.10733299999993, 94.50158300000112,
+        86.40845799999988, 91.72645899999952, 90.29808299999968, 92.88558299999931,
+        94.52820799999972, 93.74183299999822, 98.24012500000026, 95.44324999999844
+      ],
+      "nodes": 34,
+      "fallbacks": 0
+    },
+    "capture-parallel-warm": {
+      "warmupsExcluded": 2,
+      "milliseconds": [
+        438.44091599999956, 74.26379199999974, 76.3238339999998, 77.18262500000037,
+        79.73174999999992, 76.21458299999995, 76.02820800000063, 75.75500000000011,
+        76.8057919999992, 74.16058299999986, 74.03320900000017, 75.02683400000024,
+        77.01058300000022, 77.63758399999915, 73.62208400000054, 76.24966700000004,
+        75.76012499999888, 73.12162500000159, 74.81524999999965, 78.37166699999943,
+        76.28525000000081, 76.05424999999923, 75.36220800000046, 75.21420900000157,
+        74.61666699999842, 75.49387500000012, 74.04991699999846, 75.63166699999965,
+        76.83087499999965, 75.75520799999867, 75.91354200000023, 75.4565419999999
+      ],
+      "nodes": 34,
+      "fallbacks": 0
+    },
+    "password-baseline-verified": {
+      "milliseconds": [3143.0931249999994, 3636.8446669999976, 3344.322709, 3289.290125000007],
+      "successfulLogins": 4
+    },
+    "password-warmup-baseline-verified": {
+      "milliseconds": [462.7, 446.4, 463.0, 400.8]
+    },
+    "password-production": {
+      "milliseconds": [
+        2818.7710420000003, 3070.121041999999, 3076.7858750000014, 3016.898540999995
+      ],
+      "successfulLogins": 4
+    },
+    "password-warmup-production": {
+      "milliseconds": [73.5, 68.8, 79.0, 56.1]
+    },
+    "text-baseline-clean": {
+      "fill-empty": {
+        "milliseconds": [
+          2169.352541, 2040.0450840000012, 2038.1687090000014, 1952.8112079999992,
+          2011.012582999996, 2047.5521249999947, 2056.345792, 2019.859083000003
+        ],
+        "failures": 0
+      },
+      "fill-replace": {
+        "milliseconds": [
+          3228.7047920000005, 3250.1123750000006, 3235.6019159999996, 3262.082665999995,
+          3236.0727499999994, 3210.3902499999967, 3234.2858750000087, 3236.3368340000015
+        ],
+        "failures": 0
+      },
+      "type-append": {
+        "milliseconds": [
+          1202.507458, 1198.6578750000008, 1226.3141660000001, 1204.447540999994,
+          1200.0966249999983, 1206.3476669999945, 1208.7802500000107, 1206.8783750000002
+        ],
+        "failures": 0
+      }
+    },
+    "text-production-warm": {
+      "fill-empty": {
+        "milliseconds": [1989.972917, 2011.2156250000007, 2068.6344169999975, 2045.7098750000005],
+        "failures": 0
+      },
+      "fill-replace": {
+        "milliseconds": [
+          3220.879208999999, 3186.019292000001, 3203.5044169999965, 3317.675166000001
+        ],
+        "failures": 0
+      },
+      "type-append": {
+        "milliseconds": [
+          1192.5328329999993, 1186.7882499999978, 1198.5200000000004, 1176.7431670000005
+        ],
+        "failures": 0
+      }
+    },
+    "text-no-warmup": {
+      "fill-empty": {
+        "milliseconds": [
+          1745.0530839999992, 1660.5627910000003, 1672.8450420000008, 1726.6735829999961,
+          1711.0416250000053, 1692.1331659999996, 1723.7318749999977, 1662.9657920000027
+        ],
+        "failures": 0
+      },
+      "fill-replace": {
+        "milliseconds": [
+          2949.5647499999995, 2901.131708000001, 2949.8871670000008, 2932.541999999994,
+          2880.678791999999, 3004.605042000003, 2955.0863329999993, 2897.6092089999875
+        ],
+        "failures": 0
+      },
+      "type-append": {
+        "milliseconds": [
+          1025.0007910000004, 1022.1937499999985, 1019.7220410000009, 1026.1973330000037,
+          1029.3868750000038, 1021.9305420000019, 1055.699625000001, 1024.4197499999864
+        ],
+        "failures": 0
+      }
+    }
+  },
+  "nativeVerification": {
+    "passed": 17,
+    "failed": 0,
+    "skipped": 0,
+    "command": "#!/bin/sh\nset -eu\nxcodebuild test-without-building \\\n -xctestrun /private/tmp/agent-device-speed-runner-production-ios/Build/Products/AgentDeviceRunner_AgentDeviceRunnerUITests_iphonesimulator27.1-arm64.xctestrun \\\n -destination 'platform=iOS Simulator,id=BC54AC11-CD86-4C10-8C4E-5101C773FFEB' \\\n -parallel-testing-enabled NO \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedFirstResponderTypeAdmitsOnlyTheBareSubmitKeyAfterAHiddenKeyboardTap \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testWarmupWaitsForPendingTextButNotAnUnreadableValue \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextValueReadOwnsTheUnreadableRule \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypePlanPeelsAWarmupCharacterAndChargesItsReadBack \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillFailsWhenAppRemovesInputBeforeTextIsDelivered \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillFailsWhenAppReplacesInputBeforeTextIsDelivered \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillSucceedsWhenAppReplacesInputAfterLastCharacter \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillSucceedsWhenAppRemovesInputAfterLastCharacter \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillWithAppWriteBackFailsWithoutRetyping \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillIntoMaskedTextFieldIsUnverifiedRatherThanAMismatch \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyUsesSynthesizedFirstResponderAfterHiddenKeyboardTap \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyRefusesWhenPrivateSynthesisIsUnavailable \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedReplacementPacesAnAppOwnedFieldAtItsAcknowledgeWindow \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillThatClearsOnSubmitIsUnverifiedAndSubmitsOnce \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillIntoTemplateCurrencyFieldReportsUnconfirmedWithoutRetyping \\\n -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillVerifiesAnUnidentifiedFieldThatMovesWhileTyping \\\n -resultBundlePath /private/tmp/agent-device-speed-production-tests.xcresult\n"
+  },
+  "detection": {
+    "sequentialPresence": {
+      "passed": 13,
+      "failed": 1
+    },
+    "parallelPresence": {
+      "passed": 14,
+      "failed": 0
+    },
+    "policyControl": {
+      "passed": 1,
+      "failed": 0
+    },
+    "policyMutant": {
+      "passed": 0,
+      "failed": 1
+    },
+    "burstCandidate": {
+      "passed": 0,
+      "failed": 2,
+      "successorValue": "23456"
+    }
+  }
+}

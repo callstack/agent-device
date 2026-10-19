@@ -52,28 +52,34 @@ extension RunnerTests {
   }
 
   func testSynthesizedFirstResponderTypeAdmitsOnlyTheBareSubmitKeyAfterAHiddenKeyboardTap() {
-    let cases: [(TextTypingRepairMode, String, Bool, Bool, Bool)] = [
-      (.none, "\n", true, false, true),
-      (.none, "\n", true, true, false),
-      (.none, "\n", false, false, false),
-      (.none, "hardware-keyboard", true, false, false),
-      (.none, "\r", true, false, false),
-      (.none, "search\n", true, false, false),
-      (.append, "\n", true, false, false),
-      (.append, "hardware-keyboard", true, false, false),
-      (.replacement, "\n", true, false, false),
+    let cases: [(TextTypingRepairMode, String, Bool, Bool, Bool, Int)] = [
+      (.none, "\n", true, false, true, 1),
+      (.none, "\n", true, true, false, 1),
+      (.none, "\n", false, false, false, 0),
+      (.none, "hardware-keyboard", true, false, false, 0),
+      (.none, "\r", true, false, false, 0),
+      (.none, "search\n", true, false, false, 0),
+      (.append, "\n", true, false, false, 0),
+      (.append, "hardware-keyboard", true, false, false, 0),
+      (.replacement, "\n", true, false, false, 0),
     ]
-    for (mode, text, fromTapWitness, softwareKeyboardVisible, expected) in cases {
+    for (mode, text, fromTapWitness, softwareKeyboardVisible, expected, expectedReads) in cases {
+      var keyboardReads = 0
+      func readKeyboardVisibility() -> Bool {
+        keyboardReads += 1
+        return softwareKeyboardVisible
+      }
       XCTAssertEqual(
         Self.shouldUseSynthesizedFirstResponderType(
           repairMode: mode,
           text: text,
           fromTapWitness: fromTapWitness,
-          softwareKeyboardVisible: softwareKeyboardVisible
+          softwareKeyboardVisible: readKeyboardVisibility()
         ),
         expected,
         "mode: \(mode), text: \(text.debugDescription)"
       )
+      XCTAssertEqual(keyboardReads, expectedReads)
     }
   }
 
@@ -130,6 +136,19 @@ extension RunnerTests {
     XCTAssertEqual(Self.textValueRead(elementType: .textField, value: "hunter2"), .text("hunter2"))
     XCTAssertEqual(Self.textValueRead(elementType: .textField, value: ""), .text(""))
     XCTAssertEqual(Self.textValueRead(elementType: .button, value: bullets), .unavailable)
+  }
+
+  func testWarmupWaitsForPendingTextButNotAnUnreadableValue() {
+    let cases: [(TextValueRead, Bool)] = [
+      (.text("a"), false),
+      (.text(""), true),
+      (.text("old"), true),
+      (.unavailable, true),
+      (.unreadable, false),
+    ]
+    for (read, pending) in cases {
+      XCTAssertEqual(read.warmupReadIsPending(expectedText: "a"), pending)
+    }
   }
 
   // The penalized route's clear reads through the same rule, so a pre-filled masked plain field

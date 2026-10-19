@@ -452,6 +452,14 @@ extension RunnerTests {
     case unreadable
     /// The read could not answer, or no input resolves.
     case unavailable
+
+    func warmupReadIsPending(expectedText: String) -> Bool {
+      switch self {
+      case .text(let value): return value != expectedText
+      case .unreadable: return false
+      case .unavailable: return true
+      }
+    }
   }
 
   /// What a text entry element's accessibility value says about its text. The one owner of the

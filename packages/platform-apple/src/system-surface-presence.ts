@@ -61,9 +61,14 @@ async function probeSystemSurfacePresence(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<SystemSurfacePresence> {
+  const hostPids = await Promise.all(
+    IOS_SYSTEM_SURFACE_HOSTS.map(async (host) => ({
+      host,
+      pids: await hostProcessIds(host.processExecutable, signal),
+    })),
+  );
   let sawUnknown = false;
-  for (const host of IOS_SYSTEM_SURFACE_HOSTS) {
-    const pids = await hostProcessIds(host.processExecutable, signal);
+  for (const { host, pids } of hostPids) {
     if (pids === 'unknown') {
       sawUnknown = true;
       continue;

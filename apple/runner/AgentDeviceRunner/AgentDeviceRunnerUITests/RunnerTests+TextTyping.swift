@@ -252,7 +252,9 @@ extension RunnerTests {
       }
       let deadline = Date().addingTimeInterval(TextEntryTiming.warmupValueTimeout)
       while Date() < deadline {
-        if editableTextValue(for: resolveTextEntryElement(app: app, target: activeTarget)) == warmupExpectedText {
+        let observed = textValueRead(for: resolveTextEntryElement(app: app, target: activeTarget))
+        if !observed.warmupReadIsPending(expectedText: warmupExpectedText) {
+          if observed == .unreadable { sleepFor(TextEntryTiming.pollInterval) }
           return
         }
         sleepFor(TextEntryTiming.pollInterval)

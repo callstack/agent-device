@@ -105,6 +105,25 @@ test('no host process at all is absent without reading any environment', async (
   expect(mockRunCmd.mock.calls.every(([command]) => command === 'pgrep')).toBe(true);
 });
 
+test('fresh host scans overlap and absence waits for both answers', async () => {
+  const pending = new Map<string, (reply: ProbeReply) => void>();
+  mockRunCmd.mockImplementation(async (_command, args = []) => {
+    const reply = await new Promise<ProbeReply>((resolve) => pending.set(args[1]!, resolve));
+    return { ...reply, stderr: '' };
+  });
+  let settled = false;
+  const result = createSystemSurfacePresenceProbe()(sim).then((presence) => {
+    settled = true;
+    return presence;
+  });
+  expect([...pending.keys()]).toEqual([SAFARI_EXECUTABLE, PASSBOOK_EXECUTABLE]);
+  pending.get(SAFARI_EXECUTABLE)!(NOT_RUNNING);
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  pending.get(PASSBOOK_EXECUTABLE)!({ exitCode: 2, stdout: '' });
+  await expect(result).resolves.toBe('unknown');
+});
+
 test('a non-simulator is absent without probing', async () => {
   const probe = createSystemSurfacePresenceProbe();
   await expect(probe({ ...sim, kind: 'device' } as DeviceInfo)).resolves.toBe('absent');
