@@ -37,7 +37,7 @@ function verify(
     20,
     '',
     { captureMetadata },
-    before,
+    { targetInput: before, uniqueIdentity: true },
   );
 }
 test('confirms a uniquely identified focused empty field after it moves away from the original point', () => {
@@ -132,3 +132,21 @@ test.each([
     expect(verify(nodes, target, captureMetadata).ok).toBe(false);
   },
 );
+
+test('does not corroborate a moved empty field without a unique pre-action identity', () => {
+  const xml =
+    '<hierarchy>' +
+    field('app:id/decoy', 'D', 0, false) +
+    field('app:id/target', '', 200, true) +
+    '</hierarchy>';
+  expect(
+    verifyAndroidFilledTextInHierarchy(
+      xml,
+      50,
+      20,
+      '',
+      { captureMetadata: metadata },
+      { targetInput: target, uniqueIdentity: false },
+    ).ok,
+  ).toBe(false);
+});

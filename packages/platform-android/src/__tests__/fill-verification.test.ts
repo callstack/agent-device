@@ -159,7 +159,7 @@ test('the pre-action target read shares the daemon-session helper with the sampl
     return before;
   });
 
-  assert.equal(target?.resourceId, 'com.example:id/field');
+  assert.equal(target?.targetInput?.resourceId, 'com.example:id/field');
   assert.equal(session.captureCount(), 3);
   assert.equal(session.spawnArgs.length, 1);
   assert.equal(
@@ -179,7 +179,11 @@ type FillHelperSession = {
 };
 
 function createFillHelperSession(
-  options: { textForCapture?: (captureIndex: number) => string } = {},
+  options: {
+    textForCapture?: (captureIndex: number) => string;
+    xmlForCapture?: (captureIndex: number) => string;
+    metadataForCapture?: (captureIndex: number) => Record<string, string>;
+  } = {},
 ): FillHelperSession {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
@@ -191,9 +195,13 @@ function createFillHelperSession(
     spawnArgs,
     processes,
     sessionRequests: requests,
+    sessionSnapshotMetadata: (_, captureIndex) => options.metadataForCapture?.(captureIndex) ?? {},
     sessionXml: () => {
       captureCount += 1;
-      return filledFieldXml(options.textForCapture?.(captureCount) ?? 'chips');
+      return (
+        options.xmlForCapture?.(captureCount) ??
+        filledFieldXml(options.textForCapture?.(captureCount) ?? 'chips')
+      );
     },
   });
   return {
@@ -298,3 +306,40 @@ test('helper window provenance identifies a custom IME without an adb keyboard p
   assert.equal(verification.reason, 'ime_capture');
   assert.equal(verification.actualInput?.packageName, 'dev.custom.keyboard');
 });
+
+for (const mode of ['unique', 'duplicate', 'truncated', 'cache-unknown', 'missing-root'] as const) {
+  test(`moved clear requires unique fresh complete pre-action capture: ${mode}`, async () => {
+    const beforeXml = filledFieldXml('old');
+    const movedXml =
+      '<hierarchy>' +
+      '<node package="com.example" class="android.widget.EditText" text="D" resource-id="com.example:id/decoy" focused="false" bounds="[0,0][200,100]"/>' +
+      '<node package="com.example" class="android.widget.EditText" text="" resource-id="com.example:id/field" focused="true" bounds="[300,0][500,100]"/>' +
+      '</hierarchy>';
+    const session = createFillHelperSession({
+      xmlForCapture: (i) =>
+        i === 1
+          ? mode === 'duplicate'
+            ? beforeXml.replace(
+                '</hierarchy>',
+                '<node package="com.example" class="android.widget.EditText" text="" resource-id="com.example:id/field" focused="false" bounds="[300,0][500,100]"/></hierarchy>',
+              )
+            : beforeXml
+          : movedXml,
+      metadataForCapture: (i) => ({
+        cacheInvalidated: i === 1 && mode === 'cache-unknown' ? '' : 'true',
+        missingRootWindowTypes: i === 1 && mode === 'missing-root' ? '2' : '',
+        ...(i === 1 && mode === 'truncated' ? { truncated: 'true' } : {}),
+      }),
+    });
+    const verification = await underFakeTimers(() =>
+      withFillHelperProvider(session.provider, async () => {
+        const helper = { helperSessionScope: 'daemon-session' as const };
+        const before = await readAndroidFillTargetBeforeMutation(device, 10, 10, helper);
+        return verifyAndroidFilledText(device, 10, 10, '', helper, before);
+      }),
+    );
+    assert.equal(verification.ok, mode === 'unique');
+    if (mode === 'unique')
+      assert.equal(verification.actualInput?.resourceId, 'com.example:id/field');
+  });
+}

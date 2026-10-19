@@ -40,6 +40,11 @@ type AndroidTextAtPointScan = {
   anyAtPoint: AndroidFillVerificationCandidate | null;
 };
 
+type AndroidFillTargetCapture = {
+  targetInput: AndroidFillVerificationNode | null;
+  uniqueIdentity: boolean;
+};
+
 type AndroidFillVerificationContext = {
   captureMetadata?: AndroidSnapshotBackendMetadata;
   activeInputMethodPackage?: string | null;
@@ -61,7 +66,7 @@ export async function verifyAndroidFilledText(
   y: number,
   expected: string,
   helper: AndroidHelperSessionOptions = {},
-  beforeTarget?: AndroidFillVerificationNode | null,
+  beforeCapture?: AndroidFillTargetCapture | null,
 ): Promise<AndroidFillVerification> {
   const deadline = Deadline.fromTimeoutMs(FILL_VERIFICATION_DEADLINE_MS);
   let initialCapture: Awaited<ReturnType<typeof captureAndroidUiHierarchy>> | undefined =
@@ -84,10 +89,10 @@ export async function verifyAndroidFilledText(
             ...context,
             captureMetadata: capture.metadata,
           },
-          beforeTarget,
+          beforeCapture,
         );
       }
-      return await inspectAndroidFilledText(device, x, y, expected, context, helper, beforeTarget);
+      return await inspectAndroidFilledText(device, x, y, expected, context, helper, beforeCapture);
     },
     settled: (verification, previous) =>
       verification.reason === 'ime_capture' || (verification.ok && previous?.ok === true),
@@ -116,10 +121,16 @@ async function readAndroidFillTargetAtPoint(
   x: number,
   y: number,
   helper: AndroidHelperSessionOptions,
-): Promise<AndroidFillVerificationNode | null> {
-  const xml = await captureAndroidUiHierarchyXml(device, { ...helper, skipIdleWait: true });
-  const context = await readAndroidFillVerificationContext(device, xml);
-  return inspectAndroidTextAtPointInHierarchy(xml, x, y, context).targetInput;
+): Promise<AndroidFillTargetCapture> {
+  const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
+  const context = await readAndroidFillVerificationContext(device, capture.xml);
+  const targetInput = inspectAndroidTextAtPointInHierarchy(capture.xml, x, y, context).targetInput;
+  return {
+    targetInput,
+    uniqueIdentity:
+      completeFreshAndroidFillCapture(capture.metadata) &&
+      uniqueAndroidFillTarget([...androidUiNodes(capture.xml)], targetInput),
+  };
 }
 
 export async function readAndroidFillTargetBeforeMutation(
@@ -127,7 +138,7 @@ export async function readAndroidFillTargetBeforeMutation(
   x: number,
   y: number,
   helper: AndroidHelperSessionOptions = {},
-): Promise<AndroidFillVerification['targetInput']> {
+): Promise<AndroidFillTargetCapture | null> {
   try {
     return await readAndroidFillTargetAtPoint(device, x, y, helper);
   } catch (error) {
@@ -217,15 +228,17 @@ export function verifyAndroidFilledTextInHierarchy(
   y: number,
   expected: string,
   context: AndroidFillVerificationContext = {},
-  beforeTarget?: AndroidFillVerificationNode | null,
+  beforeCapture?: AndroidFillTargetCapture | null,
 ): AndroidFillVerification {
   const inspection = inspectAndroidTextAtPointInHierarchy(
     xml,
     x,
     y,
     context,
-    expected === '' && completeFreshAndroidFillCapture(context.captureMetadata)
-      ? beforeTarget
+    expected === '' &&
+      beforeCapture?.uniqueIdentity &&
+      completeFreshAndroidFillCapture(context.captureMetadata)
+      ? beforeCapture.targetInput
       : undefined,
   );
   if (isAndroidImeCapture(inspection)) {
@@ -306,7 +319,7 @@ async function inspectAndroidFilledText(
   expected: string,
   context: AndroidFillVerificationContext,
   helper: AndroidHelperSessionOptions,
-  beforeTarget?: AndroidFillVerificationNode | null,
+  beforeCapture?: AndroidFillTargetCapture | null,
 ): Promise<AndroidFillVerification> {
   // Each delay samples the live hierarchy again — settling is what the samples observe, so they
   // share the helper session but never a capture.
@@ -317,7 +330,7 @@ async function inspectAndroidFilledText(
     y,
     expected,
     { ...context, captureMetadata: capture.metadata },
-    beforeTarget,
+    beforeCapture,
   );
 }
 
@@ -328,6 +341,19 @@ function completeFreshAndroidFillCapture(metadata?: AndroidSnapshotBackendMetada
     metadata.helperTruncated === false &&
     metadata.systemSurfaceOnly !== true &&
     metadata.missingRootWindowTypes?.length === 0
+  );
+}
+
+function uniqueAndroidFillTarget(
+  nodes: readonly AndroidUiNodeMetadata[],
+  target: AndroidFillVerificationNode | null,
+): boolean {
+  return (
+    !!target?.resourceId &&
+    !!target.packageName &&
+    nodes.filter(
+      (node) => node.resourceId === target.resourceId && node.packageName === target.packageName,
+    ).length === 1
   );
 }
 
@@ -366,6 +392,7 @@ function inspectAndroidTextAtPointInHierarchy(
   const field = identified.length === 1 ? identified[0] : undefined;
   if (
     field &&
+    uniqueAndroidFillTarget(nodes, beforeTarget ?? null) &&
     focusedEdits === 1 &&
     field.focused &&
     field.className === beforeTarget?.className &&

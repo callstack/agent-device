@@ -58,6 +58,7 @@ export type PersistentSnapshotHelperProviderOptions = {
   sessionResponseMode?: 'ok' | 'malformed';
   sessionXml?: (sessionIndex: number, snapshotCount: number) => string;
   sessionRequests?: string[];
+  sessionSnapshotMetadata?: (sessionIndex: number, snapshotCount: number) => Record<string, string>;
   sessionInput?: (input: { kind: string; text?: string }) => void;
   sessionCommands?: string[];
   sessionCommand?: (command: string) => Record<string, string> | undefined;
@@ -142,6 +143,7 @@ export function createPersistentSnapshotHelperProvider(
                   nodeCount: '1',
                   truncated: 'false',
                   elapsedMs: '8',
+                  ...options.sessionSnapshotMetadata?.(sessionIndex, snapshotCount),
                 },
               }),
             );
