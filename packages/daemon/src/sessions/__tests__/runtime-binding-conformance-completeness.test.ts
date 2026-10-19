@@ -6,6 +6,7 @@ import {
 import {
   conformedRuntimeBindings,
   refusedRuntimeOperation,
+  registryCommandOf,
   refuseUnavailableExactOwnerFact,
   type ConformedRuntimeCommand,
 } from '../../__tests__/support/runtime-binding-conformance.ts';
@@ -43,7 +44,7 @@ test('every single-use generic or interaction route descriptor has a conformance
 
 test('every conformance entry refuses on a cell its registry descriptor declares', () => {
   const undeclared = conformedCommands.filter((command) => {
-    const declared = commandRuntimeUseRequirements(command)?.flat() ?? [];
+    const declared = commandRuntimeUseRequirements(registryCommandOf(command))?.flat() ?? [];
     return !declared.includes(refusedRuntimeOperation(command));
   });
 

@@ -256,6 +256,13 @@ test('back/home/orientation/tv-remote/keyboard never carried a web capability bu
     });
     expect(binding.operations[operation]).toBeUndefined();
   }
+  // `orientation auto`'s cell comes from the orientation facts' default refusal, not the web
+  // transport, so it refuses with the ADB-only hint instead of the web leaf's bare reason.
+  expect(binding.facts.operations.unlockOrientation).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(binding.operations.unlockOrientation).toBeUndefined();
 });
 
 test('binds viewport resizing through the local web interactor and honors cancellation', async () => {

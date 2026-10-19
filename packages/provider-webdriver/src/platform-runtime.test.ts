@@ -354,6 +354,9 @@ test.each([
   }
   expect(facts.operations.home.available).toBe(state.isSessionActive());
   expect(facts.operations.setOrientation.available).toBe(state.isSessionActive());
+  // `orientation auto` is ADB-only: even a fully reachable WebDriver session keeps the default
+  // unlock refusal the orientation facts state for an owner that declares no unlock cell.
+  expect(facts.operations.unlockOrientation.available).toBe(false);
   expect(facts.operations.readClipboard.available).toBe(state.isSessionActive());
   expect(facts.operations.writeClipboard.available).toBe(state.isSessionActive());
   expect(facts.operations.appSwitcher.available).toBe(state.isSessionActive());

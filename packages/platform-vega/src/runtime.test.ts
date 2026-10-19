@@ -171,6 +171,12 @@ test.each([
       hint: 'orientation is not supported on Vega OS.',
     });
     expect(binding.operations.setOrientation).toBeUndefined();
+    expect(binding.facts.operations.unlockOrientation).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'orientation is not supported on Vega OS.',
+    });
+    expect(binding.operations.unlockOrientation).toBeUndefined();
     for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
       expect(binding.facts.operations[operation]).toMatchObject({
         available: false,
