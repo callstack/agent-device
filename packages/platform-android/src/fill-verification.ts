@@ -59,6 +59,7 @@ export async function verifyAndroidFilledText(
   y: number,
   expected: string,
   helper: AndroidHelperSessionOptions = {},
+  beforeTarget?: AndroidFillVerificationNode | null,
 ): Promise<AndroidFillVerification> {
   const deadline = Deadline.fromTimeoutMs(FILL_VERIFICATION_DEADLINE_MS);
   let initialXml: string | undefined = await captureAndroidUiHierarchyXml(device, {
@@ -71,9 +72,9 @@ export async function verifyAndroidFilledText(
       if (initialXml !== undefined) {
         const xml = initialXml;
         initialXml = undefined;
-        return verifyAndroidFilledTextInHierarchy(xml, x, y, expected, context);
+        return verifyAndroidFilledTextInHierarchy(xml, x, y, expected, context, beforeTarget);
       }
-      return await inspectAndroidFilledText(device, x, y, expected, context, helper);
+      return await inspectAndroidFilledText(device, x, y, expected, context, helper, beforeTarget);
     },
     settled: (verification, previous) =>
       verification.reason === 'ime_capture' || (verification.ok && previous?.ok === true),
@@ -203,8 +204,15 @@ export function verifyAndroidFilledTextInHierarchy(
   y: number,
   expected: string,
   context: AndroidFillVerificationContext = {},
+  beforeTarget?: AndroidFillVerificationNode | null,
 ): AndroidFillVerification {
-  const inspection = inspectAndroidTextAtPointInHierarchy(xml, x, y, context);
+  const inspection = inspectAndroidTextAtPointInHierarchy(
+    xml,
+    x,
+    y,
+    context,
+    expected === '' ? beforeTarget : undefined,
+  );
   if (isAndroidImeCapture(inspection)) {
     return {
       ok: false,
@@ -283,6 +291,7 @@ async function inspectAndroidFilledText(
   expected: string,
   context: AndroidFillVerificationContext,
   helper: AndroidHelperSessionOptions,
+  beforeTarget?: AndroidFillVerificationNode | null,
 ): Promise<AndroidFillVerification> {
   // Each delay samples the live hierarchy again — settling is what the samples observe, so they
   // share the helper session but never a capture.
@@ -292,6 +301,7 @@ async function inspectAndroidFilledText(
     y,
     expected,
     context,
+    beforeTarget,
   );
 }
 
@@ -300,6 +310,7 @@ function inspectAndroidTextAtPointInHierarchy(
   x: number,
   y: number,
   context: AndroidFillVerificationContext = {},
+  beforeTarget?: AndroidFillVerificationNode | null,
 ): AndroidTextAtPointInspection {
   const scan: AndroidTextAtPointScan = {
     focusedEdit: null,
@@ -309,11 +320,34 @@ function inspectAndroidTextAtPointInHierarchy(
 
   const nodes = [...androidUiNodes(xml)];
   const observedContext = androidFillWindowContext(nodes) ?? context;
+  const identified: AndroidFillVerificationCandidate[] = [];
+  let focusedEdits = 0;
   for (const node of nodes) {
     const candidate = androidFillCandidateFromNode(node, observedContext);
-    if (candidate) updateAndroidTextAtPointScan(scan, candidate, x, y);
+    if (!candidate) continue;
+    updateAndroidTextAtPointScan(scan, candidate, x, y);
+    if (candidate.editText && candidate.focused) focusedEdits += 1;
+    if (
+      candidate.editText &&
+      beforeTarget?.resourceId &&
+      beforeTarget.packageName &&
+      !isSensitiveFillDiagnosticNode(beforeTarget) &&
+      !beforeTarget.inputMethodOwned &&
+      sameAndroidFillTarget(beforeTarget, candidate)
+    )
+      identified.push(candidate);
   }
-
+  const field = identified.length === 1 ? identified[0] : undefined;
+  if (
+    field &&
+    focusedEdits === 1 &&
+    field.focused &&
+    field.className === beforeTarget?.className &&
+    !field.inputMethodOwned &&
+    !isSensitiveFillDiagnosticNode(field) &&
+    observedAndroidValue(field) === ''
+  )
+    return { targetInput: field, actualInput: field };
   return androidTextAtPointInspection(scan);
 }
 

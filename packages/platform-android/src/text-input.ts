@@ -90,7 +90,7 @@ export async function fillAndroid(
     (await runAndroidAutomationHelper(device, 'input', { kind: 'fill', x, y, text }))
   ) {
     emitAndroidTextDiagnostic('fill', 'android-helper', text);
-    const verification = await verifyAndroidFilledText(device, x, y, text, helper);
+    const verification = await verifyAndroidFilledText(device, x, y, text, helper, beforeTarget);
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
   let lastVerification: AndroidFillVerification | null = null;
