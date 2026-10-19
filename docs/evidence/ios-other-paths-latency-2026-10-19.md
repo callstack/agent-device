@@ -48,3 +48,15 @@ The [samples, instrumentation, manual native probe, and exact commands](ios-othe
 An initial native probe used an incorrect cell query; a later harness compared an empty field's placeholder with an empty string. Those attempts are preserved locally and excluded. The accepted probe uses the production prepared-command entrypoint for fills and handles the app's known placeholder. No physical-device or full upstream-suite run was performed.
 
 The disposable checkout is removed. Task-owned sessions are closed and the simulator is shut down. The local evidence directory is `.tmp/other-paths/`.
+
+## Review follow-up and daemon rebase
+
+The review follow-up adds native masked-input removal and replacement cases. Five focused tests passed, with no skips. An isolated stale-handle warmup mutation produced two failures and three passes: the new masked-removal test caught the recorded XCTest failure; replacement cases remained passing. The initial control launch was killed before test bootstrap. A simulator reset preceded the successful control; the initial cause is unproven.
+
+[Coverage failed](https://github.com/callstack/agent-device/actions/runs/39261898948/job/118091424006) on nine eager-closure assertions. The inline encoder's static import added existing code to consumer import closures. Loading that encoder inside its async inline callback fixes the regression; all 851 eager-closure checks and 16 focused encoding tests passed. The worker path is unchanged.
+
+The branch rebased onto `b5f47e7542e274fc84a193c4e111e6c73ac3b1f3`, including daemon ownership/shutdown PRs #3806 and #3797. All five patches matched in range-diff. Native and capture-kit contents matched across the rebase; the subsequent encoder-loading fix is the only runtime delta in this follow-up. Matched source-daemon measurements compare `806dfa9d71fbba4ca70fc640d8b2d99794f3f721` with `1acc564ff0e55c4ef5a86af57e60cca009b78c4a`.
+
+All 54 timed device operations passed, with independent fill/append read-back. Before → after medians were: empty fill 2,466 → 2,448 ms; replacement fill 3,760 → 3,718 ms; input press 829 → 816 ms; append 1,569 → 1,613 ms; snapshot 324 → 329 ms; screenshot 902 → 768 ms. The two-step Maestro assertion/tap flow measured 1,413 → 1,259 ms. These use the same installed CLI and native artifact, with explicit HTTP overrides to separate source daemons; they are not timings of the installed host daemon.
+
+Alternating daemon runs pooled 200 samples per revision after warmup: raw TCP 0.480 → 0.437 ms; SDK 9.482 → 8.166 ms. Individual SDK run medians varied from 5.70 to 11.84 ms before and 7.95 to 8.40 ms after. Sequential PNG worker medians were 3.584 → 3.586 ms at 402×874 and 25.436 → 24.888 ms at 1206×2622, with every decoded pixel equal. No repeatable loss of the existing gains was observed. The small device sample and host variation do not prove statistical equivalence or a new speedup. All task-owned sessions and source daemons were closed, and disposable checkouts were removed.
