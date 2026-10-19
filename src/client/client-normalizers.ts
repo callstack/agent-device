@@ -1,3 +1,11 @@
+import type { DaemonWireRequest, InternalRequestOptions } from '@agent-device/contracts/command';
+import type {
+  LaunchConfirmation,
+  LaunchConfirmationAbsent,
+  LaunchConfirmationClientOutcome,
+  LaunchConfirmationProbeFailure,
+  LaunchConfirmationUnansweredReason,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import type {
   AgentDeviceDevice,
   AgentDeviceSession,
@@ -8,7 +16,6 @@ import type {
   StartupPerfSample,
   DeviceSelectionMetadata,
 } from '@agent-device/contracts/client';
-import type { InternalRequestOptions } from '@agent-device/contracts/command';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import {
   isAppleOs,
@@ -25,7 +32,6 @@ import {
   leaseScopeFromOptions,
   leaseScopeToRequestMeta,
 } from '@agent-device/contracts/lease-scope';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import {
   asRecord,
   isRecord,
@@ -380,12 +386,69 @@ export function normalizeOpenForegroundComposition(data: Record<string, unknown>
   };
 }
 
+/**
+ * The launch confirmation an open response reports, keyed on the typed outcome. An outcome or
+ * reason outside the typed set is dropped rather than guessed, as is a probe step outside its
+ * typed set; warnings travel separately and still reach the caller. An `unanswered` whose reason
+ * the client does not recognize (version skew) stays `unanswered` without a reason: the prompt is
+ * on the device either way. With no outcome, the only report left is the typed probe-failure step.
+ */
+export function normalizeLaunchConfirmation(
+  data: Record<string, unknown>,
+): LaunchConfirmationClientOutcome | LaunchConfirmationAbsent {
+  const outcome = readLaunchConfirmationOutcome(data.launchConfirmation);
+  if (outcome === 'accepted') return { launchConfirmation: 'accepted' };
+  if (outcome === 'unanswered') {
+    const reason = readLaunchConfirmationReason(data.launchConfirmationReason);
+    return reason
+      ? { launchConfirmation: 'unanswered', launchConfirmationReason: reason }
+      : { launchConfirmation: 'unanswered' };
+  }
+  const probeFailure = readLaunchConfirmationProbeFailure(data.launchConfirmationProbeFailure);
+  return probeFailure ? { launchConfirmationProbeFailure: probeFailure } : {};
+}
+
+function readLaunchConfirmationOutcome(value: unknown): LaunchConfirmation | undefined {
+  switch (value) {
+    case 'accepted':
+    case 'unanswered':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function readLaunchConfirmationReason(
+  value: unknown,
+): LaunchConfirmationUnansweredReason | undefined {
+  switch (value) {
+    case 'alert-unrecognized':
+    case 'url-owner-unresolved':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function readLaunchConfirmationProbeFailure(
+  value: unknown,
+): LaunchConfirmationProbeFailure | undefined {
+  switch (value) {
+    case 'alert-read':
+    case 'alert-accept':
+    case 'runner':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
 export function readSnapshotNodes(value: unknown): SnapshotNode[] {
   // Snapshot nodes are produced by the daemon snapshot pipeline and treated as trusted here.
   return Array.isArray(value) ? (value as SnapshotNode[]) : [];
 }
 
-export function buildMeta(options: InternalRequestOptions): DaemonRequest['meta'] {
+export function buildMeta(options: InternalRequestOptions): DaemonWireRequest['meta'] {
   const leaseScope = leaseScopeFromOptions(options);
   return stripUndefined({
     requestId: options.requestId,

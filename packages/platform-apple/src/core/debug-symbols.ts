@@ -5,7 +5,6 @@ import {
   readHostTextFile,
   writeHostTextFile,
 } from '@agent-device/host-kit/host-file';
-import { hostCurrentWorkingDirectory } from '@agent-device/host-kit/process';
 import { readAppleCrashArtifact } from './debug-symbols/crash-artifact.ts';
 import { matchImagesToDsyms, readDsymPaths, readDsymSlices } from './debug-symbols/dsym.ts';
 import { summarizeCrashArtifact } from './debug-symbols/report.ts';
@@ -19,14 +18,16 @@ import { AppError } from '@agent-device/kernel/errors';
 const MAX_CRASH_ARTIFACT_BYTES = 64 * 1024 * 1024;
 
 export async function symbolicateCrashArtifact(
-  options: DebugSymbolsOptions,
+  // The public options keep `cwd` optional; the caller that owns a host resolves it first, so
+  // this leaf never reads an ambient working directory (#3794).
+  options: DebugSymbolsOptions & { cwd: string },
 ): Promise<DebugSymbolsResult> {
   if (options.action !== undefined && options.action !== 'symbols') {
     throw new AppError('INVALID_ARGS', 'debug supports only the symbols workflow.', {
       hint: 'Use debug symbols --artifact <crash.ips|crash.log> --dsym <App.dSYM> or --search-path <dir> --out <path>.',
     });
   }
-  const cwd = options.cwd ?? hostCurrentWorkingDirectory();
+  const cwd = options.cwd;
   const artifactPath = resolvePath(cwd, options.artifact);
   const outPath = resolvePath(cwd, options.out ?? defaultOutPath(artifactPath));
   const artifactText = await readTextFile(artifactPath, 'crash artifact');

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { resolveUserPath } from '@agent-device/host-kit/file';
-import type { ReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -30,6 +30,7 @@ function handleReplayRunCommand({ positionals, flags }: ReplayCommandParams): fa
 async function handleReplayExportCommand({
   positionals,
   flags,
+  host,
 }: ReplayCommandParams): Promise<true> {
   validateReplayExportOptions(positionals, flags);
   const inputPath = positionals[1];
@@ -37,7 +38,7 @@ async function handleReplayExportCommand({
     throw new AppError('INVALID_ARGS', 'replay export requires an input path.');
   }
 
-  const sourcePath = resolveUserPath(inputPath);
+  const sourcePath = resolveUserPath(inputPath, { cwd: host.cwd });
   const script = fs.readFileSync(sourcePath, 'utf8');
   const parsed = parseReplayScriptDetailed(script);
   // `replay export` exports to Maestro, so the conversion goes through that backend's registry
@@ -50,7 +51,8 @@ async function handleReplayExportCommand({
     actionLines: parsed.actionLines,
     metadata: readReplayScriptMetadata(script),
   });
-  const outputPath = typeof flags.out === 'string' ? resolveUserPath(flags.out) : undefined;
+  const outputPath =
+    typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: host.cwd }) : undefined;
   if (outputPath) {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     fs.writeFileSync(outputPath, result.yaml);

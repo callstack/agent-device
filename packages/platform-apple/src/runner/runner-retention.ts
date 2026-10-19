@@ -1,6 +1,6 @@
 import net from 'node:net';
 import { isIosFamily } from '@agent-device/kernel/device';
-import { emitDiagnostic } from './host.ts';
+import { hostEnvironment, emitDiagnostic } from './host.ts';
 import {
   isRunnerMainThreadOccupied,
   type RunnerSession,
@@ -117,7 +117,7 @@ function needsListenerWatch(session: RunnerSession): boolean {
   return session.device.kind === 'simulator' && isIosFamily(session.device);
 }
 
-function resolveRunnerIdleStopMs(env: NodeJS.ProcessEnv = process.env): number {
+function resolveRunnerIdleStopMs(env: NodeJS.ProcessEnv = hostEnvironment().env): number {
   const raw = env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS?.trim();
   if (raw) {
     const parsed = Number(raw);

@@ -118,6 +118,7 @@ test('an unreachable newer daemon is replaced like any version mismatch', async 
     {
       kind: 'replace',
       reason: `version mismatch (client v${readVersion()})`,
+      cause: 'version',
     },
   );
 });
@@ -151,7 +152,7 @@ test('a same-version daemon the client transport cannot reach is replaced', asyn
       runningDaemon({ codeOrigin: 'installed' }),
       onlyOnAnotherTransport(),
     ),
-    { kind: 'replace', reason: 'unreachable' },
+    { kind: 'replace', reason: 'unreachable', cause: 'unreachable' },
   );
 });
 
@@ -159,6 +160,7 @@ test('a reachable daemon older than the client is replaced', async () => {
   assert.deepEqual(await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), reachable()), {
     kind: 'replace',
     reason: `version mismatch (client v${readVersion()})`,
+    cause: 'version',
   });
 });
 
@@ -236,7 +238,11 @@ test('an installed client replaces a daemon that reports a source checkout (#245
       runningDaemon({ codeOrigin: 'checkout', codeSignature: 'edited-checkout' }),
       reachable(),
     ),
-    { kind: 'replace', reason: 'code origin mismatch (daemon checkout, client installed)' },
+    {
+      kind: 'replace',
+      reason: 'code origin mismatch (daemon checkout, client installed)',
+      cause: 'code',
+    },
   );
 });
 
@@ -248,6 +254,7 @@ test('an installed client replaces a daemon that predates the code origin field 
     {
       kind: 'replace',
       reason: 'code origin mismatch (daemon unreported, client installed)',
+      cause: 'code',
     },
   );
 });
@@ -279,6 +286,7 @@ test('a source checkout replaces a daemon whose code signature differs', async (
     {
       kind: 'replace',
       reason: 'code-signature mismatch',
+      cause: 'code',
     },
   );
 });
@@ -296,6 +304,7 @@ test('a source checkout replaces a daemon that reports an installed package', as
     {
       kind: 'replace',
       reason: 'code origin mismatch (daemon installed, client checkout)',
+      cause: 'code',
     },
   );
 });
@@ -308,11 +317,16 @@ test('a source checkout judges a daemon that predates the code origin field by i
   assert.deepEqual(await resolveDaemonTakeover(runningDaemon({}), reachable()), {
     kind: 'replace',
     reason: 'code-signature mismatch',
+    cause: 'code',
   });
 });
 
 test('a mismatched version replaces the daemon whichever tree the client runs from', async () => {
-  const expected = { kind: 'replace', reason: `version mismatch (client v${readVersion()})` };
+  const expected = {
+    kind: 'replace',
+    reason: `version mismatch (client v${readVersion()})`,
+    cause: 'version',
+  };
   for (const sourceCheckout of [false, true]) {
     useClientTree(sourceCheckout);
 
@@ -340,6 +354,7 @@ test('a reachable daemon of a matching identity survives, an unreachable one doe
     {
       kind: 'replace',
       reason: 'unreachable',
+      cause: 'unreachable',
     },
   );
 });

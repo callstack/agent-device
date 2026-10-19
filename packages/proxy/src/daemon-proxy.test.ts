@@ -1,5 +1,10 @@
 import { expect, test } from 'vitest';
-import { createDaemonProxy, type DaemonProxyUpstreamFetch } from './daemon-proxy.ts';
+import { buildDaemonHttpAuthHeaders } from '@agent-device/contracts/daemon-http';
+import {
+  createDaemonProxy,
+  type DaemonProxyAuthenticatedClient,
+  type DaemonProxyUpstreamFetch,
+} from './daemon-proxy.ts';
 
 const PROXY_ORIGIN = 'https://gateway.example.test';
 
@@ -245,5 +250,332 @@ test('an unsupported route answers a bare 404 without reaching the daemon', asyn
 
   expect(response.status).toBe(404);
   expect(response.headers.get('content-type')).toBeNull();
+  expect(upstream.requests).toHaveLength(0);
+});
+
+function proxyAuthenticatingWith(upstreamFetch: DaemonProxyUpstreamFetch) {
+  const seen: Request[] = [];
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamToken: 'daemon-secret',
+    upstreamFetch,
+    authenticate: async (request) => {
+      seen.push(request);
+      const token = request.headers.get('authorization');
+      if (token === 'Bearer alice-key') return { tenantId: 'alice' };
+      if (token === 'Bearer bob-key') return { tenantId: 'bob' };
+      return null;
+    },
+  });
+  return { proxy, seen };
+}
+
+function forwardedParams(request: Request | undefined): Promise<Record<string, unknown>> {
+  return request!.json().then((body) => (body as { params: Record<string, unknown> }).params);
+}
+
+test('authenticate refuses a caller it returns null for with the unauthorized rpc envelope', async () => {
+  const upstream = recordingUpstream(() => Response.json({}));
+  const { proxy } = proxyAuthenticatingWith(upstream.fetch);
+
+  const response = await proxy.handle(
+    rpcRequest(
+      { jsonrpc: '2.0', id: 9, method: 'agent-device.command' },
+      {
+        headers: { authorization: 'Bearer client-secret' },
+      },
+    ),
+  );
+
+  expect(response.status).toBe(401);
+  expect(await response.json()).toMatchObject({
+    id: 9,
+    error: { code: -32001, data: { code: 'UNAUTHORIZED' } },
+  });
+  expect(upstream.requests).toHaveLength(0);
+});
+
+test('authenticate sees the rpc body and its tenant overwrites the tenant a command declares', async () => {
+  const upstream = recordingUpstream(() => Response.json({ jsonrpc: '2.0', id: 1, result: {} }));
+  const { proxy, seen } = proxyAuthenticatingWith(upstream.fetch);
+
+  const response = await proxy.handle(
+    rpcRequest(
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'agent-device.command',
+        params: {
+          command: 'devices',
+          flags: { tenant: 'bob', sessionIsolation: 'none' },
+          meta: { tenantId: 'bob', sessionIsolation: 'none', requestId: 'r1' },
+        },
+      },
+      { headers: { authorization: 'Bearer alice-key' } },
+    ),
+  );
+
+  expect(response.status).toBe(200);
+  expect((await forwardedParams(seen[0])).command).toBe('devices');
+  const params = await forwardedParams(upstream.requests[0]);
+  expect(params.meta).toEqual({ tenantId: 'alice', sessionIsolation: 'tenant', requestId: 'r1' });
+  expect(params.flags).toEqual({ tenant: 'alice', sessionIsolation: 'tenant' });
+  expect(params.token).toBe('daemon-secret');
+});
+
+test('authenticate tenant overwrites the tenant a lease call declares', async () => {
+  const upstream = recordingUpstream(() => Response.json({ jsonrpc: '2.0', id: 1, result: {} }));
+  const { proxy } = proxyAuthenticatingWith(upstream.fetch);
+
+  await proxy.handle(
+    rpcRequest(
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'agent_device.lease.allocate',
+        params: { tenantId: 'bob', runId: 'run-1' },
+      },
+      { headers: { authorization: 'Bearer alice-key' } },
+    ),
+  );
+
+  expect((await forwardedParams(upstream.requests[0])).tenantId).toBe('alice');
+});
+
+test('authenticate tenant replaces the tenant header a client sends on artifact routes', async () => {
+  const upstream = recordingUpstream(() => Response.json({ artifacts: [] }));
+  const { proxy } = proxyAuthenticatingWith(upstream.fetch);
+
+  await proxy.handle(
+    new Request(`${PROXY_ORIGIN}/agent-device/artifacts`, {
+      headers: { authorization: 'Bearer alice-key', 'x-agent-device-tenant': 'bob' },
+    }),
+  );
+
+  expect(upstream.requests[0]?.headers.get('x-agent-device-tenant')).toBe('alice');
+});
+
+const DAEMON_TOKEN = 'daemon-secret';
+
+/** Answers a preflight with a ticket carrying daemon credentials under several header names. */
+function daemonTicketUpstream() {
+  return recordingUpstream((request) =>
+    new URL(request.url).pathname.endsWith('/upload/preflight')
+      ? Response.json({
+          ok: true,
+          uploadId: 'abc',
+          upload: {
+            url: 'http://127.0.0.1:4310/upload/direct/abc',
+            headers: {
+              ...buildDaemonHttpAuthHeaders(DAEMON_TOKEN),
+              cookie: `daemon=${DAEMON_TOKEN}`,
+              'x-extra': '1',
+              'content-type': 'application/zip',
+            },
+          },
+        })
+      : new Response(null, { status: 200 }),
+  );
+}
+
+/** Admits `alice-key` from any of four credential headers, naming its own upload headers. */
+function proxyAuthenticatingByAnyCredential(upstreamFetch: DaemonProxyUpstreamFetch) {
+  return createDaemonProxy({
+    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamToken: DAEMON_TOKEN,
+    upstreamFetch,
+    authenticate: (request): DaemonProxyAuthenticatedClient | null => {
+      if (request.headers.get('x-api-key') === 'alice-key') {
+        return { tenantId: 'alice', uploadHeaders: { 'x-api-key': 'alice-key' } };
+      }
+      if (request.headers.get('cookie') === 'session=alice-key') {
+        return { tenantId: 'alice', uploadHeaders: { cookie: 'session=alice-key' } };
+      }
+      const token =
+        request.headers.get('x-agent-device-token') ??
+        request.headers.get('authorization')?.replace(/^Bearer /, '');
+      return token === 'alice-key' ? { tenantId: 'alice' } : null;
+    },
+  });
+}
+
+async function requestTicket(
+  proxy: ReturnType<typeof createDaemonProxy>,
+  headers: Record<string, string>,
+): Promise<Record<string, string>> {
+  const response = await proxy.handle(
+    new Request(`${PROXY_ORIGIN}/agent-device/upload/preflight`, {
+      method: 'POST',
+      headers: { ...headers, 'content-type': 'application/json' },
+      body: '{}',
+    }),
+  );
+  const text = await response.text();
+  expect(text).not.toContain(DAEMON_TOKEN);
+  const ticketHeaders = (JSON.parse(text) as { upload: { headers: Record<string, string> } }).upload
+    .headers;
+  for (const value of Object.values(ticketHeaders)) expect(value).not.toContain(DAEMON_TOKEN);
+  return ticketHeaders;
+}
+
+function uploadChunk(proxy: ReturnType<typeof createDaemonProxy>, headers: Record<string, string>) {
+  return proxy.handle(
+    new Request(`${PROXY_ORIGIN}/agent-device/upload/direct/abc`, {
+      method: 'PUT',
+      headers,
+      body: 'bytes',
+      duplex: 'half',
+    } as RequestInit),
+  );
+}
+
+test.each([
+  ['authorization', { authorization: 'Bearer alice-key' }],
+  ['x-agent-device-token', { 'x-agent-device-token': 'alice-key' }],
+])(
+  'with authenticate naming no upload headers, a %s caller gets a ticket with its own credential',
+  async (_name, clientHeaders) => {
+    const upstream = daemonTicketUpstream();
+    const proxy = proxyAuthenticatingByAnyCredential(upstream.fetch);
+
+    const ticketHeaders = await requestTicket(proxy, clientHeaders);
+
+    expect(ticketHeaders).toEqual({ 'content-type': 'application/zip', ...clientHeaders });
+  },
+);
+
+test.each([
+  ['cookie', { cookie: 'session=alice-key' }],
+  ['x-api-key', { 'x-api-key': 'alice-key' }],
+])(
+  'with authenticate naming %s upload headers, the ticket carries exactly those',
+  async (_name, uploadHeaders) => {
+    const upstream = daemonTicketUpstream();
+    const proxy = proxyAuthenticatingByAnyCredential(upstream.fetch);
+
+    const ticketHeaders = await requestTicket(proxy, {
+      ...uploadHeaders,
+      authorization: 'Bearer unrelated',
+    });
+
+    expect(ticketHeaders).toEqual({ 'content-type': 'application/zip', ...uploadHeaders });
+  },
+);
+
+test('with authenticate, a custom upload header passes authenticate on the direct upload', async () => {
+  const upstream = daemonTicketUpstream();
+  const proxy = proxyAuthenticatingByAnyCredential(upstream.fetch);
+  const ticketHeaders = await requestTicket(proxy, { 'x-api-key': 'alice-key' });
+
+  const upload = await uploadChunk(proxy, ticketHeaders);
+
+  expect(upload.status).toBe(200);
+  expect(upstream.requests[1]?.headers.get('x-agent-device-tenant')).toBe('alice');
+});
+
+test('an authenticate that never reads headers still yields a working ticket', async () => {
+  const upstream = daemonTicketUpstream();
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamToken: DAEMON_TOKEN,
+    upstreamFetch: upstream.fetch,
+    authenticate: () => ({ tenantId: 'alice' }),
+  });
+  const ticketHeaders = await requestTicket(proxy, { authorization: 'Bearer alice-key' });
+
+  const upload = await uploadChunk(proxy, ticketHeaders);
+
+  expect(ticketHeaders).toEqual({
+    'content-type': 'application/zip',
+    authorization: 'Bearer alice-key',
+  });
+  expect(upload.status).toBe(200);
+  expect(upstream.requests[1]?.headers.get('x-agent-device-tenant')).toBe('alice');
+});
+
+test('with a client token, the ticket carries the client token, never the daemon token', async () => {
+  const upstream = daemonTicketUpstream();
+  const proxy = proxyWith(upstream.fetch);
+
+  const ticketHeaders = await requestTicket(proxy, { authorization: 'Bearer client-secret' });
+
+  expect(ticketHeaders).toEqual({
+    'content-type': 'application/zip',
+    ...buildDaemonHttpAuthHeaders('client-secret'),
+  });
+});
+
+test('a ticket whose url the proxy cannot rewrite carries no credentials', async () => {
+  const upstream = recordingUpstream(() =>
+    Response.json({
+      ok: true,
+      upload: {
+        url: 'https://elsewhere.example/put/abc',
+        headers: {
+          ...buildDaemonHttpAuthHeaders(DAEMON_TOKEN),
+          'content-type': 'application/octet-stream',
+        },
+      },
+    }),
+  );
+  const proxy = proxyWith(upstream.fetch);
+
+  const ticketHeaders = await requestTicket(proxy, { authorization: 'Bearer client-secret' });
+
+  expect(ticketHeaders).toEqual({ 'content-type': 'application/octet-stream' });
+});
+
+test('with authenticate, request diagnostics are served only for the caller tenant sessions', async () => {
+  const upstream = recordingUpstream(() => Response.json({ ok: true }));
+  const { proxy } = proxyAuthenticatingWith(upstream.fetch);
+  const diagnostics = (session: string) =>
+    proxy.handle(
+      new Request(
+        `${PROXY_ORIGIN}/agent-device/sessions/${encodeURIComponent(session)}/requests/r1/diagnostics`,
+        { headers: { authorization: 'Bearer alice-key' } },
+      ),
+    );
+
+  const other = await diagnostics('bob:default');
+  const own = await diagnostics('alice:default');
+
+  expect(other.status).toBe(401);
+  expect(own.status).toBe(200);
+  expect(upstream.requests).toHaveLength(1);
+});
+
+test('without authenticate, the tenant a client declares is forwarded unchanged', async () => {
+  const upstream = recordingUpstream(() => Response.json({ jsonrpc: '2.0', id: 1, result: {} }));
+  const proxy = proxyWith(upstream.fetch);
+
+  await proxy.handle(
+    rpcRequest({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'agent-device.command',
+      params: { command: 'devices', meta: { tenantId: 'bob' } },
+    }),
+  );
+
+  const params = await forwardedParams(upstream.requests[0]);
+  expect(params.meta).toEqual({ tenantId: 'bob' });
+  expect(params.tenantId).toBeUndefined();
+});
+
+test('authenticate returning a tenantId the daemon rejects refuses the request before the daemon', async () => {
+  const upstream = recordingUpstream(() => Response.json({ ok: true }));
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamToken: 'daemon-secret',
+    upstreamFetch: upstream.fetch,
+    authenticate: () => ({ tenantId: 'alice@example.com' }),
+  });
+
+  const response = await proxy.handle(
+    new Request(`${PROXY_ORIGIN}/agent-device/upload/preflight`, { method: 'POST', body: '{}' }),
+  );
+
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({ ok: false, code: 'COMMAND_FAILED' });
   expect(upstream.requests).toHaveLength(0);
 });

@@ -1,3 +1,6 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   AppError,
   readDiagnosticsRecordRef,
@@ -6,9 +9,8 @@ import {
 } from '@agent-device/kernel/errors';
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
-import { materializeRemoteArtifacts } from '../remote/daemon-artifacts.ts';
-import { localizeRemoteDaemonError } from '../remote/remote-request-diagnostics.ts';
+import { materializeRemoteArtifacts } from '@agent-device/remote/daemon-artifacts';
+import { localizeRemoteDaemonError } from '@agent-device/remote/remote-request-diagnostics';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import {
   leaseScopeFromRequest,
@@ -21,13 +23,14 @@ export function handleDaemonHttpResponseBody(
   body: string,
   options: {
     info: DaemonInfo;
-    req: DaemonRequest;
+    req: DaemonWireRequest;
     stateDir: string;
+    host: HostEnvironment;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
   },
 ): void {
-  const { info, req, stateDir, resolve, reject } = options;
+  const { info, req, stateDir, host, resolve, reject } = options;
   try {
     const parsed = parseDaemonHttpResponseBody(body);
     if (parsed.error) {
@@ -42,7 +45,7 @@ export function handleDaemonHttpResponseBody(
       );
       return;
     }
-    void resolveDaemonHttpResult(info, req, parsed.result, resolve, reject);
+    void resolveDaemonHttpResult(info, req, parsed.result, host, resolve, reject);
   } catch (err) {
     reject(
       new AppError(
@@ -78,7 +81,7 @@ async function rejectDaemonHttpRpcError(
   error: { message?: string; data?: Record<string, unknown> },
   options: {
     info: DaemonInfo;
-    req: DaemonRequest;
+    req: DaemonWireRequest;
     stateDir: string;
     reject: (error: unknown) => void;
   },
@@ -91,7 +94,12 @@ async function rejectDaemonHttpRpcError(
     return;
   }
   const localized = await localizeRemoteDaemonError(payload, {
-    endpoint: { baseUrl: info.baseUrl, token: info.token, tenantId: req.meta?.tenantId },
+    endpoint: {
+      baseUrl: info.baseUrl,
+      token: info.token,
+      tenantId: req.meta?.tenantId,
+      leaseId: leaseScopeFromRequest(req).leaseId,
+    },
     stateDir,
     requestId,
   });
@@ -146,14 +154,17 @@ function appErrorFromDaemonError(error: DaemonError, requestId: string | undefin
 
 async function resolveDaemonHttpResult(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   result: DaemonResponse,
+  host: HostEnvironment,
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
 ): Promise<void> {
   try {
     resolve(
-      info.baseUrl && result.ok ? await materializeRemoteArtifacts(info, req, result) : result,
+      info.baseUrl && result.ok
+        ? await materializeRemoteArtifacts(info, req, result, host)
+        : result,
     );
   } catch (error) {
     reject(error);
@@ -161,13 +172,13 @@ async function resolveDaemonHttpResult(
 }
 
 export function buildHttpRpcPayload(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   options: { includeTokenParam: boolean },
 ): {
   jsonrpc: '2.0';
   id: string;
   method: string;
-  params: DaemonRequest | Record<string, unknown>;
+  params: DaemonWireRequest | Record<string, unknown>;
 } {
   const id = req.meta?.requestId ?? createRequestId();
   if (!isLeaseRpcCommand(req.command)) {
@@ -210,7 +221,7 @@ function leaseRpcMethodForCommand(command: LeaseRpcCommand): string {
 }
 
 function buildLeaseRpcParams(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   command: LeaseRpcCommand,
   options: { includeTokenParam: boolean },
 ): Record<string, unknown> {

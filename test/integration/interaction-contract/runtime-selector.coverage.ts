@@ -31,8 +31,6 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
     'runtime-selector resolutionDisclosure: a unique match discloses the unique runtime shape',
     'runtime-selector resolutionDisclosure: an equivalent wrapper chain discloses matchCount, winnerDiagnostic, and structural equivalence',
   ],
-  targetReadiness:
-    'runtime-selector targetReadiness: a target missing on the first capture resolves once a later poll observes it',
   targetStability: [
     'runtime-selector targetStability: a settled slide-in is tapped where it came to rest',
     'runtime-selector targetStability: a target still moving at the end of the window is refused with target_still_moving',

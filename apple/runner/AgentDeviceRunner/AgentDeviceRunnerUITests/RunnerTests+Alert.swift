@@ -16,6 +16,11 @@ extension RunnerTests {
 
   static let defaultAlertCommandTimeout: TimeInterval = 10
 
+  /// One recovery sentence for every alert failure that activated nothing, so the refusal in
+  /// `handleAlert` and the unactivated `alertVerificationResponse` branches cannot drift apart.
+  static let alertNoButtonActivatedHint =
+    "No alert button was activated. Inspect the current alert before deciding on an action."
+
   static func alertCommandTimeout(timeoutMs: Double?) -> TimeInterval {
     guard let timeoutMs, timeoutMs.isFinite else { return defaultAlertCommandTimeout }
     return max(0.001, timeoutMs / 1000)
@@ -38,6 +43,10 @@ extension RunnerTests {
       break
     }
 #endif
+    let state = activeApp.state
+    guard state != .notRunning && state != .unknown else {
+      return nil
+    }
     // Guard the query: when a remote-hosted modal (e.g. the AccessorySetupKit
     // picker) was just dismissed, the dismissal re-check re-enters here with the
     // now-gone host as `activeApp`, and its `alerts` query raises
@@ -54,8 +63,14 @@ extension RunnerTests {
   @MainActor
   func handleAlert(_ alert: RunnerAlert, action: String, deadline: Date) -> Response {
     if action == "accept" || action == "dismiss" {
-      guard let button = chooseAlertButton(alert.buttons, action: action) else {
-        return Response(ok: false, error: ErrorPayload(message: "alert \(action) button not found"))
+      guard let button = chooseAlertButton(alert, action: action) else {
+        // The choice refused before any activation, so this discloses dispatched: no like the
+        // runner's other pre-run refusals.
+        return Response(ok: false, error: ErrorPayload(
+          code: RunnerWireErrorCode.alertButtonNotFound,
+          message: "alert \(action) button not found",
+          hint: RunnerTests.alertNoButtonActivatedHint
+        ))
       }
       guard Date() < deadline else {
         return alertVerificationResponse(.timedOut, action: action, activated: false)
@@ -242,61 +257,58 @@ extension RunnerTests {
   )
   private static let dismissPopupMarkerText = NSPredicate(format: "SELF MATCHES[c] %@", dismissPopupMarkerPattern)
 
-  private func chooseAlertButton(_ buttons: [XCUIElement], action: String) -> XCUIElement? {
-    if action == "accept" {
-      if let accept = buttons.first(where: { isAcceptButton($0.label) }) {
-        return accept
-      }
-      return buttons.count == 1 && !isDismissButton(buttons[0].label) ? buttons[0] : nil
+  // Internal, not private: the dismiss-popup wiring is pinned by
+  // RunnerTests+AlertTests, and the label rule itself by RunnerAlertButtonChoice.
+  func chooseAlertButton(_ alert: RunnerAlert, action: String) -> XCUIElement? {
+    guard let index = RunnerAlertButtonChoice.buttonIndex(
+      for: alert.buttons.map(\.label),
+      action: action,
+      popupMarkerSurface: alert.source == .dismissPopup
+    ) else {
+      return nil
     }
-
-    return buttons.first(where: { isDismissButton($0.label) }) ?? buttons.last
+    return alert.buttons[index]
   }
 
-  func isAcceptButton(_ label: String) -> Bool {
-    let normalized = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return [
-      "ok",
-      "allow",
-      "yes",
-      "continue",
-      "done",
-      "open",
-      "open settings"
-    ].contains(normalized) || normalized.hasPrefix("confirm")
-  }
-
-  private func isDismissButton(_ label: String) -> Bool {
-    [
-      "cancel",
-      "close",
-      "dismiss",
-      "don't allow",
-      "don’t allow",
-      "not now",
-      "no",
-      "keep browsing",
-      "later"
-    ].contains(label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
-  }
-
+  /// The alert's own title: the first non-empty static text inside the alert that is neither a
+  /// button nor alert chrome, then the alert element's own label, then the first labelled
+  /// descendant that is not a button or chrome. An alert presents its copy as static text, so the
+  /// static-text read answers a root that carries host chrome whose accessibility label is not the
+  /// alert's title (a SpringBoard sheet over the Home Screen includes the page readout).
   private func preferredAlertTitle(_ element: XCUIElement, buttons: [XCUIElement]) -> String {
     let buttonLabels = Set(buttons.map { $0.label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
-    let descendants = element.descendants(matching: .any).allElementsBoundByIndex
-    for descendant in descendants {
-      let text = descendant.label.trimmingCharacters(in: .whitespacesAndNewlines)
-      if text.isEmpty ||
-        isGenericAlertLabel(text) ||
-        buttonLabels.contains(text.lowercased()) ||
-        descendant.elementType == .navigationBar ||
-        actionableTypes.contains(descendant.elementType)
-      {
+    let isButtonLabel: (String) -> Bool = { buttonLabels.contains($0.lowercased()) }
+    if let text = firstAlertText(safeElementsQuery { element.staticTexts.allElementsBoundByIndex }, isButtonLabel: isButtonLabel) {
+      return text
+    }
+    let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !label.isEmpty && !isGenericAlertLabel(label) {
+      return label
+    }
+    if let text = firstAlertText(
+      safeElementsQuery { element.descendants(matching: .any).allElementsBoundByIndex },
+      isButtonLabel: isButtonLabel
+    ) {
+      return text
+    }
+    return "Alert"
+  }
+
+  private func firstAlertText(
+    _ elements: [XCUIElement],
+    isButtonLabel: (String) -> Bool
+  ) -> String? {
+    for element in elements {
+      let text = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+      if text.isEmpty || isGenericAlertLabel(text) || isButtonLabel(text) {
+        continue
+      }
+      if element.elementType == .navigationBar || actionableTypes.contains(element.elementType) {
         continue
       }
       return text
     }
-    let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
-    return label.isEmpty || isGenericAlertLabel(label) ? "Alert" : label
+    return nil
   }
 
   private func isGenericAlertLabel(_ label: String) -> Bool {

@@ -1,12 +1,13 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
-import { now, toBackendContext } from '../../runtime-common.ts';
+import { toBackendContext } from '../../runtime-common.ts';
 
 /**
  * A leaf shared by every interaction runtime module that needs a fresh (or session-cached) tree:
- * `resolution.ts`'s ref/selector resolution, `selector-readiness.ts`'s readiness poll,
- * `gestures.ts`'s viewport resolution, and `post-action-observation.ts`'s `--verify` baseline.
+ * `resolution.ts`'s ref/selector resolution, `selector-target-resolution.ts`'s acting selector lookup,
+ * `moving-target-gate.ts`'s re-observation, `gestures.ts`'s viewport resolution, and
+ * `post-action-observation.ts`'s `--verify` baseline.
  * Deliberately self-contained — it imports no sibling of this directory, so those siblings can
  * import it without ever risking a cycle back.
  */
@@ -30,14 +31,7 @@ export async function captureInteractionSnapshot(
     interactiveOnly,
     includeRects: true,
   });
-  const snapshot =
-    result.snapshot ??
-    ({
-      nodes: result.nodes ?? [],
-      truncated: result.truncated,
-      backend: result.backend as SnapshotState['backend'],
-      createdAt: now(runtime),
-    } satisfies SnapshotState);
+  const snapshot = result.snapshot;
   await runtime.sessions.set({ ...session, snapshot });
   return { snapshot };
 }

@@ -222,6 +222,8 @@ function expectLinuxNavigationAndKeyboardFacts(
     'actionButton',
     // Nor does it have a foldable hinge to pose.
     'setFoldPose',
+    // Nor a modem to simulate a call or text message on.
+    'sendTelephonyEvent',
     // R57: the retired `trigger-app-event` descriptor declared `linux: {}` too.
     'triggerAppEvent',
     // R58/R59: and so did `settings` and `alert`.

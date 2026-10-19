@@ -1,10 +1,12 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import path from 'node:path';
 import { SessionStore } from '../../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
+import type { CloseApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   activateCompleteRefFrame,
   readSessionRuntimeRevision,
@@ -18,8 +20,17 @@ import {
   mockInspectDeviceRuntimeFacts,
 } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import { lifecycleRuntimeFacts } from '../../../../__tests__/support/application-lifecycle-runtime-harness.ts';
-import { dispatchApplicationLifecycleEffect } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  clearRuntimeHintsFixture,
+  dispatchApplicationLifecycleEffect,
+} from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok: true, data: {} });
@@ -53,8 +64,10 @@ async function close(params: {
   sessionStore: SessionStore;
   positionals?: string[];
   internal?: DaemonRequest['internal'];
+  bindDevice?: Parameters<typeof handleSessionCommands>[0]['bindDevice'];
 }) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: closeRequest(params.sessionName, params.positionals ?? [], params.internal),
@@ -62,6 +75,7 @@ async function close(params: {
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore: params.sessionStore,
     invoke: noopInvoke,
+    bindDevice: params.bindDevice,
   });
 }
 
@@ -172,6 +186,54 @@ test('close expires the ref frame immediately before its admitted platform mutat
   expect(mockDispatch).toHaveBeenCalledOnce();
 });
 
+test('an app-only kill close carries mode kill while a stop close carries none', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-app-only-kill-carries-mode';
+  const device = {
+    platform: 'android' as const,
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator' as const,
+    target: 'mobile' as const,
+    booted: true,
+  };
+  const session = makeSession(sessionName, device);
+  session.appBundleId = 'com.example.app';
+  sessionStore.publish(sessionName, session);
+  const seenModes: Array<CloseApplicationInput['mode']> = [];
+  const bindDevice: Parameters<typeof close>[0]['bindDevice'] = async (boundDevice, use) => {
+    const binding = await mockBindDeviceRuntime(boundDevice, use);
+    return {
+      ...binding,
+      operations: {
+        ...binding.operations,
+        closeApplication: async (input: CloseApplicationInput) => {
+          seenModes.push(input.mode);
+        },
+      },
+    };
+  };
+
+  const killed = await close({
+    sessionName,
+    sessionStore,
+    positionals: ['com.example.app'],
+    internal: { closeAppOnly: true, killApp: true },
+    bindDevice,
+  });
+  const stopped = await close({
+    sessionName,
+    sessionStore,
+    positionals: ['com.example.app'],
+    internal: { closeAppOnly: true },
+    bindDevice,
+  });
+
+  expect(killed?.ok).toBe(true);
+  expect(stopped?.ok).toBe(true);
+  expect(seenModes).toEqual(['kill', undefined]);
+});
+
 test('app-only close expires the rebuilt record after admission, preserving the captured snapshot', async () => {
   const sessionStore = makeSessionStore();
   const address = 'cwd:close:default';
@@ -202,4 +264,170 @@ test('app-only close expires the rebuilt record after admission, preserving the 
   expect(sessionStore.requireCurrent(ref).appName).toBe('Updated during admission');
   expect(refFrameState(ref.session)).toBe('active');
   expect(mockDispatch).toHaveBeenCalledOnce();
+});
+
+test('a close-capable runtime with false runtime-hints facts never asks the platform to clear hints', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'harmony-close-without-runtime-hints';
+  const device = {
+    platform: 'harmonyos' as const,
+    id: 'harmony-device-1',
+    name: 'Harmony device',
+    kind: 'device' as const,
+    target: 'mobile' as const,
+    booted: true,
+  };
+  const session = makeSession(sessionName, device);
+  session.appBundleId = 'com.example.harmony';
+  sessionStore.publish(sessionName, session);
+  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
+    const facts = lifecycleRuntimeFacts(candidate);
+    return {
+      ...facts,
+      operations: {
+        ...facts.operations,
+        clearRuntimeHints: {
+          available: false as const,
+          reason: 'unsupported-platform-leaf' as const,
+        },
+      },
+    };
+  });
+
+  const response = await close({
+    sessionName,
+    sessionStore,
+    positionals: ['com.example.harmony'],
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledTimes(1);
+  expect(mockBindDeviceRuntime).toHaveBeenCalledTimes(1);
+  expect(mockDispatch).toHaveBeenCalledOnce();
+  expect(clearRuntimeHintsFixture).not.toHaveBeenCalled();
+});
+
+test('an app-only close with stored hints selects no runtime-hint cleanup sibling', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-app-only-close-stored-runtime-hints';
+  const device = {
+    platform: 'android' as const,
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator' as const,
+    target: 'mobile' as const,
+    booted: true,
+  };
+  const session = makeSession(sessionName, device);
+  session.appBundleId = 'com.example.app';
+  sessionStore.publish(sessionName, session);
+  sessionStore.setRuntimeHints(sessionName, { platform: 'android', metroHost: '10.0.2.2' });
+  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
+    const facts = lifecycleRuntimeFacts(candidate);
+    return {
+      ...facts,
+      operations: {
+        ...facts.operations,
+        clearRuntimeHints: {
+          available: false as const,
+          reason: 'unsupported-provider-mode' as const,
+        },
+      },
+    };
+  });
+
+  const response = await close({
+    sessionName,
+    sessionStore,
+    positionals: ['com.example.app'],
+    internal: { closeAppOnly: true },
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledTimes(1);
+  expect(mockBindDeviceRuntime).toHaveBeenCalledTimes(1);
+  expect(mockDispatch).toHaveBeenCalledOnce();
+  expect(clearRuntimeHintsFixture).not.toHaveBeenCalled();
+  expect(sessionStore.getRuntimeHints(sessionName)).toEqual({
+    platform: 'android',
+    metroHost: '10.0.2.2',
+  });
+});
+
+test('a close with persisted native hints fails closed when the distinct cleanup fact is false', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-device-close-stale-runtime-hints';
+  const device = {
+    platform: 'apple' as const,
+    appleOs: 'ios' as const,
+    id: 'ios-device-1',
+    name: 'iPhone',
+    kind: 'device' as const,
+    target: 'mobile' as const,
+    booted: true,
+  };
+  const session = makeSession(sessionName, device);
+  session.appBundleId = 'com.example.app';
+  sessionStore.publish(sessionName, session);
+  sessionStore.setRuntimeHints(sessionName, { platform: 'ios', metroHost: '10.0.2.2' });
+  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
+    const facts = lifecycleRuntimeFacts(candidate);
+    return {
+      ...facts,
+      operations: {
+        ...facts.operations,
+        clearRuntimeHints: {
+          available: false as const,
+          reason: 'unsupported-device-kind' as const,
+        },
+      },
+    };
+  });
+
+  const response = await close({ sessionName, sessionStore });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'UNSUPPORTED_OPERATION', message: 'close is not supported on this device' },
+  });
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledTimes(1);
+  expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
+  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(clearRuntimeHintsFixture).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)).toMatchObject({ name: sessionName });
+});
+
+test('a supported Android close clears admitted runtime hints exactly once', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-close-runtime-hints';
+  const device = {
+    platform: 'android' as const,
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator' as const,
+    target: 'mobile' as const,
+    booted: true,
+  };
+  const session = makeSession(sessionName, device);
+  session.appBundleId = 'com.example.app';
+  sessionStore.publish(sessionName, session);
+  sessionStore.setRuntimeHints(sessionName, {
+    platform: 'android',
+    metroHost: '10.0.2.2',
+    metroPort: 8081,
+  });
+
+  const response = await close({ sessionName, sessionStore });
+
+  expect(response?.ok).toBe(true);
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledTimes(1);
+  expect(mockBindDeviceRuntime).toHaveBeenCalledTimes(1);
+  expect(clearRuntimeHintsFixture).toHaveBeenCalledOnce();
+  expect(clearRuntimeHintsFixture).toHaveBeenCalledWith(
+    expect.objectContaining({
+      device,
+      appId: 'com.example.app',
+      values: expect.objectContaining({ metroHost: '10.0.2.2', metroPort: '8081' }),
+    }),
+  );
 });

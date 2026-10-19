@@ -11,6 +11,8 @@ export type {
   SnapshotSourceTarget,
 } from './snapshot-source/types.ts';
 
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+
 import type { SnapshotSourceOutcome, SnapshotSourceRequest } from './snapshot-source/types.ts';
 
 export type SimulatorSnapshotSource = Readonly<{
@@ -18,14 +20,16 @@ export type SimulatorSnapshotSource = Readonly<{
   close(): Promise<void>;
 }>;
 
-export function createSimulatorSnapshotSource(): SimulatorSnapshotSource {
+export function createSimulatorSnapshotSource(host: HostEnvironment): SimulatorSnapshotSource {
   let implementation:
     | Promise<import('./snapshot-source/adapter.ts').SimulatorSnapshotSource>
     | undefined;
   let closed = false;
   const load = async () => {
-    implementation ??= import('./snapshot-source/adapter.ts').then(
-      ({ createSimulatorSnapshotSource: create }) => create(),
+    implementation ??= import('./snapshot-source/host.ts').then(({ createSnapshotSourceHost }) =>
+      import('./snapshot-source/adapter.ts').then(({ createSimulatorSnapshotSource: create }) =>
+        create({ host: createSnapshotSourceHost(host) }),
+      ),
     );
     return await implementation;
   };

@@ -18,8 +18,6 @@ import { observeUntil, type ObservationClock, type ObservationSchedule } from '.
  * Cadence and budget for the quiet-window loop: poll every 200ms, allow 1.5s
  * before an unsettled surface times out, and always complete two observations
  * (an `initial` counts) so a quiet pair can form even under a tight budget.
- * No per-capture deadline: `hooks.capture` takes no signal, so a late capture
- * is judged when it returns.
  */
 const POST_GESTURE_STABILITY_SCHEDULE: ObservationSchedule = {
   intervalMs: 200,

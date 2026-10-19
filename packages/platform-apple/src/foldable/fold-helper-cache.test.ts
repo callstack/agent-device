@@ -8,6 +8,7 @@ import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 import { execKillTimeoutError } from '../native-build/__tests__/exec-timeout-fixture.ts';
 import { createSnapshotSourceHost } from '../snapshot-source/host.ts';
 import type { SnapshotSourceHost } from '../snapshot-source/types.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import {
   buildFoldHelperCompileArgv,
   ensureFoldHelperBinary,
@@ -18,7 +19,7 @@ function fakeFoldHelperHost(
   binary: () => string,
   xcodeVersion: () => string = () => 'Xcode 16.4\nBuild version 16F6',
 ): SnapshotSourceHost {
-  const real = createSnapshotSourceHost();
+  const real = createSnapshotSourceHost(createLiveTestHostEnvironment());
   return {
     ...real,
     cpuArch: async () => 'arm64',
@@ -221,7 +222,7 @@ test('an abort while a second caller waits on the fold-helper lock reports a can
 //
 // The compile runs in beforeAll, not in the test body: it is a real clang invocation (see the
 // unit slow-test budget in docs/agents/testing.md), and the snapshot-bridge sibling gate in
-// native-runtime.test.ts keeps its compile out of test-case wall time the same way.
+// cache-native-runtime.test.ts keeps its compile out of test-case wall time the same way.
 describe.skipIf(process.platform !== 'darwin')('fold helper warning gate', () => {
   let compiled: { exitCode: number; stderr: string };
   beforeAll(async () => {

@@ -1,0 +1,56 @@
+import { test, expect } from 'vitest';
+import { createAppleInteractor } from '../interactor.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { RunnerContext } from '@agent-device/contracts/interactor-types';
+import { AppError } from '@agent-device/kernel/errors';
+
+// watchOS is an explicit unsupported sentinel: XCUITest cannot drive watchOS UI,
+// so a `appleOs: 'watchos'` device must be rejected at interactor creation (the
+// admission seam) rather than silently falling through to the iOS runner.
+const watchOsDevice: DeviceInfo = {
+  platform: 'apple',
+  id: 'watch-1',
+  name: 'Apple Watch Series 10',
+  kind: 'device',
+  appleOs: 'watchos',
+};
+
+test('createAppleInteractor rejects a watchOS device as UNSUPPORTED_PLATFORM', () => {
+  // The guard throws before touching runnerContext, so an empty context is fine.
+  const create = () =>
+    createAppleInteractor(watchOsDevice, {} as RunnerContext, {
+      env: process.env,
+      cwd: process.cwd(),
+    });
+  expect(create).toThrow(AppError);
+  try {
+    create();
+    expect.unreachable('expected createAppleInteractor to throw for watchOS');
+  } catch (error) {
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe('UNSUPPORTED_PLATFORM');
+    expect((error as AppError).message).toMatch(/watchOS/i);
+  }
+});
+
+test('a non-watchOS appleOs does not trigger the watchOS sentinel', () => {
+  // A tvOS device must pass the watchOS admission guard. Interactor creation
+  // succeeds on an empty runner context, and pinning that success keeps this
+  // oracle unconditional — the previous shape only asserted inside a catch
+  // block that never fired, so no assertion executed on the observed path.
+  const tvOsDevice: DeviceInfo = {
+    platform: 'apple',
+    id: 'tv-1',
+    name: 'Apple TV 4K',
+    kind: 'simulator',
+    target: 'tv',
+    appleOs: 'tvos',
+    booted: true,
+  };
+  expect(
+    createAppleInteractor(tvOsDevice, {} as RunnerContext, {
+      env: process.env,
+      cwd: process.cwd(),
+    }),
+  ).toBeTruthy();
+});

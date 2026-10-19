@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
@@ -5,6 +6,9 @@ import {
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
+import { lifecycleOperationsSpy } from '../../../../__tests__/support/lifecycle-operations-spy.ts';
+
+bindTestCommandHost();
 
 const {
   acquireDeviceClaim,
@@ -47,6 +51,7 @@ test('a failed platform close retains the device claim and reports it', async ()
       booted: true,
     };
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: sessionName,
       workspace: process.cwd(),
@@ -76,6 +81,7 @@ test('a failed platform close retains the device claim and reports it', async ()
         let caught: unknown;
         try {
           await handleSessionCommands({
+            host: createTestHostEnvironment(),
             createCommandSurface: fakeCreateCommandSurface,
             platformServices: daemonPlatformServicesFixture(),
             req: {
@@ -104,7 +110,7 @@ test('a failed platform close retains the device claim and reports it', async ()
     expect(sessionStore.get(sessionName)).toBeUndefined();
 
     // The claim itself was NOT cleared: it is still live, still naming the deleted session.
-    const claimState = inspectDeviceClaims({ serial: device.id })[0];
+    const claimState = inspectDeviceClaims({ serial: device.id }, process.env)[0];
     expect(claimState?.classification).toBe('live');
     expect(claimState?.claim?.session).toBe(sessionName);
 
@@ -149,6 +155,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
       booted: true,
     };
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: sessionName,
       workspace: process.cwd(),
@@ -191,6 +198,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
         let caught: unknown;
         try {
           await handleSessionCommands({
+            host: createTestHostEnvironment(),
             createCommandSurface: fakeCreateCommandSurface,
             platformServices: daemonPlatformServicesFixture(),
             req: {
@@ -221,7 +229,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
     });
     expect(sessionStore.get(sessionName)).toBeUndefined();
 
-    const claimState = inspectDeviceClaims({ serial: device.id })[0];
+    const claimState = inspectDeviceClaims({ serial: device.id }, process.env)[0];
     expect(claimState?.classification).toBe('live');
     expect(claimState?.claim?.session).toBe(sessionName);
 
@@ -259,6 +267,7 @@ test('a successful close clears the device claim', async () => {
       booted: true,
     };
     const acquired = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: sessionName,
       workspace: process.cwd(),
@@ -278,6 +287,7 @@ test('a successful close clears the device claim', async () => {
     sessionStore.publish(sessionName, session);
 
     const response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -295,12 +305,119 @@ test('a successful close clears the device claim', async () => {
 
     expect(response?.ok).toBe(true);
     expect(sessionStore.get(sessionName)).toBeUndefined();
-    expect(inspectDeviceClaims({ serial: device.id })).toEqual([]);
+    expect(inspectDeviceClaims({ serial: device.id }, process.env)).toEqual([]);
   } finally {
     if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(claimsRoot, { recursive: true, force: true });
   }
+});
+
+test('targeted close preserves the platform-close AppError and still runs later cleanup', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'targeted-close-error-session';
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, {
+    device: {
+      platform: 'apple',
+      id: 'sim-udid-close-error',
+      name: 'iPhone 15',
+      kind: 'simulator',
+      booted: true,
+    },
+  });
+  sessionStore.publish(sessionName, session);
+
+  const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
+    reason: 'device_disconnected',
+    hint: 'Reconnect the device and retry close.',
+  });
+  mockDispatchCommand.mockRejectedValueOnce(platformCloseError);
+  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+
+  await expect(
+    handleSessionCommands({
+      host: createTestHostEnvironment(),
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      lifecycleOperationsLoader: loader,
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'close',
+        positionals: ['com.example.app'],
+        flags: {},
+      },
+      sessionName,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    }),
+  ).rejects.toBe(platformCloseError);
+
+  expect(platformCloseError.code).toBe('DEVICE_UNAVAILABLE');
+  expect(platformCloseError.details).toMatchObject({
+    reason: 'device_disconnected',
+    hint: 'Reconnect the device and retry close.',
+  });
+  expect(session.actions.some((action) => action.command === 'close')).toBe(false);
+  expect(finalizeApplicationClose).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('targeted close surfaces a required pre-close failure from the lifecycle port and still finalizes', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'targeted-close-preclose-failure-session';
+  const session = {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      id: 'physical-device-close',
+      name: 'My iPhone',
+      kind: 'device',
+      booted: true,
+    }),
+    appBundleId: 'com.example.app',
+  } as unknown as SessionState;
+  sessionStore.publish(sessionName, session);
+
+  const preCloseError = new AppError('RUNNER_UNAVAILABLE', 'runner stop failed', {
+    reason: 'runner_stop_failed',
+    hint: 'Retry once the runner is reachable.',
+  });
+  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy({
+    closeApplication: async () => {
+      throw preCloseError;
+    },
+  });
+
+  await expect(
+    handleSessionCommands({
+      host: createTestHostEnvironment(),
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      lifecycleOperationsLoader: loader,
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'close',
+        positionals: ['com.example.app'],
+        flags: {},
+      },
+      sessionName,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    }),
+  ).rejects.toBe(preCloseError);
+
+  expect(mockDispatchCommand).not.toHaveBeenCalled();
+  expect(preCloseError.code).toBe('RUNNER_UNAVAILABLE');
+  expect(preCloseError.details).toMatchObject({
+    reason: 'runner_stop_failed',
+    hint: 'Retry once the runner is reachable.',
+  });
+  expect(session.actions.some((action) => action.command === 'close')).toBe(false);
+  expect(finalizeApplicationClose).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
 // Live evidence (2026-08-02): a plain `open` followed by `close --save-script` used to fold the

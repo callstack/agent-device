@@ -3,7 +3,7 @@ import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
-import type { DeviceClaimSessionOwnership } from '../../../resources/device/device-claims.ts';
+import type { DeviceClaimSessionOwnership } from '@agent-device/daemon-contracts/device-claims';
 import { clearSessionSnapshot } from '../../../execution/session-snapshot.ts';
 import { resolveSessionLeaseForRequest } from '../../lease-lifecycle.ts';
 import { resolvePublicSessionName, resolveSessionScope } from '../../session-routing.ts';

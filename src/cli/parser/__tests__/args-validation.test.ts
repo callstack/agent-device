@@ -261,3 +261,20 @@ test('invalid range errors are deterministic', () => {
       error.message === 'Invalid depth: -1',
   );
 });
+
+test('parseArgs rejects an empty numeric flag value instead of reading it as 0', () => {
+  for (const argv of [
+    ['test', './suite', '--retries='],
+    ['test', './suite', '--retries', ''],
+    ['test', './suite', '--retries', ' '],
+  ]) {
+    assert.throws(
+      () => parseArgs(argv, { strictFlags: true }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message === 'Flag --retries requires a value.',
+      `expected ${JSON.stringify(argv)} to be refused`,
+    );
+  }
+});

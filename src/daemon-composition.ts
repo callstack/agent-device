@@ -17,10 +17,7 @@ import {
   createProviderDeviceRuntimeRequestProviders,
   isActiveProviderDevice,
 } from './provider-device-runtime.ts';
-import {
-  createDaemonProviderRuntimeComposition,
-  DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
-} from './provider-device-runtimes.ts';
+import { createDaemonProviderRuntimeComposition } from './provider-device-runtimes.ts';
 import { readDaemonProviderCredentials } from './provider-credential-fingerprint.ts';
 import { getInteractor } from './core/interactors.ts';
 import {
@@ -30,8 +27,8 @@ import {
   createRequestPlatformProviders,
 } from './platform-runtime.ts';
 import { createHostDiagnostics } from './platform-runtime-host-diagnostics.ts';
-import { platformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
-import { platformDaemonLifecycleOwners } from './platform-runtime-daemon-lifecycle.ts';
+import { createPlatformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
+import { createPlatformDaemonLifecycleOwners } from './platform-runtime-daemon-lifecycle.ts';
 import {
   createOwnedProcessRecordStore,
   type OwnedProcessRecordStore,
@@ -39,30 +36,33 @@ import {
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  ComposeDaemonRuntimeDeps,
-  DaemonRuntimeDeps,
-} from '@agent-device/daemon/server/daemon-runtime';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { RunnerContext } from '@agent-device/contracts/interactor-types';
+import type { ComposeDaemonRuntimeDeps, DaemonRuntimeDeps } from '@agent-device/daemon';
 
 /**
  * Best-effort startup cleanup of managed-agent-browser orphans left by a previous daemon. It runs
  * only after this process holds the daemon lock, and it never fails startup: a cleanup the host
  * refuses is a diagnostic, not a reason to keep the next daemon from serving.
  */
-export async function cleanupWebBrowserOrphansForDaemonStartup(params: {
+export function createDaemonStartupWebOrphanCleanup(
+  host: HostEnvironment,
+): (params: {
   stateDir: string;
   openWebSessionNames: readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
-}): Promise<void> {
-  try {
-    await platformDaemonLifecycleOwners.cleanupManagedWebOrphans(params);
-  } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'web_agent_browser_orphan_cleanup_failed',
-      data: { error: error instanceof Error ? error.message : String(error) },
-    });
-  }
+}) => Promise<void> {
+  return async (params) => {
+    try {
+      await createPlatformDaemonLifecycleOwners(host).cleanupManagedWebOrphans(params);
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'web_agent_browser_orphan_cleanup_failed',
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  };
 }
 
 /**
@@ -78,7 +78,7 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
   input,
 ): Promise<DaemonRuntimeDeps> => {
   const {
-    env,
+    host,
     baseDir,
     sessionsDir,
     assertShutdownAllowed,
@@ -86,80 +86,103 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
     resolveSessionArtifacts,
     openWebSessionNames,
   } = input;
+  const { env } = host;
   const ownedProcessRecords = createOwnedProcessRecordStore({
     stateDir: baseDir,
     sessionsDir,
     resolveSessionDir,
   });
-  const hostDiagnostics = createHostDiagnostics();
+  const hostDiagnostics = createHostDiagnostics(host);
   const providerComposition = await createDaemonProviderRuntimeComposition(env);
-  const providerDeviceRuntimes = [...providerComposition.runtimes];
-  const deviceRuntimeGateway = createPlatformRuntimeGateway({
-    assertShutdownAllowed,
-    providerRuntimes: providerDeviceRuntimes,
-    providerModules: providerComposition.platformModules,
-    sessionsDir,
-    ownedProcesses: ownedProcessRecords,
-    resolveSessionArtifacts,
-  });
-  const providerRuntimeProviders = createProviderDeviceRuntimeRequestProviders(
-    providerDeviceRuntimes,
-    { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
-  );
-  const requestPlatformProviders = createRequestPlatformProviders({
-    providers: {
-      appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
-      appleRunnerScreenRecordingTransport:
-        providerRuntimeProviders.appleRunnerScreenRecordingTransport,
-    },
-    defaultWebProvider: {
-      stateDir: baseDir,
-      openWebSessionNames,
-      ownedProcessRecords,
-    },
-  });
-  const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
-    providerRuntimeProviders.deviceInventorySource,
-  );
-  // Root composition of the platform-services port and the owner-scoped claim-recovery gateway.
-  // platform-runtime.ts is already static in this module, so the deferred imports keep these thin
-  // composition modules (and the readiness/open-target adapters only the services module pulls)
-  // off `src/daemon.ts`'s eager closure; what each adapter itself loads stays as lazy as it was.
-  const { createDaemonPlatformServices } = await import('./platform-runtime-daemon-services.ts');
-  const { createClaimRecoveryGateway } = await import('./platform-runtime-claim-recovery.ts');
+  // The registry has set up every plugin. Until this function returns, nothing else owns its
+  // cleanup, so any later failure closes it here; success transfers ownership to the daemon.
+  try {
+    const providerDeviceRuntimes = [...providerComposition.runtimes];
+    const deviceRuntimeGateway = createPlatformRuntimeGateway({
+      host,
+      assertShutdownAllowed,
+      providerRuntimes: providerDeviceRuntimes,
+      providerModules: providerComposition.platformModules,
+      sessionsDir,
+      ownedProcesses: ownedProcessRecords,
+      resolveSessionArtifacts,
+    });
+    const providerRuntimeProviders =
+      createProviderDeviceRuntimeRequestProviders(providerDeviceRuntimes);
+    const requestPlatformProviders = createRequestPlatformProviders({
+      providers: {
+        appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
+        appleRunnerScreenRecordingTransport:
+          providerRuntimeProviders.appleRunnerScreenRecordingTransport,
+      },
+      defaultWebProvider: {
+        host,
+        stateDir: baseDir,
+        openWebSessionNames,
+        ownedProcessRecords,
+      },
+    });
+    const deviceInventoryGateways = await createPlatformDeviceInventoryGateways(
+      host,
+      providerRuntimeProviders.deviceInventorySource,
+    );
+    // Root composition of the platform-services port and the owner-scoped claim-recovery gateway.
+    // platform-runtime.ts is already static in this module, so the deferred imports keep these thin
+    // composition modules (and the readiness/open-target adapters only the services module pulls)
+    // off `src/daemon.ts`'s eager closure; what each adapter itself loads stays as lazy as it was.
+    const { createDaemonPlatformServices } = await import('./platform-runtime-daemon-services.ts');
+    const { createClaimRecoveryGatewayFor } = await import('./platform-runtime-claim-recovery.ts');
 
-  return Object.freeze({
-    ownedProcessRecords,
-    hostDiagnostics,
-    ownerLifecycle: platformDaemonLifecycleOwners,
-    providerDeviceRuntimes,
-    skippedProviderRuntimes: Object.freeze([...(providerComposition.skipped ?? [])]),
-    leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
-    providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
-    recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,
-    recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
-    deviceRuntimeGateway,
-    platformResourceCleanup,
-    claimRecoveryGateway: createClaimRecoveryGateway,
-    interactorResolution: Object.freeze({ resolve: getInteractor }),
-    providerDeviceAdmission: Object.freeze({
-      isActive: (device: DeviceInfo) => isActiveProviderDevice(device),
-    }),
-    cleanupManagedWebOrphans: cleanupWebBrowserOrphansForDaemonStartup,
-    requestRouter: Object.freeze({
-      requestPlatformProviders,
-      deviceInventoryGateways,
-      platformServices: createDaemonPlatformServices(),
-      androidObservation,
-      providerCredentials: readDaemonProviderCredentials(env, baseDir),
-      createCommandSurface: async (config: AgentDeviceRuntimeConfig) =>
-        (
-          await import('./command-runtime/runtime-command-surface.ts')
-        ).createCommandSurfaceAgentDevice(config),
-      cloudArtifactProvider: providerRuntimeProviders.cloudArtifactProvider,
-      providerAppCatalog: providerRuntimeProviders.providerAppCatalog,
-      providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
-      providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
-    }),
-  });
+    const { createAppleRunnerRuntimeState } =
+      await import('@agent-device/platform-apple/runner-owner');
+    const { createAndroidHelperRuntimeState } =
+      await import('@agent-device/platform-android/adb-host');
+    return Object.freeze({
+      runtimeStates: Object.freeze([
+        createAppleRunnerRuntimeState(host),
+        createAndroidHelperRuntimeState(),
+      ]),
+      ownedProcessRecords,
+      hostDiagnostics,
+      ownerLifecycle: createPlatformDaemonLifecycleOwners(host),
+      shutdownProviderRuntimes: providerComposition.shutdown,
+      pluginInventory: providerComposition.inventory,
+      leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
+      providerRuntimeIds: providerRuntimeProviders.providerRuntimeIds,
+      recoverExpiredLease: providerRuntimeProviders.recoverExpiredLease,
+      recoverableProviderIds: providerRuntimeProviders.recoverableProviderIds,
+      deviceRuntimeGateway,
+      platformResourceCleanup: createPlatformResourceCleanup(host),
+      claimRecoveryGateway: createClaimRecoveryGatewayFor(host),
+      interactorResolution: Object.freeze({
+        resolve: async (device: DeviceInfo, runnerContext: RunnerContext) =>
+          await getInteractor(device, runnerContext, host),
+      }),
+      providerDeviceAdmission: Object.freeze({
+        isActive: (device: DeviceInfo) => isActiveProviderDevice(device),
+      }),
+      cleanupManagedWebOrphans: createDaemonStartupWebOrphanCleanup(host),
+      requestRouter: Object.freeze({
+        requestPlatformProviders,
+        deviceInventoryGateways,
+        platformServices: createDaemonPlatformServices(),
+        androidObservation,
+        providerCredentials: readDaemonProviderCredentials(
+          env,
+          baseDir,
+          providerComposition.inventory,
+        ),
+        createCommandSurface: async (config: AgentDeviceRuntimeConfig) =>
+          (
+            await import('./command-runtime/runtime-command-surface.ts')
+          ).createCommandSurfaceAgentDevice(config),
+        cloudArtifactProvider: providerRuntimeProviders.cloudArtifactProvider,
+        providerAppCatalog: providerRuntimeProviders.providerAppCatalog,
+        providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
+      }),
+    });
+  } catch (error) {
+    await providerComposition.shutdown();
+    throw error;
+  }
 };

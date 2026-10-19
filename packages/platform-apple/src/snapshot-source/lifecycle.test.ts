@@ -11,6 +11,7 @@ import {
 } from './protocol.ts';
 import { SnapshotBridgeManager } from './lifecycle.ts';
 import { simulatorAddressFor } from '../core/simctl.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import type {
   SnapshotSourceHost,
   SnapshotSourceLimits,
@@ -436,7 +437,7 @@ function createLifecycleFixture(
   const diagnostics: LifecycleFixture['diagnostics'] = [];
   const socketPaths: string[] = [];
   const startedTargets: LifecycleFixture['startedTargets'] = [];
-  const realHost = createSnapshotSourceHost();
+  const realHost = createSnapshotSourceHost(createLiveTestHostEnvironment());
   const host: SnapshotSourceHost = {
     ...realHost,
     emitDiagnostic: (event) => diagnostics.push(event),

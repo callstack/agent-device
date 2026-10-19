@@ -8,10 +8,10 @@ import { pathToFileURL } from 'node:url';
 import { AppError, normalizeError, toAppErrorCode } from '@agent-device/kernel/errors';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { normalizeTenantId } from '../../core/config.ts';
 import {
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
+  normalizeTenantId,
 } from '@agent-device/contracts/daemon-http';
 import { sendRestJsonError } from '../http-errors.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
@@ -130,13 +130,11 @@ async function runHttpAuthHook(
   return { ok: true };
 }
 
-async function loadHttpAuthHook(
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<HttpAuthHook | null> {
+async function loadHttpAuthHook(env: NodeJS.ProcessEnv, cwd: string): Promise<HttpAuthHook | null> {
   const hookPath = env.AGENT_DEVICE_HTTP_AUTH_HOOK;
   if (!hookPath) return null;
   const exportName = env.AGENT_DEVICE_HTTP_AUTH_EXPORT || 'default';
-  const resolvedPath = path.isAbsolute(hookPath) ? hookPath : path.resolve(hookPath);
+  const resolvedPath = path.isAbsolute(hookPath) ? hookPath : path.resolve(cwd, hookPath);
   let imported: Record<string, unknown>;
   try {
     imported = (await import(pathToFileURL(resolvedPath).href)) as Record<string, unknown>;

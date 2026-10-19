@@ -1,3 +1,9 @@
+import {
+  resolveSessionDir,
+  resolveSessionAppLogPath,
+  resolveSessionAppLogPidPath,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
+import { DAEMON_SHUTTING_DOWN_REASON } from '@agent-device/daemon-contracts/daemon-resolution';
 import path from 'node:path';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
@@ -5,11 +11,6 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { isSafeSessionSegment, safeSessionName } from '@agent-device/host-kit/session-paths';
-import {
-  resolveSessionDir,
-  resolveSessionAppLogPath,
-  resolveSessionAppLogPidPath,
-} from './session-artifact-paths.ts';
 import {
   readRepairTombstoneFile,
   clearRepairTombstoneFile,
@@ -74,7 +75,7 @@ export class SessionStore {
   assertAdmissionOpen(address: string): void {
     if (!this.acceptingSessions) {
       throw new AppError('COMMAND_FAILED', 'Daemon is shutting down', {
-        reason: 'daemon_shutting_down',
+        reason: DAEMON_SHUTTING_DOWN_REASON,
         session: address,
       });
     }

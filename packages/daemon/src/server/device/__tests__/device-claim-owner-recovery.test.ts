@@ -1,15 +1,15 @@
+import {
+  createOwnerScopedDeviceClaimReconciler,
+  type OwnerScopedClaimRecoveryComposer,
+} from '@agent-device/daemon-contracts/device-claim-recovery';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
-import type { DeviceClaim } from '../../../resources/device/device-claim-record.ts';
-import {
-  createOwnerScopedDeviceClaimReconciler,
-  type OwnerScopedClaimRecoveryComposer,
-} from '../device-claim-owner-recovery.ts';
+import type { DeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 
 const scope = {
   signal: new AbortController().signal,
@@ -19,7 +19,8 @@ const scope = {
 
 function makeClaim(stateDir: string, session: string): DeviceClaim {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    claimOwnerKind: 'open-session',
     deviceKey: `local:android:none:${session}`,
     device: { family: 'android', id: session, name: 'Pixel', kind: 'emulator' },
     session,

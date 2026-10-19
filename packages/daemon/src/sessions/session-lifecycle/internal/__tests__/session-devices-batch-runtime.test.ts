@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
@@ -19,12 +20,18 @@ import { handleReleaseMaterializedPathsCommand } from '../../../handlers/session
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import { makeSession } from '../../../../__tests__/support/session-factories.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({
   ok: true,
@@ -41,6 +48,7 @@ async function runDevices(
     { local: async () => inventory },
     async () =>
       await handleSessionInventoryCommands({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         req: { token: 't', session: 'default', command: 'devices', positionals: [], flags },
         sessionName: 'default',
@@ -355,7 +363,9 @@ test('batch step pins nested requests to the resolved session', async () => {
   );
 
   expect(response.ok).toBe(true);
-  expect(seenSessions).toEqual([{ session: 'resolved-session', flagSession: 'resolved-session' }]);
+  // The wire address stays pinned to the resolved session. The step flag carries it only when the
+  // caller named a session (#3674): an unconditional stamp would read as caller-provened.
+  expect(seenSessions).toEqual([{ session: 'resolved-session', flagSession: undefined }]);
 });
 
 test('close clears retained materialized install paths bound to the session', async () => {
@@ -390,6 +400,7 @@ test('close clears retained materialized install paths bound to the session', as
   mockCleanupRetainedMaterializedPaths.mockImplementation(realCleanup);
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },

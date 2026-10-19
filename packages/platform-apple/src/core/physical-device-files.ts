@@ -1,19 +1,21 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS } from './config.ts';
-import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../runner/index.ts';
+import { resolveRunnerContainerBundleIds } from '../runner/index.ts';
 import { runXcrun } from './tool-provider.ts';
 
 export async function copyCoreDeviceRunnerFile(
   device: DeviceInfo,
   remotePath: string,
   outPath: string,
+  env: Readonly<EnvMap>,
   timeoutMs = IOS_RUNNER_SCREENSHOT_COPY_TIMEOUT_MS,
 ): Promise<void> {
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
   let copyResult = { exitCode: 1, stdout: '', stderr: '' };
-  for (const bundleId of IOS_RUNNER_CONTAINER_BUNDLE_IDS) {
+  for (const bundleId of resolveRunnerContainerBundleIds(env)) {
     copyResult = await runXcrun(
       [
         'devicectl',

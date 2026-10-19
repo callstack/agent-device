@@ -1,3 +1,5 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import path from 'node:path';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
@@ -31,7 +33,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { bindSessionPerfCapture } from '../../../core/session-capture-binding.ts';
 import { recordSessionAction } from '../../../core/session-action-recorder.ts';
@@ -45,6 +47,7 @@ import {
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type PerfRuntimeHandlerParams = Readonly<{
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -142,7 +145,7 @@ async function executeAdmittedPerfPlan(
         appId: session.appBundleId,
         kind: plan.request.kind,
         outPath: plan.request.outPath
-          ? expandSessionPath(plan.request.outPath, params.req.meta?.cwd)
+          ? expandSessionPath(plan.request.outPath, params.req.meta?.cwd ?? params.host.cwd)
           : undefined,
         artifactsDir: path.join(
           params.sessionStore.ensureSessionDir(params.sessionName),
@@ -175,7 +178,7 @@ async function executeAdmittedPerfPlan(
       const data = await runtime.operations.perfProfileReport({
         appId: session.appBundleId,
         kind: plan.request.kind,
-        tracePath: expandSessionPath(tracePath, params.req.meta?.cwd),
+        tracePath: expandSessionPath(tracePath, params.req.meta?.cwd ?? params.host.cwd),
         outPath,
         template: plan.request.template ?? (last?.kind === 'xctrace' ? last.template : undefined),
         profile: last,
@@ -261,7 +264,9 @@ async function stopPerfCapture(
   const mismatchMessage = perfCaptureStopMismatch(snapshot, request);
   if (mismatchMessage) return errorResponse('INVALID_ARGS', mismatchMessage);
   if (request.outPath) {
-    capture.handle.setOutputPath(expandSessionPath(request.outPath, params.req.meta?.cwd));
+    capture.handle.setOutputPath(
+      expandSessionPath(request.outPath, params.req.meta?.cwd ?? params.host.cwd),
+    );
   }
   const completion = await finishLivePerfCapture({
     intent: 'capture',
@@ -392,7 +397,8 @@ function resolveNativeOutPath(
   requestedPath: string | undefined,
   fallbackFileName: string,
 ): string {
-  if (requestedPath) return expandSessionPath(requestedPath, params.req.meta?.cwd);
+  if (requestedPath)
+    return expandSessionPath(requestedPath, params.req.meta?.cwd ?? params.host.cwd);
   return path.join(
     params.sessionStore.ensureSessionDir(params.sessionName),
     `${timestampToken()}-${fallbackFileName}`,

@@ -166,7 +166,11 @@ extension RunnerTests {
       XCTAssertTrue(response.ok, "prefilled: \(prefilled) \(String(describing: response.error))")
       XCTAssertEqual(response.data?.textEntryRoute, "synthesized-first-responder-replacement")
       XCTAssertEqual(response.data?.message, "typed", "prefilled: \(prefilled)")
-      XCTAssertEqual(textField.value as? String, String(repeating: "\u{2022}", count: 8), "prefilled: \(prefilled)")
+      // An unreadable field cannot certify replacement or commit timing. Readable-field tests
+      // below pin exact replacement, including dropped select-alls; this case pins classification.
+      let delivered = app.staticTexts["agent-device-masked-delivery"]
+      let delivery = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "delivered"), object: delivered)
+      XCTAssertEqual(XCTWaiter.wait(for: [delivery], timeout: appExistenceTimeout), .completed, "prefilled: \(prefilled)")
       XCTAssertEqual(togglePresses.label, "presses=0", "prefilled: \(prefilled)")
     }
   }
@@ -190,47 +194,37 @@ extension RunnerTests {
     XCTAssertEqual(String(describing: textField.value ?? ""), "")
   }
 
-  /// Drops the select-all of the first `remaining` replacing posts, the way a React Native field in
-  /// a freshly launched app does, so each of those passes deletes only the last character.
-  final class SelectAllDroppingSynthesizer: TextEntrySynthesizing {
-    var remaining: Int
-
-    init(dropping count: Int) {
-      remaining = count
-    }
-
+  /// Drops every select-all while preserving real synthesized delete and text delivery.
+  struct SelectAllDroppingSynthesizer: TextEntrySynthesizing {
     func enterText(
       app: XCUIApplication,
       text: String,
       replacingExistingText: Bool
     ) -> SynthesizedTextEntryAction {
-      let dropsSelectAll = replacingExistingText && remaining > 0
-      if dropsSelectAll { remaining -= 1 }
-      return PrivateXCTestTextEntrySynthesizer().enterText(
+      PrivateXCTestTextEntrySynthesizer().enterText(
         app: app,
         text: text,
-        replacingExistingText: replacingExistingText && !dropsSelectAll
+        replacingExistingText: false
       )
     }
   }
 
-  /// Two fixed clear passes left "Clie" of "Client" in 3 of 5 fills on a freshly launched React
-  /// Native app that dropped its select-alls, and the fill typed after it. The clear now repeats
-  /// until the field reads empty, and types nothing over text it could not remove.
+  /// A later Command-A can also be dropped by XCTest/iOS, so neither case relies on it succeeding.
+  /// Three characters require more than the old two clear passes; refusal exceeds the clear budget.
   @MainActor
   func testSynthesizedReplacementClearsPastDroppedSelectAlls() throws {
-    let field = try focusSynthesizedReplacementField()
-    defer { tearDownSynthesizedReplacementField() }
-    let frame = field.frame
-    let found = try XCTUnwrap(coordinateTapTextInputIdentityAt(app: app, x: frame.midX, y: frame.midY))
-    let cases: [(dropped: Int, failure: TextEntryFailure?)] = [
-      (2, nil),
-      (SynthesizedTextPlan.Step.maxClearPassCount, .clearNotObserved),
+    let cases: [(seed: String, failure: TextEntryFailure?)] = [
+      ("old", nil),
+      (String(repeating: "x", count: SynthesizedTextPlan.Step.maxClearPassCount + 1), .clearNotObserved),
     ]
 
     for testCase in cases {
-      let label = "\(testCase.dropped) select-alls dropped"
-      let seeded = try replaceSynthesizedFieldText(field, text: "stale", commandId: "seed-\(testCase.dropped)")
+      let field = try focusSynthesizedReplacementField()
+      defer { tearDownSynthesizedReplacementField() }
+      let frame = field.frame
+      let found = try requireTextInputAtPoint(app: app, x: frame.midX, y: frame.midY)
+      let label = "\(testCase.seed.count) characters, all select-alls dropped"
+      let seeded = try replaceSynthesizedFieldText(field, text: testCase.seed, commandId: "seed-\(testCase.seed.count)")
       XCTAssertTrue(seeded.ok, String(describing: seeded.error))
       let result = typeTextReliably(
         app: app,
@@ -244,7 +238,7 @@ extension RunnerTests {
         delaySeconds: 0,
         repairMode: .replacement,
         xCTestChannelPenalized: true,
-        synthesizer: SelectAllDroppingSynthesizer(dropping: testCase.dropped)
+        synthesizer: SelectAllDroppingSynthesizer()
       )
 
       let value = String(describing: field.value ?? "")
@@ -420,10 +414,12 @@ extension RunnerTests {
   }
 
   /// The pre-tap lookup runs on a channel already penalized for failing XCTest reads. A lookup that
-  /// fails leaves the fill to the point; it used to record the failure, which fails the command
-  /// and ends the runner.
+  /// fails used to record the failure, which fails the command and ends the runner, and left the
+  /// fill to the point. Containment stays: no recorded failure. What changed is what the fill then
+  /// does with a point it cannot read: it refuses under the probe-unavailable reason, which is not a
+  /// claim that the point has no input (#1721).
   @MainActor
-  func testSynthesizedReplacementContainsAFailedLookupOfTheInputUnderThePoint() throws {
+  func testSynthesizedReplacementFailsClosedOnAFailedLookupOfTheInputUnderThePoint() throws {
     let textField = try focusSynthesizedReplacementField()
     defer {
       textInputProbeIssueForTesting = nil
@@ -437,8 +433,9 @@ extension RunnerTests {
     let response = try replaceSynthesizedFieldText(textField, text: "fresh", commandId: "fill-lookup-failed")
 
     XCTAssertNil(textInputProbeIssueForTesting, "the fill made no lookup")
-    XCTAssertTrue(response.ok, String(describing: response.error))
-    XCTAssertEqual(String(describing: textField.value ?? ""), "fresh")
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_PROBE_UNAVAILABLE")
+    XCTAssertEqual(String(describing: textField.value ?? ""), "")
   }
 #endif
 }

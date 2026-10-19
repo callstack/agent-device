@@ -7,10 +7,12 @@ import type {
   FoldCommandOptions,
   HomeCommandOptions,
   OrientationCommandOptions,
+  TelephonyCommandOptions,
   TvRemoteCommandOptions,
 } from '../../client/client-types.ts';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { readInputFromCli } from '../cli-grammar/registry.ts';
+import { findCommandMetadata } from '../command-metadata.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
   backCliReader,
@@ -23,6 +25,8 @@ import {
   keyboardDaemonWriter,
   orientationCliReader,
   orientationDaemonWriter,
+  telephonyCliReader,
+  telephonyDaemonWriter,
   tvRemoteCliReader,
   tvRemoteDaemonWriter,
   systemCommandFamily,
@@ -122,6 +126,7 @@ describe('system command interface', () => {
 
   test('back CLI output renders the settled observation', () => {
     const output = systemCliOutputFormatters.back({
+      env: process.env,
       input: {},
       result: {
         action: 'back',
@@ -153,6 +158,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output renders the Apple session app from the runner read', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'ios',
@@ -175,6 +181,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output falls back to the bundle id and omits absent lines', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'ios',
@@ -192,6 +199,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output renders unknown when the Apple session carries no app identity', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: { platform: 'ios', surface: 'app' },
     });
@@ -200,6 +208,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output renders the Android foreground app and activity', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'android',
@@ -214,6 +223,7 @@ describe('system command interface', () => {
     // macOS appState is never admitted by the Apple runtime facts, so the live
     // daemon always answers from the session record: no State line.
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'macos',
@@ -234,6 +244,7 @@ describe('system command interface', () => {
 
   test('appstate CLI output renders the HarmonyOS foreground app and activity', () => {
     const output = systemCliOutputFormatters.appstate({
+      env: process.env,
       input: {},
       result: {
         platform: 'harmonyos',
@@ -379,4 +390,62 @@ test('fold keyframes survive CLI and daemon projection without a preset', () => 
     options: { keyframes: JSON.stringify(keyframes) },
   });
   expect(() => foldCliReader(['open'], flags({ keyframes: JSON.stringify(keyframes) }))).toThrow();
+});
+
+test('the typed client exposes telephony with its closed result', () => {
+  expectTypeOf<AgentDeviceCommandClient['telephony']>().toEqualTypeOf<
+    (options: TelephonyCommandOptions) => Promise<CommandResult<'telephony'>>
+  >();
+});
+
+test('the CLI reader parses each action and joins unquoted SMS words', () => {
+  expect(telephonyCliReader(['call', '5551234'], flags({ platform: 'android' }))).toMatchObject({
+    platform: 'android',
+    action: 'call',
+    number: '5551234',
+  });
+  expect(telephonyCliReader(['Accept', '5551234'], flags())).toMatchObject({ action: 'accept' });
+  expect(telephonyCliReader(['cancel', '5551234'], flags())).toMatchObject({ action: 'cancel' });
+  expect(telephonyCliReader(['sms', '5551234', 'Meet', 'at', '8'], flags())).toMatchObject({
+    action: 'sms',
+    number: '5551234',
+    text: 'Meet at 8',
+  });
+});
+
+test('the CLI reader refuses a malformed event', () => {
+  expect(() => telephonyCliReader(['sms', '5551234'], flags())).toThrow(
+    expect.objectContaining({ code: 'INVALID_ARGS', message: expect.stringContaining('text') }),
+  );
+  expect(() => telephonyCliReader(['call', 'abc'], flags())).toThrow(
+    expect.objectContaining({ code: 'INVALID_ARGS', message: 'Invalid phone number: abc.' }),
+  );
+});
+
+test('the daemon writer sends the SMS text as one positional, quotes and all', () => {
+  const text = `Don't "stop" the stream`;
+  expect(telephonyDaemonWriter({ action: 'sms', number: '5551234', text })).toMatchObject({
+    command: 'telephony',
+    positionals: ['sms', '5551234', text],
+  });
+  expect(telephonyDaemonWriter({ action: 'cancel', number: '5551234' })).toMatchObject({
+    command: 'telephony',
+    positionals: ['cancel', '5551234'],
+  });
+  expect(() => telephonyDaemonWriter({ action: 'call', number: '5551234', text: 'x' })).toThrow(
+    expect.objectContaining({ code: 'INVALID_ARGS' }),
+  );
+});
+
+test('structured input validates through the same parser as the CLI', () => {
+  const metadata = findCommandMetadata('telephony');
+  expect(metadata.readInput({ action: 'sms', number: '+15551234567', text: 'hi' })).toMatchObject({
+    action: 'sms',
+    number: '+15551234567',
+    text: 'hi',
+  });
+  expect(() => metadata.readInput({ action: 'call', number: '555 1234' })).toThrow(
+    expect.objectContaining({ code: 'INVALID_ARGS' }),
+  );
+  expect(metadata.inputSchema).toMatchObject({ required: ['action', 'number'] });
 });

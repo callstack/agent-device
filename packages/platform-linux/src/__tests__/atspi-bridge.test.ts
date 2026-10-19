@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { afterAll, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
@@ -9,6 +10,8 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 import { captureAccessibilityTree } from '../atspi-bridge.ts';
 import { runCmd, whichCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
+
+bindTestCommandHost();
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockWhichCmd = vi.mocked(whichCmd);

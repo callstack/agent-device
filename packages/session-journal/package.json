@@ -16,18 +16,6 @@
       "types": "./src/session-event-log.ts",
       "default": "./src/session-event-log.ts"
     },
-    "./session-event-log-lines": {
-      "types": "./src/session-event-log-lines.ts",
-      "default": "./src/session-event-log-lines.ts"
-    },
-    "./session-event-log-window": {
-      "types": "./src/session-event-log-window.ts",
-      "default": "./src/session-event-log-window.ts"
-    },
-    "./session-event-request": {
-      "types": "./src/session-event-request.ts",
-      "default": "./src/session-event-request.ts"
-    },
     "./session-event-action": {
       "types": "./src/session-event-action.ts",
       "default": "./src/session-event-action.ts"

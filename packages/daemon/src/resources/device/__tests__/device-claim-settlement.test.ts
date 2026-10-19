@@ -3,16 +3,22 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../device-claims.ts';
-import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
-import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import * as hostProcess from '@agent-device/host-kit/process';
+import {
+  acquireDeviceClaim as acquireProductionDeviceClaim,
+  acquireTransientDeviceClaim,
+  canonicalLocalDeviceKey,
+  inspectDeviceClaims,
+  renewDeviceClaim,
+} from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
-vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
-);
+import {
+  mkdtempForTestSync,
+  pinOwnProcessStartTime,
+  publishDaemonRegistration,
+} from '@agent-device/test-kit';
+pinOwnProcessStartTime(hostProcess);
 
 const device: DeviceInfo = {
   platform: 'android',
@@ -64,6 +70,7 @@ function claimPath(root: string): string {
 test('preserves and reports a live foreign claim without overwriting it', async () => {
   const root = useClaimsRoot();
   const first = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'first',
     workspace: '/worktrees/first',
@@ -71,7 +78,7 @@ test('preserves and reports a live foreign claim without overwriting it', async 
   });
   assert.equal(first.status, 'acquired');
   const persisted = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
-  assert.equal(persisted.schemaVersion, 2);
+  assert.equal(persisted.schemaVersion, 3);
   assert.deepEqual(persisted.device, {
     id: device.id,
     family: device.platform,
@@ -79,6 +86,7 @@ test('preserves and reports a live foreign claim without overwriting it', async 
     name: device.name,
   });
   const second = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'second',
     workspace: '/worktrees/second',
@@ -87,12 +95,184 @@ test('preserves and reports a live foreign claim without overwriting it', async 
   assert.equal(second.status, 'conflict');
   if (second.status !== 'conflict') return;
   assert.equal(second.conflict.classification, 'live');
-  assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.session, 'first');
+  assert.equal(inspectDeviceClaims({ serial: device.id }, process.env)[0]?.claim?.session, 'first');
+});
+
+// The maintainer's trace on #3714: `install` holds a transient claim under the label
+// `transient:install`; an `open` from the same workspace addressed at that label must not be
+// handed the command's ownership token. Any session string can be typed into `--session`; only
+// the stored kind says who holds the claim, so an open-session acquirer never holds a
+// transient-command record and vice versa.
+test('an open session addressed at a command label never adopts the in-flight command claim', async () => {
+  const root = useClaimsRoot();
+  const holder = await acquireTransientDeviceClaim({
+    env: process.env,
+    device,
+    command: 'install',
+    coveredBySession: 'open-a',
+    coveredClaimIsOwnedByRequest: () => false,
+    workspace: '/worktrees/first',
+    stateDir: root,
+    reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test-no-recovery' }),
+  });
+  assert.equal(holder.status, 'acquired');
+  if (holder.status !== 'acquired') return;
+
+  const open = await acquireDeviceClaim({
+    device,
+    session: 'transient:install',
+    workspace: '/worktrees/first',
+    stateDir: root,
+    env: process.env,
+  });
+
+  assert.equal(open.status, 'conflict');
+  if (open.status !== 'conflict') return;
+  assert.equal(open.conflict.classification, 'live');
+  // The refusal wrote nothing: the command still holds the device with its own token.
+  assert.equal(storedClaim().ownerToken, holder.ownership.ownerToken);
+});
+
+// The mirror direction, pinned at the settlement boundary every acquire route goes through. Two
+// live requests can never share one claim: a second `reinstall` or `install` reaching the running
+// `install`'s claim — same workspace, label as session — is refused, and only the request that
+// took the claim re-enters it, through the token the admission layer already pins.
+test('a second request never holds an in-flight command claim, under its own label or another’s', async () => {
+  const root = useClaimsRoot();
+  const holder = await acquireTransientDeviceClaim({
+    env: process.env,
+    device,
+    command: 'install',
+    coveredBySession: 'open-a',
+    coveredClaimIsOwnedByRequest: () => false,
+    workspace: '/worktrees/first',
+    stateDir: root,
+    reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test-no-recovery' }),
+  });
+  assert.equal(holder.status, 'acquired');
+  if (holder.status !== 'acquired') return;
+
+  const intruder = await acquireTransientDeviceClaim({
+    env: process.env,
+    device,
+    command: 'reinstall',
+    coveredBySession: 'transient:install',
+    coveredClaimIsOwnedByRequest: () => true,
+    workspace: '/worktrees/first',
+    stateDir: root,
+    reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test-no-recovery' }),
+  });
+  assert.equal(intruder.status, 'conflict');
+  assert.equal(storedClaim().ownerToken, holder.ownership.ownerToken);
+
+  const sameCommand = await acquireTransientDeviceClaim({
+    env: process.env,
+    device,
+    command: 'install',
+    coveredBySession: 'some-other-session',
+    coveredClaimIsOwnedByRequest: () => false,
+    workspace: '/worktrees/first',
+    stateDir: root,
+    reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test-no-recovery' }),
+  });
+  // A different request of the SAME command still refuses: only the request holding the claim's
+  // release token re-enters it (the admission layer pins that), so a live command claim is never
+  // disposed from under its holder by a second same-named request.
+  assert.equal(sameCommand.status, 'conflict');
+  assert.equal(storedClaim().ownerToken, holder.ownership.ownerToken);
+});
+
+// A migrated record states no kind, so no acquirer's kind can equal it: even the same principal
+// in the same workspace cannot hold it at acquisition, and a record whose start time is unreadable
+// (`null === null` against this process) is the case that most needs the refusal. Acquisition
+// never renews it either — the token the record itself names is the only renewal route left.
+test('a migrated record states no kind, so acquisition never holds it', async () => {
+  for (const startTimeUnavailable of [false, true]) {
+    const root = useClaimsRoot();
+    const identity = startTimeUnavailable
+      ? { pid: process.pid, startTime: null }
+      : hostProcess.readCurrentOwnerIdentity();
+    const owner = vi.spyOn(hostProcess, 'readCurrentOwnerIdentity').mockReturnValue(identity);
+    try {
+      fs.writeFileSync(
+        claimPath(root),
+        JSON.stringify({
+          schemaVersion: 2,
+          deviceKey: canonicalLocalDeviceKey(device),
+          device: { family: 'android', id: device.id, name: device.name, kind: device.kind },
+          session: 'legacy-owner',
+          workspace: '/worktrees/legacy',
+          stateDir: root,
+          ownerPid: identity.pid,
+          ownerStartTime: identity.startTime,
+          ownerToken: 'legacy-token',
+          createdAtMs: 1,
+          updatedAtMs: 1,
+        }),
+      );
+
+      const held = await acquireDeviceClaim({
+        device,
+        session: 'legacy-owner',
+        workspace: '/worktrees/legacy',
+        stateDir: root,
+        env: process.env,
+      });
+
+      assert.equal(held.status, 'conflict');
+      assert.equal(storedClaim().ownerToken, 'legacy-token');
+      assert.equal(storedClaim().updatedAtMs, 1);
+    } finally {
+      owner.mockRestore();
+    }
+  }
+});
+
+// Renewal, abandon, and clear write a decoded claim back. A migrated record must therefore carry
+// the current schema version: a legacy version on the migrated device shape reads back as
+// inconsistent and locks the device out of any settlement path that reads it.
+test('a renewal through a migrated record’s own token writes back the shape the reader expects', async () => {
+  const root = useClaimsRoot();
+  fs.writeFileSync(
+    claimPath(root),
+    JSON.stringify({
+      schemaVersion: 1,
+      deviceKey: canonicalLocalDeviceKey(device),
+      device: { platform: 'android', id: device.id, name: device.name, kind: device.kind },
+      session: 'legacy-owner',
+      workspace: '/worktrees/legacy',
+      stateDir: root,
+      ownerPid: process.pid,
+      ownerStartTime: 'test-process-start-time',
+      ownerToken: 'legacy-token',
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    }),
+  );
+
+  const renewal = await renewDeviceClaim(
+    {
+      deviceKey: canonicalLocalDeviceKey(device),
+      ownerToken: 'legacy-token',
+      ownerPid: process.pid,
+      ownerStartTime: 'test-process-start-time',
+    },
+    process.env,
+  );
+  assert.equal(renewal.status, 'renewed');
+
+  const persisted = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  assert.equal(persisted.schemaVersion, 3);
+  const reread = inspectDeviceClaims({ serial: device.id }, process.env)[0];
+  assert.equal(reread?.classification, 'live');
+  assert.equal(reread?.claim?.session, 'legacy-owner');
+  assert.equal(reread?.claim?.claimOwnerKind, 'unstated');
 });
 
 test('does not treat a same-named session in another worktree as its claim owner', async () => {
   const root = useClaimsRoot();
   const first = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'default',
     workspace: '/worktrees/first',
@@ -100,18 +280,23 @@ test('does not treat a same-named session in another worktree as its claim owner
   });
   assert.equal(first.status, 'acquired');
   const second = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'default',
     workspace: '/worktrees/second',
     stateDir: path.join(root, 'second-state'),
   });
   assert.equal(second.status, 'conflict');
-  assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.workspace, '/worktrees/first');
+  assert.equal(
+    inspectDeviceClaims({ serial: device.id }, process.env)[0]?.claim?.workspace,
+    '/worktrees/first',
+  );
 });
 
 test('reconciles a proven-dead owner and replaces it while acquiring the same claim', async () => {
   const root = useClaimsRoot();
   const first = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'dead-owner',
     workspace: '/worktrees/dead',
@@ -130,6 +315,7 @@ test('reconciles a proven-dead owner and replaces it while acquiring the same cl
   });
 
   const second = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'replacement',
     workspace: '/worktrees/replacement',
@@ -139,12 +325,16 @@ test('reconciles a proven-dead owner and replaces it while acquiring the same cl
 
   assert.equal(second.status, 'acquired');
   assert.equal(reconciledSession, 'dead-owner');
-  assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.session, 'replacement');
+  assert.equal(
+    inspectDeviceClaims({ serial: device.id }, process.env)[0]?.claim?.session,
+    'replacement',
+  );
 });
 
 test('retains a proven-dead claim when exact-owner cleanup remains pending', async () => {
   const root = useClaimsRoot();
   await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'cleanup-pending',
     workspace: '/worktrees/dead',
@@ -157,6 +347,7 @@ test('retains a proven-dead claim when exact-owner cleanup remains pending', asy
   );
 
   const second = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'blocked',
     workspace: '/worktrees/blocked',
@@ -170,12 +361,16 @@ test('retains a proven-dead claim when exact-owner cleanup remains pending', asy
   assert.equal(second.status, 'conflict');
   if (second.status !== 'conflict') return;
   assert.equal(second.conflict.classification, 'owner-process-dead');
-  assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.session, 'cleanup-pending');
+  assert.equal(
+    inspectDeviceClaims({ serial: device.id }, process.env)[0]?.claim?.session,
+    'cleanup-pending',
+  );
 });
 
 test('PID reuse is uncertain ownership and never authorizes reconciliation', async () => {
   const root = useClaimsRoot();
   await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'reused-pid-owner',
     workspace: '/worktrees/old',
@@ -186,6 +381,7 @@ test('PID reuse is uncertain ownership and never authorizes reconciliation', asy
   const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
 
   const result = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'blocked',
     workspace: '/worktrees/new',
@@ -197,12 +393,16 @@ test('PID reuse is uncertain ownership and never authorizes reconciliation', asy
   if (result.status !== 'conflict') return;
   assert.equal(result.conflict.classification, 'owner-process-reused');
   assert.equal(reconcile.mock.calls.length, 0);
-  assert.equal(inspectDeviceClaims({ serial: device.id })[0]?.claim?.session, 'reused-pid-owner');
+  assert.equal(
+    inspectDeviceClaims({ serial: device.id }, process.env)[0]?.claim?.session,
+    'reused-pid-owner',
+  );
 });
 
 test('an internally inconsistent dead claim never authorizes reconciliation', async () => {
   const root = useClaimsRoot();
   await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'inconsistent-owner',
     workspace: '/worktrees/old',
@@ -221,6 +421,7 @@ test('an internally inconsistent dead claim never authorizes reconciliation', as
   const reconcile = vi.fn(async () => ({ status: 'reconciled' as const }));
 
   const result = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'blocked',
     workspace: '/worktrees/new',
@@ -238,7 +439,7 @@ test('an internally inconsistent dead claim never authorizes reconciliation', as
 const reconciled = async () => ({ status: 'reconciled' as const });
 
 function storedClaim() {
-  const claim = inspectDeviceClaims({ serial: device.id })[0]?.claim;
+  const claim = inspectDeviceClaims({ serial: device.id }, process.env)[0]?.claim;
   assert.ok(claim);
   return claim;
 }
@@ -252,6 +453,7 @@ function rewriteClaimOwner(root: string, ownerPid: number): void {
 async function seedForeignLiveClaim(root: string, stateDir: string): Promise<void> {
   fs.mkdirSync(stateDir, { recursive: true });
   const seeded = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'cwd:/w:default',
     workspace: '/w',
@@ -281,6 +483,7 @@ test('takes a live foreign claim whose device rebooted after the claim was taken
   let reconciledSession: string | undefined;
 
   const second = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'other',
     workspace: '/w',
@@ -312,6 +515,7 @@ test('keeps a live foreign claim blocking until the device boot is answered', as
     publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
 
     const second = await acquireDeviceClaim({
+      env: process.env,
       device,
       session: 'other',
       workspace: '/w',
@@ -334,6 +538,7 @@ test('a boot that predates the claim proves nothing about it and keeps the confl
   publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
 
   const second = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'other',
     workspace: '/w',
@@ -354,6 +559,7 @@ test('a rebooted device stays claimed while its owner has resources left to sett
   publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
 
   const second = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'other',
     workspace: '/w',
@@ -373,6 +579,7 @@ test('an owner that reopened its app after the reboot keeps the device', async (
   const root = useClaimsRoot();
   const stateDir = path.join(root, 'renewed-state');
   const first = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'cwd:/w:default',
     workspace: '/w',
@@ -383,6 +590,7 @@ test('an owner that reopened its app after the reboot keeps the device', async (
   await new Promise((resolve) => setTimeout(resolve, 2));
 
   const reopened = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'cwd:/w:default',
     workspace: '/w',
@@ -397,6 +605,7 @@ test('an owner that reopened its app after the reboot keeps the device', async (
   rewriteClaimOwner(root, process.ppid);
   publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
   const foreign = await acquireDeviceClaim({
+    env: process.env,
     device,
     session: 'other',
     workspace: '/w',

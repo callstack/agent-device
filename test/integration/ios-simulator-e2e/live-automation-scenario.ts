@@ -83,26 +83,6 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   verifyCommand(context, C.snapshot, 'interactive fixture tree exposes its stable title');
   verifyCommand(context, C.open, 'cold launch exposes the fixture UI through snapshot and wait');
 
-  await openAutomationDeepLink(context, 'cold launch fixture through a deep link');
-  await waitForDeepLinkDestination(context, ['text', 'Automation lab']);
-  await assertElementText(context, 'id="automation-event-name"', 'cold.start');
-  await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
-  await assertClearStateLaunchUrl(context);
-  await runStep(context, 'navigate onward from cold deep link', [
-    'click',
-    'id="automation-continue-catalog"',
-  ]);
-  await runStep(context, 'wait for exact catalog destination', [
-    'wait',
-    'id="catalog-title"',
-    '10000',
-  ]);
-  verifyBehavior(
-    context,
-    'cold-start-deep-link-navigation',
-    'launchApp(clearState) removed a seeded data canary, rendered the stored deep route and payload, and continued into the fixture catalog',
-  );
-
   await runStep(context, 'wait for settings tab target', ['wait', 'label="Settings"', '10000']);
   await runStep(context, 'open settings tab', ['click', 'label="Settings"']);
   await assertWaitText(context, 'Settings');
@@ -215,6 +195,28 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await runStep(context, 'return from automation route', ['back']);
   await assertWaitText(context, 'Settings');
   verifyCommand(context, C.back, 'back returns from automation route to Settings');
+}
+
+export async function assertColdDeepLinkNavigation(context: LiveContext): Promise<void> {
+  await openAutomationDeepLink(context, 'cold launch fixture through a deep link');
+  await waitForDeepLinkDestination(context, ['text', 'Automation lab']);
+  await assertElementText(context, 'id="automation-event-name"', 'cold.start');
+  await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
+  await assertClearStateLaunchUrl(context);
+  await runStep(context, 'navigate onward from cold deep link', [
+    'click',
+    'id="automation-continue-catalog"',
+  ]);
+  await runStep(context, 'wait for exact catalog destination', [
+    'wait',
+    'id="catalog-title"',
+    '10000',
+  ]);
+  verifyBehavior(
+    context,
+    'cold-start-deep-link-navigation',
+    'launchApp(clearState) removed a seeded data canary, rendered the stored deep route and payload, and continued into the fixture catalog',
+  );
 }
 
 async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {

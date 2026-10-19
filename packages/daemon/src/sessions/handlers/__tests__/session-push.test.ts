@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,9 +8,13 @@ import type {
   BindDeviceRuntime,
 } from '../../../core/request-runtime-binding.ts';
 
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import {
   handleSessionCommands,
   mockBindDeviceRuntime,
@@ -18,6 +23,8 @@ import {
   mockPushNotificationRuntime,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+
+bindTestCommandHost();
 
 const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
   return {
@@ -29,6 +36,7 @@ const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
 test('push requires active session or explicit device selector', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-');
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -68,6 +76,7 @@ test('push validates payload before runtime facts admission', async () => {
 
   await expect(
     handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -110,6 +119,7 @@ test('push runs readiness and notification through one admitted runtime binding'
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -177,6 +187,7 @@ test('push treats an existing brace-prefixed payload as a file before inline JSO
 
   try {
     const response = await handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
@@ -217,6 +228,7 @@ test('push stops at unavailable facts without binding', async () => {
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -273,6 +285,7 @@ test('push fails closed before binding when a provider owner lacks readiness', a
   };
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

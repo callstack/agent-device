@@ -1,3 +1,4 @@
+import { helperRuntimeSlot } from './adb-host.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellFragment } from '@agent-device/kernel/device-shell';
@@ -37,7 +38,9 @@ type PendingRetirement = {
   cause: string;
 };
 
-const pendingRetirements = new Map<string, PendingRetirement>();
+const pendingRetirementsSlot = Symbol('androidPendingRetirements');
+const pendingRetirements = (): Map<string, PendingRetirement> =>
+  helperRuntimeSlot(pendingRetirementsSlot, () => new Map<string, PendingRetirement>());
 
 export function getAndroidSnapshotHelperSessionDeviceKey(
   device: Pick<DeviceInfo, 'platform' | 'id'>,
@@ -76,7 +79,7 @@ export async function recoverAndroidSnapshotHelperRetirement(params: {
   adb: AndroidAdbExecutor;
   signal?: AbortSignal;
 }): Promise<void> {
-  const retirement = pendingRetirements.get(params.deviceKey);
+  const retirement = pendingRetirements().get(params.deviceKey);
   if (!retirement) return;
   await stopAndroidSnapshotHelperRuntime({
     adb: params.adb,
@@ -109,7 +112,7 @@ export async function recoverAndroidSnapshotHelperRetirement(params: {
   // A device that could not be read leaves the retirement pending: the next acquire asks again, and
   // this command answers for its own transport instead of for ownership.
   if (release === 'unknown') return;
-  pendingRetirements.delete(params.deviceKey);
+  pendingRetirements().delete(params.deviceKey);
 }
 
 /**
@@ -132,11 +135,11 @@ export async function recordAndroidSnapshotHelperRelease(params: {
       packageName: params.packageName,
     }));
   if (release === 'released') {
-    pendingRetirements.delete(params.deviceKey);
+    pendingRetirements().delete(params.deviceKey);
     return release;
   }
   const causeMessage = params.cause instanceof Error ? params.cause.message : String(params.cause);
-  pendingRetirements.set(params.deviceKey, {
+  pendingRetirements().set(params.deviceKey, {
     packageName: params.packageName,
     cause: causeMessage,
   });
@@ -334,11 +337,11 @@ export async function stopAndroidSnapshotHelperHostProcess(params: {
  * process that may not be the only one, and the pending entry has to stay.
  */
 export function settleAndroidSnapshotHelperRetirement(deviceKey: string): void {
-  pendingRetirements.delete(deviceKey);
+  pendingRetirements().delete(deviceKey);
 }
 
 export function resetAndroidSnapshotHelperRetirements(): void {
-  pendingRetirements.clear();
+  pendingRetirements().clear();
 }
 
 /**

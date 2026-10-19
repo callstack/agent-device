@@ -1,11 +1,5 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
-import type {
-  DurableDescriptorCodec,
-  DurableResourceEnvelope,
-} from '@agent-device/contracts/durable-resource-envelope';
-import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import type { DurableDescriptorCodec } from '@agent-device/contracts/durable-resource-envelope';
 import { APP_LOG_RESOURCE_KIND } from '@agent-device/contracts/app-log-runtime';
-import { createDurableResourceEnvelope, encodeDurableDescriptor } from '@agent-device/capture-kit';
 import type { LimrunInstanceOwnership } from './instance-access.ts';
 
 export type LimrunAppLogDescriptor = Readonly<{
@@ -52,36 +46,6 @@ export const limrunAppLogDescriptorCodec: DurableDescriptorCodec<
     };
   },
 });
-
-export function createLimrunAppLogEnvelope(input: {
-  sessionId: string;
-  device: DeviceInfo;
-  owner: RuntimeOwnerRef;
-  fence: { token: string; generation: number };
-  descriptor: LimrunAppLogDescriptor;
-}): DurableResourceEnvelope<'app-log'> {
-  if (input.device.platform === 'apple' && !input.device.appleOs) {
-    throw new TypeError('Limrun Apple app-log persistence requires an explicit appleOs identity');
-  }
-  return createDurableResourceEnvelope({
-    resourceKind: APP_LOG_RESOURCE_KIND,
-    sessionId: input.sessionId,
-    device: {
-      id: input.device.id,
-      family: input.device.platform,
-      ...(input.device.appleOs === undefined ? {} : { appleOs: input.device.appleOs }),
-      kind: input.device.kind,
-      ...(input.device.target === undefined ? {} : { target: input.device.target }),
-      ...(input.device.iosPhysicalDeviceBackend === undefined
-        ? {}
-        : { iosPhysicalDeviceBackend: input.device.iosPhysicalDeviceBackend }),
-    },
-    owner: input.owner,
-    fence: input.fence,
-    lifecycle: 'open',
-    descriptor: encodeDurableDescriptor(limrunAppLogDescriptorCodec, input.descriptor),
-  });
-}
 
 /** Descriptors written before attach support carry no ownership; those named created instances. */
 function decodeOwnership(value: unknown): LimrunInstanceOwnership | undefined {

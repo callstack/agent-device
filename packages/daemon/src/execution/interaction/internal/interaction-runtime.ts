@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { AppError as KernelAppError } from '@agent-device/kernel/errors';
@@ -27,7 +28,6 @@ import { markDeferredInteractionOutcome } from '../../../core/deferred-interacti
 import { isSessionRecording } from '../../../core/session-script-publication-capability.ts';
 import { recordTouchVisualizationEvent } from '../../../core/recording-gestures.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
 import type { BoundTouchExecutor } from '../../../core/touch-runtime.ts';
 import type { BoundGestureExecutor } from '../../../core/gesture-runtime.ts';

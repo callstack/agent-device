@@ -91,18 +91,15 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
 
   Earlier `close` actions still run. `test` does not accept the flag because each suite attempt
   cleans up its own session.
-- `press`, `click`, and `longpress` steps wait up to 2 seconds for their target to appear before
-  they fail, so a step recorded against a screen that was still loading passes once the target
-  shows up. The wait covers only a target that is not on screen yet: a target that is covered,
-  off-screen, or matched by more than one element fails at once, as it does live. The replay output
-  does not show the wait for a step that passed; run with `--debug` to see it in the diagnostics.
-- When the target never appears, replay stops with `REPLAY_DIVERGENCE`, and
-  `error.details.readiness` says how long the step waited and how many times it looked (`waitedMs`,
-  `polls`, `end`). For a step recorded with a target annotation (the `# agent-device:target-v1`
+- `press`, `click`, and `longpress` steps do not wait for a missing target to appear. If a screen
+  needs time to load, add an explicit wait before the interaction, such as
+  `wait 'label="Continue"' 5000`.
+  Covered, off-screen, and ambiguous targets fail as they do in live commands.
+- When the target is missing, replay stops with `REPLAY_DIVERGENCE`.
+  For a step recorded with a target annotation (the `# agent-device:target-v1`
   line above it), `error.details.divergence.kind` is `selector-miss` and the step is never sent.
   For a step without an annotation, `error.details.reason` is `selector_not_found`, as for a live
-  command. If the app shows an empty accessibility tree during that wait, `error.details.reason`
-  is `capture_sparse` instead; take a snapshot to see where the app is.
+  command.
 - A step whose read names one element (`is` with a predicate other than `exists`/`absent`, or
   `get attrs`) that reaches dispatch with an ambiguous selector fails with `AMBIGUOUS_MATCH` as
   the divergence cause — the same code the live command reports, so an ambiguous recorded
@@ -327,7 +324,7 @@ A failing `replay`/`test` step returns a structured `REPLAY_DIVERGENCE` error. T
 
 - **`step`** — the 1-based plan index and its source file/line (through Maestro `runFlow` includes).
 - **`screen`** — a fresh post-failure snapshot digest with actionable refs, or `unavailable` with a reason/hint when capture failed or was sparse (never a stale tree).
-- **`suggestions`** — up to 5 ranked, re-resolved candidates for the failing selector (id match ranks above role+label, which ranks above label-only), each with a `basis` you can inspect before acting.
+- **`suggestions`** — up to 5 ranked, re-resolved candidates for the failing selector (id match ranks above role+label, which ranks above label-only), each with a `basis` you can inspect before acting. For a verified `target-v1` annotation, equally strong candidates in the recorded scroll region rank first; document order breaks remaining ties.
 - **`resume`** — whether and how to continue without re-running the script from the top.
 
 ```jsonc
@@ -353,6 +350,8 @@ A failing `replay`/`test` step returns a structured `REPLAY_DIVERGENCE` error. T
 Text output prints a compact summary of the same fields; `--json`/MCP carry the full object.
 
 ## Resume a failed replay
+
+During a repair armed with `replay --save-script`, diagnostic reads stay out of the healed script. To keep a corrective read, pass `--record` on that invocation, or `record: true` in that SDK/MCP call. `--record` is per-invocation only: the config key `record` and `AGENT_DEVICE_RECORD` were removed, and a config file or environment still naming them fails with migration guidance. Authored replay observations are retained automatically.
 
 `replay --from <n> --plan-digest <sha256>` resumes **at** plan step `n`, not after it, skipping `1..n-1` without executing them. Both flags come from a divergence report's `resume` field — `from` is the failed step, `planDigest` is the digest of the exact unchanged plan that produced it.
 
@@ -396,8 +395,7 @@ Passing `--plan-digest` that no longer matches the current script — because yo
     which repeats until the element is actually on screen.
 - A `press` or `click` step fails because its target was not found, but the element is on the
   screenshot:
-  - A `selector-miss` divergence, or `error.details.readiness.end: expired`, means the element was
-    not in the accessibility tree for the whole 2-second wait: the selector is wrong for this
-    build, or the element is not exposed to accessibility. `readiness.end: sparse` means the app
-    showed an empty tree: the screen was mid-transition or the app had left. Add a `wait` step for
-    a landmark on the new screen before the press.
+  - A `selector-miss` divergence means the target was absent from the captured accessibility
+    tree. Check the selector for this build and whether the app exposes the element to
+    accessibility. Add a `wait` step for a landmark on a loading screen before
+    the press.

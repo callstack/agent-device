@@ -11,7 +11,7 @@ import type {
 } from '../../../../core/request-runtime-binding.ts';
 import { createCapabilitiesAdmissionRuntime } from './session-capabilities.fixtures.ts';
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 
 test('capabilities projects the install family from exactly one facts inspection', async () => {
@@ -39,6 +39,7 @@ test('capabilities projects the install family from exactly one facts inspection
     expect.arrayContaining([
       PUBLIC_COMMANDS.install,
       PUBLIC_COMMANDS.reinstall,
+      PUBLIC_COMMANDS.uninstall,
       PUBLIC_COMMANDS.installFromSource,
       PUBLIC_COMMANDS.push,
     ]),
@@ -105,6 +106,7 @@ test('capabilities fails closed for every fact-owned command when facts inspecti
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.logs);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.install);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.reinstall);
+  expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.uninstall);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.installFromSource);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.push);
   expect(runtime.uses).toEqual([]);
@@ -155,6 +157,7 @@ async function dispatchCapabilities(params: {
   inspectFacts: InspectDeviceRuntimeFacts;
 }) {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

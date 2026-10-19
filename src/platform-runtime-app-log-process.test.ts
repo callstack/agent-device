@@ -28,7 +28,7 @@ import {
   createManagedAppLogProcesses,
   recoverLegacyAppLogMarkersAfterDaemonLock,
 } from './platform-runtime-app-log-process.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const roots: string[] = [];
 

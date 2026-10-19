@@ -51,10 +51,19 @@ invocations can pass `0` when immediate capture during ongoing animation is pref
 acquisition has a separate 500 ms stabilization bound that is used only when no root is available or
 an active/focused window is temporarily missing its root; complete captures pay no additional wait.
 
+Child reads run in batches of up to eight on a shared worker pool. This lets Android serve
+multiple accessibility requests between animation frames on busy apps. XML retains depth-first
+child order and the same depth/node limits. Each capture still clears the accessibility cache;
+results are not reused across captures.
+
 ## One-Shot Modes
 
 Passing `-e mode snapshot|viewport|gesture` selects what a single instrumentation run does; `snapshot`
 is the default and matches the `Run` section above.
+The `viewport` mode reads application and keyboard bounds after the same best-effort idle wait
+used by snapshots: a 100 ms quiet interval with a 500 ms maximum wait. This allows short window
+transitions, including keyboard appearance, to settle without waiting indefinitely on live content.
+Snapshot mode uses the idle wait configured above.
 
 ```sh
 # Read the interactive-window viewport without capturing a snapshot.
@@ -95,6 +104,10 @@ closes that connection; the process stays alive for the next connection:
 `elapsedMs` for `gesture`, and `x`, `y`, `width`, `height` for `viewport`. `snapshot` responses carry
 the XML body after the header block, as described below. The response protocol literal is always
 `android-snapshot-helper-v1`, regardless of session or one-shot transport.
+
+When an input method window overlaps the application's vertical swipe path, `viewport` responses
+also include `keyboardX`, `keyboardY`, `keyboardWidth`, and `keyboardHeight`. All four fields are
+omitted when no such window is reported; their absence does not establish that the keyboard is hidden.
 
 ## Output Contract
 

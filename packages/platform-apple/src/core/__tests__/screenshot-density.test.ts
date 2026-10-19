@@ -45,8 +45,8 @@ test('screenshotIos caches simulator screen scale per device', async () => {
   try {
     await withAppleToolProvider(provider, async () => {
       const options = { pixelDensity: 3, skipIosSimulatorBootCheck: true } as const;
-      await screenshotIos(device, outPath, options);
-      await screenshotIos(device, outPath, options);
+      await screenshotIos(device, outPath, { ...options, env: process.env });
+      await screenshotIos(device, outPath, { ...options, env: process.env });
     });
 
     assert.equal(

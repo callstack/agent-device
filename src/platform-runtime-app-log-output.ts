@@ -1,15 +1,17 @@
+import { ensureAppLogPath } from '@agent-device/capture-kit/app-log-files';
 import type { AppLogOutputSink } from '@agent-device/contracts/app-log-runtime';
 import fs from 'node:fs';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { openVerifiedFileForAppend, openVerifiedFileForRead } from '@agent-device/host-kit/file';
-import { ensureAppLogPath } from '@agent-device/daemon/app-log-files';
-import { requireManagedSessionArtifactPath } from '@agent-device/daemon/managed-session-artifact-path';
+import { requireManagedSessionArtifactPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 
 export async function openAppLogOutput(
   sessionsDir: string,
   pathname: string,
+  host: HostEnvironment,
 ): Promise<AppLogOutputSink> {
   pathname = requireManagedOutputPath(sessionsDir, pathname);
-  ensureAppLogPath(pathname);
+  ensureAppLogPath(pathname, host.env);
   const descriptor = openVerifiedFileForAppend(pathname);
   let stream: fs.WriteStream;
   try {
@@ -22,7 +24,8 @@ export async function openAppLogOutput(
   stream.on('error', (error) => {
     streamError ??= error;
   });
-  const patterns = redactionPatterns();
+  const { env } = host;
+  const patterns = redactionPatterns(env);
   let pending = '';
   let writes = Promise.resolve();
   let disposal: Promise<void> | undefined;
@@ -89,8 +92,8 @@ function requireManagedOutputPath(sessionsDir: string, pathname: string): string
   });
 }
 
-function redactionPatterns(): RegExp[] {
-  return (process.env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
+function redactionPatterns(env: NodeJS.ProcessEnv): RegExp[] {
+  return (env.AGENT_DEVICE_APP_LOG_REDACT_PATTERNS ?? '')
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean)

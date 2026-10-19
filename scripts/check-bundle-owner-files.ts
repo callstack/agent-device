@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { COMMAND_OWNER_FILES } from '@agent-device/command-registry/owner-files';
-import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/route-owner-files';
+import {
+  COMMAND_OWNER_FILES,
+  getDaemonRouteOwnerFiles,
+} from '@agent-device/command-registry/owner-files';
 import { walkFiles } from './lib/walk-files.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');

@@ -139,3 +139,12 @@ function parseEnumSetValue(
 }
 
 export type EnvMap = Record<string, string | undefined>;
+
+/**
+ * The process-level inputs a host hands to the code it runs: the environment and working
+ * directory. An entry point captures it once; everything below receives it.
+ */
+export type HostEnvironment = Readonly<{
+  env: Readonly<EnvMap>;
+  cwd: string;
+}>;

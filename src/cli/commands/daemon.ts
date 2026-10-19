@@ -1,23 +1,40 @@
+import {
+  readPluginInventory,
+  type PluginInventoryEntry,
+} from '@agent-device/contracts/plugin-inventory';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   readDaemonStopIdentity,
   stopDaemon,
   type DaemonStopResult,
-} from '@agent-device/daemon/daemon-stop';
+} from '@agent-device/daemon-contracts/daemon-stop';
+import {
+  isUnusableRecord,
+  readDaemonStatus,
+  type DaemonStatus,
+} from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { AppError } from '@agent-device/kernel/errors';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 import { createDaemonOwnerCleanup } from '../../platform-runtime-daemon-owner-cleanup.ts';
 
-const daemonOwnerCleanup = createDaemonOwnerCleanup();
-
-export const daemonCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
+  const daemonOwnerCleanup = createDaemonOwnerCleanup(host);
   const subcommand = positionals[0];
-  if (subcommand !== 'stop' || positionals.length !== 1) {
-    throw new AppError('INVALID_ARGS', 'daemon accepts only: stop');
+  if ((subcommand !== 'stop' && subcommand !== 'status') || positionals.length !== 1) {
+    throw new AppError('INVALID_ARGS', 'daemon accepts only: stop, status');
   }
-  const paths = resolveDaemonPaths(flags.stateDir);
+  const paths = resolveDaemonPaths(flags.stateDir, {
+    cwd: host.cwd,
+    env: host.env,
+  });
+  if (subcommand === 'status') {
+    const status = readDaemonStatus(paths);
+    const shown = { ...status, plugins: readPluginInventory(status.plugins) };
+    await writeCommandOutput(flags, shown, () => renderDaemonStatus(shown));
+    return true;
+  }
   const identity = readDaemonStopIdentity(paths.infoPath);
   const stopped = await stopDaemon({ paths });
   const report = stopped.mode === 'graceful' ? readDaemonShutdownReport(paths.baseDir) : null;
@@ -121,4 +138,32 @@ function renderDaemonStop(
   return [headline, result.clean ? 'Retained runner cleanup completed.' : null, ...result.warnings]
     .filter((line): line is string => Boolean(line))
     .join('\n');
+}
+
+function renderDaemonStatus(
+  status: Omit<DaemonStatus, 'plugins'> & { plugins: readonly PluginInventoryEntry[] },
+): string {
+  if (isUnusableRecord(status)) {
+    return `The daemon record for ${status.stateDir} is ${status.state === 'invalid' ? 'not a valid record' : 'unreadable'}, so whether a daemon runs there is unknown.`;
+  }
+  if (status.state === 'stopped') return `No running daemon for ${status.stateDir}.`;
+  const details = [`pid ${status.pid}`, status.version, status.transport].filter(Boolean);
+  return [
+    `Daemon running (${details.join(', ')}) for ${status.stateDir}.`,
+    ...(status.plugins.length === 0
+      ? ['No providers registered.']
+      : [
+          'Providers:',
+          ...status.plugins.map((plugin) => {
+            const origin = plugin.package
+              ? `${plugin.package}${plugin.version ? `@${plugin.version}` : ''}`
+              : plugin.source;
+            const outcome =
+              plugin.state === 'active'
+                ? 'active'
+                : `failed: ${plugin.error?.message ?? 'unknown'}`;
+            return `  ${plugin.provider ?? '(unknown provider)'} [${plugin.source}] ${origin} - ${outcome}`;
+          }),
+        ]),
+  ].join('\n');
 }

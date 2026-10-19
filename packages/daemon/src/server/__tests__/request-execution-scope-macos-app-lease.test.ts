@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import {
   daemonPlatformServicesFixture,
@@ -41,6 +42,7 @@ async function runScoped(params: {
   daemonPolicy?: ReturnType<typeof parseDaemonPolicy>;
 }): Promise<{ ran: boolean; error?: unknown }> {
   const scope = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: { token: 't', session: 'default', positionals: [], ...params.req },
@@ -124,6 +126,7 @@ test('a request under a pid-pinned macos-app lease does not run once that proces
     }),
   );
   const scope = await createRequestExecutionScope({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: { token: 't', session: 'default', command: 'snapshot', positionals: [], flags: {} },

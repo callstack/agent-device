@@ -8,6 +8,8 @@ import {
   withProcessLock,
   isEnvTruthy,
   findProjectRoot,
+  hostEnvironment,
+  runnerRuntimeSlot,
 } from './host.ts';
 import {
   RUNNER_CACHE_METADATA_FILE,
@@ -38,7 +40,9 @@ export { requireRunnerPhaseRemainingMs, type RunnerPhaseBudget } from './runner-
 const RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS = 10 * 60_000;
 const RUNNER_XCTESTRUN_CACHE_LOCK_POLL_MS = 100;
 
-const badRunnerArtifactsForRun = new Set<string>();
+const BAD_ARTIFACTS_SLOT = Symbol('apple-runner-bad-artifacts');
+const badRunnerArtifactsForRun = () =>
+  runnerRuntimeSlot(BAD_ARTIFACTS_SLOT, () => new Set<string>());
 
 export type RunnerXctestrunCacheKind = 'exact' | 'miss' | 'external';
 
@@ -102,7 +106,7 @@ export async function markRunnerXctestrunArtifactBadForRun(
     return;
   }
 
-  badRunnerArtifactsForRun.add(artifact.derived);
+  badRunnerArtifactsForRun().add(artifact.derived);
   await withProcessLock({
     acquire: () => acquireRunnerXctestrunCacheLock(artifact.derived),
     task: async () => {
@@ -139,7 +143,7 @@ function resolveRunnerXctestrunCacheLockPath(derived: string): string {
 }
 
 export function cleanRunnerDerivedBeforeEvaluation(derived: string, forceRebuild: boolean): void {
-  if (!shouldCleanDerived() && !forceRebuild && !badRunnerArtifactsForRun.has(derived)) {
+  if (!shouldCleanDerived() && !forceRebuild && !badRunnerArtifactsForRun().has(derived)) {
     return;
   }
   emitRunnerXctestrunDecision('clean', forceRebuild ? 'forced_rebuild' : 'forced_clean', {
@@ -147,7 +151,7 @@ export function cleanRunnerDerivedBeforeEvaluation(derived: string, forceRebuild
   });
   assertSafeDerivedCleanup(derived);
   cleanRunnerDerivedArtifacts(derived);
-  badRunnerArtifactsForRun.delete(derived);
+  badRunnerArtifactsForRun().delete(derived);
 }
 
 /**
@@ -284,12 +288,12 @@ function evaluateRunnerCacheMetadata(
 }
 
 function shouldCleanDerived(): boolean {
-  return isEnvTruthy(process.env.AGENT_DEVICE_IOS_CLEAN_DERIVED);
+  return isEnvTruthy(hostEnvironment().env.AGENT_DEVICE_IOS_CLEAN_DERIVED);
 }
 
 export function assertSafeDerivedCleanup(
   derivedPath: string,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = hostEnvironment().env,
 ): void {
   const override = env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim();
   if (!override) {

@@ -5,13 +5,15 @@
 // request's cancellation lifetime, and invocation. The envelope framing lives
 // in `http-rpc-envelope.ts`, the authorization decisions in
 // `http-authorization.ts`, and the RPC method vocabulary in `http-rpc-methods.ts`.
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { AsyncResource } from 'node:async_hooks';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import type { DiagnosticsRecordRef, NormalizedError } from '@agent-device/kernel/errors';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import { isRecord } from '@agent-device/kernel/record';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   clearRequestAbortRegistration,
@@ -70,9 +72,11 @@ const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   leaseRegistry?: LeaseRegistry;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
   token?: string;
   retainArtifacts?: boolean;
   env?: NodeJS.ProcessEnv;
+  cwd?: string;
   /**
    * Resolves a request diagnostics record path for the `/sessions/.../requests/...`
    * route (#1801). Omitted by embedded servers with no session store; the route
@@ -94,7 +98,7 @@ export async function createDaemonHttpServer(options: {
     (backend) => backend !== 'macos-app' || process.platform === 'darwin',
   );
   const environment = options.env ?? process.env;
-  const authHook = await loadHttpAuthHook(environment);
+  const authHook = await loadHttpAuthHook(environment, options.cwd ?? process.cwd());
   const {
     handleRequest,
     token,
@@ -102,7 +106,7 @@ export async function createDaemonHttpServer(options: {
     resolveRequestDiagnosticsPath,
     onUnownedRequestFailure,
   } = options;
-  return http.createServer((req, res) => {
+  const onRequest = AsyncResource.bind((req: http.IncomingMessage, res: http.ServerResponse) => {
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
@@ -126,6 +130,7 @@ export async function createDaemonHttpServer(options: {
         res,
         expectedToken: token,
         registry: options.leaseRegistry,
+        endSessionsForLease: options.endSessionsForLease,
       })
     ) {
       return;
@@ -209,6 +214,7 @@ export async function createDaemonHttpServer(options: {
       });
     });
   });
+  return http.createServer(onRequest);
 }
 
 /** Accumulates one `/rpc` body and hands it to the flow once the stream ends. */
@@ -232,9 +238,12 @@ function readRpcRequestBody(
     }
   });
 
-  req.on('end', () => {
-    onBody(body);
-  });
+  req.on(
+    'end',
+    AsyncResource.bind(() => {
+      onBody(body);
+    }),
+  );
 }
 
 // The `/rpc` flow, in the order it runs: the envelope decides whether this body is a
@@ -468,8 +477,9 @@ function beginRpcRequestLifetime(params: {
       };
     },
     watchForClientDisconnect() {
-      req.on('aborted', markCanceledIfResponseIncomplete);
-      res.on('close', markCanceledIfResponseIncomplete);
+      const onClientGone = AsyncResource.bind(markCanceledIfResponseIncomplete);
+      req.on('aborted', onClientGone);
+      res.on('close', onClientGone);
       if (req.aborted || res.destroyed) {
         markCanceledIfResponseIncomplete();
       }

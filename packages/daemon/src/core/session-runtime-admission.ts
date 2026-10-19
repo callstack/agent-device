@@ -1,3 +1,5 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from './platform-services.ts';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type {
@@ -9,10 +11,11 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 import { unsupportedOperationResponse } from './runtime-admission.ts';
 
 export type RuntimeCommandHandlerParams = Readonly<{
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;

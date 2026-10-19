@@ -4,7 +4,6 @@ import {
   rejectRefusedProviderProfileFields,
   requireResolvedProfilePlatform,
   requireResolvedProfileValue,
-  type ProviderProfileFieldDeclaration,
 } from '@agent-device/contracts/provider-profile-fields';
 import {
   requireConnectFlag,
@@ -16,19 +15,17 @@ import {
   isTestMuAppReference,
   requireTestMuCredentials,
 } from './providers.ts';
+import { TESTMU_PROFILE_FIELDS } from './profile-fields.ts';
 import { verifyTestMuConnection } from './testmu-connection-verification.ts';
 import { readTestMuDeviceFeatureFields, readTestMuDeviceType } from './testmu-device-features.ts';
 
 const PROVIDER = 'testmu';
 const SERVICE = 'TestMu AI';
 
-export function createTestMuConnection(
-  host: ProviderPluginHost,
-  fields: ProviderProfileFieldDeclaration,
-) {
+export function createTestMuConnection(host: ProviderPluginHost) {
   return {
     resolve: ({ flags, cwd }: { flags: CliFlags; cwd: string }) => {
-      rejectRefusedProviderProfileFields(flags, fields);
+      rejectRefusedProviderProfileFields(flags, TESTMU_PROFILE_FIELDS);
       requireTestMuCredentials(host.env, `connect ${PROVIDER}`);
       const platform = requireConnectPlatform(flags, PROVIDER);
       const app = connectAppReference(

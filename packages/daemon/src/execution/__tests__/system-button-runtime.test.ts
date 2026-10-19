@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
@@ -178,6 +179,7 @@ test('request router joins home admission to execution, recording, and ref inval
   activateCompleteRefFrame(session);
   sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 't',

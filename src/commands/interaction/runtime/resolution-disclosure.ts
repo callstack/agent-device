@@ -16,7 +16,7 @@ import type {
   ResolutionDisclosure,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
-import type { InteractionAction } from './interaction-resolution-request.ts';
+import type { InteractionAction } from '@agent-device/selectors/interaction-action';
 
 export type ResolvedRefNode = {
   ref: string;

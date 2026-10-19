@@ -1,0 +1,44 @@
+name: Cancel runs of closed PRs
+
+# A merged or closed PR gates nothing, so its queued and running runs only hold runners.
+on:
+  pull_request:
+    types:
+      - closed
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    # A fork PR's token is read-only, so it cannot cancel runs.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # pr-preview-cleanup.yml runs on the same close event and must finish.
+      - name: Cancel the PR's unfinished runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          ids=$(gh api --paginate -X GET "repos/$GITHUB_REPOSITORY/actions/runs" \
+            -f branch="$HEAD_REF" -f event=pull_request -f per_page=100 \
+            --jq ".workflow_runs[]
+              | select(.status != \"completed\")
+              | select(.head_repository.full_name == \"$GITHUB_REPOSITORY\")
+              | select(any(.pull_requests[]; .number == $PR_NUMBER))
+              | select(.id != $RUN_ID)
+              | select(.path != \".github/workflows/pr-preview-cleanup.yml\")
+              | .id")
+          refused=()
+          for id in $ids; do
+            gh run cancel "$id" --repo "$GITHUB_REPOSITORY" || refused+=("$id")
+          done
+          # A run that finished after the listing refuses cancellation; any other refusal is an error.
+          for id in "${refused[@]}"; do
+            status=$(gh run view "$id" --repo "$GITHUB_REPOSITORY" --json status --jq .status)
+            [ "$status" = completed ] || { echo "::error::Could not cancel run $id ($status)"; exit 1; }
+          done

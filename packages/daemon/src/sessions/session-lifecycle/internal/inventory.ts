@@ -1,10 +1,17 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import { resolveSessionRunnerLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import {
   commandRuntimeUseRequirements,
   listRuntimeFactCommands,
 } from '@agent-device/command-registry/registry';
 import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
-import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
+import {
+  assertResolvedAppsFilter,
+  type ProviderAppCatalog,
+  type ProviderAppCatalogQuery,
+} from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
 import {
   requireRuntimeBinding,
@@ -16,24 +23,20 @@ import {
   isMacOs,
   matchesPlatformSelector,
   publicPlatformString,
-  resolveAppleSimulatorSetPathForSelector,
+  resolveRequestAppleSimulatorSetPath,
   type DeviceInfo,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import {
-  resolveAndroidSerialAllowlist,
-  resolveIosSimulatorDeviceSetPath,
-} from '@agent-device/kernel/device-isolation';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaims,
-} from '../../../resources/device/device-claim-inspection.ts';
-import { canonicalLocalDeviceKey } from '../../../resources/device/device-claim-paths.ts';
-import { deviceClaimIdentity } from '../../../resources/device/device-claims.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+  canonicalLocalDeviceKey,
+  deviceClaimIdentity,
+} from '@agent-device/daemon-contracts/device-claims';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
-import { resolveSessionRunnerLogPath } from '../../../core/session-artifact-paths.ts';
 import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
@@ -54,11 +57,11 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
-import type { ProviderAppCatalog, ProviderAppCatalogQuery } from '@agent-device/contracts/device';
 import { resolveLeaseScope } from '../../../core/lease-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 
 export type SessionInventoryCommandInput = Readonly<{
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -76,7 +79,7 @@ export async function handleSessionInventoryCommands(
     case 'session_list':
       return sessionListInventoryResponse(req, sessionStore);
     case 'devices':
-      return await devicesInventoryResponse(req);
+      return await devicesInventoryResponse(req, params.host.env);
     case 'capabilities':
       return await capabilitiesInventoryResponse({
         req,
@@ -87,6 +90,7 @@ export async function handleSessionInventoryCommands(
       });
     case 'apps':
       return await handleAppsInventory({
+        env: params.host.env,
         req,
         sessionName,
         sessionStore,
@@ -141,13 +145,16 @@ function publicSessionInfo({ address, session }: SessionRef, sessionStore: Sessi
   };
 }
 
-async function devicesInventoryResponse(req: DaemonRequest): Promise<DaemonResponse> {
+async function devicesInventoryResponse(
+  req: DaemonRequest,
+  env: HostEnvironment['env'],
+): Promise<DaemonResponse> {
   try {
-    const blockingClaims = blockingClaimOwnersByDevice();
+    const blockingClaims = blockingClaimOwnersByDevice(env);
     return {
       ok: true,
       data: {
-        devices: (await resolveInventoryDevices(req)).map((device) => ({
+        devices: (await resolveInventoryDevices(req, env)).map((device) => ({
           ...publicDeviceInfo(device),
           ...claimedByProjection(device, blockingClaims),
         })),
@@ -166,9 +173,11 @@ async function devicesInventoryResponse(req: DaemonRequest): Promise<DaemonRespo
   }
 }
 
-function blockingClaimOwnersByDevice(): Map<string, { session: string; workspace: string }> {
+function blockingClaimOwnersByDevice(
+  env: HostEnvironment['env'],
+): Map<string, { session: string; workspace: string }> {
   const owners = new Map<string, { session: string; workspace: string }>();
-  for (const entry of inspectDeviceClaims({})) {
+  for (const entry of inspectDeviceClaims({}, env)) {
     const claim = entry.claim;
     if (!claim || deviceClaimOwnerCannotRelease(entry.classification)) continue;
     owners.set(claim.deviceKey, {
@@ -187,13 +196,20 @@ function claimedByProjection(
   return owner ? { claimedBy: owner } : {};
 }
 
-async function resolveInventoryDevices(req: DaemonRequest): Promise<DeviceInfo[]> {
+async function resolveInventoryDevices(
+  req: DaemonRequest,
+  env: HostEnvironment['env'],
+): Promise<DeviceInfo[]> {
   const requestedPlatform = req.flags?.platform;
-  const devices = await listDeviceInventory(inventoryDeviceQuery(req, requestedPlatform));
+  const devices = await listDeviceInventory(inventoryDeviceQuery(req, requestedPlatform, env));
   return filterInventoryDevices(devices, req.flags?.platform, req.flags?.target);
 }
 
-function inventoryDeviceQuery(req: DaemonRequest, platform: PlatformSelector | undefined) {
+function inventoryDeviceQuery(
+  req: DaemonRequest,
+  platform: PlatformSelector | undefined,
+  env: HostEnvironment['env'],
+) {
   const flags = req.flags;
   return {
     platform,
@@ -205,8 +221,9 @@ function inventoryDeviceQuery(req: DaemonRequest, platform: PlatformSelector | u
       flags?.iosSimulatorDeviceSet,
       platform,
       flags?.target,
+      env,
     ),
-    androidSerialAllowlist: inventoryAndroidSerialAllowlist(flags?.androidDeviceAllowlist),
+    androidSerialAllowlist: inventoryAndroidSerialAllowlist(flags?.androidDeviceAllowlist, env),
   };
 }
 
@@ -214,16 +231,21 @@ function inventoryIosSimulatorSetPath(
   configuredPath: string | undefined,
   platform: PlatformSelector | undefined,
   target: DeviceInfo['target'],
+  env: HostEnvironment['env'],
 ) {
-  return resolveAppleSimulatorSetPathForSelector({
-    simulatorSetPath: resolveIosSimulatorDeviceSetPath(configuredPath),
+  return resolveRequestAppleSimulatorSetPath({
+    requestedSetPath: configuredPath,
     platform,
     target,
+    env,
   });
 }
 
-function inventoryAndroidSerialAllowlist(configuredAllowlist: string | undefined) {
-  const allowlist = resolveAndroidSerialAllowlist(configuredAllowlist);
+function inventoryAndroidSerialAllowlist(
+  configuredAllowlist: string | undefined,
+  env: HostEnvironment['env'],
+) {
+  const allowlist = resolveAndroidSerialAllowlist(configuredAllowlist, env);
   return allowlist ? Array.from(allowlist).sort() : undefined;
 }
 
@@ -334,6 +356,7 @@ function hasAvailableFact(
 }
 
 async function handleAppsInventory(params: {
+  env: HostEnvironment['env'];
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -361,6 +384,7 @@ async function handleAppsInventory(params: {
 
   const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
     req.flags?.androidDeviceAllowlist,
+    params.env,
   );
   const runtimeResolution = await resolveAppsRuntime({
     device,

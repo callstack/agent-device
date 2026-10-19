@@ -7,8 +7,8 @@ import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
-import { maestroScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { maestroScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
+import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import {
   unavailableBindDevice,
@@ -73,6 +73,7 @@ async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
   // the asserted path: dropping it in the handler must fail this test, since an
   // unset field reads as trusted and a remote flow would run evalScript.
   const response = await handleReplayCommand({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req,

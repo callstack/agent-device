@@ -1,4 +1,5 @@
 import type { ActingPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
+import type { InteractionAction } from '@agent-device/selectors/interaction-action';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
 import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 
@@ -19,22 +20,6 @@ import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay
  */
 export type ExpectedResolvedTarget = ReplayTargetGuardDenotation;
 
-export type InteractionAction =
-  | 'click'
-  | 'press'
-  | 'fill'
-  | 'focus'
-  | 'longPress'
-  | 'hover'
-  | 'scroll'
-  | 'swipe'
-  | 'pinch'
-  | 'pan'
-  | 'drag'
-  | 'fling'
-  | 'rotate'
-  | 'transform';
-
 export type ResolveInteractionTargetParams = {
   action: InteractionAction;
   requireInteractive: boolean;
@@ -45,12 +30,6 @@ export type ResolveInteractionTargetParams = {
    * the element they resolved.
    */
   pipeline: ActingPipelinePolicy;
-  /**
-   * How long a `promotedTarget` row may poll for a target that does not exist yet (never model- or
-   * CLI-writable); `resolveSelectorInteractionTarget` caps it at the row's `maxTimeoutMs`. Anything
-   * other than a positive integer, and every `resolvedTarget` row, takes one attempt.
-   */
-  readinessTimeoutMs?: number;
   /**
    * `--verify` (#1047): also capture the pre-action node set for a `point` target
    * so `changedFromBefore` evidence has a baseline. Ref/selector targets already

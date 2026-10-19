@@ -1,11 +1,15 @@
+import { isTenantOwnedSessionName } from '@agent-device/contracts/daemon-http';
+
 /**
  * The one rule that says which sessions belong to a tenant: under tenant
- * isolation every session name lives beneath its own `<tenant>:` prefix.
+ * isolation every session name lives beneath its own `<tenant>:` prefix
+ * (`isTenantOwnedSessionName` in `@agent-device/contracts/daemon-http`).
  *
- * It is written once because two sides depend on it agreeing — `scopeRequestSession`
+ * It is written once because several sides depend on it agreeing — `scopeRequestSession`
  * (`request-admission.ts`) names the session, and the request diagnostics route
- * (`request-diagnostics-http.ts`, #1801) decides from the name alone whether a
- * caller may read that session's record long after the session itself is gone.
+ * (`request-diagnostics-http.ts`, #1801) and `@agent-device/proxy` decide from the
+ * name alone whether a caller may read that session's record long after the session
+ * itself is gone.
  *
  * The naming side has a precondition the reading side must honor: it applies the
  * prefix ONLY under tenant isolation, which the daemon forces exactly when the
@@ -35,10 +39,6 @@ export type TenantSessionNamespace = {
 
 export function tenantScopedSessionName(tenant: string, session: string): string {
   return isTenantOwnedSessionName(tenant, session) ? session : `${tenant}:${session}`;
-}
-
-export function isTenantOwnedSessionName(tenant: string, sessionName: string): boolean {
-  return sessionName.startsWith(`${tenant}:`);
 }
 
 /**

@@ -96,6 +96,7 @@ explicit config:
 - local code and write destinations (`reporter`, `reportJunit`, `saveScript`, `launchConsole`)
 
 Project config can also set `snapshotDepth`, `snapshotScope`, `screenshotScale`, `activity`, `relaunch`, `shutdown`, `fps`, and `quality`. Local paths and executable modules, such as `stepsFile` and `reporter`, are allowed only in user or explicit config.
+The `record` config key and `AGENT_DEVICE_RECORD` were removed. `--record` is per-invocation only: pass it on the command, or set `record: true` in an SDK/MCP call, to keep a corrective read in a healed script.
 
 `install-from-source` can read a GitHub Actions artifact source from user or explicit config when the remote daemon supports resolving CI artifacts. Repository config rejects this key:
 
@@ -121,8 +122,8 @@ Only the variables below, and those documented on command pages, are supported. 
 
 | Category | Env vars | Decision |
 | --- | --- | --- |
-| CLI defaults and config | `AGENT_DEVICE_HOME`, `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public |
-| Device scoping | `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST` | Public |
+| CLI defaults and config | `AGENT_DEVICE_HOME`, `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public. `AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS` is the ceiling (a positive integer number of milliseconds, default `120000`; any other value fails with `INVALID_ARGS` before a daemon spawns, and only when the client must start a daemon — a client that attaches to or reuses a running daemon never reads it) a client waits for a local daemon it starts to register; CLI, MCP, and Node clients share it. A live daemon is waited for while it records startup progress, so an overloaded host slows startup instead of failing it. A failed startup names the outcome in `details.reason`: `startup-exited` (the process ended before registering), `startup-stalled` (alive, no startup progress for a fixed 60 s window this variable does not change), or `startup-ceiling` (a startup was still live when the ceiling passed — this client's daemon or another client's; the client stops its own launch and never signals another client's live daemon. Only a progressing own launch outlasts the fixed stall window). Branch on `details.reason`, never on the message. |
+| Device scoping | `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST`, `AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET` | Public. `AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET` is read by the daemon: every iOS simulator request that names no `--ios-simulator-device-set` uses that set, so iOS physical devices are not listed, and a request naming a different path string fails with `INVALID_ARGS` (`details.reason: "ios_simulator_device_set_outside_daemon_set"`). macOS and non-iOS requests ignore it. A daemon started by the CLI inherits the CLI's value; restart the daemon after changing it. |
 | Android test IME | `AGENT_DEVICE_TEST_IME` | Public. Same setting as `--test-ime` / `--no-test-ime` on `open`, `test`, and `replay`; see known limitations. |
 | Local daemon storage | `AGENT_DEVICE_STATE_DIR` | Public |
 | Metro and install helpers | `AGENT_DEVICE_METRO_BEARER_TOKEN`, `AGENT_DEVICE_BUNDLETOOL_JAR` | Public |

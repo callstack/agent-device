@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type TsdownPluginOption } from 'tsdown';
 
 const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
@@ -55,8 +56,8 @@ const publicSdkChunkGroups = [
   ],
   [
     'sdk-remote-config',
-    /src[\\/]remote[\\/]remote-config-schema\.d\.[cm]?ts$/,
-    /src[\\/]remote[\\/]remote-config-schema\.ts$/,
+    /packages[\\/]remote[\\/]src[\\/]remote-config-schema\.d\.[cm]?ts$/,
+    /packages[\\/]remote[\\/]src[\\/]remote-config-schema\.ts$/,
   ],
   ['sdk-selectors', /src[\\/]sdk[\\/]selectors\.d\.[cm]?ts$/, /src[\\/]sdk[\\/]selectors\.ts$/],
 ] as const;
@@ -108,7 +109,7 @@ export default defineConfig({
     finders: 'src/sdk/finders.ts',
     'ai-sdk': 'src/ai-sdk/index.ts',
     'internal/bin': 'src/bin.ts',
-    'internal/companion-tunnel': 'src/client/companion-tunnel.ts',
+    'internal/companion-tunnel': 'packages/react-native/src/companion/companion-tunnel.ts',
     'internal/daemon': 'src/daemon.ts',
     'internal/run-script-http-child': 'packages/maestro/src/daemon-port/run-script-http-child.ts',
     'internal/png-worker': 'packages/capture-kit/src/png-worker.ts',
@@ -169,8 +170,9 @@ export default defineConfig({
   // specifier to a chunk that names the omission. Add the package to `deps.onlyBundle` and drop
   // this alias to restore that path.
   alias: {
-    '@limrun/xdelta3-wasm': new URL('./src/vendor/limrun-delta-sync-omitted.ts', import.meta.url)
-      .pathname,
+    '@limrun/xdelta3-wasm': fileURLToPath(
+      new URL('./src/vendor/limrun-delta-sync-omitted.ts', import.meta.url),
+    ),
   },
   format: 'esm',
   platform: 'node',

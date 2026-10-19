@@ -58,6 +58,47 @@ function batchRequest(commands: string[], responseLevel?: ResponseLevel): BatchR
   };
 }
 
+// #3674: the daemon refuses a request that names a session it does not hold. A batch step is
+// addressed through `session:`, so only a caller who named a session may see one in `flags`:
+// stamping every step would hand that refusal to sessionless batches, whose steps are meant to
+// resolve their device from the session or the selectors.
+test('sessionless batch steps carry no session flag, so they stay sessionless at the daemon', async () => {
+  const seen: Array<Record<string, unknown> | undefined> = [];
+  const request: BatchRequest = {
+    token: 't',
+    command: 'batch',
+    positionals: [],
+    flags: { batchSteps: [{ command: 'snapshot' }] },
+  };
+  const response = await runBatch(request, 'cwd:1a2b3c4d5e6f7a8b:default', async (req) => {
+    seen.push(req.flags as Record<string, unknown> | undefined);
+    return { ok: true, data: {} };
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(seen[0]?.session, undefined);
+});
+
+test('a batch whose caller named a session stamps that address onto every step', async () => {
+  const seen: Array<Record<string, unknown> | undefined> = [];
+  const request: BatchRequest = {
+    token: 't',
+    command: 'batch',
+    positionals: [],
+    session: 'e2e-ios-0',
+    meta: { sessionExplicit: true },
+    flags: { batchSteps: [{ command: 'snapshot' }, { command: 'get' }] },
+  };
+  const response = await runBatch(request, 'e2e-ios-0', async (req) => {
+    seen.push(req.flags as Record<string, unknown> | undefined);
+    return { ok: true, data: {} };
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(seen[0]?.session, 'e2e-ios-0');
+  assert.equal(seen[1]?.session, 'e2e-ios-0');
+});
+
 // #2997: `testIme` joined INHERITED_PARENT_FLAG_KEYS for the flow command's session
 // opens; batch shares that list, so its steps inherit the parent's opt-in the same way.
 // Pinning it here keeps the shared-list addition deliberate for both consumers.

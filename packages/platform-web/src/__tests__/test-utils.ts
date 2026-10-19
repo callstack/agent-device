@@ -68,7 +68,13 @@ export async function withManagedAgentBrowserProvider(
 ): Promise<void> {
   const stateDir = mkdtempForTestSync('agent device web provider ');
   installFakeManagedAgentBrowser(stateDir);
-  await testFn(createAgentBrowserWebProvider({ ...options, stateDir }));
+  await testFn(
+    createAgentBrowserWebProvider({
+      host: { env: process.env, cwd: process.cwd() },
+      ...options,
+      stateDir,
+    }),
+  );
 }
 
 /** The answer shape the managed backend answers every command with. */

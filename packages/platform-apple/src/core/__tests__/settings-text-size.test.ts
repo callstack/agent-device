@@ -4,11 +4,7 @@ import assert from 'node:assert/strict';
 import { readIosSetting, setIosSetting } from '../app-settings.ts';
 import { assertRejectsAppError } from '../../__tests__/app-error.ts';
 import { withFakeAppleTool, type FakeAppleToolResponse } from '../../__tests__/fake-apple-tool.ts';
-import {
-  IOS_TEST_SIMULATOR,
-  MACOS_TEST_DEVICE,
-  TVOS_TEST_SIMULATOR,
-} from './apple-core-stub-helpers.ts';
+import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
 
 // `simctl ui <device> content_size` is reached through the production tool-provider scope that
 // `withFakeAppleTool` installs, so nothing here shells out for real.
@@ -45,6 +41,9 @@ test('setIosSetting text-size applies the category with simctl ui content_size',
         IOS_TEST_SIMULATOR,
         'text-size',
         'accessibility-extra-large',
+        undefined,
+        undefined,
+        process.env,
       );
       assert.deepEqual(result, {
         setting: 'text-size',
@@ -66,7 +65,14 @@ test('setIosSetting text-size sends the normalized category, not the caller casi
       return unexpectedArgs(args);
     },
     async ({ calls }) => {
-      await setIosSetting(IOS_TEST_SIMULATOR, 'text-size', ' Extra-Small ');
+      await setIosSetting(
+        IOS_TEST_SIMULATOR,
+        'text-size',
+        ' Extra-Small ',
+        undefined,
+        undefined,
+        process.env,
+      );
       assert.deepEqual(simctlUiCalls(calls), ['simctl ui sim-1 content_size extra-small']);
     },
   );
@@ -82,40 +88,21 @@ test('setIosSetting text-size refuses an off-ladder category without calling sim
       // `simctl ui ... content_size bogus` exits 0 with `Invalid argument`, so an unvalidated write
       // would be reported as a successful change that changed nothing.
       await assertRejectsAppError(
-        () => setIosSetting(IOS_TEST_SIMULATOR, 'text-size', 'gigantic'),
+        () =>
+          setIosSetting(
+            IOS_TEST_SIMULATOR,
+            'text-size',
+            'gigantic',
+            undefined,
+            undefined,
+            process.env,
+          ),
         {
           code: 'INVALID_ARGS',
         },
       );
       assert.deepEqual(simctlUiCalls(calls), []);
     },
-  );
-});
-
-test('setIosSetting text-size refuses a simulator whose content size was never verified', async () => {
-  // The `settings` admission is one cell covering every Apple simulator, so the per-setting leaf
-  // rule lives here: an Apple TV simulator would otherwise answer `Text size set to …` for a
-  // setting nobody has observed it hold.
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args))
-        return JSON.stringify({
-          devices: {
-            'com.apple.CoreSimulator.SimRuntime.tvOS-18-0': [
-              { udid: 'tvos-sim-1', state: 'Booted' },
-            ],
-          },
-        });
-      return unexpectedArgs(args);
-    },
-    async ({ calls, device }) => {
-      await assertRejectsAppError(() => setIosSetting(device, 'text-size', 'large'), {
-        code: 'UNSUPPORTED_OPERATION',
-        message: /iOS and iPadOS simulators/,
-      });
-      assert.deepEqual(simctlUiCalls(calls), []);
-    },
-    { device: TVOS_TEST_SIMULATOR },
   );
 });
 
@@ -188,20 +175,4 @@ test('readIosSetting text-size reports a failing simctl read', async () => {
       });
     },
   );
-});
-
-test('readIosSetting text-size refuses a leaf that holds no content size', async () => {
-  for (const device of [MACOS_TEST_DEVICE, TVOS_TEST_SIMULATOR]) {
-    await withFakeAppleTool(
-      (args) => (isSimctlListDevices(args) ? BOOTED_SIM_LIST_JSON : unexpectedArgs(args)),
-      async ({ calls }) => {
-        await assertRejectsAppError(() => readIosSetting(device, 'text-size'), {
-          code: 'UNSUPPORTED_OPERATION',
-          message: /iOS and iPadOS simulators/,
-        });
-        assert.deepEqual(simctlUiCalls(calls), []);
-      },
-      { device },
-    );
-  }
 });

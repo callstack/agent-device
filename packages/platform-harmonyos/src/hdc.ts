@@ -11,7 +11,6 @@ import {
   type ExecOptions,
   type ExecResult,
 } from '@agent-device/host-kit/command';
-import { hostEnvironment } from '@agent-device/host-kit/process';
 
 export type HarmonyHdcOptions = Pick<
   ExecOptions,
@@ -49,9 +48,7 @@ export async function runHarmonyShell(
  * DevEco's command-line tools do not amend PATH for non-interactive processes.
  * Honor the documented roots so the daemon sees the same HDC binary as a shell.
  */
-export async function ensureHarmonyToolchainPathConfigured(
-  env: NodeJS.ProcessEnv = hostEnvironment(),
-): Promise<void> {
+export async function ensureHarmonyToolchainPathConfigured(env: NodeJS.ProcessEnv): Promise<void> {
   const toolchainRoots = [
     env.HDC_SDK_PATH,
     env.DEVECO_SDK_HOME

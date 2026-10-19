@@ -1,0 +1,22 @@
+{
+  "name": "@agent-device/react-native",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "React Native development runtime: Metro preparation, companion tunnelling, component inspection, and render profiling. Internal workspace package bundled into agent-device.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/daemon-contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
+  }
+}

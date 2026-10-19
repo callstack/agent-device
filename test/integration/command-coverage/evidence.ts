@@ -12,11 +12,10 @@ export type RepositoryEvidence = {
 
 const C = PUBLIC_COMMANDS;
 
-// Tracking issues for the known-gap rows each platform still carries.
+// The tracking issues that own the `known-gap` rows each platform still carries. An
+// accepted-gap row states a `reason` instead of citing one of these.
 export const MACOS_COVERAGE_GAP_ISSUE = 1916;
 export const TVOS_COVERAGE_GAP_ISSUE = 1914;
-export const WEB_COVERAGE_GAP_ISSUE = 1900;
-export const LINUX_COVERAGE_GAP_ISSUE = 1915;
 
 // Android contract evidence that only the coverage declarations cite. Evidence shared with a
 // production test module keeps living next to that module and is imported by declarations.ts.
@@ -50,11 +49,29 @@ export const ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
     [C.fold],
     'Android admits the fold fact on emulators and refuses every other kind',
   );
+export const ANDROID_UNINSTALL_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'test/integration/provider-scenarios/android-uninstall.test.ts',
+    [C.uninstall],
+    'Provider-backed integration Android uninstall removes an installed package and no-ops on a missing one',
+  );
+export const ANDROID_TELEPHONY_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'packages/platform-android/src/runtime.test.ts',
+    [C.telephony],
+    'Android admits the telephony fact on emulators and refuses every other kind',
+  );
 export const ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'packages/daemon/src/execution/__tests__/viewport-runtime.test.ts',
     [C.viewport],
     'rejects an unavailable exact-owner fact before binding',
+  );
+export const ANDROID_AUDIO_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'packages/daemon/src/sessions/session-observability/internal/__tests__/session-audio.test.ts',
+    [C.audio],
+    'audio probe starts host helper for Android emulator audio',
   );
 
 export const TVOS_REMOTE_TEST_NAME =

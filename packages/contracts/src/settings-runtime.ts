@@ -1,6 +1,7 @@
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
-import type { ReadableSetting, ReadSettingResult, SettingOptions } from './settings.ts';
+import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
+import type { ReadSettingResult, SettingOptions } from './settings.ts';
+import type { ReadableSetting, SettingName } from './settings-catalog.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
@@ -46,22 +47,43 @@ export type SettingsRuntimeOperationFacts = Readonly<{
 }>;
 
 /**
- * Builds the exhaustive owner claims for the two settings operations. Both cells are stated, never
- * implied: a write and a read genuinely diverge for real owners — the macOS host sets an appearance
- * it has no ladder to read back, and the HarmonyOS leaf clears app state it cannot read — so an
- * owner that leaves one out is not compiled, not guessed.
+ * Builds an owner's settings facts from the settings it serves. `target` gates every setting on the
+ * device in hand; each listed setting may narrow it further, and a setting the owner does not list
+ * answers with `unsupported`. An operation is available while any of its settings is; otherwise it
+ * answers with its first listed setting's refusal, or `unsupported` when it lists none.
  */
 export function settingsRuntimeOperationFacts(
   input: Readonly<{
-    setSetting: RuntimeOperationFact;
-    readSetting: RuntimeOperationFact;
+    target: RuntimeOperationFact;
+    unsupported: RuntimeOperationUnavailability;
+    write: Readonly<Partial<Record<SettingName, RuntimeOperationFact>>>;
+    read?: Readonly<Partial<Record<ReadableSetting, RuntimeOperationFact>>>;
   }>,
 ): SettingsRuntimeOperationFacts {
   return Object.freeze({
-    setSetting: input.setSetting,
-    readSetting: input.readSetting,
+    setSetting: settingSubjectsFact(input, input.write),
+    readSetting: settingSubjectsFact(input, input.read ?? {}),
   });
 }
+
+function settingSubjectsFact(
+  owner: Readonly<{ target: RuntimeOperationFact; unsupported: RuntimeOperationUnavailability }>,
+  served: Readonly<Partial<Record<SettingName, RuntimeOperationFact>>>,
+): RuntimeOperationFact {
+  if (!owner.target.available) return owner.target;
+  const listed = Object.values(served).filter((fact) => fact !== undefined);
+  if (!listed.some((fact) => fact.available)) return listed[0] ?? owner.unsupported;
+  const subjects = Object.fromEntries(
+    Object.entries(served).map(([name, fact]) => [name, fact.available ? AVAILABLE : fact]),
+  );
+  return Object.freeze({
+    available: true,
+    subjects: Object.freeze(subjects),
+    unlisted: owner.unsupported,
+  });
+}
+
+const AVAILABLE = Object.freeze({ available: true } as const);
 
 /**
  * Captures one selected owner's interactor authority for the lifetime of a request binding. The

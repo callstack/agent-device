@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { shutdownTargetUse } from '@agent-device/contracts/platform-runtime-operations';
@@ -12,7 +13,6 @@ import {
   requireRuntimeFacts,
   type RuntimeCommandHandlerParams,
 } from '../../core/session-runtime-admission.ts';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 import { deviceStatusReportResponse } from './session-device-status-response.ts';
 
 function shutdownUnavailableResponse(fact: RuntimeOperationFact) {

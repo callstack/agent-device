@@ -38,19 +38,44 @@ extension RunnerTests {
     }
   }
 
+  /// What the point's text-input lookup can say before a coordinate gesture is dispatched: the
+  /// input it found, no input at the point, or nothing. A lookup that cannot answer is neither of the
+  /// first two, and must not be read as one of them.
+  enum CoordinateTextInputResolution {
+    case input(TextInputAtPoint)
+    case absent
+    case unavailable
+  }
+
   /// The input `coordinateTapTextInputAt` finds, with the identity it carried then, read inside the
-  /// same issue containment. Nil when the probe finds none or cannot answer.
-  func coordinateTapTextInputIdentityAt(app: XCUIApplication, x: Double, y: Double) -> TextInputAtPoint? {
-    let probed = containingTextInputProbeIssues(fallback: nil) { shouldStop -> TextInputAtPoint? in
-      guard let element = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first,
-            case .input(let identity) = probeTextEntryInput(element)
+  /// same issue containment, split into what the lookup can name so a refusal can tell an empty
+  /// point from a blind one.
+  func coordinateTapTextInputIdentityAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double
+  ) -> CoordinateTextInputResolution {
+    let probed = containingTextInputProbeIssues(fallback: CoordinateTextInputResolution.unavailable) {
+      shouldStop -> CoordinateTextInputResolution in
+      guard let element = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first
       else {
-        return nil
+        return .absent
       }
-      return TextInputAtPoint(element: element, identity: identity)
+      switch probeTextEntryInput(element) {
+      case .input(let identity):
+        return .input(TextInputAtPoint(element: element, identity: identity))
+      case .noMatch:
+        return .absent
+      case .unavailable:
+        return .unavailable
+      }
     }
-    guard case .success(let input) = probed else { return nil }
-    return input
+    switch probed {
+    case .success(let resolution):
+      return resolution
+    case .failure:
+      return .unavailable
+    }
   }
 
   /// Whether `input`'s handle still resolves to the input it named when found, read inside the

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parse } from 'yaml';
 import { expect, test } from 'vitest';
 import { runCmdSync } from '@agent-device/host-kit/command';
-import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTest } from '@agent-device/test-kit';
 
 const pipeline = (serial: string) => [
   'pnpm|gate build',

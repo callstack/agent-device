@@ -36,12 +36,6 @@
     "dispatched": "unknown"
   },
   {
-    "id": "daemon.refusal.selector-readiness-exhausted",
-    "producer": "daemon",
-    "trigger": "press with readinessTimeoutMs whose selector target never appears: the readiness wait (pollForSelectorReadiness) spends its budget over two or more polls and refuses with selector_not_found before any backend touch",
-    "dispatched": "no"
-  },
-  {
     "id": "daemon.unclassified",
     "producer": "daemon",
     "trigger": "an interaction failure no producer classified; the seam reads only the failure, never session state",
@@ -111,6 +105,12 @@
     "id": "daemon.route.session-or-selector-refusal",
     "producer": "daemon",
     "trigger": "a device-bound command with no active session and no device selector: requireSessionOrExplicitSelector refuses before any target resolves, carrying details.reason session_or_device_selector_required",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.route.named-session-refusal",
+    "producer": "daemon",
+    "trigger": "a command naming a session this daemon does not hold and no device selector: requireNamedSessionHoldsDevice refuses with SESSION_NOT_FOUND and details.reason named_session_not_found before any device is listed or resolved",
     "dispatched": "no"
   },
   {
@@ -197,6 +197,24 @@
     "id": "ios-runner.reply.ALERT_NOT_FOUND",
     "producer": "ios-runner",
     "trigger": "structured runner reply with code ALERT_NOT_FOUND: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.NO_TEXT_INPUT_AT_POINT",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code NO_TEXT_INPUT_AT_POINT: a coordinate fill refused before its focus tap because the runner identified no text input under the point",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.TEXT_INPUT_PROBE_UNAVAILABLE",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code TEXT_INPUT_PROBE_UNAVAILABLE: a coordinate fill refused before its focus tap because the pre-tap input lookup could not answer",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.ALERT_BUTTON_NOT_FOUND",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ALERT_BUTTON_NOT_FOUND: the accept/dismiss button choice refused before any activation (#3627)",
     "dispatched": "no"
   },
   {

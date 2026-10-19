@@ -1,15 +1,20 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { trackUploadedArtifact } from '../../../resources/artifact-tracking.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
@@ -26,6 +31,8 @@ import {
   mockDeployAppRuntime,
   mockInspectDeviceRuntimeFacts,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
+
+bindTestCommandHost();
 
 function makeStore(): SessionStore {
   return new SessionStore(
@@ -50,6 +57,7 @@ beforeEach(() => {
 
 test('reinstall requires active session or explicit device selector', async () => {
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -86,6 +94,7 @@ test('reinstall validates required args before runtime admission', async () => {
     }),
   );
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -124,6 +133,7 @@ test('install binds the deployment use exactly once after one facts admission', 
   });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -189,6 +199,7 @@ test('install fails closed before binding when its provider owner lacks deployme
   };
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -235,6 +246,7 @@ test('reinstall cleans an uploaded artifact after the request-scoped operation',
   vi.mocked(resolveTargetDevice).mockResolvedValue(session.device);
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -271,6 +283,7 @@ test('HarmonyOS reinstall updates the active session identity from the runtime r
   mockDeployAppRuntime.mockResolvedValue({ packageName: 'com.example.application' });
 
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
@@ -322,6 +335,7 @@ test.each(['rebuild', 'retire'] as const)(
       return { packageName: 'com.example.updated' };
     });
     const running = handleSessionCommands({
+      host: createTestHostEnvironment(),
       createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {

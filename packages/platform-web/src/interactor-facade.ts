@@ -1,0 +1,11 @@
+import type { Interactor } from '@agent-device/contracts/interactor-types';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { WebProvider } from './provider.ts';
+
+export async function createWebInteractor(
+  host: HostEnvironment,
+  provider?: WebProvider,
+): Promise<Interactor> {
+  const { createWebInteractor: create } = await import('./interactor.ts');
+  return await create(host, provider);
+}

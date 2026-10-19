@@ -47,7 +47,11 @@ async function ensureEmulatorReady(
   const existing = isRunningEmulator(selected) ? selected : undefined;
   const launchedPid = existing
     ? undefined
-    : host.deviceReadiness.androidEmulator.launch(selected.name, input.headless);
+    : await host.deviceReadiness.androidEmulator.launch(
+        selected.name,
+        input.headless,
+        deadlineAtMs - host.clock.now(),
+      );
   try {
     const discovered =
       existing ??

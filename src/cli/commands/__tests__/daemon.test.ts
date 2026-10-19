@@ -1,21 +1,26 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
-import type { DaemonStopResult } from '@agent-device/daemon/daemon-stop';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
+import {
+  mkdtempForTestSync,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 const mocks = vi.hoisted(() => ({
   cleanupDaemonOwner: vi.fn(async () => undefined),
   readDaemonShutdownReport: vi.fn(),
+  readDaemonStatus: vi.fn(),
   readDaemonStopIdentity: vi.fn(),
   stopDaemon: vi.fn(),
   writeCommandOutput: vi.fn(),
 }));
 
-// The mock specifier must be the SUT's exact `@agent-device/daemon/daemon-stop`: the
+// The mock specifier must be the SUT's exact `@agent-device/daemon-contracts/daemon-stop`: the
 // mutation lane aliases only the manifest's exact entries, so the `./testing/*` pattern
 // form resolved outside the Stryker sandbox and the mock silently missed (#3546 CI).
-vi.mock('@agent-device/daemon/daemon-stop', () => ({
+vi.mock('@agent-device/daemon-contracts/daemon-stop', () => ({
   readDaemonStopIdentity: mocks.readDaemonStopIdentity,
   stopDaemon: mocks.stopDaemon,
 }));
@@ -25,9 +30,15 @@ vi.mock('@agent-device/daemon-contracts/daemon-shutdown-report', () => ({
 vi.mock('../../../platform-runtime-daemon-owner-cleanup.ts', () => ({
   createDaemonOwnerCleanup: () => ({ cleanup: mocks.cleanupDaemonOwner }),
 }));
+vi.mock('@agent-device/daemon-contracts/daemon-registration', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/daemon-contracts/daemon-registration')>()),
+  readDaemonStatus: mocks.readDaemonStatus,
+}));
 vi.mock('../shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
 
 import { daemonCommand } from '../daemon.ts';
+
+bindTestCommandHost();
 
 const GRACEFUL_RESULT: DaemonStopResult = {
   stopped: true,
@@ -45,10 +56,11 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-test('accepts only daemon stop', async () => {
+test('accepts only daemon stop and status', async () => {
   await assert.rejects(
     async () =>
       await daemonCommand({
+        host: createTestHostEnvironment(),
         positionals: [],
         flags: { help: false, json: false, version: false },
         client: {} as never,
@@ -58,6 +70,7 @@ test('accepts only daemon stop', async () => {
   await assert.rejects(
     async () =>
       await daemonCommand({
+        host: createTestHostEnvironment(),
         positionals: ['stop', 'extra'],
         flags: { help: false, json: false, version: false },
         client: {} as never,
@@ -86,6 +99,7 @@ test('merges a graceful shutdown report and cleans runner leases with the start-
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['stop'],
       flags: { clean: true, help: false, json: false, stateDir, version: false },
       client: {} as never,
@@ -125,6 +139,7 @@ test('reports graceful provider cleanup as unknown when the shutdown report is u
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['stop'],
       flags: { help: false, json: false, stateDir, version: false },
       client: {} as never,
@@ -162,6 +177,7 @@ test('warns in text output when a graceful stop leaves an orphaned claim', async
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['stop'],
       flags: { clean: false, help: false, json: false, stateDir, version: false },
       client: {} as never,
@@ -199,6 +215,7 @@ test('routes an unattributable claim to the default status view, never to --stal
 
   try {
     await daemonCommand({
+      host: createTestHostEnvironment(),
       positionals: ['stop'],
       flags: { clean: false, help: false, json: false, stateDir, version: false },
       client: {} as never,
@@ -219,6 +236,55 @@ test('routes an unattributable claim to the default status view, never to --stal
     expect(rendered).toContain('No device release route settles it');
     expect(rendered).not.toContain('then release with');
     expect(rendered).not.toContain('Inspect with: agent-device device status --stale');
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('daemon status reads the daemon record without stopping or contacting the daemon', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-command-');
+  const status = {
+    state: 'running',
+    stateDir,
+    pid: 321,
+    version: '0.21.30',
+    plugins: [
+      {
+        provider: 'browserstack',
+        source: 'builtin',
+        state: 'active',
+        credentials: { variables: [], byBackend: {} },
+      },
+      {
+        provider: 'testmu',
+        source: 'store',
+        package: '@agent-device/testmu',
+        version: '1.0.0',
+        state: 'failed',
+        error: { code: 'INVALID_ARGS', message: 'bad plugin' },
+        credentials: { variables: [], byBackend: {} },
+      },
+    ],
+  };
+  mocks.readDaemonStatus.mockReturnValue(status);
+
+  try {
+    await daemonCommand({
+      host: createTestHostEnvironment(),
+      positionals: ['status'],
+      flags: { help: false, json: true, stateDir, version: false },
+      client: {} as never,
+    });
+
+    expect(mocks.stopDaemon).not.toHaveBeenCalled();
+    expect(mocks.writeCommandOutput).toHaveBeenCalledWith(
+      expect.objectContaining({ json: true }),
+      status,
+      expect.any(Function),
+    );
+    const render = mocks.writeCommandOutput.mock.calls[0]![2] as () => string;
+    expect(render()).toContain('testmu [store] @agent-device/testmu@1.0.0 - failed: bad plugin');
+    expect(render()).toContain('browserstack [builtin] builtin - active');
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

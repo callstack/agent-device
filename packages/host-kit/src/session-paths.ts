@@ -18,6 +18,6 @@ export function isSafeSessionSegment(name: string): boolean {
   return safe.length > 0 && safe !== '.' && safe !== '..';
 }
 
-export function expandSessionPath(filePath: string, cwd?: string): string {
+export function expandSessionPath(filePath: string, cwd: string): string {
   return resolveUserPath(filePath, { cwd });
 }

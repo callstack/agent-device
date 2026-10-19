@@ -6,6 +6,7 @@ import type { PlatformRuntimeModule } from '@agent-device/contracts/platform-run
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { PlatformPlugin } from '@agent-device/contracts/platform-plugin';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 
 // fallow-ignore-next-line code-duplication
 type DeferredFunction = (...args: never[]) => unknown;
@@ -49,9 +50,28 @@ export const vegaPlugin = {
   createInteractor: async (
     device: DeviceInfo,
     runnerContext: RunnerContext,
+    host: HostEnvironment,
   ): Promise<Interactor> => {
     const { createVegaInteractor } = await import('./interactor.ts');
-    return createVegaInteractor(device, runnerContext);
+    // The interactor binds the CLI adapter to the composing runtime's host: executable
+    // resolution reads that host's PATH and HOME and memoizes on this instance (#3794). A
+    // request-scoped provider still wins: this one enters only when the request scopes none.
+    // The facade stays eager-free, so the scope helper arrives with its module, not above it.
+    const [{ withMethodScope }, toolProvider] = await Promise.all([
+      import('@agent-device/kernel/scoped-provider'),
+      import('./tool-provider.ts'),
+    ]);
+    const {
+      createLocalVegaCliAdapter,
+      createLocalVegaToolProvider,
+      hasScopedVegaToolProvider,
+      withVegaToolProvider,
+    } = toolProvider;
+    const provider = createLocalVegaToolProvider(createLocalVegaCliAdapter(host));
+    const interactor = createVegaInteractor(device, runnerContext);
+    return withMethodScope(interactor, async (task) =>
+      hasScopedVegaToolProvider() ? await task() : await withVegaToolProvider(provider, task),
+    );
   },
 } as const satisfies PlatformPlugin;
 

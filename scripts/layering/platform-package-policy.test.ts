@@ -36,7 +36,6 @@ function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/perf',
             '@agent-device/platform-apple/physical-device',
             '@agent-device/platform-apple/runner',
-            '@agent-device/platform-apple/runner/test-host',
             '@agent-device/platform-apple/runner/operations',
             '@agent-device/platform-apple/runner/requests-fixtures',
             '@agent-device/platform-apple/runner-owner',
@@ -57,7 +56,9 @@ function declarations(): PlatformPackageDeclaration[] {
               '@agent-device/platform-android/snapshot-capture-fixtures',
               '@agent-device/platform-android/ui-hierarchy-fixtures',
             ]
-          : [`@agent-device/platform-${family}`],
+          : family === 'harmonyos' || family === 'linux' || family === 'web'
+            ? [`@agent-device/platform-${family}`, `@agent-device/platform-${family}/interactor`]
+            : [`@agent-device/platform-${family}`],
   }));
 }
 
@@ -285,22 +286,6 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 
-  // The test-host installer is a single vitest setup file, dynamic imports included.
-  const testHostSources = validSources();
-  testHostSources.set(
-    'scripts/vitest-apple-runner-host-setup.ts',
-    "import { installAppleRunnerTestHost } from '@agent-device/platform-apple/runner/test-host';",
-  );
-  assert.deepEqual(checkPlatformPackagePolicy(testHostSources, declarations()), []);
-  testHostSources.set(
-    'src/platform-runtime.ts',
-    composition() + "\nvoid import('@agent-device/platform-apple/runner/test-host');",
-  );
-  assert.match(
-    messages(testHostSources).join('\n'),
-    /only scripts\/vitest-apple-runner-host-setup\.ts may import/,
-  );
-
   // A NEW unenumerated subpath widens the export list and fails declarations.
   const widened = declarations();
   const apple = widened.find((pkg) => pkg.family === 'apple')!;
@@ -311,6 +296,26 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   assert.match(
     messages(validSources(), widened).join('\n'),
     /platform-apple must export exactly its root façade/,
+  );
+});
+
+test('the runner test host is importable only from tests and __tests__ helpers', () => {
+  const testHostSources = validSources();
+  testHostSources.set(
+    'packages/platform-apple/src/runner/__tests__/host-setup.ts',
+    "import { installAppleRunnerTestHost } from '../test-host.ts';",
+  );
+  testHostSources.set(
+    'packages/platform-apple/src/runner/runner-lifecycle.ts',
+    "import { appleRunnerTestHost } from './test-host.ts';",
+  );
+  assert.match(
+    messages(testHostSources).join('\n'),
+    /runner\/test-host\.ts binds the runner test dispatcher/,
+  );
+  assert.equal(
+    messages(testHostSources).filter((message) => message.includes('test dispatcher')).length,
+    1,
   );
 });
 
@@ -384,7 +389,7 @@ test('platform packages may import the xml vocabulary package', () => {
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 });
 
-test('the Android mechanics facet is the named consumer seam and adb host wiring is root-only', () => {
+test('the Android mechanics facet is the named consumer seam and adb host wiring is limited to the root binding and daemon composition', () => {
   const mechanicsImport =
     "import { resolveAndroidAdbExecutor } from '@agent-device/platform-android/mechanics';";
   const hostImport =
@@ -394,6 +399,7 @@ test('the Android mechanics facet is the named consumer seam and adb host wiring
   allowed.set('src/sdk/android-adb.ts', mechanicsImport);
   allowed.set('packages/daemon/src/sessions/handlers/__tests__/session.test.ts', mechanicsImport);
   allowed.set('src/platform-runtime-android-adb-host.ts', hostImport);
+  allowed.set('src/daemon-composition.ts', hostImport);
   assert.deepEqual(
     messages(allowed).filter((message) => message.includes('may import')),
     [],
@@ -430,7 +436,7 @@ test('the Android mechanics facet is the named consumer seam and adb host wiring
   );
 });
 
-test('the Android test-only fixture subpaths accept test consumers and deny production ones', () => {
+test('R13 leaves the Android test-only fixture subpaths to R83 for every consumer', () => {
   const fixtureImport =
     "import { createAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';";
   const allowed = validSources();
@@ -440,21 +446,14 @@ test('the Android test-only fixture subpaths accept test consumers and deny prod
     fixtureImport,
   );
   allowed.set('test/integration/provider-scenarios/android.test.ts', fixtureImport);
-  assert.deepEqual(
-    messages(allowed).filter((message) => message.includes('may import')),
-    [],
-  );
+  assert.deepEqual(messages(allowed), []);
 
-  // Production consumers ride no facet seam: importing a fixture is an R13 violation, even
-  // from a file the mechanics facet would otherwise accept.
+  // Production importers of a fixture are R83's to refuse (package-export-surface.test.ts);
+  // R13 holds no second list of them.
   for (const file of ['src/commands/replay/index.ts', 'src/core/interactors/android.ts']) {
-    const denied = validSources();
-    denied.set(file, fixtureImport);
-    assert.match(
-      messages(denied).join('\n'),
-      /may import '@agent-device\/platform-android\/snapshot-capture-fixtures'/,
-      file,
-    );
+    const production = validSources();
+    production.set(file, fixtureImport);
+    assert.deepEqual(messages(production), [], file);
   }
 });
 
@@ -520,6 +519,115 @@ test('platform packages may use capture-kit but no unrelated workspace implement
       /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
     );
   }
+});
+
+test('platform-web production source may use only the canonical positional-ref selectors subpath', () => {
+  const allowed = validSources();
+  allowed.set(
+    'packages/platform-web/src/interactor.ts',
+    "import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), []);
+
+  for (const [file, specifier] of [
+    ['packages/platform-web/src/interactor.ts', '@agent-device/selectors'],
+    ['packages/platform-web/src/interactor.ts', '@agent-device/selectors/selector-pipeline'],
+    ['packages/platform-apple/src/probe.ts', '@agent-device/selectors/interaction-positionals'],
+    ['packages/platform-linux/src/probe.ts', '@agent-device/selectors/interaction-positionals'],
+  ] as const) {
+    const sources = validSources();
+    sources.set(file, `import { forbidden } from '${specifier}';`);
+    assert.match(
+      messages(sources).join('\n'),
+      /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
+      `${file} ${specifier}`,
+    );
+  }
+
+  for (const statement of [
+    "import { x } from '../../platform-apple/src/index.ts';",
+    "import { x } from '@agent-device/platform-apple';",
+    "import { x } from '../../../src/core/interactors.ts';",
+  ]) {
+    const sources = validSources();
+    sources.set(
+      'packages/platform-web/src/interactor.ts',
+      `import { stripAtPrefix } from '@agent-device/selectors/interaction-positionals';\n${statement}`,
+    );
+    assert.notDeepEqual(messages(sources), [], statement);
+  }
+});
+
+test('interactor subpaths are loaded only by the builtin registry, dynamically', () => {
+  for (const family of ['harmonyos', 'linux', 'web']) {
+    const allowed = validSources();
+    allowed.set(
+      'src/core/interactors/register-builtins.ts',
+      `const load = () => import('@agent-device/platform-${family}/interactor');`,
+    );
+    assert.deepEqual(checkPlatformPackagePolicy(allowed, declarations()), [], family);
+
+    for (const [file, source] of [
+      [
+        'src/core/interactors/register-builtins.ts',
+        `import { x } from '@agent-device/platform-${family}/interactor';`,
+      ],
+      ['src/core/interactors.ts', `void import('@agent-device/platform-${family}/interactor');`],
+      [
+        'packages/daemon/src/probe.ts',
+        `void import('@agent-device/platform-${family}/interactor');`,
+      ],
+      [
+        'src/core/interactors/register-builtins.ts',
+        `void import('@agent-device/platform-${family}/snapshot');`,
+      ],
+      [
+        `packages/platform-${family === 'web' ? 'linux' : 'web'}/src/probe.ts`,
+        `void import('@agent-device/platform-${family}/interactor');`,
+      ],
+    ] as const) {
+      const sources = validSources();
+      sources.set(file, source);
+      assert.notDeepEqual(messages(sources), [], `${family} ${file} ${source}`);
+    }
+  }
+
+  const undeclared = declarations().map((declaration) =>
+    declaration.family === 'linux'
+      ? { ...declaration, exportedSubpaths: ['@agent-device/platform-linux'] }
+      : declaration,
+  );
+  assert.match(
+    messages(validSources(), undeclared).join('\n'),
+    /platform-linux must export exactly its root façade.*mechanics subpaths/,
+  );
+});
+
+test('platform package tests may import test-kit, production source may not', () => {
+  const tests = validSources();
+  tests.set(
+    'packages/platform-apple/src/probe.test.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  tests.set(
+    'packages/platform-apple/src/recording/fixtures.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  tests.set(
+    'packages/platform-apple/src/probe.spec.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(tests, declarations()), []);
+
+  const production = validSources();
+  production.set(
+    'packages/platform-apple/src/probe.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  assert.match(
+    messages(production).join('\n'),
+    /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
+  );
 });
 
 test('package-owned tests may import their own public facade', () => {

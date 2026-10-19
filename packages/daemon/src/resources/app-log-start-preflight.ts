@@ -1,7 +1,7 @@
+import { appLogDurableResource } from '@agent-device/capture-kit/app-log-durable-resource';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
-import { appLogDurableResource } from './app-log-session-resource.ts';
 
 export function createNextAppLogFence(params: {
   ledger: AppLogAdmissionLedger;

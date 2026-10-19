@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 // Proves the exact androidAdbExecutor reference reaches the session handler
 // through the neutral providerScope, and that an empty scope forwards none.
@@ -77,6 +78,7 @@ test('the android adb executor from the generic provider scope reaches the sessi
   });
 
   await runRequestHandlerChain({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     ...baseChainParams('provider-scope-test'),
@@ -94,6 +96,7 @@ test('an empty provider scope forwards no android adb executor to the session ha
   handleSessionCommandsMock.mockClear();
 
   await runRequestHandlerChain({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     ...baseChainParams('provider-scope-empty'),

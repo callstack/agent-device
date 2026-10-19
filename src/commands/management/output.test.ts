@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
-import { withNoColorAsync } from '@agent-device/test-kit/color';
+import { withNoColorAsync, bindTestCommandHost } from '@agent-device/test-kit';
 import type { AppOpenResult } from '@agent-device/contracts/client';
+
+bindTestCommandHost();
 
 describe('openCliOutput', () => {
   test('prints session state directory on a second line', async () => {
@@ -87,10 +89,11 @@ describe('openCliOutput', () => {
     };
 
     const openOutput = await withNoColorAsync(() =>
-      formatCliOutput({ name: 'open', input: {}, result: openResult }),
+      formatCliOutput({ env: process.env, name: 'open', input: {}, result: openResult }),
     );
     const snapshotOutput = await withNoColorAsync(() =>
       formatCliOutput({
+        env: process.env,
         name: 'snapshot',
         input: { interactiveOnly: true },
         result: { nodes, truncated: false, backend: 'xctest', refsGeneration: 1 },
@@ -151,6 +154,7 @@ describe('openCliOutput', () => {
 describe('artifactsCliOutput', () => {
   test('prints ready artifact URLs and preserves JSON data', () => {
     const output = managementCliOutputFormatters.artifacts({
+      env: process.env,
       input: {},
       result: {
         provider: 'browserstack',
@@ -177,6 +181,7 @@ describe('artifactsCliOutput', () => {
 
   test('prints exact retry command for pending provider sessions', () => {
     const output = managementCliOutputFormatters.artifacts({
+      env: process.env,
       input: {},
       result: {
         provider: 'aws-device-farm',
@@ -197,6 +202,7 @@ describe('artifactsCliOutput', () => {
 
   test('prints daemon artifact inventory and preserves JSON data', () => {
     const output = managementCliOutputFormatters.artifacts({
+      env: process.env,
       input: {},
       result: {
         source: 'daemon',
@@ -228,27 +234,30 @@ describe('artifactsCliOutput', () => {
 describe('doctorCliOutput', () => {
   test('prints passing checks by default using test-style status markers', async () => {
     const output = await withNoColorAsync(() =>
-      doctorCliOutput({
-        status: 'pass',
-        summary: 'No blockers found.',
-        checks: [
-          {
-            id: 'agent-device',
-            status: 'pass',
-            summary: 'agent-device 0.17.9 using /tmp/agent-device',
-          },
-          {
-            id: 'device',
-            status: 'pass',
-            summary: 'Selected Pixel (android)',
-          },
-          {
-            id: 'session',
-            status: 'info',
-            summary: 'No active session named default. Doctor will use the selected device.',
-          },
-        ],
-      }),
+      doctorCliOutput(
+        {
+          status: 'pass',
+          summary: 'No blockers found.',
+          checks: [
+            {
+              id: 'agent-device',
+              status: 'pass',
+              summary: 'agent-device 0.17.9 using /tmp/agent-device',
+            },
+            {
+              id: 'device',
+              status: 'pass',
+              summary: 'Selected Pixel (android)',
+            },
+            {
+              id: 'session',
+              status: 'info',
+              summary: 'No active session named default. Doctor will use the selected device.',
+            },
+          ],
+        },
+        process.env,
+      ),
     );
 
     expect(output.text).toBe(
@@ -263,23 +272,26 @@ describe('doctorCliOutput', () => {
 
   test('keeps warning and failure recovery details under the relevant row', async () => {
     const output = await withNoColorAsync(() =>
-      doctorCliOutput({
-        status: 'fail',
-        checks: [
-          {
-            id: 'device',
-            status: 'fail',
-            summary: 'No devices found.',
-            command: 'agent-device devices',
-          },
-          {
-            id: 'android-reverse',
-            status: 'warn',
-            summary: 'Android adb reverse is missing for Metro port 8081.',
-            command: 'adb -s emulator-5554 reverse tcp:8081 tcp:8081',
-          },
-        ],
-      }),
+      doctorCliOutput(
+        {
+          status: 'fail',
+          checks: [
+            {
+              id: 'device',
+              status: 'fail',
+              summary: 'No devices found.',
+              command: 'agent-device devices',
+            },
+            {
+              id: 'android-reverse',
+              status: 'warn',
+              summary: 'Android adb reverse is missing for Metro port 8081.',
+              command: 'adb -s emulator-5554 reverse tcp:8081 tcp:8081',
+            },
+          ],
+        },
+        process.env,
+      ),
     );
 
     expect(output.text).toBe(
@@ -306,7 +318,7 @@ describe('doctorCliOutput', () => {
           },
         ],
       };
-      return await doctorCliOutput(result, { renderedToStderr: true });
+      return await doctorCliOutput(result, process.env, { renderedToStderr: true });
     });
 
     expect(output.text).toBe(['Doctor: pass', 'No blockers found.'].join('\n'));
@@ -328,7 +340,7 @@ describe('doctorCliOutput', () => {
           },
         ],
       };
-      return await doctorCliOutput(result, { renderedToStderr: false });
+      return await doctorCliOutput(result, process.env, { renderedToStderr: false });
     });
 
     expect(output.text).toBe(['Doctor: pass', '✓ device: Selected Pixel (android)'].join('\n'));
@@ -338,6 +350,7 @@ describe('doctorCliOutput', () => {
 describe('devices output', () => {
   test('carries the projected claim owner through JSON data and the text line', async () => {
     const output = await managementCliOutputFormatters.devices({
+      env: process.env,
       input: {},
       result: [
         {
@@ -378,6 +391,7 @@ describe('devices output', () => {
 
   test('carries the discovered model and OS version through JSON data and the text line', async () => {
     const output = await managementCliOutputFormatters.devices({
+      env: process.env,
       input: {},
       result: [
         {

@@ -1,5 +1,5 @@
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from './host.ts';
+import { emitDiagnostic, runnerRuntimeSlot } from './host.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 
 // Caps how many times one daemon request may pay for a full runner recycle
@@ -19,7 +19,9 @@ type RunnerRecycleLedgerEntry = {
   lastAtMs: number;
 };
 
-const ledger = new Map<string, RunnerRecycleLedgerEntry>();
+const LEDGER_SLOT = Symbol('apple-runner-recycle-ledger');
+const ledgerEntries = (): Map<string, RunnerRecycleLedgerEntry> =>
+  runnerRuntimeSlot(LEDGER_SLOT, () => new Map<string, RunnerRecycleLedgerEntry>());
 
 /** Requests are the recycle scope; direct calls without a request fall back to the command id. */
 export function runnerRecycleLedgerKey(
@@ -43,7 +45,7 @@ export function markRunnerRequestTouchedSession(key: string | undefined): void {
 
 export function hasRunnerRequestTouchedSession(key: string | undefined): boolean {
   if (!key) return false;
-  return ledger.get(key)?.touchedSession === true;
+  return ledgerEntries().get(key)?.touchedSession === true;
 }
 
 /**
@@ -108,28 +110,28 @@ export function buildRunnerRecycleBudgetExhaustedError(
  * @internal Test isolation hook for process-global runner recycle accounting.
  */
 export function resetRunnerRecycleLedgerForTests(): void {
-  ledger.clear();
+  ledgerEntries().clear();
 }
 
 function readEntry(key: string): RunnerRecycleLedgerEntry {
   pruneLedger();
-  return ledger.get(key) ?? { touchedSession: false, recycles: 0, lastAtMs: Date.now() };
+  return ledgerEntries().get(key) ?? { touchedSession: false, recycles: 0, lastAtMs: Date.now() };
 }
 
 function writeEntry(key: string, entry: RunnerRecycleLedgerEntry): void {
   entry.lastAtMs = Date.now();
-  ledger.delete(key);
-  ledger.set(key, entry);
+  ledgerEntries().delete(key);
+  ledgerEntries().set(key, entry);
 }
 
 function pruneLedger(): void {
   const cutoff = Date.now() - LEDGER_ENTRY_TTL_MS;
-  for (const [key, entry] of ledger) {
-    if (entry.lastAtMs < cutoff) ledger.delete(key);
+  for (const [key, entry] of ledgerEntries()) {
+    if (entry.lastAtMs < cutoff) ledgerEntries().delete(key);
   }
-  while (ledger.size > LEDGER_MAX_ENTRIES) {
-    const oldest = ledger.keys().next().value;
+  while (ledgerEntries().size > LEDGER_MAX_ENTRIES) {
+    const oldest = ledgerEntries().keys().next().value;
     if (oldest === undefined) break;
-    ledger.delete(oldest);
+    ledgerEntries().delete(oldest);
   }
 }

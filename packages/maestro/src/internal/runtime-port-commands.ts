@@ -30,7 +30,7 @@ type MaestroCommandOf<K extends MaestroRuntimeCommand['kind']> = Extract<
 >;
 
 type MaestroLifecycleCommand = MaestroCommandOf<
-  'launchApp' | 'stopApp' | 'setPermissions' | 'clearState' | 'openLink'
+  'launchApp' | 'stopApp' | 'killApp' | 'setPermissions' | 'clearState' | 'openLink'
 >;
 type MaestroTargetCommand = MaestroCommandOf<'tapOn' | 'doubleTapOn' | 'longPressOn'>;
 type MaestroTextCommand = MaestroCommandOf<'inputText' | 'eraseText'>;
@@ -55,6 +55,7 @@ type MaestroRuntimeCommandHandlers = {
 const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
   launchApp: executeLifecycleCommand,
   stopApp: executeLifecycleCommand,
+  killApp: executeLifecycleCommand,
   setPermissions: executeLifecycleCommand,
   clearState: executeLifecycleCommand,
   openLink: executeLifecycleCommand,
@@ -82,6 +83,7 @@ const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
 const MAESTRO_COMMAND_REQUIRES_SETTLED_PREDECESSOR = {
   launchApp: true,
   stopApp: true,
+  killApp: true,
   setPermissions: true,
   clearState: true,
   openLink: true,
@@ -146,6 +148,13 @@ async function executeLifecycleCommand(
     case 'stopApp':
       return await invokeOperation(
         operations.stopApp,
+        { appId: command.appId ?? request.appId },
+        context,
+        'invalidate',
+      );
+    case 'killApp':
+      return await invokeOperation(
+        operations.killApp,
         { appId: command.appId ?? request.appId },
         context,
         'invalidate',

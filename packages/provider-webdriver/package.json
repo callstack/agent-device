@@ -28,5 +28,8 @@
       "types": "./src/connection-verification.ts",
       "default": "./src/connection-verification.ts"
     }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
   }
 }

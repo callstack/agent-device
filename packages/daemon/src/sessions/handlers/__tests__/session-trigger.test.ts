@@ -1,8 +1,10 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { test, expect } from 'vitest';
 
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
@@ -16,6 +18,7 @@ const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
 test('trigger-app-event requires active session or explicit device selector', async () => {
   const sessionStore = makeSessionStore('agent-device-session-trigger-');
   const response = await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {

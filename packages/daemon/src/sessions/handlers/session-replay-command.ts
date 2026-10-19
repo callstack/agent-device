@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
@@ -26,7 +27,8 @@ import { assertSessionSelectorMatches } from '../../core/session-selector.ts';
 import { resolveSessionScope } from '../session-routing.ts';
 import { resolveEffectiveOpenRuntimeHints } from '../session-runtime.ts';
 import { captureSnapshot } from '../../core/snapshot-capture.ts';
-import { handleSessionCloseCommands } from '../session-lifecycle/index.ts';
+import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
+import { onDelegatingLedger } from '../../core/request-ended-leases.ts';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
 import type { SessionCommandHandler } from './session-command-input.ts';
 
@@ -49,6 +51,7 @@ export const handleReplayCommand: SessionCommandHandler = async ({
   });
 
 export const handleReplayTestCommand: SessionCommandHandler = async ({
+  host,
   req,
   sessionName,
   logPath,
@@ -91,6 +94,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
     dependencies: replayDaemonDependencies,
     cleanupSession: async (testSessionName) =>
       await closeReplayTestSession({
+        host,
         req,
         sessionName: testSessionName,
         logPath,
@@ -176,6 +180,7 @@ export function createReplaySession(
 }
 
 type ReplayTestSessionCleanupParams = Readonly<{
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -191,14 +196,18 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
   const { req, sessionName, logPath, sessionStore } = params;
   if (!sessionStore.get(sessionName)) return;
   const closeResponse = await handleSessionCloseCommands({
-    req: {
-      token: req.token,
-      session: sessionName,
-      command: 'close',
-      positionals: [],
-      flags: {},
-      meta: req.meta,
-    },
+    host: params.host,
+    req: onDelegatingLedger(
+      {
+        token: req.token,
+        session: sessionName,
+        command: 'close',
+        positionals: [],
+        flags: {},
+        meta: req.meta,
+      },
+      req,
+    ),
     sessionName,
     logPath,
     sessionStore,

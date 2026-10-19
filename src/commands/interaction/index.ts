@@ -229,7 +229,9 @@ const tapInteractionResponseDataSchema = interactionResponseDataSchema({
     count: numberSchema('Number of press/click repetitions.'),
     intervalMs: numberSchema('Delay between repeated press/click actions.'),
     holdMs: numberSchema('Hold duration for each action.'),
-    jitterPx: numberSchema('Randomization radius in pixels.'),
+    jitterPx: numberSchema(
+      'Deterministic per-axis coordinate jitter in pixels (each press offsets x and y by up to this amount).',
+    ),
     doubleTap: booleanSchema('Whether the command requested a double-tap action.'),
   },
 });
@@ -678,7 +680,6 @@ function toPressOptions(input: PressInput): PressOptions {
     ...toSelectorSnapshotOptions(input),
     ...toRepeatedOptions(input),
     verify: input.verify,
-    readinessTimeoutMs: input.readinessTimeoutMs,
     ...toSettleOptions(input),
   };
 }
@@ -703,7 +704,6 @@ function toLongPressOptions(input: LongPressInput): LongPressOptions {
     ...toClientInteractionTarget(input.target),
     ...toSelectorSnapshotOptions(input),
     durationMs: input.durationMs,
-    readinessTimeoutMs: input.readinessTimeoutMs,
     ...toSettleOptions(input),
   };
 }

@@ -39,11 +39,14 @@ export function parseAndroidDeviceDescription(rawOutput: string): {
   };
 }
 
+/** avdmanager restricts AVD names to these characters; other stdout lines are emulator logging. */
+const ANDROID_AVD_NAME = /^[A-Za-z0-9._-]+$/;
+
 export function parseAndroidAvdList(rawOutput: string): string[] {
   return rawOutput
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+    .filter((line) => ANDROID_AVD_NAME.test(line));
 }
 
 export function parseAndroidEmulatorAvdNameOutput(rawOutput: string): string | undefined {
@@ -60,10 +63,12 @@ export function parseAndroidTargetFromCharacteristics(rawOutput: string): 'tv' |
   return normalized.includes('tv') || normalized.includes('leanback') ? 'tv' : null;
 }
 
-export function parseAndroidFeatureListForTv(rawOutput: string): boolean {
-  return /feature:android\.(software\.leanback(_only)?|hardware\.type\.television)\b/i.test(
-    rawOutput,
-  );
+/** `pm list features` prints one `feature:<name>` or `feature:<name>=<version>` line per feature. */
+export function androidFeatureListDeclares(rawOutput: string, feature: string): boolean {
+  const declared = `feature:${feature}`.toLowerCase();
+  return rawOutput
+    .split(/\r?\n/)
+    .some((line) => line.trim().split('=')[0]?.toLowerCase() === declared);
 }
 
 export function inferAndroidAvdTarget(avdName: string): 'mobile' | 'tv' {

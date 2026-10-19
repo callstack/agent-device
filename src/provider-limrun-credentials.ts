@@ -42,19 +42,23 @@ export function limrunPlatformForLeaseBackend(
 }
 
 /**
- * The value of each credential variable a lease on `leaseBackend` depends on, read by the same
- * rule the credential reader uses: the account variables plus that platform's instance variables,
- * or every variable when the backend names no platform.
+ * The variables a Limrun lease reads: the account variables plus the leased platform's instance
+ * variables, or every variable when the lease backend names no platform.
  */
-export function readLimrunCredentialValues(
-  env: EnvMap,
-  leaseBackend?: string,
-): Readonly<Record<string, string | undefined>> {
-  const platform = limrunPlatformForLeaseBackend(leaseBackend);
-  const names = platform
-    ? [...Object.values(ACCOUNT_VARS), ...INSTANCE_VARS[platform]]
-    : LIMRUN_CREDENTIAL_VARIABLES;
-  return Object.fromEntries(names.map((name) => [name, readValue(env, name)]));
+export function limrunCredentialDeclaration(): Readonly<{
+  variables: readonly string[];
+  byBackend: Readonly<Record<string, readonly string[]>>;
+}> {
+  const account = Object.values(ACCOUNT_VARS);
+  return {
+    variables: LIMRUN_CREDENTIAL_VARIABLES,
+    byBackend: Object.fromEntries(
+      [...LEASE_BACKEND_PLATFORMS].map(([backend, platform]) => [
+        backend,
+        [...account, ...INSTANCE_VARS[platform]],
+      ]),
+    ),
+  };
 }
 
 /** The variables that give access to an existing instance of a platform. */

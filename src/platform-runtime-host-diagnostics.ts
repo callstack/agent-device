@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DeviceInfo, PlatformSelector } from '@agent-device/kernel/device';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type {
@@ -11,7 +12,8 @@ import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
  * execution). Families load lazily: a probe module is imported only when its family's method
  * actually runs, matching the platform registry's implementation-laziness.
  */
-export function createHostDiagnostics(): HostDiagnostics {
+export function createHostDiagnostics(host: HostEnvironment): HostDiagnostics {
+  const { env } = host;
   return Object.freeze({
     toolchainCheck: async (
       platform: PlatformSelector | undefined,
@@ -19,11 +21,11 @@ export function createHostDiagnostics(): HostDiagnostics {
     ): Promise<DoctorCheck | undefined> => {
       if (platform === 'android') {
         const { androidToolchainCheck } = await loadAndroidMechanics();
-        return await androidToolchainCheck(process.env, process.platform);
+        return await androidToolchainCheck(env, process.platform);
       }
       if (platform === 'vega') {
         const { vegaToolchainCheck } = await import('@agent-device/platform-vega');
-        return await vegaToolchainCheck(context);
+        return await vegaToolchainCheck(context, host);
       }
       if (platform === 'harmonyos') {
         const { harmonyToolchainCheck } = await import('@agent-device/platform-harmonyos');
@@ -45,7 +47,7 @@ export function createHostDiagnostics(): HostDiagnostics {
     },
     ambientChecks: async (context: HostDiagnosticsContext): Promise<readonly DoctorCheck[]> => {
       const { webBrowserLifecycleCheck } = await import('@agent-device/platform-web');
-      return [await webBrowserLifecycleCheck(context.stateDir)];
+      return [await webBrowserLifecycleCheck(context.stateDir, host)];
     },
     warmupCheck: async (
       device: DeviceInfo,

@@ -6,7 +6,7 @@ import {
 } from '@agent-device/contracts/lease-scope';
 import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { normalizeTenantId } from '../core/config.ts';
+import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 
 export type LeaseRegistryOptions = {
   maxActiveSimulatorLeases?: number;
@@ -21,6 +21,8 @@ export type LeaseRegistryOptions = {
 export type AllocateLeaseRequest = {
   tenantId: string;
   runId: string;
+  /** A caller-chosen id for a new lease; without it the registry mints one. */
+  leaseId?: string;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
@@ -254,7 +256,11 @@ export function normalizeLeaseAdmissionRequest(
   const runId = normalizeRunId(request.runId);
   if (!runId) throw new AppError('INVALID_ARGS', 'tenant isolation requires run id.');
   const leaseId = normalizeLeaseId(request.leaseId);
-  if (!leaseId) throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id.');
+  if (!leaseId) {
+    throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id.', {
+      hint: 'Allocate a lease with leases.allocate and pass its leaseId.',
+    });
+  }
   return { ...request, tenantId, runId, leaseId, leaseBackend };
 }
 function normalizeOptionalLeaseScope(
@@ -334,9 +340,10 @@ export function createDeviceLease(
   request: NormalizedAllocateLeaseRequest,
   leaseTtlMs: number,
   now: number,
+  leaseId = crypto.randomBytes(16).toString('hex'),
 ): DeviceLease {
   return {
-    leaseId: crypto.randomBytes(16).toString('hex'),
+    leaseId,
     tenantId: request.tenantId,
     runId: request.runId,
     backend: request.backend,

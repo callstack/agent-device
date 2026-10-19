@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/testmu",
-  "version": "0.21.28-dev",
+  "version": "0.21.29-dev",
   "type": "module",
   "description": "TestMu AI real and virtual mobile device plugin for agent-device.",
   "files": [
@@ -12,6 +12,10 @@
   },
   "exports": {
     ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./agent-device": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
@@ -48,7 +52,10 @@
   "publishConfig": {
     "exports": {
       ".": {
-        "import": "./dist/plugin.mjs"
+        "import": "./dist/agent-device.mjs"
+      },
+      "./agent-device": {
+        "import": "./dist/agent-device.mjs"
       }
     },
     "access": "public"

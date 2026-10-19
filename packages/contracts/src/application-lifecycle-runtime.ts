@@ -169,17 +169,59 @@ export type PostOpenObservationFailure =
   | Readonly<{ source: 'circuit' }>;
 
 /**
- * A system confirmation the launch itself raised and the open answered. `accepted`: iOS held a
- * launch URL behind `Open in "<App>"?` naming the session app, and the open accepted it.
+ * An alert seen in place of the launch, and what the open reported about it. `accepted`: iOS held
+ * a launch URL behind `Open in "<App>"?` naming the session app, and the open accepted it.
+ * `unanswered`: the open saw an alert it did not answer, and the required reason names which leg
+ * outran it; the prompt stays on screen for `alert accept`.
  */
-export type LaunchConfirmation = 'accepted';
+export type LaunchConfirmation = 'accepted' | 'unanswered';
 
-export type OpenApplicationOutcome = Readonly<{
+/** Which leg left a seen launch confirmation unanswered. Keyed, never inferred from text. */
+export type LaunchConfirmationUnansweredReason = 'alert-unrecognized' | 'url-owner-unresolved';
+
+/**
+ * A launch-confirmation probe step that failed or whose result could not be verified, so whether a
+ * prompt is up is unknown. Not an outcome of the confirmation itself: the open reports no
+ * confirmation for it and carries this step on the response beside a warning, keeping probe
+ * failure separate from what a completed probe saw.
+ */
+export type LaunchConfirmationProbeFailure = 'alert-read' | 'alert-accept' | 'runner';
+
+/** What the open reports about a launch confirmation it saw, with its typed outcome paired. */
+export type LaunchConfirmationOutcome =
+  | Readonly<{ launchConfirmation: 'accepted'; launchConfirmationProbeFailure?: undefined }>
+  | Readonly<{
+      launchConfirmation: 'unanswered';
+      launchConfirmationReason: LaunchConfirmationUnansweredReason;
+      launchConfirmationProbeFailure?: undefined;
+    }>;
+
+/**
+ * What a client reports about a launch confirmation. The platform always pairs an `unanswered`
+ * outcome with its reason; a version-skewed daemon may not, so this adds the arm where only the
+ * outcome survives and the unknown reason is omitted.
+ */
+export type LaunchConfirmationClientOutcome =
+  | LaunchConfirmationOutcome
+  | Readonly<{
+      launchConfirmation: 'unanswered';
+      launchConfirmationReason?: undefined;
+      launchConfirmationProbeFailure?: undefined;
+    }>;
+
+/** No confirmation reported: either none was seen or the probe could not read one. */
+export type LaunchConfirmationAbsent = Readonly<{
+  launchConfirmation?: undefined;
+  launchConfirmationProbeFailure?: LaunchConfirmationProbeFailure;
+}>;
+
+type OpenApplicationOutcomeBase = Readonly<{
   appBundleId?: string;
   timing: OpenApplicationTiming;
-  /** Present only when the open answered a launch confirmation. */
-  launchConfirmation?: LaunchConfirmation;
 }>;
+
+export type OpenApplicationOutcome = OpenApplicationOutcomeBase &
+  (LaunchConfirmationOutcome | LaunchConfirmationAbsent);
 
 /** Applies or clears a platform's native representation of neutral runtime hints. */
 export type RuntimeHintsApplicationInput = Readonly<{
@@ -195,6 +237,11 @@ export type CloseApplicationInput = Readonly<{
   surface: SessionSurface;
   /** A selector-only close establishes readiness inside its admitted lifecycle binding. */
   ensureReady?: boolean;
+  /**
+   * `kill` asks for system-initiated process death of the positional target (Maestro `killApp`);
+   * absent means an ordinary close. A backend without such a primitive closes normally.
+   */
+  mode?: 'kill';
   execution: ApplicationLifecycleExecution;
 }>;
 
@@ -377,8 +424,10 @@ export type AppleApplicationTools = Readonly<{
   applyRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;
   clearRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;
   dismissCloseAlerts(device: DeviceInfo, input: CloseApplicationFinalizationInput): Promise<void>;
-  detachRunnerSessionsForShutdown(): Promise<void>;
-  finalizeRunnerSessionsForShutdown(): Promise<void>;
+  /** The devices whose runner was handed to the next daemon instead of stopped. */
+  detachRunnerSessionsForShutdown(): Promise<readonly string[]>;
+  /** The devices whose runner this daemon stopped. */
+  finalizeRunnerSessionsForShutdown(): Promise<readonly string[]>;
 }>;
 
 /** Lazy Android mechanics used by the Android package's own lifecycle binding. */
@@ -408,6 +457,6 @@ export type AndroidApplicationTools = Readonly<{
 /** Gateway-coordinated durable phases whose concrete mechanics stay package-owned. */
 export type ApplicationLifecycleResourceLifecycle = Readonly<{
   recoverStartupResources(input: Readonly<{ stateDir: string }>): Promise<void>;
-  detachForDaemonShutdown(): Promise<void>;
-  finalizeDaemonShutdown(): Promise<void>;
+  detachForDaemonShutdown(): Promise<readonly string[]>;
+  finalizeDaemonShutdown(): Promise<readonly string[]>;
 }>;

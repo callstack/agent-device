@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import { runCmd } from '@agent-device/host-kit/command';
 import { Deadline } from '@agent-device/host-kit/retry';
@@ -9,7 +10,7 @@ import {
   compileSwiftSourceFile,
   resolveRecordingScriptPath,
 } from './swift-cache.ts';
-import { waitForPlayableVideo, waitForStableFile } from './video.ts';
+import { waitForPlayableVideo } from './video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,
@@ -27,10 +28,17 @@ export function getRecordingOverlaySupportWarning(
 /**
  * `record stop` is one daemon request, which the client abandons after `record`'s 90 s envelope:
  * the caller gets "Daemon request timed out" while the daemon finishes the stop. So the overlay must
- * end well inside it. Compiling the helper, its export and its exit all come out of this budget;
- * past it the stop keeps the raw video and its gesture telemetry, with a warning.
+ * end well inside it. The budget starts with the stop's finalization, so the playability checks
+ * before the overlay (on a cold host they compile their validator first) come out of it, as do
+ * compiling the helper, its export, its exit and verifying its output; past it the stop keeps the raw video and its
+ * gesture telemetry, with a warning.
  */
 export const OVERLAY_BUDGET_MS = 70_000;
+
+/** Starts the overlay budget. Call it when the stop's finalization starts, not when the overlay does. */
+export function startRecordingOverlayBudget(): Deadline {
+  return Deadline.fromTimeoutMs(OVERLAY_BUDGET_MS);
+}
 
 /**
  * The helper's time outside its export: starting up, then verifying the composited output or
@@ -38,40 +46,48 @@ export const OVERLAY_BUDGET_MS = 70_000;
  */
 const HELPER_EXIT_GRACE_MS = 5_000;
 
-let overlayScriptPath: string | undefined;
-let exportSupportScriptPath: string | undefined;
+// The working-directory fallback in the search makes a resolved script path specific to the host's
+// directory, so each directory keeps its own.
+const overlayScriptPaths = new Map<string, string>();
+const exportSupportScriptPaths = new Map<string, string>();
 
-function getOverlayScriptPath(): string {
-  overlayScriptPath ??= resolveRecordingScriptPath('recording-overlay.swift', findProjectRoot());
-  return overlayScriptPath;
+function resolveCachedScriptPath(
+  cache: Map<string, string>,
+  scriptName: string,
+  host: HostEnvironment,
+): string {
+  let resolved = cache.get(host.cwd);
+  if (resolved === undefined) {
+    resolved = resolveRecordingScriptPath(scriptName, findProjectRoot(), host.cwd);
+    cache.set(host.cwd, resolved);
+  }
+  return resolved;
 }
 
-function getExportSupportScriptPath(): string {
-  exportSupportScriptPath ??= resolveRecordingScriptPath(
-    'RecordingExportSupport.swift',
-    findProjectRoot(),
-  );
-  return exportSupportScriptPath;
+function getOverlayScriptPath(host: HostEnvironment): string {
+  return resolveCachedScriptPath(overlayScriptPaths, 'recording-overlay.swift', host);
+}
+
+function getExportSupportScriptPath(host: HostEnvironment): string {
+  return resolveCachedScriptPath(exportSupportScriptPaths, 'RecordingExportSupport.swift', host);
 }
 
 async function exportProcessedVideo(params: {
+  host: HostEnvironment;
   videoPath: string;
   scriptPath: string;
   scriptArgs: string[];
   commandDescription: string;
-  budgetMs: number;
+  deadline: Deadline;
 }): Promise<void> {
-  const { videoPath, scriptPath, scriptArgs, commandDescription } = params;
-  const deadline = Deadline.fromTimeoutMs(params.budgetMs);
-  await waitForStableFile(videoPath);
-  await waitForPlayableVideo(videoPath);
-
+  const { host, videoPath, scriptPath, scriptArgs, commandDescription, deadline } = params;
   const outputPath = temporarySiblingVideoPath(videoPath);
   let exportOverran = false;
   try {
     const executablePath = await compileSwiftSourceFile({
+      host,
       sourcePath: scriptPath,
-      extraSourcePaths: [getExportSupportScriptPath()],
+      extraSourcePaths: [getExportSupportScriptPath(host)],
       // `runCmd` reads a timeout of 0 as none.
       timeoutMs: Math.max(1, deadline.remainingMs()),
     });
@@ -80,7 +96,7 @@ async function exportProcessedVideo(params: {
     if (exportMs <= 0) {
       throw new AppError(
         'COMMAND_FAILED',
-        `No time was left for the export within the ${params.budgetMs}ms budget`,
+        `No time was left for the export within the ${OVERLAY_BUDGET_MS}ms budget`,
       );
     }
     try {
@@ -95,17 +111,24 @@ async function exportProcessedVideo(params: {
           '--timeout-ms',
           String(Math.round(exportMs)),
         ],
-        { timeoutMs: helperMs, env: buildSwiftToolEnv() },
+        { timeoutMs: helperMs, env: buildSwiftToolEnv(host.env) },
       );
     } catch (error) {
       exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
       throw error;
     }
-    await waitForPlayableVideo(outputPath);
+    await waitForPlayableVideo(outputPath, { host, deadline });
+    if (deadline.isExpired()) {
+      exportOverran = true;
+      throw new AppError(
+        'COMMAND_FAILED',
+        'The composited video was not verified within the budget',
+      );
+    }
     fs.renameSync(outputPath, videoPath);
   } catch (error) {
     const description = exportOverran
-      ? `${commandDescription}: the export did not finish within its ${params.budgetMs}ms budget; a lower --fps renders faster`
+      ? `${commandDescription}: the export did not finish within its ${OVERLAY_BUDGET_MS}ms budget; a lower --fps renders faster`
       : commandDescription;
     const cause =
       error instanceof AppError
@@ -138,12 +161,15 @@ function temporarySiblingVideoPath(videoPath: string): string {
 }
 
 export async function overlayRecordingTouches(params: {
+  host: HostEnvironment;
   videoPath: string;
   telemetryPath: string;
   exportQuality?: RecordingExportQuality;
   /** The caller's `--fps`; the helper renders at most this many frames a second, capped at 30. */
   fps?: number;
   targetLabel?: string;
+  /** From `startRecordingOverlayBudget`, taken when the stop's finalization started. */
+  deadline: Deadline;
 }): Promise<void> {
   const {
     videoPath,
@@ -152,8 +178,9 @@ export async function overlayRecordingTouches(params: {
     targetLabel = 'recording',
   } = params;
   await exportProcessedVideo({
+    host: params.host,
     videoPath,
-    scriptPath: getOverlayScriptPath(),
+    scriptPath: getOverlayScriptPath(params.host),
     scriptArgs: [
       '--events',
       telemetryPath,
@@ -162,6 +189,6 @@ export async function overlayRecordingTouches(params: {
       ...(params.fps === undefined ? [] : ['--max-fps', String(params.fps)]),
     ],
     commandDescription: `Failed to add touch overlays to the ${targetLabel}`,
-    budgetMs: OVERLAY_BUDGET_MS,
+    deadline: params.deadline,
   });
 }

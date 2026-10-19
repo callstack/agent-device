@@ -6,7 +6,7 @@ import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../.
 import { snapshotRuntimeFixture } from '../../../__tests__/support/snapshot-runtime-fixture.ts';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import path from 'node:path';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 

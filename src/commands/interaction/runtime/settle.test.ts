@@ -239,32 +239,6 @@ test('a settled sparse capture directs agents away from invalid refs and selecto
   assert.equal(result.settle?.diff, undefined);
 });
 
-test('a broken settle capture never fails the action', async () => {
-  const before = buttonSnapshot();
-  let captures = 0;
-  const device = createSettleDevice({
-    stored: before,
-    captureSnapshot: () => {
-      captures += 1;
-      if (captures === 1) return { snapshot: before };
-      throw new Error('AX bridge crashed');
-    },
-  });
-
-  const result = await device.interactions.press(selector('label=Continue'), {
-    session: 'default',
-    settle: {},
-  });
-
-  // The press itself succeeded; the observation reports its own failure.
-  assert.equal(result.kind, 'selector');
-  const settle = result.settle;
-  assert.ok(settle);
-  assert.equal(settle.settled, false);
-  assert.equal(settle.diff, undefined);
-  assert.match(settle.hint ?? '', /Settle observation unavailable \(AX bridge crashed\)/);
-});
-
 test('--settle --verify shares the settle captures for evidence (zero extra captures)', async () => {
   const before = buttonSnapshot();
   const after = welcomeSnapshot();

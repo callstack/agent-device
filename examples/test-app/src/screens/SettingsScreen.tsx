@@ -21,6 +21,7 @@ export interface SettingsScreenProps {
   onOpenAccessorySetup: () => void;
   onOpenAutomationLab: () => void;
   onOpenInertSurface: () => void;
+  onOpenSnapshotDepth: () => void;
   onOpenWebViewLab: () => void;
   onRetryDiagnostics: () => void;
   onSetNotificationsEnabled: (value: boolean) => void;
@@ -71,6 +72,14 @@ export function SettingsScreen(props: SettingsScreenProps) {
           label="Open automation lab"
           onPress={props.onOpenAutomationLab}
           testID="open-automation-lab"
+        />
+      </SectionCard>
+
+      <SectionCard subtitle="Inspect visible and raw snapshot depth." title="Snapshot depth">
+        <ActionButton
+          label="Open snapshot depth lab"
+          onPress={props.onOpenSnapshotDepth}
+          testID="open-snapshot-depth-lab"
         />
       </SectionCard>
 

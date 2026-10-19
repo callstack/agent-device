@@ -10,7 +10,11 @@ import {
   readProcessStartTime,
 } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  closeLoopbackServer,
+  mkdtempForTestSync,
+  supportsLoopbackBind,
+} from '@agent-device/test-kit';
 import {
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixtures,
@@ -19,7 +23,6 @@ import {
   startHttpDaemonFixture,
   currentDaemonCodeSignature,
 } from '../../__tests__/test-utils/daemon-http-fixture.ts';
-import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit/loopback';
 import { beginStderrCapture } from '../../__tests__/test-utils/stream-capture.ts';
 import {
   resolveDaemonPaths,
@@ -202,6 +205,7 @@ test.for(['early exit', 'timeout'] as const)(
     let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
     let now = Date.now();
     let advanced = false;
+    vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
     vi.spyOn(Date, 'now').mockImplementation(() => now);
     spawn.mockImplementation((_command, _args, options) => {
       paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
@@ -381,7 +385,55 @@ for (const exit of [
   });
 }
 
+test('a busy contender that exits sweeps its own pre-lock marker before the retried attempt', async (t) => {
+  if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+  const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-busy-retry-marker-'));
+  const http = await startHttpDaemonFixture({ devices: [] });
+  const claim = tryAcquireProcessLock({
+    lockDirPath: paths.lockPath,
+    owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
+  });
+  assert.equal(claim.status, 'acquired');
+  if (claim.status !== 'acquired') throw new Error('fixture claim refused');
+  let released = false;
+  spawn.mockImplementation((_command, _args, options) => {
+    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options, undefined, {
+      emitStartupMarkerBeforeAcquisition: true,
+    });
+    if (spawn.mock.calls.length === 1) {
+      void child.exited.then((exit) => {
+        assert.equal(exit.exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
+        if (!released) {
+          void claim.acquisition.release().then(() => {
+            released = true;
+          });
+        }
+      });
+      return child;
+    }
+    throw new Error('no second launch: the retry boundary must be observable without a sweeper');
+  });
+  pause.mockImplementation((ms) => actualRetry.sleep(Math.min(Number(ms), 50)));
+  try {
+    await assert.rejects(
+      sendToDaemon(request(paths)),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.kind === 'daemon_startup_failed',
+    );
+    assert.deepEqual(
+      fs.readdirSync(paths.baseDir).filter((e) => e.startsWith('daemon-startup-phases')),
+      [],
+      "the retry result must not leave the joined busy contender's record behind",
+    );
+    assert.equal(released, true, 'the contender must have exited busy against the held claim');
+  } finally {
+    if (!released) await claim.acquisition.release();
+    await closeLoopbackServer(http.server);
+  }
+});
+
 test('a joined busy contender waits for a published winner to become ready without signaling it', async (t) => {
+  // The contender records its pre-lock phase through the real protocol; the handoff must sweep it.
   if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-delayed-ready-'));
   let probes = 0;
@@ -392,7 +444,9 @@ test('a joined busy contender waits for a published winner to become ready witho
   await awaitFile(path.join(paths.baseDir, 'registration-held'));
   let contenderExit: ExecDetachedExit | undefined;
   spawn.mockImplementation((_command, _args, options) => {
-    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options);
+    const child = spawnRegisteredDaemonFixture(paths, fields(http.port), options, undefined, {
+      emitStartupMarkerBeforeAcquisition: true,
+    });
     void child.exited.then((exit) => {
       contenderExit = exit;
     });
@@ -414,6 +468,11 @@ test('a joined busy contender waits for a published winner to become ready witho
       signal.mock.calls.some(([pid, kind]) => pid === winner.pid && kind !== 0),
       false,
     );
+    assert.deepEqual(
+      fs.readdirSync(paths.baseDir).filter((e) => e.startsWith('daemon-startup-phases')),
+      [],
+      "the winner handoff must not leave the exited contender's record behind",
+    );
   } finally {
     signal.mockRestore();
     await closeLoopbackServer(http.server);
@@ -423,6 +482,7 @@ test('a joined busy contender waits for a published winner to become ready witho
 for (const held of [true, false]) {
   test(`startup uses one deadline when the claim is ${held ? 'held' : 'released for relaunch'}`, async () => {
     const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-budget-'));
+    vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
     const claim = tryAcquireProcessLock({
       lockDirPath: paths.lockPath,
       owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
@@ -481,6 +541,8 @@ test.for([
 ])('an older winner is replaced only with enough startup time ($budget)', async (expected, t) => {
   if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
   const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-start-older-winner-'));
+  // The replacement-window behavior is budget-independent; this pins the original 15 s shape.
+  vi.stubEnv('AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS', '15000');
   const http = await startHttpDaemonFixture({ devices: [] });
   const deferred = path.join(paths.baseDir, 'defer-publication');
   fs.writeFileSync(deferred, 'wait');
@@ -591,7 +653,7 @@ test.for(['default', 'private replay'] as const)(
     if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
     const http = await startHttpDaemonFixture({ devices: [], sessionActive: false });
     const defaultPaths = resolveDaemonPaths(mkdtempForTestSync('daemon-missed-birth-'));
-    const ensure = vi.spyOn(lifecycle, 'ensureDaemon');
+    const ensure = vi.spyOn(lifecycle, 'ensureManagedDaemon');
     let paths: DaemonPaths | undefined;
     let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
     let now = Date.now();

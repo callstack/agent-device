@@ -1,10 +1,10 @@
+import type { DaemonResponse as SharedDaemonResponse } from '@agent-device/kernel/contracts';
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
-import type {
-  DaemonRequest as SharedDaemonRequest,
-  DaemonResponse as SharedDaemonResponse,
-} from '@agent-device/daemon/daemon-request';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { AgentDeviceDaemonTransportContext } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import {
   createRequestId,
   emitDiagnostic,
@@ -16,24 +16,57 @@ import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/t
 import {
   prepareRemoteRequestArtifacts,
   type PreparedRemoteRequest,
-} from '../remote/daemon-artifacts.ts';
+} from '@agent-device/remote/daemon-artifacts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
+import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
 import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
-export type DaemonRequest = SharedDaemonRequest;
+export type DaemonRequest = DaemonWireRequest;
 export type DaemonResponse = SharedDaemonResponse;
 type DaemonTransportOptions = AgentDeviceDaemonTransportContext & {
   onProgress?: RequestProgressSink;
 };
 
+/** The released default: a process-level client, which reads the process's own host. */
 export async function sendToDaemon(
   req: Omit<DaemonRequest, 'token'>,
   options: DaemonTransportOptions = {},
 ): Promise<DaemonResponse> {
-  const { resolveClientSettings, ensureDaemon, attachSessionAddressHints } =
+  return await sendToDaemonOnHost(req, options, captureHostEnvironment(process));
+}
+
+/**
+ * A transport whose daemon resolution, spawn, policy check and request preparation read `host`.
+ * Remote artifact upload still reads the process (`packages/remote`, tracked by #3751).
+ */
+export function createDaemonTransport(host: HostEnvironment) {
+  return async (
+    req: Omit<DaemonRequest, 'token'>,
+    options: DaemonTransportOptions = {},
+  ): Promise<DaemonResponse> => await sendToDaemonOnHost(req, options, host);
+}
+
+/** The transport one run uses: host-bound when its deps can build one, else the injected one. */
+export function resolveRunTransport(
+  deps: {
+    sendToDaemon: typeof sendToDaemon;
+    transportForHost?: (host: HostEnvironment) => typeof sendToDaemon;
+  },
+  host: HostEnvironment,
+): typeof sendToDaemon {
+  return deps.transportForHost?.(host) ?? deps.sendToDaemon;
+}
+
+async function sendToDaemonOnHost(
+  req: Omit<DaemonRequest, 'token'>,
+  options: DaemonTransportOptions,
+  host: HostEnvironment,
+): Promise<DaemonResponse> {
+  const { resolveClientSettings, attachSessionAddressHints } =
     await import('./daemon-client-lifecycle.ts');
+  const { connectToDaemon } = await import('./daemon-client-attach.ts');
   const requestId = req.meta?.requestId ?? createRequestId();
   const debug = Boolean(req.meta?.debug || req.flags?.verbose);
   // A few internal callers build DaemonRequest directly instead of using the
@@ -47,6 +80,8 @@ export async function sendToDaemon(
   const settings = resolveClientSettings(
     requestWithoutAuthFlag,
     options.authToken ?? flagAuthToken,
+    host,
+    options.daemonLifecycle,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
@@ -57,10 +92,14 @@ export async function sendToDaemon(
   const cancellation = createRequestGuard({ signal: options.signal, requestId });
   cancellation.refuseIfAborted();
   const daemon = await cancellation.guard(async () => {
-    return await withDiagnosticTimer('daemon_startup', async () => await ensureDaemon(settings), {
-      requestId,
-      session: req.session,
-    });
+    return await withDiagnosticTimer(
+      'daemon_startup',
+      async () => await connectToDaemon(settings),
+      {
+        requestId,
+        session: req.session,
+      },
+    );
   });
   const info = daemon.info;
   const preparedRemoteRequest = await cancellation.guard(
@@ -72,7 +111,7 @@ export async function sendToDaemon(
         options.signal,
       ),
   );
-  writeInstallInProgressNotice(requestWithoutAuthFlag.command);
+  writeInstallInProgressNotice(requestWithoutAuthFlag.command, host.env);
 
   const request = buildTransportRequest(
     requestWithoutAuthFlag,
@@ -80,7 +119,8 @@ export async function sendToDaemon(
     info,
     requestId,
     debug,
-    await readLocalProviderCredentialFingerprint(requestWithoutAuthFlag, info),
+    await readLocalProviderCredentialFingerprint(requestWithoutAuthFlag, info, host.env),
+    host.env,
   );
   emitDiagnostic({
     level: 'info',
@@ -105,13 +145,40 @@ export async function sendToDaemon(
             settings.transportPreference,
             settings.paths,
             requestTimeoutMs,
-            { onProgress: options.onProgress, signal: options.signal },
+            {
+              host,
+              onProgress: options.onProgress,
+              signal: options.signal,
+              timeoutRecovery:
+                settings.daemonLifecycle === 'attach' ? 'none' : 'retire-unresponsive',
+            },
           ),
         { requestId, command: req.command },
       );
       return attachSessionAddressHints(response, requestWithoutAuthFlag, settings);
     },
   );
+}
+
+/**
+ * The transport the CLI and MCP use: `sendToDaemon` behind an explicit `ensureDaemon`. The wrapper
+ * loads on the first request, so a CLI start that never reaches the daemon does not pay for it.
+ * With a `host`, ensuring and every request read it; without one, each reads the process.
+ */
+export function createEnsuredDaemonTransport(
+  options: EnsuringTransportOptions = {},
+): typeof sendToDaemon {
+  // The load is memoized as a promise, so concurrent first requests share one wrapper and its
+  // ensure-once state.
+  let ensured: Promise<typeof sendToDaemon> | undefined;
+  return async (req, context) => {
+    ensured ??= import('./daemon-client-ensuring.ts').then(({ withEnsuredDaemon }) =>
+      withEnsuredDaemon(options.host ? createDaemonTransport(options.host) : sendToDaemon, options),
+    );
+    return await (
+      await ensured
+    )(req, context);
+  };
 }
 
 function buildTransportRequest(
@@ -121,6 +188,7 @@ function buildTransportRequest(
   requestId: string,
   debug: boolean,
   providerCredentialFingerprint: string | undefined,
+  env: Readonly<EnvMap>,
 ): DaemonRequest {
   return {
     ...request,
@@ -129,7 +197,7 @@ function buildTransportRequest(
     token: info.token,
     meta: {
       ...buildTransportRequestMeta(request, preparedRemoteRequest, requestId, debug),
-      ...buildLocalHostEnvMeta(info),
+      ...buildLocalHostEnvMeta(info, env),
       providerCredentialFingerprint,
     },
   };
@@ -140,19 +208,29 @@ function buildTransportRequest(
 async function readLocalProviderCredentialFingerprint(
   request: Omit<DaemonRequest, 'token'>,
   info: DaemonInfo,
+  env: Readonly<EnvMap>,
 ): Promise<string | undefined> {
   if (isRemoteDaemon(info) || request.command !== 'lease_allocate') return undefined;
   const { leaseProvider: provider, leaseBackend } = leaseScopeFromRequest(request);
   if (!provider) return undefined;
-  const { providerCredentialFingerprint } = await import('../provider-credential-fingerprint.ts');
-  return providerCredentialFingerprint(provider, process.env, leaseBackend);
+  const [{ providerCredentialFingerprint }, { readPluginInventory }] = await Promise.all([
+    import('../provider-credential-fingerprint.ts'),
+    import('@agent-device/contracts/plugin-inventory'),
+  ]);
+  return providerCredentialFingerprint(
+    provider,
+    env,
+    leaseBackend,
+    readPluginInventory(info.plugins),
+  );
 }
 
 // A developer dir is a path on the client's host, so only a local daemon can use it.
 function buildLocalHostEnvMeta(
   info: DaemonInfo,
+  env: Readonly<EnvMap>,
 ): Pick<NonNullable<DaemonRequest['meta']>, 'developerDir'> {
-  const developerDir = process.env.DEVELOPER_DIR;
+  const developerDir = env.DEVELOPER_DIR;
   if (isRemoteDaemon(info)) return { developerDir: undefined };
   return developerDir !== undefined ? { developerDir } : {};
 }
@@ -260,8 +338,8 @@ async function performDaemonRequestWithCleanup(
   return finalResponse;
 }
 
-function writeInstallInProgressNotice(command: string | undefined): void {
-  if (!isInstallLikeCommand(command) || process.stderr.isTTY !== true || process.env.CI) return;
+function writeInstallInProgressNotice(command: string | undefined, env: Readonly<EnvMap>): void {
+  if (!isInstallLikeCommand(command) || process.stderr.isTTY !== true || env.CI) return;
   process.stderr.write(
     command === PUBLIC_COMMANDS.reinstall ? 'Reinstalling...\n' : 'Installing...\n',
   );
@@ -296,6 +374,7 @@ async function protectArtifactUploadWithLeaseBeats(
       request,
       info,
       callerSignal ?? new AbortController().signal,
+      settings.host,
     );
   }
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
@@ -309,6 +388,7 @@ async function protectArtifactUploadWithLeaseBeats(
         request,
         info,
         callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
+        settings.host,
       ),
     callerSignal,
   });

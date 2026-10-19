@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '../../agent-device-client.ts';
 import type { CliCommandName } from '@agent-device/command-registry/catalog';
@@ -5,6 +6,8 @@ import type { CommandProgressState } from '../../commands/command-progress.ts';
 import type { ReplayTestReporterRuntime } from '../replay-test/reporting.ts';
 
 export type ClientCommandParams = {
+  /** The host this run reads its environment and working directory from. */
+  host: HostEnvironment;
   positionals: string[];
   flags: CliFlags;
   client: AgentDeviceClient;

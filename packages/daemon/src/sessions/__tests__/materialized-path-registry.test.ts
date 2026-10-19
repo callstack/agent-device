@@ -8,7 +8,7 @@ import {
   cleanupRetainedMaterializedPathsForSession,
   retainMaterializedPaths,
 } from '../materialized-path-registry.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('retainMaterializedPaths copies file and directory artifacts into managed storage', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-retained-paths-');

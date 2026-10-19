@@ -158,6 +158,10 @@ function harmonyFocusFact(device: DeviceInfo): RuntimeOperationFact {
 
 /** Public orientation and TV-remote operations are not supported by the HarmonyOS owner. */
 const harmonyPlatformLeafUnavailable = unavailableFact('unsupported-platform-leaf');
+const harmonySettingUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'HarmonyOS supports settings clear-app-state only.',
+);
 
 /** Android's live IME status read has no HarmonyOS counterpart (parity with the retired leaf,
  * which rejected `status`/`get` on every non-Android family). */
@@ -244,13 +248,14 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         // HarmonyOS devices have no foldable hinge control for HDC to pose.
         setFoldPose: harmonyPlatformLeafUnavailable,
+        // HDC has no telephony control to simulate a call or text message.
+        sendTelephonyEvent: harmonyPlatformLeafUnavailable,
         // HarmonyOS has no trigger-app-event implementation.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: harmonyPlatformLeafUnavailable }),
-        // The HDC-driven settings surface shares the interaction kind gate. No HDC leaf reads a
-        // setting back, so the read half states the platform-leaf denial it would otherwise throw.
         ...settingsRuntimeOperationFacts({
-          setSetting: harmonyFocusFact(device),
-          readSetting: harmonyPlatformLeafUnavailable,
+          target: harmonyFocusFact(device),
+          unsupported: harmonySettingUnavailable,
+          write: { 'clear-app-state': available },
         }),
         // HarmonyOS exposes no alert automation operation.
         ...alertRuntimeOperationFacts({

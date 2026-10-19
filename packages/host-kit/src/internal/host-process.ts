@@ -1,6 +1,7 @@
 import type { ExecOptions, ExecResult } from './exec.ts';
 import { runCmd, runCmdSync, withoutCommandExecutorOverride } from './exec.ts';
 import { sleep } from './retry.ts';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 const PS_TIMEOUT_MS = 1_000;
 // The one binary behind every POSIX probe: pinning it keeps a hostile PATH from
@@ -42,20 +43,22 @@ type HostProcessRunCommand = (
   options: ExecOptions,
 ) => Promise<ExecResult>;
 
-export function hostEnvironment(): NodeJS.ProcessEnv {
-  return process.env;
-}
+/** The process-shaped object an entry point captures: Node's `process` satisfies it. */
+export type HostEnvironmentSource = Readonly<{
+  env: EnvMap;
+  cwd(): string;
+}>;
 
-export function readHostEnvironmentVariable(name: string): string | undefined {
-  return hostEnvironment()[name];
+/**
+ * Snapshots the environment and working directory of `source`, which an entry point passes as
+ * `process`. The environment is copied, so later changes to the source never reach the capture.
+ */
+export function captureHostEnvironment(source: HostEnvironmentSource): HostEnvironment {
+  return { env: { ...source.env }, cwd: source.cwd() };
 }
 
 export function writeHostStderr(value: string): void {
   process.stderr.write(value);
-}
-
-export function hostCurrentWorkingDirectory(): string {
-  return process.cwd();
 }
 
 export function hostNodeExecutablePath(): string {

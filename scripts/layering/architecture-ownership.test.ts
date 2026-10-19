@@ -6,8 +6,8 @@ import {
   ARCHITECTURE_OWNERSHIP,
   INTERACTION_RETIRED_HANDLER_PATHS,
   matchesDeclaredRoot,
-  SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
-  SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
+  SESSION_LIFECYCLE_RETIRED_PATHS,
+  SESSION_OBSERVABILITY_RETIRED_PATHS,
 } from './architecture-ownership.ts';
 import { readNamedExports } from './facade-exports.ts';
 import { resolveImportEdges } from './model.ts';
@@ -61,16 +61,16 @@ test('logical module façades pin their named command surfaces', () => {
   }
 });
 
-test('session lifecycle retires its handler-owned helper paths', () => {
+test('session lifecycle retires its handler helpers and barrel paths', () => {
   const tracked = new Set(listTrackedTypeScriptFiles(repoRoot));
-  for (const retiredPath of SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS) {
+  for (const retiredPath of SESSION_LIFECYCLE_RETIRED_PATHS) {
     assert.equal(tracked.has(retiredPath), false, `retired path was restored: ${retiredPath}`);
   }
 });
 
-test('session observability retires its handler-owned paths', () => {
+test('session observability retires its handler and barrel paths', () => {
   const tracked = new Set(listTrackedTypeScriptFiles(repoRoot));
-  for (const retiredPath of SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS) {
+  for (const retiredPath of SESSION_OBSERVABILITY_RETIRED_PATHS) {
     assert.equal(tracked.has(retiredPath), false, `retired path was restored: ${retiredPath}`);
   }
 });

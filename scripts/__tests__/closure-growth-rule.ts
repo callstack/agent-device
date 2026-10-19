@@ -60,6 +60,11 @@ export type ClosureGrowthEvidence = {
    * pre-existing code newly made eager, under its own name or a renamed one.
    */
   addedModulesAreNew: boolean;
+  /**
+   * How many of the added modules a maintainer approved by name (`APPROVED_CLOSURE_ADDITIONS`).
+   * Each is excused from the count comparison; an unapproved addition is judged as before.
+   */
+  approvedAddedCount?: number;
 };
 
 /**
@@ -87,6 +92,8 @@ export function closureGrowthEvidence(params: {
    * pre-existing code, not a new file.
    */
   deletedSourceTexts?: readonly (readonly string[])[];
+  /** Absolute paths of the modules a maintainer approved as additions to existing closures. */
+  approvedModules?: ReadonlySet<string>;
 }): ClosureGrowthEvidence {
   const {
     baseGraph,
@@ -97,6 +104,7 @@ export function closureGrowthEvidence(params: {
     baseTree,
     renamedBaseToHead,
     deletedSourceTexts = [],
+    approvedModules = new Set<string>(),
   } = params;
   const sum = (files: Iterable<string>, weights: ReadonlyMap<string, number>) =>
     [...files].reduce((total, file) => total + (weights.get(file) ?? 0), 0);
@@ -107,6 +115,13 @@ export function closureGrowthEvidence(params: {
   return {
     baseCount: baseGraph.size,
     headCount: headGraph.size,
+    // Renames are canonicalized first: an approved module that is a rename of a base module is
+    // not an addition.
+    approvedAddedCount: [...headGraph.keys()].filter(
+      (headFile) =>
+        approvedModules.has(headFile) &&
+        !baseGraph.has(baseOfRenamedHead.get(headFile) ?? headFile),
+    ).length,
     baseWeight: sum(baseGraph.keys(), baseWeights),
     headWeight: sum(headGraph.keys(), headWeights),
     preservedBaseClosure: [...baseGraph.keys()].every((baseFile) =>
@@ -160,7 +175,7 @@ function movedFromDeletedSource(
 export function classifyGrowth(id: string, evidence: ClosureGrowthEvidence): string | null {
   const { baseCount, headCount, baseWeight, headWeight, preservedBaseClosure, addedModulesAreNew } =
     evidence;
-  if (headCount <= baseCount) return null;
+  if (headCount - (evidence.approvedAddedCount ?? 0) <= baseCount) return null;
   if (preservedBaseClosure && addedModulesAreNew && headWeight <= baseWeight) return null;
   const reasons: string[] = [];
   if (!preservedBaseClosure) {

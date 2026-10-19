@@ -70,6 +70,9 @@ importers:
       '@agent-device/platform-web':
         specifier: workspace:*
         version: link:packages/platform-web
+      '@agent-device/plugins':
+        specifier: workspace:*
+        version: link:packages/plugins
       '@agent-device/provider-limrun':
         specifier: workspace:*
         version: link:packages/provider-limrun
@@ -82,6 +85,12 @@ importers:
       '@agent-device/proxy':
         specifier: workspace:*
         version: link:packages/proxy
+      '@agent-device/react-native':
+        specifier: workspace:*
+        version: link:packages/react-native
+      '@agent-device/remote':
+        specifier: workspace:*
+        version: link:packages/remote
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:packages/replay-port
@@ -110,8 +119,8 @@ importers:
         specifier: ^0.0.4
         version: 0.0.4
       '@limrun/api':
-        specifier: ^0.60.0
-        version: 0.60.0(supports-color@7.2.0)
+        specifier: ^0.64.1
+        version: 0.64.1(supports-color@7.2.0)
       '@nkzw/eslint-plugin':
         specifier: ^2.0.0
         version: 2.0.0(eslint@10.9.1(supports-color@7.2.0))
@@ -161,8 +170,8 @@ importers:
         specifier: ^5.10.1
         version: 5.10.1(eslint@10.9.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
       fallow:
-        specifier: 3.32.0
-        version: 3.32.0
+        specifier: 3.34.0
+        version: 3.34.0
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
@@ -272,6 +281,10 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
+    devDependencies:
+      fast-check:
+        specifier: ^4.9.0
+        version: 4.9.0
 
   packages/contracts:
     dependencies:
@@ -336,10 +349,13 @@ importers:
       '@agent-device/session-journal':
         specifier: workspace:*
         version: link:../session-journal
+    devDependencies:
+      '@agent-device/proxy':
+        specifier: workspace:*
+        version: link:../proxy
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
-    devDependencies:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
@@ -355,6 +371,9 @@ importers:
 
   packages/daemon-contracts:
     dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
       '@agent-device/command-registry':
         specifier: workspace:*
         version: link:../command-registry
@@ -367,6 +386,10 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/device-selection:
     dependencies:
@@ -379,6 +402,10 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/host-kit:
     dependencies:
@@ -409,6 +436,9 @@ importers:
 
   packages/maestro:
     dependencies:
+      '@agent-device/ad-script':
+        specifier: workspace:*
+        version: link:../ad-script
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
@@ -456,6 +486,9 @@ importers:
         specifier: workspace:*
         version: link:../xml
     devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
@@ -480,6 +513,10 @@ importers:
       '@agent-device/xml':
         specifier: workspace:*
         version: link:../xml
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/platform-harmonyos:
     dependencies:
@@ -498,6 +535,10 @@ importers:
       '@agent-device/provision-kit':
         specifier: workspace:*
         version: link:../provision-kit
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/platform-linux:
     dependencies:
@@ -513,6 +554,10 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/platform-vega:
     dependencies:
@@ -546,6 +591,26 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+
+  packages/plugins:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/provider-limrun:
     dependencies:
@@ -563,8 +628,8 @@ importers:
         version: link:../platform-android
     devDependencies:
       '@limrun/api':
-        specifier: ^0.60.0
-        version: 0.60.0(supports-color@7.2.0)
+        specifier: ^0.64.1
+        version: 0.64.1(supports-color@7.2.0)
 
   packages/provider-testmu:
     devDependencies:
@@ -598,6 +663,10 @@ importers:
       '@agent-device/xml':
         specifier: workspace:*
         version: link:../xml
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/provision-kit:
     dependencies:
@@ -629,6 +698,53 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+
+  packages/react-native:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/daemon-contracts':
+        specifier: workspace:*
+        version: link:../daemon-contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+
+  packages/remote:
+    dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/daemon-contracts':
+        specifier: workspace:*
+        version: link:../daemon-contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+      '@types/tar-stream':
+        specifier: ^3.1.4
+        version: 3.1.4
+      tar-stream:
+        specifier: ^3.2.0
+        version: 3.2.0
 
   packages/replay-port:
     dependencies:
@@ -668,6 +784,10 @@ importers:
       '@agent-device/session-journal':
         specifier: workspace:*
         version: link:../session-journal
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/replay-test:
     dependencies:
@@ -693,6 +813,9 @@ importers:
         specifier: workspace:*
         version: link:../kernel
     devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
@@ -717,15 +840,9 @@ importers:
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
-      '@agent-device/command-registry':
-        specifier: workspace:*
-        version: link:../command-registry
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@agent-device/daemon-contracts':
-        specifier: workspace:*
-        version: link:../daemon-contracts
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit
@@ -736,6 +853,9 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+      oxc-parser:
+        specifier: ^0.146.0
+        version: 0.146.0
 
   packages/xml: {}
 
@@ -1046,43 +1166,43 @@ packages:
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@fallow-cli/darwin-arm64@3.32.0':
-    resolution: {integrity: sha512-+h1q0byIelDXRUBFZvTaNNbFg6uGvXyv3G55drCxIHA4/FUk01QZjEb/N9qoj2ZcQiQ1NwJuz9U+YkJPYSXghw==}
+  '@fallow-cli/darwin-arm64@3.34.0':
+    resolution: {integrity: sha512-x4tNB82CUF++90QR2QesQOtnIMrhW7UO1Y6ffWuAC0ZDlWbP7qb4KAqEXrD0latrIwEdBQXktyAj1tTEpSKJdQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@fallow-cli/darwin-x64@3.32.0':
-    resolution: {integrity: sha512-WZvKyrCc1FwsYWxYyhCCQs/tLIgRhlh70Se2BPwQuYc0slXOPwc6/oiAcdKc4lg0e3tDTQA6/nvQvVYVGYqObg==}
+  '@fallow-cli/darwin-x64@3.34.0':
+    resolution: {integrity: sha512-OcvZRFzHAH1vSrxdEOTOGVcoW0TOR5ko4+1ehVFXk6JMbdkj3X4mebXjz4UU/RIfajmniE8pizStnFPPoQkZ4g==}
     cpu: [x64]
     os: [darwin]
 
-  '@fallow-cli/linux-arm64-gnu@3.32.0':
-    resolution: {integrity: sha512-hUvjjWxHSYocd/84Kk8CPe6Gf7WeD0+Zo/6/HUkTdKGknZk8H/zOqhiJGnJYwk0IRViaJci91qxhna5RejwP4w==}
+  '@fallow-cli/linux-arm64-gnu@3.34.0':
+    resolution: {integrity: sha512-+HuqJ7nHXLVsmHq7AHaLlLf8ml4qYv7IisxEiQUPthMCo+fsPi9CcdXhHcn/x+mOtcE/1vPLPgKCyWivZTiXTA==}
     cpu: [arm64]
     os: [linux]
 
-  '@fallow-cli/linux-arm64-musl@3.32.0':
-    resolution: {integrity: sha512-BQvTFPL6FYNGjmRSJEnrqZn+V7D3CtDYjmO8jbUwzui80bUUPSKNkdPBVZ804JoyQo69mCi8Mmjtd4wHKIPtdA==}
+  '@fallow-cli/linux-arm64-musl@3.34.0':
+    resolution: {integrity: sha512-pI7ZcB3FYV9FuE9FotpvKN/RZ4nsiWcI77HLd+GRUTEQf/I4xjg91/c8dBjOCq7FBb2gq5EV6WkQBxBKcSN1XA==}
     cpu: [arm64]
     os: [linux]
 
-  '@fallow-cli/linux-x64-gnu@3.32.0':
-    resolution: {integrity: sha512-h8ZdgCeo8eDKfexQNFTMykEFyCQLukPl4SRm73QpuDo18RYTjGtMYxtv50DgFiuhSxnHUkeV8voly7QfcJS8uw==}
+  '@fallow-cli/linux-x64-gnu@3.34.0':
+    resolution: {integrity: sha512-nvqgcvF9jhO47tJhUiJFA12mj+Ei7aM0ipcV/uzkjkO4GR1bzaV7VODlU5JjwlN+NxXHxQLCNVaJikdX3a4k6w==}
     cpu: [x64]
     os: [linux]
 
-  '@fallow-cli/linux-x64-musl@3.32.0':
-    resolution: {integrity: sha512-WRzZKv2rgGGgq6rvY94qgjiDlCKiDQliWoL0DmmVpXAoVt3E82Kv2SMlJn+T/pBcreifWrkqakC10aj+y3Y8qw==}
+  '@fallow-cli/linux-x64-musl@3.34.0':
+    resolution: {integrity: sha512-VH1NjbvLiY1dOXdNIhnWFvgS7ZDKTJhsestfSEWX1rJZoExIu9Fnpct0LEwhckhvQ2IqCg26DGhx/TZkCBc5Sw==}
     cpu: [x64]
     os: [linux]
 
-  '@fallow-cli/win32-arm64-msvc@3.32.0':
-    resolution: {integrity: sha512-6n9bzCcHVwpfniyscUs1NH014akO8YL4lTIEwT8XtGI3aYisGb/BF09nYY/eTMZMFRFDf+60WlNLzVjqdAdJmg==}
+  '@fallow-cli/win32-arm64-msvc@3.34.0':
+    resolution: {integrity: sha512-o4y7orN2+RPUvI8RK2KhH+neO2xdbJypS06iYtvx4krNGXAd2VP1MImQGVSD0Lej9oDXUNVOMDb2JSSvamSwbA==}
     cpu: [arm64]
     os: [win32]
 
-  '@fallow-cli/win32-x64-msvc@3.32.0':
-    resolution: {integrity: sha512-IK123RccF6liIbWCs3fUyzdlMWi9AQdc7zivewpjtVQFqVZ+1g44hTkiOzKOL7GR0bRcIGh+56QlXTmmeDI6pQ==}
+  '@fallow-cli/win32-x64-msvc@3.34.0':
+    resolution: {integrity: sha512-YxehTJxGtJQQCvdA2+av9y+PsFK1niAxjF3fDPvZYjnVNjeVd/CB1aGL+NkCkkRB2q9VWPp2g+AdV6QAbtX30g==}
     cpu: [x64]
     os: [win32]
 
@@ -1256,8 +1376,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@limrun/api@0.60.0':
-    resolution: {integrity: sha512-w7A0PiqNF5XHBU6xUzvAsi1BEnJeBhzYKckuVETp/Nkehv5QF28u2q90LgkjifdFEJkULus7IzeCqnqTnynJCA==}
+  '@limrun/api@0.64.1':
+    resolution: {integrity: sha512-nrKFfalo3I+9wFPEoIs7kqlUxgih14qvaQqBr1OsUM7j0rjfxje2XiIHb/401PIccPEvuXSFbSJ4uru+asDbwg==}
 
   '@limrun/xdelta3-wasm@0.2.0':
     resolution: {integrity: sha512-mEohO7CYj4Gdc0v1Gr/AjlBhfbXQnIz6+2wmMhRfwz8hXZrsIC/yqYQhfoDhu1ysqQwBnU5lDDLPUGdUu+8hPQ==}
@@ -2299,133 +2419,157 @@ packages:
     resolution: {integrity: sha512-C/0zV5IhgVdYhGJTwrY0v8dknxlhiKwtVJkMUaexu9/QvRmzlV4vfU3hZlUSgqc2BxQHntL1mCVbDq8j0FRFDw==}
     cpu: [arm64]
     os: [android]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-darwin-arm64@0.8.7':
     resolution: {integrity: sha512-/u+REDMI4a0/lsJXTM4c53/w31OGZLOReZIyg62uhgLs0kc8NHsj/nOcxTdlQjq5gi0zhdkccD9LaLTXcdzPvw==}
     cpu: [arm64]
     os: [darwin]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-darwin-x64@0.8.7':
     resolution: {integrity: sha512-sMMzFOwCo4WXR+/6zIBThOocSC50iIIZZdfiIDbaLvj0Ax/rWt/iavyfEAqajyvzydLyCqR/ZItdLWSRlu1umw==}
     cpu: [x64]
     os: [darwin]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-freebsd-x64@0.8.7':
     resolution: {integrity: sha512-MpdpKXix9P+Y1rKgjvcNeNtGjXeL1CmttNhYINrWls8kRpm4xM/oBGTmn6w7to8lAlwj5jm8q03dQPl5mRv4Qw==}
     cpu: [x64]
     os: [freebsd]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-linux-arm-gnu@0.8.7':
     resolution: {integrity: sha512-rr1srFLlPAmC1vtxfc9C1YLDe3iH09YjfSeeIidBqKhzx1MATjOAq4mjlRUOnhr/L27MotWIYOFKwVsd5JZFOg==}
     cpu: [arm]
     os: [linux]
     libc: [glibc]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-linux-arm-musl@0.8.7':
     resolution: {integrity: sha512-eAufXh8qBRpiSO6ueaMDL+yyoXIGLhpUce72YbcACtZU2qhExwBIJyEtQf5kH2Ki0X2aqkSjSfog4OPtKXan3Q==}
     cpu: [arm]
     os: [linux]
     libc: [musl]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-linux-arm64-gnu@0.8.7':
     resolution: {integrity: sha512-gw4w6wPoHObBrdIC4duVWLmJOvpdE25j5D7yrM5mACNlK4klRz/lv8hK+ssQk9EJHBgZjSaqZIJVFgqNYbfv7A==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-linux-arm64-musl@0.8.7':
     resolution: {integrity: sha512-L68N6Y4XkqcIaKo3Ra88JEvBEH4AHff44A4INcrxeVWZ8CZtu2tCpfVxe3hR8qQQMcvBSQlDn24KpkCKEhVvfA==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-linux-x64-gnu@0.8.7':
     resolution: {integrity: sha512-dzyAbltJmf3Cqlb8HcFuYIf5Yn0fl1vTr3XJ9HiVNNvOlhqPSArOqtw9vI1p6/VTXTjrMLXlU+s+/kNHiIy/Cw==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-linux-x64-musl@0.8.7':
     resolution: {integrity: sha512-Otw4MH3404q0Bbvl+YTdW9aoUV5vXmUw8260bWvt1XlaoIX/ceSgI4ygheRDMfBPoHt6FDayQaO9OLVUZAgkFA==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-win32-arm64@0.8.7':
     resolution: {integrity: sha512-qo/jyrzryiBuKEsFiuWaBCBe3tRMynQ0qFWFgOEjcCMQeZfBm+wKiVEUEFXXLc7bh8YezguAWp0Mtnhq4ARNyA==}
     cpu: [arm64]
     os: [win32]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-codegen/binding-win32-x64@0.8.7':
     resolution: {integrity: sha512-D5lDsVDx6m00E6bWySlWdH72Ca4TPSaphDqB6QjU6MpuNLIJqoGoatYyq2rOmBE8Zv/kunot/o58KGL03P3eiA==}
     cpu: [x64]
     os: [win32]
+    deprecated: yuku-codegen is pure JavaScript since 0.14
 
   '@yuku-parser/binding-android-arm64@0.8.7':
     resolution: {integrity: sha512-eGKYiUDX7Y0V7tDTmg+JTVnXnjMqfXXsorZ+EDf5kxwchQ3Or1HS14MzI2fw+jFhHR85fCWt+mtX33Yao73hIQ==}
     cpu: [arm64]
     os: [android]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-darwin-arm64@0.8.7':
     resolution: {integrity: sha512-Re0RHelKLnjEURulY2/KxW+Ngb8zuNA4BRZuMwgGQNzVumT6u4U2N2hc01oeYVNVof0i7GrXE4UCNBgbpRRnjQ==}
     cpu: [arm64]
     os: [darwin]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-darwin-x64@0.8.7':
     resolution: {integrity: sha512-Hn8DROtQkjlA1ACbPgj4a7eP9IuVOI504oiTwpkWPbpaDWD9KdmnVYCqW+1LfenNK/g7O9NhWGpXEdaCNX7lIA==}
     cpu: [x64]
     os: [darwin]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-freebsd-x64@0.8.7':
     resolution: {integrity: sha512-bAP2OV8wRuzplX/jYxv9+vvqQT8JxyNphI8fLfXGL054Xs+4/J5u33cIm3y4rxY8rdoLmmdiJs2Tq7r7lrDRfA==}
     cpu: [x64]
     os: [freebsd]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-arm-gnu@0.8.7':
     resolution: {integrity: sha512-kTYwJQQgmZeAWdDIWabiReIZMpmfLueIj1tCmjStUtFGhR1Z0qwxonKVfUC4N7h/VhGGzLZ//7O1kgt1QKqgCg==}
     cpu: [arm]
     os: [linux]
     libc: [glibc]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-arm-musl@0.8.7':
     resolution: {integrity: sha512-uL4jE8HPT2BLlxAXyD10LqgPuXa9eDa0BKpCdSANmzIJghq/2eZo3/gQNtaxPZMupWoxjYzSad9IXrwu7aYPXQ==}
     cpu: [arm]
     os: [linux]
     libc: [musl]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-arm64-gnu@0.8.7':
     resolution: {integrity: sha512-3gVN4pWSKZmXiNX7cU164dR9MPvesCHnlH6nPfpK+yQsCuYphjKKplcb4SnZBrhiqmXbgb2HR0c2TS0IZUPhgA==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-arm64-musl@0.8.7':
     resolution: {integrity: sha512-S0mwfEjoLpxzXeZw802Wa4RaELsQiPtWqG6INcy8j4GtvNFtl4LCX3eGO1XLn9pyLAISLzTRyU3zUCBUPin8lg==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-x64-gnu@0.8.7':
     resolution: {integrity: sha512-lnbWdPmerE5D1uH1G4IEZKnPzCrWCStRGrtgpSIe1RibAo5bZIjDbbbPYXmMHCEh4F+x/JaJpElh26a3r+BPbg==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-linux-x64-musl@0.8.7':
     resolution: {integrity: sha512-769uwndMvMzUvATWbAcEvyLHKA+DzhHSCl/obBUrRdYfRo26yxui6S8y3z7uJ+Naup7UKrDxrpK7OnQkxkl9KQ==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-win32-arm64@0.8.7':
     resolution: {integrity: sha512-mEB/9PlaAkisJ6KWGz0zvywXoU6+80dTlR2LwS7s/jcXXoU6fm2+sitBZXtqu3+Q4DcDgPxM45uWMCzPs0TSRw==}
     cpu: [arm64]
     os: [win32]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-parser/binding-win32-x64@0.8.7':
     resolution: {integrity: sha512-8vNB2DP0ou61nGb8tc/qfi41gfyDXz1MHr2zqL3nR+cJ6CEbiuWV/l/a/vv151gCgiZLLAyGkQGENpozdg716w==}
     cpu: [x64]
     os: [win32]
+    deprecated: yuku-parser runs on yuku-core since 0.14
 
   '@yuku-toolchain/types@0.8.7':
     resolution: {integrity: sha512-2Z53dNxAJL6UvFoIrDZvYf3zlO8s4VJK4O2hhaB4mXVwwpX/7ajtss3cmfqKvamlNLWyt9FSWs4eoYdlbxpnHA==}
@@ -2876,13 +3020,13 @@ packages:
   extend@3.0.2:
     resolution: {integrity: sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g==}
 
-  fallow-type-aware@3.32.0:
-    resolution: {integrity: sha512-p1jFVESH7Y9DHlvgEn1xOeugiVgU1LbPnsTAYsXG9iykimYuof+r95eF5IqpBeR7Z42N527FNyU3OO/GHfXwVw==}
+  fallow-type-aware@3.34.0:
+    resolution: {integrity: sha512-44HHnbjos8vqsmwxAkfFBWstgvp+knjX8L47kk1zxCmTFiNQ8jVd4vxpLP4WniJuLZP1HDAensnJKOxuE6Ysdw==}
     engines: {node: '>=20'}
     hasBin: true
 
-  fallow@3.32.0:
-    resolution: {integrity: sha512-bBIykYqWClscRllE/g89qVYQjvOOSFz1z0hqJ/HT+zZoaaBLAKjtn2U23E90EvsXKMteTgyk54Vcy+juABxZuQ==}
+  fallow@3.34.0:
+    resolution: {integrity: sha512-+G/GsTdXQmixP7uuJKqJc5Fwp0H24TP+5QvAzjuVXKqGFyPCFhlNoaGzQ6XLr/VqZkbIbtA4fUJOBDg7HEjIqw==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -4699,28 +4843,28 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@fallow-cli/darwin-arm64@3.32.0':
+  '@fallow-cli/darwin-arm64@3.34.0':
     optional: true
 
-  '@fallow-cli/darwin-x64@3.32.0':
+  '@fallow-cli/darwin-x64@3.34.0':
     optional: true
 
-  '@fallow-cli/linux-arm64-gnu@3.32.0':
+  '@fallow-cli/linux-arm64-gnu@3.34.0':
     optional: true
 
-  '@fallow-cli/linux-arm64-musl@3.32.0':
+  '@fallow-cli/linux-arm64-musl@3.34.0':
     optional: true
 
-  '@fallow-cli/linux-x64-gnu@3.32.0':
+  '@fallow-cli/linux-x64-gnu@3.34.0':
     optional: true
 
-  '@fallow-cli/linux-x64-musl@3.32.0':
+  '@fallow-cli/linux-x64-musl@3.34.0':
     optional: true
 
-  '@fallow-cli/win32-arm64-msvc@3.32.0':
+  '@fallow-cli/win32-arm64-msvc@3.34.0':
     optional: true
 
-  '@fallow-cli/win32-x64-msvc@3.32.0':
+  '@fallow-cli/win32-x64-msvc@3.34.0':
     optional: true
 
   '@humanfs/core@0.19.2':
@@ -4874,7 +5018,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@limrun/api@0.60.0(supports-color@7.2.0)':
+  '@limrun/api@0.64.1(supports-color@7.2.0)':
     dependencies:
       '@limrun/xdelta3-wasm': 0.2.0
       '@types/har-format': 1.2.16
@@ -6178,24 +6322,24 @@ snapshots:
 
   extend@3.0.2: {}
 
-  fallow-type-aware@3.32.0:
+  fallow-type-aware@3.34.0:
     dependencies:
       typescript: 7.0.2
     optional: true
 
-  fallow@3.32.0:
+  fallow@3.34.0:
     dependencies:
       detect-libc: 2.1.2
     optionalDependencies:
-      '@fallow-cli/darwin-arm64': 3.32.0
-      '@fallow-cli/darwin-x64': 3.32.0
-      '@fallow-cli/linux-arm64-gnu': 3.32.0
-      '@fallow-cli/linux-arm64-musl': 3.32.0
-      '@fallow-cli/linux-x64-gnu': 3.32.0
-      '@fallow-cli/linux-x64-musl': 3.32.0
-      '@fallow-cli/win32-arm64-msvc': 3.32.0
-      '@fallow-cli/win32-x64-msvc': 3.32.0
-      fallow-type-aware: 3.32.0
+      '@fallow-cli/darwin-arm64': 3.34.0
+      '@fallow-cli/darwin-x64': 3.34.0
+      '@fallow-cli/linux-arm64-gnu': 3.34.0
+      '@fallow-cli/linux-arm64-musl': 3.34.0
+      '@fallow-cli/linux-x64-gnu': 3.34.0
+      '@fallow-cli/linux-x64-musl': 3.34.0
+      '@fallow-cli/win32-arm64-msvc': 3.34.0
+      '@fallow-cli/win32-x64-msvc': 3.34.0
+      fallow-type-aware: 3.34.0
 
   fast-check@4.9.0:
     dependencies:

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { CliJsonResult } from './cli-json.ts';
 import { createLiveDeviceContext, createLiveDeviceHarness } from './live-device-e2e/runtime.ts';
 
@@ -67,6 +67,24 @@ test('a scenario assertion after allowed misses captures evidence before caller 
   assert.match(report, /failed-step-1-snapshot.json/);
   assert.deepEqual(context.completedScenarios, []);
   assert.equal(reports(), 1);
+});
+
+test('a caller-owned cleanup failure captures evidence without reissuing the command', async () => {
+  const { context, harness, calls } = fixture();
+  context.currentScenario = 'cleanup';
+  const result = await harness.runStep(context, 'close session', ['close'], { allowFailure: true });
+  assert.equal(result.status, 1);
+  await harness.recordFailure(context, new Error('close session exhausted its retry budget'));
+
+  assert.deepEqual(
+    calls.map((args) => args[0]),
+    ['close', 'screenshot', 'snapshot'],
+  );
+  assert.ok(fs.existsSync(path.join(context.artifactDir, 'failed-step-1.png')));
+  assert.ok(fs.existsSync(path.join(context.artifactDir, 'failed-step-1-snapshot.json')));
+  const report = fs.readFileSync(path.join(context.artifactDir, 'failed-step.txt'), 'utf8');
+  assert.match(report, /close session exhausted its retry budget/);
+  assert.match(report, /scenario: cleanup/);
 });
 
 test('a scenario assertion before any command also captures evidence', async () => {

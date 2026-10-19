@@ -740,3 +740,24 @@ test('buildSnapshotState numbers an Android capture densely so every node is add
 
   expect(state.nodes.map((node) => node.ref)).toEqual(['e1', 'e2', 'e3']);
 });
+
+// #3565: the presentation fact belongs to the capture, so the assembly carries it verbatim into the
+// state every consumer reads. What it must never do is mint a value: a capture whose producer could
+// not decide — every non-iOS backend among them — leaves the field off, and a reader treats that as
+// `unknown` rather than as a screen someone proved clear.
+test('buildSnapshotState carries the presented-surface fact its producer published (#3565)', () => {
+  for (const presentedSurface of ['presented', 'absent', 'unknown'] as const) {
+    const state = buildSnapshotState(
+      { nodes: [{ index: 0, type: 'Application' }], presentedSurface },
+      undefined,
+    );
+
+    expect(state.presentedSurface).toBe(presentedSurface);
+  }
+});
+
+test('buildSnapshotState leaves an unclassified capture without a presented surface (#3565)', () => {
+  const state = buildSnapshotState({ nodes: [{ index: 0, type: 'Application' }] }, undefined);
+
+  expect('presentedSurface' in state).toBe(false);
+});

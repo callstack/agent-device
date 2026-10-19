@@ -19,7 +19,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
 // loses the mock this way starts the real local XCTest runner — whose stale-process cleanup
 // `pkill`s xcodebuild on the developer's host, failing whichever test is running when it lands.
 test('concurrent runner ports share one module resolution, so the mock always applies', async () => {
-  const tools = createAppleApplicationTools();
+  const tools = createAppleApplicationTools(process.env);
 
   await Promise.all([
     tools.detachRunnerSessionsForShutdown(),

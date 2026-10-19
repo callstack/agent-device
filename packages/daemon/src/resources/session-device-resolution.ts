@@ -1,9 +1,10 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 import {
   hasDeviceSelectionInput,
@@ -25,10 +26,6 @@ export function requireSessionOrExplicitSelector(
     `${command} requires an active session or an explicit device selector (e.g. --platform ios).`,
     sessionOrDeviceSelectorRequiredDetails(),
   );
-}
-
-export function hasExplicitSessionFlag(flags: DaemonRequest['flags'] | undefined): boolean {
-  return typeof flags?.session === 'string' && flags.session.trim().length > 0;
 }
 
 export async function resolveCommandDevice(params: {

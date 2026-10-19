@@ -1,17 +1,18 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 
 /** Lazy host-only composition; platform semantics stay package-owned. */
-export function createScreenRecordingRuntimeHost(
-  options: {
-    ownedProcesses?: OwnedProcessRecordWriter;
-  } = {},
-): ScreenRecordingRuntimeHost {
+export function createScreenRecordingRuntimeHost(options: {
+  ownedProcesses?: OwnedProcessRecordWriter;
+  host: HostEnvironment;
+}): ScreenRecordingRuntimeHost {
+  const host = options.host;
   const android: ScreenRecordingRuntimeHost['android'] = Object.freeze({
     resolve: async (device) => {
       const { createAndroidScreenRecordingTransport } =
         await import('./platform-runtime-screen-recording-android-host.ts');
-      return await createAndroidScreenRecordingTransport(device);
+      return await createAndroidScreenRecordingTransport(device, host);
     },
   });
   const web: ScreenRecordingRuntimeHost['web'] = Object.freeze({
@@ -42,12 +43,12 @@ export function createScreenRecordingRuntimeHost(
     sniff: async (input) => {
       const { createScreenRecordingFinalizer } =
         await import('./platform-runtime-screen-recording-finalizer-host.ts');
-      await createScreenRecordingFinalizer().sniff(input);
+      await createScreenRecordingFinalizer(host).sniff(input);
     },
     complete: async (input, signal) => {
       const { createScreenRecordingFinalizer } =
         await import('./platform-runtime-screen-recording-finalizer-host.ts');
-      return await createScreenRecordingFinalizer().complete(input, signal);
+      return await createScreenRecordingFinalizer(host).complete(input, signal);
     },
   });
   const ownedProcesses: OwnedProcessRecordWriter =
@@ -57,7 +58,7 @@ export function createScreenRecordingRuntimeHost(
       clear: () => {},
     });
   return Object.freeze({
-    apple: createLazyAppleHost(),
+    apple: createLazyAppleHost(host),
     android,
     harmony: createLazyHarmonyHost(),
     web,
@@ -67,11 +68,11 @@ export function createScreenRecordingRuntimeHost(
   });
 }
 
-function createLazyAppleHost(): ScreenRecordingRuntimeHost['apple'] {
+function createLazyAppleHost(host: HostEnvironment): ScreenRecordingRuntimeHost['apple'] {
   const load = async () => {
     const { createAppleScreenRecordingHost } =
       await import('./platform-runtime-screen-recording-apple-host.ts');
-    return createAppleScreenRecordingHost();
+    return createAppleScreenRecordingHost(host);
   };
   return Object.freeze({
     availability: async (device) => (await load()).availability(device),

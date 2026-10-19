@@ -1,8 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { asAppError } from '@agent-device/kernel/errors';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { absenceCaptureOptionError } from '@agent-device/selectors/absence-observation-errors';
 import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-observation';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef } from '../core/session-state.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import {

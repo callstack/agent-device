@@ -25,11 +25,13 @@ const device: DeviceInfo = {
 
 test('keeps only artifact and identity capabilities in the root adapter', async () => {
   resolveIosApp.mockResolvedValue('com.example.app');
-  const executor = createAppleAppDeploymentExecutor();
+  const executor = createAppleAppDeploymentExecutor(process.env);
 
   await expect(executor.resolveAppBundleId(device, 'Example')).resolves.toBe('com.example.app');
 
-  expect(resolveIosApp).toHaveBeenCalledWith(device, 'Example');
+  expect(resolveIosApp).toHaveBeenCalledWith(device, 'Example', undefined);
+  await executor.resolveAppBundleId(device, 'Example', { installedOnly: true });
+  expect(resolveIosApp).toHaveBeenLastCalledWith(device, 'Example', { installedOnly: true });
   expect(executor).not.toHaveProperty('install');
   expect(executor).not.toHaveProperty('uninstall');
   expect(executor).not.toHaveProperty('push');
@@ -40,7 +42,7 @@ test('delegates the full Apple reinstall cache transaction to the lazy native ex
   invalidateIosAppResolutionCache.mockImplementation(async (_device, scopedOperation) =>
     scopedOperation(),
   );
-  const executor = createAppleAppDeploymentExecutor();
+  const executor = createAppleAppDeploymentExecutor(process.env);
 
   await expect(executor.withInvalidatedAppResolutionCache(device, operation)).resolves.toBe(
     'completed',

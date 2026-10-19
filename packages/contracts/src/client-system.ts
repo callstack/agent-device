@@ -6,6 +6,7 @@ import type { SelectorSnapshotCommandOptions } from './client-capture.ts';
 import type { DeviceCommandBaseOptions } from './client-connection.ts';
 import type { SettleCommandOptions } from './client-gesture.ts';
 import type { OrientationRequest, SetFoldPoseInput } from './device-rotation.ts';
+import type { TelephonyEventInput } from './telephony-input.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 
 export type WaitCommandTarget =
@@ -101,6 +102,8 @@ export type TvRemoteCommandOptions = DeviceCommandBaseOptions & {
   button: TvRemoteButton;
   durationMs?: number;
 };
+
+export type TelephonyCommandOptions = DeviceCommandBaseOptions & TelephonyEventInput;
 
 export type KeyboardCommandOptions = DeviceCommandBaseOptions & {
   action?: 'status' | 'dismiss' | 'enter' | 'return';

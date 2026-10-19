@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 
@@ -15,7 +16,7 @@ vi.mock('@agent-device/device-selection/device-inventory-context', async (import
 import { handleSessionInventoryCommands } from '../inventory.ts';
 import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -25,7 +26,11 @@ import {
   MACOS_DEVICE,
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
-} from '@agent-device/test-kit/device-fixtures';
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const mockListDeviceInventory = vi.mocked(listDeviceInventory);
 
@@ -44,6 +49,7 @@ async function runDevices(): Promise<DaemonResponse | null> {
     flags: {},
   };
   return handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',

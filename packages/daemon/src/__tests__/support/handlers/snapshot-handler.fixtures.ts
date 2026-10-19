@@ -1,6 +1,5 @@
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { buildNodes } from '@agent-device/test-kit/snapshot-builders';
+import { buildNodes, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';
@@ -98,8 +97,9 @@ export function snapshotRequest(
 }
 
 /**
- * The suite's snapshot runtime with a bind counter, so a test can assert whether the handler
- * bound the device at all (ADR 0019 §9: at most one bind per request).
+ * The suite's snapshot runtime counts device binds.
+ * ADR 0019 §9 permits one execution bind.
+ * If the action use has no capture, `--settle` may acquire a second, capture-only bind.
  */
 export function countingSnapshotRuntime(): Readonly<{
   inspectFacts: InspectDeviceRuntimeFacts;
@@ -211,9 +211,7 @@ const SNAPSHOT_ROUTE_RUNTIME_COMMANDS = new Set(['snapshot', 'diff', 'settings',
 
 /**
  * `handleSnapshotCommands` bound to the suite's snapshot runtime fixture for the
- * runtime-bound route commands, and to `platformResourceCleanup` always. It lives here rather than
- * in any one `snapshot-handler*.test.ts` file because several split test files over the
- * module-size tripwire share it (docs/agents/testing.md).
+ * runtime-bound route commands, and to `platformResourceCleanup` always.
  */
 export function handleSnapshotCommands(
   params: Parameters<typeof handleProductionSnapshotCommands>[0],

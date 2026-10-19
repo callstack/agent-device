@@ -1,6 +1,6 @@
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../commands/output/diff.ts';
-import type { ScreenshotDiffResult } from '../../screenshot-diff/screenshot-diff.ts';
+import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
 import { AppError } from '@agent-device/kernel/errors';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { resolveUserPath } from '@agent-device/host-kit/file';
@@ -12,12 +12,18 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
-export const screenshotCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
+export const screenshotCommand: ClientCommandHandler = async ({
+  positionals,
+  flags,
+  client,
+  host,
+}) => {
   const result = (await runCliCommand({
     client,
     command: 'screenshot',
     positionals,
     flags,
+    env: host.env,
   })) as CaptureScreenshotResult;
   // A non-default responseLevel returns a leveled (digest) payload — overlayCount,
   // artifacts, leveled overlayRefs. Rebuilding the default { path, overlayRefs }
@@ -37,9 +43,15 @@ export const screenshotCommand: ClientCommandHandler = async ({ positionals, fla
   return true;
 };
 
-export const diffCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
+export const diffCommand: ClientCommandHandler = async ({ positionals, flags, client, host }) => {
   if (positionals[0] === 'snapshot') {
-    const result = await runCliCommand({ client, command: 'diff', positionals, flags });
+    const result = await runCliCommand({
+      client,
+      command: 'diff',
+      positionals,
+      flags,
+      env: host.env,
+    });
     await writeCommandOutput(flags, result, () => formatSnapshotDiffText(result));
     return true;
   }
@@ -51,8 +63,9 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     throw new AppError('INVALID_ARGS', 'diff screenshot requires --baseline <path>');
   }
 
-  const baselinePath = resolveUserPath(baselineRaw);
-  const outputPath = typeof flags.out === 'string' ? resolveUserPath(flags.out) : undefined;
+  const baselinePath = resolveUserPath(baselineRaw, { cwd: host.cwd });
+  const outputPath =
+    typeof flags.out === 'string' ? resolveUserPath(flags.out, { cwd: host.cwd }) : undefined;
   const currentRaw = positionals[1];
   if (positionals.length > 2) {
     throw new AppError(
@@ -69,7 +82,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
   ]);
   const runtime = createAgentDevice({
     backend: createClientScreenshotBackend(client, flags),
-    artifacts: createLocalArtifactAdapter(),
+    artifacts: createLocalArtifactAdapter({ cwd: host.cwd }),
     sessions: {
       get: (name) => ({ name }),
       set: () => {},
@@ -80,7 +93,9 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
   const result = await runtime.capture.diffScreenshot({
     session: flags.session,
     baseline: { kind: 'path', path: baselinePath },
-    current: currentRaw ? { kind: 'path', path: resolveUserPath(currentRaw) } : { kind: 'live' },
+    current: currentRaw
+      ? { kind: 'path', path: resolveUserPath(currentRaw, { cwd: host.cwd }) }
+      : { kind: 'live' },
     ...(outputPath ? { out: { kind: 'path', path: outputPath } } : {}),
     threshold: parseCliThreshold(flags.threshold),
     overlayRefs: flags.overlayRefs,

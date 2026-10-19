@@ -6,34 +6,13 @@ import {
   checkRetiredSessionLifecyclePaths,
   checkRetiredSessionObservabilityPaths,
   checkRetiredSnapshotExecutionPaths,
-  DAEMON_MODULARITY_BASELINE,
 } from './daemon-modularity.ts';
-import { resolveImportEdges, targetDagZone, type ResolvedImportEdge } from './model.ts';
+import { resolveImportEdges, type ResolvedImportEdge } from './model.ts';
 import type { LayeringRatchets } from './ratchet-reference.ts';
 
-function importEdge(file: string, target: string): ResolvedImportEdge {
-  return {
-    file,
-    target,
-    spec: target,
-    line: 1,
-    dynamic: false,
-    typeOnly: true,
-    symbols: [],
-    fromZone: targetDagZone(file),
-    toZone: targetDagZone(target),
-  };
-}
-
-function baselineDaemonTypesEdges(): ResolvedImportEdge[] {
-  return DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.map((file) =>
-    importEdge(file, 'packages/daemon/src/core/daemon-request.ts'),
-  );
-}
-
-/** Every baseline edge is present and nothing else is forbidden: the quiet state of the ratchets. */
+/** The quiet state of the ratchets: no forbidden edge present. */
 function baselineEdges(): ResolvedImportEdge[] {
-  return baselineDaemonTypesEdges();
+  return [];
 }
 
 /** Where a member of `zone` lives, so a zone count can be turned back into file paths. */
@@ -105,39 +84,20 @@ test('R10 banks an R7 shrink with no edit anywhere', () => {
   );
 });
 
-test('external daemon request/session-state importer membership changes require the baseline to change', () => {
+test('a production import of the daemon request/session-state modules outside the daemon is red', () => {
   const edges = resolveImportEdges(
     new Map([
       [
-        'src/client/new-importer.ts',
+        'src/commands/new-importer.ts',
         "import type { SessionState } from '../../packages/daemon/src/core/session-state.ts';",
       ],
       ['packages/daemon/src/core/session-state.ts', 'export type SessionState = { name: string };'],
     ]),
   );
 
-  const violations = checkDaemonModularityRatchets(
-    [...baselineEdges(), ...edges],
-    REFERENCE,
-    REFERENCE,
-  );
+  const violations = checkDaemonModularityRatchets(edges, REFERENCE, REFERENCE);
   assert.equal(violations.length, 1);
-  // The recorded list owns its own size (#2342 relocated five client files into it), so the
-  // message assertion reads it rather than pinning a literal that the baseline would outgrow.
-  assert.match(
-    violations[0]!.message,
-    new RegExp(
-      `may only shrink from the recorded ${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length}`,
-    ),
-  );
-
-  const removed = checkDaemonModularityRatchets(
-    baselineDaemonTypesEdges().slice(1),
-    REFERENCE,
-    REFERENCE,
-  );
-  assert.equal(removed.length, 1);
-  assert.match(removed[0]!.message, /delete it from externalDaemonTypesImporters/);
+  assert.match(violations[0]!.message, /src\/commands\/new-importer\.ts imports a daemon request/);
 });
 
 test('logical modules reject forbidden imports', () => {
@@ -237,7 +197,7 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
     new Map([
       [
         'packages/replay-port/src/daemon-port/test-command.ts',
-        "import { handleSessionCloseCommands } from '../../../../packages/daemon/src/sessions/session-lifecycle/index.ts';",
+        "import { handleSessionCloseCommands } from '../../../../packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts';",
       ],
       [
         'packages/replay-port/src/daemon-port/native-command.ts',
@@ -248,7 +208,7 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
         "import { runReplayCommand } from '../../../replay-port/src/daemon-port/native-command.ts';",
       ],
       [
-        'packages/daemon/src/sessions/session-lifecycle/index.ts',
+        'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
         'export function handleSessionCloseCommands() {}',
       ],
       ['packages/daemon/src/core/session-store.ts', 'export class SessionStore {}'],
@@ -266,7 +226,7 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
       {
         file: 'packages/replay-port/src/daemon-port/test-command.ts',
         message:
-          'replay-port must not import packages/daemon/src/sessions/session-lifecycle/index.ts',
+          'replay-port must not import packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
       },
       {
         file: 'packages/replay-port/src/daemon-port/native-command.ts',
@@ -280,24 +240,20 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
   );
 });
 
-test('session lifecycle rejects handler deep imports in both directions', () => {
+test('session lifecycle rejects handler crossings and private helper imports', () => {
   const edges = resolveImportEdges(
     new Map([
       [
         'packages/daemon/src/sessions/handlers/session.ts',
-        "import { handleSessionInventoryCommands } from '../session-lifecycle/internal/inventory.ts';\nexport function handleSessionCommands() {}",
+        "import { prepareOpenSession } from '../session-lifecycle/internal/session-open-prepare.ts';\nexport function handleSessionCommands() {}",
       ],
       [
-        'packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts',
-        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleSessionInventoryCommands() {}",
+        'packages/daemon/src/sessions/session-lifecycle/internal/session-open-prepare.ts',
+        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function prepareOpenSession() {}",
       ],
       [
         'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
         "import { handleSessionCommands } from '../../handlers/session.ts';",
-      ],
-      [
-        'packages/daemon/src/sessions/session-lifecycle/index.ts',
-        'export function handleSessionInventoryCommands() {}',
       ],
     ]),
   );
@@ -318,10 +274,10 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
         file: 'packages/daemon/src/sessions/handlers/session.ts',
         line: 1,
         message:
-          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-lifecycle's internal tree (packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts)",
+          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-lifecycle's internal tree (packages/daemon/src/sessions/session-lifecycle/internal/session-open-prepare.ts)",
       },
       {
-        file: 'packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts',
+        file: 'packages/daemon/src/sessions/session-lifecycle/internal/session-open-prepare.ts',
         line: 1,
         message:
           'daemon-session-lifecycle must not import packages/daemon/src/sessions/handlers/session.ts',
@@ -434,19 +390,19 @@ test('interaction rejects handler crossings and deep imports around its facade',
   );
 });
 
-test('session observability rejects handler deep imports in both directions', () => {
+test('session observability rejects handler crossings and private helper imports', () => {
   const edges = resolveImportEdges(
     new Map([
       [
         'packages/daemon/src/sessions/handlers/session.ts',
-        "import { handleSessionObservabilityCommands } from '../session-observability/internal/session-observability.ts';\nexport function handleSessionCommands() {}",
+        "import { handleAudioCommand } from '../session-observability/internal/session-audio.ts';\nexport function handleSessionCommands() {}",
+      ],
+      [
+        'packages/daemon/src/sessions/session-observability/internal/session-audio.ts',
+        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleAudioCommand() {}",
       ],
       [
         'packages/daemon/src/sessions/session-observability/internal/session-observability.ts',
-        "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleSessionObservabilityCommands() {}",
-      ],
-      [
-        'packages/daemon/src/sessions/session-observability/index.ts',
         'export function handleSessionObservabilityCommands() {}',
       ],
     ]),
@@ -468,10 +424,10 @@ test('session observability rejects handler deep imports in both directions', ()
         file: 'packages/daemon/src/sessions/handlers/session.ts',
         line: 1,
         message:
-          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-observability's internal tree (packages/daemon/src/sessions/session-observability/internal/session-observability.ts)",
+          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-observability's internal tree (packages/daemon/src/sessions/session-observability/internal/session-audio.ts)",
       },
       {
-        file: 'packages/daemon/src/sessions/session-observability/internal/session-observability.ts',
+        file: 'packages/daemon/src/sessions/session-observability/internal/session-audio.ts',
         line: 1,
         message:
           'daemon-session-observability must not import packages/daemon/src/sessions/handlers/session.ts',
@@ -690,5 +646,75 @@ test('R9 banks a shrink with no edit anywhere', () => {
       REFERENCE,
     ),
     [],
+  );
+});
+
+for (const file of [
+  'src/cli.ts',
+  'src/cli/commands/daemon.ts',
+  'src/client/client-normalizers.ts',
+  'packages/remote/src/daemon-artifacts.ts',
+  'src/daemon-client/daemon-client.ts',
+]) {
+  for (const [kind, source] of [
+    [
+      'type-only',
+      "import type { DaemonRequest } from '../packages/daemon/src/core/daemon-request.ts';",
+    ],
+    ['value', "import { handle } from '../packages/daemon/src/server/daemon-stop.ts';"],
+    [
+      'dynamic',
+      "export const load = () => import('../packages/daemon/src/server/daemon-stop.ts');",
+    ],
+  ] as const) {
+    test(`client-side ${file} importing the daemon package is red (${kind})`, () => {
+      const edges = resolveImportEdges(
+        new Map([
+          [file, source.replaceAll('../', '../'.repeat(file.split('/').length - 1))],
+          ['packages/daemon/src/core/daemon-request.ts', 'export type DaemonRequest = object;'],
+          ['packages/daemon/src/server/daemon-stop.ts', 'export const handle = 1;'],
+        ]),
+      );
+
+      const violations = checkDaemonModularityRatchets(edges, REFERENCE, REFERENCE);
+      assert.equal(violations.length, 1);
+      assert.match(violations[0]!.message, /client-side must not import packages\/daemon\/src/);
+    });
+  }
+}
+
+test('session command owners accept direct imports without an internal barrel', () => {
+  const sources = new Map<string, string>();
+  for (const [family, owner, symbol] of [
+    ['session-lifecycle', 'session-close', 'handleSessionCloseCommands'],
+    ['session-lifecycle', 'session-open', 'handleSessionOpenCommands'],
+    ['session-lifecycle', 'inventory', 'handleSessionInventoryCommands'],
+    ['session-observability', 'session-observability', 'handleSessionObservabilityCommands'],
+  ]) {
+    sources.set(
+      `packages/daemon/src/sessions/${family}/internal/${owner}.ts`,
+      `export function ${symbol}() {}`,
+    );
+    sources.set(
+      `packages/daemon/src/sessions/handlers/${owner}.ts`,
+      `import { ${symbol} } from '../${family}/internal/${owner}.ts';`,
+    );
+  }
+  assert.deepEqual(
+    checkDaemonModularityRatchets(resolveImportEdges(sources), REFERENCE, REFERENCE),
+    [],
+  );
+});
+
+test('session command families reject restored internal barrels', () => {
+  const lifecycle = 'packages/daemon/src/sessions/session-lifecycle/index.ts';
+  const observability = 'packages/daemon/src/sessions/session-observability/index.ts';
+  assert.deepEqual(
+    checkRetiredSessionLifecyclePaths([lifecycle]).map(({ file }) => file),
+    [lifecycle],
+  );
+  assert.deepEqual(
+    checkRetiredSessionObservabilityPaths([observability]).map(({ file }) => file),
+    [observability],
   );
 });

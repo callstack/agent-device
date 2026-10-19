@@ -40,12 +40,12 @@ import {
   type DivergenceObservation,
 } from './session-replay-divergence.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
+import type { ReplayResumeStamper } from '@agent-device/replay-port/command-types';
 import type {
-  ReplayResumeStamper,
   ReplaySessionObservation,
   ReplaySessionState,
   ReplaySessionStore,
-} from '@agent-device/replay-port/command-types';
+} from '@agent-device/contracts/replay-backend';
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,

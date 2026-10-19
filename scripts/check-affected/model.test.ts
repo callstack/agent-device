@@ -228,7 +228,7 @@ test('user docs pages and README select the docs-links and docs-prose checks', (
 });
 
 test('agent guidance owns its focused contract instead of disappearing as docs-only', () => {
-  for (const file of ['AGENTS.md', 'CONTEXT.md', 'docs/agents/testing.md']) {
+  for (const file of ['AGENTS.md', 'CONTEXT.md', 'docs/agents/testing.md', 'docs/adr/FORMAT.md']) {
     const result = plan([file]);
     assert.deepEqual(result.checks, ['agent-guidance']);
     assert.deepEqual(result.docsOnlyPaths, []);

@@ -1,3 +1,4 @@
+import { helperRuntimeSlot } from './adb-host.ts';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
 
 /**
@@ -8,7 +9,9 @@ import type { AndroidAdbExecutor } from './adb-executor.ts';
 const SHELL_PROTOCOL_V2_FEATURE = 'shell_v2';
 const FEATURE_PROBE_TIMEOUT_MS = 2_000;
 
-const deviceExitStatusForwarding = new Map<string, boolean>();
+const deviceExitStatusForwardingSlot = Symbol('androidDeviceExitStatusForwarding');
+const deviceExitStatusForwarding = (): Map<string, boolean> =>
+  helperRuntimeSlot(deviceExitStatusForwardingSlot, () => new Map<string, boolean>());
 
 /**
  * Whether the exit status of a host `adb shell` child is the DEVICE command's exit status.
@@ -26,7 +29,7 @@ export async function androidAdbForwardsDeviceExitStatus(params: {
   deviceKey: string;
   signal?: AbortSignal;
 }): Promise<boolean> {
-  const cached = deviceExitStatusForwarding.get(params.deviceKey);
+  const cached = deviceExitStatusForwarding().get(params.deviceKey);
   if (cached !== undefined) return cached;
   let stdout: string;
   try {
@@ -43,12 +46,12 @@ export async function androidAdbForwardsDeviceExitStatus(params: {
     return false;
   }
   const forwards = parseAndroidAdbFeatures(stdout).includes(SHELL_PROTOCOL_V2_FEATURE);
-  deviceExitStatusForwarding.set(params.deviceKey, forwards);
+  deviceExitStatusForwarding().set(params.deviceKey, forwards);
   return forwards;
 }
 
 export function resetAndroidAdbShellProtocolProbes(): void {
-  deviceExitStatusForwarding.clear();
+  deviceExitStatusForwarding().clear();
 }
 
 function parseAndroidAdbFeatures(stdout: string): string[] {

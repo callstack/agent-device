@@ -6,6 +6,7 @@ import { hostFixture } from './logs/runtime.fixtures.ts';
 export function platformRuntimeHostFixture(): PlatformRuntimeHost {
   return {
     ...hostFixture().host,
+    hostEnvironment: { env: process.env, cwd: process.cwd() },
     appLogs: {
       readRecent: async () => ({
         path: '/sessions/one/app.log',
@@ -25,7 +26,7 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
       },
       androidEmulator: {
         discover: async () => [],
-        launch: () => 1,
+        launch: async () => 1,
         terminate: async () => {},
       },
     },

@@ -1,3 +1,6 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   DeviceLease,
   LeaseLifecycleContext,
@@ -8,11 +11,12 @@ import type {
   AgentArtifactsResult,
   CloudArtifactProvider,
 } from '@agent-device/contracts/observability';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   leaseReleaseRequestFor,
   normalizeLeaseBackend,
+  normalizeLeaseProvider,
   type ReleaseLeaseRequest,
 } from '../../resources/lease-registry-scope.ts';
 import type { SessionStore } from '../../core/session-store.ts';
@@ -22,10 +26,15 @@ import {
   resolveRequestOrSessionLeaseScope,
 } from '../../core/lease-context.ts';
 import {
+  leaseDeviceKey,
+  leaseProviderRequiringRuntime,
   leaseScopeToAllocateRequest,
   leaseScopeToHeartbeatRequest,
   leaseScopeToReleaseRequest,
+  type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
+import { publicPlatformString } from '@agent-device/kernel/device';
+import { platformForLeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError, createRequestCanceledError, errorMessage } from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
@@ -35,15 +44,17 @@ import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/p
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
 type LeaseHandlerArgs = {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
-  providerRuntimeRequiredIds?: readonly string[];
+  failedPlugins?: readonly PluginInventoryEntry[];
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -53,10 +64,11 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     sessionStore,
     leaseRegistry,
     providerRuntimeIds,
-    providerRuntimeRequiredIds,
+    failedPlugins,
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    endSessionsForLease,
   } = args;
   const leaseScope = resolveLeaseScope(req);
   switch (req.command) {
@@ -74,21 +86,16 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     }
     case 'lease_allocate': {
       assertTenantMayAllocate(leaseScope.leaseBackend);
-      assertProviderRuntimeAvailable(
-        leaseScope.leaseProvider,
-        providerRuntimeIds,
-        providerRuntimeRequiredIds,
-      );
+      // The registry stores the trimmed, validated id, so every admission check reads that id:
+      // " testmu " names testmu, and a malformed id is INVALID_ARGS as everywhere else.
+      const leaseProvider = normalizeLeaseProvider(leaseScope.leaseProvider);
+      assertProviderRuntimeRegistered(leaseProvider, providerRuntimeIds ?? [], failedPlugins ?? []);
       assertProviderCredentialsUnchanged(
-        leaseScope,
+        { leaseProvider, leaseBackend: leaseScope.leaseBackend },
         req.meta?.providerCredentialFingerprint,
         providerCredentials,
       );
-      const activeLeaseIds = new Set(
-        leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
-      );
-      const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
-      const reused = activeLeaseIds.has(lease.leaseId);
+      const { lease, reused } = await allocateOrRenewLease(req, leaseScope, leaseRegistry);
       const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
         let providerData: Record<string, unknown> | undefined;
@@ -99,7 +106,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           : undefined;
         try {
           providerData = await leaseLifecycleProvider?.allocate?.(lease, {
-            ...leaseLifecycleContext(req),
+            ...leaseLifecycleContext(req, args.host),
             signal: getRequestSignal(requestId),
             deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
           });
@@ -136,7 +143,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
       const providerData = await leaseLifecycleProvider?.heartbeat?.(
         lease,
-        leaseLifecycleContext(req),
+        leaseLifecycleContext(req, args.host),
       );
       return {
         ok: true,
@@ -155,9 +162,12 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
             leaseLifecycleProvider,
             lease,
             releaseRequest,
-            leaseLifecycleContext(req),
+            leaseLifecycleContext(req, args.host),
           ),
       );
+      // Outside the device mutation: ending a session waits for its execution locks, and a
+      // command holding them may itself be waiting for that mutation.
+      if (lease && outcome.registryReleased) await endSessionsForLease?.(lease.leaseId);
       return {
         ok: true,
         data: {
@@ -170,6 +180,57 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     default:
       return null;
   }
+}
+
+/**
+ * A request repeating the `leaseId` of its own live lease gets that lease back before any device is
+ * picked, so a retry neither fails on a device that left the inventory nor binds another one.
+ */
+async function allocateOrRenewLease(
+  req: DaemonRequest,
+  scope: LeaseScope,
+  leaseRegistry: LeaseRegistry,
+): Promise<{ lease: DeviceLease; reused: boolean }> {
+  const request = leaseScopeToAllocateRequest(scope);
+  const renewed = leaseRegistry.renewRequestedLease(request);
+  if (renewed) return { lease: renewed, reused: true };
+  const pickedDeviceKey = await pickProxyLeaseDeviceKey(req, scope);
+  const activeLeaseIds = new Set(leaseRegistry.listActiveLeases().map((entry) => entry.leaseId));
+  const lease = leaseRegistry.allocateLease(
+    pickedDeviceKey ? { ...request, deviceKey: pickedDeviceKey } : request,
+  );
+  return { lease, reused: activeLeaseIds.has(lease.leaseId) };
+}
+
+/**
+ * A proxy allocation that names no `deviceKey` but does name a device spec leaves the device to this
+ * daemon: it resolves the request's selectors as a command would, and the lease binds that device.
+ */
+async function pickProxyLeaseDeviceKey(
+  req: DaemonRequest,
+  scope: LeaseScope,
+): Promise<string | undefined> {
+  if (!isProxyLeaseScope(scope) || scope.deviceKey) return undefined;
+  const flags = req.flags ?? {};
+  const { hasDeviceSelectionInput } = await import('../../core/device/device-selector-intent.ts');
+  if (!hasDeviceSelectionInput(flags)) return undefined;
+  const { resolveTargetDevice } = await import('@agent-device/device-selection/dispatch-resolve');
+  const device = await resolveTargetDevice({
+    platform:
+      flags.platform ??
+      (scope.leaseBackend ? platformForLeaseBackend(scope.leaseBackend) : undefined),
+    target: flags.target,
+    device: flags.device,
+    udid: flags.udid,
+    serial: flags.serial,
+    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+    androidDeviceAllowlist: flags.androidDeviceAllowlist,
+  });
+  return leaseDeviceKey({
+    platform: publicPlatformString(device),
+    target: device.target,
+    id: device.id,
+  });
 }
 
 type LeaseReleaseOutcome = {
@@ -268,35 +329,48 @@ function canceledAllocationHint(
   return `The lease request was canceled while the provider was still allocating, and the session it produced could NOT be confirmed released — it may still be running and billing. Stop provider session ${String(providerSessionId ?? '(unknown)')} for lease ${leaseId} by hand.`;
 }
 
-function leaseLifecycleContext(req: DaemonRequest): LeaseLifecycleContext {
+function leaseLifecycleContext(req: DaemonRequest, host: HostEnvironment): LeaseLifecycleContext {
   return {
     flags: req.flags,
     ...(typeof req.flags?.providerApp === 'string' ? { initialApp: req.flags.providerApp } : {}),
-    cwd: typeof req.meta?.cwd === 'string' ? req.meta.cwd : undefined,
+    cwd: typeof req.meta?.cwd === 'string' ? req.meta.cwd : host.cwd,
     ...(req.internal?.publicNetworkOnly ? { publicNetworkOnly: true } : {}),
   };
 }
 
-function assertProviderRuntimeAvailable(
-  provider: string | undefined,
-  providerRuntimeIds: readonly string[] | undefined,
-  providerRuntimeRequiredIds: readonly string[] | undefined,
+function assertProviderRuntimeRegistered(
+  leaseProvider: string | undefined,
+  registeredProviders: readonly string[],
+  failedPlugins: readonly PluginInventoryEntry[],
 ): void {
-  if (
-    !provider ||
-    providerRuntimeIds === undefined ||
-    providerRuntimeRequiredIds === undefined ||
-    !providerRuntimeRequiredIds.includes(provider) ||
-    providerRuntimeIds.includes(provider)
-  ) {
-    return;
-  }
+  const provider = leaseProviderRequiringRuntime({ leaseProvider });
+  if (provider === undefined || registeredProviders.includes(provider)) return;
+  // A plugin that failed before its provider id was known could have been this provider.
+  const failures = failedPlugins.flatMap((plugin) =>
+    plugin.state === 'failed' && (plugin.provider === provider || plugin.provider === undefined)
+      ? [
+          {
+            ...(plugin.provider === undefined ? {} : { provider: plugin.provider }),
+            ...(plugin.package === undefined ? {} : { package: plugin.package }),
+            code: plugin.error.code,
+            ...(plugin.error.reason === undefined ? {} : { reason: plugin.error.reason }),
+            message: plugin.error.message,
+          },
+        ]
+      : [],
+  );
   throw new AppError(
     'UNSUPPORTED_OPERATION',
     `Provider "${provider}" is not available in this daemon runtime.`,
     {
+      reason: 'provider-not-registered',
       provider,
-      hint: `Restart the daemon with ${provider} configured, then retry lease allocation.`,
+      registeredProviders: [...registeredProviders],
+      ...(failures.length > 0 ? { failedPlugins: failures } : {}),
+      hint:
+        failures.length > 0
+          ? `Fix the plugin that failed to register (see failedPlugins or agent-device daemon status), restart the daemon, then retry lease allocation.`
+          : `Restart the daemon with ${provider} configured, then retry lease allocation.`,
     },
   );
 }

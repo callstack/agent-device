@@ -48,11 +48,6 @@ export const FLOW_DIVERGENCES: Record<string, FlowDivergence> = {
     reason: 'travel is outside the supported subset.',
     unsupported: ['travel'],
   },
-  'upstream/116_kill_app': {
-    classification: 'we-reject',
-    reason: 'Standalone killApp is outside the supported subset.',
-    unsupported: ['killApp'],
-  },
   // --- Deliberately stricter than upstream ---
   'invalid/duplicate-keys': {
     classification: 'we-reject',
@@ -138,6 +133,12 @@ export type DocumentedDeviation = {
 };
 
 export const DOCUMENTED_DEVIATIONS: DocumentedDeviation[] = [
+  {
+    id: 'kill-app-preconditions',
+    area: 'killApp',
+    description:
+      'Upstream killApp runs am kill unconditionally. On ADB-backed Android agent-device refuses a resumed target (android-kill-requires-background-app) and fails when the process survives (android-kill-process-survived), so a kill that would silently do nothing upstream fails loudly here.',
+  },
   {
     id: 'animation-wait-mechanism',
     area: 'waitForAnimationToEnd',

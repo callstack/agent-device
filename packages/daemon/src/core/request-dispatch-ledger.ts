@@ -1,4 +1,5 @@
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonInvokeFn, DaemonRequest } from './daemon-request.ts';
 import { RUNTIME_OPERATION_EFFECTS } from './runtime-operation-effects.ts';
 
 /**

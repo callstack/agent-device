@@ -21,7 +21,7 @@ export type DaemonProviderDeviceResolutionIntent =
   | 'sessionless-default-device'
   | 'skip';
 
-// Built from the additive command-descriptor registry (ADR-0008, Phase 1 step 2).
+// Built from the command-descriptor registry (ADR 0008, "Daemon ownership").
 // The hand-authored literal that previously lived here was proven byte-equal to
 // this derived value by `src/__tests__/command-descriptor-parity.test.ts` (#906)
 // and has been deleted; the daemon now derives its routes/traits from the single

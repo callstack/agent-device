@@ -1,37 +1,28 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
-import { readinessScheduleFor } from '@agent-device/selectors/selector-pipeline-policy';
 import {
   attemptSelectorResolution,
-  pollForSelectorReadiness,
-  type SelectorReadinessWait,
   selectorInteractionFailure,
-} from './selector-readiness.ts';
-import {
-  captureInteractionSnapshot,
-  type InteractionSnapshot,
-} from './interaction-snapshot-capture.ts';
+} from './selector-target-resolution.ts';
+import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { containsPoint } from '@agent-device/kernel/rect';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
-import { surfaceScopedNodes } from './post-action-surface.ts';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import type {
   InteractionTarget,
   PointTarget,
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
-import { describeKeyboardOccludedPointWarning } from './keyboard-occlusion.ts';
+import { describeKeyboardOccludedPointWarning } from '@agent-device/selectors/keyboard-occlusion';
+import type { InteractionAction } from '@agent-device/selectors/interaction-action';
 import { assertReplayTargetResolution } from './replay-target-guard.ts';
-import type {
-  InteractionAction,
-  ResolveInteractionTargetParams,
-} from './interaction-resolution-request.ts';
+import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 import { resolveRefInteractionTarget } from './ref-target-resolution.ts';
 import {
   buildSelectorResolutionDisclosure,
   describeResolvedInteractionNode,
 } from './resolution-disclosure.ts';
-import type { ActionSelectorResolution } from './selector-action-resolution.ts';
 import {
   assertVisibleSelectorTarget,
   runInteractionPipelineStages,
@@ -137,34 +128,20 @@ async function resolveSelectorInteractionTarget(
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
   const selectorExpression = target.selector;
-  let capture: InteractionSnapshot;
-  let resolved: ActionSelectorResolution | null;
-  let readiness: SelectorReadinessWait | undefined;
-  const readinessSchedule = readinessScheduleFor(params.pipeline.poll, params.readinessTimeoutMs);
-  if (!readinessSchedule) {
-    const attempt = await attemptSelectorResolution(runtime, options, selectorExpression, params);
-    capture = attempt.capture;
-    resolved = attempt.resolved;
-    if (!resolved || !resolved.node.rect) {
-      throw await selectorInteractionFailure({
-        runtime,
-        nodes: capture.snapshot.nodes,
-        selectorExpression,
-        action: params.action,
-        resolved,
-      });
-    }
-  } else {
-    const ready = await pollForSelectorReadiness(
+  const { capture, resolved } = await attemptSelectorResolution(
+    runtime,
+    options,
+    selectorExpression,
+    params,
+  );
+  if (!resolved || !resolved.node.rect) {
+    throw await selectorInteractionFailure({
       runtime,
-      options,
+      nodes: capture.snapshot.nodes,
       selectorExpression,
-      params,
-      readinessSchedule,
-    );
-    capture = ready.capture;
-    resolved = ready.resolved;
-    readiness = ready.readiness;
+      action: params.action,
+      resolved,
+    });
   }
   // #1542: see the ref-target twin in ref-target-resolution.ts.
   const selected = resolved;
@@ -191,7 +168,6 @@ async function resolveSelectorInteractionTarget(
     kind: 'selector',
     point,
     target: { kind: 'selector', selector: resolved.selector },
-    ...(readiness ? { readiness } : {}),
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,

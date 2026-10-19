@@ -1,4 +1,4 @@
-import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
+import type { RemoteConfigProfile } from '@agent-device/remote/remote-config-schema';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
@@ -11,9 +11,9 @@ export function resolveProxyConnectProfile(options: {
   flags: CliFlags;
   stateDir: string;
   cwd: string;
-  env?: EnvMap;
+  env: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
-  const daemonBaseUrl = options.flags.daemonBaseUrl ?? options.env?.AGENT_DEVICE_DAEMON_BASE_URL;
+  const daemonBaseUrl = options.flags.daemonBaseUrl ?? options.env.AGENT_DEVICE_DAEMON_BASE_URL;
   if (!daemonBaseUrl) {
     throw new AppError(
       'INVALID_ARGS',

@@ -70,6 +70,13 @@ export function bindAndroidApplicationLifecycle(
       if (input.ensureReady) {
         await ensureAndroidReady(host, device, { headless: false }, signal);
       }
+      if (input.mode === 'kill') {
+        const [target] = input.positionals;
+        if (!target) throw new AppError('INVALID_ARGS', 'Kill requires an app target');
+        const { killAndroidApp } = await import('./app-lifecycle.ts');
+        await killAndroidApp(device, target);
+        return;
+      }
       await invokeApplicationClose({
         device,
         interactor: await binding.resolveInteractor(input.execution, input.appBundleId),

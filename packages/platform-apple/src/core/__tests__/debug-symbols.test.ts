@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -6,6 +7,8 @@ import { symbolicateCrashArtifact } from '../debug-symbols.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+
+bindTestCommandHost();
 
 const UUID = 'ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB';
 const NORMALIZED_UUID = 'ABCDEFABCDEFABCDEFABCDEFABCDEFAB';
@@ -66,7 +69,7 @@ test('symbolicates Apple text crash frames with a matching dSYM UUID', async () 
       }
       return undefined;
     },
-    async () => await symbolicateCrashArtifact({ artifact, dsym, out }),
+    async () => await symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym, out }),
   );
 
   const output = await fs.readFile(out, 'utf8');
@@ -129,7 +132,8 @@ test('matches dSYMs discovered under search path and symbolicates IPS frames', a
       }
       return undefined;
     },
-    async () => await symbolicateCrashArtifact({ artifact, searchPath: buildDir, out }),
+    async () =>
+      await symbolicateCrashArtifact({ cwd: process.cwd(), artifact, searchPath: buildDir, out }),
   );
 
   const output = JSON.parse(await fs.readFile(out, 'utf8')) as any;
@@ -180,7 +184,7 @@ test('preserves modern two-document IPS headers while symbolicating payload fram
       }
       return undefined;
     },
-    async () => await symbolicateCrashArtifact({ artifact, dsym, out }),
+    async () => await symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym, out }),
   );
 
   const output = await fs.readFile(out, 'utf8');
@@ -236,7 +240,7 @@ test('reports a UUID mismatch with actionable details', async () => {
         }
         return undefined;
       },
-      async () => await symbolicateCrashArtifact({ artifact, dsym }),
+      async () => await symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym }),
     ),
   );
 
@@ -267,7 +271,9 @@ test('normalizes malformed IPS numeric fields into AppErrors', async () => {
     }),
   );
 
-  const error = await readRejectedError(symbolicateCrashArtifact({ artifact, dsym }));
+  const error = await readRejectedError(
+    symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym }),
+  );
 
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'INVALID_ARGS');
@@ -288,7 +294,9 @@ test('normalizes malformed IPS image bases into AppErrors', async () => {
     }),
   );
 
-  const error = await readRejectedError(symbolicateCrashArtifact({ artifact, dsym }));
+  const error = await readRejectedError(
+    symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym }),
+  );
 
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'INVALID_ARGS');
@@ -307,7 +315,9 @@ test('rejects nonexistent search paths with an actionable invalid-args hint', as
     ),
   );
 
-  const error = await readRejectedError(symbolicateCrashArtifact({ artifact, searchPath }));
+  const error = await readRejectedError(
+    symbolicateCrashArtifact({ cwd: process.cwd(), artifact, searchPath }),
+  );
 
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'INVALID_ARGS');
@@ -323,7 +333,9 @@ test('rejects oversized crash artifacts before loading them into memory', async 
   await fs.writeFile(artifact, '');
   await fs.truncate(artifact, 64 * 1024 * 1024 + 1);
 
-  const error = await readRejectedError(symbolicateCrashArtifact({ artifact, dsym }));
+  const error = await readRejectedError(
+    symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym }),
+  );
 
   assert.ok(error instanceof AppError);
   assert.equal(error.code, 'INVALID_ARGS');
@@ -380,7 +392,7 @@ test('uses address ranges for duplicate text crash image names and supports arm6
       }
       return undefined;
     },
-    async () => await symbolicateCrashArtifact({ artifact, dsym }),
+    async () => await symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym }),
   );
 
   assert.equal(result.symbolicatedFrames, 1);
@@ -428,7 +440,7 @@ test('keeps atos output aligned and ignores unsymbolicated address echoes', asyn
       }
       return undefined;
     },
-    async () => await symbolicateCrashArtifact({ artifact, dsym, out }),
+    async () => await symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym, out }),
   );
 
   const output = await fs.readFile(out, 'utf8');
@@ -457,7 +469,7 @@ test('reports missing Apple tools before attempting symbolication', async () => 
         }
         return undefined;
       },
-      async () => await symbolicateCrashArtifact({ artifact, dsym }),
+      async () => await symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym }),
     ),
   );
 
@@ -479,7 +491,7 @@ test('defers Android crash symbolication with a clear hint', async () => {
   );
 
   const error = await readRejectedError(
-    symbolicateCrashArtifact({ artifact, dsym: path.join(dir, 'mapping.txt') }),
+    symbolicateCrashArtifact({ cwd: process.cwd(), artifact, dsym: path.join(dir, 'mapping.txt') }),
   );
 
   assert.ok(error instanceof AppError);

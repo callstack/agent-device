@@ -266,7 +266,9 @@ test('post-action observation CLI output formatters follow descriptor traits', a
   for (const [command, format] of Object.entries(formatters)) {
     let text: string;
     try {
-      text = String((await format({ input: {}, result: settledResult })).text ?? '');
+      text = String(
+        (await format({ env: process.env, input: {}, result: settledResult })).text ?? '',
+      );
     } catch {
       // Formatters expecting a differently-shaped result (device lists) are
       // orthogonal to settle rendering — but a settle-capable formatter must

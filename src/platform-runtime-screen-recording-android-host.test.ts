@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { withAndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { createAndroidScreenRecordingTransport } from './platform-runtime-screen-recording-android-host.ts';
 import './platform-runtime-android-adb-host.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const adbExecutor = vi.hoisted(() => ({
   override: undefined as
@@ -50,7 +51,10 @@ test('uses the request-scoped Android ADB executor rather than a host fallback',
     },
     { serial: android.id },
     async () => {
-      const transport = await createAndroidScreenRecordingTransport(android);
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
       expect(transport.mode).toBe('transport-composed');
       await expect(transport.start({ remotePath: '/sdcard/capture.mp4' })).resolves.toEqual({
         process: { pid: '42', remotePath: '/sdcard/capture.mp4', startTime: '42' },
@@ -96,7 +100,10 @@ test('finds only exact screenrecord processes for the canonical remote path', as
     },
     { serial: android.id },
     async () => {
-      const transport = await createAndroidScreenRecordingTransport(android);
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
       await expect(transport.probeRunningWriters(remotePath)).resolves.toEqual({
         writers: [
           { pid: '41', remotePath, startTime: '41' },
@@ -166,7 +173,10 @@ test.each(inconclusiveWriterScans)(
       },
       { serial: android.id },
       async () => {
-        const transport = await createAndroidScreenRecordingTransport(android);
+        const transport = await createAndroidScreenRecordingTransport(
+          android,
+          createLiveTestHostEnvironment(),
+        );
         await expect(transport.probeRunningWriters(writerScanRemotePath)).resolves.toEqual(
           expected,
         );
@@ -192,7 +202,10 @@ test('revalidates start-time and exact argv before SIGINT', async () => {
     },
     { serial: android.id },
     async () => {
-      const transport = await createAndroidScreenRecordingTransport(android);
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
       const process = {
         pid: '51',
         remotePath: '/sdcard/capture.mp4',
@@ -223,7 +236,10 @@ test('distinguishes a missing proc directory from an unavailable identity probe'
     },
     { serial: android.id },
     async () => {
-      const transport = await createAndroidScreenRecordingTransport(android);
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
       const expected = { remotePath: '/sdcard/capture.mp4', startTime: '42' };
       await expect(transport.inspect({ ...expected, pid: '42' })).resolves.toBe('missing');
       await expect(transport.inspect({ ...expected, pid: '43' })).resolves.toBe('uncertain');
@@ -237,7 +253,10 @@ test('retains an interrupted empty-stderr presence probe as uncertain', async ()
     return result('', '', null);
   };
   try {
-    const transport = await createAndroidScreenRecordingTransport(android);
+    const transport = await createAndroidScreenRecordingTransport(
+      android,
+      createLiveTestHostEnvironment(),
+    );
     await expect(
       transport.inspect({
         pid: '44',
@@ -262,7 +281,10 @@ test('credits a path as absent only from a probe that answered, not from one tha
     return result('');
   };
   try {
-    const transport = await createAndroidScreenRecordingTransport(android);
+    const transport = await createAndroidScreenRecordingTransport(
+      android,
+      createLiveTestHostEnvironment(),
+    );
     await expect(transport.exists('/sdcard/capture.mp4')).resolves.toBe(false);
     await expect(transport.exists('/sdcard/capture.mp4')).resolves.toBe('uncertain');
     await expect(transport.exists('/sdcard/capture.mp4')).resolves.toBe('uncertain');
@@ -279,7 +301,10 @@ test('retains an interrupted empty-stderr manifest probe as unavailable', async 
     return result('', '', null);
   };
   try {
-    const transport = await createAndroidScreenRecordingTransport(android);
+    const transport = await createAndroidScreenRecordingTransport(
+      android,
+      createLiveTestHostEnvironment(),
+    );
     await expect(transport.readManifest('/sdcard/interrupted.json')).resolves.toEqual({
       status: 'unavailable',
       message: 'Android recording manifest probe failed',
@@ -314,7 +339,10 @@ test('proves termination from each ownership-lost producer without signalling', 
     },
     { serial: android.id },
     async () => {
-      const transport = await createAndroidScreenRecordingTransport(android);
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
       for (const replacement of [reassignedPid, otherArtifact, exitedTask]) {
         identity = replacement;
         await expect(transport.inspect(recorded)).resolves.toBe('ownership-lost');
@@ -347,7 +375,10 @@ test('classifies a replacement recorder on the same path as a foreign writer and
     },
     { serial: android.id },
     async () => {
-      const transport = await createAndroidScreenRecordingTransport(android);
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
       await expect(transport.inspect(recorded)).resolves.toBe('foreign-writer');
       await expect(transport.stop(recorded)).resolves.toBe('ownership-lost');
       expect(commands.some((command) => command.startsWith('kill '))).toBe(false);
@@ -396,7 +427,10 @@ test('retains unavailable manifest reads and confirms manifest deletion', async 
     },
     { serial: android.id },
     async () => {
-      const transport = await createAndroidScreenRecordingTransport(android);
+      const transport = await createAndroidScreenRecordingTransport(
+        android,
+        createLiveTestHostEnvironment(),
+      );
       await expect(transport.readManifest('/sdcard/manifest.json')).resolves.toEqual({
         status: 'unavailable',
         message: 'transport unavailable',

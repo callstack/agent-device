@@ -36,6 +36,7 @@ test('download redirects revalidate destinations and strip sensitive cross-origi
         'user-agent': 'agent-device-test',
       },
       signal: new AbortController().signal,
+      environment: process.env,
     });
     assert.equal(await fs.readFile(result, 'utf8'), 'apk');
     assert.equal(lookup.mock.calls.length, 2);
@@ -70,12 +71,14 @@ test('download sends a default user-agent that a caller header replaces', async 
       tempDir: tempRoot,
       url: 'https://example.com/default.apk',
       signal: new AbortController().signal,
+      environment: process.env,
     });
     await downloadInstallSource({
       tempDir: tempRoot,
       url: 'https://example.com/custom.apk',
       headers: { 'User-Agent': 'caller-agent' },
       signal: new AbortController().signal,
+      environment: process.env,
     });
     const defaultHeaders = requestMock.mock.calls[0]![0].headers;
     const customHeaders = requestMock.mock.calls[1]![0].headers;
@@ -108,6 +111,7 @@ test('download errors do not disclose URL credentials or query values', async ()
       url: 'https://private-user:private-pass@example.com/app?token=private-query',
       headers: { authorization: 'private-header' },
       signal: new AbortController().signal,
+      environment: process.env,
     }).catch((error: unknown) => error);
     assert.match((error as Error).message, /credentials are not allowed/i);
     const serialized = JSON.stringify(error);
@@ -142,6 +146,7 @@ test('download identifies the daemon as the requester and preserves the network 
       tempDir: tempRoot,
       url: 'https://example.com/app.apk',
       signal: new AbortController().signal,
+      environment: process.env,
     }).catch((error: unknown) => error);
 
     assert.ok(error instanceof Error);
@@ -178,6 +183,7 @@ test('download omits network error codes that are not identifiers', async () => 
       tempDir: tempRoot,
       url: 'https://example.com/app.apk',
       signal: new AbortController().signal,
+      environment: process.env,
     }).catch((error: unknown) => error);
 
     assert.ok(error instanceof Error);
@@ -210,6 +216,7 @@ test('download rejects non-identity content encoding and malformed lengths', asy
         tempDir: tempRoot,
         url: 'https://example.com/app',
         signal: new AbortController().signal,
+        environment: process.env,
       }),
       /content encoding/i,
     );
@@ -221,6 +228,7 @@ test('download rejects non-identity content encoding and malformed lengths', asy
         tempDir: tempRoot,
         url: 'https://example.com/app',
         signal: new AbortController().signal,
+        environment: process.env,
       }),
       /content-length/i,
     );
@@ -252,6 +260,7 @@ test('download and the trusted-source check refuse an unparsable source alike', 
       tempDir: '/unused',
       url: source,
       signal: new AbortController().signal,
+      environment: process.env,
     }),
     expected,
   );

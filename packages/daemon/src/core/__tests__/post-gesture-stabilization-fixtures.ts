@@ -1,4 +1,4 @@
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { SessionState } from '../session-state.ts';
 

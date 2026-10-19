@@ -2,10 +2,20 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { makeIosSession, makeMacOsSession } from '../../__tests__/support/session-factories.ts';
 import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+import { AppError } from '@agent-device/kernel/errors';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { assertRequestLeaseAdmission } from '../request-admission.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { ProviderAppCatalog } from '@agent-device/contracts/device';
+
+// The message names the missing field; the remediation pointer lives in the
+// AppError hint, which normalizeError keeps for callers.
+function missingLeaseIdError(error: unknown): boolean {
+  assert.ok(error instanceof AppError);
+  assert.equal(error.message, 'tenant isolation requires lease id.');
+  assert.equal(error.details?.hint, 'Allocate a lease with leases.allocate and pass its leaseId.');
+  return true;
+}
 
 const limrunAppCatalog: ProviderAppCatalog = {
   supports: (provider) => provider === 'limrun',
@@ -36,6 +46,7 @@ test('close on a tenant-isolated session with no lease ever allocated admits wit
     }),
     registry,
     undefined,
+    { env: process.env },
   );
 
   assert.equal(result, undefined);
@@ -60,8 +71,9 @@ test('close on a lease-less but stored tenant-isolated session still requires a 
         }),
         registry,
         session,
+        { env: process.env },
       ),
-    /tenant isolation requires lease id/,
+    missingLeaseIdError,
   );
 });
 
@@ -83,8 +95,9 @@ test('close with an app target still requires a lease id even with no lease anyw
         }),
         registry,
         undefined,
+        { env: process.env },
       ),
-    /tenant isolation requires lease id/,
+    missingLeaseIdError,
   );
 });
 
@@ -105,6 +118,7 @@ test('close with an explicit lease id but no session lease still requires an act
         }),
         registry,
         undefined,
+        { env: process.env },
       ),
     /Lease is not active/,
   );
@@ -122,8 +136,9 @@ test('non-close commands on a tenant-isolated session still require a lease id',
         }),
         registry,
         undefined,
+        { env: process.env },
       ),
-    /tenant isolation requires lease id/,
+    missingLeaseIdError,
   );
 });
 
@@ -142,8 +157,9 @@ test.each(['bogus', 'proxy', 'browserstack'])(
           }),
           registry,
           undefined,
+          { env: process.env },
         ),
-      /tenant isolation requires lease id/,
+      missingLeaseIdError,
     );
   },
 );
@@ -159,7 +175,7 @@ test('sessionless apps admits a provider declared by the runtime app catalog', (
     }),
     registry,
     undefined,
-    { providerAppCatalog: limrunAppCatalog },
+    { env: process.env, providerAppCatalog: limrunAppCatalog },
   );
 
   assert.equal(result, undefined);
@@ -197,6 +213,7 @@ test('admitting a command does not shorten a proxy lease allocated above the old
     }),
     registry,
     undefined,
+    { env: process.env },
   );
 
   assert.equal(result?.leaseId, lease.leaseId);
@@ -239,6 +256,7 @@ test('a command that names its own window renews the lease onto it', () => {
     }),
     registry,
     undefined,
+    { env: process.env },
   );
 
   assert.equal(result!.expiresAt - result!.heartbeatAt, 90_000);
@@ -266,6 +284,7 @@ test('close still admits and heartbeats a real active lease', () => {
     }),
     registry,
     session,
+    { env: process.env },
   );
 
   assert.equal(result?.leaseId, lease.leaseId);
@@ -305,6 +324,7 @@ test('a request under a macos-app lease is confined to the leased app', () => {
       makeRequest({ command: 'snapshot', meta: leaseMeta(lease) }),
       registry,
       session,
+      { env: process.env },
     )?.leaseId,
     lease.leaseId,
   );
@@ -314,6 +334,7 @@ test('a request under a macos-app lease is confined to the leased app', () => {
         makeRequest({ command: 'snapshot', flags: { surface: 'desktop' }, meta: leaseMeta(lease) }),
         registry,
         session,
+        { env: process.env },
       ),
     { code: 'UNAUTHORIZED' },
   );
@@ -329,6 +350,7 @@ test('a request under a macos-app lease that names no existing session is refuse
           makeRequest({ command, flags: { platform: 'macos' }, meta: leaseMeta(lease) }),
           registry,
           undefined,
+          { env: process.env },
         ),
       (error: { code?: string; details?: Record<string, unknown> }) =>
         error.code === 'UNAUTHORIZED' &&
@@ -352,7 +374,7 @@ test('a daemon policy that requires a macos-app lease refuses unleased and other
         makeRequest({ command: 'open', positionals: ['com.apple.finder'] }),
         registry,
         undefined,
-        { daemonPolicy: policy },
+        { env: process.env, daemonPolicy: policy },
       ),
     denied,
   );
@@ -375,7 +397,7 @@ test('a daemon policy that requires a macos-app lease refuses unleased and other
         }),
         registry,
         undefined,
-        { daemonPolicy: policy },
+        { env: process.env, daemonPolicy: policy },
       ),
     denied,
   );
@@ -385,7 +407,7 @@ test('a daemon policy that requires a macos-app lease refuses unleased and other
       makeRequest({ command: 'snapshot', meta: leaseMeta(lease) }),
       registry,
       makeMacOsSession('default', { appBundleId: 'com.example.app' }),
-      { daemonPolicy: policy },
+      { env: process.env, daemonPolicy: policy },
     )?.leaseId,
     lease.leaseId,
   );

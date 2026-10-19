@@ -1,3 +1,5 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { CloudArtifactsQuery } from '@agent-device/contracts/observability';
@@ -5,7 +7,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { handleLeaseCommands } from '../lease.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 
@@ -160,6 +162,7 @@ test('artifacts refuses a provider session returned after a canceled allocation 
   try {
     await assert.rejects(
       handleLeaseCommands({
+        host: createTestHostEnvironment(),
         req: leaseRequest('lease_allocate', {
           requestId,
           tenantId: 'tenant-a',
@@ -170,6 +173,7 @@ test('artifacts refuses a provider session returned after a canceled allocation 
         sessionName: 'artifact-test',
         sessionStore: world.sessionStore,
         leaseRegistry: world.leaseRegistry,
+        providerRuntimeIds: [CLOUD_PROVIDER],
         leaseLifecycleProvider: world.lifecycle,
       }),
       isRequestCanceledError,
@@ -243,6 +247,7 @@ function createWorld(
 
 async function allocateLease(world: World, tenantId: string, runId: string): Promise<DeviceLease> {
   const response = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: leaseRequest('lease_allocate', {
       tenantId,
       runId,
@@ -252,6 +257,7 @@ async function allocateLease(world: World, tenantId: string, runId: string): Pro
     sessionName: 'artifact-test',
     sessionStore: world.sessionStore,
     leaseRegistry: world.leaseRegistry,
+    providerRuntimeIds: [CLOUD_PROVIDER],
     leaseLifecycleProvider: world.lifecycle,
   });
   assert.equal(response?.ok, true);
@@ -261,6 +267,7 @@ async function allocateLease(world: World, tenantId: string, runId: string): Pro
 
 async function releaseLease(world: World, lease: DeviceLease): Promise<void> {
   const response = await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: leaseRequest('lease_release', {
       tenantId: lease.tenantId,
       runId: lease.runId,
@@ -271,6 +278,7 @@ async function releaseLease(world: World, lease: DeviceLease): Promise<void> {
     sessionName: 'artifact-test',
     sessionStore: world.sessionStore,
     leaseRegistry: world.leaseRegistry,
+    providerRuntimeIds: [CLOUD_PROVIDER],
     leaseLifecycleProvider: world.lifecycle,
   });
   assert.equal(response?.ok, true);
@@ -286,6 +294,7 @@ async function listArtifacts(
   },
 ): Promise<DaemonResponse> {
   return (await handleLeaseCommands({
+    host: createTestHostEnvironment(),
     req: leaseRequest(
       'artifacts',
       {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { macOsHelperSurface } from '@agent-device/contracts/session';
+import { AppError } from '@agent-device/kernel/errors';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
 import { readFileSync } from 'node:fs';
 import {
@@ -16,6 +17,7 @@ import {
 const desktop = macOsHelperSurface('desktop', 'xctest')!;
 const menubar = macOsHelperSurface('menubar', 'xctest')!;
 const frontmostApp = macOsHelperSurface('frontmost-app', 'xctest')!;
+const nativeApp = macOsHelperSurface('app', 'native')!;
 
 test('macOS helper snapshot passes cancellation to the helper process', async () => {
   const controller = new AbortController();
@@ -43,7 +45,8 @@ test('macOS helper snapshot passes cancellation to the helper process', async ()
 
   await withAppleToolProvider(
     provider,
-    async () => await runMacOsSnapshotAction(desktop, { signal: controller.signal }),
+    async () =>
+      await runMacOsSnapshotAction(desktop, { env: process.env, signal: controller.signal }),
   );
 
   assert.equal(receivedSignal, controller.signal);
@@ -72,6 +75,7 @@ test('macOS helper press carries the hold, repeat count, and interval to the cli
     provider,
     async () =>
       await runMacOsPressAction(12, 34, {
+        env: process.env,
         surface: menubar,
         bundleId: 'com.example.Menu',
         holdMs: 800,
@@ -113,7 +117,13 @@ test('macOS helper press carries an explicit zero interval instead of dropping i
 
   await withAppleToolProvider(
     provider,
-    async () => await runMacOsPressAction(7, 8, { surface: desktop, clicks: 2, intervalMs: 0 }),
+    async () =>
+      await runMacOsPressAction(7, 8, {
+        env: process.env,
+        surface: desktop,
+        clicks: 2,
+        intervalMs: 0,
+      }),
   );
 
   assert.ok(receivedArgs.includes('--clicks'), receivedArgs.join(' '));
@@ -140,7 +150,12 @@ test('macOS helper press keeps repeats independent and names a double-click expl
   await withAppleToolProvider(
     provider,
     async () =>
-      await runMacOsPressAction(7, 8, { surface: frontmostApp, clicks: 3, doubleClick: true }),
+      await runMacOsPressAction(7, 8, {
+        env: process.env,
+        surface: frontmostApp,
+        clicks: 3,
+        doubleClick: true,
+      }),
   );
 
   // `--count 3 --double-tap` is three double-clicks: the count stays the press count and the
@@ -172,6 +187,7 @@ test('macOS helper press outlives its own click schedule and forwards cancellati
     provider,
     async () =>
       await runMacOsPressAction(1, 2, {
+        env: process.env,
         surface: desktop,
         holdMs: 10_000,
         clicks: 4,
@@ -214,7 +230,7 @@ test('macOS helper press stays a single held click when nothing is repeated', as
 
   await withAppleToolProvider(
     provider,
-    async () => await runMacOsPressAction(5, 6, { surface: frontmostApp }),
+    async () => await runMacOsPressAction(5, 6, { env: process.env, surface: frontmostApp }),
   );
 
   assert.equal(receivedArgs.includes('--clicks'), false);
@@ -235,11 +251,58 @@ test('macOS helper screenshot argv carries only --out and --surface', async () =
 
   await withAppleToolProvider(
     provider,
-    async () => await runMacOsScreenshotAction('/tmp/out.png', { surface: desktop }),
+    async () =>
+      await runMacOsScreenshotAction('/tmp/out.png', { env: process.env, surface: desktop }),
   );
 
   assert.deepEqual(receivedArgs, ['screenshot', '--out', '/tmp/out.png', '--surface', 'desktop']);
 });
+
+for (const hint of [
+  'The front window is unavailable to screen capture. If it is opening or closing, retry after it settles.',
+  undefined,
+]) {
+  test(`a helper refusal carries its details and hint through untouched (${hint === undefined ? 'no hint' : 'with hint'})`, async () => {
+    const provider = createLocalAppleToolProvider({
+      macosHelper: {
+        run: async () => ({
+          exitCode: 1,
+          stdout: JSON.stringify({
+            ok: false,
+            error: {
+              message:
+                "screenshot could not capture the app's front window: ScreenCaptureKit does not offer it",
+              details: {
+                reason: 'front-window-not-shareable',
+                bundleId: 'com.apple.TextEdit',
+                frontWindowId: '4242',
+                ...(hint ? { hint } : {}),
+              },
+            },
+          }),
+          stderr: '',
+        }),
+      },
+    });
+
+    const error = await withAppleToolProvider(provider, async () =>
+      runMacOsScreenshotAction('/tmp/out.png', {
+        surface: nativeApp,
+        bundleId: 'com.apple.TextEdit',
+        env: process.env,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      ),
+    );
+
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.details?.reason, 'front-window-not-shareable');
+    assert.equal(error.details?.frontWindowId, '4242');
+    assert.equal(error.details?.hint, hint);
+  });
+}
 
 test('helper entry points accept only an owner-routed surface', () => {
   // Never invoked: each directive fails typecheck once its entry point widens back to an
@@ -248,7 +311,7 @@ test('helper entry points accept only an owner-routed surface', () => {
     // @ts-expect-error a bare literal skips the routing owner
     await runMacOsSnapshotAction('desktop');
     // @ts-expect-error a bare literal skips the routing owner
-    await runMacOsScreenshotAction(out, { surface: 'menubar' });
+    await runMacOsScreenshotAction(out, { env: process.env, surface: 'menubar' });
     // @ts-expect-error the surface is required
     await runMacOsReadTextAction(1, 2, { bundleId: 'com.example' });
     // @ts-expect-error the surface is required
@@ -268,7 +331,10 @@ test('the helper vocabulary matches the table the Swift helper is held to', () =
       ),
       'utf8',
     ),
-  ) as { refusalReasons: string[]; deliveryMechanisms: string[] };
+  ) as {
+    refusalReasons: string[];
+    deliveryMechanisms: string[];
+  };
   assert.deepEqual([...MACOS_HELPER_REFUSAL_REASONS], fixture.refusalReasons);
   assert.deepEqual([...MACOS_DELIVERY_MECHANISMS], fixture.deliveryMechanisms);
 });

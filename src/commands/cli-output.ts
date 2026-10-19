@@ -6,6 +6,7 @@ import type { CliOutput } from './command-contract.ts';
 import type { CommandProgressState } from './command-progress.ts';
 import { routeResponseWarnings, type CliOutputFormatter } from './output-common.ts';
 import type { CommandName } from './command-metadata.ts';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 
 const cliOutputFormatters = listCommandFamilyCliOutputFormatters() as Partial<
   Record<CommandName, CliOutputFormatter>
@@ -29,11 +30,14 @@ export async function formatCliOutput(params: {
   input: unknown;
   result: unknown;
   progress?: CommandProgressState;
+  /** The caller's host environment; a formatter that styles output reads color from it. */
+  env: EnvMap;
 }): Promise<CliOutput | undefined> {
   const output = await cliOutputFormatters[params.name]?.({
     input: (params.input ?? {}) as Record<string, unknown>,
     result: params.result,
     progress: params.progress,
+    env: params.env,
   });
   if (output === undefined) return undefined;
   return routeResponseWarnings(

@@ -10,10 +10,17 @@
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*"
   },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./interactor": {
+      "types": "./src/interactor-facade.ts",
+      "default": "./src/interactor-facade.ts"
     }
   }
 }

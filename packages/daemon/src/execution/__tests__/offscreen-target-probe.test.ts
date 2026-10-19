@@ -1,7 +1,7 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import type {
   QuerySelectorInput,
   QuerySelectorResult,

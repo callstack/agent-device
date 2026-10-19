@@ -1,6 +1,7 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import {
   makeSession,
   makeSessionStore,
@@ -13,11 +14,17 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import {
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../../core/request-runtime-binding.ts';
+
+bindTestCommandHost();
 
 const HARMONY_DEVICE = {
   platform: 'harmonyos' as const,
@@ -111,6 +118,7 @@ async function listApps(appsFilter: 'all' | 'user-installed'): Promise<DaemonRes
     flags: { appsFilter },
   };
   return await handleSessionInventoryCommands({
+    host: createTestHostEnvironment(),
     platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName,

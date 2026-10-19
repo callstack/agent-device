@@ -7,9 +7,9 @@ import { sleep } from '@agent-device/host-kit/retry';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import type {
   ReplayRecordVideoRequest,
-  ReplaySessionStore,
   ReplayTestVideoOwner,
 } from '@agent-device/replay-port/command-types';
+import type { ReplaySessionStore } from '@agent-device/contracts/replay-backend';
 import {
   defaultRecordingPath,
   recordingExtensionForPlatform,

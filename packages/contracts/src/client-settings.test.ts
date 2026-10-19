@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, test, vi } from 'vitest';
 import type { SettingsUpdateOptions } from './client-settings.ts';
+import type { SettingName } from './settings-catalog.ts';
 
 type Permission = Extract<SettingsUpdateOptions, { setting: 'permission' }>;
 
@@ -40,6 +41,23 @@ describe('public client permission vocabulary', () => {
   test('keeps the permission actions and modes it already declared', () => {
     expectTypeOf<Permission['state']>().toEqualTypeOf<'grant' | 'deny' | 'reset'>();
     expectTypeOf<Permission['mode']>().toEqualTypeOf<'full' | 'limited' | undefined>();
+  });
+});
+
+describe('public client settings cover the catalog', () => {
+  test('every catalog setting has an update arm', () => {
+    type SettingWithoutArm = {
+      [Name in SettingName]: [Extract<SettingsUpdateOptions, { setting: Name }>] extends [never]
+        ? Name
+        : never;
+    }[SettingName];
+    expectTypeOf<SettingWithoutArm>().toEqualTypeOf<never>();
+  });
+
+  test('the device-wide toggles take on|off and an app to refuse', () => {
+    type Toggle = Extract<SettingsUpdateOptions, { setting: 'mobile-data' | 'bluetooth' }>;
+    expectTypeOf<Toggle['state']>().toEqualTypeOf<'on' | 'off'>();
+    expectTypeOf<Toggle['app']>().toEqualTypeOf<string | undefined>();
   });
 });
 

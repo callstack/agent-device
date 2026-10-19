@@ -221,6 +221,29 @@ jobs:
   assert.ok(caller?.uses.includes('.github/workflows/called.yml'));
 });
 
+test('gates inside a parallel step group belong to the lane, alongside sequential ones', () => {
+  const lanes = planted({
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    steps:
+      - parallel:
+          - uses: ./.github/actions/run-gate
+            with:
+              gate: layering
+          - uses: ./.github/actions/run-gate
+            with:
+              gate: lint
+      - uses: ./.github/actions/run-gate
+        with:
+          gate: format
+`,
+  });
+  assert.deepEqual(lanes[0]?.gates, ['layering', 'lint', 'format']);
+});
+
 test('a remote or nested reusable workflow fails closed', () => {
   const lanes = planted({
     '.github/workflows/planted.yml': `name: Planted
@@ -290,4 +313,39 @@ on:
 `,
   });
   assert.equal(lanes.find((lane) => lane.workflow === 'planted.yml')?.unsupported.length, 1);
+});
+
+// Drafts are where agents iterate; a smoke lane that runs on them spends device
+// runners on heads nobody is reviewing, and one that misses `ready_for_review`
+// never runs on a draft marked ready until its next push. `converted_to_draft`
+// starts a skipped run whose concurrency group cancels the one in flight.
+test('device smoke lanes skip drafts and start when a draft is marked ready', () => {
+  const directory = path.join(repoRoot, '.github/workflows');
+  type Workflow = {
+    name: string;
+    on: { pull_request?: { types?: string[] } };
+    jobs: Record<string, { name?: string; if?: string }>;
+  };
+  const smokeLanes = fs
+    .readdirSync(directory)
+    .map((file) => parse(fs.readFileSync(path.join(directory, file), 'utf8')) as Workflow)
+    .flatMap((workflow) =>
+      Object.values(workflow.jobs)
+        .filter((job) => job.name === 'Smoke Tests' && workflow.on.pull_request)
+        .map((job) => ({ workflow, job })),
+    );
+  assert.deepEqual(smokeLanes.map(({ workflow }) => workflow.name).sort(), [
+    'Android',
+    'Linux',
+    'iOS',
+    'macOS',
+  ]);
+  for (const { workflow, job } of smokeLanes) {
+    assert.deepEqual(
+      workflow.on.pull_request?.types,
+      ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft'],
+      workflow.name,
+    );
+    assert.equal(job.if, '${{ !github.event.pull_request.draft }}', workflow.name);
+  }
 });

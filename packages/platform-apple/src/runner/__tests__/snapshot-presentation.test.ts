@@ -251,7 +251,7 @@ test('a runner payload with the hittable bit absent presents without declaring i
 // what cannot be placed belongs to `readSnapshotKeyboardBandFact` in @agent-device/kernel, which owns
 // that table; this seam owns forwarding AND the proof that it forwards through that reader. The
 // same-process capture path feeds `result.keyboard` straight into the tap/click occlusion guard in
-// src/commands/interaction/runtime/keyboard-occlusion.ts before any serialization, so a seam that
+// packages/selectors/src/keyboard-occlusion.ts before any serialization, so a seam that
 // passed the raw wire value through would hand the guard an unvalidated shape with nothing red.
 // The malformed cases below are what prove the routing; kernel/src/record.test.ts owns the table.
 
@@ -282,6 +282,34 @@ test('the reader forwards each published keyboard band shape unchanged', () => {
     ).keyboard,
     { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' },
   );
+});
+
+// #3565: the runner classifies the presentation on the acquisition it is about to present, and this
+// seam is the only place that fact becomes a TS value. Forwarding the raw wire string would let a
+// payload spelling a state this vocabulary never declared reach settle as if a producer had read it.
+test('the reader forwards the presented-surface fact through the kernel reader (#3565)', () => {
+  assert.equal(
+    readAppleSnapshotResult({ presentedSurface: 'presented' }, IOS_SIMULATOR).presentedSurface,
+    'presented',
+  );
+  assert.equal(
+    readAppleSnapshotResult({ presentedSurface: 'absent' }, IOS_SIMULATOR).presentedSurface,
+    'absent',
+  );
+  assert.equal(
+    readAppleSnapshotResult({ presentedSurface: 'unknown' }, IOS_SIMULATOR).presentedSurface,
+    'unknown',
+  );
+  assert.equal(
+    readAppleSnapshotResult({ presentedSurface: 'no-sheet' }, IOS_SIMULATOR).presentedSurface,
+    'unknown',
+  );
+});
+
+test('a capture the runner classified nothing publishes no presented-surface fact', () => {
+  // The terminals (a sparse payload, an AX-unavailable failure) and any older runner answer with no
+  // key. The daemon must read that as no evidence, not as a screen the producer proved clear.
+  assert.equal(readAppleSnapshotResult({ nodes: [] }, IOS_SIMULATOR).presentedSurface, undefined);
 });
 
 test('a capture from a tier that never reads the keyboard publishes no fact at all', () => {

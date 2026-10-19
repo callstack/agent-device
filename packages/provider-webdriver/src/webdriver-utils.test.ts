@@ -141,6 +141,27 @@ test('the hub app resolver passes references through, uploads local files, and p
   }
 });
 
+test('the hub app resolver refuses a relative app path when the request names no working directory', async () => {
+  const uploadFile = vi.fn(async () => 'hub://never');
+
+  await assert.rejects(
+    resolveHubAppReference({
+      service: 'Hub',
+      app: 'App.apk',
+      referenceLabel: 'a hub:// app id',
+      ...hubReferenceGrammar,
+      uploadFile,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.details?.reason, 'provider_app_cwd_missing');
+      return true;
+    },
+  );
+  assert.equal(uploadFile.mock.calls.length, 0);
+});
+
 test('appFileUploadForm carries a regular app file and refuses anything else typed', async () => {
   const tempDir = await mkdtempForTest('agent-device-upload-form-');
   try {

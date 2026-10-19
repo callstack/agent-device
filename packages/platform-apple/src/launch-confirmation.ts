@@ -8,6 +8,9 @@ import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 
 export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
 
+/** Short presentation window for the optional launch-confirmation probe. */
+const LAUNCH_CONFIRMATION_PRESENTATION_TIMEOUT_MS = 3_000;
+
 /**
  * How one launch-confirmation answer attempt ended. `accepted` verifies dismissal; an unreadable
  * `alert-accept` has an unknown outcome. `alert-still-present` proves the recognized prompt remains
@@ -49,7 +52,9 @@ export type LaunchConfirmationTarget = Readonly<{ url: string; appBundleId: stri
 /** The device reads and the answer one launch confirmation needs, bound to the session app. */
 export type LaunchConfirmationPort = Readonly<{
   appBundleId: string;
-  /** The alert on screen, or `undefined` when there is none. */
+  /** Initial presentation wait, or `undefined` when no alert appears within its window. */
+  awaitAlert(): Promise<Record<string, unknown> | undefined>;
+  /** One presence read after an attempted accept. */
   readAlert(): Promise<Record<string, unknown> | undefined>;
   acceptAlert(): Promise<unknown>;
   /** The installed app that owns the launch URL's scheme, when exactly one does. */
@@ -66,7 +71,7 @@ export type LaunchConfirmationPort = Readonly<{
 export async function answerLaunchConfirmation(
   port: LaunchConfirmationPort,
 ): Promise<LaunchConfirmationAttempt> {
-  const read = await readAlert(port);
+  const read = await readAlert(() => port.awaitAlert());
   if ('outcome' in read) return read;
   const alert = read.alert;
   if (!alert) return { outcome: 'absent' };
@@ -106,7 +111,7 @@ async function verifyFailedAcceptance(
   original: Record<string, unknown>,
   error: unknown,
 ): Promise<LaunchConfirmationAttempt> {
-  const read = await readAlert(port);
+  const read = await readAlert(() => port.readAlert());
   if ('outcome' in read) return unreadable('alert-accept')(error);
   if (
     read.alert &&
@@ -120,9 +125,9 @@ async function verifyFailedAcceptance(
 }
 
 async function readAlert(
-  port: LaunchConfirmationPort,
+  read: LaunchConfirmationPort['readAlert'],
 ): Promise<Readonly<{ alert: Record<string, unknown> | undefined }> | LaunchConfirmationAttempt> {
-  return await port.readAlert().then((alert) => ({ alert }), unreadable('alert-read'));
+  return await read().then((alert) => ({ alert }), unreadable('alert-read'));
 }
 
 async function resolveUrlOwner(
@@ -188,17 +193,22 @@ export async function answerSimulatorLaunchConfirmation(
 export function createLaunchConfirmationPort(
   device: DeviceInfo,
   { url, appBundleId }: LaunchConfirmationTarget,
-  interactor: Interactor,
+  interactor: Pick<Interactor, 'awaitAlert' | 'readAlert' | 'acceptAlert'>,
   signal: AbortSignal,
 ): LaunchConfirmationPort {
+  const awaitAlert = interactor.awaitAlert?.bind(interactor);
   const readAlert = interactor.readAlert?.bind(interactor);
   const acceptAlert = interactor.acceptAlert?.bind(interactor);
-  if (!readAlert || !acceptAlert) {
-    throw invalidRuntimeContract('Apple interactor has no alert read or accept leg');
+  if (!awaitAlert || !readAlert || !acceptAlert) {
+    throw invalidRuntimeContract('Apple interactor has no alert wait, read or accept leg');
   }
   const target = { appBundleId, surface: 'app' } as const;
   return Object.freeze({
     appBundleId,
+    awaitAlert: async () =>
+      await alertIfPresent(
+        awaitAlert({ ...target, timeoutMs: LAUNCH_CONFIRMATION_PRESENTATION_TIMEOUT_MS }),
+      ),
     readAlert: async () => await alertIfPresent(readAlert(target)),
     acceptAlert: async () => await acceptAlert(target),
     resolveUrlOwner: async () =>

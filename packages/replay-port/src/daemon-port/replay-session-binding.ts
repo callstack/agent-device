@@ -1,10 +1,9 @@
+import type { ReplayCoordinator, ReplaySession } from '@agent-device/replay-port/command-types';
 import type {
-  ReplayCoordinator,
-  ReplaySession,
   ReplaySessionObservation,
   ReplaySessionState,
   ReplaySessionStore,
-} from '@agent-device/replay-port/command-types';
+} from '@agent-device/contracts/replay-backend';
 
 /**
  * The live session record reached through the reads replay binds over. The daemon implements it

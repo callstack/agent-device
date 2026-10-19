@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,15 +9,14 @@ import {
   listDownloadableArtifacts,
   trackDownloadableArtifact,
 } from '../../resources/artifact-tracking.ts';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 import { ANDROID_ARTIFACTS_CONTRACT_EVIDENCE } from './http-server-artifacts.coverage.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 type ArtifactInventoryResponse = {
   artifacts: Array<{

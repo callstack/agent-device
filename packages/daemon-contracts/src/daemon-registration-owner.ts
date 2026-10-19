@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   stopDaemonProcess,
   waitForDaemonExit,
@@ -22,10 +23,12 @@ import {
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
   resolveDaemonPaths,
+  type DaemonCapability,
   type DaemonPaths,
   type DaemonServerMode,
 } from './daemon-resolution.ts';
@@ -41,6 +44,7 @@ import {
   resolveDaemonShutdownReportPath,
   type DaemonShutdownOutcome,
 } from './daemon-shutdown-report.ts';
+import { sweepDeadDaemonStartupPhasesFiles } from './daemon-startup-phases.ts';
 
 export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
 export type DaemonRegistrationFields = Readonly<{
@@ -51,6 +55,10 @@ export type DaemonRegistrationFields = Readonly<{
   codeOrigin: DaemonCodeOrigin;
   codeSignature: string;
   policyDigest?: string;
+  /** What this daemon can do beyond the base RPC contract; absent from daemons that predate it. */
+  capabilities?: readonly DaemonCapability[];
+  /** The provider plugin inventory, so a client can read what this daemon registered. */
+  plugins?: readonly PluginInventoryEntry[];
 }>;
 type DaemonRegistrationRemoval =
   | Readonly<{ state: 'removed' }>
@@ -78,6 +86,7 @@ export async function tryAcquireDaemonRegistration(
   try {
     acquisition.assertHeld();
     fs.rmSync(resolveDaemonShutdownReportPath(boundPaths.baseDir), { force: true });
+    sweepDeadDaemonStartupPhasesFiles(boundPaths.baseDir);
   } catch (error) {
     await releaseRegistrationAfterFailure(acquisition, error, boundPaths.logPath);
   }
@@ -246,6 +255,10 @@ export function launchDaemonProcess(
     paths: DaemonPaths;
     args: string[];
     serverMode: DaemonServerMode;
+    /** The environment the daemon process starts with, before the state dir and mode overrides. */
+    env: EnvMap;
+    /** The daemon's working directory: the one its client resolves relative paths against. */
+    cwd: string;
     ownedStateDir?: OwnedReplayStateDir;
   }>,
 ): DaemonStartupLaunch {
@@ -258,8 +271,9 @@ export function launchDaemonProcess(
   const logFd = fs.openSync(input.paths.logPath, 'a');
   try {
     const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
+      cwd: input.cwd,
       env: {
-        ...process.env,
+        ...input.env,
         AGENT_DEVICE_STATE_DIR: input.paths.baseDir,
         AGENT_DEVICE_DAEMON_SERVER_MODE: input.serverMode,
       },

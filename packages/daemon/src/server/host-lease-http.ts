@@ -45,6 +45,7 @@ type HostAdminHttpParams = {
   res: http.ServerResponse;
   expectedToken: string;
   registry: LeaseRegistry;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
 };
 
 /** Every host administration route: lease allocation and human-control holds. */
@@ -82,6 +83,7 @@ async function handleHostLeaseRoute(
       const released = lease
         ? registry.releaseLease(leaseReleaseRequestFor(lease)).released
         : false;
+      if (lease && released) await params.endSessionsForLease?.(lease.leaseId);
       sendJson(res, { ok: true, released, ...(lease && released ? { lease } : {}) });
       return;
     }

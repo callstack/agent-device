@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { isSafeBrowserUrl, openUrlInBrowser } from '../browser-launch.ts';
-import { recordCommandSpawns, withMockedPlatform } from '@agent-device/test-kit/host-execution';
+import { recordCommandSpawns, withMockedPlatform } from '@agent-device/test-kit';
 
 // A verification URI may carry `&`, `^`, and `%` verbatim, which a shell would re-tokenize.
 const METACHARACTER_URL = 'https://cloud.example/device?user_code=ABCD-EFGH&calc&next=%2Fstart';

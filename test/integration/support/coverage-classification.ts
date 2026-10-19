@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 
-export type CoverageClassificationLevel = 'live' | 'command-contract' | 'known-gap';
+export type CoverageClassificationLevel =
+  | 'live'
+  | 'command-contract'
+  | 'known-gap'
+  | 'accepted-gap';
 
 export type CoverageClassificationSummary = {
   contract: number;
@@ -14,8 +18,53 @@ type CoverageBucket = 'live' | 'contract' | 'gap';
 const BUCKET_BY_LEVEL: Readonly<Record<CoverageClassificationLevel, CoverageBucket>> = {
   live: 'live',
   'command-contract': 'contract',
+  // Both gap kinds roll up into the one `gap` bucket: the report counts how many
+  // commands a platform does not prove, not which kind of gap each one is.
   'known-gap': 'gap',
+  'accepted-gap': 'gap',
 };
+
+type CoverageGapRow = {
+  level: string;
+  trackingIssue?: number;
+  reason?: string;
+};
+
+/**
+ * Every gap row is exactly one of two kinds, so a gap is owned rather than merely visible:
+ *
+ * - a `known-gap` row is owed work and carries a positive `trackingIssue` naming an open
+ *   issue that owns it, an umbrella or a child of one;
+ * - an `accepted-gap` row is a permanent limitation: it carries a non-empty `reason` saying
+ *   why no evidence lane will cover it, and no tracking issue. An accepted-gap reason may
+ *   only claim an absence that holds against the repository's lanes — if a lane runs or
+ *   asserts the command, the row is evidence-citable or owed, never accepted.
+ *
+ * This mirrors the `gap:` waiver rule ADR 0011 enforces for interaction guarantees.
+ */
+export function assertCoverageGapRowsAreOwned(
+  platform: string,
+  manifest: Readonly<Record<string, CoverageGapRow>>,
+): void {
+  for (const [command, entry] of Object.entries(manifest)) {
+    if (entry.level === 'known-gap') {
+      assert.ok(
+        Number.isInteger(entry.trackingIssue) && (entry.trackingIssue ?? 0) > 0,
+        `${platform} ${command}: a known-gap row must carry a tracking issue that owns the work`,
+      );
+    }
+    if (entry.level === 'accepted-gap') {
+      assert.ok(
+        typeof entry.reason === 'string' && entry.reason.trim().length > 0,
+        `${platform} ${command}: an accepted-gap row must carry a non-empty reason`,
+      );
+      assert.ok(
+        entry.trackingIssue === undefined,
+        `${platform} ${command}: an accepted-gap row carries a reason, not a tracking issue`,
+      );
+    }
+  }
+}
 
 /**
  * Proves a published summary is still the rollup of the manifest it is exported beside, and that the
@@ -98,6 +147,7 @@ export function buildCoverageClassificationSummary(
         summary.contract += 1;
         break;
       case 'known-gap':
+      case 'accepted-gap':
         summary.gap += 1;
         break;
     }

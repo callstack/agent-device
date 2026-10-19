@@ -46,6 +46,7 @@ async function runArgv(argv: string[]): Promise<SeenRequest[]> {
       client,
       command: argv[0] as CommandName,
       positionals: parsed.positionals,
+      env: process.env,
       flags: parsed.flags,
     });
   } catch {

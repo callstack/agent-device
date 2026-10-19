@@ -50,6 +50,14 @@ export {
   parseFoldPose,
   parseOrientationRequest,
 } from '../device-rotation.ts';
+export {
+  TELEPHONY_ACTIONS,
+  TELEPHONY_CALL_ACTIONS,
+  TELEPHONY_USAGE,
+  parseTelephonyEventInput,
+  parseTelephonyPositionals,
+  telephonyPositionals,
+} from '../telephony-input.ts';
 export type {
   DeviceRotation,
   OrientationRequest,
@@ -58,6 +66,8 @@ export type {
   FoldScreenCoordinateSpace,
   SetFoldPoseInput,
 } from '../device-rotation.ts';
+export type { TelephonyEventInput } from '../telephony-input.ts';
+export type { TelephonyCommandResult, TelephonyRuntimeOperations } from '../telephony-runtime.ts';
 export type { BootCommandResult, ShutdownCommandResult } from '../device.ts';
 export type {
   ProviderDeviceInstallOptions,

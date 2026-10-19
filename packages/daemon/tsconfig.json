@@ -51,6 +51,9 @@
       "path": "../platform-web"
     },
     {
+      "path": "../proxy"
+    },
+    {
       "path": "../replay-port"
     },
     {

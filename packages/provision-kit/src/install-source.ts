@@ -27,6 +27,8 @@ export type MaterializeInstallableOptions = {
   ) => boolean;
   installableLabel: string;
   signal?: AbortSignal;
+  /** The host environment whose proxy settings apply to a network download. */
+  environment: NodeJS.ProcessEnv;
 };
 
 export type MaterializedInstallable = {
@@ -50,7 +52,10 @@ export async function materializeInstallablePath(
 ): Promise<MaterializedInstallable> {
   const cleanupTasks: Array<() => Promise<void>> = [];
   try {
-    const localSource = await materializeLocalSource(options.source, { signal: options.signal });
+    const localSource = await materializeLocalSource(options.source, {
+      signal: options.signal,
+      environment: options.environment,
+    });
     cleanupTasks.push(localSource.cleanup);
     const resolved = await resolveInstallableCandidate(localSource.localPath, {
       archivePath: undefined,
@@ -79,17 +84,17 @@ export async function materializeInstallablePath(
   }
 }
 
-function expandSourcePath(inputPath: string): string {
-  return expandUserHomePath(inputPath);
+function expandSourcePath(inputPath: string, env: NodeJS.ProcessEnv): string {
+  return expandUserHomePath(inputPath, { env });
 }
 
 async function materializeLocalSource(
   source: LocalInstallSource,
-  options?: { signal?: AbortSignal },
+  options: { signal?: AbortSignal; environment: NodeJS.ProcessEnv },
 ): Promise<MaterializeLocalSourceResult> {
   if (source.kind === 'path') {
     return {
-      localPath: expandSourcePath(source.path),
+      localPath: expandSourcePath(source.path, options.environment),
       cleanup: async () => {},
     };
   }
@@ -112,17 +117,23 @@ async function materializeLocalSource(
 async function downloadToTempFile(
   tempDir: string,
   url: string,
-  headers?: Record<string, string>,
-  options?: { signal?: AbortSignal },
+  headers: Record<string, string> | undefined,
+  options: { signal?: AbortSignal; environment: NodeJS.ProcessEnv },
 ): Promise<string> {
-  const requestSignal = options?.signal;
+  const requestSignal = options.signal;
   if (requestSignal?.aborted) {
     throw createRequestCanceledError();
   }
   const timeoutSignal = AbortSignal.timeout(DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   try {
-    return await downloadInstallSource({ tempDir, url, headers, signal });
+    return await downloadInstallSource({
+      tempDir,
+      url,
+      headers,
+      signal,
+      environment: options.environment,
+    });
   } catch (error) {
     throw classifyDownloadError(
       error,

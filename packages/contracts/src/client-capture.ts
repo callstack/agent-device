@@ -4,6 +4,7 @@ import type { SessionSurface } from './session-surface.ts';
 import type { PublicSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type {
+  PresentedSurface,
   SnapshotCommandOptionFields,
   SnapshotKeyboardBandFact,
   SnapshotNode,
@@ -78,6 +79,13 @@ export type CaptureSnapshotResult = {
    * screen size only; content-safe gesture bounds stay with #1821.
    */
   viewport?: SnapshotViewportSize;
+  /**
+   * iOS: whether the capture read a modal presentation over the app (#3565), decided on the acquired
+   * tree before interactive filtering, compaction, depth, or scope. `'absent'` is a positive reading;
+   * a capture whose producer could not decide — or did not speak — reports `'unknown'`, and absence
+   * of the field means a non-iOS producer or an older runner published nothing.
+   */
+  presentedSurface?: PresentedSurface;
   /**
    * Screenshot captured automatically when the semantic snapshot was sparse.
    * Remote clients receive a materialized local path through the daemon artifact channel.

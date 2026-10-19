@@ -1,3 +1,4 @@
+import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
 import { expect, test, vi } from 'vitest';
 
 vi.mock('./hdc.ts', () => ({ runHarmonyShell: vi.fn() }));
@@ -101,6 +102,8 @@ test.each([
   expect(binding.operations.actionButton).toBeUndefined();
   expect(facts.operations.setFoldPose).toMatchObject({ available: false });
   expect(binding.operations.setFoldPose).toBeUndefined();
+  expect(facts.operations.sendTelephonyEvent).toMatchObject({ available: false });
+  expect(binding.operations.sendTelephonyEvent).toBeUndefined();
   // Public orientation and TV-remote operations remain unavailable unconditionally.
   expect(facts.operations.setOrientation).toEqual({
     available: false,
@@ -135,8 +138,8 @@ test.each([
     });
     expect(binding.operations[operation]).toBeUndefined();
   }
-  // Settings is available through the same HDC kind gate as the interaction operations.
-  expect(facts.operations.setSetting).toEqual({ available: true });
+  expect(runtimeSubjectFact(facts.operations.setSetting, 'clear-app-state').available).toBe(true);
+  expect(runtimeSubjectFact(facts.operations.setSetting, 'wifi').available).toBe(false);
   expect(binding.operations.setSetting).toBeTypeOf('function');
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   await expect(

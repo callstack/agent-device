@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/proxy",
-  "version": "0.21.28-dev",
+  "version": "0.21.29-dev",
   "type": "module",
   "description": "Transport-neutral authenticating proxy in front of an agent-device daemon.",
   "license": "MIT",

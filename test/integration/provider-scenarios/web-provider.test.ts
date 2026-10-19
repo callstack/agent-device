@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { createAgentBrowserWebProvider, type WebProvider } from '@agent-device/platform-web';
-import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   installFakeManagedAgentBrowser,
+  mkdtempForTestSync,
+  WEB_DESKTOP_DEVICE,
   withNodeRuntime,
-} from '@agent-device/test-kit/web-managed-agent-browser';
+} from '@agent-device/test-kit';
+import { createAgentBrowserWebProvider, type WebProvider } from '@agent-device/platform-web';
+import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createProviderScenarioHarness } from './harness.ts';
 
 test('web provider is scoped through the request router and dispatch path', async () => {
@@ -108,7 +108,6 @@ test('web provider is scoped through the request router and dispatch path', asyn
 
   const harness = await createProviderScenarioHarness({
     deviceInventoryProvider: async () => [WEB_DESKTOP_DEVICE],
-    platformRuntime: true,
     webProvider: ({ device, session }) => {
       calls.push(`scope:${session?.name ?? 'none'}:${device.id}`);
       return webProvider;
@@ -139,7 +138,6 @@ test('web provider is scoped through the request router and dispatch path', asyn
         label: 'main',
         rect: { x: 0, y: 0, width: 320, height: 240 },
         depth: 0,
-        parentIndex: undefined,
         ref: 'e1',
         kind: 'section',
       },
@@ -220,7 +218,10 @@ test('non-dense browser refs survive snapshot storage and routed fill and click'
   const stateDir = mkdtempForTestSync('web-ref-route-');
   installFakeManagedAgentBrowser(stateDir);
   await withNodeRuntime({ version: '24.0.0' }, async () => {
-    const provider = await createAgentBrowserWebProvider({ stateDir });
+    const provider = await createAgentBrowserWebProvider({
+      stateDir,
+      host: { env: process.env, cwd: process.cwd() },
+    });
     await withCommandExecutorOverride(
       async (_command, args) => {
         const [command, ref, text] = args.slice(1);
@@ -252,7 +253,6 @@ test('non-dense browser refs survive snapshot storage and routed fill and click'
       async () => {
         const harness = await createProviderScenarioHarness({
           deviceInventoryProvider: async () => [WEB_DESKTOP_DEVICE],
-          platformRuntime: true,
           webProvider: () => provider,
         });
         try {

@@ -14,7 +14,8 @@ import java.io.OutputStream;
 final class TouchCommandHandler {
   private TouchCommandHandler() {}
 
-  static void populateViewport(Bundle result, UiAutomation automation) {
+  static void populateViewport(Bundle result, UiAutomation automation)
+      throws InterruptedException {
     GestureViewportReader.Reading reading = GestureViewportReader.readReading(automation);
     result.putString("ok", "true");
     result.putString("kind", "viewport");

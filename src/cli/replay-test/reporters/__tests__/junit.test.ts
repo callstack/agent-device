@@ -7,7 +7,7 @@ import { parseXmlDocumentSync, type XmlNode } from '@agent-device/xml';
 import { createJunitReplayTestReporter } from '../junit.ts';
 import { renderReplayTestResponse } from '../../reporting.ts';
 import type { ReplayTestReporterContext } from '../types.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const context: ReplayTestReporterContext = {
   stdout: { isTTY: false, write() {} },

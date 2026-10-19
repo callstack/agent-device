@@ -6,6 +6,7 @@ import type {
 import { macOsHelperSurface } from '@agent-device/contracts/session';
 import { assertScrollGestureInput } from '@agent-device/contracts/scroll-gesture';
 import { AppError } from '@agent-device/kernel/errors';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { normalizeAppleScrollResultWithResolvedFrame } from '../../core/scroll.ts';
 import {
   MACOS_HELPER_REFUSAL_REASONS,
@@ -29,7 +30,11 @@ const REFUSAL_REASONS: ReadonlySet<string> = new Set(MACOS_HELPER_REFUSAL_REASON
  * Runner-only commands are refused at admission by `macOsNativeBackendFacts`; the members the
  * interface requires for them refuse the same way.
  */
-export function macOsNativeAppInteractor(base: Interactor, ctx: RunnerContext): Interactor {
+export function macOsNativeAppInteractor(
+  base: Interactor,
+  ctx: RunnerContext,
+  env: Readonly<EnvMap>,
+): Interactor {
   const bundleId = (): string => {
     if (ctx.appBundleId) return ctx.appBundleId;
     throw nativeBackendRefusal('an action on a session that names no app');
@@ -45,6 +50,7 @@ export function macOsNativeAppInteractor(base: Interactor, ctx: RunnerContext): 
         clicks: options.count,
         intervalMs: options.intervalMs,
         signal: ctx.signal,
+        env,
       }),
     );
     return actedOn(result);
@@ -80,12 +86,12 @@ export function macOsNativeAppInteractor(base: Interactor, ctx: RunnerContext): 
     focus: async (x, y) => await press({ x, y }),
     type: async (text, delayMs) => {
       await withHelperRefusals(
-        runMacOsTypeAction(text, { bundleId: bundleId(), delayMs, signal: ctx.signal }),
+        runMacOsTypeAction(text, { bundleId: bundleId(), delayMs, signal: ctx.signal, env }),
       );
     },
     fill: async (x, y, text) => {
       const result = await withHelperRefusals(
-        runMacOsFillAction(x, y, text, { bundleId: bundleId(), signal: ctx.signal }),
+        runMacOsFillAction(x, y, text, { bundleId: bundleId(), signal: ctx.signal, env }),
       );
       return actedOn(result);
     },
@@ -97,6 +103,7 @@ export function macOsNativeAppInteractor(base: Interactor, ctx: RunnerContext): 
           amount: options?.amount,
           pixels: options?.pixels,
           signal: ctx.signal,
+          env,
         }),
       );
       return {

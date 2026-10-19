@@ -2,6 +2,7 @@ name: macOS
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths-ignore:
       - 'docs/**'
       - 'website/**'
@@ -49,6 +50,7 @@ jobs:
   # goes.
   smoke-macos:
     name: Smoke Tests
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: macos-26
     timeout-minutes: 80
     env:
@@ -166,10 +168,10 @@ jobs:
         run: |
           pnpm build
           pnpm exec vitest run \
-            packages/platform-apple/src/snapshot-source/native-runtime.test.ts \
+            packages/platform-apple/src/snapshot-source/cache-native-runtime.test.ts \
             packages/platform-apple/src/foldable/fold-helper-cache.test.ts \
             packages/platform-apple/src/foldable/simulator-hid-native.test.ts \
-            packages/capture-kit/src/recording/__tests__/recording-scripts.test.ts
+            packages/capture-kit/src/recording/__tests__/swift-cache-recording-scripts.test.ts
           pnpm check:package -- --verify-snapshot-bridge-preparation
 
       - name: Upload macOS artifacts

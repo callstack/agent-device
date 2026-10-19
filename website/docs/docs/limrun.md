@@ -18,7 +18,7 @@ agent-device connect limrun --platform android
 
 `--platform android` or `--platform ios` selects the instance type. `connect` checks the credentials for that platform without creating an instance.
 
-When you create an instance through agent-device, the creation request sends `User-Agent: agent-device-cli/<version>` so Limrun can attribute it to agent-device for revenue sharing.
+Requests agent-device makes with your API key, including instance creation, start their `User-Agent` with `agent-device-cli/<version>` so Limrun can attribute them to agent-device for revenue sharing.
 
 ## Drive an existing instance
 
@@ -29,7 +29,7 @@ An agent in a sandbox can drive an instance that someone else created, such as t
 | iOS | `LIM_IOS_INSTANCE_URL` (`status.apiUrl`), `LIM_IOS_INSTANCE_TOKEN` (`status.token`) |
 | Android | `LIM_ANDROID_INSTANCE_URL` (`status.apiUrl`), `LIM_ANDROID_INSTANCE_TOKEN` (`status.token`), `LIM_ANDROID_INSTANCE_ADB_URL` (`status.adbWebSocketUrl`) |
 
-The `lim` CLI reads the same variables, so one set works for both tools. Set all of a platform's variables or none. With a partial set, `connect` fails, and the daemon disables Limrun and records `provider_runtime_skipped` in `daemon.log`.
+The `lim` CLI reads the same variables, so one set works for both tools. Set all of a platform's variables or none. With a partial set, `connect` fails, and the daemon registers without Limrun, lists it as `failed` in `agent-device daemon status`, and records `provider_plugin_failed` in `daemon.log`.
 
 ```bash
 export LIM_IOS_INSTANCE_URL=...
@@ -71,9 +71,9 @@ agent-device disconnect
 
 On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots use the Android snapshot helper, installs upload the app through Limrun asset storage, and port reverse runs over ADB, including the usual reverse setup for a local Metro server.
 
-On iOS, agent-device supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, the home button, clipboard read and write, and app installation. `open --launch-args` relaunches the app with those arguments through simctl. iOS cannot reverse a remote device port to a local host port, so for Metro or React DevTools use a publicly reachable HTTPS endpoint or bridge URL instead of a local-only address.
+On iOS, agent-device supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, the home button, clipboard read and write, and app installation. `open --launch-args` relaunches the app with those arguments through simctl. iOS cannot reverse a remote device port to a local host port, so for Metro use a publicly reachable HTTPS endpoint or bridge URL instead of a local-only address.
 
-On iOS, `settings` supports `appearance`, `permission`, `location`, and `clear-app-state`, with the same arguments as a local simulator. `clear-app-state` resets the app's data container through Limrun's soft reset. That reset relaunches the app once before agent-device stops it, so the app may run once after its data is cleared. `reset-keychain`, `wifi`, `airplane`, `faceid`, `touchid`, and `text-size` are unsupported, and you cannot read back any iOS setting.
+On iOS, `settings` supports `appearance`, `permission`, `location`, and `clear-app-state`, with the same arguments as a local simulator. `clear-app-state` resets the app's data container through Limrun's soft reset. That reset relaunches the app once before agent-device stops it, so the app may run once after its data is cleared. `reset-keychain`, `wifi`, `airplane`, `mobile-data`, `faceid`, `touchid`, and `text-size` are unsupported, and you cannot read back any iOS setting. On Android, `settings mobile-data on|off` runs over the ADB tunnel like on a local device.
 
 On iOS, `fill` taps the target, waits for that field to take text-entry focus, and only then types. Apps that never report a globally focused element, such as Flutter forms, still fill and report `textEntryReadiness: "focused-element"`. If the tap does not focus a field, `fill` fails with `text_entry_focus_not_observed` instead of typing into an unknown field. Use `type` to send text to whichever field already has focus.
 
@@ -96,6 +96,36 @@ const runtime = new LimrunRuntime({
 ```
 
 To drive existing instances, pass `instances: { ios: { apiUrl, token } }` (Android also takes `adbUrl`), with or without `apiKey`. The runtime never creates or deletes instances for a platform listed there.
+
+A provider that reaches a harness-owned instance through the Node.js client allocates a Limrun lease in `acquire` and releases that same lease in `release`. Put the returned `lease.leaseId` on the client scope, and pass that same id to `leases.release`. Start the daemon with the instance URL and token (`LIM_IOS_INSTANCE_URL` and `LIM_IOS_INSTANCE_TOKEN`). `leases.allocate` attaches to that instance. `leases.release` returns `{ released, provider }`. Neither call creates or deletes the instance. Allocate with `retainOnClose: true` because the provider releases the lease itself: without it, a session `close` before `release` ends the lease and `leases.release` returns `released: false`. A retained lease still expires after its `ttlMs`, so keep heartbeating it between sessions.
+
+```ts
+import { createAgentDeviceClient } from 'agent-device';
+
+const scope = {
+  tenant: 'limrun',
+  runId: process.env.GITHUB_RUN_ID ?? 'local-run',
+  leaseBackend: 'ios-instance',
+  leaseProvider: 'limrun',
+} as const;
+
+const provider = {
+  acquire: async (req: { slot: string }) => {
+    const lease = await createAgentDeviceClient({ session: `lease-${req.slot}` }).leases.allocate({
+      ...scope,
+      platform: 'ios',
+      retainOnClose: true,
+    });
+    return {
+      id: lease.leaseId,
+      client: { ...scope, leaseId: lease.leaseId, sessionIsolation: 'tenant' as const },
+    };
+  },
+  release: async (lease: { id: string }) => {
+    await createAgentDeviceClient({}).leases.release({ ...scope, leaseId: lease.id });
+  },
+};
+```
 
 After allocating a lease, call `runtime.getDeviceSession(device)` to get the allocated device's capabilities: app inventory, foreground state where Limrun exposes it, key input, bounded log reads, recording, remote asset installation, and the interactor. On Android it also exposes agent-device's `AndroidAdbProvider` for helpers and reversible port forwarding. On iOS it exposes a typed `simctl` execution handle so your bridge can own runner lifecycle and launch policy. The runtime does not expose raw Limrun clients.
 

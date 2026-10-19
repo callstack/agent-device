@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
+  NO_TEXT_INPUT_AT_POINT_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
+  TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE,
   classifyRunnerReportedError,
 } from '../runner-contract.ts';
 import {
@@ -94,6 +96,41 @@ test('the main-thread runner codes publish details.reason beside details.runnerE
   assert.equal(timeout.details.runnerErrorCode, 'MAIN_THREAD_TIMEOUT');
   assert.equal(timeout.details.reason, 'runner_main_thread_timeout');
   assert.equal(classifyRunnerReportedError('APP_NOT_RUNNING').details.reason, undefined);
+});
+
+// The literal is what the Swift runner encodes, so it is the contract and not the constant name:
+// a rename on one side has to fail here rather than silently split the pair.
+test('a coordinate fill refused for a point with no input keeps its code and publishes its reason', () => {
+  assert.equal(NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'NO_TEXT_INPUT_AT_POINT');
+  const refusal = classifyRunnerReportedError(NO_TEXT_INPUT_AT_POINT_RUNNER_CODE);
+  assert.equal(refusal.code, 'NO_TEXT_INPUT_AT_POINT');
+  assert.equal(refusal.details.reason, 'no_text_input_at_point');
+  assert.equal(refusal.details.dispatched, 'no');
+  assert.equal(refusal.details.retriable, undefined);
+  // The refusal ran nothing, so it is a definite answer and never a resend.
+  const refusalError = new AppError(refusal.code, refusal.details.reason ?? '', refusal.details);
+  assert.equal(isRetryableRunnerError(refusalError), false);
+  assert.equal(isRunnerBusyError(refusalError), false);
+  // The closest negative: the same words from an unclassified failure earn no reason, so a
+  // consumer keyed on `reason` cannot mistake a reply that may have landed for this refusal.
+  const untyped = commandFailed('no text input identified at the provided coordinates');
+  assert.equal(untyped.details?.reason, undefined);
+  assert.equal(isRetryableRunnerError(untyped), false);
+});
+
+// The two coordinate-fill refusals answer different questions and must never collapse into one
+// another: an empty point is a fact about the screen, a blind lookup is a fact about the channel.
+test('a coordinate fill refused on an unreadable point reports its own code, not no-input', () => {
+  assert.equal(TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'TEXT_INPUT_PROBE_UNAVAILABLE');
+  const refusal = classifyRunnerReportedError(TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE);
+  assert.equal(refusal.code, 'TEXT_INPUT_PROBE_UNAVAILABLE');
+  assert.equal(refusal.details.reason, 'text_input_probe_unavailable');
+  assert.equal(refusal.details.dispatched, 'no');
+  assert.notEqual(
+    refusal.details.reason,
+    classifyRunnerReportedError(NO_TEXT_INPUT_AT_POINT_RUNNER_CODE).details.reason,
+  );
+  assert.equal(isRetryableRunnerError(new AppError(refusal.code, '', refusal.details)), false);
 });
 
 test('retryable requires an AppError with COMMAND_FAILED', () => {
@@ -211,6 +248,74 @@ test('only a runner that never accepted a connection indicts the cached artifact
     false,
   );
   assert.equal(shouldRebuildCachedRunnerArtifact(commandFailed('fetch failed')), false);
+});
+
+test('a simulator service this macOS refuses to load is terminal on every recovery axis', () => {
+  // The reason the launch paths publish is the whole fact: this Xcode fails every launch on this
+  // macOS, so no restart, resend, replay, or clean rebuild may be ordered for it (#3449).
+  const blessRefusal = commandFailed('Runner did not accept connection', {
+    reason: 'simulator_service_hub_unavailable',
+    runnerConnectFailureReason: 'runner_connect_refused',
+    dispatched: 'no',
+  });
+  assert.equal(shouldRetryRunnerConnectError(blessRefusal), false);
+  assert.equal(isRetryableRunnerError(blessRefusal), false);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(blessRefusal, SNAPSHOT), false);
+  assert.equal(shouldRebuildCachedRunnerArtifact(blessRefusal), false);
+  // The preflight's restart marker cannot outvote it either: the preflight would boot the same
+  // runner that just failed to load its service hub.
+  assert.equal(
+    shouldRestartRunnerAfterReadinessPreflight(
+      commandFailed('Runner readiness refused', {
+        reason: 'simulator_service_hub_unavailable',
+        runnerReadinessPreflightFailed: true,
+      }),
+    ),
+    false,
+  );
+});
+
+test('a refused connection still restarts and rebuilds without the service-hub reason', () => {
+  // The closest negative: the same connect-shaped failure a host with a supported Xcode produces.
+  const refused = unwrittenConnectRefusal();
+  assert.equal(shouldRetryRunnerConnectError(refused), true);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(refused, TAP), true);
+  assert.equal(shouldRebuildCachedRunnerArtifact(refused), true);
+});
+
+test('a scoped-set destination this Xcode cannot resolve is terminal on every recovery axis', () => {
+  // The other cause a launch log names. The set is on the command, so a retry, a restart, or a fresh
+  // build resolves nothing, and the connect loop has to stop on the attempt that reads the log — the
+  // same terminal reading the service-hub cause gets.
+  const destinationFailure = commandFailed('Runner did not accept connection', {
+    reason: 'simulator_set_destination_not_found',
+    runnerConnectFailureReason: 'runner_connect_refused',
+    dispatched: 'no',
+    simulatorSetPath: '/Users/dev/Library/Developer/CoreSimulator/Sets/foo.json',
+  });
+  assert.equal(shouldRetryRunnerConnectError(destinationFailure), false);
+  assert.equal(isRetryableRunnerError(destinationFailure), false);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(destinationFailure, SNAPSHOT), false);
+  assert.equal(shouldRebuildCachedRunnerArtifact(destinationFailure), false);
+  assert.equal(
+    shouldRestartRunnerAfterReadinessPreflight(
+      commandFailed('Runner readiness refused', {
+        reason: 'simulator_set_destination_not_found',
+        runnerReadinessPreflightFailed: true,
+      }),
+    ),
+    false,
+  );
+});
+
+test('the reason in foreign text marks nothing terminal', () => {
+  // The verdict keys on the reason the launch paths publish. A runner response or tool transcript that
+  // merely repeats the words cannot order a failure non-retryable.
+  const echoed = commandFailed(
+    'Runner did not accept connection: simulator_set_destination_not_found',
+    { stderr: 'DTServiceHubClient failed to bless service hub for simulator' },
+  );
+  assert.equal(shouldRetryRunnerConnectError(echoed), true);
 });
 
 test('a device that is busy connecting is a terminal connect verdict', () => {

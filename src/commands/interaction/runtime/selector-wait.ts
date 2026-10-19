@@ -97,6 +97,7 @@ type StableCaptureResult = {
   waitedMs: number;
   captures: number;
   nodeCount: number;
+  failure?: { error: unknown };
 };
 
 export type SelectorWaitOperations<Runtime extends SelectorWaitRuntime> = {

@@ -1,3 +1,4 @@
+import { bindTestCommandHost, createTestHostEnvironment } from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
@@ -6,8 +7,9 @@ import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { connectCommand, disconnectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { beginStdoutCapture } from './test-utils/stream-capture.ts';
-import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+
+bindTestCommandHost();
 
 const LEASE_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
@@ -43,15 +45,7 @@ function flagsFor(stateDir: string, remoteConfig: string) {
 test('a macos-app remote config opens on the lease the host allocated, unchanged', async () => {
   const { stateDir, remoteConfigPath } = connectionWorkspace('macos-app-open-');
   writeHostIssuedConfig(remoteConfigPath);
-  const registry = new LeaseRegistry();
-  registry.putHostLease(LEASE_ID, {
-    tenantId: 'stim',
-    runId: 'session-1',
-    clientId: 'client-1',
-    leaseBackend: 'macos-app',
-    leaseProvider: 'proxy',
-    deviceKey: 'com.example.app@4242',
-  });
+  const heartbeatRequests: Parameters<AgentDeviceClient['leases']['heartbeat']>[0][] = [];
   const client = createTestClient({
     listDevices: async () => {
       throw new Error('a macos-app connection resolves no device into a new key');
@@ -59,10 +53,22 @@ test('a macos-app remote config opens on the lease the host allocated, unchanged
     allocate: async () => {
       throw new Error('a macos-app connection never allocates');
     },
-    heartbeat: async (request) => registry.heartbeatLease({ ...request, tenantId: request.tenant }),
+    heartbeat: async (request) => {
+      heartbeatRequests.push(request);
+      return {
+        leaseId: request.leaseId,
+        tenantId: request.tenant ?? 'stim',
+        runId: request.runId ?? 'session-1',
+        backend: request.leaseBackend ?? 'macos-app',
+        leaseProvider: request.leaseProvider,
+        clientId: request.clientId,
+        deviceKey: request.deviceKey,
+      };
+    },
   });
   const flags = flagsFor(stateDir, remoteConfigPath);
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     positionals: ['com.example.app'],
     flags,
@@ -74,6 +80,16 @@ test('a macos-app remote config opens on the lease the host allocated, unchanged
     platform: 'macos',
   });
   expect(materialized.connection).toMatchObject({ deviceKey: 'com.example.app@4242' });
+  expect(heartbeatRequests).toContainEqual(
+    expect.objectContaining({
+      leaseId: LEASE_ID,
+      tenant: 'stim',
+      runId: 'session-1',
+      leaseBackend: 'macos-app',
+      leaseProvider: 'proxy',
+      deviceKey: 'com.example.app@4242',
+    }),
+  );
   expect(readRemoteConnectionState({ stateDir, session: 'hosted' })).toMatchObject({
     leaseId: LEASE_ID,
     deviceKey: 'com.example.app@4242',
@@ -95,6 +111,7 @@ test('an inactive host lease is reported, never replaced by a tenant allocation'
   });
   await expect(
     materializeRemoteConnectionForCommand({
+      host: createTestHostEnvironment(),
       command: 'snapshot',
       flags: flagsFor(stateDir, remoteConfigPath),
       client,
@@ -111,6 +128,7 @@ async function connectHostedMacosApp(
   const stdoutCapture = beginStdoutCapture();
   try {
     await connectCommand({
+      host: createTestHostEnvironment(),
       positionals: [],
       flags: {
         ...flagsFor(workspace.stateDir, workspace.remoteConfigPath),
@@ -150,6 +168,7 @@ test('connect binds the lease and device a macos-app remote config names, and op
   });
 
   const materialized = await materializeRemoteConnectionForCommand({
+    host: createTestHostEnvironment(),
     command: 'open',
     positionals: ['com.example.app'],
     flags: { ...flagsFor(workspace.stateDir, workspace.remoteConfigPath), platform: 'macos' },
@@ -230,6 +249,7 @@ test('disconnect drops the local connection and never releases the host lease', 
   const stdoutCapture = beginStdoutCapture();
   try {
     await disconnectCommand({
+      host: createTestHostEnvironment(),
       positionals: [],
       flags: flagsFor(workspace.stateDir, workspace.remoteConfigPath),
       client: createTestClient({

@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { waitObservesDevice } from '@agent-device/contracts/wait-runtime-plan';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { AppError } from '@agent-device/kernel/errors';
@@ -28,7 +29,7 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../core/request-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import { withCaptureDisclosures } from '../core/capture-disclosure.ts';
@@ -46,7 +47,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   const parsedOrResponse = parseWaitRequest(req);
   if ('ok' in parsedOrResponse) return parsedOrResponse;
   const parsed = parsedOrResponse;
-  const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
+  const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req);
   // ADR 0019: facts are the only support authority, through the selector family's one
   // admit-then-bind entry. A duration wait observes nothing, so it never asks for a binding —
   // exactly the cell legacy admission skipped by testing `parsed.kind !== 'sleep'`.

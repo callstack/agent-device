@@ -1,16 +1,17 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { FindLocator } from '@agent-device/selectors';
 import type { BoundSelectorCapture } from '../../selector-capture-binding.ts';
 import type { SnapshotQualityVerdict, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { CaptureProvenance, RequestCaptureProof } from '../../../core/capture-disclosure.ts';
 import { createSelectorCaptureRuntime } from '../../selector-capture-runtime.ts';
 import { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 /** The tree a mutating find resolves its target against, plus what the capture disclosed. */
 export type FindTargetTree = CaptureProvenance &
-  Pick<SnapshotState, 'nodes' | 'snapshotQuality' | 'keyboard'>;
+  Pick<SnapshotState, 'nodes' | 'snapshotQuality' | 'keyboard' | 'presentedSurface'>;
 
 /**
  * Find's target capture. A mutating find (click/fill/focus/type) resolves its target from its

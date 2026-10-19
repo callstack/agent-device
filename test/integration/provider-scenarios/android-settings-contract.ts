@@ -6,8 +6,7 @@ type AndroidSettingsWorld = Awaited<ReturnType<typeof createAndroidSettingsWorld
 /**
  * The adb evidence the Android settings flow must leave behind: the appearance, location,
  * fingerprint, permission, animation-scale, and network mutations each named with the exact
- * argv the provider saw. Extracted from `android-lifecycle.test.ts`, which sits over the
- * test-file tripwire (`scripts/__tests__/test-file-size-ratchet.test.ts`).
+ * argv the provider saw.
  */
 export function assertAndroidSettingsContract(world: AndroidSettingsWorld): void {
   const { adbCalls } = world;

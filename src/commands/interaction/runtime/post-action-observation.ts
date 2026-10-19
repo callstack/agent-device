@@ -6,7 +6,8 @@ import type {
   SettleParams,
 } from '@agent-device/contracts/interaction';
 import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
-import { summarizePostActionEvidence, surfaceScopedNodes } from './post-action-surface.ts';
+import { summarizePostActionEvidence } from './post-action-surface.ts';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import { settleAfterInteraction, settleEvidence } from './settle.ts';
 
 type ObservedResult<T extends object> = T & {

@@ -8,7 +8,7 @@ import {
 import { cleanupDaemonTestState } from './daemon-test-cleanup.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   spawnRegisteredDaemonFixture,
   waitForRegisteredDaemonFixture,

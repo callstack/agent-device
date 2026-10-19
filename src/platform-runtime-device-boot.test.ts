@@ -17,13 +17,13 @@ vi.mock('@agent-device/platform-android/device-boot', () => mocks);
 
 import {
   ANDROID_EMULATOR,
-  IPADOS_SIMULATOR,
   IOS_SIMULATOR,
+  IPADOS_SIMULATOR,
   LINUX_DEVICE,
   MACOS_DEVICE,
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
-} from '@agent-device/test-kit/device-fixtures';
+} from '@agent-device/test-kit';
 import { deviceBootObservation } from './platform-runtime-device-boot.ts';
 
 beforeEach(() => {

@@ -32,7 +32,7 @@ export const IOS_SIMULATOR_BEHAVIOR_COVERAGE = {
     assertion:
       'launchApp(clearState) removes seeded app data, opens the stored deep route, renders its payload, and navigates onward',
     level: 'live',
-    owner: 'smoke:automation-input',
+    owner: 'smoke:deep-link-navigation',
   },
   'text-entry-keyboard-lifecycle': {
     assertion:

@@ -5,11 +5,11 @@ import {
   buildSnapshotDiff,
   countSnapshotComparableLines,
 } from '@agent-device/capture-kit/snapshot-diff';
-import { buildNodes as nodes } from '@agent-device/test-kit/snapshot-builders';
 import {
+  buildNodes as nodes,
   PROPERTY_RUNS_SMALL,
   rawSnapshotNodesArb,
-} from '@agent-device/test-kit/property-arbitraries';
+} from '@agent-device/test-kit';
 
 test('buildSnapshotDiff reports unchanged lines when snapshots are equal', () => {
   const previous = nodes([

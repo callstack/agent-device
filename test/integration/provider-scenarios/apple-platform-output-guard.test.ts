@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
+import type { AppleRunnerScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-runner-transport.ts';
 import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR, PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
@@ -85,6 +86,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.apps]: () => one(),
   [PUBLIC_COMMANDS.install]: ({ appPath }) => one(['com.example.demo', appPath]),
   [PUBLIC_COMMANDS.reinstall]: ({ appPath }) => one(['com.example.demo', appPath]),
+  [PUBLIC_COMMANDS.uninstall]: () => one(['com.example.demo']),
   [PUBLIC_COMMANDS.installFromSource]: ({ appPath }) => one([appPath]),
   [PUBLIC_COMMANDS.push]: ({ tmpDir }) => one([path.join(tmpDir, 'push-src.txt'), '/tmp/dest']),
   [PUBLIC_COMMANDS.triggerAppEvent]: () => one(['url', 'https://example.com']),
@@ -128,6 +130,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.appSwitcher]: () => one(),
   [PUBLIC_COMMANDS.actionButton]: () => one(),
   [PUBLIC_COMMANDS.fold]: () => one(['open']),
+  [PUBLIC_COMMANDS.telephony]: () => one(['call', '5551234']),
 
   // -- orchestration (drive to an error response; still scanned) --
   [PUBLIC_COMMANDS.artifacts]: () => one(),
@@ -340,10 +343,23 @@ function permissiveRecording(): AppleSimulatorScreenRecordingTransport {
   };
 }
 
+function unavailableRunnerRecording(): AppleRunnerScreenRecordingTransport {
+  return {
+    authority: 'local-lease',
+    available: false,
+    start: async () => {
+      throw new Error('Apple runner recording is unavailable in this fake provider');
+    },
+    inspect: async () => 'missing',
+    stop: async () => {},
+  };
+}
+
 async function createWorldDaemon(world: World): Promise<ProviderScenarioHarness> {
   const device = world === 'ios' ? PROVIDER_SCENARIO_IOS_SIMULATOR : PROVIDER_SCENARIO_MACOS;
   return await createProviderScenarioHarness({
     appleRunnerProvider: () => permissiveRunner(),
+    appleRunnerScreenRecordingTransport: () => unavailableRunnerRecording(),
     appleToolProvider: () => permissiveTool(world).provider,
     appleSimulatorScreenRecordingTransport: () => permissiveRecording(),
     deviceInventoryProvider: async () => [device],
@@ -351,7 +367,7 @@ async function createWorldDaemon(world: World): Promise<ProviderScenarioHarness>
 }
 
 async function ensureSession(daemon: ProviderScenarioHarness, world: World): Promise<void> {
-  if (daemon.session()) return;
+  if (await daemon.hasSession()) return;
   const { positionals, flags } = WORLDS[world].open;
   await daemon.callCommand('open', positionals ?? [], flags ?? {});
 }

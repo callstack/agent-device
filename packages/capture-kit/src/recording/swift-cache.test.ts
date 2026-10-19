@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { createTestHost } from '../host-environment.fixtures.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
@@ -38,6 +39,7 @@ test('compileSwiftSourceFile compiles to a unique temp executable before publish
   const sourcePath = writeSourceFile('print("hello")');
 
   const executablePath = await compileSwiftSourceFile({
+    host: createTestHost(),
     cacheName: 'recording-helper',
     sourcePath,
   });
@@ -56,10 +58,7 @@ test('concurrent file-backed helper compiles for the same cache key reuse the wi
   const sourcePath = writeSourceFile();
 
   await expectConcurrentCacheReuse(() =>
-    compileSwiftSourceFile({
-      sourcePath,
-      cacheName: 'recording-overlay',
-    }),
+    compileSwiftSourceFile({ host: createTestHost(), sourcePath, cacheName: 'recording-overlay' }),
   );
 });
 
@@ -72,16 +71,19 @@ test('extra source paths participate in the cache key and reach the compiler', a
 
   const [withSupport, withSupportAgain, withChangedSupport] = await Promise.all([
     compileSwiftSourceFile({
+      host: createTestHost(),
       sourcePath,
       extraSourcePaths: [supportPath],
       cacheName: 'recording-overlay',
     }),
     compileSwiftSourceFile({
+      host: createTestHost(),
       sourcePath,
       extraSourcePaths: [supportPath],
       cacheName: 'recording-overlay',
     }),
     compileSwiftSourceFile({
+      host: createTestHost(),
       sourcePath,
       extraSourcePaths: [changedSupportPath],
       cacheName: 'recording-overlay',
@@ -110,6 +112,7 @@ test('cache locks with a proven dead owner are recovered before compiling', asyn
 
   await expect(
     compileSwiftSourceFile({
+      host: createTestHost(),
       sourcePath,
       cacheName: 'recording-overlay',
       timeoutMs: 100,
@@ -127,6 +130,7 @@ test('an ownerless cache lock is retained with verified-recovery guidance regard
 
   await expect(
     compileSwiftSourceFile({
+      host: createTestHost(),
       sourcePath,
       cacheName: 'recording-overlay',
       timeoutMs: 1,
@@ -156,7 +160,11 @@ test('compileSwiftSourceText resolves a cache name with a long interior dash run
   // call is expected to reject once it reaches disk I/O; that happens only *after* the
   // (now fast) sanitize step this test pins, so timing the settle either way still proves
   // no catastrophic backtracking occurred.
-  await compileSwiftSourceText({ source: 'print(1)', cacheName: value }).catch(() => {});
+  await compileSwiftSourceText({
+    host: createTestHost(),
+    source: 'print(1)',
+    cacheName: value,
+  }).catch(() => {});
   const elapsedMs = Date.now() - start;
 
   expect(elapsedMs).toBeLessThan(1_000);
@@ -164,6 +172,7 @@ test('compileSwiftSourceText resolves a cache name with a long interior dash run
 
 test('compileSwiftSourceText falls back to swift-helper when the cache name sanitizes to nothing', async () => {
   const executablePath = await compileSwiftSourceText({
+    host: createTestHost(),
     source: 'print(1)',
     cacheName: '---',
   });
@@ -191,9 +200,9 @@ test('a compile that failed is reported over a cache lock that could not be give
     throw buildFailure;
   });
 
-  await expect(compileSwiftSourceFile({ sourcePath, cacheName: 'recording-overlay' })).rejects.toBe(
-    buildFailure,
-  );
+  await expect(
+    compileSwiftSourceFile({ host: createTestHost(), sourcePath, cacheName: 'recording-overlay' }),
+  ).rejects.toBe(buildFailure);
   // The release really could not verify itself: the lock is still standing.
   expect(fs.existsSync(lockDir)).toBe(true);
 });
@@ -207,6 +216,7 @@ function writeSourceFile(source = 'print("recording")'): string {
 async function createBlockedCacheEntry() {
   const sourcePath = writeSourceFile();
   const executablePath = await compileSwiftSourceFile({
+    host: createTestHost(),
     sourcePath,
     cacheName: 'recording-overlay',
   });
@@ -278,4 +288,23 @@ test('recording script candidates include packaged dist apple-runner source', ()
   const firstExisting = candidates.find((candidate) => fs.existsSync(candidate));
 
   expect(firstExisting).toBe(scriptPath);
+});
+
+test('the cache root and tool environment come from the host it is given, not the process', async () => {
+  const hostCacheDir = path.join(tmpDir, 'host-cache');
+
+  const executablePath = await compileSwiftSourceText({
+    host: {
+      env: { AGENT_DEVICE_SWIFT_CACHE_DIR: hostCacheDir, FROM_HOST: 'yes' },
+      cwd: tmpDir,
+    },
+    source: 'print("host")',
+    cacheName: 'host-helper',
+  });
+
+  expect(path.dirname(executablePath)).toBe(path.join(hostCacheDir, 'bin'));
+  expect(mockRunCmd.mock.calls[0]?.[2]?.env).toMatchObject({
+    FROM_HOST: 'yes',
+    HOME: path.join(hostCacheDir, 'home'),
+  });
 });

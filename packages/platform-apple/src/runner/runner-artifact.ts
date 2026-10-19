@@ -15,14 +15,16 @@ import {
   emitRequestProgress,
   findProjectRoot,
   isCommandTimeoutError,
+  hostEnvironment,
+  runnerRuntimeSlot,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 import { logChunk } from './runner-io.ts';
 import {
+  runnerLaunchLogClassificationDetails,
   runnerSimulatorSetFailureDetails,
-  simulatorSetDestinationNotFoundMessage,
   xcodebuildDestinationArgs,
 } from './runner-device-set.ts';
 import {
@@ -119,7 +121,10 @@ type DeviceStartState = {
   inFlight: Set<StartAdmission>;
 };
 
-const deviceStartStates = new Map<string, DeviceStartState>();
+const DEVICE_START_STATES_SLOT = Symbol('apple-runner-device-start-states');
+// Per daemon runtime: a runtime's teardown retires only the start admissions it opened.
+const deviceStartStates = () =>
+  runnerRuntimeSlot(DEVICE_START_STATES_SLOT, () => new Map<string, DeviceStartState>());
 
 /**
  * Opens the admission one start answers to, taken when a caller asks for a runner. Registration is
@@ -144,7 +149,7 @@ export function openRunnerStartLoopAdmission(deviceId: string): RunnerStartAdmis
 /** The start settled: its token leaves the device's in-flight set. Verdicts live on the token. */
 export function finishRunnerStartAdmission(admission: RunnerStartAdmission): void {
   (admission as StartAdmission).retryPending = false;
-  const state = deviceStartStates.get(admission.deviceId);
+  const state = deviceStartStates().get(admission.deviceId);
   if (!state) return;
   state.inFlight.delete(admission as StartAdmission);
   forgetDeviceStartState(admission.deviceId, state);
@@ -180,7 +185,10 @@ export function fenceRunnerStartAdmissionsForTeardown(deviceId: string): () => v
  * build past the sweep that is about to stop it.
  */
 export function retireAllRunnerStartAdmissions(additionalDeviceIds?: Iterable<string>): () => void {
-  const deviceIds = new Set<string>([...deviceStartStates.keys(), ...(additionalDeviceIds ?? [])]);
+  const deviceIds = new Set<string>([
+    ...deviceStartStates().keys(),
+    ...(additionalDeviceIds ?? []),
+  ]);
   const settles = [...deviceIds].map((deviceId) => fenceRunnerStartAdmissionsForTeardown(deviceId));
   return () => {
     for (const settle of settles.splice(0)) settle();
@@ -193,7 +201,7 @@ export function retireAllRunnerStartAdmissions(additionalDeviceIds?: Iterable<st
  * not that teardown's retry.
  */
 export function runnerStartTeardownPending(deviceId: string): boolean {
-  return (deviceStartStates.get(deviceId)?.pendingTeardowns ?? 0) > 0;
+  return (deviceStartStates().get(deviceId)?.pendingTeardowns ?? 0) > 0;
 }
 
 /**
@@ -299,17 +307,17 @@ export function releaseRunnerStartWaiter(
 }
 
 function stateForDevice(deviceId: string): DeviceStartState {
-  const existing = deviceStartStates.get(deviceId);
+  const existing = deviceStartStates().get(deviceId);
   if (existing) return existing;
   const state: DeviceStartState = { pendingTeardowns: 0, inFlight: new Set() };
-  deviceStartStates.set(deviceId, state);
+  deviceStartStates().set(deviceId, state);
   return state;
 }
 
 /** Nothing fences the device and no start is in flight on it once the last of both is gone. */
 function forgetDeviceStartState(deviceId: string, state: DeviceStartState): void {
   if (state.pendingTeardowns <= 0 && state.inFlight.size === 0) {
-    deviceStartStates.delete(deviceId);
+    deviceStartStates().delete(deviceId);
   }
 }
 
@@ -360,7 +368,10 @@ type RunnerPrepProcess = Readonly<{
   child: ExecBackgroundResult['child'];
 }>;
 
-const runnerPrepProcessLedger = new Set<RunnerPrepProcess>();
+const RUNNER_PREP_LEDGER_SLOT = Symbol('apple-runner-prep-process-ledger');
+// Per daemon runtime: a runtime's stop signals only the prep children it started.
+const runnerPrepProcessLedger = () =>
+  runnerRuntimeSlot(RUNNER_PREP_LEDGER_SLOT, () => new Set<RunnerPrepProcess>());
 
 /**
  * Records a prep subprocess (`xcodebuild build-for-testing`) against the device it builds for and
@@ -377,9 +388,9 @@ export function registerRunnerPrepProcess(
   startAdmission?: RunnerStartAdmission,
 ): void {
   const entry: RunnerPrepProcess = { deviceId, startAdmission, child };
-  runnerPrepProcessLedger.add(entry);
+  runnerPrepProcessLedger().add(entry);
   child.on('close', () => {
-    runnerPrepProcessLedger.delete(entry);
+    runnerPrepProcessLedger().delete(entry);
   });
 }
 
@@ -426,14 +437,14 @@ export function markRunnerStartRetryPending(admission: RunnerStartAdmission): vo
 }
 
 function prepProcessEntries(deviceId?: string): readonly RunnerPrepProcess[] {
-  return [...runnerPrepProcessLedger].filter(
+  return [...runnerPrepProcessLedger()].filter(
     (entry) => deviceId === undefined || entry.deviceId === deviceId,
   );
 }
 
 export function forgetRunnerPrepProcess(child: ExecBackgroundResult['child']): void {
-  for (const entry of runnerPrepProcessLedger) {
-    if (entry.child === child) runnerPrepProcessLedger.delete(entry);
+  for (const entry of runnerPrepProcessLedger()) {
+    if (entry.child === child) runnerPrepProcessLedger().delete(entry);
   }
 }
 
@@ -872,16 +883,17 @@ async function buildRunnerXctestrun(
   // teardown or a last-waiter cancellation reaches this same line again, and admission is what
   // refuses it. Checking at registration would be a check after the child exists (#3220).
   assertRunnerStartAdmitsPreparation(device.id, options.startAdmission);
-  const runnerBundleBuildSettings = resolveRunnerBundleBuildSettings(process.env);
+  const { env } = hostEnvironment();
+  const runnerBundleBuildSettings = resolveRunnerBundleBuildSettings(env);
   const signingBuildSettings = resolveRunnerSigningBuildSettings(
-    process.env,
+    env,
     device.kind === 'device',
     device,
   );
   const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
-  const archBuildSettings = resolveRunnerArchBuildSettings(process.env);
-  const sandboxBuildArgs = resolveRunnerSandboxBuildArgs();
+  const archBuildSettings = resolveRunnerArchBuildSettings(env);
+  const sandboxBuildArgs = resolveRunnerSandboxBuildArgs(env);
   try {
     await runCmdStreaming(
       'xcodebuild',
@@ -925,11 +937,15 @@ async function buildRunnerXctestrun(
     if (isRequestCanceledError(error)) throw error;
     const appErr =
       error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
-    const simulatorSet = runnerSimulatorSetFailureDetails(device);
-    // The reason and the hint beside it come from one classifier (#2680), so the reason a caller
-    // switches on can never disagree with the advice it is handed.
-    const { reason, hint, matched } = classifyRunnerStartupFailure(
-      new AppError(appErr.code, appErr.message, { ...appErr.details, ...simulatorSet }),
+    const publishedSimulatorSet = runnerSimulatorSetFailureDetails(device);
+    // The reason, the hint, and any cause named in the message all come from one classifier (#2680), so
+    // the reason a caller switches on can never disagree with the advice or the sentence beside it.
+    const classificationDetails = runnerLaunchLogClassificationDetails(device);
+    const { reason, hint, messageSuffix, matched } = classifyRunnerStartupFailure(
+      new AppError(appErr.code, appErr.message, {
+        ...appErr.details,
+        ...classificationDetails,
+      }),
     );
     const hostDeadlineHit = isCommandTimeoutError(appErr);
     // `startupRuleMatched` travels with the verdict: this wrapper buries the tool's text a level too
@@ -937,21 +953,15 @@ async function buildRunnerXctestrun(
     // alone (#2690 review). The device's own state is attached further out, by the startup catch that
     // can see this build and the launch after it.
     const message = 'xcodebuild build-for-testing failed';
-    throw new AppError(
-      'COMMAND_FAILED',
-      reason === 'simulator_set_destination_not_found'
-        ? simulatorSetDestinationNotFoundMessage(message, device, simulatorSet)
-        : message,
-      {
-        reason,
-        error: appErr.message,
-        details: appErr.details,
-        logPath: options.logPath,
-        hint,
-        startupRuleMatched: matched,
-        startupHostDeadlineHit: hostDeadlineHit,
-        ...simulatorSet,
-      },
-    );
+    throw new AppError('COMMAND_FAILED', messageSuffix ? `${message}: ${messageSuffix}` : message, {
+      reason,
+      error: appErr.message,
+      details: appErr.details,
+      logPath: options.logPath,
+      hint,
+      startupRuleMatched: matched,
+      startupHostDeadlineHit: hostDeadlineHit,
+      ...publishedSimulatorSet,
+    });
   }
 }

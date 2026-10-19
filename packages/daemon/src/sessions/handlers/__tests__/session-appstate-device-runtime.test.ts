@@ -4,7 +4,11 @@ import { test, expect, vi } from 'vitest';
 import { handleAppStateCommand } from '../session-appstate.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import {
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  bindTestCommandHost,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type DeviceBinding,
@@ -19,6 +23,8 @@ import {
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import type { BindDeviceRuntime } from '../../../core/request-runtime-binding.ts';
+
+bindTestCommandHost();
 
 test('appstate rejects web before Android app-state backend dispatch', async () => {
   const device = {
@@ -40,6 +46,7 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
     },
     async () =>
       await handleAppStateCommand({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
@@ -71,6 +78,7 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
             clipboard: { available: false, reason: 'unsupported-platform-leaf' },
             systemButton: { available: false, reason: 'unsupported-platform-leaf' },
             fold: { available: false, reason: 'unsupported-platform-leaf' },
+            telephony: { available: false, reason: 'unsupported-platform-leaf' },
             triggerAppEvent: { available: false, reason: 'unsupported-platform-leaf' },
             settings: { available: false, reason: 'unsupported-platform-leaf' },
             readAlert: { available: false, reason: 'unsupported-platform-leaf' },
@@ -162,6 +170,7 @@ test('appstate rejects a missing readiness fact even when appState is available'
     { local: async () => [device] },
     async () =>
       await handleAppStateCommand({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
@@ -260,6 +269,7 @@ test('sessionless Android appstate inspects once, binds once, and preserves oper
     { local: async () => [device] },
     async () =>
       await handleAppStateCommand({
+        host: createTestHostEnvironment(),
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',

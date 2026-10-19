@@ -1,7 +1,8 @@
 import fs from 'node:fs';
+import { teardownDaemonSessionForShutdown } from './server-shutdown.ts';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 vi.mock('../../sessions/session-teardown.ts', async (importOriginal) => {
@@ -16,7 +17,6 @@ vi.mock('../../sessions/session-teardown.ts', async (importOriginal) => {
 import { SessionStore } from '../../core/session-store.ts';
 import { teardownSessionResources } from '../../sessions/session-teardown.ts';
 import type { SessionState } from '../../core/session-state.ts';
-import { teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
 
 const mockTeardownSessionResources = vi.mocked(teardownSessionResources);
 const roots: string[] = [];

@@ -1,8 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { SessionStore } from '../../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -64,9 +65,11 @@ import {
   stopIosRunnerSession,
 } from '@agent-device/platform-apple/runner/operations';
 import { cleanupAppleXctracePerfCapture } from '@agent-device/platform-apple/perf';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { acquireDeviceClaim } from '../../../../resources/device/device-claims.ts';
-import { inspectDeviceClaims } from '../../../../resources/device/device-claim-inspection.ts';
+import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
+import {
+  acquireDeviceClaim,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 
 import {
   type DeviceBinding,
@@ -80,7 +83,6 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { lifecycleRuntimeFacts } from '../../../../__tests__/support/application-lifecycle-runtime-harness.ts';
 import { dispatchApplicationLifecycleEffect } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 export type { DeviceBinding, PlatformRuntimeOperations, SessionState };
 

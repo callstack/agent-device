@@ -25,7 +25,8 @@ export type RepeatedPressOptions = {
  * Opt-in (#1101): after the action, wait for the UI to go quiet and return the
  * settled diff vs the pre-action tree (`settle` on the result) in the same
  * response. Best-effort — never fails the action. `settleQuietMs` tunes the
- * quiet window (default 500ms); `timeoutMs` bounds the settle wait (default
+ * quiet window (default 500ms, or 300ms when the settled tree comes from the iOS
+ * simulator snapshot bridge); `timeoutMs` bounds the settle wait (default
  * 10s) when `settle` is true. A bare `timeoutMs` without `settle` is ignored
  * for compatibility; `settleQuietMs` still requires `settle`.
  */
@@ -35,20 +36,11 @@ export type SettleCommandOptions = {
   timeoutMs?: number;
 };
 
-/**
- * How long a tap-shaped interaction may poll for a target that does not exist yet, capped at the
- * promotedTarget row's maxTimeoutMs. Never model- or CLI-writable; omitted means one attempt.
- */
-export type ReadinessBudgetOptions = {
-  readinessTimeoutMs?: number;
-};
-
 export type ClickOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
   RepeatedPressOptions &
-  SettleCommandOptions &
-  ReadinessBudgetOptions & {
+  SettleCommandOptions & {
     button?: ClickButton;
     /**
      * Opt-in (#1047): return cheap post-action evidence (AX digest, node counts,
@@ -62,16 +54,14 @@ export type PressOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
   RepeatedPressOptions &
-  SettleCommandOptions &
-  ReadinessBudgetOptions & {
+  SettleCommandOptions & {
     verify?: boolean;
   };
 
 export type LongPressOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
-  SettleCommandOptions &
-  ReadinessBudgetOptions & {
+  SettleCommandOptions & {
     durationMs?: number;
   };
 

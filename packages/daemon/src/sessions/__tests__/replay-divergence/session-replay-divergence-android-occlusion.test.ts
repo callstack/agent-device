@@ -6,7 +6,7 @@ import {
   ANDROID_QS_SHADE_CAPTURE_RAW_NODES,
   walkNonRawAndroidFixture,
 } from '@agent-device/platform-android/ui-hierarchy-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { replayCoordinatorForTest, replaySessionForTest } from './replay-session-fixture.ts';
 import {

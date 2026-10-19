@@ -3,16 +3,13 @@ import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import {
   hasExplicitDeviceIdentitySelector,
   isApplePlatform,
-  resolveAppleSimulatorSetPathForSelector,
+  resolveRequestAppleSimulatorSetPath,
   type DeviceInfo,
   type DeviceTarget,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import {
-  resolveAndroidSerialAllowlist,
-  resolveIosSimulatorDeviceSetPath,
-} from '@agent-device/kernel/device-isolation';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   listLocalDeviceInventory,
@@ -107,6 +104,11 @@ export async function resolveTargetDeviceSelection(
   const diagnosticData = {
     platform: inventoryRequest.platform,
     target: flags.target,
+    // The selector the resolution was asked for, echoed for recovery lanes whose whole job is
+    // re-resolving one stated device: which udid was requested and which simulator set was
+    // scoped must be visible in the request log without debug-only dumps.
+    ...(inventoryRequest.udid ? { udid: inventoryRequest.udid } : {}),
+    ...(iosSimulatorSetPath ? { iosSimulatorSetPath } : {}),
     cacheHit: false,
   };
   return await withDiagnosticTimer(
@@ -209,12 +211,16 @@ export function buildDeviceInventoryRequestFromFlags(
       'Device target selector requires --platform. Use --platform ios|macos|android|vega|linux|apple with --target mobile|tv|desktop.',
     );
   }
-  const iosSimulatorSetPath = resolveAppleSimulatorSetPathForSelector({
-    simulatorSetPath: resolveIosSimulatorDeviceSetPath(flags.iosSimulatorDeviceSet),
+  const iosSimulatorSetPath = resolveRequestAppleSimulatorSetPath({
+    requestedSetPath: flags.iosSimulatorDeviceSet,
     platform,
     target: flags.target,
+    env: process.env,
   });
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(flags.androidDeviceAllowlist);
+  const androidSerialAllowlist = resolveAndroidSerialAllowlist(
+    flags.androidDeviceAllowlist,
+    process.env,
+  );
   return {
     platform,
     target: flags.target,

@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { handleReleaseMaterializedPathsCommand } from './session-app-source-deployment.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
 import {
@@ -7,15 +7,13 @@ import {
 } from '../../execution/handlers/session-selector-dispatch.ts';
 import { handleSessionAppDeploymentCommand } from './session-app-deployment-route.ts';
 import { runBatchCommands } from './session-batch.ts';
-import {
-  handleSessionCloseCommands,
-  handleSessionInventoryCommands,
-  handleSessionOpenCommands,
-} from '../session-lifecycle/index.ts';
+import { handleSessionCloseCommands } from '../session-lifecycle/internal/session-close.ts';
+import { handleSessionInventoryCommands } from '../session-lifecycle/internal/inventory.ts';
+import { handleSessionOpenCommands } from '../session-lifecycle/internal/session-open.ts';
 import { handleBootCommand } from './session-boot.ts';
 import { handleShutdownCommand } from './session-shutdown.ts';
 import { handleAppStateCommand } from './session-appstate.ts';
-import { handleSessionObservabilityCommands } from '../session-observability/index.ts';
+import { handleSessionObservabilityCommands } from '../session-observability/internal/session-observability.ts';
 import { handleReplayCommand, handleReplayTestCommand } from './session-replay-command.ts';
 import { handleSessionScriptPublication } from './session-script-publication.ts';
 import { handleSessionClipboardCommand } from '../../execution/handlers/session-clipboard.ts';
@@ -26,12 +24,10 @@ import type {
   SessionCommandInput,
   SessionCommandParams,
 } from './session-command-input.ts';
-import type {
-  SessionCloseCommandInput,
-  SessionInventoryCommandInput,
-  SessionOpenCommandInput,
-} from '../session-lifecycle/index.ts';
-import type { SessionObservabilityCommandInput } from '../session-observability/index.ts';
+import type { SessionCloseCommandInput } from '../session-lifecycle/internal/session-close.ts';
+import type { SessionInventoryCommandInput } from '../session-lifecycle/internal/inventory.ts';
+import type { SessionOpenCommandInput } from '../session-lifecycle/internal/session-open.ts';
+import type { SessionObservabilityCommandInput } from '../session-observability/internal/session-observability.ts';
 import type { DescriptorSessionRouteCommandName } from '@agent-device/command-registry/registry';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 
@@ -41,6 +37,7 @@ const handleSessionInventoryCommandGroup: SessionCommandHandler = (
 
 const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
   handleSessionOpenCommands({
+    host: params.host,
     req: params.req,
     createCommandSurface: params.createCommandSurface,
     sessionName: params.sessionName,
@@ -54,6 +51,7 @@ const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
 
 const handleSessionCloseCommandGroup: SessionCommandHandler = (params) =>
   handleSessionCloseCommands({
+    host: params.host,
     req: params.req,
     sessionName: params.sessionName,
     logPath: params.logPath,
@@ -67,6 +65,7 @@ const handleSessionCloseCommandGroup: SessionCommandHandler = (params) =>
   } satisfies SessionCloseCommandInput);
 
 const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
+  host,
   req,
   sessionName,
   sessionStore,
@@ -79,6 +78,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   throwIfCanceled,
 }) =>
   await handleSessionObservabilityCommands({
+    host,
     req,
     sessionName,
     sessionStore,
@@ -107,6 +107,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   capabilities: handleSessionInventoryCommandGroup,
   apps: handleSessionInventoryCommandGroup,
   doctor: async ({
+    host,
     req,
     sessionName,
     sessionStore,
@@ -116,6 +117,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     bindDevice,
   }) =>
     await handleDoctorCommand({
+      host,
       req,
       sessionName,
       sessionStore,
@@ -191,6 +193,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
     }),
   install: handleSessionAppDeploymentCommand,
   reinstall: handleSessionAppDeploymentCommand,
+  uninstall: handleSessionAppDeploymentCommand,
   install_source: handleSessionAppDeploymentCommand,
   release_materialized_paths: async ({ req }) =>
     await handleReleaseMaterializedPathsCommand({ req }),
@@ -207,6 +210,7 @@ export async function handleSessionCommands(
   params: SessionCommandInput,
 ): Promise<DaemonResponse | null> {
   const {
+    host,
     req,
     sessionName,
     logPath,
@@ -238,6 +242,7 @@ export async function handleSessionCommands(
   if (!handler) return null;
 
   return await handler({
+    host,
     req,
     createCommandSurface: params.createCommandSurface,
     sessionName,

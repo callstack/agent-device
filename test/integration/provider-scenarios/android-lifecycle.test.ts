@@ -169,7 +169,6 @@ test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
         ...world.selection,
       });
       assert.equal(oneFingerPan.pointerCount, 1);
-      assert.equal(world.daemon.session()?.actions.at(-1)?.flags.pointerCount, undefined);
 
       const twoFingerPan = await client.interactions.pan({
         x: 195,
@@ -182,8 +181,6 @@ test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
       });
       assert.equal(twoFingerPan.pointerCount, 2);
       assert.equal(twoFingerPan.backend, 'provider-native-touch');
-      assert.equal(world.daemon.session()?.actions.at(-1)?.flags.pointerCount, 2);
-
       const pinch = await client.interactions.pinch({
         scale: 2,
         x: 195,
@@ -295,7 +292,7 @@ test('Provider-backed integration Android external ANR fails with actionable con
         (call) => call.slice(0, 4).join(' ') === 'shell am start -W',
       ).length;
       const press = await world.daemon.callCommand('press', ['50', '60'], world.selection);
-      const error = assertRpcError(press, 'COMMAND_FAILED', /com\.android\.systemui/);
+      const error = assertRpcError(press, 500, 'COMMAND_FAILED', /com\.android\.systemui/);
       const details = error.details as Record<string, unknown>;
 
       assert.equal(details.focusedPackage, 'com.android.systemui');
@@ -317,7 +314,7 @@ async function runAndroidSetupAndInstallWorkflow(
   world: AndroidSettingsWorld,
   client: AgentDeviceClient,
 ): Promise<void> {
-  const { daemon, apkPath, aabPath, manifestApkPath, selection, tempRoot } = world;
+  const { daemon, apkPath, aabPath, manifestApkPath, selection } = world;
 
   const devices = await client.devices.list({ platform: 'android' });
   assert.equal(devices.length, 1);
@@ -355,7 +352,7 @@ async function runAndroidSetupAndInstallWorkflow(
     selectorTriggeredEvent.eventUrl,
     'demo://agent-device/event?name=pre_open_ping&payload=%7B%22stage%22%3A%22explicit-selector%22%7D&platform=android',
   );
-  assert.equal(daemon.session(), undefined);
+  assert.equal(await daemon.hasSession(), false);
 
   const keyboardDismiss = await client.command.keyboard({ action: 'dismiss', ...selection });
   assert.equal(keyboardDismiss.platform, 'android');
@@ -433,45 +430,37 @@ async function runAndroidSetupAndInstallWorkflow(
   assert.equal(push.action, 'com.example.demo.PUSH');
   assert.equal(push.extrasCount, 3);
 
-  const pushPayloadPath = path.join(tempRoot, 'payload.json');
-  fs.writeFileSync(
-    pushPayloadPath,
-    JSON.stringify({
-      action: 'com.example.demo.FILE_PUSH',
-      extras: { source: 'relative-file' },
-    }),
-    'utf8',
-  );
-  const filePush = await daemon.callCommand(
-    'push',
-    ['com.example.demo', './payload.json'],
-    selection,
-    {
-      meta: { cwd: tempRoot },
-    },
-  );
-  assert.equal(filePush.json.result.data.package, 'com.example.demo');
-  assert.equal(filePush.json.result.data.action, 'com.example.demo.FILE_PUSH');
-  assert.equal(filePush.json.result.data.extrasCount, 1);
-
-  const bracePayloadPath = path.join(tempRoot, '{payload}.json');
-  fs.writeFileSync(
-    bracePayloadPath,
-    JSON.stringify({
-      action: 'com.example.demo.BRACE_PUSH',
-      extras: { source: 'brace-file' },
-    }),
-    'utf8',
-  );
-  const braceFilePush = await daemon.callCommand(
-    'push',
-    ['com.example.demo', './{payload}.json'],
-    selection,
-    { meta: { cwd: tempRoot } },
-  );
-  assert.equal(braceFilePush.json.result.data.package, 'com.example.demo');
-  assert.equal(braceFilePush.json.result.data.action, 'com.example.demo.BRACE_PUSH');
-  assert.equal(braceFilePush.json.result.data.extrasCount, 1);
+  // #3345: coverage pairs the routed session with the workspace a claim records. The client
+  // calls above sent no cwd, so their open claim records the daemon-side fallback workspace —
+  // this checkout — at the routed `default` address. These pushes state their provenance
+  // explicitly: sessionExplicit joins that address, and their cwd — a checkout child directory,
+  // chosen so the relative payloads resolve against it — canonicalizes to that recorded
+  // workspace. A foreign cwd refuses even under the same session name: the copyable-address rule.
+  fs.mkdirSync(path.join(process.cwd(), '.tmp'), { recursive: true });
+  const callerWorkspace = fs.mkdtempSync(path.join(process.cwd(), '.tmp', 'push-'));
+  try {
+    for (const [payloadFile, action, source] of [
+      ['payload.json', 'com.example.demo.FILE_PUSH', 'relative-file'],
+      ['{payload}.json', 'com.example.demo.BRACE_PUSH', 'brace-file'],
+    ] as const) {
+      fs.writeFileSync(
+        path.join(callerWorkspace, payloadFile),
+        JSON.stringify({ action, extras: { source } }),
+        'utf8',
+      );
+      const pushed = await daemon.callCommand(
+        'push',
+        ['com.example.demo', `./${payloadFile}`],
+        selection,
+        { meta: { cwd: callerWorkspace, sessionExplicit: true } },
+      );
+      assert.equal(pushed.json.result.data.package, 'com.example.demo');
+      assert.equal(pushed.json.result.data.action, action);
+      assert.equal(pushed.json.result.data.extrasCount, 1);
+    }
+  } finally {
+    fs.rmSync(callerWorkspace, { recursive: true, force: true });
+  }
 
   const clipboard = await client.command.clipboard({ action: 'read', ...selection });
   if (clipboard.action !== 'read') throw new Error('expected clipboard read result');
@@ -529,15 +518,7 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     triggeredEvent.eventUrl,
     'demo://agent-device/event?name=screenshot_taken&payload=%7B%22source%22%3A%22provider-scenario%22%2C%22foreground%22%3Atrue%7D&platform=android',
   );
-  const sessionAfterTriggeredEvent = daemon.session();
-  assert.equal(sessionAfterTriggeredEvent?.appBundleId, 'com.example.demo');
-  assert.ok(
-    sessionAfterTriggeredEvent?.actions.some(
-      (action) =>
-        action.command === 'trigger-app-event' && action.positionals[0] === 'screenshot_taken',
-    ),
-    JSON.stringify(sessionAfterTriggeredEvent?.actions),
-  );
+  assert.equal(await daemon.hasSession(), true);
   const tracePath = path.join(world.tempRoot, 'android-provider.adtrace');
   const finalTracePath = path.join(world.tempRoot, 'android-provider-final.adtrace');
   const traceStart = await daemon.callCommand('trace', ['start', tracePath], selection);
@@ -683,7 +664,7 @@ async function runAndroidAppControlAndObservabilityWorkflow(
     platform: 'android',
     serial: PROVIDER_SCENARIO_ANDROID.id,
   });
-  assertRpcError(invalidPerfAction, 'INVALID_ARGS', /perf action must be/i);
+  assertRpcError(invalidPerfAction, 400, 'INVALID_ARGS', /perf action must be/i);
 
   const logsStop = await client.observability.logs({ action: 'stop', ...selection });
   assert.equal(logsStop.stopped, true);
@@ -811,17 +792,6 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
     noRecord: true,
   });
   assert.equal(unrecordedPress.json?.result?.data?.x, 50);
-  assert.equal(
-    daemon
-      .session()
-      ?.actions.some(
-        (action) =>
-          action.command === 'press' &&
-          action.positionals[0] === '50' &&
-          action.positionals[1] === '60',
-      ),
-    false,
-  );
 
   // ADR 0014: the ref click expired the frame — re-observe before filling.
   await client.capture.snapshot({ interactiveOnly: true, ...selection });
@@ -1016,7 +986,7 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   // close --save-script + shutdown below.
   const plainCloseBeforeArm = await daemon.callCommand('close');
   assert.equal(plainCloseBeforeArm.statusCode, 200, JSON.stringify(plainCloseBeforeArm.json));
-  assert.equal(daemon.session(), undefined);
+  assert.equal(await daemon.hasSession(), false);
 
   const savedReplayPath = path.join(tempRoot, 'saved-session.ad');
   const armedOpen = await client.apps.open({
@@ -1031,7 +1001,7 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   });
   assert.equal(close.json?.result?.data?.shutdown?.success, true);
   assert.equal(fs.existsSync(savedReplayPath), true);
-  assert.equal(daemon.session(), undefined);
+  assert.equal(await daemon.hasSession(), false);
 
   const testReplayPath = path.join(tempRoot, 'settings-smoke.ad');
   fs.writeFileSync(

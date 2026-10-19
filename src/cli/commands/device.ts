@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import {
@@ -5,25 +6,28 @@ import {
   deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
   type InspectedDeviceClaim,
-} from '@agent-device/daemon/device/device-claim-inspection';
-import type { DeviceClaimStaleReleaseOutcome } from '@agent-device/daemon/device/device-claims';
+  type DeviceClaimStaleReleaseOutcome,
+} from '@agent-device/daemon-contracts/device-claims';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientCommandHandler } from './router-types.ts';
 
 // Loaded dynamically by dedicatedCliCommandHandlerLoaders in router.ts.
-export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const deviceCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   if (positionals.length !== 1 || (positionals[0] !== 'status' && positionals[0] !== 'release')) {
     throw new AppError('INVALID_ARGS', 'device accepts only: status, release');
   }
-  if (positionals[0] === 'release') return await runDeviceRelease(flags);
-  const inspectedClaims = inspectDeviceClaims({
-    platform: flags.platform,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-  });
+  if (positionals[0] === 'release') return await runDeviceRelease(flags, host);
+  const inspectedClaims = inspectDeviceClaims(
+    {
+      platform: flags.platform,
+      device: flags.device,
+      udid: flags.udid,
+      serial: flags.serial,
+    },
+    host.env,
+  );
   const staleClaims = inspectedClaims.filter((claim) =>
     deviceClaimRequiresStaleInspection(claim.classification),
   );
@@ -55,7 +59,7 @@ export const deviceCommand: ClientCommandHandler = async ({ positionals, flags }
  * provably cannot release them. Everything else fails closed and is reported
  * with the reason, so a live or uncertain owner is never interrupted.
  */
-async function runDeviceRelease(flags: CliFlags): Promise<boolean> {
+async function runDeviceRelease(flags: CliFlags, host: HostEnvironment): Promise<boolean> {
   if (flags.stale !== true) {
     throw new AppError(
       'INVALID_ARGS',
@@ -65,13 +69,16 @@ async function runDeviceRelease(flags: CliFlags): Promise<boolean> {
       },
     );
   }
-  const { runStaleDeviceClaimRelease } = await import('./device-release.ts');
-  const outcomes = await runStaleDeviceClaimRelease({
-    platform: flags.platform,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-  });
+  const { runStaleDeviceClaimRelease } = await import('../../platform-runtime-claim-recovery.ts');
+  const outcomes = await runStaleDeviceClaimRelease(
+    {
+      platform: flags.platform,
+      device: flags.device,
+      udid: flags.udid,
+      serial: flags.serial,
+    },
+    host,
+  );
   const data = {
     released: outcomes.filter((outcome) => outcome.status === 'released').map(serializeOutcome),
     retained: outcomes.filter((outcome) => outcome.status === 'retained').map(serializeOutcome),

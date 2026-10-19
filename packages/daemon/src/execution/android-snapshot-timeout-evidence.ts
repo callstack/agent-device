@@ -1,7 +1,7 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { DaemonResponse } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';

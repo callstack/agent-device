@@ -1,5 +1,4 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '@agent-device/daemon/testing/session-observability/__tests__/session-audio.coverage';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from '../../../src/__tests__/install-source.coverage.ts';
 import { ANDROID_LIFECYCLE_CONTRACT_EVIDENCE } from '../provider-scenarios/android-lifecycle.coverage.ts';
 import {
@@ -15,10 +14,13 @@ import {
 } from './entries.ts';
 import {
   ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
+  ANDROID_AUDIO_CONTRACT_EVIDENCE,
   ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE,
   ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
+  ANDROID_TELEPHONY_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE,
+  ANDROID_UNINSTALL_CONTRACT_EVIDENCE,
   ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE,
   APPLE_ACTION_BUTTON_FACT_EVIDENCE,
   APPLE_HOVER_DENIAL_EVIDENCE,
@@ -41,6 +43,10 @@ const C = PUBLIC_COMMANDS;
  * per-platform `Record<PublicCommand, …>` each e2e runner reads is projected from this table at
  * load time (`projectCoverage`), so adding a public command is one edit here rather than six
  * parallel edits in six manifests.
+ *
+ * A gap row is exactly one of two kinds: a `known-gap` row is owed work and its builder pins the
+ * platform's open tracking issue; an `accepted-gap` row states a `reason` for why no evidence lane
+ * will cover it and has no tracking issue. `assertCoverageGapRowsAreOwned` enforces both.
  *
  * `satisfies Record<PublicCommand, CommandCoverageDeclaration>` is the exhaustiveness check:
  * a command added to the catalog without a row here fails type-checking, and each platform's
@@ -68,8 +74,9 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'artifacts lists a daemon-tracked artifact produced during a web session',
       'daemon artifact listing round-trips a tracked artifact for a web-backed session',
     ),
-    linux: linux.gap(
-      'No Linux live command creates a downloadable daemon artifact for inventory yet',
+    linux: linux.accepted(
+      'No Linux live command creates a downloadable daemon artifact for inventory',
+      'The Linux lanes run the local CLI, where command outputs are caller-owned local paths; request finalization inventories a response artifact only when the request carries a client artifact path (remote transport) or it is the sparse-snapshot fallback screenshot, which no Linux lane observes, so a Linux lane cannot produce a downloadable inventory entry without a local-transport product decision.',
     ),
   },
   [C.devices]: {
@@ -135,7 +142,10 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'smoke:inventory-install',
       'doctor discovers the installed fixture app',
     ),
-    macos: macos.gap('No command-specific macOS doctor evidence exists yet'),
+    macos: macos.accepted(
+      'No command-specific macOS doctor evidence exists',
+      'The doctor checks are daemon-owned host diagnostics — version, state dir, inventory probes, Metro — pinned platform-neutrally by the daemon doctor tests, and no macOS lane invokes the command: neither the System Settings replay nor the desktop and recording provider scenarios carry a doctor step.',
+    ),
     tvos: tvos.gap('No tvOS-specific doctor command evidence exists yet'),
     web: web.contract(
       'packages/platform-web/src/__tests__/doctor.test.ts',
@@ -204,14 +214,20 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'full:device-lifecycle',
       'shutdown succeeds and inventory reports the selected simulator stopped',
     ),
-    macos: macos.gap('No command-specific macOS shutdown evidence exists yet'),
+    macos: macos.accepted(
+      'No command-specific macOS shutdown evidence exists',
+      'The Apple owner declares shutdownTarget unavailable on the macOS leaf (unsupported-platform-leaf): agent-device never powers off the host Mac it runs on, so the command refuses at admission and no lane will observe a successful macOS shutdown.',
+    ),
     tvos: tvos.gap('No tvOS-specific shutdown command evidence exists yet'),
     web: web.contract(
       'packages/platform-web/src/runtime.test.ts',
       'boot and shutdown report the runtime-owned unavailable readiness fact',
       'the web runtime fact rejects device shutdown',
     ),
-    linux: linux.gap('No Linux-specific shutdown command evidence exists yet'),
+    linux: linux.accepted(
+      'No Linux-specific shutdown command evidence exists',
+      'The Linux owner declares shutdownTarget unavailable (unsupported-platform-leaf): the Linux desktop is the host machine itself and agent-device never powers off the machine it runs on, so the command refuses at admission and no lane will observe a successful shutdown.',
+    ),
   },
   [C.appState]: {
     androidEmulator: androidEmulator.live(
@@ -280,7 +296,10 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'logs reports the runtime-owned unavailable app-log facts',
       'the web runtime fact rejects native app-log commands',
     ),
-    linux: linux.gap('No Linux-specific app-log command evidence exists yet'),
+    linux: linux.accepted(
+      'No Linux-specific app-log command evidence exists',
+      'The Linux runtime declares the whole app-log family unavailable (unsupported-platform-leaf) by owner decision: a Linux desktop session has no runtime-owned app log stream, so the command refuses at admission and no lane will observe a Linux app-log stream.',
+    ),
   },
   [C.events]: {
     androidEmulator: androidEmulator.live(
@@ -291,7 +310,10 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'full:observability-artifacts',
       'timeline contains commands from this session',
     ),
-    macos: macos.gap('No command-specific macOS event timeline evidence exists yet'),
+    macos: macos.accepted(
+      'No command-specific macOS event timeline evidence exists',
+      'The events timeline is daemon-owned session bookkeeping, pinned by request-router-events.test.ts for a daemon-backed web session, and no macOS lane invokes the command: neither the System Settings replay nor the desktop and recording provider scenarios carry an events step.',
+    ),
     tvos: tvos.gap('No tvOS-specific session-event command evidence exists yet'),
     web: web.contract(
       'packages/daemon/src/server/__tests__/request-router-events.test.ts',
@@ -388,8 +410,9 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     macos: macos.gap('No command-specific macOS test-suite evidence exists yet'),
     tvos: tvos.gap('No tvOS-specific test-suite command evidence exists yet'),
-    web: web.gap(
-      "Web test-suite execution has no executable web evidence: ReplayTestPlatform = Exclude<PlatformSelector, 'web'> structurally excludes web from the declared-platform filter, so `test --platform web` can never select a script (proven by a regression test in session-command-replay.test.ts) — that is evidence of what the command cannot do, not that it works on web",
+    web: web.accepted(
+      'No command-specific web test-suite evidence exists',
+      "ReplayTestPlatform = Exclude<PlatformSelector, 'web'> structurally excludes web from the declared-platform filter, so `test --platform web` can never select a script (proven by a regression test in session-command-replay.test.ts); there is no successful web test-suite execution for any lane to observe, and adding web replay-test support is a product decision, not scheduled work.",
     ),
     linux: linux.commandEvidenceLive(
       'the command-evidence lane runs a dedicated Linux script as a test suite',
@@ -474,7 +497,10 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'install and reinstall share the runtime-owned unavailable deploy fact',
       'the web runtime fact rejects native app installation',
     ),
-    linux: linux.gap('No Linux-specific application installation command evidence exists yet'),
+    linux: linux.accepted(
+      'No Linux-specific application installation command evidence exists',
+      'The Linux owner declares the app-deployment family unavailable (unsupported-platform-leaf): a Linux desktop app is launched by name through the desktop interactor and there is no installable package model, so the command refuses at admission and no lane will observe a Linux install.',
+    ),
   },
   [C.reinstall]: {
     androidEmulator: androidEmulator.contract(
@@ -500,7 +526,40 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'install and reinstall share the runtime-owned unavailable deploy fact',
       'the web runtime fact rejects native app reinstallation',
     ),
-    linux: linux.gap('No Linux-specific application reinstallation command evidence exists yet'),
+    linux: linux.accepted(
+      'No Linux-specific application reinstallation command evidence exists',
+      'Reinstall reuses the app-deployment family the Linux runtime declares unavailable (unsupported-platform-leaf): there is no installable package model for the desktop interactor to reinstall, so the command refuses at admission and no lane will observe a Linux reinstall.',
+    ),
+  },
+  [C.uninstall]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_UNINSTALL_CONTRACT_EVIDENCE,
+      'scripted ADB scenario removes an installed package and skips adb for a missing one',
+    ),
+    iosSimulator: iosSimulator.contract(
+      'packages/platform-apple/src/deployment/runtime.test.ts',
+      'uninstall on the %s removes an installed bundle and skips a missing one',
+      'simctl uninstall dispatch through the shared Apple deployment operations',
+    ),
+    macos: macos.contract(
+      'packages/platform-apple/src/deployment/runtime.test.ts',
+      'classifies deployment facts for the %s denominator cell',
+      'Apple deployment facts close application uninstall on the macOS host',
+    ),
+    tvos: tvos.contract(
+      'packages/platform-apple/src/deployment/runtime.test.ts',
+      'classifies deployment facts for the %s denominator cell',
+      'shared Apple deployment facts admit app uninstall on tvOS simulators',
+    ),
+    web: web.contract(
+      'packages/platform-web/src/runtime.test.ts',
+      'uninstall reports the runtime-owned unavailable uninstall fact',
+      'the web runtime fact rejects native app uninstall',
+    ),
+    linux: linux.accepted(
+      'No Linux-specific application uninstall command evidence exists',
+      'Uninstall belongs to the app-deployment family the Linux runtime declares unavailable (unsupported-platform-leaf): a Linux desktop app is launched by name and there is no installed package model to remove, so the command refuses at admission and no lane will observe a Linux uninstall.',
+    ),
   },
   [C.push]: {
     androidEmulator: androidEmulator.live(
@@ -527,7 +586,10 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'push reports the runtime-owned unavailable readiness and push facts',
       'the web runtime fact rejects native push notification delivery',
     ),
-    linux: linux.gap('No Linux-specific push delivery command evidence exists yet'),
+    linux: linux.accepted(
+      'No Linux-specific push delivery command evidence exists',
+      'The Linux runtime declares push delivery unavailable (unsupported-platform-leaf): the desktop interactor has no OS push channel to deliver through, so the command refuses at admission and no lane will observe a Linux push delivery.',
+    ),
   },
   [C.triggerAppEvent]: {
     androidEmulator: androidEmulator.contract(
@@ -539,7 +601,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'custom-scheme event name and JSON payload render in the fixture',
     ),
     macos: macos.contract(
-      'src/__tests__/daemon-composition/app-event-delivery.test.ts',
+      'packages/daemon/src/execution/app-events.test.ts',
       'trigger-app-event supports macOS and prefers macOS template',
       'macOS app-event dispatch selects the macOS URL template',
     ),
@@ -632,9 +694,9 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'session inventory proves the app lease is removed',
     ),
     macos: macos.contract(
-      'src/__tests__/daemon-composition/handlers/session-relaunch-close.test.ts',
-      'close on macOS session stops runner and dismisses automation alert before delete',
-      'macOS close stops the runner, dismisses automation state, and deletes the session',
+      'packages/platform-apple/src/lifecycle-relaunch-close.test.ts',
+      'close finalization releases the runner before it dismisses close alerts',
+      'macOS close stops the runner and then dismisses automation state; the daemon close tests own the session deletion',
     ),
     tvos: tvos.contract(
       TVOS_REMOTE_EVIDENCE.path,
@@ -763,7 +825,10 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'full:observability-artifacts',
       'Release fixture returns typed detected=false and dismissed=false overlay state',
     ),
-    macos: macos.gap('No command-specific macOS React Native inspection evidence exists yet'),
+    macos: macos.accepted(
+      'No command-specific macOS React Native inspection evidence exists',
+      "react-native dismiss-overlay only answers meaningfully on a surface that carries a React Native overlay, the repository's React Native overlay evidence runs on iOS simulators and Android emulators, and no macOS lane invokes the command: neither the System Settings replay nor the desktop and recording provider scenarios carry a react-native step.",
+    ),
     tvos: tvos.gap('No tvOS-specific React Native inspection command evidence exists yet'),
     // R61: no owner fact refuses this command on a browser — its whole device work is one bound
     // `tapPoint` the web target admits — so it now runs and reports that no overlay is present.
@@ -800,7 +865,10 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'start web recording',
       'web recording starts and stops through the scoped provider',
     ),
-    linux: linux.gap('No Linux-specific recording command evidence exists yet'),
+    linux: linux.accepted(
+      'No Linux-specific recording command evidence exists',
+      'The Linux runtime declares the screen-recording family unavailable (unsupported-platform-leaf): there is no Linux capture pipeline, so the command refuses at admission and no lane will produce a playable Linux recording.',
+    ),
   },
   [C.trace]: {
     androidEmulator: androidEmulator.live(
@@ -811,14 +879,20 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'full:observability-artifacts',
       'typed start/stop lifecycle retains the requested path and captures non-empty diagnostics',
     ),
-    macos: macos.gap('No command-specific macOS trace evidence exists yet'),
+    macos: macos.accepted(
+      'No command-specific macOS trace evidence exists',
+      'trace never binds a device runtime: handleTraceCommand carries no bindDevice or inspectFacts call, its start/stop bookkeeping is pinned by the daemon trace-runtime tests, and no macOS lane invokes the command: neither the System Settings replay nor the desktop and recording provider scenarios carry a trace step.',
+    ),
     tvos: tvos.gap('No tvOS-specific trace command evidence exists yet'),
     web: web.contract(
       'packages/daemon/src/sessions/handlers/__tests__/trace-runtime.test.ts',
       'starts and stops one trace through the session-owned trace slot on a web session',
       'session-scoped trace start/stop bookkeeping works the same for a web session as any other platform',
     ),
-    linux: linux.gap('No Linux-specific trace command evidence exists yet'),
+    linux: linux.accepted(
+      'No Linux-specific trace command evidence exists',
+      'trace never binds a device runtime: handleTraceCommand carries no bindDevice or inspectFacts call and its start/stop bookkeeping is pinned by the daemon trace-runtime tests, and no Linux lane invokes the command: neither the replay script nor the command-evidence lane carries a trace step.',
+    ),
   },
   [C.find]: {
     androidEmulator: androidEmulator.live(
@@ -1052,12 +1126,12 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'fixture gesture counters prove pan/fling/pinch/rotate',
     ),
     macos: macos.contract(
-      'packages/platform-apple/src/core/__tests__/interactions.test.ts',
+      'packages/platform-apple/src/interactions.test.ts',
       'performGestureApple composes macOS one-contact plans with the drag executor',
       'macOS gesture dispatch preserves the one-contact drag plan',
     ),
     tvos: tvos.contract(
-      'src/__tests__/daemon-composition/gesture-admission-parity.test.ts',
+      'src/platform-runtime-gateway-gesture-admission.test.ts',
       'TV, spatial, watch, desktop, Linux, and web gesture policy stays explicit',
       'the typed Apple gesture policy refuses tvOS multi-touch while preserving the narrower gesture contract',
     ),
@@ -1224,7 +1298,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     macos: macos.gap('No command-specific macOS focus evidence exists yet'),
     tvos: tvos.gap('No tvOS-specific focus command evidence exists yet'),
     web: web.contract(
-      'src/core/__tests__/web-interactor.test.ts',
+      'packages/platform-web/src/interactor.test.ts',
       'web interactor delegates first-slice operations to the scoped provider',
       'web focus delegates to the scoped provider click primitive',
     ),
@@ -1361,6 +1435,37 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'the exact-owner runtime fact refuses a hinge pose on the Linux desktop',
     ),
   },
+  [C.telephony]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_TELEPHONY_RUNTIME_CONTRACT_EVIDENCE,
+      'the Android emulator advertises the console telephony event and binds it; a physical device is refused by the fact',
+    ),
+    iosSimulator: iosSimulator.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'refuses the telephony fact for the %s leaf',
+      'the exact-owner runtime fact refuses a simulated call or SMS on the iOS simulator leaf',
+    ),
+    macos: macos.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'refuses the telephony fact for the %s leaf',
+      'the exact-owner runtime fact refuses a simulated call or SMS on the macOS host leaf',
+    ),
+    tvos: tvos.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'refuses the telephony fact for the %s leaf',
+      'the exact-owner runtime fact refuses a simulated call or SMS on the tvOS leaf',
+    ),
+    web: web.contract(
+      'packages/platform-web/src/runtime.test.ts',
+      'clipboard, the app switcher, app events, settings and alerts carry no web bucket',
+      'the exact-owner runtime fact refuses a simulated call or SMS on the web target',
+    ),
+    linux: linux.contract(
+      LINUX_RUNTIME_EVIDENCE.path,
+      LINUX_RUNTIME_EVIDENCE.test,
+      'the exact-owner runtime fact refuses a simulated call or SMS on the Linux desktop',
+    ),
+  },
   [C.installFromSource]: {
     androidEmulator: androidEmulator.contract(
       ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE,
@@ -1386,7 +1491,10 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'install-from-source reports the runtime-owned unavailable materialize and deploy facts',
       'the web runtime fact rejects source-based app installation',
     ),
-    linux: linux.gap('No Linux-specific source-install command evidence exists yet'),
+    linux: linux.accepted(
+      'No Linux-specific source-install command evidence exists',
+      'Source installation runs through the app-deployment family the Linux runtime declares unavailable (unsupported-platform-leaf): the desktop has no materialized-app install route to source from, so the command refuses at admission and no lane will observe a Linux source install.',
+    ),
   },
 } satisfies Record<PublicCommand, CommandCoverageDeclaration>;
 

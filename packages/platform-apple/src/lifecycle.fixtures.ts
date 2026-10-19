@@ -152,6 +152,10 @@ export function launchUrlSimulator(
       events.push('alert get');
       return await readAlert();
     }),
+    awaitAlert: vi.fn(async () => {
+      events.push('alert wait');
+      return await readAlert();
+    }),
     acceptAlert: vi.fn(async () => {
       events.push('alert accept');
       return await (legs.acceptAlert ?? (async () => ({})))();

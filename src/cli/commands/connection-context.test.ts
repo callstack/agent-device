@@ -2,11 +2,11 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,
-} from '../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { resolveConnectContext } from './connection-context.ts';
 
 test('unscoped connect contexts never adopt the ambient connection', () => {

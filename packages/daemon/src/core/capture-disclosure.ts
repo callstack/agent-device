@@ -1,9 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { systemSurfaceDisclosure } from '@agent-device/contracts/android-system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
-import type { DaemonResponse } from './daemon-request.ts';
 
 /** The capture provenance a response must be disclosed against (#2438, #2682, gesture outcomes). */
 export type CaptureProvenance = Pick<

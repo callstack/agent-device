@@ -84,13 +84,19 @@ int main(int argc, const char *argv[]) {
 
 @interface AgentDeviceRunnerViewController : UIViewController
 @property(nonatomic, strong) UILabel *maskedToggleStatus;
+@property(nonatomic, strong) UILabel *maskedDeliveryStatus;
 @property(nonatomic, assign) NSUInteger maskedTogglePresses;
 @property(nonatomic, strong) UILabel *alertActionStatus;
 @property(nonatomic, strong) UILabel *alertActivationBusyAnswer;
+@property(nonatomic, strong) UILabel *alertDeclineAnswer;
 @property(nonatomic, assign) NSUInteger firstAlertActions;
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, strong) UILabel *textEntryWriteBackStatus;
 @property(nonatomic, strong) UILabel *textEntryDigitSlots;
+// Counts presses a gesture landed on a control that is not a text input, so a test can tell a
+// refusal that ran nothing from one that dispatched its gesture first and refused afterwards.
+@property(nonatomic, strong) UILabel *tapWitnessStatus;
+@property(nonatomic, assign) NSUInteger tapWitnessPresses;
 // Filled from the fixture field's own delegate callbacks so a test can tell that a gesture really
 // took focus from an input that has stopped answering the accessibility query that found it.
 @property(nonatomic, strong) UILabel *textEntryFocusWitness;
@@ -388,8 +394,39 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   [self presentViewController:alert animated:NO completion:nil];
 }
 
+// Mirrors the App Tracking Transparency prompt's real button order: the affirmative button is
+// last (#3627). The answer label records which button the app actually took, so a test asserts
+// the app's answer instead of the command's own report. `--agent-device-alert-affirmative-only`
+// shows the same alert with no decline button at all.
+- (void)presentAlertDeclineChoiceFixture {
+  BOOL affirmativeOnly =
+      [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"];
+  UIAlertController *alert = [UIAlertController
+    alertControllerWithTitle:@"“Runner” Would Like to Track Your Activity"
+                     message:@"Track your activity across other companies' apps and websites."
+              preferredStyle:UIAlertControllerStyleAlert];
+  NSArray<NSArray *> *buttons = affirmativeOnly
+      ? @[ @[@"Allow", @"Authorized"], @[@"OK", @"Authorized"] ]
+      : @[ @[@"Ask App Not to Track", @"Declined"], @[@"Allow", @"Authorized"] ];
+  for (NSArray *button in buttons) {
+    [alert addAction:[UIAlertAction actionWithTitle:button[0]
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+                                              (void)action;
+                                              self.alertDeclineAnswer.text = button[1];
+                                            }]];
+  }
+  [self presentViewController:alert animated:NO completion:nil];
+}
+
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
+  if (!self.alertFixtureStarted &&
+      ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"] ||
+       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"])) {
+    self.alertFixtureStarted = YES;
+    [self presentAlertDeclineChoiceFixture];
+  }
   if (!self.alertFixtureStarted &&
       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-replacement-regression"]) {
     self.alertFixtureStarted = YES;
@@ -430,6 +467,9 @@ static const CGFloat AgentDeviceTextEntryFieldHeight = 44;
 static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
+  if (self.maskedDeliveryStatus != nil) {
+    self.maskedDeliveryStatus.text = [textField.text hasSuffix:@"not-a-secret-123"] ? @"delivered" : @"pending";
+  }
   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
   // typed faster than the app renders loses the characters that arrived while a render was in
   // flight, and the field settles stable short of the request.
@@ -529,6 +569,17 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   [self updateMaskedToggleStatus];
 }
 
+- (void)agentDeviceTapWitnessDidPress:(UIButton *)sender {
+  (void)sender;
+  self.tapWitnessPresses += 1;
+  [self updateTapWitnessStatus];
+}
+
+- (void)updateTapWitnessStatus {
+  self.tapWitnessStatus.text =
+      [NSString stringWithFormat:@"presses=%lu", (unsigned long)self.tapWitnessPresses];
+}
+
 - (void)updateMaskedToggleStatus {
   self.maskedToggleStatus.text =
       [NSString stringWithFormat:@"presses=%lu", (unsigned long)self.maskedTogglePresses];
@@ -558,6 +609,20 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     self.alertActionStatus = label;
     label.accessibilityIdentifier = @"agent-device-alert-actions";
     [self updateAlertActionStatus];
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"] ||
+      [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"]) {
+    UILabel *declineAnswer = [[UILabel alloc] init];
+    declineAnswer.text = @"Unanswered";
+    declineAnswer.accessibilityIdentifier = @"agent-device-alert-decline-answer";
+    declineAnswer.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:declineAnswer];
+    [NSLayoutConstraint activateConstraints:@[
+      [declineAnswer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [declineAnswer.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+    ]];
+    self.alertDeclineAnswer = declineAnswer;
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-activation-busy"]) {
@@ -660,6 +725,32 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         ((AgentDeviceSubmitClearingTextField *)textField).entryStatus = entryStatus;
       }
     }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-tap-witness"]) {
+      // A control that is not a text input, sitting below the field. Its press count is the only
+      // witness a test has that a coordinate gesture reached this screen: a refusal that dispatched
+      // its focus tap here would move the counter, and one that refused first would not.
+      UIButton *witness = [UIButton buttonWithType:UIButtonTypeSystem];
+      witness.accessibilityIdentifier = @"agent-device-tap-witness";
+      [witness setTitle:@"Tap witness" forState:UIControlStateNormal];
+      witness.translatesAutoresizingMaskIntoConstraints = NO;
+      [witness addTarget:self
+                  action:@selector(agentDeviceTapWitnessDidPress:)
+        forControlEvents:UIControlEventTouchUpInside];
+      [self.view addSubview:witness];
+      self.tapWitnessStatus = [[UILabel alloc] init];
+      self.tapWitnessStatus.accessibilityIdentifier = @"agent-device-tap-witness-presses";
+      self.tapWitnessStatus.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.tapWitnessStatus];
+      [NSLayoutConstraint activateConstraints:@[
+        [witness.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [witness.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:24],
+        [witness.widthAnchor constraintEqualToConstant:200],
+        [witness.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+        [self.tapWitnessStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.tapWitnessStatus.topAnchor constraintEqualToAnchor:witness.bottomAnchor constant:12],
+      ]];
+      [self updateTapWitnessStatus];
+    }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unqueryable-on-focus"]) {
       self.textEntryFocusWitness = [[UILabel alloc] init];
       self.textEntryFocusWitness.accessibilityIdentifier = @"agent-device-text-entry-focus";
@@ -722,6 +813,15 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [self.maskedToggleStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.maskedToggleStatus.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
       ]];
+      self.maskedDeliveryStatus = [[UILabel alloc] init];
+      self.maskedDeliveryStatus.accessibilityIdentifier = @"agent-device-masked-delivery";
+      self.maskedDeliveryStatus.text = @"pending";
+      self.maskedDeliveryStatus.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.maskedDeliveryStatus];
+      [NSLayoutConstraint activateConstraints:@[
+        [self.maskedDeliveryStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.maskedDeliveryStatus.topAnchor constraintEqualToAnchor:self.maskedToggleStatus.bottomAnchor constant:8],
+      ]];
       [self updateMaskedToggleStatus];
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
@@ -752,6 +852,21 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     }
   }
 
+  // The shape a SpringBoard confirmation root carries on an older iOS: the window's own title
+  // text plus host chrome whose accessibility label is not copy (the Home Screen page readout),
+  // placed first so a walk over every descendant reads it before the title.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-title-page-chrome"]) {
+    label.isAccessibilityElement = NO;
+    UIView *pageChrome = [[UIView alloc] initWithFrame:CGRectMake(140, 300, 100, 20)];
+    pageChrome.isAccessibilityElement = YES;
+    pageChrome.accessibilityLabel = @"0 pages";
+    [self.view addSubview:pageChrome];
+    UILabel *popupTitle = [[UILabel alloc] initWithFrame:CGRectMake(80, 340, 240, 24)];
+    popupTitle.text = @"Relaunch to continue";
+    popupTitle.accessibilityIdentifier = @"agent-device-alert-title";
+    [self.view addSubview:popupTitle];
+  }
+
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-crowded-screen"]) {
     for (NSUInteger row = 0; row < 500; row++) {
       UILabel *rowLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 60 + (row % 30) * 24, 400, 16)];
@@ -759,6 +874,31 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       rowLabel.accessibilityIdentifier = [NSString stringWithFormat:@"agent-device-crowded-row-%lu", (unsigned long)row];
       [self.view addSubview:rowLabel];
     }
+  }
+
+  // Overlapping sibling buttons must not become children of an ordinary slider.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-wide-slider"]) {
+    UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(20, 20, 360, 31)];
+    slider.accessibilityLabel = @"Volume";
+    [self.view addSubview:slider];
+    NSArray<NSString *> *titles = @[ @"Left", @"Right" ];
+    for (NSUInteger i = 0; i < titles.count; i++) {
+      UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+      [button setTitle:titles[i] forState:UIControlStateNormal];
+      button.frame = CGRectMake(30 + i * 170, 20, 100, 30);
+      [self.view addSubview:button];
+    }
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-collapsed-tab-bar"]) {
+    UITabBar *tabBar = [[UITabBar alloc] initWithFrame:CGRectMake(20, 20, 360, 60)];
+    tabBar.items = @[
+      [[UITabBarItem alloc] initWithTitle:@"First tab" image:nil tag:0],
+      [[UITabBarItem alloc] initWithTitle:@"Second tab" image:nil tag:1],
+    ];
+    tabBar.isAccessibilityElement = YES;
+    tabBar.accessibilityLabel = @"Collapsed tabs";
+    [self.view addSubview:tabBar];
   }
 
   BOOL markedButton = [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup"];

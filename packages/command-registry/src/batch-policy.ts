@@ -5,8 +5,8 @@ import { AppError } from '@agent-device/kernel/errors';
 /**
  * The exact set of command names exposed through `batch`, as a narrow union.
  *
- * DERIVED from the command-descriptor registry (ADR-0008, Phase 1 step 7): the
- * registry is now `as const` (#910), so each entry keeps its literal `name` and
+ * DERIVED from the command-descriptor registry (ADR 0008, "One declaration
+ * site"): the registry is now `as const` (#910), so each entry keeps its literal `name` and
  * literal `batchable`. Extracting the entries whose `batchable` is `true` and
  * indexing their `name` reconstructs this union from the same single source the
  * runtime allowlist below is built from — no hand-maintained list to drift. The

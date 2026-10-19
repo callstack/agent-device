@@ -1,6 +1,7 @@
 import type { AppleScreenRecordingRunnerRequest } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { ManagedProcessOwnership } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 
 export async function runAppleRecordingRunner(
   device: DeviceInfo,
@@ -56,13 +57,14 @@ export async function retrieveAppleRunnerRecording(
   device: DeviceInfo,
   remotePath: string,
   outputPath: string,
+  env: Readonly<EnvMap>,
   signal?: AbortSignal,
 ): Promise<void> {
   signal?.throwIfAborted();
   const { resolveIosPhysicalDeviceControl } =
     await import('@agent-device/platform-apple/physical-device');
   const control = resolveIosPhysicalDeviceControl(device);
-  await control.copyRunnerFile(device, remotePath, outputPath);
+  await control.copyRunnerFile(device, remotePath, outputPath, env);
   signal?.throwIfAborted();
 }
 
@@ -105,7 +107,10 @@ export async function captureAppleClockAnchor(
   }
 }
 
-export async function isAppleRunnerBundleId(bundleId: string): Promise<boolean> {
-  const { IOS_RUNNER_CONTAINER_BUNDLE_IDS } = await import('@agent-device/platform-apple/runner');
-  return IOS_RUNNER_CONTAINER_BUNDLE_IDS.includes(bundleId);
+export async function isAppleRunnerBundleId(
+  bundleId: string,
+  env: Readonly<Record<string, string | undefined>>,
+): Promise<boolean> {
+  const { resolveRunnerContainerBundleIds } = await import('@agent-device/platform-apple/runner');
+  return resolveRunnerContainerBundleIds(env).includes(bundleId);
 }

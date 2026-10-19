@@ -9,6 +9,7 @@ import {
   decodePngAsync,
   decodeScreenshotImageAsync,
   encodePngAsync,
+  retainPngWorker,
   terminatePngWorker,
   transcodeScreenshotToPngAsync,
 } from './png-worker-client.ts';
@@ -224,4 +225,20 @@ test('decodeScreenshotImageAsync rejects a container it cannot read with the can
       return true;
     },
   );
+});
+
+test('the worker serves every holder and stops only when the last one lets go', async () => {
+  const first = retainPngWorker(() => {});
+  const second = retainPngWorker(() => {});
+  const encoded = PNG.sync.write(buildPatternPng(5, 4, 2));
+
+  await first();
+  await first();
+  const stillServing = await runOnWorkerThread('decode after one release', () =>
+    decodePngAsync(encoded, 'fixture'),
+  );
+  assert.equal(stillServing.width, 5);
+
+  await second();
+  assert.equal(process.getActiveResourcesInfo().includes('MessagePort'), false);
 });

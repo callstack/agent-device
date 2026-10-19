@@ -1,8 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,

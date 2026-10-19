@@ -12,11 +12,11 @@ import {
   hoistReplayFailureCauseDiagnosticMeta,
 } from '@agent-device/replay-port/session-replay-runtime-failure-response';
 import { getRequestSignal } from '@agent-device/host-kit/request';
+import type { ReplayResumeStamper } from '@agent-device/replay-port/command-types';
 import type {
-  ReplayResumeStamper,
   ReplaySessionObservation,
   ReplaySessionStore,
-} from '@agent-device/replay-port/command-types';
+} from '@agent-device/contracts/replay-backend';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export async function withReplayFailureDiagnostics(params: {

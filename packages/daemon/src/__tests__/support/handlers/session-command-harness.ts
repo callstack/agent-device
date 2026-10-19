@@ -8,6 +8,8 @@ import type {
   MaterializedAppSource,
   PushNotificationInput,
   PushNotificationResult,
+  AppUninstallInput,
+  AppUninstallResult,
 } from '@agent-device/contracts/app-deployment-runtime';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
@@ -26,8 +28,8 @@ import {
   applicationLifecycleRuntimeFixture,
   type LifecycleOperationsLoader,
 } from '../application-lifecycle-runtime-fixture.ts';
-import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
+import { withClientReplayScriptSources } from '../replay-script-source-fixture.ts';
+import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../platform-resource-cleanup-fixture.ts';
 
 const unavailable = Object.freeze({
@@ -66,6 +68,9 @@ export const mockDeployMaterializedAppRuntime = vi.fn(
 export const mockPushNotificationRuntime = vi.fn(
   async (_input: PushNotificationInput): Promise<PushNotificationResult> => ({}),
 );
+export const mockUninstallAppRuntime = vi.fn(
+  async (_input: AppUninstallInput): Promise<AppUninstallResult> => ({ wasInstalled: false }),
+);
 export const mockBindDeviceRuntime = vi.fn(
   async (
     device: DeviceInfo,
@@ -96,6 +101,8 @@ beforeEach(() => {
   mockDeployMaterializedAppRuntime.mockResolvedValue({});
   mockPushNotificationRuntime.mockReset();
   mockPushNotificationRuntime.mockResolvedValue({});
+  mockUninstallAppRuntime.mockReset();
+  mockUninstallAppRuntime.mockResolvedValue({ wasInstalled: false });
   mockBindDeviceRuntime.mockClear();
 });
 
@@ -157,6 +164,7 @@ function readinessFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperati
       materializeAppSource: operationAvailability(deployment.source),
       deployMaterializedApp: operationAvailability(deployment.source),
       sendPushNotification: operationAvailability(deployment.push),
+      uninstallApp: operationAvailability(deployment.uninstall),
       appState: operationAvailability(device.platform === 'android'),
       ensureReady: operationAvailability(device.appleOs !== 'watchos'),
       bootTarget: operationAvailability(normalAvailable),
@@ -247,6 +255,11 @@ async function readinessBinding(
             sendPushNotification: async (input) => await mockPushNotificationRuntime(input),
           }
         : {}),
+      ...(facts.operations.uninstallApp.available
+        ? {
+            uninstallApp: async (input) => await mockUninstallAppRuntime(input),
+          }
+        : {}),
       ...lifecycle,
     },
     [Symbol.asyncDispose]: async () => {},
@@ -267,6 +280,11 @@ function deploymentAvailability(device: DeviceInfo) {
     source: deploy && (device.platform === 'apple' || device.platform === 'android'),
     push:
       device.platform === 'android' || (device.platform === 'apple' && device.kind === 'simulator'),
+    uninstall:
+      deploy &&
+      ((device.platform === 'apple' && (device.kind === 'simulator' || device.kind === 'device')) ||
+        (device.platform === 'android' &&
+          (device.kind === 'emulator' || device.kind === 'device'))),
   };
 }
 

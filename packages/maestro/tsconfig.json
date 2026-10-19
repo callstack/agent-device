@@ -11,6 +11,7 @@
   },
   "include": ["src"],
   "references": [
+    { "path": "../ad-script" },
     { "path": "../capture-kit" },
     { "path": "../contracts" },
     { "path": "../host-kit" },

@@ -1,3 +1,4 @@
+import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import {
   copySnapshotClickabilityEvidence,
   snapshotCaptureAnnotationsFrom,
@@ -29,7 +30,7 @@ import {
   resolveBoundSnapshotCaptureRuntime,
   type SnapshotRuntimeRouteParams,
 } from '../core/snapshot-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 
 export type SnapshotRuntimeRecord =

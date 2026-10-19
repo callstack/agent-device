@@ -296,7 +296,7 @@ async function sendRunnerCommandAfterPreflight(params: {
   // nobody is waiting for any more. A readiness probe is charged no more than the preflight's own
   // probe is: the runner serves it inline, so its reply says nothing about the queued work a charge
   // stands for, and charging it would let one probe settle another command's debt (#2965). The trait
-  // that names the probe is pinned to the runner's inline routing by `runner-readiness-routing.test.ts`.
+  // that names the probe is pinned to the runner's inline routing by `runner-command-traits-readiness-routing.test.ts`.
   const charged = !isRunnerReadinessProbeCommand(runnerCommand);
   if (charged) session.commandCharges.charge(runnerCommand.commandId);
   try {

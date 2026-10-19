@@ -6,6 +6,7 @@ import {
   type RecordingContactSheetResult,
 } from '@agent-device/capture-kit/recording-contact-sheet';
 import { AppError } from '@agent-device/kernel/errors';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   ArtifactDescriptor,
   FileInputRef,
@@ -17,6 +18,8 @@ import type { RuntimeCommand } from '../../runtime-types.ts';
 import { reserveCommandOutput, resolveCommandInput } from '../../io-policy.ts';
 
 export type RecordingContactSheetCommandOptions = CommandContext & {
+  /** The caller's host; the ffmpeg probe and sheet draw spawn through it. */
+  host: HostEnvironment;
   /** The exported recording to read. A file the caller already holds, not a live capture. */
   video: FileInputRef;
   out?: FileOutputRef;
@@ -59,6 +62,7 @@ export const contactSheetCommand: RuntimeCommand<
       artifactType: 'screen-recording-contact-sheet',
     });
     const sheet = await buildRecordingContactSheet({
+      host: options.host,
       videoPath: video.path,
       outputPath: output.path,
       maxPixels: runtime.policy.maxImagePixels,

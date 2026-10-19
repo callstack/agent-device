@@ -1,10 +1,10 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import {
   isApplePlatform,
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 
 /** The per-command status field a device-status report carries beside the device identity. */
 export type DeviceStatusReport = Readonly<{ booted: true } | { shutdown: TargetShutdownResult }>;

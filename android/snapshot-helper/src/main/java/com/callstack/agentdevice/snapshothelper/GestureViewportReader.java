@@ -6,7 +6,6 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 
 /**
  * Resolves the active application window bounds used to validate planned gestures, plus the input
@@ -58,19 +57,14 @@ final class GestureViewportReader {
   }
 
   @SuppressWarnings("deprecation")
-  static Reading readReading(UiAutomation automation) {
-    try {
-      automation.waitForIdle(100, 2_000);
-    } catch (TimeoutException ignored) {
-      // Window/root state can still be usable when the app is animating continuously.
-    }
+  static Reading readReading(UiAutomation automation) throws InterruptedException {
     // UiAutomation.getWindows() transfers recyclable AccessibilityWindowInfo instances, and this
     // read runs repeatedly inside the persistent helper session: copy the bounds the precedence
     // below needs, then recycle every window before resolving.
     // UiAutomation.getWindows() answers with an empty list until interactive retrieval is on, which
     // is the same seam the tree capture already uses. Without it this read sees no windows at all and
     // the keyboard below is invisible to it.
-    AccessibilityTreeCapture.enableInteractiveWindowRetrieval(automation);
+    AccessibilityTreeCapture.prepare(automation);
     Rect activeBounds = null;
     Rect fallbackBounds = null;
     List<WindowEdges> inputMethodWindows = new ArrayList<>();
@@ -136,10 +130,6 @@ final class GestureViewportReader {
           Math.max(struck.bottom, bounds.bottom));
     }
     return struck;
-  }
-
-  static Rect read(UiAutomation automation) {
-    return readReading(automation).application;
   }
 
   private static Rect resolveApplication(

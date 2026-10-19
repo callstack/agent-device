@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { defineRuntimeSlots } from '@agent-device/host-kit/runtime-slots';
 import type { AndroidHelperInstallDecision, AndroidImeHelperArtifact } from './helper-artifacts.ts';
 import type {
   AndroidAdbInvocation,
@@ -114,6 +115,19 @@ const androidAdbHostTransportScope = new AsyncLocalStorage<AndroidAdbHostTranspo
 export function bindAndroidAdbHost(host: AndroidAdbHost): void {
   boundHost = host;
 }
+
+/**
+ * What one daemon runtime owns of the Android helper: warm sessions, failed starts, pending
+ * retirements and shell-protocol probes, which the helper modules keep in {@link helperRuntimeSlot}s.
+ * A close tears down only the runtime that closes; the helper itself is stopped by the close-time
+ * reset, which reads the same slots.
+ */
+const helperRuntime = defineRuntimeSlots();
+
+export const createAndroidHelperRuntimeState = helperRuntime.createHandle;
+
+/** One piece of helper state this daemon runtime owns, created on first use. */
+export const helperRuntimeSlot = helperRuntime.slot;
 
 export function requireAndroidAdbHost(): AndroidAdbHost {
   if (!boundHost) {

@@ -6,6 +6,7 @@ import { readSnapshotSourceToolchain } from './cache-identity.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
 import { SnapshotSourceError } from './errors.ts';
 import type { SnapshotSourceHost } from './types.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 // The retry, deadline, and cancellation behavior this composes lives with the shared identity read
 // it delegates to: see `native-build/toolchain-identity.test.ts`. These cases cover only what this
@@ -15,7 +16,7 @@ function fakeToolchainHost(
   run: (command: string, args: string[], options: ExecOptions) => ExecResult,
   cpuArch = 'arm64',
 ): SnapshotSourceHost {
-  const real = createSnapshotSourceHost();
+  const real = createSnapshotSourceHost(createLiveTestHostEnvironment());
   return {
     ...real,
     cpuArch: async () => cpuArch,

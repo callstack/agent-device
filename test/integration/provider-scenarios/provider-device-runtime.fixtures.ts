@@ -1,3 +1,4 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import type {
   DeviceInventoryProvider,
@@ -44,8 +45,7 @@ import type {
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
 import { deviceShape, hasAppleActionButton, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createProviderScenarioHarness } from './harness.ts';
@@ -273,6 +273,8 @@ function providerScenarioRuntimeFacts(
       // A provider session has no host simulator for the fold HID helper, so no fixture leg poses
       // a hinge.
       setFoldPose: fakeProviderUnavailable,
+      // A provider device exposes no emulator console on the daemon host.
+      sendTelephonyEvent: fakeProviderUnavailable,
       // Provider-owned iOS keyboard actions ride the same runner transport the shared interactor
       // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
       ...keyboardRuntimeOperationFacts({
@@ -483,7 +485,7 @@ function createFakeProviderInteractor(device: DeviceInfo, calls: FakeProviderCal
   ) as Interactor;
 }
 
-export function leaseFlags(leaseId?: string): DaemonRequest['flags'] {
+export function leaseFlags(leaseId?: string): DaemonWireRequest['flags'] {
   return {
     platform: 'android',
     tenant: 'team-a',
@@ -493,7 +495,7 @@ export function leaseFlags(leaseId?: string): DaemonRequest['flags'] {
   };
 }
 
-export function leaseMeta(leaseId?: string): DaemonRequest['meta'] {
+export function leaseMeta(leaseId?: string): DaemonWireRequest['meta'] {
   return {
     tenantId: 'team-a',
     runId: 'run-a',
@@ -505,11 +507,11 @@ export function leaseMeta(leaseId?: string): DaemonRequest['meta'] {
   };
 }
 
-export function iosLeaseFlags(leaseId?: string): DaemonRequest['flags'] {
+export function iosLeaseFlags(leaseId?: string): DaemonWireRequest['flags'] {
   return { ...leaseFlags(leaseId), platform: 'ios' };
 }
 
-export function iosLeaseMeta(leaseId?: string): DaemonRequest['meta'] {
+export function iosLeaseMeta(leaseId?: string): DaemonWireRequest['meta'] {
   return { ...leaseMeta(leaseId), leaseBackend: 'ios-instance', deviceKey: 'ios-a' };
 }
 

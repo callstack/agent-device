@@ -1,8 +1,10 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
@@ -10,6 +12,7 @@ import { resolveCommandDevice } from '../../../resources/session-device-resoluti
 import { expireRefFrame } from '../../../core/ref-frame.ts';
 import type { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { releaseSessionLease } from '../../lease-lifecycle.ts';
+import { recordEndedLease } from '../../../core/request-ended-leases.ts';
 import {
   hasRepairPlatformCloseReceipt,
   isRepairArmedSession,
@@ -18,7 +21,7 @@ import {
 import { isAuthoringArmedSession } from '../../../core/session-script-publication-capability.ts';
 import type { SessionCleanupFailure } from '../../session-teardown.ts';
 import { isWebSession } from '../../web-session-names.ts';
-import { clearDeviceClaim } from '../../../resources/device/device-claims.ts';
+import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import { hasRuntimeTransportHints } from '../../session-runtime.ts';
 import type {
@@ -41,6 +44,7 @@ import type { PlatformResourceCleanup } from '../../../core/platform-resource-cl
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type SessionCloseCommandInput = Readonly<{
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -116,12 +120,15 @@ async function prepareRepairClose(params: {
 }
 
 async function releaseProviderLeaseForClose(params: {
+  req: DaemonRequest;
   session: SessionState;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined;
 }): Promise<{ providerData?: Record<string, unknown>; response?: DaemonResponse }> {
   try {
-    return { providerData: await releaseSessionLease(params) };
+    const { endedLeaseId, providerData } = await releaseSessionLease(params);
+    if (endedLeaseId) recordEndedLease(params.req, endedLeaseId);
+    return { providerData };
   } catch (error) {
     const normalized = normalizeError(error);
     return {
@@ -152,6 +159,7 @@ async function dispatchTargetedPlatformClose(params: {
       outPath: req.flags?.out,
       appBundleId: session.appBundleId,
       surface: session.surface ?? 'app',
+      ...(req.internal?.killApp === true ? { mode: 'kill' as const } : {}),
       execution: applicationLifecycleExecutionFromRequest(req, logPath, session.trace?.outPath),
     });
     return undefined;
@@ -200,6 +208,7 @@ export async function handleSessionCloseCommands(
   if (!ref) {
     return await closeWithoutSession({
       req,
+      sessionName,
       logPath,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
@@ -252,6 +261,7 @@ export async function handleSessionCloseCommands(
   });
   if ('response' in repair) return repair.response;
   const closed = await runCloseTeardownAndRelease({
+    env: params.host.env,
     req,
     ref,
     logPath,
@@ -286,6 +296,7 @@ type SessionCloseFinalization =
 // once both are known) the device-claim clear and session delete. A failed
 // lease release keeps the session retryable instead (`{kind:'response'}`).
 async function runCloseTeardownAndRelease(params: {
+  env: HostEnvironment['env'];
   req: DaemonRequest;
   ref: SessionRef;
   logPath: string;
@@ -324,6 +335,7 @@ async function runCloseTeardownAndRelease(params: {
   });
   let session = sessionStore.requireCurrent(ref);
   const leaseRelease = await releaseProviderLeaseForClose({
+    req,
     session,
     leaseRegistry,
     leaseLifecycleProvider,
@@ -344,7 +356,7 @@ async function runCloseTeardownAndRelease(params: {
       });
     }
   } else {
-    await clearDeviceClaim(session.deviceClaim);
+    await clearDeviceClaim(session.deviceClaim, params.env);
   }
   sessionStore.retire(ref);
   if (deviceClaimBlockingError) throw deviceClaimBlockingError;
@@ -418,12 +430,16 @@ async function closeAppWithoutEndingSession(params: {
 
 async function closeWithoutSession(params: {
   req: DaemonRequest;
+  sessionName: string;
   logPath: string;
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { req, logPath, inspectFacts, bindDevice, platformServices } = params;
+  const { req, sessionName, logPath, inspectFacts, bindDevice, platformServices } = params;
+  const { requireNamedSessionHoldsDevice } =
+    await import('../../../core/explicit-session-resolution.ts');
+  requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session: undefined });
   if (!req.positionals || req.positionals.length === 0)
     return errorResponse('SESSION_NOT_FOUND', 'No active session');
   const device = await resolveCommandDevice({
@@ -444,6 +460,7 @@ async function closeWithoutSession(params: {
     outPath: req.flags?.out,
     surface: 'app',
     ensureReady: true,
+    ...(req.internal?.killApp === true ? { mode: 'kill' as const } : {}),
     execution: applicationLifecycleExecutionFromRequest(req, logPath),
   });
   return {

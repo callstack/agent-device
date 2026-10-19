@@ -17,8 +17,7 @@ import { mkdtempForTestSync } from './tmp-dir.ts';
 
 // The main-thread-occupancy half of the runner-session lifecycle: what the daemon records from a
 // runner's busy signals, and what `close` does with a runner that reported abandoned main-thread
-// work still draining (#2552). Split out of `runner-session.test.ts`, which already mirrors the
-// rest of `runner-session.ts` and is held at the test-file size tripwire.
+// work still draining (#2552).
 
 const {
   mockCleanupTempFile,

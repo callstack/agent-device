@@ -217,6 +217,8 @@ test('clipboard, the app switcher, app events, settings and alerts carry no web 
     // A foldable hinge is posed through the host's iOS simulator HID helper; the web target has
     // none.
     'setFoldPose',
+    // Telephony events go through an Android emulator console, which a browser has no analogue of.
+    'sendTelephonyEvent',
     'triggerAppEvent',
     // R58/R59: the retired `settings` and `alert` descriptors declared no web leaf either.
     'setSetting',
@@ -398,7 +400,11 @@ function host(
         markBooted: () => {},
         wasRecentlyObservedBooted: async () => false,
       },
-      androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
+      androidEmulator: {
+        discover: async () => [],
+        launch: async () => 1,
+        terminate: async () => {},
+      },
     },
     localInteractors: { resolve: async () => interactor },
     applicationResources: {
@@ -516,6 +522,19 @@ test('install and reinstall share the runtime-owned unavailable deploy fact', as
     reason: 'unsupported-platform-leaf',
   });
   expect(binding.operations.deployApp).toBeUndefined();
+});
+
+test('uninstall reports the runtime-owned unavailable uninstall fact', async () => {
+  const binding = await createWebPlatformRuntime(host({ mode: 'transport-composed' })).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: scope(),
+  });
+  expect(binding.facts.operations.uninstallApp).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+  expect(binding.operations.uninstallApp).toBeUndefined();
 });
 
 // #1900: `install-from-source` resolves to `readyMaterializeAndDeployAppUse`, requiring all three

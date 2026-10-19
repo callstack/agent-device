@@ -10,6 +10,7 @@ import type {
   MaestroExtendedWaitUntilCommand,
   MaestroHideKeyboardCommand,
   MaestroInputTextCommand,
+  MaestroKillAppCommand,
   MaestroLaunchAppCommand,
   MaestroLaunchArguments,
   MaestroOpenLinkCommand,
@@ -127,6 +128,7 @@ const COMMAND_VALUE_PARSERS: Readonly<Record<string, CommandValueParser>> = {
   back: parseBack,
   waitForAnimationToEnd: parseWaitForAnimationToEnd,
   stopApp: parseStopApp,
+  killApp: parseKillApp,
   setPermissions: parseSetPermissions,
   clearState: parseClearState,
   runScript: parseMaestroRunScriptCommand,
@@ -457,6 +459,16 @@ function parseStopApp(
   const source = sourceAt(commandNode, context);
   if (isNullNode(value)) return { kind: 'stopApp', source };
   return { kind: 'stopApp', source, appId: readRequiredString(value, 'stopApp', context) };
+}
+
+function parseKillApp(
+  value: Node | null,
+  commandNode: Node,
+  context: MaestroProgramParseContext,
+): MaestroKillAppCommand {
+  const source = sourceAt(commandNode, context);
+  if (isNullNode(value)) return { kind: 'killApp', source };
+  return { kind: 'killApp', source, appId: readRequiredString(value, 'killApp', context) };
 }
 
 function parseSetPermissions(

@@ -88,6 +88,11 @@ export type AppleRunnerHost = Pick<
   Pick<typeof AppleSimctl, 'buildSimctlArgsForDevice' | 'simulatorAddressFor'> &
   Pick<typeof ApplePlistXml, 'visitXmlPlistEntries'> & {
     /**
+     * The environment and working directory the runner reads its configuration from (derived-data
+     * overrides, lease directory, bundle ids, signing settings) and starts detached children with.
+     */
+    hostEnvironment: typeof HostCommand.commandHostEnvironment;
+    /**
      * The `Deadline` constructor is a class static, so the port carries the factory alone, typed
      * to the read side: a test host substitutes its own clock.
      */
@@ -97,6 +102,8 @@ export type AppleRunnerHost = Pick<
     resolveIosPhysicalDeviceControl: (device: DeviceInfo) => IosPhysicalDeviceRunnerControl;
     /** Daemon-owned lease owner state directory. */
     leaseOwnerStateDir: typeof AppleRunnerOwnerState.getRunnerLeaseOwnerStateDir;
+    /** One registry the daemon runtime owns (sessions, locks, ledgers), created on first use. */
+    runnerRuntimeSlot: typeof AppleRunnerOwnerState.runnerRuntimeSlot;
     /**
      * Daemon-owned device-claim arbitration probe: true only while the embedding process holds
      * the host-global local device claim for exactly this device (matched by canonical
@@ -158,6 +165,7 @@ export const runCmdBackground = delegate('runCmdBackground');
 export const requireExecSuccess = delegate('requireExecSuccess');
 export const isCommandTimeoutError = delegate('isCommandTimeoutError');
 export const commandDeveloperDir = delegate('commandDeveloperDir');
+export const hostEnvironment = delegate('hostEnvironment');
 export const shellQuote = delegate('shellQuote');
 export const emitDiagnostic = delegate('emitDiagnostic');
 export const withDiagnosticTimer = delegate('withDiagnosticTimer');
@@ -173,6 +181,7 @@ export const classifyOwnerLiveness = delegate('classifyOwnerLiveness');
 export const readHostCpuArchSync = delegate('readHostCpuArchSync');
 export const findProjectRoot = delegate('findProjectRoot');
 export const readVersion = delegate('readVersion');
+export const runnerRuntimeSlot = delegate('runnerRuntimeSlot');
 export const acquireProcessLock = delegate('acquireProcessLock');
 export const withProcessLock = delegate('withProcessLock');
 export const publishFileSync = delegate('publishFileSync');

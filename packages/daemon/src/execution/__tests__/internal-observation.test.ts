@@ -12,7 +12,7 @@ import {
 } from '../../core/ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import { SessionStore } from '../../core/session-store.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 function snapshot(ref: string, label = ref): SnapshotState {
   return {

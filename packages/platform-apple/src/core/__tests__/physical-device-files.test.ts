@@ -1,4 +1,5 @@
 import { test } from 'vitest';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { copyCoreDeviceRunnerFile } from '../physical-device-files.ts';
@@ -11,6 +12,8 @@ import { withFakeAppleTool, type FakeAppleToolScript } from '../../__tests__/fak
  * candidate bundle ids in order and reports only what the last one said. The shapes below pin the
  * retry boundary (one success stops the loop) and each source of the reported message.
  */
+bindTestCommandHost();
+
 test('copyCoreDeviceRunnerFile copies with the app data container domain', async () => {
   const calls = await runCopy(() => '');
   assert.equal(calls.length, 1);
@@ -44,7 +47,8 @@ test('copyCoreDeviceRunnerFile reports the last container error', async () => {
           calls.push(args);
           return { exitCode: 1, stderr: `container miss ${calls.length}` };
         },
-        async () => await copyCoreDeviceRunnerFile(IOS_DEVICE, '/tmp/shot.png', '/out/shot.png'),
+        async () =>
+          await copyCoreDeviceRunnerFile(IOS_DEVICE, '/tmp/shot.png', '/out/shot.png', process.env),
         { device: IOS_DEVICE },
       ),
     (error: unknown) => {
@@ -81,7 +85,14 @@ test('copyCoreDeviceRunnerFile refuses to start once the deadline is spent', asy
           calls.push(args);
           return '';
         },
-        async () => await copyCoreDeviceRunnerFile(IOS_DEVICE, '/tmp/shot.png', '/out/shot.png', 0),
+        async () =>
+          await copyCoreDeviceRunnerFile(
+            IOS_DEVICE,
+            '/tmp/shot.png',
+            '/out/shot.png',
+            process.env,
+            0,
+          ),
         { device: IOS_DEVICE },
       ),
     (error: unknown) => {
@@ -106,7 +117,7 @@ async function runCopy(script: FakeAppleToolScript): Promise<string[][]> {
   return await withFakeAppleTool(
     script,
     async ({ calls }) => {
-      await copyCoreDeviceRunnerFile(IOS_DEVICE, '/tmp/shot.png', '/out/shot.png');
+      await copyCoreDeviceRunnerFile(IOS_DEVICE, '/tmp/shot.png', '/out/shot.png', process.env);
       return calls;
     },
     { device: IOS_DEVICE },
@@ -118,7 +129,8 @@ async function assertCopyFailure(script: FakeAppleToolScript, message: RegExp): 
     async () =>
       await withFakeAppleTool(
         script,
-        async () => await copyCoreDeviceRunnerFile(IOS_DEVICE, '/tmp/shot.png', '/out/shot.png'),
+        async () =>
+          await copyCoreDeviceRunnerFile(IOS_DEVICE, '/tmp/shot.png', '/out/shot.png', process.env),
         { device: IOS_DEVICE },
       ),
     message,

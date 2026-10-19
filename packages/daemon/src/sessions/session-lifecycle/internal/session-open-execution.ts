@@ -1,3 +1,8 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import {
+  resolveSessionRequestLogPath,
+  resolveSessionRunnerLogPath,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyUse,
@@ -9,10 +14,16 @@ import {
 } from '@agent-device/device-selection/device-selection-resolver';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import type { OpenApplicationTiming } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  LaunchConfirmationAbsent,
+  LaunchConfirmationOutcome,
+  LaunchConfirmationUnansweredReason,
+  OpenApplicationOutcome,
+  OpenApplicationTiming,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import {
   abortAuthoringOnSecondOpen,
@@ -22,10 +33,6 @@ import {
 import { isRequestCanceled } from '@agent-device/host-kit/request';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../../core/session-store.ts';
-import {
-  resolveSessionRequestLogPath,
-  resolveSessionRunnerLogPath,
-} from '../../../core/session-artifact-paths.ts';
 import {
   countConfiguredRuntimeHints,
   runtimeHintValues,
@@ -58,12 +65,16 @@ import {
   type DeviceClaimAcquireResult,
   type DeviceClaimSessionOwnership,
   type DeviceClaimReconciler,
-} from '../../../resources/device/device-claims.ts';
-import type { TakenOverDeviceClaim } from '../../../resources/device/device-claim-reboot.ts';
+  type TakenOverDeviceClaim,
+} from '@agent-device/daemon-contracts/device-claims';
 import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
-import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/contracts';
+import {
+  errorResponse,
+  type DaemonFailureResponse,
+  type DaemonResponse,
+} from '@agent-device/kernel/contracts';
 
 export type SessionOpenResult =
   | Readonly<{ type: 'opened'; response: DaemonResponse; ref: SessionRef }>
@@ -110,6 +121,51 @@ function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim): string {
   );
 }
 
+/** What the caller's `open` output says about the launch-confirmation probe on this outcome. */
+function launchConfirmationReport(
+  outcome: OpenApplicationOutcome,
+): LaunchConfirmationOutcome | LaunchConfirmationAbsent {
+  switch (outcome.launchConfirmation) {
+    case 'accepted':
+      return { launchConfirmation: 'accepted' };
+    case 'unanswered':
+      return {
+        launchConfirmation: 'unanswered',
+        launchConfirmationReason: outcome.launchConfirmationReason,
+      };
+    default:
+      // Keeps the typed probe-failure step on the response beside its warning, so a machine
+      // reader tells "no prompt" from "prompt state unreadable" without parsing prose.
+      return outcome.launchConfirmationProbeFailure
+        ? { launchConfirmationProbeFailure: outcome.launchConfirmationProbeFailure }
+        : {};
+  }
+}
+
+/** What the caller's `open` output says when a confirmation probe step failed unverified. */
+function launchConfirmationProbeFailureWarning(): string {
+  return (
+    'agent-device could not read whether iOS is asking to confirm the launch URL, so the launch ' +
+    'URL may still be held by a prompt. Check with `alert get` before retrying.'
+  );
+}
+
+/** What the caller's `open` output says when the launch confirmation it saw stayed unanswered. */
+function launchConfirmationUnansweredWarning(reason: LaunchConfirmationUnansweredReason): string {
+  if (reason === 'url-owner-unresolved') {
+    return (
+      'iOS is still holding the launch confirmation and the installed app that owns the launch ' +
+      "URL's scheme could not be resolved, so this launch URL has not reached the app. Answer it " +
+      'with `alert accept`.'
+    );
+  }
+  return (
+    'iOS shows an alert this open did not recognize (alert-unrecognized), so it left the launch ' +
+    'URL unconfirmed. Inspect the current alert with `alert get` before answering it with ' +
+    '`alert accept`.'
+  );
+}
+
 // Default-on for emulators, opt-in via --test-ime on real devices; --no-test-ime forces off.
 function shouldActivateAndroidTestIme(device: DeviceInfo, req: DaemonRequest): boolean {
   if (device.platform !== 'android') return false;
@@ -142,9 +198,10 @@ function buildStartupPerfSample(
 export async function renewOpenSessionClaim(
   device: DeviceInfo,
   ownership: DeviceClaimSessionOwnership | undefined,
+  env: HostEnvironment['env'],
 ): Promise<DaemonResponse | undefined> {
   if (!ownership) return undefined;
-  const renewal = await renewDeviceClaim(ownership);
+  const renewal = await renewDeviceClaim(ownership, env);
   if (renewal.status === 'renewed') return undefined;
   if (renewal.conflict) return buildDeviceClaimConflictError(device, renewal.conflict);
   return errorResponse(
@@ -294,10 +351,19 @@ export async function completeOpenCommand(params: {
     runtimeHintCount: countConfiguredRuntimeHints,
     sessionReused: existingSession !== undefined,
     selection: preparedSelection,
-    launchConfirmation: outcome.launchConfirmation,
+    launchConfirmation: launchConfirmationReport(outcome),
   });
   if (tookOverDeviceClaim) {
     appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim));
+  }
+  if (outcome.launchConfirmation === 'unanswered') {
+    appendResponseWarning(
+      openResult,
+      launchConfirmationUnansweredWarning(outcome.launchConfirmationReason),
+    );
+  }
+  if (outcome.launchConfirmation === undefined && outcome.launchConfirmationProbeFailure) {
+    appendResponseWarning(openResult, launchConfirmationProbeFailureWarning());
   }
   const nextRef = publishOpenSession({
     req,
@@ -400,6 +466,7 @@ function findNewSessionDeviceConflict(params: {
 }
 
 async function acquireDeviceClaimForOwner(params: {
+  host: HostEnvironment;
   req: DaemonRequest;
   device: DeviceInfo;
   owner: OpenApplicationRuntime['owner'];
@@ -424,8 +491,9 @@ async function acquireDeviceClaimForOwner(params: {
       return await acquireDeviceClaim({
         device,
         session: sessionName,
-        workspace: req.meta?.cwd ?? process.cwd(),
+        workspace: req.meta?.cwd ?? params.host.cwd,
         stateDir: sessionStore.resolveDaemonStateDir(),
+        env: params.host.env,
         reconcileOrphanedDeviceClaim,
         observeDeviceBoot: platformServices.deviceBootObservation,
       });
@@ -433,6 +501,7 @@ async function acquireDeviceClaimForOwner(params: {
 }
 
 export async function openNewSessionWithDeviceClaim(params: {
+  host: HostEnvironment;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -469,6 +538,7 @@ export async function openNewSessionWithDeviceClaim(params: {
   if (conflict) return { type: 'response', response: conflict };
 
   const ownerClaim = await acquireDeviceClaimForOwner({
+    host: params.host,
     req,
     device,
     owner: lifecycle.owner,
@@ -491,6 +561,7 @@ export async function openNewSessionWithDeviceClaim(params: {
       effects,
       sessionName,
       sessionStore,
+      env: params.host.env,
     });
   try {
     requireOpenSessionAdmission(sessionStore, sessionName, undefined);
@@ -512,7 +583,7 @@ export async function openNewSessionWithDeviceClaim(params: {
     // Stamping here is what covers a boot preparation caused for this very open; from
     // `completeOpenCommand` on, a relaunch-close or a runtime-hint write may already have touched the
     // app, so a failure from that point cannot prove ownership was never established.
-    const reclaimed = await renewOpenSessionClaim(device, deviceClaim);
+    const reclaimed = await renewOpenSessionClaim(device, deviceClaim, params.host.env);
     if (reclaimed) return { type: 'response', response: reclaimed };
     effects.mayHaveStarted = true;
     const requestedPositionals = req.positionals ?? [];
@@ -556,15 +627,16 @@ async function rollbackNewSessionClaim(params: {
   effects: NewSessionOpenEffects;
   sessionName: string;
   sessionStore: SessionStore;
+  env: HostEnvironment['env'];
 }): Promise<void> {
-  const { ownership, effects, sessionName, sessionStore } = params;
+  const { ownership, effects, sessionName, sessionStore, env } = params;
   if (!ownership) return;
   if (!effects.mayHaveStarted) {
-    await clearDeviceClaim(ownership);
+    await clearDeviceClaim(ownership, env);
     return;
   }
   if (sessionStore.get(sessionName)?.deviceClaim?.ownerToken === ownership.ownerToken) return;
-  const outcome = await abandonDeviceClaim(ownership);
+  const outcome = await abandonDeviceClaim(ownership, env);
   emitDiagnostic({
     level: 'warn',
     phase: 'device_claim_open_effects_unconfirmed',

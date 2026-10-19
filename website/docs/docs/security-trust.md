@@ -23,7 +23,7 @@ CLI commands run through a per-user background daemon:
 - Artifact uploads are size-capped, filenames are sanitized, and archive extraction rejects path-traversal entries. Artifact downloads resolve through server-side IDs, never client-supplied paths.
 - `install-from-source` protects the daemon host while it downloads and extracts the artifact; it does not vouch for the app inside. An app installed and launched on an iOS simulator runs as a process on the host Mac, so treat permission to send install requests as permission to run code on that Mac.
 
-For remote or cloud deployments, you can add a custom auth hook for remotely consumable HTTP routes: set `AGENT_DEVICE_HTTP_AUTH_HOOK` to a module path that the daemon imports, and `AGENT_DEVICE_HTTP_AUTH_EXPORT` to select the export. The host-local `/admin/human-control/*` route uses the daemon token instead. The hook runs with the daemon's full privileges, so treat it as trusted code: point it only at a read-only path you control, never at a location that less-trusted users or processes can write to. Whoever controls the daemon's environment controls the hook.
+For remote or cloud deployments, you can add a custom auth hook for remotely consumable HTTP routes: set `AGENT_DEVICE_HTTP_AUTH_HOOK` to a module path that the daemon imports, and `AGENT_DEVICE_HTTP_AUTH_EXPORT` to select the export. Relative hook paths resolve from the daemon host's working directory. The host-local `/admin/human-control/*` route uses the daemon token instead. The hook runs with the daemon's full privileges, so treat it as trusted code: point it only at a read-only path you control, never at a location that less-trusted users or processes can write to. Whoever controls the daemon's environment controls the hook.
 
 Lease-owner human-control RPCs pass normal authentication and tenant/lease admission. They can
 target only the admitted lease's device and cannot alter a host administrator's hold. Host
@@ -47,6 +47,8 @@ Apple targets (iOS, tvOS, visionOS, and macOS) are driven through an XCTest runn
 Screenshots, recordings, traces, logs, network dumps, audio probes, replay files, provider-hosted cloud videos and logs, and reports can contain private UI state, credentials, tokens, request data, timing signals, or customer information. Store them in a controlled directory, review them before sharing, and don't commit them unless they are deliberately sanitized fixtures.
 
 Cloud provider artifact URLs returned by `artifacts`, `close --json`, or `disconnect --json` may be provider dashboard URLs, public share links, or pre-signed download URLs. Treat the URLs themselves as credentials until you know the provider's sharing and expiry policy.
+
+The privacy controls for typed input (`fill --text-stdin` and `--record-as`) keep the literal out of agent-device's own responses, diagnostics, and recorded scripts. They do not rewrite what the platform records: on iOS, XCTest writes its own diagnostic logs and its `.xcresult` bundle under the Apple runner's derived directory, and typed text can appear in both, on a simulator or a physical device. Treat those as sensitive, and use test-only credentials when they may be kept or shared.
 
 ## Permissions
 

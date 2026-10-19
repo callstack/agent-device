@@ -17,7 +17,6 @@ import { PROVIDER_SCENARIO_IOS_DEVICE, PROVIDER_SCENARIO_IOS_SIMULATOR } from '.
 import {
   createProviderIosSimulatorRecordingProcess,
   createProviderScenarioHarness,
-  restoreEnv,
   withProviderScenarioTempDir,
 } from './harness.ts';
 import {
@@ -39,7 +38,6 @@ test('generic scoped iOS physical runner recording fails closed without local fa
         },
       });
       const daemon = await createProviderScenarioHarness({
-        platformRuntime: true,
         appleRunnerProvider: () =>
           createAppleRunnerProviderFromTranscript(runnerTranscript, 'ios.runner'),
         appleToolProvider: () => appleTool.provider,
@@ -106,17 +104,13 @@ test('iOS simulator recording reports host contention and recovers through the f
         },
       };
       const daemon = await createProviderScenarioHarness({
-        platformRuntime: true,
+        // No real tool is on the daemon's PATH, and its Swift helper compiles into the scenario's cache.
+        env: { PATH: tmpDir, AGENT_DEVICE_SWIFT_CACHE_DIR: path.join(tmpDir, 'swift-cache') },
         appleRunnerProvider: () => appleRunnerProvider,
         appleToolProvider: () => appleTool.provider,
         appleSimulatorScreenRecordingTransport: () => recordingTransport,
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
       });
-      const previousPath = process.env.PATH;
-      const previousSwiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
-      process.env.PATH = tmpDir;
-      process.env.AGENT_DEVICE_SWIFT_CACHE_DIR = path.join(tmpDir, 'swift-cache');
-
       try {
         const open = await daemon.callCommand('open', ['com.apple.Preferences'], {
           platform: 'ios',
@@ -137,7 +131,10 @@ test('iOS simulator recording reports host contention and recovers through the f
         assert.equal(busyStart.json?.error?.data?.details?.exitCode, 16);
         assert.match(busyStart.json?.error?.data?.hint ?? '', /record stop/);
         assert.match(busyStart.json?.error?.data?.hint ?? '', /CoreSimulator/);
-        assert.equal(daemon.session()?.screenRecording, undefined);
+        assert.equal(
+          fs.existsSync(path.join(daemon.sessionDir(), 'screen-recording.resource.json')),
+          false,
+        );
         assert.equal(fs.existsSync(recordingPath), false);
 
         const recordStart = await daemon.callCommand(
@@ -194,8 +191,6 @@ test('iOS simulator recording reports host contention and recovers through the f
         );
       } finally {
         await daemon.close();
-        restoreEnv('PATH', previousPath);
-        restoreEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', previousSwiftCacheDir);
       }
     },
   );

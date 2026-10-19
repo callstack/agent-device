@@ -165,7 +165,7 @@ async function openAppleApplication(
       runnerTargetPredatesOpen,
       retainRunnerForRelaunch,
     );
-    const launchConfirmation = await settleAppleOpen(
+    const launchConfirmationReport = await settleAppleOpen(
       host,
       binding,
       input,
@@ -180,7 +180,7 @@ async function openAppleApplication(
     return {
       appBundleId: input.appBundleId,
       timing,
-      ...(launchConfirmation ? { launchConfirmation } : {}),
+      ...(launchConfirmationReport ?? {}),
     };
   } catch (error) {
     if (retainRunnerForRelaunch) {

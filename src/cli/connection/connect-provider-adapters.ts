@@ -2,9 +2,10 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { requireResolvedProfilePlatform } from '@agent-device/contracts/provider-profile-fields';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
+import { readVersion } from '@agent-device/host-kit/version';
 import { leaseBackendForPlatform } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
+import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import { type EnvMap } from '@agent-device/kernel/source-value';
 
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
@@ -12,10 +13,15 @@ import { resolveLimrunConnectProfile } from './limrun-profile.ts';
 import { readLimrunCredentials } from '../../provider-limrun-credentials.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
-import { isConnectProviderName, type ConnectProvider } from './provider-policy.ts';
+import {
+  isConnectProviderName,
+  primeProviderConnection,
+  type ConnectProvider,
+} from './provider-policy.ts';
+import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
 import { bundledCloudWebDriverConnection } from '../../provider-webdriver.ts';
-import { withPluginConnection } from '../../plugins/load.ts';
-import type { PluginConnection } from '../../plugins/connection.ts';
+import { withPluginConnection } from '@agent-device/plugins/load';
+import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { buildConnectClientId } from './client-id.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
@@ -84,21 +90,22 @@ function builtinConnectAdapter(provider: string): ConnectProviderAdapter | undef
 async function withProviderConnection<T>(
   provider: string,
   env: EnvMap,
-  run: (connection: PluginConnection) => Promise<T>,
+  run: (connection: PluginConnectionCallbacks) => Promise<T>,
 ): Promise<T> {
   const bundled = bundledCloudWebDriverConnection(provider, env);
-  return bundled ? await run(bundled) : await withPluginConnection(provider, env, run);
+  return bundled
+    ? await run(bundled)
+    : await withPluginConnection(provider, BUILTIN_PROVIDER_IDS, env, run);
 }
 
 export async function resolveConnectProviderProfile(options: {
   provider?: ConnectProvider;
   flags: CliFlags;
   stateDir: string;
-  cwd?: string;
-  env?: EnvMap;
+  cwd: string;
+  env: EnvMap;
 }): Promise<ResolvedConnectProfile> {
-  const cwd = options.cwd ?? process.cwd();
-  const env = options.env ?? process.env;
+  const { cwd, env } = options;
   if (options.flags.remoteConfig) {
     const resolved = resolveRemoteConfigProfile({
       configPath: options.flags.remoteConfig,
@@ -106,6 +113,7 @@ export async function resolveConnectProviderProfile(options: {
       env,
     });
     const leaseProvider = resolved.profile.leaseProvider;
+    await primeProviderConnection(leaseProvider, env);
     return {
       flags: {
         ...profileToCliFlags(resolved.profile),
@@ -141,7 +149,7 @@ export async function resolveConnectProviderProfile(options: {
  */
 async function resolveProviderConnectionProfile(
   provider: string,
-  connection: PluginConnection,
+  connection: PluginConnectionCallbacks,
   context: AdapterContext,
 ): Promise<ConnectProfile> {
   const resolved = await connection.resolve(context);
@@ -178,6 +186,7 @@ async function resolveProviderConnectionProfile(
 
 export async function verifyResolvedConnectProvider(
   resolved: ResolvedConnectProfile,
+  env: EnvMap,
 ): Promise<ConnectVerification> {
   if (!resolved.provider) {
     return {
@@ -189,7 +198,7 @@ export async function verifyResolvedConnectProvider(
   }
   const context = {
     flags: resolved.flags,
-    env: process.env,
+    env,
   };
   const adapter = builtinConnectAdapter(resolved.provider);
   return adapter
@@ -206,6 +215,7 @@ async function verifyLimrun(
 ): Promise<ConnectVerification> {
   return await verifyLimrunConnection({
     ...readLimrunCredentials(context.env),
+    clientVersion: readVersion(),
     platform: requireResolvedProfilePlatform(context.flags.platform, 'Limrun'),
   });
 }

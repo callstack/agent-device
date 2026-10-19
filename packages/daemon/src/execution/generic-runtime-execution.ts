@@ -45,8 +45,7 @@ export async function resolveGenericRuntimeExecution(
   switch (params.req.command) {
     case 'screenshot': {
       // This branch alone owns an in-process command surface and the interaction implementations
-      // beneath it; the other leaves here are bound runtimes the dispatcher reaches directly, so
-      // only this one's module is deferred out of the daemon's startup closure.
+      // beneath it, so its module is deferred out of the daemon's startup closure.
       const { resolveScreenshotGenericExecution } = await import('./screenshot-runtime.ts');
       return await resolveScreenshotGenericExecution(params);
     }
@@ -104,6 +103,17 @@ export async function resolveGenericRuntimeExecution(
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
+    case 'telephony': {
+      // Deferred to keep the daemon's eager closure within scripts/__tests__/eager-closure-budgets.ts.
+      const { resolveBoundTelephonyRuntime } = await import('./telephony-runtime.ts');
+      return await resolveBoundTelephonyRuntime({
+        device: params.session.device,
+        positionals: params.req.positionals ?? [],
+        inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
+        bindDevice: params.bindDevice,
+      });
+    }
     case 'tv-remote':
       return await resolveBoundTvRemoteRuntime({
         device: params.session.device,

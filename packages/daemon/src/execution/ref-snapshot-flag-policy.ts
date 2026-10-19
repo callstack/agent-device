@@ -1,5 +1,5 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonResponse } from '../core/daemon-request.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 const REF_UNSUPPORTED_FLAG_MAP: ReadonlyArray<[keyof CommandFlags, string]> = [

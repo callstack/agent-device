@@ -5,7 +5,7 @@ import {
   buildDeviceClaimConflictError,
   buildDeviceClaimInspectionCommand,
 } from '../device-claim-conflict.ts';
-import type { InspectedDeviceClaim } from '../device-claim-inspection.ts';
+import type { InspectedDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 
 const device: DeviceInfo = {
   platform: 'android',
@@ -20,7 +20,8 @@ function conflict(classification: InspectedDeviceClaim['classification']): Inspe
     deviceKey: 'local:android:none:emulator-5554',
     classification,
     claim: {
-      schemaVersion: 2,
+      schemaVersion: 3,
+      claimOwnerKind: 'open-session',
       deviceKey: 'local:android:none:emulator-5554',
       device: { family: 'android', id: device.id, name: device.name, kind: device.kind },
       session: 'checkout',

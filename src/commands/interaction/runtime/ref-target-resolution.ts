@@ -16,7 +16,7 @@ import { STALE_REF_HINT } from '@agent-device/selectors';
 import type { InteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import { findNodeByLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
-import { surfaceScopedNodes } from './post-action-surface.ts';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import type {
   InteractionTarget,
   PreresolvedInteractionTarget,
@@ -46,7 +46,7 @@ type RefResolution = {
   /** The keyboard band the capture of `tree.nodes` measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
   /**
-   * Which tree `resolved.node` was read from, as the reconciliation decided it (ADR 0014 step 5).
+   * Which tree `resolved.node` was read from, as the reconciliation decided it (ADR 0014, "Mutation admission and read behavior").
    * Absent for a caller-carried node (#1654), which no reconciliation of this module chose.
    */
   adoptedFrom?: RefObservationSource;
@@ -73,7 +73,7 @@ function adoptPreresolvedRefTarget(
     carriedRef !== ref ||
     !hasSnapshotRef(preresolved.node) ||
     normalizeRef(preresolved.node.ref) !== ref ||
-    !preresolved.nodes.includes(preresolved.node)
+    !preresolved.tree.nodes.includes(preresolved.node)
   ) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -81,12 +81,7 @@ function adoptPreresolvedRefTarget(
     );
   }
   return {
-    tree: {
-      nodes: preresolved.nodes,
-      ...(preresolved.iosSystemSurfaceBundleId
-        ? { surfaceBundleId: preresolved.iosSystemSurfaceBundleId }
-        : {}),
-    },
+    tree: preresolved.tree,
     ...(preresolved.keyboard ? { keyboard: preresolved.keyboard } : {}),
     resolved: buildRefResolution(ref, preresolved.node, 'exact'),
   };
@@ -185,7 +180,7 @@ async function resolveSnapshotForRef(
 }
 
 /**
- * ADR 0014 step 5: decouple Android freshness from ref authorization. The frame
+ * ADR 0014, "Mutation admission and read behavior": separate Android freshness from ref authorization. The frame
  * tree names WHICH node `@eN` authorizes. When a freshness (or other read-only)
  * capture has advanced the operational observation past the frame, adopt the
  * observation's node — its fresh on-screen coordinates — ONLY when its local

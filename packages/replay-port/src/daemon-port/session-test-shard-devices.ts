@@ -1,14 +1,11 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
-import {
-  resolveAndroidSerialAllowlist,
-  resolveIosSimulatorDeviceSetPath,
-} from '@agent-device/kernel/device-isolation';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   isMobilePlatform,
   matchesPlatformSelector,
-  resolveAppleSimulatorSetPathForSelector,
+  resolveRequestAppleSimulatorSetPath,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -95,14 +92,18 @@ async function resolveReplayTestShardDevices(
 function buildReplayTestShardInventoryRequest(
   flags: CommandFlags | undefined,
 ): DeviceInventoryRequest {
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(flags?.androidDeviceAllowlist);
+  const androidSerialAllowlist = resolveAndroidSerialAllowlist(
+    flags?.androidDeviceAllowlist,
+    process.env,
+  );
   return {
     platform: flags?.platform,
     target: flags?.target,
-    iosSimulatorSetPath: resolveAppleSimulatorSetPathForSelector({
-      simulatorSetPath: resolveIosSimulatorDeviceSetPath(flags?.iosSimulatorDeviceSet),
+    iosSimulatorSetPath: resolveRequestAppleSimulatorSetPath({
+      requestedSetPath: flags?.iosSimulatorDeviceSet,
       platform: flags?.platform,
       target: flags?.target,
+      env: process.env,
     }),
     androidSerialAllowlist: androidSerialAllowlist
       ? Array.from(androidSerialAllowlist).sort()

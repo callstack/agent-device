@@ -2,6 +2,10 @@ import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import type { JsonObject, JsonValue } from './json.ts';
 import type { AndroidClipboardShellSupport } from './android-clipboard-support.ts';
 
+// The composition root names the runtime host through this contract rather than the kernel
+// substrate directly (R13): one host object is the whole configuration surface a runtime reads.
+export type { HostEnvironment } from '@agent-device/kernel/source-value';
+
 export type HostCommandRequest = Readonly<{
   executable: string;
   args: readonly string[];
@@ -153,7 +157,12 @@ export type DeviceInventoryHost = Readonly<{
   files: DeviceInventoryFileHost;
   hostOs: HostOperatingSystem;
   hostName: string;
-  homeDirectory: string;
+  /**
+   * The home this host names, or undefined when it names none (HOME and USERPROFILE both
+   * absent). A host with no home still inventories: only default paths derived from the home
+   * turn off, never the whole host.
+   */
+  homeDirectory: string | undefined;
   observations: DeviceObservationSink;
 }>;
 

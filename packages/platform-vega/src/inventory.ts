@@ -1,6 +1,6 @@
-import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveVegaExecutable } from './vega-executable.ts';
 import type {
   DeviceInventoryHostFor,
   HostCommandResult,
@@ -35,7 +35,7 @@ async function discoverVegaDevices(
   host: DeviceInventoryHostFor<'vega'>,
   scope: PlatformRequestScope,
 ): Promise<readonly DeviceInfo[]> {
-  const executable = await resolveVegaExecutable(host);
+  const executable = await resolveVegaExecutableForInventory(host);
   if (!executable) {
     throw new AppError('TOOL_MISSING', 'Vega CLI not found in PATH', {
       hint: 'Install Vega Developer Tools, source ~/vega/env, and retry devices.',
@@ -66,13 +66,16 @@ async function discoverVegaDevices(
   return devices;
 }
 
-async function resolveVegaExecutable(
+async function resolveVegaExecutableForInventory(
   host: DeviceInventoryHostFor<'vega'>,
 ): Promise<string | undefined> {
-  const resolved = await host.commands.which('vega');
-  if (resolved) return resolved;
-  const defaultInstall = path.join(host.homeDirectory, 'vega', 'bin', 'vega');
-  return (await host.files.isExecutable(defaultInstall)) ? defaultInstall : undefined;
+  // The one Vega lookup shared with the CLI adapter and doctor: PATH, then the runtime host's
+  // home default install (#3794).
+  return await resolveVegaExecutable({
+    which: (executable) => host.commands.which(executable),
+    isExecutableFile: (candidate) => host.files.isExecutable(candidate),
+    homeDirectory: host.homeDirectory,
+  });
 }
 
 function assertCommandSuccess(result: HostCommandResult): void {

@@ -1,9 +1,12 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
 import { macOsNativeAppInteractor } from './native-app-interactor.ts';
+
+bindTestCommandHost();
 
 const context: RunnerContext = { appBundleId: 'com.apple.TextEdit' };
 
@@ -26,7 +29,7 @@ function runnerInteractor(reached: string[] = []): Interactor {
 }
 
 function nativeInteractor(ctx: RunnerContext = context, reached: string[] = []): Interactor {
-  return macOsNativeAppInteractor(runnerInteractor(reached), ctx);
+  return macOsNativeAppInteractor(runnerInteractor(reached), ctx, process.env);
 }
 
 async function recordHelperCalls(

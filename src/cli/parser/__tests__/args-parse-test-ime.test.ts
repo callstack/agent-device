@@ -1,7 +1,5 @@
 /**
  * `--test-ime` / `--no-test-ime` parsing across the three surfaces that accept it (#2997).
- * Split out of `args-parse-session.test.ts`, which sits at the 1,000-line test-size
- * tripwire (AGENTS.md "Module and test topology").
  */
 import { test } from 'vitest';
 import assert from 'node:assert/strict';

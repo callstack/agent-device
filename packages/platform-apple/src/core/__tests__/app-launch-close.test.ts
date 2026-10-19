@@ -47,7 +47,7 @@ test('closeIosApp terminates a physical iOS app by its resolved process ID', asy
   });
 
   await withAppleToolProvider(provider, async () => {
-    await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID);
+    await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID, undefined, process.env);
   });
 
   const terminateCall = calls.at(-1);
@@ -67,7 +67,7 @@ test('closeIosApp terminates a physical iOS app by its resolved process ID', asy
 
 test('closeIosApp tolerates the process exiting after PID resolution', async () => {
   await withAppleToolProvider(createTerminateFailureProvider(3), async () => {
-    await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID);
+    await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID, undefined, process.env);
   });
 });
 
@@ -75,7 +75,7 @@ test('closeIosApp preserves termination failures other than an exited process', 
   await assert.rejects(
     () =>
       withAppleToolProvider(createTerminateFailureProvider(1), async () => {
-        await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID);
+        await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID, undefined, process.env);
       }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -109,7 +109,7 @@ test('closeIosApp reports the required devicectl process-list API', async () => 
   await assert.rejects(
     () =>
       withAppleToolProvider(provider, async () => {
-        await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID);
+        await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID, undefined, process.env);
       }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
@@ -144,7 +144,7 @@ test('closeIosApp fails closed when devicectl changes the process-list response 
   await assert.rejects(
     () =>
       withAppleToolProvider(provider, async () => {
-        await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID);
+        await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID, undefined, process.env);
       }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);

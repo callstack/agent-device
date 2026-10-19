@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { stripAndroidSystemChromeProvenance } from '@agent-device/contracts/android-system-chrome';
 import { copySnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import {
@@ -9,7 +10,7 @@ import { withTargetActivationDisclosure } from '../core/capture-disclosure.ts';
 import { dispatchSnapshotRuntimeCommand } from './snapshot-command-runtime.ts';
 import { captureSparseFallbackScreenshot } from '../execution/sparse-fallback-screenshot.ts';
 import type { SnapshotRuntimeRouteParams } from '../core/snapshot-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 
 export async function dispatchSnapshotViaRuntime(

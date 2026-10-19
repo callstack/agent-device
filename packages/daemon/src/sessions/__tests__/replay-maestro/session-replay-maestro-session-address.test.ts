@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { stringify } from 'yaml';
-import { runTypedMaestroReplay } from '@agent-device/replay-port/session-replay-maestro-runtime';
+import { getReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
 import { SessionStore } from '../../../core/session-store.ts';
 import { replayCommandForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
-import { maestroScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { maestroScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 
 // The Maestro replay route resolves the store key upstream and then validates the session's
@@ -37,7 +37,9 @@ test('a typed Maestro selector conflict names the session store key, not "defaul
     meta: { requestId: 'req-maestro-address' },
   } as unknown as DaemonRequest;
 
-  const response = await runTypedMaestroReplay(
+  const response = await (
+    await getReplayBackend('maestro')
+  ).runReplay(
     replayCommandForTest({
       req,
       sessionName: SCOPED_ADDRESS,

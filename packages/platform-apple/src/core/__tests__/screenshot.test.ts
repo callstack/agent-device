@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { promises as fs, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { RunnerScreenCaptureMetadata } from '@agent-device/contracts/screen-capture-contract';
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+
+bindTestCommandHost();
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
@@ -159,6 +162,8 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
   try {
     const outPath = path.join(tmpDir, 'out.png');
     await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, {
+      env: process.env,
+
       appBundleId: 'com.example.app',
       deps: {
         ensureBooted: ensureBootedSimulator,
@@ -205,6 +210,8 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
   try {
     const outPath = path.join(tmpDir, 'out.png');
     await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, {
+      env: process.env,
+
       appBundleId: 'com.example.app',
       deps: {
         ensureBooted: ensureBootedSimulator,
@@ -231,6 +238,8 @@ test('captureSimulatorScreenshotWithFallback continues when status bar preparati
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
   mockRetryWithPolicy.mockResolvedValue(undefined);
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    env: process.env,
+
     appBundleId: 'com.example.app',
     normalizeStatusBar: true,
     deps: { normalizeDensity: async () => {} },
@@ -246,6 +255,8 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
   mockRetryWithPolicy.mockResolvedValue(undefined);
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    env: process.env,
+
     appBundleId: 'com.example.app',
     skipIosSimulatorBootCheck: true,
     deps: { normalizeDensity: async () => {} },
@@ -272,6 +283,8 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
   const captureWithRunner = vi.fn(async () => undefined);
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    env: process.env,
+
     appBundleId: 'com.example.app',
     skipIosSimulatorBootCheck: true,
     deps: {
@@ -310,6 +323,8 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
   const captureWithRunner = vi.fn(async () => undefined);
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    env: process.env,
+
     appBundleId: 'com.example.app',
     skipIosSimulatorBootCheck: true,
     deps: {
@@ -336,6 +351,8 @@ test('captureSimulatorScreenshotWithFallback ignores status bar restore failures
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
   mockRetryWithPolicy.mockResolvedValue(undefined);
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    env: process.env,
+
     appBundleId: 'com.example.app',
     normalizeStatusBar: true,
     deps: { normalizeDensity: async () => {} },
@@ -352,6 +369,8 @@ test('captureSimulatorScreenshotWithFallback skips status bar normalization by d
   mockRetryWithPolicy.mockResolvedValue(undefined);
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    env: process.env,
+
     appBundleId: 'com.example.app',
     deps: { normalizeDensity: async () => {} },
   });
@@ -395,6 +414,8 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
           throw new Error(`Unexpected xcrun args: ${args.join(' ')}`);
         });
         await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+          env: process.env,
+
           appBundleId: 'com.example.app',
           deps: {
             ensureBooted: ensureBootedSimulator,
@@ -447,6 +468,8 @@ test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by d
   try {
     const outPath = path.join(tmpDir, 'out.png');
     await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, {
+      env: process.env,
+
       appBundleId: 'com.example.app',
       deps: { normalizeDensity: async () => {} },
     });
@@ -493,7 +516,8 @@ test('captureScreenshotViaRunner treats a (null) data-container answer as no con
   try {
     const outPath = path.join(tmpDir, 'out.png');
     await assert.rejects(
-      () => captureScreenshotViaRunner(device, outPath),
+      () =>
+        captureScreenshotViaRunner(device, outPath, undefined, undefined, undefined, process.env),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.code, 'COMMAND_FAILED');
@@ -524,8 +548,22 @@ test('captureScreenshotViaRunner reuses a verified simulator container path', as
   try {
     const firstPath = path.join(tmpDir, 'first.png');
     const secondPath = path.join(tmpDir, 'second.png');
-    await captureScreenshotViaRunner(device, firstPath);
-    await captureScreenshotViaRunner(device, secondPath);
+    await captureScreenshotViaRunner(
+      device,
+      firstPath,
+      undefined,
+      undefined,
+      undefined,
+      process.env,
+    );
+    await captureScreenshotViaRunner(
+      device,
+      secondPath,
+      undefined,
+      undefined,
+      undefined,
+      process.env,
+    );
 
     assert.equal(await fs.readFile(firstPath, 'utf8'), 'runner-image');
     assert.equal(await fs.readFile(secondPath, 'utf8'), 'runner-image');
@@ -559,7 +597,14 @@ test('captureScreenshotViaRunner reports the display facts a runner capture meas
 
   try {
     const outPath = path.join(tmpDir, 'out.png');
-    const metadata = await captureScreenshotViaRunner(device, outPath);
+    const metadata = await captureScreenshotViaRunner(
+      device,
+      outPath,
+      undefined,
+      undefined,
+      undefined,
+      process.env,
+    );
     assert.deepEqual(metadata, MEASURED_CAPTURE.metadata);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-image');
   } finally {
@@ -584,7 +629,17 @@ test('captureScreenshotViaRunner reports no display facts for a pre-panel runner
 
   try {
     const outPath = path.join(tmpDir, 'out.png');
-    assert.equal(await captureScreenshotViaRunner(device, outPath), undefined);
+    assert.equal(
+      await captureScreenshotViaRunner(
+        device,
+        outPath,
+        undefined,
+        undefined,
+        undefined,
+        process.env,
+      ),
+      undefined,
+    );
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
@@ -599,7 +654,14 @@ test('captureScreenshotViaRunner copies macOS runner screenshots from the host',
   mockRunCmd.mockRejectedValue(new Error('macOS screenshot must not invoke xcrun devicectl'));
 
   try {
-    await captureScreenshotViaRunner(MACOS_TEST_DEVICE, outPath);
+    await captureScreenshotViaRunner(
+      MACOS_TEST_DEVICE,
+      outPath,
+      undefined,
+      undefined,
+      undefined,
+      process.env,
+    );
     assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-image');
     assert.equal(mockRunCmd.mock.calls.length, 0);
   } finally {
@@ -609,6 +671,8 @@ test('captureScreenshotViaRunner copies macOS runner screenshots from the host',
 
 test('captureSimulatorScreenshotWithFallback reports the panel rotation for a simctl capture', async () => {
   const facts = await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
+    env: process.env,
+
     skipIosSimulatorBootCheck: true,
     deps: {
       ensureBooted: async () => {},
@@ -624,6 +688,8 @@ test('captureSimulatorScreenshotWithFallback reports the panel rotation for a si
 
 test('captureSimulatorScreenshotWithFallback keeps the panel rotation for a runner fallback capture', async () => {
   const facts = await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
+    env: process.env,
+
     skipIosSimulatorBootCheck: true,
     deps: {
       ensureBooted: async () => {},

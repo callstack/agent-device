@@ -1,3 +1,5 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
 import {
@@ -8,7 +10,7 @@ import {
   resolveOpenApplicationRuntimePlan,
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { refreshSessionDeviceIfNeeded } from '../../../resources/session-device-resolution.ts';
@@ -28,7 +30,7 @@ import {
   resolveForegroundOpenRequest,
 } from './session-open-foreground.ts';
 import { expireRefFrame } from '../../../core/ref-frame.ts';
-import type { DeviceClaimReconciler } from '../../../resources/device/device-claims.ts';
+import type { DeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -53,6 +55,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 
 export type SessionOpenCommandInput = Readonly<{
+  host: HostEnvironment;
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
@@ -64,7 +67,17 @@ export type SessionOpenCommandInput = Readonly<{
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }>;
 
-const firstSessionOpenLocks = new Map<string, Promise<unknown>>();
+// One lock table per session store, which is to say per daemon runtime.
+const firstSessionOpenLocksByStore = new WeakMap<SessionStore, Map<string, Promise<unknown>>>();
+
+function firstSessionOpenLocks(sessionStore: SessionStore): Map<string, Promise<unknown>> {
+  let locks = firstSessionOpenLocksByStore.get(sessionStore);
+  if (!locks) {
+    locks = new Map();
+    firstSessionOpenLocksByStore.set(sessionStore, locks);
+  }
+  return locks;
+}
 
 type OpenRuntimeAdmission =
   | Readonly<{
@@ -220,6 +233,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     const lostClaim = await renewOpenSessionClaim(
       admittedSession.device,
       admittedSession.deviceClaim,
+      params.host.env,
     );
     if (lostClaim) return { type: 'response', response: lostClaim };
 
@@ -263,6 +277,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     const reclaimed = await renewOpenSessionClaim(
       device,
       sessionStore.requireCurrent(existingRef).deviceClaim,
+      params.host.env,
     );
     if (reclaimed) return { type: 'response', response: reclaimed };
 
@@ -342,10 +357,11 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   const { admission, runtimeHintPlan } = runtimePlanAdmission;
 
   return await withKeyedLock(
-    firstSessionOpenLocks,
+    firstSessionOpenLocks(sessionStore),
     device.id,
     async () =>
       await openNewSessionWithDeviceClaim({
+        host: params.host,
         req,
         sessionName,
         logPath,

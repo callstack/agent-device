@@ -169,6 +169,30 @@ test('Limrun carries docked tree evidence and never infers absence from missing 
   ).toEqual({ kind: 'tree-rejected', derivation: 'docked-tree' });
 });
 
+test('Limrun acquires a system photo picker whose tabs report numeric values', async () => {
+  // PHPickerViewController reports AXValue 1/0 as numbers, and marks a tapped photo with the
+  // Selected trait. Both are variant JSON the raw tree hands over untyped.
+  const result = await captureLimrunIosSnapshot(
+    createLimrunSnapshotSession({
+      elementType: 'Other',
+      children: [
+        { elementType: 'RadioButton', AXLabel: 'Photos', AXValue: 1 },
+        { elementType: 'RadioButton', AXLabel: 'Collections', AXValue: 0 },
+        {
+          elementType: 'Image',
+          AXLabel: 'Photo',
+          AXUniqueId: 12,
+          traits: ['Scrollable', 'Selected', 'Image'],
+        },
+      ],
+    }),
+  );
+  const [photos, collections, photo] = result.acquisition.nodes.slice(1);
+  expect(photos).toMatchObject({ value: '1', checked: true });
+  expect(collections).toMatchObject({ value: '0', checked: false });
+  expect(photo).toMatchObject({ selected: true, label: 'Photo', identifier: '12' });
+});
+
 test('limrun acquisition shares RN interpretation and preserves native values', async () => {
   const result = await captureLimrunIosSnapshot(
     createLimrunSnapshotSession({

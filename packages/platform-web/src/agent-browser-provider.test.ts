@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
@@ -27,6 +28,8 @@ import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+
+bindTestCommandHost();
 
 type AgentBrowserCall = {
   cmd: string;
@@ -127,6 +130,7 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
   assert.deepEqual(events, ['provider-startup-cleanup', 'agent-browser open']);
   assert.equal(mockProviderStartupCleanup.mock.calls.length, 1);
   assert.deepEqual(mockProviderStartupCleanup.mock.calls[0]?.[1], {
+    env: process.env,
     openWebSessionNames: [],
   });
 });
@@ -387,7 +391,10 @@ test('agent-browser provider adds doctor guidance for missing binary and invalid
   await withNodeRuntime({ version: '24.0.0' }, async () => {
     const missingStateDir = mkdtempForTestSync('agent-device-web-provider-missing-');
     try {
-      const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
+      const provider = createAgentBrowserWebProvider({
+        host: { env: process.env, cwd: process.cwd() },
+        stateDir: missingStateDir,
+      });
       await assert.rejects(
         async () => await provider.open('https://example.test'),
         (error: unknown) =>
@@ -421,7 +428,10 @@ test('agent-browser provider preserves Node version guidance for missing managed
   await withNodeRuntime({ version: '22.19.0' }, async () => {
     const missingStateDir = mkdtempForTestSync('agent-device-web-provider-node-');
     try {
-      const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
+      const provider = createAgentBrowserWebProvider({
+        host: { env: process.env, cwd: process.cwd() },
+        stateDir: missingStateDir,
+      });
       await assert.rejects(
         async () => await provider.open('https://example.test'),
         (error: unknown) =>

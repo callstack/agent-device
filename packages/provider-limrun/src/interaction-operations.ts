@@ -18,6 +18,8 @@ import {
 } from '@agent-device/contracts/scroll-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
+import type { AndroidSetting } from '@agent-device/platform-android/mechanics';
+import type { LimrunIosSetting } from './ios-settings.ts';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
@@ -39,6 +41,7 @@ import {
 } from '@agent-device/contracts/touch-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import {
+  type RuntimeOperationFact,
   type RuntimeOperationUnavailability,
   unavailableFact,
 } from '@agent-device/contracts/platform-runtime';
@@ -115,6 +118,14 @@ const orientationUnlockUnavailableIos = unavailableFact(
 const keyboardUnavailableIos = unavailableFact(
   'unsupported-provider-mode',
   'Limrun iOS direct sessions do not expose keyboard actions.',
+);
+const settingUnavailableIos = unavailableFact(
+  'unsupported-provider-mode',
+  'Limrun iOS direct sessions support settings appearance, permission, location, and clear-app-state.',
+);
+const settingUnavailableAndroid = unavailableFact(
+  'unsupported-platform-leaf',
+  'Run `agent-device settings --help` for the settings each target serves.',
 );
 const settingsReadUnavailableIos = unavailableFact(
   'unsupported-provider-mode',
@@ -323,9 +334,19 @@ export const LIMRUN_FOLD_UNAVAILABLE = unavailableFact(
   'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a Limrun session has no such simulator.',
 );
 
+export const LIMRUN_TELEPHONY_UNAVAILABLE = unavailableFact(
+  'unsupported-provider-mode',
+  "telephony sends calls and SMS to an Android emulator's console through local adb; agent-device does not route it through a Limrun session.",
+);
+
 /** The fold refusal both Limrun legs share. */
 export function limrunFoldOperationFacts() {
   return Object.freeze({ setFoldPose: LIMRUN_FOLD_UNAVAILABLE });
+}
+
+/** The telephony refusal both Limrun legs share. */
+export function limrunTelephonyOperationFacts() {
+  return Object.freeze({ sendTelephonyEvent: LIMRUN_TELEPHONY_UNAVAILABLE });
 }
 
 /**
@@ -343,21 +364,46 @@ export function limrunAppEventOperationFacts(
   });
 }
 
-/**
- * `settings` splits the same way `app-switcher` does: the Android leg rides the local family's
- * own interactor factory, while the iOS leg writes through simctl and reads nothing back.
- */
+/** The Android leg runs the local Android interactor; the iOS leg runs the simctl plan. */
 export function limrunSettingsOperationFacts(
   device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
-  const write = liveSessionUnavailable ?? available;
-  const read =
-    liveSessionUnavailable ??
-    (device.platform === 'android' ? available : settingsReadUnavailableIos);
-  return Object.freeze({
-    ...settingsRuntimeOperationFacts({ setSetting: write, readSetting: read }),
-  });
+  const target = liveSessionUnavailable ?? available;
+  return Object.freeze(
+    settingsRuntimeOperationFacts(
+      device.platform === 'android'
+        ? {
+            target,
+            unsupported: settingUnavailableAndroid,
+            write: {
+              wifi: available,
+              bluetooth: available,
+              airplane: available,
+              'mobile-data': available,
+              location: available,
+              animations: available,
+              appearance: available,
+              'text-size': available,
+              fingerprint: available,
+              'clear-app-state': available,
+              permission: available,
+            } satisfies Record<AndroidSetting, RuntimeOperationFact>,
+            read: { 'text-size': available },
+          }
+        : {
+            target,
+            unsupported: settingUnavailableIos,
+            write: {
+              appearance: available,
+              permission: available,
+              location: available,
+              'clear-app-state': available,
+            } satisfies Record<LimrunIosSetting, RuntimeOperationFact>,
+            read: { 'text-size': settingsReadUnavailableIos },
+          },
+    ),
+  );
 }
 
 /**

@@ -16,8 +16,11 @@ import {
   currentDaemonCodeSignature,
   startHttpDaemonFixture,
 } from '../../__tests__/test-utils/daemon-http-fixture.ts';
-import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  closeLoopbackServer,
+  mkdtempForTestSync,
+  supportsLoopbackBind,
+} from '@agent-device/test-kit';
 import { loadDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendToDaemon } from '../daemon-client.ts';
@@ -66,7 +69,10 @@ test('a caller naming a policy refuses a running daemon that enforces a differen
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'DAEMON_POLICY_MISMATCH');
         assert.equal(error.details?.daemonPolicyDigest, otherDigest);
-        assert.equal(error.details?.expectedPolicyDigest, loadDaemonPolicy()?.digest);
+        assert.equal(
+          error.details?.expectedPolicyDigest,
+          loadDaemonPolicy(process.env, process.cwd())?.digest,
+        );
         return true;
       },
     );
@@ -150,7 +156,9 @@ async function startReusableDaemon(options: {
         codeSignature: currentDaemonCodeSignature(),
         processStartTime: readProcessStartTime(process.pid) ?? undefined,
         policyDigest:
-          options.policyDigest === 'matching' ? loadDaemonPolicy()?.digest : options.policyDigest,
+          options.policyDigest === 'matching'
+            ? loadDaemonPolicy(process.env, process.cwd())?.digest
+            : options.policyDigest,
       })}\n`,
     );
   if (options.publish === 'on-spawn') {

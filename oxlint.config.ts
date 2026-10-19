@@ -36,6 +36,29 @@ const NODE_OS_PATH = {
 const CHILD_PROCESS_BAN_ROOTS = ['src', 'packages/host-kit/src'];
 const PROVIDER_BAN_ROOTS = ['src/commands', 'src/cli/commands'];
 
+const MAX_FILE_LINES = 1000;
+
+// Architecture debt: lower caps as files shrink; remove entries when files fit MAX_FILE_LINES.
+const LEGACY_FILE_LINE_CAPS = {
+  'packages/platform-android/src/__tests__/snapshot.test.ts': 1416,
+  'packages/platform-apple/src/runner/__tests__/runner-client-command-retry.test.ts': 1064,
+  'packages/platform-apple/src/runner/__tests__/runner-session.test.ts': 1456,
+  'src/__tests__/agent-device-client.test.ts': 1271,
+  'src/__tests__/cli-client-commands.test.ts': 1234,
+  'src/__tests__/cli-config.test.ts': 1282,
+  'src/__tests__/cli-network.test.ts': 1092,
+  'src/__tests__/remote-connection.test.ts': 2324,
+  'src/commands/interaction/runtime/settle.test.ts': 2094,
+  'src/daemon-client/__tests__/daemon-client-lifecycle.test.ts': 1169,
+  'src/daemon-client/__tests__/daemon-client.test.ts': 1340,
+  'src/mcp/__tests__/command-tools.test.ts': 1029,
+  'test/integration/provider-scenarios/android-lifecycle.test.ts': 1227,
+  'packages/command-registry/src/registry.ts': 2179,
+  'packages/host-kit/src/internal/exec.ts': 1032,
+  'packages/react-native/src/metro/client-metro.ts': 1123,
+  'src/cli/commands/connection-runtime.ts': 1019,
+};
+
 export default defineConfig({
   env: {
     builtin: true,
@@ -84,6 +107,25 @@ export default defineConfig({
   },
   overrides: [
     {
+      files: ['**/*.test.{ts,tsx,mjs}'],
+      rules: {
+        'max-lines': ['error', { max: MAX_FILE_LINES }],
+      },
+    },
+    {
+      files: ['src/**/*.{ts,tsx,mjs}', 'packages/*/src/**/*.{ts,tsx,mjs}'],
+      excludeFiles: ['**/*.test.*', '**/__tests__/**', '**/*.fixtures.*', '**/test-utils/**'],
+      rules: {
+        'max-lines': ['error', { max: MAX_FILE_LINES }],
+      },
+    },
+    ...Object.entries(LEGACY_FILE_LINE_CAPS).map(([file, max]) => ({
+      files: [file],
+      rules: {
+        'max-lines': ['error', { max }] as const,
+      },
+    })),
+    {
       files: ['scripts/**/*.ts', 'scripts/**/*.mts', 'scripts/**/*.cts'],
       rules: {
         'no-undef': 'error',
@@ -125,8 +167,8 @@ export default defineConfig({
       files: [
         'src/daemon-client/daemon-client-rpc.ts',
         'packages/daemon/src/server/downloadable-artifact-http.ts',
-        'src/remote/remote-request-diagnostics.ts',
-        'src/remote/upload-stream.ts',
+        'packages/remote/src/remote-request-diagnostics.ts',
+        'packages/remote/src/upload-stream.ts',
       ],
       rules: {
         'unicorn/catch-error-name': 'off',

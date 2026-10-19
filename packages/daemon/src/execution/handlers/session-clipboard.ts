@@ -12,7 +12,7 @@ import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/devi
 import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { contextFromFlags, type DaemonCommandContext } from '../../core/context.ts';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type {
   BindDeviceRuntime,
@@ -26,7 +26,11 @@ import {
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
 } from '../../resources/session-device-resolution.ts';
-import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
+import {
+  type DaemonFailureResponse,
+  errorResponse,
+  type DaemonResponse,
+} from '@agent-device/kernel/contracts';
 
 type ClipboardAction = 'read' | 'write';
 

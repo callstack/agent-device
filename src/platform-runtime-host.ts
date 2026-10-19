@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   DeviceInventoryHost,
   HostOperatingSystem,
@@ -13,16 +14,24 @@ import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
 import { runCmd, whichCmd } from '@agent-device/host-kit/command';
 import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
+import { hostHomeDirectoryFromEnv } from '@agent-device/host-kit/host-file';
 
-export function createDeviceInventoryHost(): DeviceInventoryHost {
+export function createDeviceInventoryHost(host: HostEnvironment): DeviceInventoryHost {
+  const env = host.env;
+  // The host names its own home; families derive default-install paths from it (#3794). A host
+  // that names none (HOME and USERPROFILE both absent, e.g. env -i or a systemd unit without
+  // User=) yields undefined, and each family then omits only the home-derived default paths.
+  // Guessing the process home would be an ambient read (#3753), so undefined is the honest answer.
+  const homeDirectory = hostHomeDirectoryFromEnv(env);
   return Object.freeze({
     commands: Object.freeze({
-      which: async (executable: string) => ((await whichCmd(executable)) ? executable : undefined),
+      which: async (executable: string) =>
+        (await whichCmd(executable, env)) ? executable : undefined,
       run: async (request: HostCommandRequest, signal?: AbortSignal) => {
         const result = await runCmd(request.executable, guardedHostCommandArgv(request), {
           allowFailure: request.allowFailure,
           cwd: request.cwd,
-          env: request.env ? { ...process.env, ...request.env } : undefined,
+          env: request.env ? { ...env, ...request.env } : undefined,
           signal,
           timeoutMs: request.timeoutMs,
         });
@@ -34,7 +43,7 @@ export function createDeviceInventoryHost(): DeviceInventoryHost {
       },
     }),
     appleTools: createAppleToolHost(),
-    toolchains: createHostToolchainPreparer(),
+    toolchains: createHostToolchainPreparer(env),
     files: Object.freeze({
       isExecutable: async (candidate: string) => await isExecutable(candidate),
       createTemporaryTextFile: async (options: { prefix: string; suffix: string }) =>
@@ -42,7 +51,7 @@ export function createDeviceInventoryHost(): DeviceInventoryHost {
     }),
     hostOs: hostOperatingSystem(process.platform),
     hostName: os.hostname(),
-    homeDirectory: os.homedir(),
+    homeDirectory,
     observations: Object.freeze({
       deviceBooted: async (device: DeviceInfo) => {
         const { markSimulatorBooted } = await import('@agent-device/platform-apple/simulator');

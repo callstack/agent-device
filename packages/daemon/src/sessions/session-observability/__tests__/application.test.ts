@@ -1,11 +1,13 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
-vi.mock('../index.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../index.ts')>();
+vi.mock('../internal/session-observability.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../internal/session-observability.ts')>();
   return {
     ...actual,
     handleSessionObservabilityCommands: vi.fn(actual.handleSessionObservabilityCommands),
@@ -13,7 +15,7 @@ vi.mock('../index.ts', async (importOriginal) => {
 });
 
 import { handleSessionCommands } from '../../handlers/session.ts';
-import { handleSessionObservabilityCommands } from '../index.ts';
+import { handleSessionObservabilityCommands } from '../internal/session-observability.ts';
 
 const mockHandleSessionObservabilityCommands = vi.mocked(handleSessionObservabilityCommands);
 
@@ -33,6 +35,7 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: request(command),
@@ -59,6 +62,7 @@ test('observability commands retain their route response and narrow facade input
         'appLogAdmissionLedger',
         'audioProbeAdmissionLedger',
         'bindDevice',
+        'host',
         'inspectFacts',
         'perfCaptureAdmissionLedger',
         'platformServices',

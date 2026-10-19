@@ -1,6 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import {
+  LINUX_DEVICE,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type {
   BindDeviceRuntime,
@@ -13,7 +17,6 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 import { hostDiagnosticsFixture } from '../../../__tests__/support/host-diagnostics-fixture.ts';
 
@@ -45,6 +48,7 @@ test('doctor app checks retain runtime admission failures as a failed target-app
   });
 
   const response = await handleDoctorCommand({
+    host: createTestHostEnvironment(),
     hostDiagnostics: hostDiagnosticsFixture(),
     req: {
       token: 't',
@@ -143,6 +147,7 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
   });
 
   const response = await handleDoctorCommand({
+    host: createTestHostEnvironment(),
     hostDiagnostics: hostDiagnosticsFixture(),
     req: {
       token: 't',

@@ -243,6 +243,30 @@ test('a settle that stored its settled tree records that tree, not the tree the 
   assert.equal(movingTargetBaseline(session)?.tree.nodes, settled.nodes);
 });
 
+test('a stored settled tree keeps the surface and presentation its capture read', () => {
+  // #3565: the rest-proof baseline is minted like every other one, so a settle that came to rest on
+  // a sheet over SpringBoard hands the gate the same facts the capture published.
+  const session = makeSession('ios');
+  session.snapshot = {
+    ...appTree('Settled'),
+    iosSystemSurfaceBundleId: 'com.apple.springboard',
+    presentedSurface: 'presented',
+  };
+
+  markDeferredInteractionOutcome({
+    session,
+    command: 'press',
+    positionals: ['label="Slide target"'],
+    flags: undefined,
+    preActionTree: { nodes: appTree('Pre-action').nodes },
+    settle: settleMark({ stored: true }),
+  });
+
+  const tree = movingTargetBaseline(session)?.tree;
+  assert.equal(tree?.surfaceBundleId, 'com.apple.springboard');
+  assert.equal(tree?.presentedSurface, 'presented');
+});
+
 test('a converged settle that stored nothing keeps the acted-through tree', () => {
   // `settled: true` is not the whole claim, and neither is a settle that merely ran: a sparse
   // capture is refused by the store and a cross-surface transition (#2438) withholds the diff,

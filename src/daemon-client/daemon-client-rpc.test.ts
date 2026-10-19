@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -30,6 +31,31 @@ test('lease allocation transports an optional initial provider app', () => {
     ttlMs: 30_000,
     backend: 'android-instance',
     providerApp: 'Example.apk',
+  });
+});
+
+test('lease allocation transports a caller-chosen lease id', () => {
+  const payload = buildHttpRpcPayload(
+    {
+      token: 'daemon-token',
+      session: 'default',
+      command: 'lease_allocate',
+      positionals: [],
+      meta: {
+        requestId: 'lease-req',
+        tenantId: 'proxy',
+        runId: 'proxy-client-1',
+        leaseId: 'abcdef0123456789abcdef0123456789',
+      },
+    },
+    { includeTokenParam: false },
+  );
+
+  assert.deepEqual(payload.params, {
+    session: 'default',
+    tenantId: 'proxy',
+    runId: 'proxy-client-1',
+    leaseId: 'abcdef0123456789abcdef0123456789',
   });
 });
 
@@ -82,6 +108,41 @@ test('lease allocation transports the provider configuration the session needs (
   });
 });
 
+test('lease allocation carries the device selectors a proxy daemon picks by', () => {
+  const payload = buildHttpRpcPayload(
+    {
+      token: 'daemon-token',
+      session: 'adc-proxy',
+      command: 'lease_allocate',
+      positionals: [],
+      flags: {
+        platform: 'ios',
+        target: 'tv',
+        device: 'Apple TV',
+        udid: 'SIM-1',
+        serial: 'S-1',
+        iosSimulatorDeviceSet: '/sims',
+        androidDeviceAllowlist: 'S-1',
+      },
+      meta: { requestId: 'lease-req', tenantId: 'proxy', runId: 'proxy-client-1' },
+    },
+    { includeTokenParam: false },
+  );
+
+  assert.deepEqual(payload.params, {
+    session: 'adc-proxy',
+    tenantId: 'proxy',
+    runId: 'proxy-client-1',
+    platform: 'ios',
+    target: 'tv',
+    device: 'Apple TV',
+    udid: 'SIM-1',
+    serial: 'S-1',
+    iosSimulatorDeviceSet: '/sims',
+    androidDeviceAllowlist: 'S-1',
+  });
+});
+
 test('HTTP RPC errors sanitize an untrusted cause before rehydration', () => {
   const secret = 'adc_agent_remote-secret';
   const oversizedCode = `apiKey=${secret} ${'c'.repeat(500)}`;
@@ -101,6 +162,7 @@ test('HTTP RPC errors sanitize an untrusted cause before rehydration', () => {
       },
     }),
     {
+      host: createTestHostEnvironment(),
       info: { token: 'daemon-token', pid: 1 },
       req: {
         command: 'apps_install_source',

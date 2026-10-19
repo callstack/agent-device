@@ -83,6 +83,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   screenRecordingStart: 'repeatable',
   scrollDirection: 'mutates',
   sendPushNotification: 'mutates',
+  sendTelephonyEvent: 'mutates',
   setFoldPose: 'mutates',
   setOrientation: 'mutates',
   setSetting: 'mutates',
@@ -94,6 +95,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   triggerAppEvent: 'mutates',
   tvRemote: 'mutates',
   typeText: 'mutates',
+  uninstallApp: 'mutates',
   unlockOrientation: 'mutates',
   writeClipboard: 'mutates',
 });

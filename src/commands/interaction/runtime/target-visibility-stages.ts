@@ -20,13 +20,15 @@ import {
   type OffscreenScrollDirection,
 } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import { toBackendContext } from '../../runtime-common.ts';
-import { assertTapTargetClearOfVisibleKeyboard } from './keyboard-occlusion.ts';
-import { interactionVerb } from './interaction-verb.ts';
-import type { InteractionAction } from './interaction-resolution-request.ts';
+import { assertTapTargetClearOfVisibleKeyboard } from '@agent-device/selectors/keyboard-occlusion';
+import {
+  interactionVerb,
+  type InteractionAction,
+} from '@agent-device/selectors/interaction-action';
 
 /**
  * The one construction site for "covered by another visible element" refusals, shared by the
- * node-stage runner below (ref, selector, native-ref preflight) and `selector-readiness.ts`'s
+ * node-stage runner below (ref, selector, native-ref preflight) and `selector-target-resolution.ts`'s
  * covered-target diagnosis probe. `find ... focus` builds the same detail shape through
  * {@link coveredInteractionDetails}, so both producers report one shape.
  *

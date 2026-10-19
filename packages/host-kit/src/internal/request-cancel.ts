@@ -1,7 +1,29 @@
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { defineRuntimeSlots, type RuntimeStateHandle } from '../runtime-slots.ts';
 
-const canceledRequestIds = new Set<string>();
-const requestAbortControllers = new Map<string, AbortController>();
+type RequestCancelState = {
+  canceledRequestIds: Set<string>;
+  requestAbortControllers: Map<string, AbortController>;
+};
+
+const requestCancelRuntime = defineRuntimeSlots();
+const REQUEST_CANCEL_SLOT = Symbol('requestCancel');
+const requestCancelState = (): RequestCancelState =>
+  requestCancelRuntime.slot(
+    REQUEST_CANCEL_SLOT,
+    (): RequestCancelState => ({
+      canceledRequestIds: new Set<string>(),
+      requestAbortControllers: new Map<string, AbortController>(),
+    }),
+    (state) => {
+      for (const controller of state.requestAbortControllers.values()) controller.abort();
+    },
+  );
+const canceledRequestIds = () => requestCancelState().canceledRequestIds;
+const requestAbortControllers = () => requestCancelState().requestAbortControllers;
+
+export const createRequestCancelRuntimeState = (): RuntimeStateHandle =>
+  requestCancelRuntime.createHandle();
 
 export type RequestAbortRegistration = {
   requestId: string;
@@ -55,16 +77,16 @@ export function registerRequestAbort(
   requestId: string | undefined,
 ): RequestAbortRegistration | undefined {
   if (!requestId) return undefined;
-  if (requestAbortControllers.has(requestId)) {
+  if (requestAbortControllers().has(requestId)) {
     throw new AppError('INVALID_ARGS', `Request ID is already in flight: ${requestId}`, {
       requestId,
       reason: 'duplicate_request_id',
     });
   }
-  evictOldestEntries(requestAbortControllers);
+  evictOldestEntries(requestAbortControllers());
   const controller = new AbortController();
-  requestAbortControllers.set(requestId, controller);
-  if (canceledRequestIds.has(requestId)) {
+  requestAbortControllers().set(requestId, controller);
+  if (canceledRequestIds().has(requestId)) {
     controller.abort();
   }
   return { requestId, controller };
@@ -72,13 +94,18 @@ export function registerRequestAbort(
 
 export function markRequestCanceled(requestId: string | undefined): void {
   if (!requestId) return;
-  evictOldestSetEntries(canceledRequestIds);
-  canceledRequestIds.add(requestId);
+  evictOldestSetEntries(canceledRequestIds());
+  canceledRequestIds().add(requestId);
   // Abort WITH the typed error as the reason: every `signal.throwIfAborted()`,
   // fetch, and `throw signal.reason` downstream then surfaces the canceled
   // request as such, instead of a bare DOMException that normalizes to UNKNOWN.
   // No call site has to remember the factory — the signal carries it.
-  requestAbortControllers.get(requestId)?.abort(createRequestCanceledError());
+  requestAbortControllers().get(requestId)?.abort(createRequestCanceledError());
+}
+
+/** Aborts every request this runtime has in flight, as a canceled request. */
+export function cancelAllRequests(): void {
+  for (const requestId of requestAbortControllers().keys()) markRequestCanceled(requestId);
 }
 
 export function clearRequestCanceled(
@@ -89,12 +116,12 @@ export function clearRequestCanceled(
   if (
     registration &&
     (registration.requestId !== requestId ||
-      requestAbortControllers.get(requestId) !== registration.controller)
+      requestAbortControllers().get(requestId) !== registration.controller)
   ) {
     return;
   }
-  canceledRequestIds.delete(requestId);
-  requestAbortControllers.delete(requestId);
+  canceledRequestIds().delete(requestId);
+  requestAbortControllers().delete(requestId);
 }
 
 export function clearRequestAbortRegistration(
@@ -106,12 +133,12 @@ export function clearRequestAbortRegistration(
 
 export function isRequestCanceled(requestId: string | undefined): boolean {
   if (!requestId) return false;
-  return canceledRequestIds.has(requestId);
+  return canceledRequestIds().has(requestId);
 }
 
 export function getRequestSignal(requestId: string | undefined): AbortSignal | undefined {
   if (!requestId) return undefined;
-  return requestAbortControllers.get(requestId)?.signal;
+  return requestAbortControllers().get(requestId)?.signal;
 }
 
 export function throwIfRequestCanceled(requestId: string | undefined): void {

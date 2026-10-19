@@ -27,18 +27,21 @@ test('Provider-backed integration Android record stop retries the pull until in-
       const streaming = mp4WithMoovSlot('free');
       const finalized = mp4WithMoovSlot('moov');
       let pulls = 0;
-      const daemon = await createAndroidRecordingScenarioHarness({
-        androidAdbProvider: () =>
-          createAndroidRecordingProvider({
-            calls: [],
-            manifests: [manifest],
-            onPull: (_remotePath, localPath, count) => {
-              pulls = count;
-              fs.writeFileSync(localPath, count < 3 ? streaming : finalized);
-            },
-          }),
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-      });
+      const daemon = await createAndroidRecordingScenarioHarness(
+        {
+          androidAdbProvider: () =>
+            createAndroidRecordingProvider({
+              calls: [],
+              manifests: [manifest],
+              onPull: (_remotePath, localPath, count) => {
+                pulls = count;
+                fs.writeFileSync(localPath, count < 3 ? streaming : finalized);
+              },
+            }),
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+        },
+        tmpDir,
+      );
       seedAndroidRecordingResource(daemon, manifest);
       try {
         const stopped = await stopAndroidRecording(daemon, outputPath);

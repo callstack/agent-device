@@ -1,8 +1,9 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import net from 'node:net';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type {
   DaemonPaths,
@@ -24,10 +25,13 @@ import {
 import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { readVersion } from '@agent-device/host-kit/version';
 
 type ResolvedDaemonTransport = 'socket' | 'http';
 type SendRequestOptions = {
+  /** The host whose working directory and environment this request's client-side work reads. */
+  host: HostEnvironment;
   onProgress?: RequestProgressSink;
   /**
    * The caller's per-request cancellation (#3178). Aborted at or before a send attempt, nothing
@@ -36,6 +40,12 @@ type SendRequestOptions = {
    * canceled-request error. An abort is never a timeout: it never reaches `handleRequestTimeout`.
    */
   signal?: AbortSignal;
+  /**
+   * What a timed-out request may do to the daemon. `retire-unresponsive`, the default, lets the
+   * liveness probe retire a daemon that answers nothing; `none` leaves every daemon alone, which is
+   * how an attach client and the quiesce request itself time out.
+   */
+  timeoutRecovery?: 'retire-unresponsive' | 'none';
 };
 
 /**
@@ -367,11 +377,11 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
 
 export async function sendRequest(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   preference: DaemonTransportPreference,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
-  options: SendRequestOptions = {},
+  options: SendRequestOptions,
 ): Promise<DaemonResponse> {
   try {
     return await sendRequestWithFallback(info, req, preference, statePaths, timeoutMs, options);
@@ -383,6 +393,7 @@ export async function sendRequest(
     throw await handleRequestTimeout({
       info,
       statePaths,
+      retireUnresponsive: options.timeoutRecovery !== 'none',
       ...timeoutRequestContext(req, isRemoteDaemon(info), expiredBudget),
     });
   }
@@ -390,11 +401,11 @@ export async function sendRequest(
 
 async function sendRequestWithFallback(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   preference: DaemonTransportPreference,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
-  options: SendRequestOptions = {},
+  options: SendRequestOptions,
 ): Promise<DaemonResponse> {
   const transport = chooseTransport(info, preference);
   const deadline = typeof timeoutMs === 'number' ? performance.now() + timeoutMs : undefined;
@@ -424,7 +435,7 @@ async function sendRequestWithFallback(
 
 async function retryAfterRemoteInstanceMismatch(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
   deadline: number | undefined,
@@ -458,7 +469,7 @@ async function retryAfterRemoteInstanceMismatch(
 }
 
 function remainingRemoteRequestTimeoutMs(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   timeoutMs: number | undefined,
   deadline: number | undefined,
   timedOutProbeMs?: number,
@@ -489,7 +500,7 @@ function isRemoteTransportFailure(error: unknown): boolean {
 
 async function sendRequestWithTransport(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
   transport: ResolvedDaemonTransport,
@@ -591,7 +602,7 @@ function handleTransportError(
 
 async function sendSocketRequest(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   timeoutMs: number | undefined,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
@@ -686,10 +697,13 @@ function requestTimeoutError(timeoutMs: number, requestId: string | undefined): 
 
 // The fields a timed-out request is described by, read once so a socket and an HTTP timeout cannot
 // describe the same request differently.
-type TimeoutRequestFields = Omit<Parameters<typeof handleRequestTimeout>[0], 'info' | 'statePaths'>;
+type TimeoutRequestFields = Omit<
+  Parameters<typeof handleRequestTimeout>[0],
+  'info' | 'statePaths' | 'retireUnresponsive'
+>;
 
 function timeoutRequestContext(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   remote: boolean,
   timeoutMs: number,
 ): TimeoutRequestFields {
@@ -722,7 +736,7 @@ function isRemoteInstanceMismatchResponse(
 
 async function sendHttpRequest(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
   options: SendRequestOptions,
@@ -766,6 +780,7 @@ async function sendHttpRequest(
         info,
         req,
         stateDir: statePaths.baseDir,
+        host: options.host,
         resolve: resolveOnce,
         reject: rejectOnce,
       });

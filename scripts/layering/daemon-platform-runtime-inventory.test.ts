@@ -59,18 +59,18 @@ for (const [file, target, symbol] of [
 test('R76 rejects an edge with the pair and its line', () => {
   const sources = {
     'src/platform-runtime-android-tool-host.ts': 'export function createAndroidToolHost() {}\n',
-    'packages/daemon/src/fixture.ts':
+    'packages/daemon/src/subject.ts':
       "import { createAndroidToolHost } from '../../../src/platform-runtime-android-tool-host.ts';\n" +
       'void createAndroidToolHost;\n',
   };
-  const found = edgeViolations(sources, 'packages/daemon/src/fixture.ts');
+  const found = edgeViolations(sources, 'packages/daemon/src/subject.ts');
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.equal(found[0]!.line, 1);
   assert.match(found[0]!.message, /daemon coupling to root platform mechanics is banned/);
   assert.match(
     found[0]!.message,
-    /packages\/daemon\/src\/fixture\.ts -> src\/platform-runtime-android-tool-host\.ts/,
+    /packages\/daemon\/src\/subject\.ts -> src\/platform-runtime-android-tool-host\.ts/,
   );
 });
 
@@ -127,10 +127,10 @@ test('R76 ignores test-shaped and non-daemon importers', () => {
 test('R76 ignores retired-zone targets, which R65 owns', () => {
   const sources = {
     'src/platforms/android.ts': 'export const legacy = 1;\n',
-    'packages/daemon/src/fixture.ts':
+    'packages/daemon/src/subject.ts':
       'import { legacy } from "../../../src/platforms/android.ts";\nvoid legacy;\n',
   };
-  assert.deepEqual(edgeViolations(sources, 'packages/daemon/src/fixture.ts'), []);
+  assert.deepEqual(edgeViolations(sources, 'packages/daemon/src/subject.ts'), []);
 });
 
 test('the root composition family is src/platform-runtime.ts plus src/platform-runtime-*.ts only', () => {
@@ -150,13 +150,13 @@ test('R76 catches a daemon import of a root hub that reaches the platform family
     'src/hub-runtime.ts':
       "import { gateway } from './platform-runtime.ts';\nvoid gateway;\n" +
       'export function hubFact() {}\n',
-    'packages/daemon/src/fixture.ts':
+    'packages/daemon/src/subject.ts':
       "import { hubFact } from '../../../src/hub-runtime.ts';\nvoid hubFact;\n",
   };
-  const found = edgeViolations(sources, 'packages/daemon/src/fixture.ts');
+  const found = edgeViolations(sources, 'packages/daemon/src/subject.ts');
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-  assert.match(found[0]!.message, /packages\/daemon\/src\/fixture\.ts -> src\/hub-runtime\.ts/);
+  assert.match(found[0]!.message, /packages\/daemon\/src\/subject\.ts -> src\/hub-runtime\.ts/);
 });
 
 test('R76 does not turn an intra-daemon hop into a hub edge', () => {

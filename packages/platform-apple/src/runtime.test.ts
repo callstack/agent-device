@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
 
 vi.mock('./core/app-resolution.ts', async (importOriginal) => ({
@@ -18,6 +19,8 @@ import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
+
+bindTestCommandHost();
 
 const presentIosAcquisition: SnapshotRuntimeHost['presentIosAcquisition'] = async () => ({
   backend: 'xctest',
@@ -371,6 +374,27 @@ test.each(Object.entries(leaves))(
         device.kind === 'simulator' ? 'unsupported-platform-leaf' : 'unsupported-device-kind',
       );
     }
+  },
+);
+
+test.each([...Object.entries(leaves), ['ios physical device', appleDevice({ kind: 'device' })]])(
+  'refuses the telephony fact for the %s leaf',
+  async (_name, device) => {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    expect(binding.facts.operations.sendTelephonyEvent).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: expect.stringContaining('Android emulator console'),
+    });
+    expect(binding.operations.sendTelephonyEvent).toBeUndefined();
   },
 );
 

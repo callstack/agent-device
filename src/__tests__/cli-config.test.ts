@@ -6,7 +6,7 @@ import {
   hashRemoteConfigFile,
   readActiveConnectionState,
   readRemoteConnectionState,
-} from '../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { runCliCapture, type CapturedDaemonRequest } from './cli-capture.ts';
 import { makeTempWorkspace } from './cli-config-fixtures.ts';
 

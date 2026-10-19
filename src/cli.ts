@@ -1,17 +1,24 @@
+import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import {
   asAppError,
   AppError,
   normalizeError,
-  throwDaemonError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon/session-artifact-paths';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { withCommandHost } from '@agent-device/host-kit/command';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
-import { sendToDaemon } from './daemon-client/daemon-client.ts';
+import {
+  createEnsuredDaemonTransport,
+  resolveRunTransport,
+  sendToDaemon,
+} from './daemon-client/daemon-client.ts';
 import fs from 'node:fs';
 import type { BatchStep } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
@@ -36,23 +43,23 @@ import {
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { applyDefaultPlatformBinding, resolveBindingSettings } from './cli/session-binding.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';
 import {
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
-} from './remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
-import { INTERNAL_COMMANDS, isKnownCliCommandName } from '@agent-device/command-registry/catalog';
-import { sendInjectedDaemonRequest } from './cli/injected-daemon-dispatch.ts';
+import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
+  /** Builds the transport that talks as a given host; injected deps leave it out. */
+  transportForHost?: (host: HostEnvironment) => typeof sendToDaemon;
 };
 
 type CliDaemonTransport = typeof sendToDaemon;
@@ -72,8 +79,26 @@ const printJson = (
   import('./commands/output/json.ts').then(({ printJson: write }) => write(result));
 
 const DEFAULT_CLI_DEPS: CliDeps = {
-  sendToDaemon,
+  sendToDaemon: createEnsuredDaemonTransport({ onReplaced: writeDaemonReplacedNotice }),
+  transportForHost: (host) =>
+    createEnsuredDaemonTransport({ host, onReplaced: writeDaemonReplacedNotice }),
 };
+
+function writeDaemonReplacedNotice(replaced: {
+  stateDir: string;
+  previous: { pid: number; version?: string };
+  reason: 'incompatible' | 'unreachable';
+}): void {
+  const { stateDir, previous, reason } = replaced;
+  const identity = previous.version
+    ? `pid ${previous.pid}, v${previous.version}`
+    : `pid ${previous.pid}`;
+  process.stderr.write(
+    reason === 'unreachable'
+      ? `Replaced unreachable daemon (${identity}) in ${stateDir}.\n`
+      : `Replaced idle daemon (${identity}) in ${stateDir}: it did not match this client.\n`,
+  );
+}
 
 const METRO_RUNTIME_OVERRIDE_FLAG_KEYS = new Set<FlagKey>([
   'launchUrl',
@@ -107,14 +132,28 @@ const REMOTE_MATERIALIZATION_DEFERRED_COMMANDS = new Set([
   'takeover',
 ]);
 
-export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): Promise<void> {
+export async function runCli(
+  argv: string[],
+  deps: CliDeps = DEFAULT_CLI_DEPS,
+  host: HostEnvironment = captureHostEnvironment(process),
+): Promise<void> {
+  await withCommandHost(
+    { host, requestEnv: undefined },
+    async () => await runCliOnHost(argv, deps, host),
+  );
+}
+
+async function runCliOnHost(argv: string[], deps: CliDeps, host: HostEnvironment): Promise<void> {
+  // One transport per run: its ensure-once state is shared by the materialization client and the
+  // command client, so a run ensures the daemon once.
+  const transport = resolveRunTransport(deps, host);
   const requestId = createRequestId();
   const version = readVersion();
   const debugEnabled = isDebugRequested(argv);
   const jsonRequested = argv.includes('--json');
   // Best-effort session guess used only for pre-parse diagnostics scope.
   // After parse succeeds, request dispatch uses parsed flags/session resolution.
-  const sessionGuess = guessSessionFromArgv(argv) ?? process.env.AGENT_DEVICE_SESSION ?? 'default';
+  const sessionGuess = guessSessionFromArgv(argv) ?? host.env.AGENT_DEVICE_SESSION ?? 'default';
 
   await withDiagnosticsScope(
     {
@@ -125,12 +164,14 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
     },
     async () => {
       const { parsed, command, positionals } = await parseCliInputOrExit(argv, {
+        host,
         version,
         jsonRequested,
         debugEnabled,
       });
       const debugOutputEnabled = isParsedDebugRequested(command, parsed.providedFlags);
       const ctx = await resolveRunContextOrExit(parsed, {
+        host,
         command,
         positionals,
         requestId,
@@ -140,7 +181,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
       let logTailStopper: (() => void) | null = null;
       try {
         if (command === 'react-devtools') {
-          await exitAfterFlush(await runReactDevtoolsCli(ctx, deps));
+          await exitAfterFlush(await runReactDevtoolsCli(ctx));
           return;
         }
         if (command === 'web') {
@@ -149,6 +190,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
             await runWebCommand(positionals, {
               flags: ctx.effectiveFlags,
               stateDir: ctx.daemonPaths.baseDir,
+              host,
             }),
           );
           return;
@@ -159,15 +201,15 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           stateDir: ctx.daemonPaths.baseDir,
           flags: ctx.effectiveFlags,
         });
-        await resolveRemoteContext(ctx, deps);
+        await resolveRemoteContext(ctx, transport);
         registerDaemonAuthDiagnosticValue(ctx.effectiveFlags);
         if (command === 'cdp') {
           await exitAfterFlush(
             await runAgentCdpCommand(positionals, {
               flags: ctx.effectiveFlags,
               runtime: ctx.resolvedRuntime,
-              cwd: process.cwd(),
-              env: process.env,
+              cwd: host.cwd,
+              env: host.env,
             }),
           );
           return;
@@ -176,12 +218,14 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
         const replayTestReporterRuntime = await createReplayReporterForTest(ctx);
         const commandProgress = createCommandProgressState();
         const client = createAgentDeviceClient(buildClientConfig(ctx), {
+          host: ctx.host,
           transport: createCliDaemonTransport({
+            host,
             command,
             flags: ctx.effectiveFlags,
             replayTestReporterRuntime,
             commandProgress,
-            transport: deps.sendToDaemon,
+            transport,
           }),
         });
         await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
@@ -206,11 +250,16 @@ type ParsedCliInput = {
 
 async function parseCliInputOrExit(
   argv: string[],
-  options: { version: string; jsonRequested: boolean; debugEnabled: boolean },
+  options: {
+    host: HostEnvironment;
+    version: string;
+    jsonRequested: boolean;
+    debugEnabled: boolean;
+  },
 ): Promise<ParsedCliInput> {
   let parsed: ReturnType<typeof resolveCliOptions>;
   try {
-    parsed = resolveCliOptions(argv, { cwd: process.cwd(), env: process.env });
+    parsed = resolveCliOptions(argv, { cwd: options.host.cwd, env: options.host.env });
   } catch (error) {
     emitDiagnostic({
       level: 'error',
@@ -271,6 +320,7 @@ async function parseCliInputOrExit(
 }
 
 type CliRunContext = {
+  host: HostEnvironment;
   command: string;
   positionals: string[];
   requestId: string;
@@ -293,11 +343,18 @@ type CliRunContext = {
 
 async function resolveRunContextOrExit(
   parsed: ReturnType<typeof resolveCliOptions>,
-  base: { command: string; positionals: string[]; requestId: string; debugOutputEnabled: boolean },
+  base: {
+    host: HostEnvironment;
+    command: string;
+    positionals: string[];
+    requestId: string;
+    debugOutputEnabled: boolean;
+  },
 ): Promise<CliRunContext> {
   const explicitFlagKeys = new Set(parsed.providedFlags.map((entry) => entry.key));
   try {
     const binding = resolveBindingSettings({
+      env: base.host.env,
       policyOverrides: parsed.flags,
       configuredPlatform: parsed.flags.platform,
       configuredSession: parsed.flags.session,
@@ -305,13 +362,18 @@ async function resolveRunContextOrExit(
     const flags = binding.lockPolicy
       ? { ...parsed.flags }
       : applyDefaultPlatformBinding(parsed.flags, {
+          env: base.host.env,
           policyOverrides: parsed.flags,
           configuredPlatform: parsed.flags.platform,
           configuredSession: parsed.flags.session,
         });
-    const daemonPaths = resolveDaemonPaths(flags.stateDir);
+    const daemonPaths = resolveDaemonPaths(flags.stateDir, {
+      env: base.host.env,
+      cwd: base.host.cwd,
+    });
     const sessionName = flags.session ?? 'default';
     const connectionDefaults = resolveActiveConnectionDefaults({
+      host: base.host,
       command: base.command,
       explicitFlagKeys,
       stateDir: daemonPaths.baseDir,
@@ -350,42 +412,19 @@ async function resolveRunContextOrExit(
   }
 }
 
-async function runReactDevtoolsCli(ctx: CliRunContext, deps: CliDeps): Promise<number> {
+async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
   const { runReactDevtoolsCommand } = await import('./cli/commands/react-devtools.ts');
-  const { daemonAuthToken, ...directRequestFlags } = ctx.effectiveFlags;
   return await runReactDevtoolsCommand(ctx.positionals, {
-    flags: {
-      ...directRequestFlags,
-      leaseProvider: ctx.connectionDefaults?.connection?.leaseProvider,
-    },
+    flags: ctx.effectiveFlags,
     stateDir: ctx.daemonPaths.baseDir,
     session: ctx.effectiveFlags.session ?? ctx.sessionName,
-    cwd: process.cwd(),
-    env: process.env,
-    configureDirectPortReverse: async () => {
-      const response = await sendInjectedDaemonRequest({
-        route: 'react-devtools',
-        command: INTERNAL_COMMANDS.runtime,
-        request: {
-          positionals: ['port-reverse'],
-          flags: {
-            ...directRequestFlags,
-            leaseProvider: ctx.connectionDefaults?.connection?.leaseProvider,
-            devicePort: 8097,
-            hostPort: 8097,
-            portReverseName: 'react-devtools',
-          },
-          session: ctx.effectiveFlags.session ?? ctx.sessionName,
-        },
-        transport: deps.sendToDaemon,
-        transportOptions: { authToken: daemonAuthToken },
-      });
-      if (!response.ok) throwDaemonError(response.error);
-    },
   });
 }
 
-async function resolveRemoteContext(ctx: CliRunContext, deps: CliDeps): Promise<void> {
+async function resolveRemoteContext(
+  ctx: CliRunContext,
+  transport: CliDaemonTransport,
+): Promise<void> {
   if (ctx.command === 'batch') {
     if (ctx.positionals.length > 0) {
       throw new AppError('INVALID_ARGS', 'batch does not accept positional arguments.');
@@ -398,18 +437,20 @@ async function resolveRemoteContext(ctx: CliRunContext, deps: CliDeps): Promise<
       command: ctx.command,
       flags: ctx.effectiveFlags,
       stateDir: ctx.daemonPaths.baseDir,
-      env: process.env,
+      env: ctx.host.env,
     });
     ctx.effectiveFlags = authResolution.flags;
   }
 
   if (ctx.effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(ctx.command)) {
     const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
-      transport: createClientDaemonTransport(deps.sendToDaemon),
+      host: ctx.host,
+      transport: createClientDaemonTransport(transport),
     });
     const { materializeRemoteConnectionForCommand } =
       await import('./cli/commands/connection-runtime.ts');
     const materialized = await materializeRemoteConnectionForCommand({
+      host: ctx.host,
       command: ctx.command,
       flags: ctx.effectiveFlags,
       client: materializationClient,
@@ -479,7 +520,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     runtime: ctx.resolvedRuntime,
     lockPolicy: ctx.binding.lockPolicy,
     lockPlatform: ctx.binding.defaultPlatform,
-    cwd: process.cwd(),
+    cwd: ctx.host.cwd,
     debug: ctx.debugOutputEnabled,
     cost: currentFlags.cost,
     responseLevel: currentFlags.responseLevel,
@@ -526,6 +567,7 @@ async function dispatchCliCommand(
         ctx.binding.lockPolicy && ctx.flags.platform === undefined
           ? { ...step.input }
           : applyDefaultPlatformBinding(step.input, {
+              env: ctx.host.env,
               policyOverrides: effectiveFlags,
               configuredPlatform: effectiveFlags.platform,
               configuredSession: effectiveFlags.session,
@@ -534,6 +576,7 @@ async function dispatchCliCommand(
     }));
     if (
       await tryRunClientBackedCommand({
+        host: ctx.host,
         command,
         positionals,
         flags: { ...effectiveFlags, batchSteps },
@@ -552,6 +595,7 @@ async function dispatchCliCommand(
     );
   } else if (
     await tryRunClientBackedCommand({
+      host: ctx.host,
       command,
       positionals,
       flags: effectiveFlags,
@@ -712,6 +756,7 @@ function isDaemonStartupFailure(error: AppError): boolean {
 }
 
 function resolveActiveConnectionDefaults(options: {
+  host: HostEnvironment;
   command: string;
   explicitFlagKeys: Set<FlagKey>;
   stateDir: string;
@@ -736,8 +781,8 @@ function resolveActiveConnectionDefaults(options: {
     stateDir: options.stateDir,
     session: options.session,
     remoteConfig: options.remoteConfig,
-    cwd: process.cwd(),
-    env: process.env,
+    cwd: options.host.cwd,
+    env: options.host.env,
     allowActiveFallback:
       !options.explicitFlagKeys.has('session') &&
       (!options.remoteConfig || options.command === 'disconnect' || !options.hasResolvedSession),
@@ -811,6 +856,30 @@ function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boole
   return false;
 }
 
+type CliDaemonTransportSetup = {
+  host: HostEnvironment;
+  command: string;
+  flags: CliFlags;
+  replayTestReporterRuntime?: ReplayTestReporterRuntime;
+  commandProgress: CommandProgressState;
+  transport: CliDaemonTransport;
+};
+
+/**
+ * A remote connection reads each daemon reply for the leases its request ended, and forgets the
+ * stored lease when the reply names it.
+ */
+function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
+  const send = createCliProgressTransport(options);
+  if (!options.flags.remoteConfig) return send;
+  return async (req, context) => {
+    const response = await send(req, context);
+    const { forgetEndedProxyLease } = await import('./cli/connection/ended-lease.ts');
+    forgetEndedProxyLease(options.flags, response, options.host);
+    return response;
+  };
+}
+
 /**
  * The human CLI renders streamed progress itself: `test` hands its events to the
  * replay-test reporter, every other command streams `command` lines to stderr
@@ -818,13 +887,7 @@ function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boole
  * doctor summary does not repeat checks progress already printed). `--json` opts
  * out of progress entirely, so it installs no sink.
  */
-function createCliDaemonTransport(options: {
-  command: string;
-  flags: CliFlags;
-  replayTestReporterRuntime?: ReplayTestReporterRuntime;
-  commandProgress: CommandProgressState;
-  transport: CliDaemonTransport;
-}): AgentDeviceDaemonTransport {
+function createCliProgressTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
   const { command, flags, replayTestReporterRuntime, transport } = options;
   if (flags.json) return createClientDaemonTransport(transport);
   const onProgress =

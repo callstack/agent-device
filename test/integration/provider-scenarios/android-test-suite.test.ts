@@ -247,7 +247,7 @@ test(
           {
             action: 'type',
             text: 'Łódź café',
-            delayMs: 0,
+            delayMs: 75,
           },
         ]);
         assert.deepEqual(
@@ -313,7 +313,7 @@ test(
           {
             action: 'type',
             text: 'Łódź café',
-            delayMs: 0,
+            delayMs: 75,
           },
         ]);
         assert.equal(

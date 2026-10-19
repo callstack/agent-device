@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -50,6 +51,7 @@ export type { RecordingContactSheetResult } from './contact-sheet-report.ts';
  */
 export async function buildRecordingContactSheet(
   input: Readonly<{
+    host: HostEnvironment;
     videoPath: string;
     outputPath?: string;
     maxPixels: number;
@@ -83,6 +85,7 @@ export async function buildRecordingContactSheet(
   const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-contact-sheet-'));
   try {
     const extracted = await extractRecordingFrames({
+      host: input.host,
       videoPath,
       scratchDir,
       timesMs: grid.timesMs,

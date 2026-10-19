@@ -238,8 +238,8 @@ i.e. the question of whether a command surface should know the client type. That
 decision, not a misplaced declaration.
 
 **5 + 1 edges → `daemon/daemon-command-registry.ts` and `daemon/types.ts`.** `core`'s descriptor
-registry composes the ADR 0003 daemon facet, whose shape the daemon declares. ADR 0003's
-daemon-owned-declaration invariant is about the _values_ (route + policy traits), which stay in
+registry composes the ADR 0008 daemon facet, whose shape the daemon declares. The ADR 0008
+daemon-owned-declaration rule is about the _values_ (route + policy traits), which stay in
 `daemon/`; only the shape needs to sit below `core`. `DaemonCommandDescriptor` references the
 daemon-internal `DaemonRequest`, so this is a real change, not a file move — either the facet type
 becomes generic over the request type, or the request shape itself moves down.
@@ -268,7 +268,12 @@ moving `DaemonRequest` is most of what §1's second cluster needs.
 > `bin.ts`, `cli.ts` and `daemon.ts`, and R80 asserts that the zone graph of static value imports is
 > acyclic. That reduces `(root)` in the logical graph only: the modules still live directly under
 > `src/`, and the declaration is a bridge whose rows go as groups move into zone folders or
-> packages. The physical moves remain outstanding, starting with #3294. Ranking the composition roots did not weaken R2: it still rejects a direct `daemon/` ->
+> packages. Correction (2026-10-16): #3294 and #3281 are closed.
+> PR #3297 moved daemon diagnostics to `src/daemon-contracts/`.
+> PR #3299 moved the runtime assembly pair to `src/command-runtime/`.
+> Package extraction later moved daemon diagnostics to `packages/daemon-contracts/`.
+> Other physical moves remain outstanding, as shown by `scripts/layering/root-module-zones.ts` on 2026-10-16.
+> Ranking the composition roots did not weaken R2: it still rejects a direct `daemon/` ->
 > `commands/` import, and the daemon reaches the command surface through the ranked
 > `command-runtime` zone, which the zone graph now shows instead of hiding. The SDK entries rank
 > above `daemon-client`, because the typed client they publish reaches the daemon through it.
@@ -343,8 +348,8 @@ Things that are **not** wrong, checked and ruled out:
   the same probe showed the returned and thrown paths write **different session events**, so
   converting one to the other is a behaviour change, not a cleanup.
 - **The ADR 0008 projection landed.** `DAEMON_COMMAND_DESCRIPTORS` is derived from the core
-  descriptors; the "copied VERBATIM from daemon" comment in `core/command-descriptor/registry.ts`
-  is a stale migration note, not live duplication.
+  descriptors; the trait-bundle shorthand comment in `packages/command-registry/src/registry.ts`
+  describes that derivation, not live duplication.
 
 ### 5a. `SessionState` is store-owned mutable state — now with declared owners
 

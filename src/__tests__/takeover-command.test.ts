@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
@@ -6,10 +7,7 @@ import {
   renderTakeoverStatus,
   takeoverCommand,
 } from '../cli/commands/takeover.ts';
-import {
-  HUMAN_CONTROL_HOLD,
-  createControlLatch,
-} from '@agent-device/daemon/testing/__tests__/human-control-fixtures';
+import { HUMAN_CONTROL_HOLD } from '../client/human-control.fixtures.ts';
 import type { DaemonRequest } from '@agent-device/kernel/contracts';
 import { TAKEOVER_CLI_FLAGS } from './test-utils/client-lease-fixtures.ts';
 
@@ -17,6 +15,14 @@ const mocks = vi.hoisted(() => ({ writeCommandOutput: vi.fn() }));
 vi.mock('../cli/commands/shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
 beforeEach(() => mocks.writeCommandOutput.mockReset());
 afterEach(() => vi.useRealTimers());
+
+function createControlLatch() {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((onResolve) => {
+    resolve = onResolve;
+  });
+  return { promise, resolve };
+}
 
 function clientForTest() {
   const transport = vi.fn(async (req: Omit<DaemonRequest, 'token'>) => ({
@@ -47,8 +53,14 @@ test('takeover output explains the hold and release gesture', () => {
 
 test('takeover status and release use the configured lease client', async () => {
   const { client, transport } = clientForTest();
-  await takeoverCommand({ client, flags: TAKEOVER_CLI_FLAGS, positionals: ['status'] });
   await takeoverCommand({
+    host: createTestHostEnvironment(),
+    client,
+    flags: TAKEOVER_CLI_FLAGS,
+    positionals: ['status'],
+  });
+  await takeoverCommand({
+    host: createTestHostEnvironment(),
     client,
     flags: TAKEOVER_CLI_FLAGS,
     positionals: ['release', 'operator-1'],
@@ -67,9 +79,17 @@ test('takeover status and release use the configured lease client', async () => 
 test('takeover rejects malformed actions without contacting the daemon', async () => {
   const { client, transport } = clientForTest();
   for (const positionals of [['release'], ['status', 'extra'], ['unknown']]) {
-    await assert.rejects(takeoverCommand({ client, flags: TAKEOVER_CLI_FLAGS, positionals }), {
-      code: 'INVALID_ARGS',
-    });
+    await assert.rejects(
+      takeoverCommand({
+        host: createTestHostEnvironment(),
+        client,
+        flags: TAKEOVER_CLI_FLAGS,
+        positionals,
+      }),
+      {
+        code: 'INVALID_ARGS',
+      },
+    );
   }
   assert.equal(transport.mock.calls.length, 0);
 });
@@ -79,7 +99,12 @@ test('foreground takeover renews its admitted lease hold and releases it on Ctrl
   const { client, transport } = clientForTest();
   const started = createControlLatch();
   mocks.writeCommandOutput.mockImplementationOnce(() => started.resolve());
-  const pending = takeoverCommand({ client, flags: TAKEOVER_CLI_FLAGS, positionals: [] });
+  const pending = takeoverCommand({
+    host: createTestHostEnvironment(),
+    client,
+    flags: TAKEOVER_CLI_FLAGS,
+    positionals: [],
+  });
   await started.promise;
   await vi.advanceTimersByTimeAsync(5_000);
   process.emit('SIGINT');
@@ -105,7 +130,12 @@ test('a failed heartbeat stops foreground takeover and attempts release', async 
   const { client, transport } = clientForTest();
   const started = createControlLatch();
   mocks.writeCommandOutput.mockImplementationOnce(() => started.resolve());
-  const pending = takeoverCommand({ client, flags: TAKEOVER_CLI_FLAGS, positionals: [] });
+  const pending = takeoverCommand({
+    host: createTestHostEnvironment(),
+    client,
+    flags: TAKEOVER_CLI_FLAGS,
+    positionals: [],
+  });
   const rejected = assert.rejects(pending, /heartbeat failed/);
   await started.promise;
   transport.mockRejectedValueOnce(new Error('heartbeat failed'));

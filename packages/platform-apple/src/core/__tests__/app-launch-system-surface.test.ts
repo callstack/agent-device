@@ -74,7 +74,7 @@ test.for<[string, OpenOptions]>([
 // Terminating the host cancels the presented session just as launching it does.
 test('close refuses to terminate a system-surface host', async () => {
   await assert.rejects(
-    closeIosApp(IOS_TEST_SIMULATOR, 'com.apple.SafariViewService'),
+    closeIosApp(IOS_TEST_SIMULATOR, 'com.apple.SafariViewService', undefined, process.env),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.reason, 'system-surface-host-not-openable');

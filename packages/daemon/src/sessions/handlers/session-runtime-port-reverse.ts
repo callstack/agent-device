@@ -1,7 +1,8 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import { configureProviderPortReverseRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type {
   BindDeviceRuntime,

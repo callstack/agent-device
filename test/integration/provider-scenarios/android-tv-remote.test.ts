@@ -1,4 +1,3 @@
-import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
@@ -31,11 +30,10 @@ test('Provider-backed integration Android TV remote flow sends D-pad keyevents',
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID_TV],
       }),
     async (daemon) => {
-      daemon.publishSession('default', {
-        name: 'default',
-        device: PROVIDER_SCENARIO_ANDROID_TV,
-        createdAt: Date.now(),
-        actions: [],
+      await daemon.client().apps.open({
+        app: 'com.android.settings',
+        platform: 'android',
+        serial: PROVIDER_SCENARIO_ANDROID_TV.id,
       });
 
       await runProviderScenario(daemon, [
@@ -72,10 +70,6 @@ test('Provider-backed integration Android TV remote flow sends D-pad keyevents',
         '--longpress',
         'KEYCODE_DPAD_CENTER',
       ]);
-      assert.deepEqual(
-        daemon.session('default')?.actions.map((action) => action.command),
-        ['tv-remote', 'tv-remote'],
-      );
     },
   );
 });

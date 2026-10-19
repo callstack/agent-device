@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { describe, expect, test } from 'vitest';
 import {
   listCommandFamilyCliOutputFormatters,
@@ -5,6 +6,8 @@ import {
 } from './family/registry.ts';
 import { formatCliOutput, isParseableOutputCommand } from './cli-output.ts';
 import type { CommandName } from './command-metadata.ts';
+
+bindTestCommandHost();
 
 /**
  * #2682: one dispatcher, one warning rule. Every command that renders text owes the agent the
@@ -29,7 +32,7 @@ const FORMATTER_COMMANDS = Object.keys(
 ).sort() as CommandName[];
 
 async function render(name: CommandName, result: unknown, input = {}) {
-  const output = await formatCliOutput({ name, input, result });
+  const output = await formatCliOutput({ env: process.env, name, input, result });
   expect(output, `${name} renders no CLI output`).toBeDefined();
   return output!;
 }

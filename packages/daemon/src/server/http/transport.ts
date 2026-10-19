@@ -1,7 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { AsyncResource } from 'node:async_hooks';
 import net from 'node:net';
 import type { Server as HttpServer } from 'node:http';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
 import {
   clearRequestAbortRegistration,
   isRequestCanceled,
@@ -26,8 +28,12 @@ export type DaemonServer = (net.Server | HttpServer) & {
 export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer {
   const sockets = new Set<net.Socket>();
   const server: DaemonServer = net.createServer((socket) => {
+    // An accepted socket loses the runtime that is listening, so its callbacks keep it explicitly.
     sockets.add(socket);
-    socket.on('close', () => sockets.delete(socket));
+    socket.on(
+      'close',
+      AsyncResource.bind(() => sockets.delete(socket)),
+    );
     let buffer = '';
     let inFlightRequests = 0;
     const activeRequestIds = new Set<string>();
@@ -51,9 +57,9 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
       });
     };
     socket.setEncoding('utf8');
-    socket.on('close', cancelInFlightRequests);
-    socket.on('error', cancelInFlightRequests);
-    socket.on('data', async (chunk) => {
+    socket.on('close', AsyncResource.bind(cancelInFlightRequests));
+    socket.on('error', AsyncResource.bind(cancelInFlightRequests));
+    const onData = AsyncResource.bind(async (chunk: string) => {
       const parsed = consumeTextLines(buffer, chunk);
       buffer = parsed.buffer;
       for (const line of parsed.lines) {
@@ -103,6 +109,7 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
         }
       }
     });
+    socket.on('data', onData);
   });
   server.destroyConnections = () => {
     for (const socket of sockets) {

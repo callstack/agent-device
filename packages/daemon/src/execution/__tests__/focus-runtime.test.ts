@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtime';
@@ -199,6 +200,7 @@ test('request router joins focus admission to execution, recording, and ref inva
   activateCompleteRefFrame(session);
   sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 't',

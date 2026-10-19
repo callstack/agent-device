@@ -25,6 +25,7 @@ export const MAESTRO_COMPATIBILITY_PRESETS = {
     scrollUntilVisibleSpeed: 40,
     scrollUntilVisiblePercentage: 100,
     eraseTextMaxCharacters: 50,
+    androidInputTextCharacterDelayMs: 75,
   },
   // ScreenshotUtils.waitForAppToSettle and MAX_TIMEOUT_WAIT_TO_SETTLE_MS.
   observation: {

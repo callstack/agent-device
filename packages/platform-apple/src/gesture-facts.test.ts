@@ -1,7 +1,10 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
+
+bindTestCommandHost();
 
 function appleDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return {

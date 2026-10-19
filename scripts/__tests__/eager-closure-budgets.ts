@@ -3,7 +3,7 @@
 // ADR-0019's "Implementation-laziness" section requires platform-package façades to stay
 // implementation-lazy and says a startup-time threshold alone does not preserve the loading
 // shape (`docs/adr/0019-request-bound-platform-runtime.md`). The AST walker in
-// `src/__tests__/eager-import-closure.fixtures.ts` counts the repo modules that importing an
+// `@agent-device/test-kit` counts the repo modules that importing an
 // entry evaluates; this module says what count each entry may have. R13 governs import
 // DIRECTION (may this file reach that one at all), never evaluation WEIGHT.
 //
@@ -133,6 +133,33 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
 > = Object.freeze({});
+
+/**
+ * Modules a maintainer approved as additions to the closures of entries that exist at the merge-base:
+ * each is excused from those entries' no-growth count, and only that module is. One row per module,
+ * naming the issue, the reason and the owner who approved it. A row whose module is gone fails.
+ */
+export const APPROVED_CLOSURE_ADDITIONS: readonly Readonly<{
+  module: string;
+  issue: string;
+  reason: string;
+  owner: string;
+}>[] = Object.freeze([
+  {
+    module: 'packages/host-kit/src/runtime-slots.ts',
+    issue: '#3752',
+    reason:
+      'The one owner of per-runtime async-local state: the store, its standalone fallback and its disposal, so Apple, request-cancel and the root declare only slot keys instead of each keeping a copy.',
+    owner: 'thymikee',
+  },
+  {
+    module: 'packages/daemon-contracts/src/daemon-startup-phases.ts',
+    issue: '#3782',
+    reason:
+      'The startup phase record owner the #3791 review asked for. The daemon entry records its earliest `modules-loaded` marker at module load, so the owner must be eager there; the entry pays for the record it writes first.',
+    owner: 'thymikee',
+  },
+]);
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {

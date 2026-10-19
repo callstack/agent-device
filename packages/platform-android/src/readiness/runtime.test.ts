@@ -33,7 +33,7 @@ test('cancellation interrupts Android boot polling and terminates the emulator l
           discoveries += 1;
           return discoveries === 1 ? [stoppedAvd()] : [runningEmulator()];
         },
-        launch: () => 4242,
+        launch: async () => 4242,
         terminate,
       },
     },
@@ -52,6 +52,7 @@ function timedHost(overrides: { bootCompleted: string; discover: () => DeviceInf
   let now = 1_000;
   const run = vi.fn(async () => ({ stdout: overrides.bootCompleted, stderr: '', exitCode: 0 }));
   const terminate = vi.fn(async () => {});
+  const launch = vi.fn(async () => 4242);
   const host = {
     commands: { which: async () => 'tool', run },
     toolchains: { prepare: async () => {} },
@@ -64,12 +65,12 @@ function timedHost(overrides: { bootCompleted: string; discover: () => DeviceInf
     deviceReadiness: {
       androidEmulator: {
         discover: async () => overrides.discover(),
-        launch: () => 4242,
+        launch,
         terminate,
       },
     },
   } as unknown as PlatformRuntimeHost;
-  return { host, run, terminate, elapsed: () => now - 1_000 };
+  return { host, run, launch, terminate, elapsed: () => now - 1_000 };
 }
 
 test('a startup deadline bounds the emulator boot wait and expiry reports boot_timeout without killing the emulator', async () => {
@@ -126,6 +127,23 @@ test('expiry of a launched emulator that never reports boot_completed leaves it 
     ),
   ).rejects.toMatchObject({ details: { reason: 'boot_timeout', serial: 'emulator-5554' } });
   expect(terminate).not.toHaveBeenCalled();
+});
+
+test('a launched emulator gets the remaining startup budget for its window watcher', async () => {
+  let discoveries = 0;
+  const { host, launch } = timedHost({
+    bootCompleted: '1',
+    discover: () => (++discoveries === 1 ? [stoppedAvd()] : [runningEmulator()]),
+  });
+
+  await ensureAndroidReady(
+    host,
+    stoppedAvd(),
+    { headless: false, deadlineAtMs: 31_000 },
+    new AbortController().signal,
+  );
+
+  expect(launch).toHaveBeenCalledWith('Pixel_9', false, 30_000);
 });
 
 test('without a deadline the default 120s boot wait applies', async () => {

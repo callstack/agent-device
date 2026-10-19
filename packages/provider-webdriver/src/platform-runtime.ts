@@ -226,6 +226,11 @@ const foldUnavailable = unavailableFact(
   'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a WebDriver backend has no such simulator.',
 );
 
+const telephonyUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  "telephony sends calls and SMS to an Android emulator's console through local adb; agent-device does not drive a WebDriver backend's own call or SMS simulation.",
+);
+
 /**
  * The WebDriver interactor supplies no alert members at all: ADR 0019 keeps a stub that throws
  * `unsupported` out of an interactor, and the provider's capability map declares
@@ -490,6 +495,7 @@ function webDriverFacts(
     return createUnavailablePlatformRuntimeFacts(device, options.owner, {
       ...createFullyUnavailablePlatformRuntimeFacts(inactiveSession),
       fold: foldUnavailable,
+      telephony: telephonyUnavailable,
     });
   }
   const deployment = options.deployment?.fact(device) ?? deploymentUnavailable;
@@ -513,6 +519,7 @@ function webDriverFacts(
     clipboard: clipboardUnavailable,
     systemButton: systemButtonUnavailable,
     fold: foldUnavailable,
+    telephony: telephonyUnavailable,
     triggerAppEvent: appEventUnavailable,
     settings: settingsUnavailable,
     readAlert: alertUnavailable,
@@ -625,14 +632,16 @@ function webDriverFacts(
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
       }),
       setFoldPose: foldUnavailable,
+      sendTelephonyEvent: telephonyUnavailable,
       // The deep link opens through the same reachable interactor `open` every lifecycle command
       // drives on this provider.
       ...appEventRuntimeOperationFacts({
         triggerAppEvent: interactorCell(reachable, appEventUnavailable),
       }),
       ...settingsRuntimeOperationFacts({
-        setSetting: settingsUnavailable,
-        readSetting: settingsUnavailable,
+        target: settingsUnavailable,
+        unsupported: settingsUnavailable,
+        write: {},
       }),
       // R59 cell delta, deliberate: the retired `supportsAlertSurface` closure ADMITTED `alert` on
       // a provider-owned physical iOS device (it keyed on `appleOs === 'ios'` alone), and the

@@ -41,6 +41,45 @@ test('runtime wait stable settles after two unchanged captures', async () => {
   assert.equal(captures, 3);
 });
 
+test('runtime wait stable retains a recovered private-ax backend for each poll capture', async () => {
+  const snapshot = makeSnapshotState(
+    [
+      { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Continue',
+        rect: { x: 20, y: 100, width: 120, height: 44 },
+      },
+    ],
+    { snapshotQuality: { state: 'recovered', backend: 'private-ax' } },
+  );
+  const preferredBackends: Array<string | undefined> = [];
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async (_context, options) => {
+        preferredBackends.push(options?.preferredBackend);
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'stable', quietMs: 25, timeoutMs: 1_000 },
+  });
+
+  assert.equal(result.kind, 'stable');
+  assert.ok(preferredBackends.length >= 2);
+  assert.ok(preferredBackends.every((backend) => backend === 'private-ax'));
+});
+
 // A clock whose sleep lands `undershootMs` short of what was asked, modelling
 // the real defect: `setTimeout(n)` can advance `Date.now()` by only n-1,
 // because libuv times the sleep on the monotonic loop clock while `now()` reads
@@ -332,6 +371,38 @@ test('runtime wait stable times out with capture stats when never settling', asy
       typeof (error as { details?: { captures?: number } }).details?.captures === 'number',
   );
   assert.ok(captures > 1);
+});
+
+test('runtime wait stable surfaces a capture failure instead of reporting a timeout', async () => {
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => {
+        throw new Error('AX bridge crashed');
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default' }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+
+  await assert.rejects(
+    () =>
+      device.selectors.wait({
+        session: 'default',
+        target: { kind: 'stable', quietMs: 500, timeoutMs: 1_000 },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.notEqual(
+        (error as { details?: { reason?: string } }).details?.reason,
+        'wait_stable_timeout',
+      );
+      assert.match(error.message, /AX bridge crashed/);
+      return true;
+    },
+  );
 });
 
 test('runtime wait stable times out when a backend capture stalls past the wait budget', async () => {

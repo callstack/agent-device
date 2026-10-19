@@ -7,7 +7,7 @@ import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/p
  * passthrough, never fingerprint content. So the fake builds a deterministic opaque key from
  * the sorted defined pairs rather than reproducing the real reader's digest format (the real
  * provider/manifest-aware selection and digest semantics are pinned root-owned in
- * request-router-provider-credentials and lease-provider-credentials). Distinct environments
+ * request-router-provider-credentials and provider-credential-fingerprint). Distinct environments
  * produce distinct keys and an empty environment produces `undefined` — the whole contract the
  * daemon suites observe.
  */

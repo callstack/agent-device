@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { AppError } from '@agent-device/kernel/errors';
+import { WAIT_REASONS, type ReadinessPhase } from '@agent-device/contracts/wait';
 import { createWaitPolling, waitTimeoutError } from './wait-polling.ts';
+import { abortWith } from './__tests__/test-utils/abort-with.ts';
 
 test('poll delay is bounded by the remaining wait budget', async () => {
   let currentMs = 0;
@@ -270,6 +272,199 @@ test('a deadline-cancelled poll after only refusals still reports the refusal wi
       return true;
     },
   );
+});
+
+test('runner restart exhaustion stays typed after an earlier readable poll', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = {
+      clock: { now: () => 0, sleep: async (_durationMs: number) => {} },
+    } as AgentDeviceRuntime;
+    const polling = createWaitPolling(runtime, {}, 10, SELECTOR_PIPELINE_POLICIES.wait);
+    await polling.capture(async () => 'readable');
+    const restart = new AppError('COMMAND_FAILED', 'request canceled', {
+      runnerRestarted: true,
+      runnerRestartReason: 'runner_readiness_preflight_failed_before_command_send',
+      runnerRestartCommand: 'snapshot',
+      runnerRestartCommandId: 'snapshot-1',
+    });
+    const pending = polling.capture(async (signal) => await abortWith(signal, restart));
+
+    await vi.advanceTimersByTimeAsync(10);
+    const result = await pending;
+
+    assert.equal(result.timedOut, true);
+    if (!result.timedOut) return;
+    assert.equal(result.deadline, 'runner-restart-exhausted');
+    const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
+    assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted);
+    assert.equal(error.details?.runnerRestarted, true);
+    assert.equal(
+      error.details?.runnerRestartReason,
+      'runner_readiness_preflight_failed_before_command_send',
+    );
+    assert.equal(error.details?.readableCaptures, 1);
+    assert.equal(error.details?.captureStalled, undefined);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('runner restart exhaustion reports typed evidence without a readable poll', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = {
+      clock: { now: () => 0, sleep: async (_durationMs: number) => {} },
+    } as AgentDeviceRuntime;
+    const polling = createWaitPolling(runtime, {}, 10, SELECTOR_PIPELINE_POLICIES.wait);
+    const restart = new AppError('COMMAND_FAILED', 'request canceled', {
+      runnerRestarted: true,
+      runnerRestartReason: 'runner_readiness_preflight_failed_before_command_send',
+      runnerRestartCommand: 'snapshot',
+      runnerRestartCommandId: 'snapshot-1',
+    });
+    const pending = polling.capture(async (signal) => await abortWith(signal, restart));
+
+    await vi.advanceTimersByTimeAsync(10);
+    const result = await pending;
+
+    assert.equal(result.timedOut, true);
+    if (!result.timedOut) return;
+    assert.equal(result.deadline, 'runner-restart-exhausted');
+    const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
+    assert.equal(error.details?.reason, WAIT_REASONS.runnerRestartExhausted);
+    assert.equal(error.details?.runnerRestarted, true);
+    assert.equal(error.details?.readableCaptures, 0);
+    assert.equal(error.details?.captureStalled, undefined);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test.each(['runner-start', 'target-discovery'] as const)(
+  'readiness exhaustion preserves the %s phase',
+  async (phase: ReadinessPhase) => {
+    vi.useFakeTimers();
+    try {
+      const runtime = {
+        clock: { now: () => 0, sleep: async (_durationMs: number) => {} },
+      } as AgentDeviceRuntime;
+      const polling = createWaitPolling(runtime, {}, 10, SELECTOR_PIPELINE_POLICIES.wait);
+      const readiness = new AppError('COMMAND_FAILED', 'request canceled', {
+        readinessPhase: phase,
+      });
+      const pending = polling.capture(async (signal) => await abortWith(signal, readiness));
+
+      await vi.advanceTimersByTimeAsync(10);
+      const result = await pending;
+
+      assert.equal(result.timedOut, true);
+      if (!result.timedOut) return;
+      assert.equal(result.deadline, 'readiness-exhausted');
+      const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
+      assert.equal(error.details?.reason, WAIT_REASONS.readinessExhausted);
+      assert.equal(error.details?.readinessPhase, phase);
+      assert.equal(error.details?.readableCaptures, 0);
+      assert.equal(error.details?.captureStalled, undefined);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+test('a steady-state cancelled poll after a readable capture is deadline-exceeded', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = {
+      clock: { now: () => 0, sleep: async (_durationMs: number) => {} },
+    } as AgentDeviceRuntime;
+    const polling = createWaitPolling(runtime, {}, 10, SELECTOR_PIPELINE_POLICIES.wait);
+    await polling.capture(async () => 'readable');
+    const cancellation = new AppError('COMMAND_FAILED', 'request canceled');
+    const pending = polling.capture(async (signal) => await abortWith(signal, cancellation));
+
+    await vi.advanceTimersByTimeAsync(10);
+    const result = await pending;
+
+    assert.equal(result.timedOut, true);
+    if (!result.timedOut) return;
+    assert.equal(result.deadline, 'capture-truncated');
+    const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
+    assert.equal(error.details?.reason, WAIT_REASONS.deadlineExceeded);
+    assert.equal(error.details?.readableCaptures, 1);
+    assert.equal(error.details?.readinessPhase, undefined);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('an earlier retriable refusal outranks readiness work on the final poll', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = {
+      clock: { now: () => 0, sleep: async (_durationMs: number) => {} },
+    } as AgentDeviceRuntime;
+    const refusal = new AppError('COMMAND_FAILED', 'app is not running', {
+      runnerErrorCode: 'APP_NOT_RUNNING',
+      retriable: true,
+    });
+    const polling = createWaitPolling(runtime, {}, 10, SELECTOR_PIPELINE_POLICIES.wait);
+    await polling.capture(async () => {
+      throw refusal;
+    });
+    const readiness = new AppError('COMMAND_FAILED', 'request canceled', {
+      readinessPhase: 'target-discovery',
+    });
+    const pending = polling.capture(async (signal) => await abortWith(signal, readiness));
+
+    await vi.advanceTimersByTimeAsync(10);
+    const result = await pending;
+
+    assert.equal(result.timedOut, true);
+    if (!result.timedOut) return;
+    assert.throws(
+      () => waitTimeoutError('wait timed out for text: Ready', polling, result.deadline),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.message, 'app is not running');
+        assert.equal(error.details?.runnerErrorCode, 'APP_NOT_RUNNING');
+        assert.equal(error.details?.readinessPhase, 'target-discovery');
+        const polls = error.details?.polls as Array<{ outcome: string }> | undefined;
+        assert.deepEqual(
+          polls?.map((poll) => poll.outcome),
+          ['retriable', 'readiness'],
+        );
+        return true;
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a capture that never becomes readable reports capture-stalled', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = {
+      clock: { now: () => 0, sleep: async (_durationMs: number) => {} },
+    } as AgentDeviceRuntime;
+    const polling = createWaitPolling(runtime, {}, 10, SELECTOR_PIPELINE_POLICIES.wait);
+    const cancellation = new AppError('COMMAND_FAILED', 'request canceled');
+    const pending = polling.capture(async (signal) => await abortWith(signal, cancellation));
+
+    await vi.advanceTimersByTimeAsync(10);
+    const result = await pending;
+
+    assert.equal(result.timedOut, true);
+    if (!result.timedOut) return;
+    assert.equal(result.deadline, 'capture-stalled');
+    const error = waitTimeoutError('wait timed out for text: Ready', polling, result.deadline);
+    assert.equal(error.details?.reason, WAIT_REASONS.captureStalled);
+    assert.equal(error.details?.captureStalled, true);
+    assert.equal(error.details?.readableCaptures, 0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('a non-retriable producer failure still ends the wait at its first poll', async () => {

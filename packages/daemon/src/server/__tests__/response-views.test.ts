@@ -1,6 +1,6 @@
+import type { DaemonResponseData } from '@agent-device/kernel/contracts';
 import { test, expect } from 'vitest';
 import { RESPONSE_VIEWS } from '../response-views.ts';
-import type { DaemonResponseData } from '../../core/daemon-request.ts';
 
 const snapshotView = RESPONSE_VIEWS.snapshot;
 const screenshotView = RESPONSE_VIEWS.screenshot;
@@ -69,6 +69,18 @@ test('digest carries the viewport of the tree it collapsed (#3182)', () => {
 
   const withoutViewport = snapshotView!(SNAPSHOT_DATA, 'digest');
   expect('viewport' in withoutViewport).toBe(false);
+});
+
+/**
+ * Same reason as the viewport: the digest drops the tree the fact was read on, and a reader arming on
+ * "was something presented" (#3565) cannot recover it from a node count.
+ */
+test('digest carries the presented-surface fact of the tree it collapsed (#3565)', () => {
+  const digest = snapshotView!({ ...SNAPSHOT_DATA, presentedSurface: 'presented' }, 'digest');
+  expect(digest.presentedSurface).toBe('presented');
+
+  const unread = snapshotView!(SNAPSHOT_DATA, 'digest');
+  expect('presentedSurface' in unread).toBe(false);
 });
 
 test('digest tolerates missing/empty node trees', () => {
@@ -252,7 +264,7 @@ test('find get-text digest keeps ref + text, drops the verbose node', () => {
   expect('node' in digest).toBe(false);
 });
 
-test('a text read keeps every OTHER cheap field (e.g. warning) while dropping the node', () => {
+test('selector text digest preserves a recovery warning while dropping the verbose node', () => {
   const digest = findView!(
     {
       ref: '@e7',

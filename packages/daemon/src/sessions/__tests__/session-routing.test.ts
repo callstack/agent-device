@@ -9,7 +9,7 @@ import { resolveEffectiveSessionName, resolveSessionScope } from '../session-rou
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import type { SessionScope } from '@agent-device/contracts/session';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 function makeSession(name: string): SessionState {
   return {

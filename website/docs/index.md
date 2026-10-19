@@ -24,5 +24,5 @@ features:
   - title: Session and replay
     details: Keep app state across commands in a session, and replay recorded `.ad` scripts to reproduce flows without an AI agent.
   - title: React Native internals
-    details: Use `agent-device react-devtools` for component trees and render profiles, and `agent-device cdp` for JS heap snapshots, diffs, and leak retainers.
+    details: Use `agent-device react-devtools` to inspect React Native components and profile their renders, and `agent-device cdp` for JS heap snapshots, diffs, and leak retainers.
 ---

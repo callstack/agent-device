@@ -35,6 +35,8 @@ const WIRE_EXTERNAL_MODULES: Readonly<Record<string, string>> = {
  * cannot change what a skewed peer parses.
  */
 export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
+  'packages/kernel/src/source-value.ts#HostEnvironment':
+    "The client process's own environment and working directory, read to resolve local paths. It never crosses the wire; only the paths it helps resolve do, and those are digested through the declarations that use them.",
   'packages/kernel/src/errors.ts#AppError':
     'The local error CLASS. Only its projection onto the wire is contractual, and that projection is DaemonError, which is listed.',
   'packages/kernel/src/errors.ts#AppErrorCode':
@@ -45,13 +47,13 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Client-side record of where a daemon is listening (pid, ports, state dir). Never serialized into a request or response.',
   'packages/daemon/src/core/daemon-request.ts#DaemonRequest':
     'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
-  'packages/daemon/src/core/daemon-request.ts#DaemonResponse':
-    'Re-export alias of the listed kernel DaemonResponse; the shape is fixed by packages/kernel/src/contracts.ts#DaemonResponse.',
-  'packages/daemon/src/core/daemon-request.ts#DaemonArtifact':
-    'Re-export alias of the listed kernel DaemonArtifact; the shape is fixed by packages/kernel/src/contracts.ts#DaemonArtifact.',
-  'src/remote/upload-stream.ts#UploadStreamProgressOptions':
+  'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequest':
+    'Client-side narrowing of the listed kernel DaemonRequest (token and session required, flags typed as CommandFlags); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
+  'packages/contracts/src/daemon-wire-request.ts#DaemonWireRequestMeta':
+    'Narrowing of the listed kernel DaemonRequestMeta (installSource, lockPlatform and the lease coordinates); the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequestMeta.',
+  'packages/remote/src/upload-stream.ts#UploadStreamProgressOptions':
     'Byte-progress callback options for local upload rendering. The bytes counted are digested through the request/response declarations; these options never cross the wire.',
-  'src/remote/upload-progress.ts#UploadProgressSink':
+  'packages/remote/src/upload-progress.ts#UploadProgressSink':
     'A callback for client-local upload progress rendering. Its events never leave the client, unlike the daemon progress stream, whose envelope and events are listed.',
   'packages/contracts/src/request-progress.ts#RequestProgressSink':
     'A callback type (event) => void. The event it receives is RequestProgressEvent, which is listed; the sink itself never crosses the wire.',

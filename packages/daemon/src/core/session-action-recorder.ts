@@ -86,6 +86,13 @@ export function recordActionEntry(
     runtime: recordedEntry.runtime,
     flags: sanitizeFlags(recordedEntry.flags),
     result: recordedEntry.result,
+    ...(OBSERVATION_ONLY_COMMANDS.has(recordedEntry.command)
+      ? recordedEntry.interactiveObservation === false
+        ? { publicationIntent: 'authored' as const }
+        : recordedEntry.flags.record === true
+          ? { publicationIntent: 'explicit-record' as const }
+          : {}
+      : {}),
     ...(recordedEntry.targetEvidence ? { targetEvidence: recordedEntry.targetEvidence } : {}),
     ...(recordedEntry.targetEvidences ? { targetEvidences: recordedEntry.targetEvidences } : {}),
   };
@@ -360,7 +367,7 @@ function isExcludedRepairSegmentObservation(
 ): boolean {
   if (!entry.interactiveObservation) return false;
   if (repairSessionBoundary(session) === undefined) return false;
-  return entry.flags?.record !== true;
+  return entry.flags.record !== true;
 }
 
 // The keys a recorded action carries derive from each flag declaration's `recorded`

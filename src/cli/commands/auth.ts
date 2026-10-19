@@ -4,9 +4,12 @@ import { loginWithDeviceAuth, removeCliSession, summarizeCliSession } from '../a
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
-export const authCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const authCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   const subcommand = positionals[0] ?? 'status';
-  const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, {
+    cwd: host.cwd,
+    env: host.env,
+  }).baseDir;
   if (subcommand === 'status') {
     const status = summarizeCliSession({ stateDir });
     await writeCommandOutput(flags, status, () => renderAuthStatus(status));
@@ -17,6 +20,7 @@ export const authCommand: ClientCommandHandler = async ({ positionals, flags }) 
       stateDir,
       flags,
       commandLabel: 'agent-device auth login',
+      env: host.env,
     });
     const data = {
       authenticated: true,

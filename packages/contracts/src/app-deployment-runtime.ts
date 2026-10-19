@@ -55,12 +55,21 @@ export type PushNotificationResult = Readonly<{
   extrasCount?: number;
 }>;
 
+export type AppUninstallInput = Readonly<{ app: string }>;
+
+/** `wasInstalled: false` means the target names no installed app, so nothing was removed. */
+export type AppUninstallResult =
+  | Readonly<{ wasInstalled: false }>
+  | Readonly<{ wasInstalled: true; bundleId: string }>
+  | Readonly<{ wasInstalled: true; packageName: string }>;
+
 /** The request-scoped deployment facet; no operation creates a durable resource. */
 export type AppDeploymentRuntimeOperations = Readonly<{
   deployApp(input: AppDeploymentInput): Promise<AppDeploymentResult>;
   materializeAppSource(input: MaterializeAppSourceInput): Promise<MaterializedAppSource>;
   deployMaterializedApp(input: DeployMaterializedAppInput): Promise<AppDeploymentResult>;
   sendPushNotification(input: PushNotificationInput): Promise<PushNotificationResult>;
+  uninstallApp(input: AppUninstallInput): Promise<AppUninstallResult>;
 }>;
 
 /**
@@ -77,7 +86,11 @@ export type AppleAppDeploymentExecutor = Readonly<{
     input: MaterializeAppSourceInput,
     options: Readonly<{ appIdentifierHint?: string; signal: AbortSignal }>,
   ): Promise<MaterializedAppSource>;
-  resolveAppBundleId(device: DeviceInfo, app: string): Promise<string>;
+  resolveAppBundleId(
+    device: DeviceInfo,
+    app: string,
+    options?: Readonly<{ installedOnly?: boolean }>,
+  ): Promise<string>;
 }>;
 
 /**
@@ -96,5 +109,9 @@ export type AndroidAppDeploymentExecutor = Readonly<{
     input: MaterializeAppSourceInput,
     options: Readonly<{ resolveIdentity?: boolean; signal: AbortSignal }>,
   ): Promise<MaterializedAppSource>;
-  resolveAppPackage(device: DeviceInfo, app: string): Promise<string>;
+  resolveAppPackage(
+    device: DeviceInfo,
+    app: string,
+    options?: Readonly<{ installedOnly?: boolean }>,
+  ): Promise<string>;
 }>;

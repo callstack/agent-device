@@ -77,6 +77,37 @@ test.each([
   },
 );
 
+const EMULATOR_CRASHDATA_BANNER =
+  'INFO    | Storing crashdata in: /tmp/user/emu-crash-34.2.16.db, detection is enabled for process: 98765';
+
+test.each([
+  ['only the crashdata banner', `${EMULATOR_CRASHDATA_BANNER}\n`, []],
+  [
+    'the crashdata banner beside AVD names',
+    `${EMULATOR_CRASHDATA_BANNER}\r\nPixel_9_Pro_XL\r\nwear-os.36\r\n`,
+    ['Pixel_9_Pro_XL', 'wear-os.36'],
+  ],
+] as const)(
+  'Android inventory lists only AVD names when emulator -list-avds prints %s',
+  async (_case, listAvdsStdout, expectedAvds) => {
+    const host = createHost(async (request) => {
+      if (request.executable === 'emulator') return result(listAvdsStdout);
+      if (request.args.join('\0') === 'devices\0-l') return result('List of devices attached\n');
+      throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+    });
+
+    const devices = await createAndroidInventory(host).discover(
+      { androidAvdSelection: 'include-stopped' },
+      scope,
+    );
+
+    assert.deepEqual(
+      devices.map((device) => device.id),
+      expectedAvds,
+    );
+  },
+);
+
 test.each([
   ['exits non-zero', async () => result('', 'error: closed', 1)],
   [
@@ -108,6 +139,32 @@ test.each([
     assert.equal(device?.booted, true);
     assert.equal(device?.model, undefined);
     assert.equal(device?.osVersion, undefined);
+  },
+);
+
+test.each([
+  ['feature:android.software.leanback_only\nfeature:android.hardware.wifi\n', 'tv'],
+  ['feature:android.hardware.type.television=1\n', 'tv'],
+  ['feature:android.software.leanback_extra\nfeature:android.hardware.wifi\n', 'mobile'],
+] as const)(
+  'Android inventory reads the feature list %j as a %s target',
+  async (featureList, target) => {
+    const host = createHost(async (request) => {
+      const key = request.args.join('\0');
+      if (key === 'devices\0-l')
+        return result('List of devices attached\nR5CT1 device model:Box\n');
+      if (key.includes('pm\0list\0features')) return result(featureList);
+      const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+      if (probe) return result(probe[1]);
+      throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+    });
+
+    const [device] = await createAndroidInventory(host).discover(
+      { androidAvdSelection: 'running-only' },
+      scope,
+    );
+
+    assert.equal(device?.target, target);
   },
 );
 
@@ -165,6 +222,32 @@ test('Android inventory prepares the legacy toolchain before an ANDROID_HOME-onl
   await createAndroidInventory(host, { sdkRoots: ['/android-home'] }).discover({}, scope);
 
   assert.deepEqual(preparedFamilies, ['android']);
+});
+
+test('Android inventory omits the home SDK root when the host names no home', async () => {
+  // The rule: a host that names no home turns off only the home-derived default paths. Discovery
+  // must still resolve adb from PATH and list devices, not fail the family (#3794 review).
+  const probed: string[] = [];
+  const host: DeviceInventoryHostFor<'android'> = {
+    ...createHost(async () => result('List of devices attached\n')),
+    homeDirectory: undefined,
+    files: {
+      isExecutable: async (candidate) => {
+        probed.push(candidate);
+        return false;
+      },
+      createTemporaryTextFile: async () => {
+        throw new Error('unused');
+      },
+    },
+  };
+
+  await createAndroidInventory(host, { sdkRoots: ['/configured-sdk'] }).discover({}, scope);
+
+  // The configured root is still probed; only the home-derived default root turns off. Without
+  // the guard, path.join(undefined, 'Android', 'Sdk') throws before adb is ever resolved.
+  assert.ok(probed.includes('/configured-sdk/platform-tools/adb'));
+  assert.ok(probed.every((candidate) => !candidate.includes('Android')));
 });
 
 test('Android inventory classifies a killed adb probe as a timeout', async () => {

@@ -2,6 +2,8 @@ import type {
   AppDeploymentInput,
   AppDeploymentResult,
   AppDeploymentRuntimeOperations,
+  AppUninstallInput,
+  AppUninstallResult,
   DeployMaterializedAppInput,
   MaterializeAppSourceInput,
   PushNotificationInput,
@@ -46,6 +48,7 @@ export function appleAppDeploymentFacts(device: DeviceInfo): Readonly<{
   materializeAppSource: RuntimeOperationFact;
   deployMaterializedApp: RuntimeOperationFact;
   sendPushNotification: RuntimeOperationFact;
+  uninstallApp: RuntimeOperationFact;
 }> {
   const deploy = appleDeployFact(device);
   return Object.freeze({
@@ -53,6 +56,7 @@ export function appleAppDeploymentFacts(device: DeviceInfo): Readonly<{
     materializeAppSource: deploy,
     deployMaterializedApp: deploy,
     sendPushNotification: applePushFact(device),
+    uninstallApp: deploy,
   });
 }
 
@@ -72,6 +76,8 @@ export function createAppleAppDeploymentOperations(params: {
             await host.appleDeployment.prepareArtifact(input, { signal }),
           deployMaterializedApp: async (input: DeployMaterializedAppInput) =>
             await deployPreparedAppleApp(host, device, input, signal),
+          uninstallApp: async (input: AppUninstallInput) =>
+            await uninstallResolvedAppleApp(host, device, input, signal),
         }
       : {}),
     ...(facts.sendPushNotification.available
@@ -120,6 +126,29 @@ async function deployAppleApp(
   } finally {
     await artifact.cleanup();
   }
+}
+
+async function uninstallResolvedAppleApp(
+  host: PlatformRuntimeHost,
+  device: DeviceInfo,
+  input: AppUninstallInput,
+  signal: AbortSignal,
+): Promise<AppUninstallResult> {
+  return await host.appleDeployment.withInvalidatedAppResolutionCache(device, async () => {
+    await ensureAppleReady(host, device, signal);
+    let bundleId: string;
+    try {
+      bundleId = await host.appleDeployment.resolveAppBundleId(device, input.app, {
+        installedOnly: true,
+      });
+    } catch (error) {
+      const notInstalled = error instanceof AppError && error.code === 'APP_NOT_INSTALLED';
+      if (notInstalled && input.app.trim().includes('.')) return { wasInstalled: false };
+      throw error;
+    }
+    await uninstallAppleApp(host, device, bundleId, signal);
+    return { wasInstalled: true, bundleId };
+  });
 }
 
 async function deployPreparedAppleApp(

@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
-import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
 
 const { runReplayFixture, runReplayForTest } = maestroReplayFixture;
 

@@ -7,6 +7,7 @@ import type {
   AppStateCommandResult,
   BootCommandResult,
   ShutdownCommandResult,
+  TelephonyCommandResult,
   TriggerAppEventCommandResult,
 } from '@agent-device/contracts/device';
 import type {
@@ -35,7 +36,8 @@ import type { RecordingCommandResult, TraceCommandResult } from '@agent-device/c
 import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
 
 /**
- * The additive typed-result spine (ADR-0008, Phase 1 step 6).
+ * The additive typed-result spine (ADR 0008, "Consequences" result-narrowing
+ * gap).
  *
  * Maps a command name to the per-command result type from `@agent-device/contracts`. It
  * is SEEDED, not exhaustive: a command is listed here only once its accurate,
@@ -82,6 +84,7 @@ export interface CommandResultMap {
   replay: ReplayCommandResult;
   scroll: ScrollCommandResult;
   shutdown: ShutdownCommandResult;
+  telephony: TelephonyCommandResult;
   test: ReplaySuiteResult;
   trace: TraceCommandResult;
   'trigger-app-event': TriggerAppEventCommandResult;
@@ -96,6 +99,9 @@ export interface CommandResultMap {
  * command falls back to the untyped `Record<string, unknown>` bag. That default
  * branch is what keeps the mapping total over every command name, so consumers
  * can switch to `CommandResult<Name>` without first migrating every command.
+ * Add a command to the map only when its producer exposes an accurate closed
+ * contract. Do not narrow an unmigrated result with casts, compatibility
+ * aliases, or invented partial shapes.
  */
 export type CommandResult<N extends string> = N extends keyof CommandResultMap
   ? CommandResultMap[N]

@@ -216,6 +216,31 @@ snapshot was taken on instead of guessing it from the largest rect.
 
 For Android pixel units and density, see [Android node metadata](#android-node-metadata).
 
+## Presented surface
+
+`snapshot --json` reports `presentedSurface` — whether the capture saw a modal presentation over your
+app's own content: `"presented"`, `"absent"`, or `"unknown"`. Read it instead of counting windows in
+the tree to work out whether a sheet or alert was up.
+
+- `"presented"` means the capture saw the presentation directly — a dimming view, an alert's own
+  view classes, or an element typed as a sheet, drawer, alert, or dialog.
+- `"absent"` is an earned answer, not a default. The capture checked every window it read and each
+  one held only its own content. This is the answer you can act on, for example to confirm a tap
+  dismissed a sheet.
+- `"unknown"` means the capture could not tell, and it is not a hedge — it says the capture lacks the
+  evidence absence needs. Absence is only reachable from a capture that reads UIKit class names, so a
+  screen served by a backend that publishes none answers `"unknown"` even when nothing is presented.
+  That is the private accessibility backend (`snapshotQuality.backend: "private-ax"`, which `--actions`
+  asks for) and an Appium or Limrun tree. Never treat `"unknown"` as `"absent"`.
+- A physical iOS device has one capture backend, and it publishes no class names, so there the answer
+  is `"presented"` or `"unknown"` and never `"absent"`.
+- The field is absent entirely when the platform publishes no reading at all: Android, web, Linux,
+  and macOS captures.
+
+The answer describes the screen, not the view of it you asked for, so `--raw`, `-i`, `-d`, and
+`--scope` all report the same value for one screen. Use `-i` or a `--scope` to keep the output small
+and still trust the answer.
+
 ## iOS capture behavior
 
 iOS snapshots use XCTest on simulators and physical devices. You can't pick the capture backend. `--raw` switches between two strategies, and each strategy

@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import type { AppsFilter } from '@agent-device/contracts/device';
@@ -65,6 +66,7 @@ export type IosPhysicalDeviceControl = IosPhysicalDeviceRunnerControl & {
     device: DeviceInfo,
     remotePath: string,
     outPath: string,
+    env: Readonly<EnvMap>,
     timeoutMs?: number,
   ): Promise<void>;
 };
@@ -146,7 +148,12 @@ async function readXctestDeviceReadiness(device: DeviceInfo): Promise<IosDeviceR
   };
 }
 
-async function rejectXctestRunnerFileCopy(device: DeviceInfo): Promise<never> {
+async function rejectXctestRunnerFileCopy(
+  device: DeviceInfo,
+  _remotePath: string,
+  _outPath: string,
+  _env: Readonly<EnvMap>,
+): Promise<never> {
   throw new AppError(
     'UNSUPPORTED_OPERATION',
     'Runner file copy is unavailable on this XCTest-backed physical iOS device.',

@@ -1,5 +1,5 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { ProviderScenarioHarness, ProviderScenarioRpcResult } from './harness.ts';
 
 export type ProviderScenarioState = {
@@ -8,17 +8,17 @@ export type ProviderScenarioState = {
 };
 
 export type ProviderScenarioDefaults = {
-  flags?: DaemonRequest['flags'];
-  meta?: DaemonRequest['meta'];
+  flags?: DaemonWireRequest['flags'];
+  meta?: DaemonWireRequest['meta'];
 };
 
 export type ProviderScenarioStep = {
   name: string;
   command: string;
-  input?: DaemonRequest['input'];
+  input?: DaemonWireRequest['input'];
   positionals?: string[];
-  flags?: DaemonRequest['flags'];
-  meta?: DaemonRequest['meta'];
+  flags?: DaemonWireRequest['flags'];
+  meta?: DaemonWireRequest['meta'];
   expectStatus?: number;
   expectData?: Record<string, unknown>;
   assert?: (

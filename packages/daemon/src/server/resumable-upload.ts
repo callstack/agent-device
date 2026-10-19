@@ -1,3 +1,4 @@
+import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,8 +21,34 @@ const RESUMABLE_UPLOAD_RESOURCE: TenantOwnedResourceKind = {
   label: 'Upload',
   expiredHint: `Resumable uploads expire ${RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS / 60_000} minutes after the last received chunk. Start the upload again from the beginning.`,
 };
-const RESUMABLE_UPLOADS_BY_ID = new Map<string, ResumableUploadEntry>();
-const RESUMABLE_UPLOADS_BY_KEY = new Map<string, string>();
+type ResumableUploadState = {
+  byId: Map<string, ResumableUploadEntry>;
+  byKey: Map<string, string>;
+};
+
+const resumableUploadRuntime = defineRuntimeSlots();
+const RESUMABLE_UPLOAD_SLOT = Symbol('resumableUploads');
+const resumableUploads = (): ResumableUploadState =>
+  resumableUploadRuntime.slot(
+    RESUMABLE_UPLOAD_SLOT,
+    (): ResumableUploadState => ({ byId: new Map(), byKey: new Map() }),
+    (state) => {
+      for (const entry of state.byId.values()) {
+        clearTimeout(entry.timer);
+        try {
+          fs.rmSync(entry.tempDir, { recursive: true, force: true });
+        } catch {
+          // best-effort cleanup only
+        }
+      }
+    },
+  );
+const RESUMABLE_UPLOADS_BY_ID = () => resumableUploads().byId;
+const RESUMABLE_UPLOADS_BY_KEY = () => resumableUploads().byKey;
+
+/** The resumable uploads one daemon runtime holds; disposing it stops their expiry timers. */
+export const createResumableUploadRuntimeState = (): RuntimeStateHandle =>
+  resumableUploadRuntime.createHandle();
 
 export type BeginResumableUploadOptions = {
   baseUrl: string;
@@ -62,8 +89,8 @@ export function beginResumableUpload(options: BeginResumableUploadOptions): {
 } {
   validateResumableUploadOptions(options);
   const key = buildResumableUploadKey(options);
-  const existingId = RESUMABLE_UPLOADS_BY_KEY.get(key);
-  const existing = existingId ? RESUMABLE_UPLOADS_BY_ID.get(existingId) : undefined;
+  const existingId = RESUMABLE_UPLOADS_BY_KEY().get(key);
+  const existing = existingId ? RESUMABLE_UPLOADS_BY_ID().get(existingId) : undefined;
   const entry = existing ?? createResumableUploadEntry(options, key);
   return {
     uploadId: entry.id,
@@ -154,8 +181,8 @@ function createResumableUploadEntry(
     closed: false,
     finalized: false,
   };
-  RESUMABLE_UPLOADS_BY_ID.set(id, entry);
-  RESUMABLE_UPLOADS_BY_KEY.set(key, id);
+  RESUMABLE_UPLOADS_BY_ID().set(id, entry);
+  RESUMABLE_UPLOADS_BY_KEY().set(key, id);
   refreshResumableUploadTimer(entry);
   return entry;
 }
@@ -258,8 +285,8 @@ async function terminateEntry(entry: ResumableUploadEntry): Promise<void> {
 function closeEntry(entry: ResumableUploadEntry): void {
   entry.closed = true;
   if (entry.timer) clearTimeout(entry.timer);
-  RESUMABLE_UPLOADS_BY_ID.delete(entry.id);
-  RESUMABLE_UPLOADS_BY_KEY.delete(entry.key);
+  RESUMABLE_UPLOADS_BY_ID().delete(entry.id);
+  RESUMABLE_UPLOADS_BY_KEY().delete(entry.key);
 }
 
 function requireResumableUpload(
@@ -267,7 +294,7 @@ function requireResumableUpload(
   tenantId: string | undefined,
 ): ResumableUploadEntry {
   return requireTenantOwnedEntry(
-    RESUMABLE_UPLOADS_BY_ID,
+    RESUMABLE_UPLOADS_BY_ID(),
     uploadId,
     tenantId,
     RESUMABLE_UPLOAD_RESOURCE,

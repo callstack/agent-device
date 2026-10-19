@@ -1,8 +1,11 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { createAppleInteractor } from '../interactor.ts';
 import { runnerResultFor } from './recording-runner-provider.ts';
+
+bindTestCommandHost();
 
 // #3182: an Apple capture publishes the box its rects are measured in — the app-window evidence the
 // presentation fold already resolves — without the runner growing a second wire key for it.
@@ -11,6 +14,7 @@ test('an Apple runner capture publishes the app-window box its rects are measure
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,
     {},
+    { env: process.env, cwd: process.cwd() },
     {
       hasLiveSession: () => true,
       runCommand: async () => runnerResultFor({ command: 'snapshot' }),
@@ -37,6 +41,7 @@ test('a macOS app capture publishes no viewport (#3182)', async () => {
   const interactor = createAppleInteractor(
     MACOS_DEVICE,
     {},
+    { env: process.env, cwd: process.cwd() },
     { hasLiveSession: () => true, runCommand: async () => ({ nodes }) },
   );
 

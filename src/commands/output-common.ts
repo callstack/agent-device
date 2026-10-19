@@ -1,4 +1,5 @@
 import { readCommandMessage, readResponseWarnings } from '@agent-device/kernel/success-text';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { CommandProgressState } from './command-progress.ts';
 import type { CliOutput } from './command-contract.ts';
 
@@ -12,6 +13,8 @@ export type CliOutputFormatterParams = {
    * asked for no progress at all.
    */
   progress?: CommandProgressState;
+  /** The caller's host environment; a formatter that styles output reads color from it. */
+  env: EnvMap;
 };
 
 export type CliOutputFormatter = (

@@ -78,22 +78,22 @@ export const BOUNDARY_FAULT_MATRIX = {
   cancellation: {
     mutation: {
       kind: 'covered',
-      evidence: ['test/integration/provider-scenarios/daemon-http-boundary-cancellation.test.ts'],
+      evidence: ['packages/daemon/src/server/http/http-server-boundary-cancellation.test.ts'],
       invariants: ['request-scoped-cancellation', 'request-signal-cleanup'],
     },
     read: {
       kind: 'covered',
-      evidence: ['test/integration/provider-scenarios/daemon-http-boundary-cancellation.test.ts'],
+      evidence: ['packages/daemon/src/server/http/http-server-boundary-cancellation.test.ts'],
       invariants: ['request-scoped-cancellation', 'request-signal-cleanup'],
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['test/integration/provider-scenarios/daemon-http-boundary-cancellation.test.ts'],
+      evidence: ['packages/daemon/src/server/http/http-server-boundary-cancellation.test.ts'],
       invariants: ['request-scoped-cancellation', 'request-signal-cleanup'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['test/integration/provider-scenarios/daemon-http-boundary-cancellation.test.ts'],
+      evidence: ['packages/daemon/src/server/http/http-server-boundary-cancellation.test.ts'],
       invariants: ['request-scoped-cancellation', 'request-signal-cleanup'],
     },
   },
@@ -144,7 +144,9 @@ export const BOUNDARY_FAULT_MATRIX = {
   'lost-response-after-mutation': {
     mutation: {
       kind: 'covered',
-      evidence: ['packages/platform-apple/src/runner/__tests__/runner-recovery-wiring.test.ts'],
+      evidence: [
+        'packages/platform-apple/src/runner/__tests__/runner-client-recovery-wiring.test.ts',
+      ],
       invariants: ['no-mutation-replay', 'typed-error-identity'],
     },
     read: {
@@ -194,7 +196,7 @@ export const BOUNDARY_FAULT_MATRIX = {
     mutation: {
       kind: 'covered',
       evidence: [
-        'src/__tests__/daemon-composition/interaction/interaction-touch-direct-ios.test.ts',
+        'packages/daemon/src/execution/interaction/internal/interaction-touch-direct-ios.test.ts',
       ],
       invariants: ['best-effort-degradation'],
     },

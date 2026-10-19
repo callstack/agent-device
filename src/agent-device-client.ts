@@ -16,6 +16,7 @@ import type {
   CaptureScreenshotResult,
   CaptureSnapshotOptions,
   CaptureSnapshotResult,
+  DaemonLifecycle,
   DragOptions,
   FlingOptions,
   MaterializationReleaseOptions,
@@ -29,11 +30,7 @@ import type {
 } from '@agent-device/contracts/client';
 import type { AgentArtifactsResult } from '@agent-device/contracts/observability';
 import type { MetroPrepareOptions } from '@agent-device/contracts/remote';
-import {
-  isNonDefaultResponseLevel,
-  type ResponseLevel,
-  type SessionRuntimeHints,
-} from '@agent-device/kernel/contracts';
+import { isNonDefaultResponseLevel, type ResponseLevel } from '@agent-device/kernel/contracts';
 import { AppError, throwDaemonError } from '@agent-device/kernel/errors';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
@@ -43,6 +40,7 @@ import {
   normalizeDeviceSelection,
   normalizeOpenForegroundComposition,
   normalizeInstallFromSourceResult,
+  normalizeLaunchConfirmation,
   normalizeMaterializationReleaseResult,
   normalizeOpenDevice,
   normalizeRuntimeHints,
@@ -54,7 +52,7 @@ import {
   readSnapshotNodes,
   resolveSessionName,
 } from './client/client-normalizers.ts';
-import type { AgentDeviceClient, MetroPrepareResult } from './client/client-types.ts';
+import type { AgentDeviceClient } from './client/client-types.ts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { buildRequestFlags } from './commands/command-flags.ts';
 import {
@@ -62,28 +60,50 @@ import {
   type DaemonCommandName,
 } from './commands/command-projection.ts';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
-import { sendToDaemon } from './daemon-client/daemon-client.ts';
+import { createDaemonTransport } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { resolveMetroServerUrl } from './metro/metro-reload-endpoints.ts';
-import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';
+import * as devServer from '@agent-device/react-native';
 import {
-  clearMetroSessionHints,
-  readMetroSessionHints,
-  writeMetroSessionHints,
-  type MetroSessionHints,
-} from './metro/metro-session-hints.ts';
-import { asOptionalRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
+  asOptionalRecord,
+  readPresentedSurfaceFact,
+  readSnapshotKeyboardBandFact,
+} from '@agent-device/kernel/record';
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
 import { createRequestGuard } from './daemon-client/daemon-client-transport.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
-  deps: { transport?: AgentDeviceDaemonTransport } = {},
+  deps: { transport?: AgentDeviceDaemonTransport; host?: HostEnvironment } = {},
 ): AgentDeviceClient {
-  const transport = deps.transport ?? sendToDaemon;
+  const host = deps.host ?? captureHostEnvironment(process);
+  const transport = deps.transport ?? createDaemonTransport(host);
+  // A typo in a JSON or JS config must not fall through to the default and manage a daemon.
+  readDaemonLifecycle(config.daemonLifecycle);
+  // The dev-server helpers take the client's host explicitly.
+  const prepareMetroRuntime = (input: Parameters<typeof devServer.prepareMetroRuntime>[0]) =>
+    devServer.prepareMetroRuntime(input, host);
+  const { reloadMetro } = devServer;
+  const withHost = <Options extends { session: string }>(options: Options) => ({
+    ...options,
+    host,
+  });
+  const clearMetroSessionHintsQuietly = (options: { session: string; stateDir?: string }) =>
+    devServer.clearMetroSessionHintsQuietly(withHost(options));
+  const recordPreparedMetroSession = (
+    options: { session: string; stateDir?: string },
+    result: Parameters<typeof devServer.recordPreparedMetroSession>[1],
+  ) => devServer.recordPreparedMetroSession(withHost(options), result);
+  const recordOpenedMetroSession = (
+    options: { session: string; stateDir?: string },
+    input: Parameters<typeof devServer.recordOpenedMetroSession>[1],
+  ) => devServer.recordOpenedMetroSession(withHost(options), input);
+  const readMetroSessionRuntime = (options: { session: string; stateDir?: string }) =>
+    devServer.readMetroSessionRuntime(withHost(options));
 
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the
@@ -120,7 +140,11 @@ export function createAgentDeviceClient(
     // mark the request canceled.
     const response = await cancellation.guard(
       async () =>
-        await transport(request, { authToken: merged.daemonAuthToken, signal: merged.signal }),
+        await transport(request, {
+          authToken: merged.daemonAuthToken,
+          signal: merged.signal,
+          daemonLifecycle: merged.daemonLifecycle,
+        }),
     );
     if (!response.ok) {
       throwDaemonError(response.error);
@@ -172,6 +196,8 @@ export function createAgentDeviceClient(
         await executeCommand<CommandResult<'clipboard'>>('clipboard', options),
       tvRemote: async (options) =>
         await executeCommand<CommandResult<'tv-remote'>>('tv-remote', options),
+      telephony: async (options) =>
+        await executeCommand<CommandResult<'telephony'>>('telephony', options),
       reactNative: async (options) => await executeCommand('react-native', options),
       doctor: async (options = {}) =>
         await executeCommand<CommandResult<'doctor'>>('doctor', options),
@@ -207,7 +233,10 @@ export function createAgentDeviceClient(
       // Pure local resolution; mirrors how the daemon client picks its state dir.
       stateDir: async (options = {}) => {
         const merged = mergeClientOptions(config, options);
-        return resolveDaemonPaths(merged.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir;
+        return resolveDaemonPaths(merged.stateDir ?? host.env.AGENT_DEVICE_STATE_DIR, {
+          env: host.env,
+          cwd: host.cwd,
+        }).baseDir;
       },
       close: async (options = {}) => {
         const session = resolveRequestSession(options);
@@ -222,7 +251,7 @@ export function createAgentDeviceClient(
           };
         } finally {
           // Close is teardown intent: drop the dev-server binding even if the daemon call fails.
-          clearMetroSessionHintsQuietly(config, options);
+          await clearMetroSessionHintsQuietly({ ...mergeClientOptions(config, options), session });
         }
       },
       saveScript: async (
@@ -263,6 +292,8 @@ export function createAgentDeviceClient(
           await executeCommand('reinstall', options),
           resolveRequestSession(options),
         ),
+      uninstall: async (options) =>
+        await executeCommand<CommandResult<'uninstall'>>('uninstall', options),
       installFromSource: async (options: AppInstallFromSourceOptions) =>
         normalizeInstallFromSourceResult(
           await executeCommand('install-from-source', options),
@@ -277,12 +308,14 @@ export function createAgentDeviceClient(
       open: async (options: AppOpenOptions) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('open', options);
-        recordMetroSessionHintsAfterOpen({
-          config,
-          options,
-          runtime: mergeClientOptions(config, options).runtime,
-          sessionReused: data.sessionReused === true,
-        });
+        await recordOpenedMetroSession(
+          { ...mergeClientOptions(config, options), session },
+          {
+            explicitRuntime: options.runtime !== undefined,
+            runtime: mergeClientOptions(config, options).runtime,
+            sessionReused: data.sessionReused === true,
+          },
+        );
         const device = normalizeOpenDevice(data);
         const appBundleId = readOptionalString(data, 'appBundleId');
         const appId = appBundleId;
@@ -301,9 +334,7 @@ export function createAgentDeviceClient(
           startup: normalizeStartupSample(data.startup),
           runtime: normalizeRuntimeHints(data.runtime),
           device,
-          ...(data.launchConfirmation === 'accepted'
-            ? { launchConfirmation: 'accepted' as const }
-            : {}),
+          ...normalizeLaunchConfirmation(data),
           ...normalizeOpenForegroundComposition(data),
           identifiers: {
             session,
@@ -363,16 +394,20 @@ export function createAgentDeviceClient(
           runtimeFilePath: options.runtimeFilePath,
           logPath: options.logPath,
         });
-        persistMetroSessionHints(config, result);
+        await recordPreparedMetroSession(
+          { ...config, session: resolveSessionName(config.session) },
+          result,
+        );
         return result;
       },
       reload: async (options = {}) =>
         await reloadMetro({
-          metroHost: options.metroHost,
-          metroPort: options.metroPort,
-          bundleUrl: options.bundleUrl,
-          runtime: resolveMetroSessionHints(config) ?? config.runtime,
-          timeoutMs: options.timeoutMs,
+          ...options,
+          runtime:
+            (await readMetroSessionRuntime({
+              ...config,
+              session: resolveSessionName(config.session),
+            })) ?? config.runtime,
         }),
     },
     capture: {
@@ -384,7 +419,14 @@ export function createAgentDeviceClient(
         // `nodes` tree and would collapse it to an empty snapshot. Pass the
         // leveled payload through verbatim. (Mirrors capture.screenshot; the
         // caller opted into the level, so the runtime value is the leveled shape.)
-        if (isLeveledResponse(options)) return data as unknown as CaptureSnapshotResult;
+        if (isLeveledResponse(options)) {
+          // Verbatim is not unchecked: the digest carries the presented-surface fact (#3565), which
+          // the normalizer skipped above would have read. `readPresentedSurfaceFact` owns its rules.
+          const presentedSurface = readPresentedSurfaceFact(data);
+          return (presentedSurface === undefined
+            ? data
+            : { ...data, presentedSurface }) as unknown as CaptureSnapshotResult;
+        }
         return normalizeSnapshotResult(data, session);
       },
       screenshot: async (options: CaptureScreenshotOptions = {}) => {
@@ -443,7 +485,10 @@ export function createAgentDeviceClient(
       symbols: async (options) => {
         const { symbolicateCrashArtifact } =
           await import('@agent-device/platform-apple/debug-symbols');
-        return symbolicateCrashArtifact({ cwd: options.cwd ?? config.cwd, ...options });
+        return symbolicateCrashArtifact({
+          ...options,
+          cwd: options.cwd ?? config.cwd ?? host.cwd,
+        });
       },
     },
     recording: {
@@ -537,6 +582,7 @@ function optionalSnapshotResponseFields(
     | 'visibility'
     | 'keyboard'
     | 'viewport'
+    | 'presentedSurface'
     | 'warnings'
     | 'snapshotQuality'
     | 'snapshotDiagnostics'
@@ -549,9 +595,11 @@ function optionalSnapshotResponseFields(
   const keyboard = readSnapshotKeyboardBandFact(data.keyboard);
   const viewport = readSnapshotViewportSize(data.viewport);
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
+  const presentedSurface = readPresentedSurfaceFact(data);
   return {
     ...(keyboard ? { keyboard } : {}),
     ...(viewport ? { viewport } : {}),
+    ...(presentedSurface ? { presentedSurface } : {}),
     ...(visibility ? { visibility: visibility as CaptureSnapshotResult['visibility'] } : {}),
     ...readSerializedSnapshotCaptureAnnotations(data),
     ...(unchanged ? { unchanged: unchanged as CaptureSnapshotResult['unchanged'] } : {}),
@@ -565,108 +613,18 @@ function optionalSnapshotResponseFields(
   };
 }
 
+function readDaemonLifecycle(value: unknown): DaemonLifecycle | undefined {
+  if (value === undefined || value === 'attach' || value === 'managed') return value;
+  throw new AppError('INVALID_ARGS', "daemonLifecycle must be 'attach' or 'managed'.", {
+    daemonLifecycle: value,
+  });
+}
+
 function mergeClientOptions(
   config: AgentDeviceClientConfig,
   options: InternalRequestOptions,
 ): InternalRequestOptions {
   return { ...config, ...options };
-}
-
-function metroSessionHintsScope(
-  config: AgentDeviceClientConfig,
-  options: InternalRequestOptions = {},
-): { stateDir: string; session: string } {
-  const merged = mergeClientOptions(config, options);
-  return {
-    stateDir: resolveDaemonPaths(merged.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir,
-    session: resolveSessionName(merged.session),
-  };
-}
-
-// The metro-sessions file is the session's dev-server binding; see MetroSessionHints.
-function persistMetroSessionHints(
-  config: AgentDeviceClientConfig,
-  result: Pick<MetroPrepareResult, 'statusUrl' | 'iosRuntime' | 'androidRuntime'>,
-): void {
-  try {
-    const deviceBaseUrls = new Set<string>();
-    for (const runtime of [result.iosRuntime, result.androidRuntime]) {
-      try {
-        const hints = metroHintsFromRuntime(runtime);
-        if (hints) deviceBaseUrls.add(hints.controlBaseUrl);
-      } catch {}
-    }
-    writeMetroSessionHints({
-      ...metroSessionHintsScope(config),
-      hints: {
-        controlBaseUrl: new URL('.', result.statusUrl).toString(),
-        deviceBaseUrls: [...deviceBaseUrls],
-      },
-    });
-  } catch {
-    // Session-hint persistence is best-effort; reload still works with explicit flags.
-  }
-}
-
-function resolveMetroSessionHints(
-  config: AgentDeviceClientConfig,
-): SessionRuntimeHints | undefined {
-  try {
-    const binding = readMetroSessionHints(metroSessionHintsScope(config));
-    return binding ? { bundleUrl: binding.controlBaseUrl } : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function metroHintsFromRuntime(
-  runtime: SessionRuntimeHints | undefined,
-): MetroSessionHints | undefined {
-  const { metroHost, metroPort, bundleUrl } = runtime ?? {};
-  if (metroHost === undefined && metroPort === undefined && bundleUrl === undefined)
-    return undefined;
-  return { controlBaseUrl: resolveMetroServerUrl({ runtime }).toString() };
-}
-
-// Hint flags rebind the session's dev server; a hintless open that created the session clears
-// any leftover binding from a previous same-name session.
-function recordMetroSessionHintsAfterOpen(params: {
-  config: AgentDeviceClientConfig;
-  options: InternalRequestOptions;
-  runtime: SessionRuntimeHints | undefined;
-  sessionReused: boolean;
-}): void {
-  try {
-    const scope = metroSessionHintsScope(params.config, params.options);
-    const hints = metroHintsFromRuntime(params.runtime);
-    if (hints) {
-      const binding =
-        params.options.runtime === undefined ? readMetroSessionHints(scope) : undefined;
-      if (
-        binding &&
-        (params.sessionReused || binding.deviceBaseUrls?.includes(hints.controlBaseUrl))
-      )
-        return;
-      writeMetroSessionHints({ ...scope, hints });
-      return;
-    }
-    if (!params.sessionReused) {
-      clearMetroSessionHints(scope);
-    }
-  } catch {
-    // Session-hint sync is best-effort; reload still works with explicit flags.
-  }
-}
-
-function clearMetroSessionHintsQuietly(
-  config: AgentDeviceClientConfig,
-  options: InternalRequestOptions,
-): void {
-  try {
-    clearMetroSessionHints(metroSessionHintsScope(config, options));
-  } catch {
-    // Session-hint cleanup is best-effort; close must not fail on local file state.
-  }
 }
 
 export type * from './client/client-types.ts';

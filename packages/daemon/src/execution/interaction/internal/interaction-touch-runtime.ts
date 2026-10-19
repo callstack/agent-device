@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
 import type {
   FillCommandResult,
@@ -12,7 +13,6 @@ import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { readResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { publishAmbiguousMatchCandidateRefs } from '../../session-snapshot.ts';
 import { isSessionRecording } from '../../../core/session-script-publication-capability.ts';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import {
   createInteractionRuntimeForRoute,

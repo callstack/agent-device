@@ -26,5 +26,6 @@ export type {
   ProviderDeviceOrientation,
   ProviderDeviceType,
   RemoteConfigMetroOptions,
+  RemoteConfigProfile,
   RemoteConnectionProfileFields,
 } from '../remote-config-fields.ts';

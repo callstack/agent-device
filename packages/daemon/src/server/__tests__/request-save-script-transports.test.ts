@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { storeSessionForTest } from '../../__tests__/support/store-factory.ts';
 import { isSessionRecording } from '../../core/session-script-publication-capability.ts';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
@@ -27,15 +28,16 @@ import { createRequestHandler } from '../../__tests__/support/test-device-runtim
 import { SessionStore } from '../../core/session-store.ts';
 import { createDaemonHttpServer } from '../http/http-server.ts';
 import { createSocketServer, listenNetServer } from '../http/transport.ts';
-import type { DaemonInvokeFn, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonInvokeFn } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
@@ -74,6 +76,7 @@ function setup(): Harness {
   const session = makeIosSession(SESSION);
   sessionStore.publish(SESSION, session);
   const handleRequest = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(root, 'daemon.log'),
     token: TOKEN,

@@ -1,3 +1,4 @@
+import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { IncomingHttpHeaders } from 'node:http';
@@ -6,7 +7,6 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   bundledCloudWebDriverProvider,
-  createBundledCloudWebDriverRuntimes,
   type RunHostCommand,
 } from '@agent-device/provider-webdriver';
 import type {
@@ -25,8 +25,8 @@ import {
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
 
-import testMuPlugin from '@agent-device/testmu';
-import { createPluginHost } from '../../../src/plugins/host.ts';
+import testmu from '@agent-device/testmu';
+import { createPluginHost } from '@agent-device/plugins/host';
 import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
@@ -38,7 +38,7 @@ test('BrowserStack facade prepares capabilities, uploads apps, and returns artif
       const appPath = path.join(tempDir, 'demo.apk');
       fs.writeFileSync(appPath, 'fake apk');
       const runtime = runtimeFor(
-        createBundledCloudWebDriverRuntimes({
+        await createBundledCloudWebDriverRuntimes({
           env: {
             BROWSERSTACK_USERNAME: 'user',
             BROWSERSTACK_ACCESS_KEY: 'key',
@@ -91,7 +91,7 @@ test('BrowserStack facade prepares capabilities, uploads apps, and returns artif
 test('BrowserStack facade nests device-feature capabilities inside bstack:options', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const runtime = runtimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: {
           BROWSERSTACK_USERNAME: 'user',
           BROWSERSTACK_ACCESS_KEY: 'key',
@@ -153,7 +153,7 @@ test('AWS Device Farm facade rejects device features it does not read at session
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
     const runtime = runtimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: { AWS_REGION: 'us-west-2' },
         clientVersion: CLIENT_VERSION,
         runHostCommand: host.run,
@@ -194,22 +194,23 @@ test('AWS Device Farm facade rejects device features it does not read at session
   });
 }, 15_000);
 
+async function testMuWebDriver(env: Record<string, string>) {
+  const setup = await testmu().setup(createPluginHost(env, undefined));
+  if (!('webDriver' in setup)) throw new Error('TestMu AI sets up a WebDriver descriptor');
+  return setup.webDriver;
+}
+
 test('TestMu facade routes a real-device session to the real pool and its upload API', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    const registration = testMuPlugin(
-      createPluginHost(
-        {
-          LT_USERNAME: 'user',
-          LT_ACCESS_KEY: 'key',
-          TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-          TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
-          TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/realDevice`,
-        },
-        undefined,
-      ),
-    );
+    const webDriver = await testMuWebDriver({
+      LT_USERNAME: 'user',
+      LT_ACCESS_KEY: 'key',
+      TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+      TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
+      TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/realDevice`,
+    });
     const runtime = await createCloudWebDriverRuntime({
-      ...registration.webDriver,
+      ...webDriver,
       clientVersion: CLIENT_VERSION,
     });
     const lease = makeLease('testmu');
@@ -249,19 +250,14 @@ test('TestMu uploads the materializer-selected simulator archive through the plu
       const installablePath = path.join(tempDir, 'extracted', 'App.app');
       fs.writeFileSync(archivePath, 'zip bytes');
       fs.mkdirSync(installablePath, { recursive: true });
-      const registration = testMuPlugin(
-        createPluginHost(
-          {
-            LT_USERNAME: 'user',
-            LT_ACCESS_KEY: 'key',
-            TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-            TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
-          },
-          undefined,
-        ),
-      );
+      const webDriver = await testMuWebDriver({
+        LT_USERNAME: 'user',
+        LT_ACCESS_KEY: 'key',
+        TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+        TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
+      });
       const runtime = await createCloudWebDriverRuntime({
-        ...registration.webDriver,
+        ...webDriver,
         clientVersion: CLIENT_VERSION,
       });
       const lease = makeLease('testmu');
@@ -326,7 +322,7 @@ test('TestMu uploads the materializer-selected simulator archive through the plu
 test('BrowserStack refuses a refused field on a repeat allocation of its live lease', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const runtime = runtimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: {
           BROWSERSTACK_USERNAME: 'user',
           BROWSERSTACK_ACCESS_KEY: 'key',
@@ -369,7 +365,7 @@ test('AWS Device Farm facade uses the injected host-command capability for its f
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
     const runtime = runtimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: { AWS_REGION: 'us-west-2' },
         clientVersion: CLIENT_VERSION,
         runHostCommand: host.run,

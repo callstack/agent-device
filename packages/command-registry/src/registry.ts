@@ -27,6 +27,7 @@ import {
   deployAppUse,
   readyMaterializeAndDeployAppUse,
   readySendPushNotificationUse,
+  uninstallAppUse,
 } from '@agent-device/contracts/app-deployment-runtime-plan';
 import {
   closeApplicationRuntimePlanUses,
@@ -42,6 +43,7 @@ import {
   alertRuntimePlanUses,
   actionButtonRuntimeUse,
   foldRuntimeUse,
+  telephonyRuntimeUse,
   appEventRuntimeUse,
   appStateRuntimeUses,
   appSwitcherRuntimeUse,
@@ -150,22 +152,10 @@ export type DescriptorSessionRouteCommandName =
       : never
     : never;
 
-/**
- * The literal union of every command the daemon routes. A command that never reaches a
- * daemon route cannot be the target of a request, so this is the type a caller building
- * one must name — an unregistered or CLI-only target is a compile error rather than a
- * string the receiver rejects at runtime.
- */
-export type DescriptorDaemonRouteCommandName =
-  Extract<(typeof commandDescriptors)[number], { daemon: object }> extends infer Descriptor
-    ? Descriptor extends { name: infer Name extends string }
-      ? Name
-      : never
-    : never;
-
 // ---------------------------------------------------------------------------
-// Daemon request-policy trait bundles — copied VERBATIM from
-// packages/daemon/src/core/daemon-command-registry.ts (DAEMON_COMMAND_DESCRIPTORS).
+// Daemon request-policy trait bundles — shorthand composed into each
+// descriptor's `daemon` facet (ADR 0008, "Daemon ownership"). The daemon
+// registry derives its traits from those facets.
 // ---------------------------------------------------------------------------
 
 const ADMISSION_AND_LOCK_EXEMPT = {
@@ -966,6 +956,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...DEPLOY_APP_COMMAND_DESCRIPTOR,
   },
   {
+    name: 'uninstall',
+    ...DEPLOY_APP_COMMAND_DESCRIPTOR,
+    platformExecution: { kind: 'device-runtime', use: uninstallAppUse },
+  },
+  {
     name: 'install_source',
     deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled
@@ -1334,7 +1329,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: postActionObservationTimeoutPolicy('click', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('click'),
-    targetReadiness: 'budgeted',
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: clickRuntimeUses },
@@ -1365,7 +1359,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
       envelopeMs: 210_000,
     },
     postActionObservation: postActionObservation('longpress'),
-    targetReadiness: 'budgeted',
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: longPressRuntimeUses },
   },
@@ -1395,7 +1388,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'core',
     timeoutPolicy: postActionObservationTimeoutPolicy('press', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('press'),
-    targetReadiness: 'budgeted',
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: pressRuntimeUses },
@@ -1525,6 +1517,18 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', uses: [foldRuntimeUse] },
   },
   {
+    name: 'telephony',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+    catalog: { group: 'public' },
+    frameworkTier: 'extended',
+    // Admission is the owner's `sendTelephonyEvent` fact. The event goes to the emulator console
+    // rather than the screen, so no blocking-dialog guard applies; the call screen or message
+    // notification it raises can still cover the app, so refs may be invalidated.
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
+    daemon: { ...GENERIC_MUTATING_COMMAND_TRAITS.daemon, androidBlockingDialogGuard: false },
+    platformExecution: { kind: 'device-runtime', uses: [telephonyRuntimeUse] },
+  },
+  {
     name: 'scroll',
     ...(ownerFilesEnabled
       ? { ownerFiles: ['packages/daemon/src/execution/scroll-runtime.ts'] as const }
@@ -1610,16 +1614,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'appSwitcher' },
     frameworkTier: 'extended',
-    // R56 retires this command's capability bucket, its `dispatch` leaf, and its HarmonyOS
-    // overlay membership together: admission is the owner's `appSwitcher` fact, and the only
-    // execution is that one bound operation (ADR 0019 §9).
+    // R56 removed the legacy `dispatch` leaf, capability bucket, and HarmonyOS overlay membership.
+    // The daemon route remains `generic`; admission checks the owner's `appSwitcher` fact,
+    // and execution uses that one bound operation (ADR 0019 §9).
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
-    // ADR 0014: app-switcher previously reached the generic daemon leaf via the
-    // registry's generic fallback with no daemon facet, so it could not be
-    // classified. Add the facet (route unchanged) so its device mutation is
-    // covered by the completeness gate; this is the escape hatch the ADR calls
-    // out, not a new specialized route.
+    // ADR 0014, "Command effects are daemon-owned and completely classified":
+    // The `daemon` facet classifies this command's device mutation for the completeness gate.
+    // The route remains `generic`.
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
@@ -1817,13 +1819,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
-    // Wave 6 residue: `react-devtools start` on a Limrun Android instance dispatches internal
-    // `runtime port-reverse` through the CLI-injected dispatch seam. `runtime` is itself fully
-    // migrated (`device-runtime`, R31), so the dispatched execution is accounted for under its
-    // own descriptor rather than hidden behind this one — this route owns no unmigrated platform
-    // execution of its own. The CLI-route dominance gate
-    // (`__tests__/platform-execution-cli-route.test.ts`) still rejects a `none` route whose
-    // CLI-injected dispatch target is still `legacy`.
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
@@ -1884,7 +1879,7 @@ const CLI_COMMAND_NAMES = new Set<string>(
  * claims. Classifications are pinned as literal command-name lists, so reclassifying or
  * renaming a command they name means editing that list in the same diff: the device-claim
  * deviating set in
- * `packages/command-registry/src/__tests__/device-claim-policy.test.ts`; the timeout
+ * `packages/command-registry/src/__tests__/registry-device-claim-policy.test.ts`; the timeout
  * envelopes and budgets in `src/__tests__/command-descriptor-timeout-policy.test.ts` (a
  * declared trait since `b25ef7b024` #1084); and the `targetIdentityVerification` and
  * `'core'` tier sets, plus the tier-iff-public rule, in
@@ -1924,8 +1919,7 @@ type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
  * Compile-time literalness of {@link Command}. The `as const` on {@link RAW_COMMAND_DESCRIPTORS}
  * keeps each descriptor's literal `name` through the composition and the `.map` above; an array
  * that lost it would widen this union to `string`, and nothing downstream would say so:
- * `COMMAND_DEFAULTS` below and `Record<DescriptorCliCommandName, …>` in
- * `src/cli/injected-daemon-dispatch.ts` stop rejecting an unknown key, and the `command: Command`
+ * `COMMAND_DEFAULTS` below stops rejecting an unknown key, and the `command: Command`
  * parameters in `src/cli/command-explain.ts` and `owner-files.ts` would stop excluding a name no
  * descriptor declares. That silence is why this is a type guard and not a value comparison.
  */
@@ -2028,9 +2022,7 @@ function readCatalogKey(descriptor: {
 const TIMEOUT_POLICY_BY_COMMAND: ReadonlyMap<string, CommandTimeoutPolicy> = new Map(
   Array.from(COMMAND_DESCRIPTOR_BY_NAME.values(), (descriptor) => [
     descriptor.name,
-    descriptor.targetReadiness
-      ? { ...descriptor.timeoutPolicy, targetReadiness: descriptor.targetReadiness }
-      : descriptor.timeoutPolicy,
+    descriptor.timeoutPolicy,
   ]),
 );
 
@@ -2056,11 +2048,6 @@ export function resolveCommandPostActionObservationSupport(
 
 export function commandSupportsSettleObservation(command: string | undefined): boolean {
   return resolveCommandPostActionObservationSupport(command) !== undefined;
-}
-
-export function commandAcceptsReadinessBudget(command: string | undefined): boolean {
-  if (command === undefined) return false;
-  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.targetReadiness === 'budgeted';
 }
 
 export function commandSupportsVerifyEvidence(command: string | undefined): boolean {

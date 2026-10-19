@@ -58,11 +58,10 @@ test('no mutation shard is allowed to exceed the 30-minute budget', () => {
   }
 });
 
-// Only a harness diff can produce a non-empty matrix, so the trigger is asserted
-// in both directions against LANE_TOOLING: a missing path lets a harness change
-// merge without ever running a mutant, and an extra one starts a select job that
-// can only answer `[]`.
-test('the affected lane triggers on exactly the lane sources that can select mutants', () => {
+// Asserted in both directions against LANE_TOOLING: a missing path lets a lane
+// change merge without its self-test or mutants, and an extra one starts a select
+// job that can only answer `[]`.
+test('the affected lane triggers on exactly the lane tooling', () => {
   // Quote style is the formatter's business (oxfmt formats the workflow tree), so
   // accept either spelling of the same scalar rather than pinning this gate to it.
   const paths = [
@@ -75,6 +74,23 @@ test('the affected lane triggers on exactly the lane sources that can select mut
     'the PR path filter drifted from LANE_TOOLING in scripts/mutation/run.ts',
   );
   assert.match(workflow('mutation-affected.yml'), /gate: mutation-affected[\s\S]*--list-affected/);
+});
+
+// Selection and scoring must agree on scope, or the report would score shards the
+// select job never spent (or expect ones it skipped).
+test('manual dispatch widens selection and scoring to the lane dependencies', () => {
+  const yaml = parse(workflow('mutation-affected.yml'));
+  assert.ok('workflow_dispatch' in yaml.on, 'dependency-only diffs have no way to run the canary');
+  assert.equal(
+    yaml.env.MUTATION_SCOPE,
+    "${{ github.event_name == 'workflow_dispatch' && '--with-dependencies' || '' }}",
+  );
+  const select = yaml.jobs.select.steps.find((step: { id?: string }) => step.id === 'select');
+  assert.match(select.with.args, /\$\{\{ env\.MUTATION_SCOPE \}\}/);
+  const score = yaml.jobs.report.steps.find(
+    (step: { name: string }) => step.name === 'Score the affected modules',
+  );
+  assert.equal(score.run.match(/--base "\$MUTATION_BASE" \$MUTATION_SCOPE/g)?.length, 2);
 });
 
 test('mutant job budgets include setup and unconditional evidence upload', () => {

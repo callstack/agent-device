@@ -1,4 +1,5 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   AudioProbeRuntimeHost,
   HostAudioCaptureProcess,
@@ -19,11 +20,11 @@ import {
  * ScreenCaptureKit sampler taps host system audio whether the session is a macOS app, an iOS
  * simulator, or an Android emulator. The owner packages state which of their cells reach it.
  */
-export function createAudioProbeRuntimeHost(
-  options: {
-    ownedProcesses?: OwnedProcessRecordWriter;
-  } = {},
-): AudioProbeRuntimeHost {
+export function createAudioProbeRuntimeHost(options: {
+  ownedProcesses?: OwnedProcessRecordWriter;
+  host: HostEnvironment;
+}): AudioProbeRuntimeHost {
+  const host = options.host;
   const ownedProcesses: OwnedProcessRecordWriter =
     options.ownedProcesses ??
     Object.freeze({
@@ -44,7 +45,7 @@ export function createAudioProbeRuntimeHost(
         statusPath: string;
       }): Promise<HostAudioCaptureProcess> => {
         const { startMacOsAudioProbeProcess } = await import('@agent-device/platform-apple/macos');
-        const probe = await startMacOsAudioProbeProcess(input);
+        const probe = await startMacOsAudioProbeProcess({ ...input, env: host.env });
         const marker = await resolveManagedProcessIdentity(probe.child.pid ?? undefined);
         return Object.freeze({
           ...(marker === undefined ? {} : { marker }),
@@ -62,8 +63,10 @@ export function createAudioProbeRuntimeHost(
     web: Object.freeze({
       resolve: async (device: DeviceInfo): Promise<WebAudioProbeTransport | undefined> => {
         if (device.platform !== 'web') return undefined;
-        const { resolveWebProvider } = await import('@agent-device/platform-web');
-        const provider = await resolveWebProvider();
+        const { resolveWebProviderForHost } = await import('@agent-device/platform-web');
+        // Every reader of one web request resolves the same provider through the one policy
+        // (#3794).
+        const provider = await resolveWebProviderForHost(host);
         const probeAudio = provider.probeAudio?.bind(provider);
         if (!probeAudio) return undefined;
         return Object.freeze({

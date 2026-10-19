@@ -277,6 +277,8 @@ export type ReplayDispatchOptions = Readonly<{
   openLifecycle?: ReplayOpenLifecycle;
   /** Terminate the targeted app without ending the owning daemon session. */
   closeAppOnly?: boolean;
+  /** With `closeAppOnly`: system-initiated process death (Maestro `killApp`) instead of a close. */
+  killApp?: boolean;
   /**
    * Daemon-composed hierarchy capture used as operational evidence only. It must not issue or
    * replace client ref authority.

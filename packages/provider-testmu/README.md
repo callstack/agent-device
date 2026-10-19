@@ -15,3 +15,15 @@ See the [TestMu AI guide](https://oss.callstack.com/agent-device/docs/testmu) fo
 To update the plugin, run `agent-device plugins update @agent-device/testmu`.
 
 After you add or update the plugin, close your sessions and run `agent-device daemon stop` before reconnecting.
+
+## Use it from JavaScript
+
+The package default-exports a plugin factory. Pass credentials as options, or leave them out to read `LT_USERNAME` and `LT_ACCESS_KEY` from the environment:
+
+```js
+import testmu from '@agent-device/testmu';
+
+const plugin = testmu({ credentials: { username: 'your-username', accessKey: 'your-access-key' } });
+```
+
+Credentials passed as options are used instead of the environment variables, and the daemon does not compare them with your shell.

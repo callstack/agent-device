@@ -1,0 +1,300 @@
+import type {
+  PluginCleanupOutcome,
+  PluginInventoryEntry,
+} from '@agent-device/contracts/plugin-inventory';
+import fs from 'node:fs';
+import path from 'node:path';
+import { afterEach, expect, test, vi } from 'vitest';
+import {
+  mkdtempForTestSync,
+  publishDaemonRegistration,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
+
+const lifecycleEvents = vi.hoisted(() => [] as string[]);
+const startupFailure = vi.hoisted(() => ({ active: false }));
+const providerComposition = vi.hoisted(() => ({
+  inventory: [] as PluginInventoryEntry[],
+  cleanup: [] as PluginCleanupOutcome[],
+}));
+
+import {
+  applicationLifecycleResourceFixture,
+  daemonRuntimeDepsFixture,
+  platformOwnerLifecycleFixture,
+} from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { startDaemonRuntime } from './daemon-runtime.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+
+type DaemonPaths = ReturnType<typeof resolveDaemonPaths>;
+
+// A pid no host can be holding, so the fabricated successor is never mistaken for a live process by
+// anything that verifies identity against the process table.
+const SUCCESSOR_PID = 999_999_999;
+
+function startRuntime(stateDir: string) {
+  return startDaemonRuntime({
+    composeDeps: daemonRuntimeDepsFixture(() => ({
+      // The post-lock, pre-publication step the runtime awaits first. Making it throw lands the
+      // runtime in the startup-failure branch that also removes `daemon.json`, which is otherwise
+      // unreachable from a test because every later step needs a real device toolchain.
+      ownerLifecycle: platformOwnerLifecycleFixture({
+        configureForDaemonLock: async () => {
+          if (startupFailure.active) throw new Error('startup step failed');
+        },
+      }),
+      deviceRuntimeGateway: Object.freeze({
+        ...lifecycleDeviceRuntimeGateway,
+        applicationLifecycle: applicationLifecycleResourceFixture(),
+        shutdown: async () => {
+          lifecycleEvents.push('gateway-shutdown');
+        },
+      }),
+      pluginInventory: providerComposition.inventory,
+      shutdownProviderRuntimes: async () => providerComposition.cleanup,
+    })),
+    host: createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+    }),
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+  });
+}
+
+function logEvents(stateDir: string): Array<{ phase: string; data?: Record<string, unknown> }> {
+  const logPath = path.join(stateDir, 'daemon.log');
+  if (!fs.existsSync(logPath)) return [];
+  return fs
+    .readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { phase: string; data?: Record<string, unknown> });
+}
+
+function publishSuccessor(paths: DaemonPaths): void {
+  publishDaemonRegistration(paths.baseDir, { pid: SUCCESSOR_PID, startTime: 'successor-start' });
+}
+
+afterEach(() => {
+  startupFailure.active = false;
+  lifecycleEvents.length = 0;
+  providerComposition.inventory = [];
+  providerComposition.cleanup = [];
+  vi.restoreAllMocks();
+});
+
+test('a shutdown whose daemon.json names a successor keeps the file and logs the decline', async () => {
+  // #3087: the exiting daemon used to unlink whatever daemon.json was present, deleting the serving
+  // daemon's metadata and leaving every later client failing with hasInfo:false + retainedLockProcess.
+  const stateDir = mkdtempForTestSync('agent-device-daemon-info-ownership-shutdown-');
+  const paths = resolveDaemonPaths(stateDir);
+  try {
+    const runtime = await startRuntime(stateDir);
+    expect(runtime).not.toBeNull();
+
+    publishSuccessor(paths);
+    await runtime?.close();
+
+    expect(lifecycleEvents).toContain('gateway-shutdown');
+    expect(fs.existsSync(paths.infoPath), 'the serving daemon keeps its metadata').toBe(true);
+    expect(fs.existsSync(paths.lockPath), 'the exiting daemon still releases its own lock').toBe(
+      false,
+    );
+    expect(logEvents(stateDir)).toContainEqual(
+      expect.objectContaining({
+        phase: 'daemon_info_removal_declined',
+        data: expect.objectContaining({ reason: 'replaced', registeredPid: SUCCESSOR_PID }),
+      }),
+    );
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a shutdown removes its own metadata and reports an unverified release', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-info-owned-shutdown-');
+  const paths = resolveDaemonPaths(stateDir);
+  try {
+    const runtime = await startRuntime(stateDir);
+    expect(runtime).not.toBeNull();
+
+    const originalRmdir = fs.rmdirSync;
+    vi.spyOn(fs, 'rmdirSync').mockImplementation((target, options) => {
+      if (target === paths.lockPath) throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+      return originalRmdir(target, options);
+    });
+    await runtime?.close();
+
+    expect(fs.existsSync(paths.infoPath)).toBe(false);
+    expect(logEvents(stateDir).map((event) => event.phase)).not.toContain(
+      'daemon_info_removal_declined',
+    );
+    expect(logEvents(stateDir)).toContainEqual(
+      expect.objectContaining({
+        phase: 'daemon_registration_finish_failed',
+        data: expect.objectContaining({
+          error: expect.objectContaining({
+            message: 'Cannot verify ownership of daemon registration',
+            details: expect.objectContaining({
+              lockDirPath: paths.lockPath,
+              ownerReleaseUnverified: true,
+            }),
+            hint: expect.stringContaining('confirming all users'),
+          }),
+        }),
+      }),
+    );
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a failed provider plugin is logged and published after this daemon publishes its record', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-provider-skip-');
+  const failed = {
+    provider: 'limrun',
+    source: 'builtin',
+    state: 'failed',
+    error: { code: 'INVALID_ARGS', message: 'Limrun instance access is missing X.' },
+    credentials: { variables: [], byBackend: {} },
+  } as const;
+  providerComposition.inventory = [failed];
+  const runtime = await startRuntime(stateDir);
+  try {
+    const event = logEvents(stateDir).find(({ phase }) => phase === 'provider_plugin_failed');
+    expect(event?.data).toMatchObject({
+      provider: 'limrun',
+      source: 'builtin',
+      code: 'INVALID_ARGS',
+    });
+    const published = JSON.parse(fs.readFileSync(resolveDaemonPaths(stateDir).infoPath, 'utf8'));
+    expect(published.plugins).toEqual([failed]);
+  } finally {
+    await runtime?.close();
+  }
+});
+
+test('a startup that fails before publication removes no record and writes no log', async () => {
+  // The other removal site. Client cleanup deletes daemon.json routinely, so this path must stay
+  // silent: reporting an "absent" record here would create a daemon.log on every such startup.
+  const stateDir = mkdtempForTestSync('agent-device-daemon-info-startup-absent-');
+  const paths = resolveDaemonPaths(stateDir);
+  startupFailure.active = true;
+  try {
+    await expect(startRuntime(stateDir)).rejects.toThrow('startup step failed');
+    expect(fs.existsSync(paths.infoPath)).toBe(false);
+    expect(fs.existsSync(paths.logPath), 'nothing was declined, so nothing is logged').toBe(false);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a startup that fails before publication leaves a foreign record standing', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-info-startup-foreign-');
+  const paths = resolveDaemonPaths(stateDir);
+  publishSuccessor(paths);
+  startupFailure.active = true;
+  try {
+    await expect(startRuntime(stateDir)).rejects.toThrow('startup step failed');
+    expect(fs.existsSync(paths.infoPath)).toBe(true);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a successor published during this daemon lifetime is recorded at detection', async () => {
+  // The detection half of #3087: the losing daemon used to vanish without ever noting that its
+  // record was gone, so the next investigation started from a truncated daemon.log. What is under test
+  // is that a live runtime notices and gets it to disk; the decision itself is
+  // `daemon-metadata-loss.test.ts`, which needs no daemon to answer it.
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-daemon-metadata-lost-');
+  const paths = resolveDaemonPaths(stateDir);
+  try {
+    const runtime = await startRuntime(stateDir);
+    expect(runtime).not.toBeNull();
+
+    publishSuccessor(paths);
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(logEvents(stateDir)).toContainEqual(
+      expect.objectContaining({
+        phase: 'daemon_metadata_lost',
+        data: expect.objectContaining({ state: 'replaced', registeredPid: SUCCESSOR_PID }),
+      }),
+    );
+
+    vi.useRealTimers();
+    await runtime?.close();
+  } finally {
+    vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('the loss watch is armed only after this daemon publishes its own record', () => {
+  // Arming before publication would report a predecessor's record as a takeover of something this
+  // daemon never owned. Ordering is the invariant, the same way the startup-ordering guards read it.
+  const source = fs.readFileSync(new URL('./daemon-runtime.ts', import.meta.url), 'utf8');
+  const published = source.indexOf('publishDaemonInfo(socketPort, httpPort);');
+  const armed = source.indexOf('stopMetadataLossWatch = armDaemonMetadataLossWatch(');
+
+  expect(published).toBeGreaterThanOrEqual(0);
+  expect(armed).toBeGreaterThan(published);
+});
+
+test('both exits tear the watch down before they touch daemon.json', () => {
+  // A watch still armed when the removal runs can report a loss for a record its own process just
+  // deleted. The startup-failure half of this is unreachable from a test — everything after
+  // publication needs a real toolchain — so the invariant is read off the source, the same way the
+  // arming order above is. Startup rollback runs its steps in reverse, so the registration that
+  // stops the watch comes after the one that finishes the registration; the close path stops first.
+  const source = fs.readFileSync(new URL('./daemon-runtime.ts', import.meta.url), 'utf8');
+  const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);
+  const finishes = [...source.matchAll(/await finishDaemonRegistration\(/g)].map((m) => m.index);
+  expect(stops).toHaveLength(2);
+  expect(finishes).toHaveLength(2);
+  expect(stops[0]).toBeGreaterThan(finishes[0]!);
+  expect(stops[1]).toBeGreaterThan(stops[0]!);
+  expect(finishes[1]).toBeGreaterThan(stops[1]!);
+});
+
+test('a plugin whose cleanup failed at shutdown is recorded in daemon.log', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-provider-cleanup-');
+  providerComposition.cleanup = [
+    {
+      provider: 'example',
+      source: 'store',
+      shutdown: { status: 'failed', error: { code: 'COMMAND_FAILED', message: 'shutdown broke' } },
+      dispose: { status: 'ok' },
+    },
+    {
+      provider: 'healthy',
+      source: 'builtin',
+      shutdown: { status: 'ok' },
+      dispose: { status: 'ok' },
+    },
+  ];
+  const runtime = await startRuntime(stateDir);
+  try {
+    await runtime?.close();
+    const events = logEvents(stateDir).filter(
+      ({ phase }) => phase === 'provider_plugin_cleanup_failed',
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]?.data).toMatchObject({
+      provider: 'example',
+      source: 'store',
+      shutdown: { code: 'COMMAND_FAILED' },
+    });
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

@@ -1,4 +1,4 @@
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 
 export function interactionErrorResponse(
   code: string,

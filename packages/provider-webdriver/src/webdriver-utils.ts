@@ -165,7 +165,7 @@ export async function resolveHubAppReference(options: {
   const reference = options.parseReference(app);
   if (reference !== undefined) return reference;
   if (/^https?:\/\//i.test(app)) return app;
-  const appPath = path.resolve(options.cwd ?? process.cwd(), app);
+  const appPath = path.isAbsolute(app) ? app : path.resolve(requireAppCwd(options), app);
   if (!fs.existsSync(appPath)) {
     throw new AppError(
       'INVALID_ARGS',
@@ -174,6 +174,17 @@ export async function resolveHubAppReference(options: {
     );
   }
   return await options.uploadFile(appPath, options.signal);
+}
+
+// A relative app path needs the working directory of the client that named it; the daemon fills it
+// from the request, and no ambient directory stands in for a request that names none.
+function requireAppCwd(options: { service: string; app: string; cwd?: string }): string {
+  if (options.cwd !== undefined) return options.cwd;
+  throw new AppError(
+    'INVALID_ARGS',
+    `${options.service} --provider-app ${options.app} is a relative path and the request names no working directory; pass an absolute path.`,
+    { providerApp: options.app, reason: 'provider_app_cwd_missing' },
+  );
 }
 
 const PROVIDER_API_TIMEOUT_MS = 15_000;

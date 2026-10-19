@@ -5,7 +5,8 @@ The proxy behind `agent-device proxy`, as a library. Embed it in your own gatewa
 
 The proxy:
 
-- authenticates clients with a token you choose, and never exposes the daemon's own token;
+- authenticates clients with a token you choose, or with your own check, and never exposes the
+  daemon's own token;
 - forwards only the routes a remote client needs: `/health`, `/rpc`, uploads, artifacts, and
   request diagnostics;
 - refuses install sources that name a file on the daemon host;
@@ -89,13 +90,53 @@ const proxy = createDaemonProxy({
 `upstreamFetch` receives a `Request` addressed to `upstreamBaseUrl` and must resolve with the
 daemon's `Response`. Abort the exchange when `request.signal` aborts.
 
+### Authenticate each client yourself
+
+One `clientToken` is shared by every client. To give each client its own credential, pass
+`authenticate` instead. It receives each client request (with its JSON body on `/rpc`) and returns
+the tenant the client acts as, or `null` to refuse it with a 401:
+
+```ts
+const proxy = createDaemonProxy({
+  upstreamBaseUrl: 'http://127.0.0.1:4310',
+  upstreamToken: daemonToken,
+  authenticate: async (request) => {
+    const account = await accounts.findByApiKey(request.headers.get('authorization'));
+    return account ? { tenantId: account.id } : null;
+  },
+});
+```
+
+The proxy then sends every authenticated request to the daemon as that tenant, whatever tenant the
+client named, and isolates its sessions from other tenants' sessions. `GET /health` is not
+authenticated and carries no tenant. A tenant id is 1-128 letters, numbers, dots, underscores or
+hyphens; any other id fails the request with a 500. On `/rpc` the proxy accepts only
+`agent_device.command` and the `agent_device.lease.*` methods (or the same names spelled
+`agent-device.command` and `agent-device.lease.*`), and refuses others with a 401.
+
+Clients upload files with a ticket that names the headers to send. The proxy builds that ticket
+from the daemon ticket's `content-type` and the client's own credential, so it never carries the
+daemon's token. By default the credential is the client's `authorization` and
+`x-agent-device-token` headers. If your clients use another header, such as a cookie or an API key
+header, return it as `uploadHeaders` so the upload passes `authenticate` too:
+
+```ts
+authenticate: async (request) => {
+  const apiKey = request.headers.get('x-api-key');
+  if (!apiKey) return null;
+  const account = await accounts.findByApiKey(apiKey);
+  return account ? { tenantId: account.id, uploadHeaders: { 'x-api-key': apiKey } } : null;
+},
+```
+
 ## Options
 
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `upstreamBaseUrl` | required | Base URL of the daemon's HTTP server. |
 | `upstreamToken` | required | The daemon's auth token. |
-| `clientToken` | required | Token clients must send as their daemon auth token. |
+| `clientToken` | required without `authenticate` | Token clients must send as their daemon auth token. |
+| `authenticate` | none | Authenticates each client and names its tenant; replaces `clientToken`. |
 | `upstreamFetch` | global `fetch` | Sends one request to the daemon. |
 | `maxRpcBodyBytes` | 1 MiB | Larger `/rpc` bodies get a 400 response. |
 | `upstreamTimeoutMs` | 5 minutes | Longest time one daemon request may take, including its body. |

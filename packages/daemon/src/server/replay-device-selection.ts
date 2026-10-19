@@ -6,7 +6,7 @@ import {
 import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { readReplayScriptSourceFile } from '@agent-device/replay-port/script-source';
-import type { ReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import {
   appTargetResolutionOptions,

@@ -10,7 +10,6 @@ import {
   recoverAbandonedDaemonRegistration,
   createOwnedReplayStateDir,
   DAEMON_STARTUP_EXIT_CODES,
-  launchDaemonProcess,
   type DaemonRetirementResult,
   type OwnedReplayStateDir,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
@@ -20,19 +19,23 @@ import {
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readRegisteredDaemonOwnership } from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  devicesClientSettings,
+  launchDaemonProcess,
+  spawnLegacyDaemonFixture,
+} from './daemon-registration-owner.fixtures.ts';
 import {
   registeredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
 } from './test-utils/registered-daemon-fixture.ts';
-import { spawnLegacyDaemonFixture } from '@agent-device/test-kit/legacy-daemon-fixture';
-import { ensureDaemon, resolveClientSettings } from '../daemon-client/daemon-client-lifecycle.ts';
+import { ensureManagedDaemon } from '../daemon-client/daemon-client-lifecycle.ts';
 import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
-import { stopDaemon } from '@agent-device/daemon/daemon-stop';
+import { stopDaemon } from '@agent-device/daemon-contracts/daemon-stop';
 
 const fields = {
   socketPort: 4210,
@@ -791,14 +794,7 @@ test('cutover refuses an already-running legacy daemon before signaling or chang
     assert.ok(disposition, 'a new daemon must refuse an occupied legacy file');
     assert.equal(disposition.exitCode, DAEMON_STARTUP_EXIT_CODES.unproven);
     await assert.rejects(
-      ensureDaemon(
-        resolveClientSettings({
-          session: 'default',
-          command: 'devices',
-          positionals: [],
-          flags: { stateDir: paths.baseDir },
-        }),
-      ),
+      ensureManagedDaemon(devicesClientSettings(paths.baseDir)),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'daemon_registration_unproven');

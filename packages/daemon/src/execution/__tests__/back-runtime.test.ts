@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
@@ -147,6 +148,7 @@ test('request router joins back admission to execution, recording, and ref inval
   activateCompleteRefFrame(session);
   sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 't',

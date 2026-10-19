@@ -2,6 +2,7 @@
 // RPC from the fresh liveness probe. Confirmed reset controls use owned registration children;
 // missing or superseded identity must retain state. No control signals an unrelated process.
 
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import net from 'node:net';
 import http from 'node:http';
 
@@ -36,18 +37,19 @@ vi.mock('@agent-device/host-kit/command', async () => {
 });
 
 import { AppError } from '@agent-device/kernel/errors';
+import { isProcessAlive } from '@agent-device/host-kit/process';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { sendRequest } from '../daemon-client-transport.ts';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   closeLoopbackServer,
   listenOnLoopback,
-  skipWhenLoopbackUnavailable,
   type LoopbackServer,
-} from '@agent-device/test-kit/loopback';
+  mkdtempForTestSync,
+  skipWhenLoopbackUnavailable,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 
 import {
   spawnRegisteredDaemonFixture,
@@ -127,7 +129,7 @@ function buildRequest(
   command: string,
   platform: 'android' | 'ios' | undefined,
   positionals: readonly string[] = [],
-): DaemonRequest {
+): DaemonWireRequest {
   return {
     token: 'test-token',
     session: 'default',
@@ -361,6 +363,7 @@ for (const row of ROUTE_ROWS) {
           row.transport === 'remote' ? 'http' : row.transport,
           statePaths,
           TIMEOUT_MS,
+          { host: createTestHostEnvironment() },
         ),
         row.hintPattern,
       );
@@ -405,6 +408,7 @@ test('request-timeout route: a reset never deletes a registration a replacement 
         'socket',
         statePaths,
         TIMEOUT_MS,
+        { host: createTestHostEnvironment() },
       ),
       /The daemon could not be safely retired/,
     );
@@ -438,7 +442,14 @@ test('a refused timeout fallback preserves the timeout without an unhandled reje
   });
   try {
     await assert.rejects(
-      sendRequest(info, buildRequest(RESET_POLICY_COMMAND, undefined), 'socket', paths, TIMEOUT_MS),
+      sendRequest(
+        info,
+        buildRequest(RESET_POLICY_COMMAND, undefined),
+        'socket',
+        paths,
+        TIMEOUT_MS,
+        { host: createTestHostEnvironment() },
+      ),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.details?.reason, 'daemon_transport_timeout');
@@ -447,6 +458,38 @@ test('a refused timeout fallback preserves the timeout without an unhandled reje
     );
     await new Promise((resolve) => setImmediate(resolve));
     assert.ok(killSpy.mock.calls.some(([pid, signal]) => pid === info.pid && signal === 'SIGKILL'));
+    assert.ok(fs.existsSync(paths.infoPath));
+    assert.ok(fs.existsSync(paths.lockPath));
+  } finally {
+    await closeLoopbackServer(daemon.server);
+  }
+});
+
+test('request-timeout route: an attach client leaves a daemon that answers no probe running', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  // The same wedged daemon the reset row retires. An attach client does not own it, so the probe
+  // still tells the caller what it found, and nothing is signaled or deleted.
+  const daemon = await startStandIn('socket', 'refuse');
+  const paths = dummyStatePaths();
+  const info = await registeredOwner(paths, daemon.port, 'socket');
+  try {
+    await expectRouteError(
+      sendRequest(
+        info,
+        buildRequest(RESET_POLICY_COMMAND, undefined),
+        'socket',
+        paths,
+        TIMEOUT_MS,
+        { host: createTestHostEnvironment(), timeoutRecovery: 'none' },
+      ),
+      /did not answer the liveness probe.*does not retire a daemon it did not start.*agent-device daemon stop/s,
+    );
+    assert.equal(
+      daemon.connections(),
+      2,
+      'the probe still asks, so the hint can say what it found',
+    );
+    assert.equal(isProcessAlive(info.pid), true);
     assert.ok(fs.existsSync(paths.infoPath));
     assert.ok(fs.existsSync(paths.lockPath));
   } finally {
@@ -477,6 +520,7 @@ test('request-timeout route: the reset acts on the resolved state paths, not the
         'http',
         resolvedPaths,
         TIMEOUT_MS,
+        { host: createTestHostEnvironment() },
       ),
       /The daemon did not answer the liveness probe and was reset after the timeout/,
     );

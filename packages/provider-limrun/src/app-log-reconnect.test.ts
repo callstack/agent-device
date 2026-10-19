@@ -66,7 +66,9 @@ test('reattaches an owned Limrun instance without persisting credentials', async
   expect(get).toHaveBeenCalledWith('instance-a', { timeout: 5_000, maxRetries: 0, signal });
   expect(outcome.status).toBe('opened');
   if (outcome.status !== 'opened') return;
-  expect(await outcome.reader.readLogs('com.example.app', 20)).toBe('provider line\n');
+  expect(await outcome.reader.readLogs('com.example.app', 20, new AbortController().signal)).toBe(
+    'provider line\n',
+  );
   await outcome.reader[Symbol.asyncDispose]();
   expect(iosClient.disconnect).toHaveBeenCalledOnce();
 });
@@ -219,7 +221,7 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
   expect(outcome.status).toBe('opened');
   if (outcome.status !== 'opened') return;
 
-  await outcome.reader.readLogs('com.example.app', 20);
+  await outcome.reader.readLogs('com.example.app', 20, new AbortController().signal);
   // The tunnel serial is addressing, so the command the reader wrote travels unchanged: no `-s`
   // is stitched back into the payload the provider hands over.
   expect(calls[0]).toEqual({

@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
+import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { appleSystemFacts, createAppleSystemOperations } from './runtime.ts';
 
@@ -123,20 +124,53 @@ test.each([
   },
 );
 
-test('the read refusal names the leaf that reports a content size back', () => {
-  // One sentence for the host, the physical devices, and the unverified simulator families: they
-  // share the reason (no `simctl ui` reading observed) rather than three near-identical hints.
-  for (const device of [
-    appleDevice('macos', 'device'),
-    appleDevice('tvos', 'simulator'),
-    appleDevice('visionos', 'simulator'),
-  ]) {
-    expect(appleSystemFacts(device).readSetting).toEqual({
+test.each([
+  {
+    appleOs: 'ios',
+    kind: 'simulator',
+    served: ['wifi', 'location', 'text-size', 'faceid', 'touchid', 'reset-keychain'],
+    refused: ['animations', 'fingerprint'],
+  },
+  {
+    appleOs: 'ipados',
+    kind: 'simulator',
+    served: ['appearance', 'text-size', 'faceid', 'touchid'],
+    refused: ['animations', 'fingerprint'],
+  },
+  {
+    appleOs: 'tvos',
+    kind: 'simulator',
+    served: ['wifi', 'appearance', 'clear-app-state'],
+    refused: ['text-size', 'faceid', 'touchid'],
+  },
+  {
+    appleOs: 'macos',
+    kind: 'device',
+    served: ['appearance', 'permission'],
+    refused: ['wifi', 'text-size', 'clear-app-state', 'reset-keychain'],
+  },
+] as const)('an Apple $appleOs $kind serves each setting on its own fact', (row) => {
+  const { setSetting } = appleSystemFacts(appleDevice(row.appleOs, row.kind));
+  for (const setting of row.served) {
+    expect(runtimeSubjectFact(setSetting, setting).available).toBe(true);
+  }
+  for (const setting of row.refused) {
+    expect(runtimeSubjectFact(setSetting, setting)).toMatchObject({
       available: false,
       reason: 'unsupported-platform-leaf',
-      hint: 'Apple targets answer a settings read only on iPhone and iPad simulators, where `simctl ui` reports the value the device holds.',
     });
   }
+});
+
+test('a setting outside the handheld simulators names the leaf that serves it', () => {
+  const hint = 'Select a booted iPhone or iPad simulator: this setting runs only there.';
+  const facts = appleSystemFacts(appleDevice('visionos', 'simulator'));
+  expect(facts.readSetting).toMatchObject({ available: false, hint });
+  expect(runtimeSubjectFact(facts.setSetting, 'faceid')).toMatchObject({ available: false, hint });
+  expect(appleSystemFacts(appleDevice('macos', 'device')).readSetting).toMatchObject({
+    available: false,
+    hint: expect.stringContaining('The macOS host supports settings appearance'),
+  });
 });
 
 test('watchOS closes the read leg for the reason it closes every interactor-backed operation', () => {

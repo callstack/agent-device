@@ -147,7 +147,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     max: 100,
     usageLabel: '--jitter-px <n>',
-    usageDescription: 'Deterministic coordinate jitter radius for press',
+    usageDescription: 'Deterministic per-axis coordinate jitter in pixels',
     projectConfig: true,
     recorded: true,
   },
@@ -211,7 +211,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     usageLabel: '--settle-quiet <ms>',
     usageDescription:
-      'Settle: quiet window the UI must hold to count as settled (default 500ms). On iOS, a broad screen replacement such as a modal dismissal is confirmed for at least 1500ms whatever window is asked for, within the --timeout settle deadline',
+      'Settle: quiet window the UI must hold to count as settled (default 500ms; 300ms when the settled tree comes from the iOS simulator snapshot bridge). On iOS, a broad screen replacement such as a modal dismissal is confirmed for at least 1500ms whatever window is asked for, within the --timeout settle deadline; a replacement from a screen the pre-action capture read as presenting nothing, such as a tab switch, gets no 1500ms confirmation and keeps the asked window',
     projectConfig: true,
     recorded: false,
   },
@@ -432,8 +432,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     // the synopsis stays the invocation they are choosing between (#1271 stage 2).
     usageHidden: true,
     usageDescription:
-      'Force-record this action even though its command is observation-only and would otherwise be excluded from a repair-armed heal by default (mutually exclusive with --no-record)',
-    projectConfig: true,
+      'Force-record this action into a repair-armed heal; per-invocation only, the retired config key "record" no longer opts in (mutually exclusive with --no-record)',
+    projectConfig: false,
     recorded: true,
   },
 ];

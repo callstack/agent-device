@@ -4,9 +4,13 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { VegaToolProvider } from '../tool-provider.ts';
 import { withVegaToolProvider } from '../tool-provider.ts';
 import { vegaToolchainCheck } from '../doctor.ts';
+
+// Doctor resolves against the host it is handed; a scoped test provider still wins.
+const DOCTOR_HOST: HostEnvironment = { env: process.env, cwd: process.cwd() };
 
 function contextWith(local: () => Promise<readonly DeviceInfo[]>): HostDiagnosticsContext {
   return Object.freeze({
@@ -35,7 +39,10 @@ function shouldPropagateInventoryProbeError(error: unknown): boolean {
 
 test('Vega doctor reports CLI version and connected-device readiness through semantic provider', async () => {
   const check = await withVegaToolProvider(makeVegaProvider(), async () =>
-    vegaToolchainCheck(contextWith(async () => [VEGA_VVD])),
+    vegaToolchainCheck(
+      contextWith(async () => [VEGA_VVD]),
+      DOCTOR_HOST,
+    ),
   );
 
   assert.deepEqual(check, {
@@ -60,6 +67,7 @@ test('Vega doctor does not report an unvalidated physical TV as supported readin
           { listedSerials: ['G071R20720350DT6'] },
         );
       }),
+      DOCTOR_HOST,
     ),
   );
 
@@ -78,6 +86,7 @@ test('Vega doctor propagates canonical request cancellation', async () => {
         contextWith(async () => {
           throw new AppError('COMMAND_FAILED', 'request canceled');
         }),
+        DOCTOR_HOST,
       ),
     ),
     (error: unknown) => error instanceof AppError && error.message === 'request canceled',
@@ -93,6 +102,7 @@ test('Vega doctor propagates missing request inventory context', async () => {
             reason: 'device_inventory_context_unavailable',
           });
         }),
+        DOCTOR_HOST,
       ),
     ),
     (error: unknown) =>
@@ -110,6 +120,7 @@ test('Vega doctor preserves the missing-tool diagnostic without probing inventor
       contextWith(async () => {
         throw new Error('inventory must not be probed');
       }),
+      DOCTOR_HOST,
     ),
   );
 
@@ -132,6 +143,7 @@ test('Vega doctor keeps version failures diagnostic when neutral inventory fails
       contextWith(async () => {
         throw new Error('inventory failed');
       }),
+      DOCTOR_HOST,
     ),
   );
 

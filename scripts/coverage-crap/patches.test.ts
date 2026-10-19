@@ -78,16 +78,22 @@ async function convertRecord(convert: Converter, capture: Capture): Promise<Ista
     coverage: { functions: capture.functions, url: capture.url },
     wrapperLength: capture.wrapperLength,
   });
-  return converted[TARGET] as IstanbulRecord;
+  const record = converted[TARGET];
+  assert.ok(record, `the converter recorded no coverage for ${TARGET}`);
+  return record as IstanbulRecord;
 }
 
 /** The counters the converter publishes for the `if` on `line`. */
 function ifCounters(record: IstanbulRecord, line: number): number[] {
-  const id = Object.keys(record.b).find(
-    (key) => record.branchMap[key].type === 'if' && record.branchMap[key].line === line,
-  );
+  const id = Object.keys(record.b).find((key) => {
+    const branch = record.branchMap[key];
+    assert.ok(branch, `the converter recorded no branch map entry for ${key}`);
+    return branch.type === 'if' && branch.line === line;
+  });
   assert.ok(id, `the converter recorded no if branch on line ${line}`);
-  return record.b[id].map(Number);
+  const counters = record.b[id];
+  assert.ok(counters, `the converter recorded no counters for if branch on line ${line}`);
+  return counters.map(Number);
 }
 
 // `async-fallback-operand` is the reported shape: `params.release ?? await probe(...)` feeding an
@@ -99,7 +105,9 @@ function ifCounters(record: IstanbulRecord, line: number): number[] {
 test('an async branch with an awaited operand drops the path it cannot count', async () => {
   const convert = await loadConverter();
   const capture = captures['async-fallback-operand'];
+  assert.ok(capture, 'missing async-fallback-operand capture');
   const branch = capture.branches.i1;
+  assert.ok(branch, 'missing i1 branch in async-fallback-operand capture');
   assert.deepEqual([branch.entered, branch.taken], [8, 6]);
   const record = await convertRecord(convert, capture);
   // The taken path is provable and stays. The entry count is not recoverable from a record whose
@@ -112,20 +120,27 @@ test('an async branch with an awaited operand drops the path it cannot count', a
 test('a branch whose awaited continuation out-counts it publishes no impossible count', async () => {
   const convert = await loadConverter();
   const capture = captures['early-return-then-fallback'];
+  assert.ok(capture, 'missing early-return-then-fallback capture');
+  const firstBranch = capture.branches.i1;
+  const secondBranch = capture.branches.i2;
+  assert.ok(firstBranch, 'missing i1 branch in early-return-then-fallback capture');
+  assert.ok(secondBranch, 'missing i2 branch in early-return-then-fallback capture');
   const record = await convertRecord(convert, capture);
-  assert.deepEqual([capture.branches.i1.entered, capture.branches.i1.taken], [8, 3]);
-  assert.deepEqual([capture.branches.i2.entered, capture.branches.i2.taken], [5, 2]);
+  assert.deepEqual([firstBranch.entered, firstBranch.taken], [8, 3]);
+  assert.deepEqual([secondBranch.entered, secondBranch.taken], [5, 2]);
   // The branch ahead of the await is counted correctly and must not move; the one behind it was
   // `[2,-2]` before the patch.
-  assert.deepEqual(ifCounters(record, capture.branches.i1.line), [3, 5]);
-  assert.deepEqual(ifCounters(record, capture.branches.i2.line), [2]);
+  assert.deepEqual(ifCounters(record, firstBranch.line), [3, 5]);
+  assert.deepEqual(ifCounters(record, secondBranch.line), [2]);
 });
 
 test('sync and non-awaited branches keep counting their implicit else', async () => {
   const convert = await loadConverter();
   for (const name of ['sync-fallback-operand', 'plain-async']) {
     const capture = captures[name];
+    assert.ok(capture, `missing ${name} capture`);
     const branch = capture.branches.i1;
+    assert.ok(branch, `missing i1 branch in ${name} capture`);
     assert.deepEqual(
       ifCounters(await convertRecord(convert, capture), branch.line),
       [6, 2],

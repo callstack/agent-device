@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { extractTarInstallableArtifact } from '../artifact-archive.ts';
 import { runCmdSync } from '@agent-device/host-kit/command';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const TAR_ENV = { ...process.env, COPYFILE_DISABLE: '1' };
 

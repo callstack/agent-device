@@ -8,7 +8,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 import { runCli } from '../../src/cli.ts';
 import {
   beginStderrCapture,

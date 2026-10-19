@@ -43,8 +43,8 @@ test('startup recovery reaches Android mechanics only after validated marker evi
 });
 
 test('daemon shutdown phases delegate to the Apple runner owner', async () => {
-  const detachRunnerSessionsForShutdown = vi.fn(async () => {});
-  const finalizeRunnerSessionsForShutdown = vi.fn(async () => {});
+  const detachRunnerSessionsForShutdown = vi.fn(async () => ['ios-sim']);
+  const finalizeRunnerSessionsForShutdown = vi.fn(async () => ['ios-sim']);
   const resources = lifecycle({
     hasTestImeRecoveryEvidence: async () => false,
     recoverTestImeStartup: async () => {},

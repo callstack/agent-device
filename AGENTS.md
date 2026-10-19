@@ -1,139 +1,63 @@
 # AGENTS.md
 
-`agent-device` is a CLI and daemon for automating Apple, Android, HarmonyOS, Vega, Linux, and web
-targets. A long-lived daemon owns sessions; registry-derived commands route to platform runtimes.
+`agent-device` is a CLI and daemon that automates devices and web targets.
+The daemon owns sessions. Registry declarations route commands to platform runtimes.
 
 ## Task routing
 
-Load only the procedures relevant to the task:
+Read only your task's row. Follow other links only when they apply.
 
 | When the task involves | Read |
 | --- | --- |
-| Domain vocabulary | `CONTEXT.md`, `docs/agents/domain.md` |
-| Architecture decisions | `docs/adr/README.md` |
-| Tests or gate selection | `docs/agents/testing.md` |
-| Writing, auditing, or sweeping tests; dispatching test-audit subagents | `docs/agents/test-audit.md` |
-| Selector capture, polling, or interaction fast paths | `docs/agents/selector-capture.md` |
-| Adding or changing a CLI flag | `docs/agents/cli-flags.md` |
-| Opening or reviewing a PR | `docs/agents/pull-requests.md` |
-| Apple runner changes or manual device verification | `docs/agents/device-verification.md` |
-| Writing issues or PRDs, and triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
+| Domain vocabulary | `CONTEXT.md` |
+| Read architecture decisions | `docs/adr/README.md` |
+| Write or amend an ADR | `docs/adr/FORMAT.md` |
+| Source changes, package boundaries, routing, diagnostics | `docs/agents/code-ownership.md` |
+| Checks or a failed gate | `docs/agents/testing.md` |
+| New or changed tests | `docs/agents/test-authoring.md` |
+| Test audits or deletions | `docs/agents/test-audit.md` |
+| Mutation experiments or base comparisons | `docs/agents/test-experiments.md` |
+| Gate selection, fuzzing, or mutation harnesses | `docs/agents/gates.md` |
+| Selector capture, polling, interaction fast paths, replay | `docs/agents/selector-capture.md` |
+| A new or changed CLI flag | `docs/agents/cli-flags.md` |
+| A PR to open or update | `docs/agents/pull-requests.md` |
+| A change to review | `docs/agents/review.md` |
+| Device-facing changes or manual device verification | `docs/agents/device-verification.md` |
+| Issues, PRDs, or triage labels | `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md` |
 | Web backend setup or diagnostics | `docs/agents/web-backend.md` |
 
-Versioned CLI help owns command semantics. Read the relevant topic when behavior is unclear;
-normal app-driving startup follows the skill's routing card.
+A device-facing change affects live device behavior: dispatch, capture, interaction, app lifecycle, or native execution.
+If a daemon edit changes none of these, a device run is not required.
 
-## Incident-derived principles
+The versioned CLI help owns command semantics. To drive an app, start with the skill's routing card.
 
-- Classify interaction dispatch paths in `packages/contracts/src/interaction-guarantees.ts` and
-  verify each claim against the native implementation.
-- Delegation on error proves no success-path parity. A fast path may succeed on a candidate the
-  shared rules would refuse.
-- Prove both paths are reachable before measuring a fast path against its baseline.
-- Repair recurring failures at the owning type, registry, or construction path; do not add guards
-  that reconstruct another source of truth.
-- Keep control-flow narration and review history out of implementation comments. Encode invariants
-  in names, types, boundaries, and tests; reserve comments for public API docs, tool directives,
-  and non-obvious constraints that cannot be encoded.
-- Key behavior on typed reasons and details, never error text; do not copy existing message sniffs.
-- A claim about a platform family in code, help, or docs holds for every backend in it (Appium as
-  well as ADB on Android), or names the backends it covers.
-- Keep metadata at response level when it applies to the whole snapshot. Append warnings through
-  the shared response builder; never replace prior warnings.
-- Before preserving a compatibility shape, run `git tag --contains <commit>`. Unreleased API has no
-  external compatibility obligation.
+## Working rules
 
-## Declaration sites and enforcement
+- Keep edits in the requested command family or module group. Examine other platforms only when the task requires it.
+- Fix a recurring failure at the owning type, registry, or construction path. Do not rebuild another owner's state.
+- Use typed reasons and details for behavior. Do not match error text.
+- Add compatibility or fallback behavior only on explicit request or approval. During a migration, remove superseded paths.
+- Encode invariants in names, types, and boundaries. Write comments only for public APIs, tool directives, or constraints that code cannot show.
+- Resolve a gate failure at the reported invariant. Do not suppress it. Do not add an allowlist to get a pass.
+- Use `@agent-device/selectors` to parse and match selectors. For other shared owners, see `docs/agents/code-ownership.md`.
+- Keep skills as routing cards. Keep `CONTEXT.md` as a glossary only. When behavior changes, update the owning help and user docs.
 
-Read the declaration rather than maintaining a prose copy:
+## Worktree setup
 
-- commands and their surface, runtime-use, batch, and timeout traits:
-  `packages/command-registry/src/registry.ts`
-- daemon route ownership and request-policy traits: `packages/daemon/src/core/daemon-command-registry.ts`
-- interaction paths and guarantees: `packages/contracts/src/interaction-guarantees.ts`
-- canonical command names: `packages/command-registry/src/catalog.ts`
-- device runtime-use declarations and fact admission:
-  `packages/command-registry/src/registry.ts`, `packages/daemon/src/core/runtime-admission.ts`, and
-  `src/platform-runtime-gateway.ts`
-- common command input fields, and which surface may write an input key (model, operator, retired):
-  `src/commands/common-input-fields.ts` and `src/commands/input-audience.ts`
+- Use `pnpm`. Use OXC to lint and format. Run `pnpm format` on the full repository.
+- In a new worktree, run `pnpm install --frozen-lockfile && pnpm build` before you test.
+- Do not change other worktrees, devices, sessions, dirty files, or experiments. Do not use `git stash`; all worktrees share it.
+- Do not copy `.env` into a worktree. For host credentials, source the main checkout's file by its absolute path.
+- Give each parallel worker different files and a different device. `pnpm check:affected --run` and `pnpm check` run one at a time automatically.
+- The layering scan reads only tracked files. Stage new modules before you trust its result.
+- When you rename a file, move its Fallow baseline entry. Do not regenerate unrelated baselines.
 
-Shared selector parsing and matching belongs in `@agent-device/selectors`; daemon-side request
-cancellation and progress in `@agent-device/host-kit/request`, and the caller's per-call abort guard
-beside the transports it serves in `src/daemon-client/daemon-client-transport.ts`; cross-layer
-contracts in `packages/contracts/src`; CLI flags in `src/commands/cli-grammar`; cross-surface schema
-composition in `src/commands/schema`.
+The validation lock automatically reclaims provably dead owners. An unknown owner continues to block.
+If the wait times out, report the printed owner and the lock state. Do not remove the lock manually.
 
-Resolve registry completeness failures at the missing declaration. Diagnose other gate failures
-at their reported invariant; do not suppress them or add an allowlist to get a pass. Build interaction
-responses through `buildInteractionResponseData`; change cross-language rules through golden tables
-under `contracts/fixtures/`.
+## Agent docs
 
-## Hard repository rules
-
-- Plain `.mjs` packaging fixtures that cannot import TypeScript execution helpers keep child-process
-  use local and prefer `execFile`.
-- Apple target changes keep the kernel device model, runtime-fact admission, dispatch resolution,
-  Apple discovery, and xctestrun preparation in sync.
-- iOS simulator-set scoping must never hide the host macOS desktop target.
-- Skills stay minimal routing cards.
-- Add compatibility or fallback behavior only when explicitly requested or approved. Otherwise,
-  complete the migration and remove superseded paths.
-- Keep changes within one command family or module group unless the task explicitly crosses a
-  boundary. Platform-neutral work does not license inspecting every platform implementation.
-
-## Module and test topology
-
-- Name modules for the domain question they answer and colocate machine-readable claims with their
-  enforcement. Internal barrels are legacy; add barrels only at package boundaries.
-- Files past 1,000 lines are architecture debt; split them before adding behavior, unless they
-  are generated or fixture data.
-- Tests mirror source topology one-to-one. Split a source module and its test together; do not add to
-  the legacy `interaction.test.ts` or platform `index.test.ts` aggregations. Pure moves carry their
-  tests unchanged; rename-only hunks owe no new coverage.
-
-## Toolchain and worktree traps
-
-- Use `pnpm`; never add `package-lock.json`. OXC owns lint and format. Run `pnpm format`
-  repository-wide, not path-scoped.
-- A fresh worktree requires `pnpm install --frozen-lockfile && pnpm build`. Until then package and
-  optional-peer resolution may point at another checkout and produce false failures.
-- Worktrees never receive `.env`; no repo code reads it. When a command needs a host credential,
-  source the main checkout's copy by absolute path (`set -a && . /path/to/main/checkout/.env && set +a`)
-  instead of copying it in or writing it into the worktree.
-- Parallel work needs disjoint edit ownership and distinct devices. Run one full gate per host;
-  concurrent subprocess-backed suites can produce contention timeouts.
-- The layering scan reads tracked files only. Stage a new module before trusting its result.
-- Fallow baselines are path-keyed. Move the matching baseline entry when renaming a file; never bulk
-  regenerate baselines to accept unrelated findings.
-
-## Runtime and diagnostics seams
-
-Diagnostics use `@agent-device/host-kit/diagnostics`. Request diagnostics belong in the session request log;
-session artifact paths come from `packages/daemon/src/core/session-artifact-paths.ts`. App/device logs remain in `app.log`;
-Apple runner and xcodebuild output remains in `runner.log`.
-
-Normalize failures with `normalizeError` and preserve `hint`, `diagnosticId`, `logPath`, and typed
-`details`. An interaction taking five seconds or more is a daemon-log question: inspect runner
-restart, stale-session recovery, accessibility failure, transport retry, and timeout evidence.
-
-Optional probes and caches are best-effort only when the feature contract says so. Their budgets
-must be shorter than the required operation they precede.
-
-## Selector and replay invariants
-
-Element interactions support selector and `@ref`, then record a selector chain after resolution.
-Replay failures may re-resolve that chain only to produce a ranked divergence suggestion; ADR 0012
-retired silent script rewriting.
-
-Selector keys stay centralized in `@agent-device/selectors`; `is` predicates use
-`evaluateIsPredicate`. On macOS, snapshot rectangles are absolute in window space and point actions
-translate through the interaction root frame. Prefer selector or ref tests over raw coordinates.
-
-## Documentation ownership
-
-Keep this file to repository traps and routing. Put task procedures in `docs/agents/`, decisions in
-ADRs, and command semantics in versioned help. Link to executable registries instead of duplicating
-their rules. `CONTEXT.md` is glossary-only: no implementation paths, decisions, or migration status.
-
-Behavior changes update owning help/metadata and user docs. Report docs or skill changes when relevant.
+Write agent docs in ASD-STE100. Write one instruction in each sentence.
+Put the condition before the instruction. Use one term for one concept.
+Keep commands and domain terms exact. Put specialized rules and new shared constraints in the owning task document, not in agent memory.
+Before you add a reminder, delete duplicate or enforced rules.

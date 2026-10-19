@@ -5,7 +5,8 @@ import { sleep } from '@agent-device/host-kit/retry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
-import { runAndroidAdb, runAndroidShell } from '../adb.ts';
+import { runAndroidShell } from '../adb.ts';
+import { runEmulatorConsole } from '../emulator-console.ts';
 import { androidAdbResultError } from '../adb-failure.ts';
 import type { AndroidAdbExecutorResult } from '../adb-transport.ts';
 
@@ -138,15 +139,14 @@ async function readDeviceStates(
   return states;
 }
 
-/** The console answers `OK` or `KO: …` on stdout and exits 0 either way, so the reply is the verdict. */
 async function sendEmulatorPosture(
   device: DeviceInfo,
   pose: FoldPose,
   postureId: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  const sent = await emulatorConsole(device, ['emu', 'posture', postureId], signal);
-  if (/^KO\b/m.test(sent.stdout)) {
+  const sent = await runEmulatorConsole(device, ['posture', postureId], signal);
+  if (sent.refusal !== undefined) {
     throw new AppError('COMMAND_FAILED', `Unable to set the emulator posture for ${pose}`, {
       deviceId: device.id,
       reason: 'fold-posture-dispatch-failed',
@@ -254,11 +254,7 @@ async function readHingeAngle(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<number> {
-  const { stdout } = await emulatorConsole(
-    device,
-    ['emu', 'sensor', 'get', 'hinge-angle0'],
-    signal,
-  );
+  const { stdout } = await runEmulatorConsole(device, ['sensor', 'get', 'hinge-angle0'], signal);
   const match = /hinge-angle0\s*=\s*(-?\d+(?:\.\d+)?)/.exec(stdout);
   if (!match) {
     throw new AppError('COMMAND_FAILED', `${device.name} reports no hinge angle`, {
@@ -287,25 +283,6 @@ async function shell(
       `adb shell ${words.join(' ')} exited with code ${result.exitCode}`,
       result,
       { deviceId: device.id },
-    );
-  }
-  return result;
-}
-
-/** The emulator console through adb, with the same exit-code check as {@link shell}. */
-async function emulatorConsole(
-  device: DeviceInfo,
-  args: readonly string[],
-  signal: AbortSignal | undefined,
-): Promise<AndroidAdbExecutorResult> {
-  const result = await runAndroidAdb(device, args, { signal, allowFailure: true });
-  if (result.exitCode !== 0) {
-    throw androidAdbResultError(
-      `adb ${args.join(' ')} exited with code ${result.exitCode}`,
-      result,
-      {
-        deviceId: device.id,
-      },
     );
   }
   return result;

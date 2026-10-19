@@ -1,4 +1,3 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import type {
   InteractionEvidence,
@@ -21,16 +20,6 @@ import {
  * Both `--verify` and `--settle` route their comparison through this module, so the refusal and its
  * disclosure cannot hold on one route and drop on the other.
  */
-
-/** Mints the one carried value from a capture: the nodes together with the surface they describe. */
-export function surfaceScopedNodes(snapshot: SnapshotState): SurfaceScopedNodes {
-  return {
-    nodes: snapshot.nodes,
-    ...(snapshot.iosSystemSurfaceBundleId
-      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
-      : {}),
-  };
-}
 
 /**
  * The transition between the two compared captures, or `undefined` when both describe the same

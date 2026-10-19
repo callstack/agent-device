@@ -9,10 +9,12 @@ import {
   type RuntimeFacts,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import {
+  createTestAppLogLiveHandle,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+} from '@agent-device/test-kit';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
 import { applePlugin } from '@agent-device/platform-apple';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import { assertFlatToolCall } from './assertions.ts';
@@ -203,7 +205,11 @@ function createRecordingPlatformRuntimeGateway(params: {
         throw new TypeError('The iOS provider scenario requires an explicit Apple leaf');
       }
       const appleOs = device.appleOs;
-      const interactor = await applePlugin.createInteractor(device, {});
+      const interactor = await applePlugin.createInteractor(
+        device,
+        {},
+        { env: process.env, cwd: process.cwd() },
+      );
       // Each alert leg resolves its interactor per call from the input's execution metadata,
       // exactly like the production alert binding. The request-scoped runner provider is keyed by
       // the request id that metadata carries, so a bind-time interactor with an empty runner
@@ -212,10 +218,14 @@ function createRecordingPlatformRuntimeGateway(params: {
         leg: 'readAlert' | 'awaitAlert' | 'acceptAlert' | 'dismissAlert',
         input: AlertRuntimeInput,
       ): Promise<Record<string, unknown>> => {
-        const alertInteractor = await applePlugin.createInteractor(device, {
-          ...input.execution,
-          appBundleId: input.appBundleId,
-        });
+        const alertInteractor = await applePlugin.createInteractor(
+          device,
+          {
+            ...input.execution,
+            appBundleId: input.appBundleId,
+          },
+          { env: process.env, cwd: process.cwd() },
+        );
         return await alertInteractor[leg]!(alertOptions(input));
       };
       return {

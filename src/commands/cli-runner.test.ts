@@ -29,6 +29,7 @@ async function runFillWithStdin(argv: string[], text: string): Promise<DaemonReq
       command: 'fill',
       positionals: parsed.positionals,
       flags: parsed.flags,
+      env: process.env,
     });
   } catch {
     // The stub's empty payload can fail result normalization after the request was captured.

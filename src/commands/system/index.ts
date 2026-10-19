@@ -13,6 +13,12 @@ import {
   ORIENTATION_REQUEST_USAGE,
   ORIENTATION_REQUESTS,
   parseOrientationRequest,
+  TELEPHONY_ACTIONS,
+  TELEPHONY_CALL_ACTIONS,
+  TELEPHONY_USAGE,
+  parseTelephonyEventInput,
+  parseTelephonyPositionals,
+  telephonyPositionals,
 } from '@agent-device/contracts/device';
 import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
@@ -71,6 +77,7 @@ const ACTION_BUTTON_COMMAND_NAME = 'action-button';
 const KEYBOARD_COMMAND_NAME = 'keyboard';
 const CLIPBOARD_COMMAND_NAME = 'clipboard';
 const TV_REMOTE_COMMAND_NAME = 'tv-remote';
+const TELEPHONY_COMMAND_NAME = 'telephony';
 const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
 
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
@@ -146,6 +153,29 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
     },
     ['action', 'button', 'message'],
   ),
+  // packages/contracts/src/telephony-input.ts — discriminated union on `action`.
+  telephony: {
+    type: 'object',
+    oneOf: [
+      objectSchema(
+        {
+          action: enumSchema(TELEPHONY_CALL_ACTIONS),
+          number: stringSchema(),
+          message: stringSchema(),
+        },
+        ['action', 'number', 'message'],
+      ),
+      objectSchema(
+        {
+          action: constSchema('sms'),
+          number: stringSchema(),
+          textLength: numberSchema('Length of the delivered message text.'),
+          message: stringSchema(),
+        },
+        ['action', 'number', 'textLength', 'message'],
+      ),
+    ],
+  },
   // packages/contracts/src/clipboard.ts — discriminated union on `action`.
   clipboard: {
     type: 'object',
@@ -221,6 +251,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   | 'fold'
   | 'action-button'
   | 'tv-remote'
+  | 'telephony'
   | 'clipboard'
   | 'appstate'
   | 'keyboard'
@@ -249,7 +280,7 @@ export const foldableHelpTopic = {
 A foldable Apple device (iPhone Duo) carries two integrated panels, which Apple calls the outer display and the inner display. Only one is lit at a time, and which one is lit is the device pose.
 
 Screens are handled for you:
-  Each iOS simulator capture resolves the CoreDevice display table, captures the lit panel explicitly, and normalizes density with that panel's own point scale. Do not add a screen flag to the normal loop; there is none, because the lit panel is always the only capturable one: the dark panel yields an all-black PNG.
+  Each iOS simulator capture resolves the CoreDevice display table, selects the sole lit panel when power identifies it, and normalizes density with that panel's own point scale. There is no screen flag. When panel power names no single lit panel, the capture names CoreDevice's primary panel, which may be dark and yield an all-black PNG. Check the pose with UIHinge.status before trusting that capture. With no primary panel either, capture fails with COMMAND_FAILED and reason capture-panel-unidentified rather than pick a panel by list order.
   The two panels are different sizes (iPhone Duo: 466x678 points closed on the outer panel, 669x951 open on the inner). A pose change therefore invalidates every ref and coordinate. Re-snapshot after any pose change and never carry coordinates or refs across one.
   Check which panel is lit before trusting a geometry claim: agent-device screenshot reports its point size, and 466x678 versus 669x951 says which panel you captured.
 
@@ -274,6 +305,9 @@ const actionButtonCommandDescription =
   'Press the iPhone or iPad Action Button once. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the app keeps the state the press found. What the system does with the press is not observed by this command: Simulators run no Shortcuts or App Intents, so delivery to an assigned Shortcut is verifiable only on a physical iPhone.';
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
+
+const telephonyCommandDescription =
+  'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
 
 const backCommandMetadata = defineFieldCommandMetadata(BACK_COMMAND_NAME, backCommandDescription, {
   mode: enumField(BACK_MODES),
@@ -364,6 +398,44 @@ const tvRemoteCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
+const telephonyFields = {
+  action: requiredField(
+    enumField(
+      TELEPHONY_ACTIONS,
+      'call starts an incoming call, accept answers it, cancel ends it, sms delivers a text message.',
+    ),
+  ),
+  number: requiredField(
+    stringField('Caller or sender phone number: digits with an optional leading +.'),
+  ),
+  text: stringField(
+    'Message text for sms; required for sms and refused for the call actions. The emulator drops characters outside the Basic Multilingual Plane, such as emoji.',
+  ),
+};
+
+const telephonyFieldMetadata = defineFieldCommandMetadata(
+  TELEPHONY_COMMAND_NAME,
+  telephonyCommandDescription,
+  telephonyFields,
+  {
+    readInput: (input) => {
+      const { action, number, text, ...common } = readFieldInput(input, telephonyFields);
+      return { ...common, ...parseTelephonyEventInput({ action, number, text }) };
+    },
+  },
+);
+
+const telephonyCommandMetadata = {
+  ...telephonyFieldMetadata,
+  inputSchema: {
+    ...telephonyFieldMetadata.inputSchema,
+    oneOf: [
+      { properties: { action: constSchema('sms') }, required: ['text'] },
+      { properties: { action: enumSchema(TELEPHONY_CALL_ACTIONS) }, not: { required: ['text'] } },
+    ],
+  },
+};
+
 const backCliSchema = {
   usageOverride: 'back [--in-app|--system] [--settle]',
   usageFlags: [],
@@ -400,6 +472,13 @@ const tvRemoteCliSchema = {
   allowedFlags: ['durationMs'],
 } as const satisfies CommandSchemaOverride;
 
+const telephonyCliSchema = {
+  usageOverride: TELEPHONY_USAGE,
+  listUsageOverride: 'telephony call|accept|cancel|sms <number> [text]',
+  positionalArgs: ['call|accept|cancel|sms', 'number', 'text?'],
+  allowsExtraPositionals: true,
+} as const satisfies CommandSchemaOverride;
+
 export const backCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
   mode: flags.backMode,
@@ -433,6 +512,11 @@ export const tvRemoteCliReader: CliReader = (positionals, flags) => ({
   ...readTvRemoteInput(positionals, flags.durationMs),
 });
 
+export const telephonyCliReader: CliReader = (positionals, flags) => ({
+  ...commonInputFromFlags(flags),
+  ...parseTelephonyPositionals(positionals),
+});
+
 export const backDaemonWriter: DaemonWriter = (input) =>
   request(BACK_COMMAND_NAME, [], {
     ...input,
@@ -462,6 +546,10 @@ export const clipboardDaemonWriter: DaemonWriter = direct(CLIPBOARD_COMMAND_NAME
 export const tvRemoteDaemonWriter: DaemonWriter = direct(TV_REMOTE_COMMAND_NAME, (input) => [
   requiredDaemonString(input.button, 'tv-remote requires button'),
 ]);
+
+export const telephonyDaemonWriter: DaemonWriter = direct(TELEPHONY_COMMAND_NAME, (input) =>
+  telephonyPositionals(parseTelephonyEventInput(input)),
+);
 
 const appStateCommandFacet = defineParameterlessCommandFacet({
   name: APPSTATE_COMMAND_NAME,
@@ -585,6 +673,21 @@ const tvRemoteCommandFacet = defineCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters['tv-remote'],
 });
 
+const telephonyCommandFacet = defineCommandFacet({
+  name: TELEPHONY_COMMAND_NAME,
+  text: {
+    summary: 'Simulate an incoming call or SMS on an Android emulator over adb',
+    cliDetail:
+      'Android emulators through the local adb executor; WebDriver (Appium) and Limrun sessions refuse it. Quote the SMS text, or pass it as the remaining words. Re-snapshot after the event: the call screen or notification can cover the app.',
+  },
+  metadata: telephonyCommandMetadata,
+  run: (client, input) => client.command.telephony(input),
+  cliSchema: telephonyCliSchema,
+  cliReader: telephonyCliReader,
+  daemonWriter: telephonyDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters.telephony,
+});
+
 export const systemCommandFamily = defineCommandFamilyFromFacets({
   name: 'system',
   commands: [
@@ -598,6 +701,7 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     keyboardCommandFacet,
     clipboardCommandFacet,
     tvRemoteCommandFacet,
+    telephonyCommandFacet,
   ],
 });
 

@@ -12,7 +12,7 @@ import { isSessionRecording } from '../../../core/session-script-publication-cap
  * `session.actions` accumulates for real instead of staying empty.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =

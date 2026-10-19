@@ -4,7 +4,13 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  closeLoopbackServer,
+  listenOnLoopback,
+  mkdtempForTestSync,
+  skipWhenLoopbackUnavailable,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import { test, vi } from 'vitest';
 import * as hostTransport from '@agent-device/host-kit/transport';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -22,11 +28,6 @@ import {
 } from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createDaemonProxyServer } from '@agent-device/proxy';
-import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
 
 function sendWithStaleInstance(port: number, timeoutMs: number) {
   return sendRequest(
@@ -40,6 +41,7 @@ function sendWithStaleInstance(port: number, timeoutMs: number) {
     'auto',
     resolveDaemonPaths('/tmp/agent-device-instance-retry-test'),
     timeoutMs,
+    { host: createTestHostEnvironment() },
   );
 }
 
@@ -497,6 +499,7 @@ test.for(['timeout', 'reset'] as const)(
             'http',
             paths,
             mode === 'timeout' ? 40 : 1_000,
+            { host: createTestHostEnvironment() },
           ),
         ),
         (error: unknown) => {

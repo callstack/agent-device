@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import path from 'node:path';
 import { DAEMON_SOURCE_ROOT } from '../../../scripts/layering/tracked-sources.ts';
-import { eagerClosureOf } from '../eager-import-closure.fixtures.ts';
+import { eagerClosureOf } from '@agent-device/test-kit';
 
 /**
  * Session teardown runs for every closed session on every platform, so its eager

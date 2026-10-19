@@ -72,6 +72,10 @@
       "types": "./src/request.ts",
       "default": "./src/request.ts"
     },
+    "./runtime-slots": {
+      "types": "./src/runtime-slots.ts",
+      "default": "./src/runtime-slots.ts"
+    },
     "./retry": {
       "types": "./src/retry.ts",
       "default": "./src/retry.ts"

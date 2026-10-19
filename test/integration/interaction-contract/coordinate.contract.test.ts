@@ -84,7 +84,7 @@ test(scenario('errorTaxonomy'), async () => {
       const press = await daemon.callCommand('press', ['100', '200']);
       // An unclassified backend failure gets the shared fallback classification
       // from normalizeError: stable code, original message, actionable hint.
-      const error = assertRpcError(press, 'UNKNOWN', /runner tap crashed/);
+      const error = assertRpcError(press, 500, 'UNKNOWN', /runner tap crashed/);
       assert.ok(typeof error.hint === 'string' && error.hint.length > 0);
       assert.ok(typeof error.diagnosticId === 'string');
     },

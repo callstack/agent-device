@@ -1,8 +1,11 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
+
+bindTestCommandHost();
 
 // Getting to the macOS helper binary means answering two host facts first: where the Swift package
 // sits relative to this module, and under which home the install directory lives. A Linux coverage
@@ -119,7 +122,7 @@ function sourcePath(...segments: string[]): string {
 
 /** A helper command is the freshness entry point: it cannot answer without fingerprinting the tree. */
 async function askTheHelperForTheFrontmostApp(): Promise<void> {
-  const frontmost = await resolveFrontmostMacOsApp();
+  const frontmost = await resolveFrontmostMacOsApp(process.env);
   assert.equal(frontmost.bundleId, 'com.example.Finder');
   // The command runs the binary the freshness check just settled on, not a rebuild.
   assert.equal(layout.helperCommands.at(-1), `${installedHelperPath} app frontmost`);

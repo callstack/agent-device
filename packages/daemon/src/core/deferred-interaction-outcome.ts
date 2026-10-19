@@ -4,7 +4,7 @@ import type { PostOpenObservation } from '@agent-device/contracts/application-li
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import type { MovingTargetBaseline } from '@agent-device/contracts/moving-target-gate';
+import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import {
   captureAndroidFreshnessRecoveredAttempt,
   getActiveAndroidSnapshotFreshness,
@@ -101,14 +101,19 @@ export function markDeferredInteractionOutcome(
   markMovingTargetBaseline(session, preActionTree, settle?.diff !== undefined);
 }
 
-/** Narrows a published capture to the shape a baseline keeps, so a stored tree never smuggles in more. */
-function movingTargetRestTree(snapshot: SnapshotState | undefined): SurfaceScopedNodes | undefined {
+/**
+ * The rest-proof baseline, carrying the same facts `surfaceScopedNodes` mints. Built here because this
+ * module is on the eager path of most daemon entries, and importing `capture-kit/snapshot-baseline`
+ * adds a module to each of their closures (ADR 0027).
+ */
+function restTree(snapshot: SnapshotState | undefined): SurfaceScopedNodes | undefined {
   if (!snapshot) return undefined;
   return {
     nodes: snapshot.nodes,
     ...(snapshot.iosSystemSurfaceBundleId
       ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
       : {}),
+    ...(snapshot.presentedSurface ? { presentedSurface: snapshot.presentedSurface } : {}),
   };
 }
 
@@ -173,7 +178,7 @@ function markMovingTargetBaseline(
   preActionTree: SurfaceScopedNodes | undefined,
   restProved: boolean,
 ): void {
-  const tree = restProved ? movingTargetRestTree(session.snapshot) : preActionTree;
+  const tree = restProved ? restTree(session.snapshot) : preActionTree;
   if (!tree || tree.nodes.length === 0) {
     retireMovingTargetBaseline(session);
     return;

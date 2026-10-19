@@ -23,10 +23,13 @@ const device: DeviceInfo = {
 
 test('keeps root composition limited to artifact preparation and app identity resolution', async () => {
   resolveAndroidApp.mockResolvedValueOnce({ type: 'package', value: 'com.example.app' });
-  const executor = createAndroidAppDeploymentExecutor();
+  const executor = createAndroidAppDeploymentExecutor({});
 
   await expect(executor.resolveAppPackage(device, 'Example')).resolves.toBe('com.example.app');
-  expect(resolveAndroidApp).toHaveBeenCalledWith(device, 'Example');
+  expect(resolveAndroidApp).toHaveBeenCalledWith(device, 'Example', undefined);
+  resolveAndroidApp.mockResolvedValueOnce({ type: 'package', value: 'com.example.app' });
+  await executor.resolveAppPackage(device, 'Example', { installedOnly: true });
+  expect(resolveAndroidApp).toHaveBeenLastCalledWith(device, 'Example', { installedOnly: true });
   expect(Object.keys(executor).sort()).toEqual([
     'bundletoolJar',
     'prepareArtifact',
@@ -39,6 +42,6 @@ test('rejects an intent where uninstall requires an exact Android package', asyn
   resolveAndroidApp.mockResolvedValueOnce({ type: 'intent', value: 'example.intent' });
 
   await expect(
-    createAndroidAppDeploymentExecutor().resolveAppPackage(device, 'example.intent'),
+    createAndroidAppDeploymentExecutor({}).resolveAppPackage(device, 'example.intent'),
   ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
 });

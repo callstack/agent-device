@@ -1,3 +1,4 @@
+import { createTestHostEnvironment } from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   daemonPlatformServicesFixture,
@@ -13,6 +14,8 @@ import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import { lifecycleDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
 import { HUMAN_CONTROL_LEASE_REQUEST, humanControlRequest } from './human-control-fixtures.ts';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';
+import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
+import { platformResourceCleanupFixture } from './platform-resource-cleanup-fixture.ts';
 
 export function createHumanControlHarness() {
   const registry = new LeaseRegistry();
@@ -26,6 +29,7 @@ export function createHumanControlHarness() {
     }),
   );
   const handleRequest = createRequestHandler({
+    host: createTestHostEnvironment(),
     createCommandSurface: fakeCreateCommandSurface,
     logPath: '/tmp/agent-device-human-control.log',
     platformServices: daemonPlatformServicesFixture(),
@@ -36,6 +40,8 @@ export function createHumanControlHarness() {
     providerCredentials: providerCredentialsFixture({}, '/tmp'),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    androidObservation: clearAndroidObservationFixture,
+    platformResourceCleanup: platformResourceCleanupFixture(),
     trackDownloadableArtifact: () => 'artifact-1',
   });
   return { registry, lease, sessionStore, sessionName, handleRequest };

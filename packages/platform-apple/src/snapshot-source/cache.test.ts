@@ -12,6 +12,7 @@ import { DEFAULT_SNAPSHOT_SOURCE_LIMITS } from './limits.ts';
 import type { SnapshotSourceHost } from './types.ts';
 import { execKillTimeoutError } from '../native-build/__tests__/exec-timeout-fixture.ts';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt or stale entries', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-source-');
@@ -345,7 +346,7 @@ function createFakeBuildHost(
   binary: string | (() => string | Promise<string>),
   getXcode: () => string = () => 'Xcode 16.4\nBuild version 16F6',
 ): SnapshotSourceHost {
-  const real = createSnapshotSourceHost();
+  const real = createSnapshotSourceHost(createLiveTestHostEnvironment());
   return {
     ...real,
     cpuArch: async () => 'arm64',

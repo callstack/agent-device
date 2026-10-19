@@ -1,17 +1,19 @@
 import type { ManagedWebBackendStatus } from '@agent-device/contracts/managed-web-backend';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { printJson } from '../../commands/output/json.ts';
 import { createManagedWebBackend } from '../../platform-runtime-managed-web-backend.ts';
 
-const managedWebBackend = createManagedWebBackend();
+const managedWebBackendFor = (host: HostEnvironment) => createManagedWebBackend(host);
 
 type PublicAgentBrowserToolStatus = Omit<ManagedWebBackendStatus, 'socketDir'>;
 
 export async function runWebCommand(
   positionals: string[],
-  options: { flags: CliFlags; stateDir: string },
+  options: { flags: CliFlags; stateDir: string; host: HostEnvironment },
 ): Promise<number> {
+  const managedWebBackend = managedWebBackendFor(options.host);
   const action = positionals[0];
   switch (action) {
     case 'setup': {

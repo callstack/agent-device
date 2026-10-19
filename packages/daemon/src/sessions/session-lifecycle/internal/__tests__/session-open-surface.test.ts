@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { buildOpenResult } from '../session-open-surface.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 
 test('buildOpenResult exposes the Vega serial without leaking an internal platform alias', () => {
@@ -71,8 +71,19 @@ test('buildOpenResult reports an answered launch confirmation and omits one that
   };
 
   assert.equal(
-    buildOpenResult({ ...base, launchConfirmation: 'accepted' }).launchConfirmation,
+    buildOpenResult({ ...base, launchConfirmation: { launchConfirmation: 'accepted' } })
+      .launchConfirmation,
     'accepted',
   );
+  const unanswered = buildOpenResult({
+    ...base,
+    launchConfirmation: {
+      launchConfirmation: 'unanswered',
+      launchConfirmationReason: 'alert-unrecognized',
+    },
+  });
+  assert.equal(unanswered.launchConfirmation, 'unanswered');
+  assert.equal(unanswered.launchConfirmationReason, 'alert-unrecognized');
   assert.equal('launchConfirmation' in buildOpenResult(base), false);
+  assert.equal('launchConfirmationReason' in buildOpenResult(base), false);
 });

@@ -76,9 +76,9 @@ const prepareAppleRunnerFixture = vi.fn(
  * the fixture owner (a dotted, non-deep-link target is the bundle id; otherwise the session's
  * current one), reached through the `directResolve` the fixture passes in. No open-target, surface,
  * or platform rule lives here — the real owners' resolution rules (apple/android target identity,
- * macOS frontmost surfaces, Safari and deep-link fallbacks) are pinned under
- * `src/__tests__/daemon-composition/` (`session-open-target.test.ts` and siblings). A daemon suite
- * that needs a different bundle id answers per case through this spy.
+ * macOS frontmost surfaces, Safari and deep-link fallbacks) are pinned beside the root modules
+ * (`src/platform-runtime-open-target.test.ts`, `src/platform-runtime-apple-application-tools.test.ts`).
+ * A daemon suite that needs a different bundle id answers per case through this spy.
  */
 export const resolveOpenTargetFixture = vi.fn(
   async (

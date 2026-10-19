@@ -1,12 +1,15 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { assertRejectsAppError } from '@agent-device/test-kit/app-error';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  assertRejectsAppError,
+  mkdtempForTestSync,
+  createTestHostEnvironment,
+} from '@agent-device/test-kit';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { sendRequest } from '../daemon-client-transport.ts';
 
 type ProcessDeathCommand = 'press' | 'fill' | 'snapshot' | 'screenshot' | 'open' | 'close';
@@ -45,6 +48,7 @@ for (const row of Object.values(PROCESS_DEATH_ROWS)) {
               'http',
               statePaths,
               1_000,
+              { host: createTestHostEnvironment() },
             );
           } catch (error) {
             observed = error;
@@ -115,7 +119,7 @@ async function startEndpointThatDiesAfterRequest(): Promise<DeadEndpoint> {
   };
 }
 
-function buildRequest(row: ProcessDeathRow): DaemonRequest {
+function buildRequest(row: ProcessDeathRow): DaemonWireRequest {
   return {
     token: 'test-token',
     session: 'acceptance',

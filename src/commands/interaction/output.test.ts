@@ -2,16 +2,16 @@ import { describe, expect, test } from 'vitest';
 import { interactionCliOutputFormatters } from './output.ts';
 
 const formatFind = (result: Record<string, unknown>) =>
-  interactionCliOutputFormatters.find({ input: {}, result });
+  interactionCliOutputFormatters.find({ env: process.env, input: {}, result });
 
 const formatPress = (result: Record<string, unknown>) =>
-  interactionCliOutputFormatters.press({ input: {}, result });
+  interactionCliOutputFormatters.press({ env: process.env, input: {}, result });
 
 const formatFill = (result: Record<string, unknown>) =>
-  interactionCliOutputFormatters.fill({ input: {}, result });
+  interactionCliOutputFormatters.fill({ env: process.env, input: {}, result });
 
 const formatLongPress = (result: Record<string, unknown>) =>
-  interactionCliOutputFormatters.longpress({ input: {}, result });
+  interactionCliOutputFormatters.longpress({ env: process.env, input: {}, result });
 
 describe('find CLI output', () => {
   test('click prints the same success line as a direct press', () => {
@@ -346,6 +346,7 @@ const REPAIR_WARNING =
 describe('formatter text stays free of warnings', () => {
   test('get text renders the value with no format, no stderr', async () => {
     const output = await interactionCliOutputFormatters.get({
+      env: process.env,
       input: { format: 'text' },
       result: { text: 'General', warnings: [REPAIR_WARNING] },
     });
@@ -355,6 +356,7 @@ describe('formatter text stays free of warnings', () => {
 
   test('get --format attrs keeps its JSON parseable', async () => {
     const output = await interactionCliOutputFormatters.get({
+      env: process.env,
       input: { format: 'attrs' },
       result: { node: { type: 'Cell', label: 'General' }, warnings: [REPAIR_WARNING] },
     });
@@ -364,6 +366,7 @@ describe('formatter text stays free of warnings', () => {
 
   test('a settle-capable command renders its tap line and settled diff only', async () => {
     const output = await interactionCliOutputFormatters.press({
+      env: process.env,
       input: {},
       result: {
         message: 'Tapped (10, 20)',

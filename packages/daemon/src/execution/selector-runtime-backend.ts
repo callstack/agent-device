@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type {
   AgentDeviceBackend,
@@ -15,7 +16,7 @@ import { readTextForNode } from './selector-text-runtime.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { markSessionSnapshotOutdated } from '../core/ref-frame.ts';
 import { SessionStore } from '../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
 import { buildRuntimeCaptureInput } from '../core/snapshot-runtime-capture-input.ts';
@@ -114,6 +115,17 @@ async function resolveSelectorRuntimeDevice(
   params.captureProof ??= {};
   const ref = params.sessionStore.lookup(params.sessionName);
   const session = ref?.session;
+  // Ordered before the required-session return: a named missing session answers with its own
+  // typed reason. Only that branch pays the function-scoped import (ADR-0019 loading shape).
+  if (!session) {
+    const { requireNamedSessionHoldsDevice } =
+      await import('../core/explicit-session-resolution.ts');
+    requireNamedSessionHoldsDevice({
+      req: params.req,
+      sessionAddress: params.sessionName,
+      session,
+    });
+  }
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
   return { ok: true, ref, session, device };

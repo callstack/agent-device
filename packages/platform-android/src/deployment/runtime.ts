@@ -2,6 +2,8 @@ import type {
   AppDeploymentInput,
   AppDeploymentResult,
   AppDeploymentRuntimeOperations,
+  AppUninstallInput,
+  AppUninstallResult,
   DeployMaterializedAppInput,
   MaterializeAppSourceInput,
   MaterializedAppSource,
@@ -12,6 +14,7 @@ import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runt
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { ensureAndroidReady } from '../readiness/runtime.ts';
+import { classifyAndroidAppTarget } from '../open-target.ts';
 import {
   inferAndroidAppName,
   installAndroidArtifact,
@@ -26,6 +29,7 @@ export function androidAppDeploymentFacts(device: DeviceInfo): Readonly<{
   materializeAppSource: RuntimeOperationFact;
   deployMaterializedApp: RuntimeOperationFact;
   sendPushNotification: RuntimeOperationFact;
+  uninstallApp: RuntimeOperationFact;
 }> {
   const fact = androidDeployFact(device);
   return Object.freeze({
@@ -33,6 +37,7 @@ export function androidAppDeploymentFacts(device: DeviceInfo): Readonly<{
     materializeAppSource: fact,
     deployMaterializedApp: fact,
     sendPushNotification: fact,
+    uninstallApp: fact,
   });
 }
 
@@ -53,6 +58,36 @@ export function createAndroidAppDeploymentOperations(params: {
       await deployPreparedAndroidApp(host, device, input, signal),
     sendPushNotification: async (input: PushNotificationInput) =>
       await pushAndroidNotification(host, device, input, signal),
+    uninstallApp: async (input: AppUninstallInput) =>
+      await uninstallAndroidApp(host, device, input, signal),
+  });
+}
+
+async function uninstallAndroidApp(
+  host: PlatformRuntimeHost,
+  device: DeviceInfo,
+  input: AppUninstallInput,
+  signal: AbortSignal,
+): Promise<AppUninstallResult> {
+  const ready =
+    device.booted === true
+      ? device
+      : await ensureAndroidReady(host, device, { headless: false }, signal);
+  return await host.androidDeployment.withInvalidatedAppResolutionCache(ready, async () => {
+    let packageName: string;
+    try {
+      packageName = await host.androidDeployment.resolveAppPackage(ready, input.app, {
+        installedOnly: true,
+      });
+    } catch (error) {
+      const notInstalled = error instanceof AppError && error.code === 'APP_NOT_INSTALLED';
+      if (notInstalled && classifyAndroidAppTarget(input.app) === 'package') {
+        return { wasInstalled: false };
+      }
+      throw error;
+    }
+    await uninstallAndroidPackage(host, ready, packageName, signal);
+    return { wasInstalled: true, packageName };
   });
 }
 

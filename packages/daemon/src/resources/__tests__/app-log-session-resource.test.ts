@@ -1,3 +1,4 @@
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -9,15 +10,13 @@ import {
   createDurableResourceEnvelope,
 } from '@agent-device/capture-kit';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
+import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { adoptStartedSessionAppLog, finishSessionAppLog } from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
-import { appLogResourceStore } from '../app-log-resource-store.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { stopSessionAppLog } from '../../sessions/session-teardown.ts';
 

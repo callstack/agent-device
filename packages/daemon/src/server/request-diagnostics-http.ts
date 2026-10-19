@@ -6,7 +6,7 @@
  * DAEMON host. A remote caller — a CI runner driving an EAS/limrun simulator —
  * cannot read that filesystem, so the record has to be reachable over the same
  * base URL and token the caller already holds. The client side is
- * `src/remote/remote-request-diagnostics.ts`.
+ * `packages/remote/src/remote-request-diagnostics.ts`.
  *
  * Scope: exactly one record, addressed the way the error names it
  * (`DaemonError.diagnosticsRecord`). A record that was never written (the

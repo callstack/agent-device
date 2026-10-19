@@ -1,9 +1,10 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   CloudArtifact,
   CloudProviderSessionResult,
 } from '@agent-device/contracts/observability';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
+import { resolveRemoteConfigProfile } from '@agent-device/remote/remote-config';
 import {
   readActiveConnectionState,
   buildRemoteConnectionRequestMetadata,
@@ -16,12 +17,13 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
-} from '../../remote/remote-connection-state.ts';
+} from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   connectProviderNamesForError,
   connectionProviderCapabilities,
   isConnectProviderName,
+  primeProviderConnection,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
 import {
@@ -35,7 +37,6 @@ import {
   releasePreviousLease,
   resolveRequestedLeaseBackend,
   stopMetroCleanup,
-  stopReactDevtoolsCleanup,
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
@@ -53,13 +54,28 @@ import {
   type RuntimePreparationNotice,
 } from './connection-presentation.ts';
 
-export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
-  const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+export const connectCommand: ClientCommandHandler = async ({
+  positionals,
+  flags,
+  client,
+  host,
+}) => {
+  const stateDir = resolveDaemonPaths(flags.stateDir, {
+    cwd: host.cwd,
+    env: host.env,
+  }).baseDir;
+  await primeProviderConnection(positionals[0]);
   const provider = readConnectProvider(positionals);
   assertConnectProviderUsage(provider, flags);
-  const resolved = await resolveConnectProviderProfile({ provider, flags, stateDir });
+  const resolved = await resolveConnectProviderProfile({
+    provider,
+    flags,
+    stateDir,
+    cwd: host.cwd,
+    env: host.env,
+  });
   const connectFlags = resolved.flags;
-  const connectionMetadata = readRemoteConfigConnectionMetadata(resolved.remoteConfigPath);
+  const connectionMetadata = readRemoteConfigConnectionMetadata(resolved.remoteConfigPath, host);
   const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
   const context = resolveConnectContext({
     stateDir,
@@ -75,7 +91,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
     connection: connectionMetadata,
     daemon: context.daemon,
   });
-  const verification = await verifyResolvedConnectProvider(resolved);
+  const verification = await verifyResolvedConnectProvider(resolved, host.env);
   const state = buildConnectedState({
     flags: connectFlags,
     scope,
@@ -86,12 +102,12 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   writeRemoteConnectionState({ stateDir, state });
   const previousLeaseNotice = await cleanupForcedPreviousConnection(
     client,
-    stateDir,
     connectFlags,
     context.previous,
     state,
+    host,
   );
-  const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state);
+  const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state, host);
   const readiness = presentConnectReadiness(state, verification);
 
   await writeCommandOutput(
@@ -267,36 +283,36 @@ function shouldReusePreviousConnectionState(
 
 async function cleanupForcedPreviousConnection(
   client: Parameters<ClientCommandHandler>[0]['client'],
-  stateDir: string,
   flags: CliFlags,
   previous: RemoteConnectionState | null,
   next: RemoteConnectionState,
+  host: HostEnvironment,
 ): Promise<PreviousLeaseReleaseNotice | undefined> {
   if (!previous || !flags.force) return undefined;
   await stopMetroCleanup(previous.metro);
-  await stopReactDevtoolsCleanup({ stateDir, state: previous });
   if (previous.leaseId && previous.leaseId === next.leaseId) return undefined;
   return await releasePreviousLease(client, previous, {
     nextDaemonBaseUrl: next.daemon?.baseUrl,
     ambientDaemonAuthToken: flags.daemonAuthToken,
-    cwd: process.cwd(),
-    env: process.env,
+    cwd: host.cwd,
+    env: host.env,
   });
 }
 
 function readRemoteConfigConnectionMetadata(
   remoteConfigPath: string,
+  host: HostEnvironment,
 ): RemoteConnectionRequestMetadata | undefined {
   const profile = resolveRemoteConfigProfile({
     configPath: remoteConfigPath,
-    cwd: process.cwd(),
-    env: process.env,
+    cwd: host.cwd,
+    env: host.env,
   }).profile;
   return buildRemoteConnectionRequestMetadata(profile);
 }
 
-export const disconnectCommand: ClientCommandHandler = async ({ flags, client }) => {
-  const { session, stateDir, state } = readRequestedConnectionState(flags);
+export const disconnectCommand: ClientCommandHandler = async ({ flags, client, host }) => {
+  const { session, stateDir, state } = readRequestedConnectionState(flags, host);
   if (!state) {
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
@@ -314,7 +330,6 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
     }
   }
   await stopMetroCleanup(state.metro);
-  await stopReactDevtoolsCleanup({ stateDir, state });
   let released = false;
   if (state.leaseId) {
     try {
@@ -339,17 +354,18 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
   return true;
 };
 
-export const connectionCommand: ClientCommandHandler = async ({ positionals, flags }) => {
+export const connectionCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   if (positionals[0] !== 'status') {
     throw new AppError('INVALID_ARGS', 'connection accepts only: status');
   }
-  const { session, state } = readRequestedConnectionState(flags);
+  const { session, state } = readRequestedConnectionState(flags, host);
   if (!state) {
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
+  await primeProviderConnection(state.leaseProvider);
   const leasePreparation = buildLeasePreparationNotice(state);
-  const runtimePreparation = buildRuntimePreparationNoticeFromState(state);
+  const runtimePreparation = buildRuntimePreparationNoticeFromState(state, host);
   await writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>
     [
       `Configured remote session "${state.session}".`,
@@ -416,13 +432,19 @@ function readConnectProvider(positionals: string[]): ConnectProvider | undefined
   );
 }
 
-function readRequestedConnectionState(flags: CliFlags): {
+function readRequestedConnectionState(
+  flags: CliFlags,
+  host: HostEnvironment,
+): {
   session: string;
   stateDir: string;
   state: RemoteConnectionState | null;
 } {
   const session = flags.session ?? 'default';
-  const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  const stateDir = resolveDaemonPaths(flags.stateDir, {
+    cwd: host.cwd,
+    env: host.env,
+  }).baseDir;
   return {
     session,
     stateDir,
@@ -507,9 +529,13 @@ function isSameDaemonState(
 function buildRuntimePreparationNotice(
   flags: CliFlags,
   state: RemoteConnectionState,
+  host: HostEnvironment,
 ): RuntimePreparationNotice | undefined {
   if (state.runtime) return undefined;
-  if (!hasDeferredMetroConfig(flags) && !remoteConfigHasMetroSettings(state.remoteConfigPath)) {
+  if (
+    !hasDeferredMetroConfig(flags) &&
+    !remoteConfigHasMetroSettings(state.remoteConfigPath, host)
+  ) {
     return undefined;
   }
   return buildDeferredRuntimeNotice(state);
@@ -517,8 +543,10 @@ function buildRuntimePreparationNotice(
 
 function buildRuntimePreparationNoticeFromState(
   state: RemoteConnectionState,
+  host: HostEnvironment,
 ): RuntimePreparationNotice | undefined {
-  if (state.runtime || !remoteConfigHasMetroSettings(state.remoteConfigPath)) return undefined;
+  if (state.runtime || !remoteConfigHasMetroSettings(state.remoteConfigPath, host))
+    return undefined;
   return buildDeferredRuntimeNotice(state);
 }
 
@@ -536,12 +564,12 @@ function buildDeferredRuntimeNotice(state: RemoteConnectionState): RuntimePrepar
   };
 }
 
-function remoteConfigHasMetroSettings(remoteConfigPath: string): boolean {
+function remoteConfigHasMetroSettings(remoteConfigPath: string, host: HostEnvironment): boolean {
   try {
     const remoteConfig = resolveRemoteConfigProfile({
       configPath: remoteConfigPath,
-      cwd: process.cwd(),
-      env: process.env,
+      cwd: host.cwd,
+      env: host.env,
     });
     const profile = remoteConfig.profile;
     return Boolean(

@@ -1,6 +1,6 @@
 import type { AgentDeviceBackend } from './backend.ts';
 import type { ArtifactAdapter } from './artifact-adapter.ts';
-import type { MovingTargetBaseline } from './moving-target-gate.ts';
+import type { SurfaceScopedNodes } from './interaction.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 export type CommandPolicy = {
@@ -8,6 +8,29 @@ export type CommandPolicy = {
   allowLocalOutputPaths: boolean;
   maxImagePixels: number;
 };
+
+/**
+ * The tree a mutation resolved against, kept on the session with the instant that mutation
+ * finished, so the next action can ask whether its own coordinates are still in play.
+ *
+ * A {@link SurfaceScopedNodes} rather than a whole capture: the gate compares node positions on one
+ * surface, and the surface scoping is what keeps an iOS system-sheet tree from ever being compared
+ * against app content (#2438).
+ */
+export type MovingTargetBaseline = Readonly<{
+  /**
+   * When the action finished, not when it began: the gate waits out what is LEFT of the window. The
+   * daemon stamps it with `Date.now()`; the gate compares it against `now(runtime)`, so a runtime
+   * that installs a clock of its own (a scenario pinning the window) states this value in that
+   * clock's time too. Production installs none, so both sides read the wall clock.
+   */
+  finishedAt: number;
+  /**
+   * The tree the action acted through: its resolution's own observation, or the settled one its
+   * `--settle` published as rest.
+   */
+  tree: SurfaceScopedNodes;
+}>;
 
 export type CommandSessionRecord = {
   name: string;

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('session state-dir prints the resolved source-checkout daemon state dir without daemon startup', async () => {
   const root = mkdtempForTestSync('agent-device-session-state-dir-');

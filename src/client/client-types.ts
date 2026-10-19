@@ -72,6 +72,7 @@ import type {
   AppStateCommandOptions,
   AppSwitcherCommandOptions,
   AppTriggerEventOptions,
+  AppUninstallOptions,
   AudioOptions,
   BackCommandOptions,
   BatchRunOptions,
@@ -126,6 +127,7 @@ import type {
   SettingsUpdateOptions,
   SwipeGestureOptions,
   SwipeOptions,
+  TelephonyCommandOptions,
   TraceOptions,
   TransformGestureOptions,
   TvRemoteCommandOptions,
@@ -170,6 +172,7 @@ export type AgentDeviceCommandClient = {
   appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
   actionButton: (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>;
   tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;
+  telephony: (options: TelephonyCommandOptions) => Promise<CommandResult<'telephony'>>;
   wait: (options: WaitCommandOptions) => Promise<CommandResult<'wait'>>;
   alert: (options?: AlertCommandOptions) => Promise<CommandRequestResult>;
   appState: (options?: AppStateCommandOptions) => Promise<CommandResult<'appstate'>>;
@@ -216,6 +219,7 @@ export type AgentDeviceClient = {
   apps: {
     install: (options: AppInstallOptions) => Promise<AppDeployResult>;
     reinstall: (options: AppDeployOptions) => Promise<AppDeployResult>;
+    uninstall: (options: AppUninstallOptions) => Promise<CommandResult<'uninstall'>>;
     installFromSource: (
       options: AppInstallFromSourceOptions,
     ) => Promise<AppInstallFromSourceResult>;

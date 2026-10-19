@@ -3,6 +3,11 @@ import { AppError } from '@agent-device/kernel/errors';
 
 export const LIMRUN_CLIENT_ID = 'agent-device-cli';
 
+/** Prefixes the SDK User-Agent so Limrun attributes API-key traffic, including instance creation, to agent-device. */
+export function limrunUserAgent(clientVersion: string): string {
+  return `${LIMRUN_CLIENT_ID}/${clientVersion}`;
+}
+
 /** The organization client, or a typed refusal for an operation that needs the API key. */
 export function requireLimrunOrgClient(
   limrun: Limrun | undefined,

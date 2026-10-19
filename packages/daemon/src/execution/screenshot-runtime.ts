@@ -323,7 +323,7 @@ function readScreenshotRequest(
   const positionals = req.positionals ?? [];
   const flags = req.flags ?? {};
   const expand = (value: string | undefined) =>
-    value === undefined ? undefined : expandSessionPath(value, req.meta?.cwd);
+    value === undefined ? undefined : expandSessionPath(value, req.meta?.cwd ?? process.cwd());
   const positionalPath = expand(positionals[0]);
   const outFlag = expand(flags.out);
   return {

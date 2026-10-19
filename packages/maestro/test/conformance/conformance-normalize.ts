@@ -95,6 +95,7 @@ export type CanonicalCommand =
   | { kind: 'takeScreenshot' }
   | { kind: 'waitForAnimationToEnd'; timeout?: number | string }
   | { kind: 'stopApp' }
+  | { kind: 'killApp' }
   | { kind: 'setPermissions'; appId?: string; permissions?: Record<string, string> }
   | { kind: 'clearState'; appId?: string }
   | {
@@ -132,6 +133,8 @@ function canonicalizeUpstreamLifecycleCommand(
       });
     case 'StopAppCommand':
       return { kind: 'stopApp' };
+    case 'KillAppCommand':
+      return { kind: 'killApp' };
     case 'ClearStateCommand':
       return dropUndefined({ kind: 'clearState' as const, appId: str(f.appId) });
     default:
@@ -400,7 +403,7 @@ type AgentLifecycleCommand = Extract<
   { kind: (typeof AGENT_LIFECYCLE_KINDS)[number] }
 >;
 
-const AGENT_LIFECYCLE_KINDS = ['launchApp', 'stopApp', 'clearState'] as const;
+const AGENT_LIFECYCLE_KINDS = ['launchApp', 'stopApp', 'killApp', 'clearState'] as const;
 
 function isAgentLifecycleCommand(command: MaestroCommand): command is AgentLifecycleCommand {
   return (AGENT_LIFECYCLE_KINDS as readonly string[]).includes(command.kind);
@@ -421,6 +424,8 @@ function canonicalizeAgentLifecycleCommand(
       });
     case 'stopApp':
       return { kind: 'stopApp' };
+    case 'killApp':
+      return { kind: 'killApp' };
     case 'clearState':
       return dropUndefined({ kind: 'clearState', appId: command.appId ?? config.appId });
   }

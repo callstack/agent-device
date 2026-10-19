@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterEach, expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTest } from '@agent-device/test-kit';
 import { downloadLimrunFile } from './limrun-download-file.ts';
 
 const servers: http.Server[] = [];

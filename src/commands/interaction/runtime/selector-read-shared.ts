@@ -3,7 +3,6 @@ import type {
   CommandContext,
   CommandSessionRecord,
 } from '@agent-device/contracts/runtime-contract';
-import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import {
   AppError,
   discloseDispatch,
@@ -27,7 +26,7 @@ import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-e
 import { elementMatchCandidateDetails } from '@agent-device/capture-kit/snapshot-lines';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { extractReadableText } from '@agent-device/capture-kit/text-surface';
-import { now, toBackendContext } from '../../runtime-common.ts';
+import { toBackendContext } from '../../runtime-common.ts';
 import { findNodeByLabel } from './selector-read-utils.ts';
 import type { SelectorSnapshotInput } from '../../command-input.ts';
 
@@ -95,7 +94,7 @@ export async function captureSelectorSnapshot(
       ? { includeHiddenContentHints: captureOptions.includeHiddenContentHints }
       : {}),
   });
-  const snapshot = snapshotStateFromResult(result, runtime);
+  const snapshot = result.snapshot;
   (options.signal ?? runtime.signal)?.throwIfAborted();
   if (
     captureOptions.updateSession &&
@@ -105,33 +104,6 @@ export async function captureSelectorSnapshot(
     await runtime.sessions.set({ ...session, snapshot });
   }
   return { sessionName, session, snapshot };
-}
-
-function snapshotStateFromResult(
-  result: BackendSnapshotResult,
-  runtime: AgentDeviceRuntime,
-): SnapshotState {
-  if (result.snapshot) return mergeSnapshotAnnotations(result.snapshot, result);
-  return {
-    nodes: result.nodes ?? [],
-    truncated: result.truncated,
-    backend: result.backend as SnapshotState['backend'],
-    ...(result.quality ? { snapshotQuality: result.quality } : {}),
-    createdAt: now(runtime),
-  } satisfies SnapshotState;
-}
-
-function mergeSnapshotAnnotations(
-  snapshot: SnapshotState,
-  result: BackendSnapshotResult,
-): SnapshotState {
-  const merged = { ...snapshot };
-  if (result.truncated === true || merged.truncated === true) merged.truncated = true;
-  else if (result.truncated !== undefined) merged.truncated = result.truncated;
-  if (result.quality && merged.snapshotQuality === undefined) {
-    merged.snapshotQuality = result.quality;
-  }
-  return merged;
 }
 
 export async function readText(

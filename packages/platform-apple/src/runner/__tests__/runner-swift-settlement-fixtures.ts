@@ -37,7 +37,7 @@ const CASE_HEADER = /\bcase\s+(\.\w+(?:\s*,\s*\.\w+)*):/g;
  * command queue, which is exactly why a reply to one is no evidence about queued work.
  *
  * A reader here can only fail in two directions, and each is caught: a misread that names an extra
- * command fails `runner-readiness-routing.test.ts`, which compares this list against the daemon's
+ * command fails `runner-command-traits-readiness-routing.test.ts`, which compares this list against the daemon's
  * `readinessProbe` trait in both directions, and a misread that loses an arm makes a real probe look
  * queued, which that same tie reports. What is left to guard locally is the case both miss — a `case`
  * these two patterns do not recognize, which would otherwise drop an arm and leave a set that still
