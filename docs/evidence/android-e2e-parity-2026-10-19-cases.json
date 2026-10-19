@@ -73,188 +73,134 @@
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20label%20query%20resolves%20a%20labeled%20text%20field",
       "sourceLine": 32,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 3401,
-      "headStatus": "passed",
-      "headDurationMs": 3444,
-      "directStatus": "passed",
-      "directDurationMs": 1687
+      "base": ["passed", 3401],
+      "head": ["passed", 3444],
+      "direct": ["passed", 1687]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20labeled%20field%20answers%20name%2C%20display%20value%2C%20value%20reads%2C%20fill%2C%20and%20clear",
       "sourceLine": 37,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 8183,
-      "headStatus": "passed",
-      "headDurationMs": 7941,
-      "directStatus": "passed",
-      "directDurationMs": 1894
+      "base": ["passed", 8183],
+      "head": ["passed", 7941],
+      "direct": ["passed", 1894]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20placeholder%20query%20and%20attribute%20reads%20find%20the%20field",
       "sourceLine": 55,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 3131,
-      "headStatus": "passed",
-      "headDurationMs": 3040,
-      "directStatus": "passed",
-      "directDurationMs": 1534
+      "base": ["passed", 3131],
+      "head": ["passed", 3040],
+      "direct": ["passed", 1534]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20secure%20field%20takes%20a%20fill%20and%20denies%20value%20reads",
       "sourceLine": 64,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 4627,
-      "headStatus": "passed",
-      "headDurationMs": 4370,
-      "directStatus": "passed",
-      "directDurationMs": 1553
+      "base": ["passed", 4627],
+      "head": ["passed", 4370],
+      "direct": ["passed", 1553]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::press%20sends%20a%20character%20and%20Enter%20through%20the%20soft%20keyboard",
       "sourceLine": 72,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 5958,
-      "headStatus": "passed",
-      "headDurationMs": 5825,
-      "directStatus": "passed",
-      "directDurationMs": 1730
+      "base": ["passed", 5958],
+      "head": ["passed", 5825],
+      "direct": ["passed", 1730]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20field%20autofocuses%20on%20mount%20and%20focus%28%29%20moves%20the%20focus",
       "sourceLine": 81,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 9066,
-      "headStatus": "passed",
-      "headDurationMs": 9064,
-      "directStatus": "passed",
-      "directDurationMs": 1872
+      "base": ["passed", 9066],
+      "head": ["passed", 9064],
+      "direct": ["passed", 1872]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::toBeFocused%20follows%20the%20focus",
       "sourceLine": 97,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 8269,
-      "headStatus": "passed",
-      "headDurationMs": 8215,
-      "directStatus": "passed",
-      "directDurationMs": 2741
+      "base": ["passed", 8269],
+      "head": ["passed", 8215],
+      "direct": ["passed", 2741]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20switch%20checks%2C%20unchecks%2C%20and%20reports%20its%20state",
       "sourceLine": 107,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 9219,
-      "headStatus": "passed",
-      "headDurationMs": 9006,
-      "directStatus": "passed",
-      "directDurationMs": 4075
+      "base": ["passed", 9219],
+      "head": ["passed", 9006],
+      "direct": ["passed", 4075]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::checkbox%20and%20radio%20roles%20answer%20getByRole%2C%20and%20a%20checkbox%20toggles%20by%20tap",
       "sourceLine": 130,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 6393,
-      "headStatus": "passed",
-      "headDurationMs": 6137,
-      "directStatus": "passed",
-      "directDurationMs": 1886
+      "base": ["passed", 6393],
+      "head": ["passed", 6137],
+      "direct": ["passed", 1886]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::checkbox%20and%20radio%20roles%20check%2C%20uncheck%2C%20and%20report%20their%20state",
       "sourceLine": 147,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 11014,
-      "headStatus": "passed",
-      "headDurationMs": 10877,
-      "directStatus": "passed",
-      "directDurationMs": 6367
+      "base": ["passed", 11014],
+      "head": ["passed", 10877],
+      "direct": ["passed", 6367]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20tab%20role%20answers%20getByRole",
       "sourceLine": 180,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 2857,
-      "headStatus": "passed",
-      "headDurationMs": 2821,
-      "directStatus": "passed",
-      "directDurationMs": 1325
+      "base": ["passed", 2857],
+      "head": ["passed", 2821],
+      "direct": ["passed", 1325]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20radio%20group%20reports%20the%20checked%20option",
       "sourceLine": 188,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 8487,
-      "headStatus": "passed",
-      "headDurationMs": 8240,
-      "directStatus": "passed",
-      "directDurationMs": 3923
+      "base": ["passed", 8487],
+      "head": ["passed", 8240],
+      "direct": ["passed", 3923]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::buttons%20report%20disabled%2C%20enabled%2C%20and%20a%20state%20that%20arrives%20later",
       "sourceLine": 201,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 7600,
-      "headStatus": "passed",
-      "headDurationMs": 7459,
-      "directStatus": "passed",
-      "directDurationMs": 3194
+      "base": ["passed", 7600],
+      "head": ["passed", 7459],
+      "direct": ["passed", 3194]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20display%3A%20none%20element%20is%20absent%20rather%20than%20hidden%2C%20its%20visible%20twin%20attached",
       "sourceLine": 219,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 5643,
-      "headStatus": "passed",
-      "headDurationMs": 5611,
-      "directStatus": "passed",
-      "directDurationMs": 2368
+      "base": ["passed", 5643],
+      "head": ["passed", 5611],
+      "direct": ["passed", 2368]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20header%20answers%20its%20accessible%20name",
       "sourceLine": 235,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 2932,
-      "headStatus": "passed",
-      "headDurationMs": 2873,
-      "directStatus": "passed",
-      "directDurationMs": 1298
+      "base": ["passed", 2932],
+      "head": ["passed", 2873],
+      "direct": ["passed", 1298]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20tab%20row%20answers%20count%2C%20all%2C%20texts%2C%20filters%2C%20positions%2C%20and%20switching",
       "sourceLine": 244,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 4790,
-      "headStatus": "passed",
-      "headDurationMs": 4715,
-      "directStatus": "passed",
-      "directDurationMs": 1727
+      "base": ["passed", 4790],
+      "head": ["passed", 4715],
+      "direct": ["passed", 1727]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20list%20answers%20counts%2C%20list-form%20text%2C%20reads%2C%20and%20boxes%20in%20order",
       "sourceLine": 271,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 4614,
-      "headStatus": "passed",
-      "headDurationMs": 4636,
-      "directStatus": "failed",
-      "directDurationMs": 647,
       "directError": {
         "category": "test",
         "code": "ACTION_FAILED",
@@ -266,7 +212,10 @@
           "line": 81,
           "column": 3
         }
-      }
+      },
+      "base": ["passed", 4614],
+      "head": ["passed", 4636],
+      "direct": ["failed", 647]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20row%20contains%20its%20texts",
@@ -276,34 +225,25 @@
         "cause": "explicit",
         "reason": "React Native flattens a plain View out of the accessibility tree on both platforms: XCTest and the Android helper report a View with a testID as a leaf beside its children, so filter({ has }) and a query scoped to it match nothing; only ScrollView, TextInput, and Text hosts nest"
       },
-      "baseStatus": "skipped",
-      "baseDurationMs": null,
-      "headStatus": "skipped",
-      "headDurationMs": null,
-      "directStatus": "skipped",
-      "directDurationMs": null
+      "base": ["skipped", null],
+      "head": ["skipped", null],
+      "direct": ["skipped", null]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20long%20press%20lands%20as%20one",
       "sourceLine": 312,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 6628,
-      "headStatus": "passed",
-      "headDurationMs": 6488,
-      "directStatus": "passed",
-      "directDurationMs": 2343
+      "base": ["passed", 6628],
+      "head": ["passed", 6488],
+      "direct": ["passed", 2343]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::a%20double%20tap%20lands%20inside%20the%20300%20ms%20window",
       "sourceLine": 327,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 7382,
-      "headStatus": "passed",
-      "headDurationMs": 7411,
-      "directStatus": "passed",
-      "directDurationMs": 1730
+      "base": ["passed", 7382],
+      "head": ["passed", 7411],
+      "direct": ["passed", 1730]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::pointer%20verbs%20land%20at%20the%20point%20asked%20for",
@@ -313,144 +253,105 @@
         "cause": "platform-unavailable",
         "reason": "test declares platforms [ios]"
       },
-      "baseStatus": "skipped",
-      "baseDurationMs": null,
-      "headStatus": "skipped",
-      "headDurationMs": null,
-      "directStatus": "skipped",
-      "directDurationMs": null
+      "base": ["skipped", null],
+      "head": ["skipped", null],
+      "direct": ["skipped", null]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::an%20ambiguous%20locator%20fails%20at%20once",
       "sourceLine": 384,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 4335,
-      "headStatus": "passed",
-      "headDurationMs": 4273,
-      "directStatus": "passed",
-      "directDurationMs": 1482
+      "base": ["passed", 4335],
+      "head": ["passed", 4273],
+      "direct": ["passed", 1482]
     },
     {
       "testId": "tests/controls.e2e.ts::control%20inventory::screenshot%2C%20restart%2C%20and%20clearState%20reopen%20the%20app%20on%20its%20home%20list",
       "sourceLine": 390,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 7884,
-      "headStatus": "passed",
-      "headDurationMs": 6570,
-      "directStatus": "passed",
-      "directDurationMs": 2483
+      "base": ["passed", 7884],
+      "head": ["passed", 6570],
+      "direct": ["passed", 2483]
     },
     {
       "testId": "tests/controls.e2e.ts::refusals::verbs%20a%20device%20never%20declares%20are%20refused%20before%20the%20engine",
       "sourceLine": 404,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 1,
-      "headStatus": "passed",
-      "headDurationMs": 1,
-      "directStatus": "passed",
-      "directDurationMs": 3
+      "base": ["passed", 1],
+      "head": ["passed", 1],
+      "direct": ["passed", 3]
     },
     {
       "testId": "tests/controls.e2e.ts::refusals::keys%20the%20soft%20keyboard%20cannot%20send%20are%20refused%20by%20the%20engine",
       "sourceLine": 418,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 157,
-      "headStatus": "passed",
-      "headDurationMs": 165,
-      "directStatus": "passed",
-      "directDurationMs": 165
+      "base": ["passed", 157],
+      "head": ["passed", 165],
+      "direct": ["passed", 165]
     },
     {
       "testId": "tests/controls.e2e.ts::refusals::a%20missing%20locator%20fails%20as%20not%20found%20once%20its%20timeout%20passes",
       "sourceLine": 429,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 1107,
-      "headStatus": "passed",
-      "headDurationMs": 1113,
-      "directStatus": "passed",
-      "directDurationMs": 1072
+      "base": ["passed", 1107],
+      "head": ["passed", 1113],
+      "direct": ["passed", 1072]
     },
     {
       "testId": "tests/flows-lists.e2e.ts::infinite%20scroll%20reaches%20the%20target%20item",
       "sourceLine": 9,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 14782,
-      "headStatus": "passed",
-      "headDurationMs": 14316,
-      "directStatus": "passed",
-      "directDurationMs": 22370
+      "base": ["passed", 14782],
+      "head": ["passed", 14316],
+      "direct": ["passed", 22370]
     },
     {
       "testId": "tests/flows-lists.e2e.ts::product%20catalog%20adds%20exactly%20two%20of%20the%20right%20variant",
       "sourceLine": 17,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 9200,
-      "headStatus": "passed",
-      "headDurationMs": 8986,
-      "directStatus": "passed",
-      "directDurationMs": 1990
+      "base": ["passed", 9200],
+      "head": ["passed", 8986],
+      "direct": ["passed", 1990]
     },
     {
       "testId": "tests/flows-lists.e2e.ts::gestures%3A%20long-press%2C%20then%20swipe%20left",
       "sourceLine": 27,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 7467,
-      "headStatus": "passed",
-      "headDurationMs": 7339,
-      "directStatus": "passed",
-      "directDurationMs": 13198
+      "base": ["passed", 7467],
+      "head": ["passed", 7339],
+      "direct": ["passed", 13198]
     },
     {
       "testId": "tests/flows-lists.e2e.ts::gestures%3A%20double-tap%20completes%20the%20flow",
       "sourceLine": 40,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 8981,
-      "headStatus": "passed",
-      "headDurationMs": 8745,
-      "directStatus": "passed",
-      "directDurationMs": 3109
+      "base": ["passed", 8981],
+      "head": ["passed", 8745],
+      "direct": ["passed", 3109]
     },
     {
       "testId": "tests/flows-lists.e2e.ts::sticky%20chrome%3A%20accept%20below%20the%20fold%2C%20then%20continue",
       "sourceLine": 50,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 10534,
-      "headStatus": "passed",
-      "headDurationMs": 10532,
-      "directStatus": "passed",
-      "directDurationMs": 13379
+      "base": ["passed", 10534],
+      "head": ["passed", 10532],
+      "direct": ["passed", 13379]
     },
     {
       "testId": "tests/flows-lists.e2e.ts::async%20states%3A%20load%2C%20pull%20to%20refresh%2C%20claim%20through%20the%20toast",
       "sourceLine": 62,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 10734,
-      "headStatus": "passed",
-      "headDurationMs": 10900,
-      "directStatus": "passed",
-      "directDurationMs": 7623
+      "base": ["passed", 10734],
+      "head": ["passed", 10900],
+      "direct": ["passed", 7623]
     },
     {
       "testId": "tests/flows-lists.e2e.ts::huge%20virtualized%20list%20reaches%20row%20512",
       "sourceLine": 102,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 50998,
-      "headStatus": "passed",
-      "headDurationMs": 48378,
-      "directStatus": "passed",
-      "directDurationMs": 50821
+      "base": ["passed", 50998],
+      "head": ["passed", 48378],
+      "direct": ["passed", 50821]
     },
     {
       "testId": "tests/flows-lists.e2e.ts::web%20view%20coupon%20form%20applies%20the%20code%20shown%20on%20the%20page",
@@ -460,45 +361,30 @@
         "cause": "platform-unavailable",
         "reason": "test declares platforms [ios]"
       },
-      "baseStatus": "skipped",
-      "baseDurationMs": null,
-      "headStatus": "skipped",
-      "headDurationMs": null,
-      "directStatus": "skipped",
-      "directDurationMs": null
+      "base": ["skipped", null],
+      "head": ["skipped", null],
+      "direct": ["skipped", null]
     },
     {
       "testId": "tests/flows.e2e.ts::text%20inputs%20unlock%20the%20submit%20button",
       "sourceLine": 11,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 5832,
-      "headStatus": "passed",
-      "headDurationMs": 7074,
-      "directStatus": "passed",
-      "directDurationMs": 1987
+      "base": ["passed", 5832],
+      "head": ["passed", 7074],
+      "direct": ["passed", 1987]
     },
     {
       "testId": "tests/flows.e2e.ts::filled%20text%20inputs%20report%20their%20values",
       "sourceLine": 25,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 5159,
-      "headStatus": "passed",
-      "headDurationMs": 5929,
-      "directStatus": "passed",
-      "directDurationMs": 1569
+      "base": ["passed", 5159],
+      "head": ["passed", 5929],
+      "direct": ["passed", 1569]
     },
     {
       "testId": "tests/flows.e2e.ts::modal%20flow%20confirms%20through%20the%20native%20alert",
       "sourceLine": 36,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 7689,
-      "headStatus": "passed",
-      "headDurationMs": 7922,
-      "directStatus": "failed",
-      "directDurationMs": 1767,
       "directError": {
         "category": "test",
         "code": "ACTION_FAILED",
@@ -510,95 +396,75 @@
           "line": 39,
           "column": 3
         }
-      }
+      },
+      "base": ["passed", 7689],
+      "head": ["passed", 7922],
+      "direct": ["failed", 1767]
     },
     {
       "testId": "tests/flows.e2e.ts::bottom%20tabs%20act%20inside%20the%20last%20tab",
       "sourceLine": 49,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 6006,
-      "headStatus": "passed",
-      "headDurationMs": 5767,
-      "directStatus": "passed",
-      "directDurationMs": 12224
+      "base": ["passed", 6006],
+      "head": ["passed", 5767],
+      "direct": ["passed", 12224]
     },
     {
       "testId": "tests/flows.e2e.ts::error%20recovery%20retries%2C%20then%20confirms%20the%20delete",
       "sourceLine": 63,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 7745,
-      "headStatus": "passed",
-      "headDurationMs": 7811,
-      "directStatus": "passed",
-      "directDurationMs": 4528
+      "base": ["passed", 7745],
+      "head": ["passed", 7811],
+      "direct": ["passed", 4528]
     },
     {
       "testId": "tests/flows.e2e.ts::choice%20controls%20place%20the%20exact%20order",
       "sourceLine": 72,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 7851,
-      "headStatus": "passed",
-      "headDurationMs": 7833,
-      "directStatus": "passed",
-      "directDurationMs": 1760
+      "base": ["passed", 7851],
+      "head": ["passed", 7833],
+      "direct": ["passed", 1760]
     },
     {
       "testId": "tests/flows.e2e.ts::debounced%20search%20selects%20the%20target%20once%20results%20arrive",
       "sourceLine": 93,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 7950,
-      "headStatus": "passed",
-      "headDurationMs": 7670,
-      "directStatus": "passed",
-      "directDurationMs": 3032
+      "base": ["passed", 7950],
+      "head": ["passed", 7670],
+      "direct": ["passed", 3032]
     },
     {
       "testId": "tests/login-form.e2e.ts::login%20form::rejects%20a%20malformed%20email",
       "sourceLine": 18,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 8165,
-      "headStatus": "passed",
-      "headDurationMs": 7710,
-      "directStatus": "passed",
-      "directDurationMs": 2012
+      "base": ["passed", 8165],
+      "head": ["passed", 7710],
+      "direct": ["passed", 2012]
     },
     {
       "testId": "tests/login-form.e2e.ts::login%20form::rejects%20an%20unknown%20account",
       "sourceLine": 26,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 8146,
-      "headStatus": "passed",
-      "headDurationMs": 7800,
-      "directStatus": "passed",
-      "directDurationMs": 2082
+      "base": ["passed", 8146],
+      "head": ["passed", 7800],
+      "direct": ["passed", 2082]
     },
     {
       "testId": "tests/login-form.e2e.ts::login%20form::signs%20in%20and%20logs%20out",
       "sourceLine": 34,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 12211,
-      "headStatus": "passed",
-      "headDurationMs": 11504,
-      "directStatus": "passed",
-      "directDurationMs": 6956
+      "base": ["passed", 12211],
+      "head": ["passed", 11504],
+      "direct": ["passed", 6956]
     },
     {
       "testId": "tests/smoke.e2e.ts::home%20lists%20the%20scenarios%20and%20opens%20one",
       "sourceLine": 5,
       "selected": true,
-      "baseStatus": "passed",
-      "baseDurationMs": 4330,
-      "headStatus": "passed",
-      "headDurationMs": 4246,
-      "directStatus": "passed",
-      "directDurationMs": 2336
+      "base": ["passed", 4330],
+      "head": ["passed", 4246],
+      "direct": ["passed", 2336]
     }
-  ]
+  ],
+  "caseResultTuple": ["status", "durationMs"]
 }
