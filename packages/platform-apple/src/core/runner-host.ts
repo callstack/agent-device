@@ -23,6 +23,7 @@ import {
   readHostCpuArchSync,
 } from '@agent-device/host-kit/process';
 import { Deadline, isEnvTruthy, retryWithPolicy } from '@agent-device/host-kit/retry';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 
@@ -45,7 +46,6 @@ import {
   getAppleRunnerHostEnvironment,
   getRunnerDeviceClaimAuthorityProbe,
   getRunnerLeaseOwnerStateDir,
-  runnerRuntimeSlot,
 } from './runner-owner-state.ts';
 import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
 import {
@@ -121,6 +121,6 @@ export const appleRunnerHost: AppleRunnerHost = {
   resolveIosPhysicalDeviceControl,
   visitXmlPlistEntries,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
-  runnerRuntimeSlot,
+  runnerRuntimeSlot: runtimeSlot,
   hasDeviceClaimAuthority: (device) => getRunnerDeviceClaimAuthorityProbe()?.(device) ?? false,
 };

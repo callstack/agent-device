@@ -7,7 +7,8 @@
  * `snapshot-helper-session.ts`; they acquire through here and never reach the registry themselves.
  */
 import type { AndroidAdbProcess } from './adb-executor.ts';
-import { helperRuntimeSlot, requireAndroidAdbHost } from './adb-host.ts';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
+import { requireAndroidAdbHost } from './adb-host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -96,14 +97,14 @@ export type AndroidSnapshotHelperSessionAcquisition = {
 
 const sessionsSlot = Symbol('androidSnapshotHelperSessions');
 const sessions = (): Map<string, AndroidSnapshotHelperSession> =>
-  helperRuntimeSlot(sessionsSlot, () => new Map<string, AndroidSnapshotHelperSession>());
+  runtimeSlot(sessionsSlot, () => new Map<string, AndroidSnapshotHelperSession>());
 /**
  * Capture identity → when this process may spawn that helper build again after a failed start or a
  * failed session capture.
  */
 const failedSessionsSlot = Symbol('androidSnapshotHelperFailedSessions');
 const failedSessions = (): Map<string, number> =>
-  helperRuntimeSlot(failedSessionsSlot, () => new Map<string, number>());
+  runtimeSlot(failedSessionsSlot, () => new Map<string, number>());
 
 /**
  * Starts (or reuses) the session without capturing, so a helper-backed read that is not a snapshot
