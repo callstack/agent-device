@@ -668,6 +668,7 @@ test('fillAndroid confirms a moved clear through one warm helper', async () => {
       exec: async (args, options) => {
         if (isDeleteKey(args)) typed = '';
         if (isTextInput(args)) typed = args[3] ?? '';
+        if (args.includes('--show-versioncode')) return provider.exec(args, options);
         if (args[0] === 'shell' && args[1] !== 'am') return adbResult('');
         return await provider.exec(args, options);
       },
