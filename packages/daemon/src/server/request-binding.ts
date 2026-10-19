@@ -1,4 +1,5 @@
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { hasDeviceSelectionInput } from '../core/device/device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
 import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
@@ -57,7 +58,7 @@ export async function resolveRequestExecutionLockPlan(params: {
   }
 
   const keys = new Set<RequestExecutionLockKey>([sessionExecutionLockKey(sessionName)]);
-  const device = await resolveFreshSessionDevice(req);
+  const device = await resolveFreshSessionDevice(req, sessionStore.host.env);
   if (device) keys.add(deviceExecutionLockKey(device.id));
   return { keys: orderRequestExecutionLockKeys(keys), deviceId: device?.id };
 }
@@ -84,16 +85,19 @@ function resolveFreshSessionBindingRequest(req: DaemonRequest): DaemonRequest {
   }
 }
 
-async function resolveFreshSessionDeviceLock(req: DaemonRequest): Promise<
+async function resolveFreshSessionDeviceLock(
+  req: DaemonRequest,
+  env: EnvMap,
+): Promise<
   | {
       flags: NonNullable<DaemonRequest['flags']>;
       options: ReturnType<typeof buildOpenTargetDeviceResolutionOptions> | undefined;
     }
   | undefined
 > {
-  if (req.command === 'open') return resolveOpenDeviceLock(req);
-  if (req.command === 'replay') return await resolveReplayDeviceLock(req);
-  return resolveExplicitDeviceLock(req);
+  if (req.command === 'open') return resolveOpenDeviceLock(req, env);
+  if (req.command === 'replay') return await resolveReplayDeviceLock(req, env);
+  return resolveExplicitDeviceLock(req, env);
 }
 
 /**
@@ -101,28 +105,36 @@ async function resolveFreshSessionDeviceLock(req: DaemonRequest): Promise<
  * lock is chosen. This runs before the request holds that lock and is never an authority on what
  * happens after: the locked request resolves and binds its device on its own.
  */
-async function resolveFreshSessionDevice(req: DaemonRequest): Promise<DeviceInfo | undefined> {
-  const resolution = await resolveFreshSessionDeviceLock(resolveFreshSessionBindingRequest(req));
+async function resolveFreshSessionDevice(
+  req: DaemonRequest,
+  env: EnvMap,
+): Promise<DeviceInfo | undefined> {
+  const resolution = await resolveFreshSessionDeviceLock(
+    resolveFreshSessionBindingRequest(req),
+    env,
+  );
   if (!resolution) return undefined;
   try {
-    return await resolveTargetDevice(resolution.flags, resolution.options);
+    return await resolveTargetDevice(resolution.flags, { ...resolution.options, env });
   } catch {
     // Unresolvable here means unresolvable for lock selection too, which is already tolerated.
     return undefined;
   }
 }
 
-function resolveOpenDeviceLock(req: DaemonRequest) {
-  const options = buildOpenTargetDeviceResolutionOptions(req.positionals?.[0]);
+function resolveOpenDeviceLock(req: DaemonRequest, env: EnvMap) {
+  const options = buildOpenTargetDeviceResolutionOptions(req.positionals?.[0], env);
   return options ? { flags: req.flags ?? {}, options } : undefined;
 }
 
-async function resolveReplayDeviceLock(req: DaemonRequest) {
-  return (await buildReplayTargetDeviceResolution(req)) ?? resolveExplicitDeviceLock(req);
+async function resolveReplayDeviceLock(req: DaemonRequest, env: EnvMap) {
+  return (await buildReplayTargetDeviceResolution(req, env)) ?? resolveExplicitDeviceLock(req, env);
 }
 
-function resolveExplicitDeviceLock(req: DaemonRequest) {
-  return hasDeviceSelectionInput(req.flags) ? { flags: req.flags ?? {}, options: {} } : undefined;
+function resolveExplicitDeviceLock(req: DaemonRequest, env: EnvMap) {
+  return hasDeviceSelectionInput(req.flags)
+    ? { flags: req.flags ?? {}, options: { env } }
+    : undefined;
 }
 
 function sessionExecutionLockKey(sessionName: string): RequestExecutionLockKey {

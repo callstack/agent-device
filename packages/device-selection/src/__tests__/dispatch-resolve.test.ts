@@ -121,10 +121,13 @@ test('resolveTargetDevice narrows local Android discovery to an explicit serial'
       return [androidEmulator];
     },
     async () =>
-      await resolveTargetDeviceInContext({
-        platform: 'android',
-        serial: androidEmulator.id,
-      }),
+      await resolveTargetDeviceInContext(
+        {
+          platform: 'android',
+          serial: androidEmulator.id,
+        },
+        { env: process.env },
+      ),
   );
 
   assert.equal(result.id, androidEmulator.id);
@@ -142,11 +145,14 @@ test('resolveTargetDevice does not discover an explicit Android serial outside i
         return [];
       },
       async () =>
-        await resolveTargetDeviceInContext({
-          platform: 'android',
-          serial: androidEmulator.id,
-          androidDeviceAllowlist: 'emulator-5556',
-        }),
+        await resolveTargetDeviceInContext(
+          {
+            platform: 'android',
+            serial: androidEmulator.id,
+            androidDeviceAllowlist: 'emulator-5556',
+          },
+          { env: process.env },
+        ),
     ),
   );
 
@@ -157,8 +163,8 @@ test('resolveTargetDevice reuses request-scoped device resolution cache for iden
   mockListAppleDevices.mockResolvedValue([bootedSimulator]);
 
   const [first, second] = await withResolveTargetDeviceCacheScope(async () => [
-    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }),
-    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }),
+    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }, { env: process.env }),
+    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }, { env: process.env }),
   ]);
 
   assert.equal(first.id, 'sim-2');
@@ -170,8 +176,8 @@ test('resolveTargetDevice request cache key separates device selectors', async (
   mockListAppleDevices.mockResolvedValue([simulator, bootedSimulator]);
 
   await withResolveTargetDeviceCacheScope(async () => {
-    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 16' });
-    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' });
+    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 16' }, { env: process.env });
+    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }, { env: process.env });
   });
 
   assert.equal(mockListAppleDevices.mock.calls.length, 2);
@@ -185,7 +191,7 @@ test('resolveTargetDevice selects the unique booted simulator with the requested
 
   const result = await resolveTargetDevice(
     { platform: 'ios' },
-    { appleSimulatorAppTarget: 'com.example.demo' },
+    { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
   );
 
   assert.equal(result.id, secondBootedSimulator.id);
@@ -215,7 +221,7 @@ test('app-narrowed selection reports its own typed provenance, not a generic loc
     async () =>
       await resolveTargetDeviceSelectionInContext(
         { platform: 'ios' },
-        { appleSimulatorAppTarget: 'com.example.demo' },
+        { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
       ),
   );
 
@@ -233,7 +239,10 @@ test('resolveTargetDevice leaves platform-less static app selection to normal cr
       return [androidEmulator];
     },
     async () =>
-      await resolveTargetDeviceInContext({}, { appleSimulatorAppTarget: 'com.example.demo' }),
+      await resolveTargetDeviceInContext(
+        {},
+        { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
+      ),
   );
 
   assert.equal(result.id, androidEmulator.id);
@@ -247,7 +256,10 @@ test('platform-less resolution refuses to pick between equally booted devices', 
     async () => [androidEmulator, bootedSimulator, secondBootedSimulator],
     async () => {
       try {
-        await resolveTargetDeviceInContext({}, { appleSimulatorAppTarget: 'com.example.demo' });
+        await resolveTargetDeviceInContext(
+          {},
+          { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
+        );
       } catch (error) {
         return error;
       }
@@ -275,8 +287,11 @@ test('resolveTargetDevice reuses an app-aware iOS selection for later iOS resolu
   );
 
   const [appAware, laterResolution] = await withResolveTargetDeviceCacheScope(async () => [
-    await resolveTargetDevice({ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo' }),
-    await resolveTargetDevice({ platform: 'ios' }),
+    await resolveTargetDevice(
+      { platform: 'ios' },
+      { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
+    ),
+    await resolveTargetDevice({ platform: 'ios' }, { env: process.env }),
   ]);
 
   assert.equal(appAware.id, secondBootedSimulator.id);
@@ -289,7 +304,7 @@ test('resolveTargetDevice refuses booted simulator selection when the requested 
 
   const error = await resolveTargetDevice(
     { platform: 'ios' },
-    { appleSimulatorAppTarget: 'com.example.demo' },
+    { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
   ).catch((error) => error);
 
   assert.ok(error instanceof AppError);
@@ -310,7 +325,7 @@ test('resolveTargetDevice refuses ambiguous booted simulator app matches', async
 
   const error = await resolveTargetDevice(
     { platform: 'ios' },
-    { appleSimulatorAppTarget: 'com.example.demo' },
+    { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
   ).catch((error) => error);
 
   assert.ok(error instanceof AppError);
@@ -328,7 +343,7 @@ test('resolveTargetDevice preserves an explicit device selector when platform is
 
   const result = await resolveTargetDevice(
     { udid: bootedSimulator.id },
-    { appleSimulatorAppTarget: 'com.example.demo' },
+    { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
   );
 
   assert.equal(result.id, bootedSimulator.id);
@@ -339,10 +354,12 @@ test('resolveTargetDevice does not reuse cache across request scopes', async () 
   mockListAppleDevices.mockResolvedValue([bootedSimulator]);
 
   await withResolveTargetDeviceCacheScope(
-    async () => await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }),
+    async () =>
+      await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }, { env: process.env }),
   );
   await withResolveTargetDeviceCacheScope(
-    async () => await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }),
+    async () =>
+      await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }, { env: process.env }),
   );
 
   assert.equal(mockListAppleDevices.mock.calls.length, 2);
@@ -352,9 +369,10 @@ test('resolveTargetDevice reuses cache across nested request scopes', async () =
   mockListAppleDevices.mockResolvedValue([bootedSimulator]);
 
   await withResolveTargetDeviceCacheScope(async () => {
-    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' });
+    await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }, { env: process.env });
     await withResolveTargetDeviceCacheScope(
-      async () => await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }),
+      async () =>
+        await resolveTargetDevice({ platform: 'ios', device: 'iPhone 15' }, { env: process.env }),
     );
   });
 
@@ -368,7 +386,11 @@ test('resolveTargetDevice uses injected device inventory without local discovery
       assert.equal(request.deviceName, 'Remote iPhone');
       return [{ ...bootedSimulator, id: 'remote-ios-1', name: 'Remote iPhone' }];
     },
-    async () => await resolveTargetDeviceInContext({ platform: 'ios', device: 'Remote iPhone' }),
+    async () =>
+      await resolveTargetDeviceInContext(
+        { platform: 'ios', device: 'Remote iPhone' },
+        { env: process.env },
+      ),
   );
 
   assert.equal(result.id, 'remote-ios-1');
@@ -378,7 +400,11 @@ test('resolveTargetDevice uses injected device inventory without local discovery
 test('resolveTargetDevice preserves physical-device backend evidence from injected inventory', async () => {
   const result = await withDeviceInventoryProvider(
     async () => [{ ...physical, iosPhysicalDeviceBackend: 'xctest' }],
-    async () => await resolveTargetDeviceInContext({ platform: 'ios', udid: physical.id }),
+    async () =>
+      await resolveTargetDeviceInContext(
+        { platform: 'ios', udid: physical.id },
+        { env: process.env },
+      ),
   );
 
   assert.equal(result.iosPhysicalDeviceBackend, 'xctest');
@@ -388,7 +414,11 @@ test('resolveTargetDevice preserves physical-device backend evidence from inject
 test('resolveTargetDeviceSelection reports one candidate for an explicit Apple identity', async () => {
   const selection = await withDeviceInventoryProvider(
     async () => [physical, bootedSimulator],
-    async () => await resolveTargetDeviceSelectionInContext({ platform: 'ios', udid: physical.id }),
+    async () =>
+      await resolveTargetDeviceSelectionInContext(
+        { platform: 'ios', udid: physical.id },
+        { env: process.env },
+      ),
   );
 
   assert.equal(selection.device.id, physical.id);
@@ -401,7 +431,8 @@ test('platform-only local selection reports inferred precedence instead of expli
     {
       local: async () => [bootedSimulator, simulator],
     },
-    async () => await resolveTargetDeviceSelectionInContext({ platform: 'ios' }),
+    async () =>
+      await resolveTargetDeviceSelectionInContext({ platform: 'ios' }, { env: process.env }),
   );
 
   assert.equal(selection.device.id, bootedSimulator.id);
@@ -419,7 +450,8 @@ test('platform-only provider selection reports provider inference', async () => 
         throw new Error('provider inventory should not fall back to local discovery');
       },
     },
-    async () => await resolveTargetDeviceSelectionInContext({ platform: 'ios' }),
+    async () =>
+      await resolveTargetDeviceSelectionInContext({ platform: 'ios' }, { env: process.env }),
   );
 
   assert.equal(selection.device.id, physical.id);
@@ -435,7 +467,7 @@ test('resolveTargetDevice preserves Apple simulator preference with injected inv
       },
       local: async () => [simulator],
     },
-    async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+    async () => await resolveTargetDeviceInContext({ platform: 'ios' }, { env: process.env }),
   );
 
   assert.equal(result.id, 'sim-1');
@@ -456,7 +488,7 @@ test('resolveTargetDevice keeps provider Apple inventory isolated from local fal
       },
       local: localDiscover,
     },
-    async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+    async () => await resolveTargetDeviceInContext({ platform: 'ios' }, { env: process.env }),
   );
 
   assert.equal(result.id, physical.id);
@@ -477,7 +509,7 @@ test('resolveTargetDevice propagates cancellation from the local Apple simulator
           throw canceled;
         },
       },
-      async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+      async () => await resolveTargetDeviceInContext({ platform: 'ios' }, { env: process.env }),
     ),
     (error) => error === canceled,
   );
@@ -499,7 +531,7 @@ test('resolveTargetDevice propagates missing inventory wiring from the local App
           throw unavailable;
         },
       },
-      async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+      async () => await resolveTargetDeviceInContext({ platform: 'ios' }, { env: process.env }),
     ),
     (error) => error === unavailable,
   );
@@ -514,7 +546,7 @@ test('resolveTargetDevice keeps genuine local Apple simulator probe failures bes
         throw new Error('simctl timed out');
       },
     },
-    async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+    async () => await resolveTargetDeviceInContext({ platform: 'ios' }, { env: process.env }),
   );
 
   assert.equal(result.id, physical.id);
@@ -524,7 +556,7 @@ test('resolveTargetDevice treats empty injected inventory as authoritative', asy
   await expectDeviceNotFound(() =>
     withDeviceInventoryProvider(
       async () => [],
-      async () => await resolveTargetDeviceInContext({ platform: 'ios' }),
+      async () => await resolveTargetDeviceInContext({ platform: 'ios' }, { env: process.env }),
     ),
   );
 
@@ -539,10 +571,13 @@ test('resolveTargetDevice resolves web through generic inventory without Apple f
       return [webDesktop];
     },
     async () =>
-      await resolveTargetDeviceInContext({
-        platform: 'web',
-        device: 'Agent Browser Chrome',
-      }),
+      await resolveTargetDeviceInContext(
+        {
+          platform: 'web',
+          device: 'Agent Browser Chrome',
+        },
+        { env: process.env },
+      ),
   );
 
   assert.equal(result.platform, 'web');
@@ -551,7 +586,7 @@ test('resolveTargetDevice resolves web through generic inventory without Apple f
 });
 
 test('resolveTargetDevice fast-paths explicit macOS without Apple mobile discovery', async () => {
-  const result = await resolveTargetDevice({ platform: 'macos' });
+  const result = await resolveTargetDevice({ platform: 'macos' }, { env: process.env });
 
   assert.equal(result.platform, 'apple');
   assert.equal(result.appleOs, 'macos');
@@ -560,11 +595,14 @@ test('resolveTargetDevice fast-paths explicit macOS without Apple mobile discove
 });
 
 test('resolveTargetDevice fast-paths Apple desktop target without simulator-set discovery', async () => {
-  const result = await resolveTargetDevice({
-    platform: 'apple',
-    target: 'desktop',
-    iosSimulatorDeviceSet: '/tmp/simulators',
-  });
+  const result = await resolveTargetDevice(
+    {
+      platform: 'apple',
+      target: 'desktop',
+      iosSimulatorDeviceSet: '/tmp/simulators',
+    },
+    { env: process.env },
+  );
 
   assert.equal(result.platform, 'apple');
   assert.equal(result.appleOs, 'macos');
@@ -573,7 +611,9 @@ test('resolveTargetDevice fast-paths Apple desktop target without simulator-set 
 });
 
 test('resolveTargetDevice fast-path preserves macOS selector validation', async () => {
-  await expectDeviceNotFound(() => resolveTargetDevice({ platform: 'macos', udid: 'other-mac' }));
+  await expectDeviceNotFound(() =>
+    resolveTargetDevice({ platform: 'macos', udid: 'other-mac' }, { env: process.env }),
+  );
 
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });
@@ -588,14 +628,20 @@ test('resolveTargetDevice keeps simulator-set scope separate from the macOS host
       },
     },
     async () => {
-      const simulatorResult = await resolveTargetDeviceInContext({
-        platform: 'ios',
-        iosSimulatorDeviceSet: '/tmp/isolated-set',
-      });
-      const macResult = await resolveTargetDeviceInContext({
-        platform: 'macos',
-        iosSimulatorDeviceSet: '/tmp/isolated-set',
-      });
+      const simulatorResult = await resolveTargetDeviceInContext(
+        {
+          platform: 'ios',
+          iosSimulatorDeviceSet: '/tmp/isolated-set',
+        },
+        { env: process.env },
+      );
+      const macResult = await resolveTargetDeviceInContext(
+        {
+          platform: 'macos',
+          iosSimulatorDeviceSet: '/tmp/isolated-set',
+        },
+        { env: process.env },
+      );
       assert.equal(simulatorResult.id, simulator.id);
       assert.equal(macResult.id, macDesktop.id);
     },
@@ -619,11 +665,14 @@ test('the resolve_target_device phase shows the requested udid and simulator set
       await withDiagnosticsScope(
         { session: 'qa', command: 'record', debug: true, logPath },
         async () => {
-          await resolveTargetDeviceInContext({
-            platform: 'apple',
-            udid: simulator.id,
-            iosSimulatorDeviceSet: '/tmp/recovery-set',
-          });
+          await resolveTargetDeviceInContext(
+            {
+              platform: 'apple',
+              udid: simulator.id,
+              iosSimulatorDeviceSet: '/tmp/recovery-set',
+            },
+            { env: process.env },
+          );
           flushDiagnosticsToSessionFile({ force: true });
         },
       );
@@ -652,7 +701,7 @@ test('resolveTargetDevice discovers simulators in the daemon operator set when t
       },
     },
     async () => {
-      const result = await resolveTargetDeviceInContext({ platform: 'ios' });
+      const result = await resolveTargetDeviceInContext({ platform: 'ios' }, { env: process.env });
       assert.equal(result.id, simulator.id);
     },
   );
@@ -663,10 +712,13 @@ test('resolveTargetDevice discovers simulators in the daemon operator set when t
 test('resolveTargetDevice refuses a request naming another set than the daemon operator set before discovery', async () => {
   vi.stubEnv('AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET', '/tmp/operator-set');
 
-  const err = await resolveTargetDevice({
-    platform: 'ios',
-    iosSimulatorDeviceSet: '/tmp/other-set',
-  }).catch((error) => error);
+  const err = await resolveTargetDevice(
+    {
+      platform: 'ios',
+      iosSimulatorDeviceSet: '/tmp/other-set',
+    },
+    { env: process.env },
+  ).catch((error) => error);
 
   assert.ok(err instanceof AppError);
   assert.equal(err.code, 'INVALID_ARGS');
@@ -685,14 +737,20 @@ test('resolveTargetDevice serves macOS and Android requests naming another set o
       },
     },
     async () => {
-      const macResult = await resolveTargetDeviceInContext({
-        platform: 'macos',
-        iosSimulatorDeviceSet: '/tmp/other-set',
-      });
-      const androidResult = await resolveTargetDeviceInContext({
-        platform: 'android',
-        iosSimulatorDeviceSet: '/tmp/other-set',
-      });
+      const macResult = await resolveTargetDeviceInContext(
+        {
+          platform: 'macos',
+          iosSimulatorDeviceSet: '/tmp/other-set',
+        },
+        { env: process.env },
+      );
+      const androidResult = await resolveTargetDeviceInContext(
+        {
+          platform: 'android',
+          iosSimulatorDeviceSet: '/tmp/other-set',
+        },
+        { env: process.env },
+      );
       assert.equal(macResult.id, macDesktop.id);
       assert.equal(androidResult.id, androidEmulator.id);
     },

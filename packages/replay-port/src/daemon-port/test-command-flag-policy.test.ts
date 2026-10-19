@@ -17,6 +17,7 @@ function rejectedTestCommand(flags: CommandFlags) {
       flags,
       meta: { cwd: '/suite' },
     },
+    host: { env: process.env, cwd: '/suite' },
     session: { name: 'default', logPath: '/suite/daemon.log' } as unknown as ReplaySession,
     createSession,
     invoke,

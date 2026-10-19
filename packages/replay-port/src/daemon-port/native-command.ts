@@ -56,6 +56,7 @@ import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contrac
 export async function runReplayCommand(command: ReplayCommand): Promise<DaemonResponse> {
   const {
     request: req,
+    host,
     session: { name: sessionName, logPath, store: sessionStore, observationStore, coordinator },
     tracePath,
     onStep,
@@ -89,6 +90,7 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
     if (backendResponse) return backendResponse;
     const planPreparation = prepareReplayPlan({
       req,
+      host,
       sessionName,
       sessionStore,
       tracePath,
@@ -111,6 +113,7 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
     const sessionPreparation = prepareReplaySession({
       req,
       entryIndex,
+      hostCwd: host.cwd,
       sessionStore,
       sourcePath: resolved,
       coordinator,

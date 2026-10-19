@@ -50,6 +50,7 @@ async function forwardedCommands(publicNetworkOnly?: true): Promise<readonly Rep
   };
   const command: ReplayTestCommand = {
     request: req,
+    host: sessionStore.host,
     session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
     createSession: (sessionName, logPath) =>
       createReplaySession(sessionName, logPath, sessionStore),

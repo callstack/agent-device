@@ -46,6 +46,7 @@ export async function handleShutdownCommand(
   const device = await resolveCommandDevice({
     flags,
     session: activeSession,
+    env: params.sessionStore.host.env,
     androidAvdSelection: 'include-stopped',
     platformServices: params.platformServices,
   });

@@ -133,6 +133,7 @@ async function runWithTestNetworkFlag(publicNetworkOnly: boolean | undefined) {
   // Drive the real `replay test` handler and suite scheduler so the handler mapping and the
   // per-case forwarding of `publicNetworkOnly` are both on the asserted engine path.
   const response = await handleReplayTestCommand({
+    host: createTestHostEnvironment(),
     req,
     sessionName: 'default',
     logPath: path.join(root, 'daemon.log'),

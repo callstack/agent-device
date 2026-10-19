@@ -64,6 +64,7 @@ export async function handlePrepareCommand(params: {
   const device = await resolveCommandDevice({
     session,
     flags,
+    env: sessionStore.host.env,
     platformServices: params.platformServices,
   });
   const admission = await admitPrepareRuntime({

@@ -496,6 +496,7 @@ async function resolveInventoryCommandDevice(params: {
     device: await resolveCommandDevice({
       session,
       flags,
+      env: sessionStore.host.env,
       platformServices,
       androidAvdSelection,
     }),

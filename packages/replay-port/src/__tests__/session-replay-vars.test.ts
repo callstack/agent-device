@@ -24,6 +24,7 @@ test('buildReplayBuiltinVars applies request values over metadata', () => {
     sessionName: 'session',
     metadata: { platform: 'android', target: 'mobile' },
     resolvedPath: '/tmp/replay/flows/test.ad',
+    hostCwd: '/tmp/replay',
   });
 
   assert.deepEqual(builtins, {
@@ -57,6 +58,7 @@ test('buildReplayBuiltinVars omits empty optional values', () => {
     sessionName: 'session',
     metadata: { platform: 'android', target: 'mobile' },
     resolvedPath: '/tmp/replay/test.ad',
+    hostCwd: '/tmp/replay',
   });
 
   assert.deepEqual(builtins, {

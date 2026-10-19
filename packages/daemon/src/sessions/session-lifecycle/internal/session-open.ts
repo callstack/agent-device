@@ -237,7 +237,11 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     );
     if (lostClaim) return { type: 'response', response: lostClaim };
 
-    const device = await refreshSessionDeviceIfNeeded(session.device, params.platformServices);
+    const device = await refreshSessionDeviceIfNeeded(
+      session.device,
+      params.platformServices,
+      params.host.env,
+    );
     const selection = resolveExistingSessionDeviceSelection(device);
     await req.internal?.retainDeviceExecutionLock?.(device.id);
     const runtimePlanAdmission = await resolveOpenRuntimePlanAdmission({
@@ -322,7 +326,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
 
   const selection = await resolveTargetDeviceSelection(
     req.flags ?? {},
-    buildOpenTargetDeviceResolutionOptions(openTarget),
+    buildOpenTargetDeviceResolutionOptions(openTarget, params.host.env),
   );
   const device = selection.device;
   await req.internal?.retainDeviceExecutionLock?.(device.id);

@@ -40,6 +40,7 @@ describe('typed Maestro replay plan', () => {
     const loadProgram = vi.fn(async () => child);
 
     const plan = await compileMaestroReplayPlan(program, {
+      baseDir: process.cwd(),
       platform: 'android',
       target: 'simulator',
       runtimeHints: { platform: 'android', metroHost: '127.0.0.1', metroPort: 8083 },
@@ -83,6 +84,7 @@ describe('typed Maestro replay plan', () => {
     expect(Object.isFrozen(plan)).toBe(true);
 
     const changed = await compileMaestroReplayPlan(program, {
+      baseDir: process.cwd(),
       platform: 'android',
       target: 'simulator',
       env: { INCLUDE: 'other.yaml' },
@@ -91,6 +93,7 @@ describe('typed Maestro replay plan', () => {
     expect(changed.digest).not.toBe(plan.digest);
 
     const changedRuntime = await compileMaestroReplayPlan(program, {
+      baseDir: process.cwd(),
       platform: 'android',
       target: 'simulator',
       runtimeHints: { platform: 'android', metroHost: '127.0.0.1', metroPort: 8084 },
@@ -117,7 +120,7 @@ describe('typed Maestro replay plan', () => {
     // `repeat`/`retry` branch, leaving the runScript/evalScript branch untested.
     const runScriptPlan = await compileMaestroReplayPlan(
       parseMaestroProgram(['---', '- runScript: setup.js', '- inputText: after'].join('\n')),
-      { platform: 'android', target: 'simulator' },
+      { baseDir: process.cwd(), platform: 'android', target: 'simulator' },
     );
     expect(
       evaluateMaestroReplayResume(runScriptPlan, { from: 2, planDigest: runScriptPlan.digest }),
@@ -130,7 +133,7 @@ describe('typed Maestro replay plan', () => {
       parseMaestroProgram(
         ['---', '- evalScript: ${output.x = 1}', '- inputText: after'].join('\n'),
       ),
-      { platform: 'android', target: 'simulator' },
+      { baseDir: process.cwd(), platform: 'android', target: 'simulator' },
     );
     expect(
       evaluateMaestroReplayResume(evalScriptPlan, { from: 2, planDigest: evalScriptPlan.digest }),
@@ -152,7 +155,7 @@ describe('typed Maestro replay plan', () => {
       observe: vi.fn(async ({ generation }) => ({ generation, matched: true })),
     };
 
-    const initialPlan = await compileMaestroReplayPlan(program);
+    const initialPlan = await compileMaestroReplayPlan(program, { baseDir: process.cwd() });
     await executeMaestroProgram(program, port, {
       from: 2,
       planDigest: initialPlan.digest,

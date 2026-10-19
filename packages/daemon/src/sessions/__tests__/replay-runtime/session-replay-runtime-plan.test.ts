@@ -525,7 +525,7 @@ test('fresh typed Maestro replay resolves its configured app before runtime defa
   expect(response.ok).toBe(true);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     expect.objectContaining({ replayBackend: 'maestro', platform: 'ios' }),
-    { appleSimulatorAppTarget: 'com.example.demo' },
+    { appleSimulatorAppTarget: 'com.example.demo', env: process.env },
   );
   expect(invoke).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -593,7 +593,7 @@ test('platform-less typed Maestro replay preserves a resolved Android device', a
   expect(response.ok).toBe(true);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     expect.objectContaining({ replayBackend: 'maestro' }),
-    {},
+    { env: process.env },
   );
   expect(invoke).toHaveBeenCalledWith(
     expect.objectContaining({

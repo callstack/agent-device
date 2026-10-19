@@ -37,6 +37,7 @@ export const replayDaemonDependencies: ReplayDaemonDependencies = { resolveSessi
 
 export const handleReplayCommand: SessionCommandHandler = async ({
   req,
+  host,
   sessionName,
   logPath,
   sessionStore,
@@ -45,6 +46,7 @@ export const handleReplayCommand: SessionCommandHandler = async ({
 }) =>
   await runReplayCommand({
     ...splitReplayCommandRequest(req),
+    host,
     session: createReplaySession(sessionName, logPath, sessionStore),
     invoke: replayInvokeOverDispatch(invokeReplayAction ?? invoke, req),
     dependencies: replayDaemonDependencies,
@@ -87,6 +89,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   });
   return await runReplayTestCommand({
     ...splitReplayCommandRequest(req),
+    host,
     session: createReplaySession(sessionName, logPath, sessionStore),
     createSession: (testSessionName, testLogPath) =>
       createReplaySession(testSessionName, testLogPath, sessionStore),

@@ -1,4 +1,5 @@
 import type { PlatformProviderRequestContext } from '@agent-device/contracts/platform-providers';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import {
   hasDeviceSelectionInput,
@@ -20,9 +21,10 @@ import type { SessionState } from '../core/session-state.ts';
 export async function resolvePlatformProviderRequestContext(params: {
   req: DaemonRequest;
   existingSession: SessionState | undefined;
+  env: EnvMap;
   useDefaultWebProvider?: boolean;
 }): Promise<PlatformProviderRequestContext | undefined> {
-  const device = await resolveScopedProviderDevice(params.req, params.existingSession);
+  const device = await resolveScopedProviderDevice(params.req, params.existingSession, params.env);
   if (!device) return undefined;
 
   return {
@@ -49,6 +51,7 @@ export async function resolvePlatformProviderRequestContext(params: {
 async function resolveScopedProviderDevice(
   req: DaemonRequest,
   existingSession: SessionState | undefined,
+  env: EnvMap,
 ): Promise<SessionState['device'] | undefined> {
   const intent = resolveProviderDeviceResolutionIntent(req, {
     hasExistingSession: Boolean(existingSession),
@@ -63,7 +66,7 @@ async function resolveScopedProviderDevice(
       // Provider-scope plumbing only: an unresolvable device means "no provider scope for this
       // request", never a failed request. The command's own device resolution reports errors.
       try {
-        return await resolveProviderTargetDevice(req);
+        return await resolveProviderTargetDevice(req, env);
       } catch {
         return undefined;
       }
@@ -72,10 +75,13 @@ async function resolveScopedProviderDevice(
   }
 }
 
-async function resolveProviderTargetDevice(req: DaemonRequest): Promise<SessionState['device']> {
+async function resolveProviderTargetDevice(
+  req: DaemonRequest,
+  env: EnvMap,
+): Promise<SessionState['device']> {
   const options =
     req.command === 'open'
-      ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0])
+      ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0], env)
       : undefined;
-  return await resolveTargetDevice(req.flags ?? {}, options);
+  return await resolveTargetDevice(req.flags ?? {}, { ...options, env });
 }

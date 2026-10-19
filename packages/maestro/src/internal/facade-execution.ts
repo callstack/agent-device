@@ -133,8 +133,10 @@ export async function executeMaestroFlow(
 ): Promise<MaestroExecutionOutcome> {
   let failed: MaestroFailedAction | undefined;
   try {
-    const loader = createMaestroProgramLoader(path.dirname(flow.sourcePath), options.readSource);
+    const baseDir = path.dirname(flow.sourcePath);
+    const loader = createMaestroProgramLoader(baseDir, options.readSource);
     const plan = await compileMaestroReplayPlan(flow[flowProgram], {
+      baseDir,
       defaults: options.defaults,
       env: options.env,
       platform: options.platform,

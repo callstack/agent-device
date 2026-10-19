@@ -4,6 +4,7 @@ import {
   type ReplayBackendId,
 } from '@agent-device/ad-script';
 import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { readReplayScriptSourceFile } from '@agent-device/replay-port/script-source';
 import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
@@ -34,6 +35,7 @@ export type ReplayTargetDeviceResolution = {
  */
 export async function buildReplayTargetDeviceResolution(
   req: DaemonRequest,
+  env: EnvMap,
 ): Promise<ReplayTargetDeviceResolution | undefined> {
   if (req.command !== 'replay' || req.flags?.replayFrom !== undefined) return undefined;
   const bundle = req.flags?.replayScriptSource;
@@ -44,9 +46,9 @@ export async function buildReplayTargetDeviceResolution(
     const source = readReplayScriptSourceFile(bundle, resolved);
     const backendId = resolveReplayFormat(resolved, req.flags?.replayBackend);
     if (backendId !== 'ad') {
-      return await readBackendReplayResolution(backendId, source, resolved, req.flags);
+      return await readBackendReplayResolution(backendId, source, resolved, req.flags, env);
     }
-    return readAdScriptResolution(source, req.flags);
+    return readAdScriptResolution(source, req.flags, env);
   });
 }
 
@@ -55,6 +57,7 @@ async function readBackendReplayResolution(
   source: string,
   resolvedPath: string,
   flags: DaemonRequest['flags'],
+  env: EnvMap,
 ): Promise<ReplayTargetDeviceResolution> {
   // Function-scoped through the #3377 registry: request binding sits in the daemon's startup
   // closure, and the engine sits one thunk behind the backend.
@@ -66,6 +69,7 @@ async function readBackendReplayResolution(
     options: buildMaestroReplayTargetDeviceResolutionOptions(
       backend.inspectSource(source, resolvedPath).appTarget,
       flags?.platform,
+      env,
     ),
   };
 }
@@ -73,6 +77,7 @@ async function readBackendReplayResolution(
 function readAdScriptResolution(
   source: string,
   flags: DaemonRequest['flags'],
+  env: EnvMap,
 ): ReplayTargetDeviceResolution | undefined {
   const parsed = parseReplayInput(source, flags);
   const selection = readScriptReplaySelection(parsed.actions);
@@ -82,7 +87,7 @@ function readAdScriptResolution(
   return {
     flags:
       platform && scriptFlags.platform === undefined ? { ...scriptFlags, platform } : scriptFlags,
-    options: platform === 'ios' ? appTargetResolutionOptions(selection.appTarget) : undefined,
+    options: platform === 'ios' ? appTargetResolutionOptions(selection.appTarget, env) : undefined,
   };
 }
 

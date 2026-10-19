@@ -270,7 +270,7 @@ async function stagePlugin(
 export async function changePlugin(
   action: PluginAction,
   input: string,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv,
   reservedProviders: readonly string[],
 ): Promise<void> {
   const { name, version } = parsePluginRequest(action, input);

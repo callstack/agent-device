@@ -71,7 +71,7 @@ async function withMockedPlatform<T>(platform: NodeJS.Platform, fn: () => Promis
 
 test('refreshSessionDeviceIfNeeded keeps iOS simulator session device on non-mac hosts', async () => {
   const device = await withMockedPlatform('linux', async () =>
-    refreshSessionDeviceIfNeeded(iosSimulatorSession.device, platformServices),
+    refreshSessionDeviceIfNeeded(iosSimulatorSession.device, platformServices, process.env),
   );
 
   expect(device).toBe(iosSimulatorSession.device);
@@ -85,6 +85,7 @@ test('resolveCommandDevice keeps an existing session for a platform-only filter'
         platformServices: platformServices,
         session: iosSimulatorSession,
         flags: { platform: 'ios' },
+        env: process.env,
       }),
   );
 
@@ -99,6 +100,7 @@ test('resolveCommandDevice does not prepare a sessionless device', async () => {
   await resolveCommandDevice({
     session: undefined,
     flags: { platform: 'ios' },
+    env: process.env,
     platformServices: platformServices,
   });
 
@@ -113,6 +115,7 @@ test('refreshSessionDeviceIfNeeded keeps provider-owned iOS simulators out of lo
     refreshSessionDeviceIfNeeded(
       { ...iosSimulatorSession.device, id: 'limrun:ios:lease-1' },
       platformServices,
+      process.env,
     ),
   );
 
@@ -127,7 +130,7 @@ test('refreshSessionDeviceIfNeeded skips re-resolve while the iOS runner session
   });
 
   const device = await withMockedPlatform('darwin', async () =>
-    refreshSessionDeviceIfNeeded(iosSimulatorSession.device, platformServices),
+    refreshSessionDeviceIfNeeded(iosSimulatorSession.device, platformServices, process.env),
   );
 
   expect(device).toEqual({ ...iosSimulatorSession.device, booted: true });
@@ -143,7 +146,7 @@ test('refreshSessionDeviceIfNeeded re-resolves when the iOS runner session is go
   mockResolveTargetDevice.mockResolvedValue(resolved);
 
   const device = await withMockedPlatform('darwin', async () =>
-    refreshSessionDeviceIfNeeded(iosSimulatorSession.device, platformServices),
+    refreshSessionDeviceIfNeeded(iosSimulatorSession.device, platformServices, process.env),
   );
 
   expect(device).toBe(resolved);

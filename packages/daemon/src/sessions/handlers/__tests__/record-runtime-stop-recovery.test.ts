@@ -75,6 +75,7 @@ test('record stop after a daemon restart replays the completed export for the na
   // The recovery re-resolves the manifest's exact device, never an unconstrained sweep.
   expect(resolveTargetDeviceMock).toHaveBeenCalledWith(
     expect.objectContaining({ serial: 'emulator-5554' }),
+    expect.objectContaining({ env: process.env }),
   );
 });
 
@@ -114,6 +115,7 @@ test('record stop recovery after a daemon restart keeps the request host-scoping
       serial: 'emulator-5554',
       androidDeviceAllowlist: 'emulator-5554',
     }),
+    expect.objectContaining({ env: process.env }),
   );
 });
 
@@ -153,6 +155,7 @@ test('record stop recovery on an Apple manifest keeps the request simulator-devi
       udid: 'IOS-UDID-1',
       iosSimulatorDeviceSet: '/sets/qa.set',
     }),
+    expect.objectContaining({ env: process.env }),
   );
 });
 
@@ -184,7 +187,10 @@ test('record stop recovery carries the request lease and discovery context', asy
   const recovered = await harness.run(['stop'], { sessionExplicit: true }, { ...leaseFlags });
 
   expect(recovered).toMatchObject({ ok: true, data: { recording: 'stopped', outPath } });
-  expect(resolveTargetDeviceMock).toHaveBeenCalledWith(expect.objectContaining(leaseFlags));
+  expect(resolveTargetDeviceMock).toHaveBeenCalledWith(
+    expect.objectContaining(leaseFlags),
+    expect.objectContaining({ env: process.env }),
+  );
 });
 
 test('record stop recovery for a family without identity flags resolves under the manifest family', async () => {
@@ -212,6 +218,7 @@ test('record stop recovery for a family without identity flags resolves under th
   expect(recovered).toMatchObject({ ok: true, data: { recording: 'stopped', outPath } });
   expect(resolveTargetDeviceMock).toHaveBeenCalledWith(
     expect.objectContaining({ platform: 'linux' }),
+    expect.objectContaining({ env: process.env }),
   );
 });
 

@@ -94,6 +94,7 @@ export async function handleAppStateCommand(
   const device = await resolveCommandDevice({
     session: target.session,
     flags: params.req.flags ?? {},
+    env: params.sessionStore.host.env,
     platformServices: params.platformServices,
   });
   return await queryDeviceRuntimeAppState(params, device, target.namedSessionMissing);

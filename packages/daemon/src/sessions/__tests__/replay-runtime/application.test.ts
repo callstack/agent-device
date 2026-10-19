@@ -50,6 +50,7 @@ function replayCommand(
 ): ReplayCommand {
   return {
     ...splitReplayCommandRequest(req),
+    host: sessionStore.host,
     session: createReplaySession(req.session, path.join(root, 'daemon.log'), sessionStore),
     invoke: replayInvokeOverDispatch(invoke, req),
     dependencies: replayDaemonDependencies,

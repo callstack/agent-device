@@ -77,6 +77,7 @@ async function runSessionOrSelectorDispatch(params: {
   const device = await resolveCommandDevice({
     session,
     flags,
+    env: sessionStore.host.env,
     platformServices: params.platformServices,
   });
   if (ref) sessionStore.requireCurrent(ref);

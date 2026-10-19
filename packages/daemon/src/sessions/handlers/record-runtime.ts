@@ -188,7 +188,8 @@ async function resolveUnheldRecordingDevice(
   plan: ReturnType<typeof resolveRecordPlan>['plan'],
 ): Promise<DeviceInfo> {
   const { req, sessionName } = params;
-  if (!namesSessionWithoutTarget(req)) return await resolveTargetDevice(req.flags ?? {});
+  if (!namesSessionWithoutTarget(req))
+    return await resolveTargetDevice(req.flags ?? {}, { env: params.sessionStore.host.env });
   if (plan.kind === 'stop-recovery') {
     const recorded = screenRecordingManifestDevice({
       sessionName,
@@ -225,7 +226,7 @@ async function resolveManifestDevice(
   };
   const identityFlag = deviceIdentityFlag(recorded.family);
   if (identityFlag) selector[identityFlag] = recorded.id;
-  return await resolveTargetDevice(selector);
+  return await resolveTargetDevice(selector, { env: params.sessionStore.host.env });
 }
 
 async function startRecording(

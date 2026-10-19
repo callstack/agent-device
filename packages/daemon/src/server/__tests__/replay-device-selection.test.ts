@@ -20,14 +20,17 @@ test('replay leaves deep-link opens to normal device resolution', async () => {
   fs.writeFileSync(replayPath, 'open demo://checkout\n');
 
   expect(
-    await buildReplayTargetDeviceResolution({
-      token: 'test-token',
-      session: 'default',
-      command: 'replay',
-      positionals: [replayPath],
-      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
-      meta: { cwd: root },
-    }),
+    await buildReplayTargetDeviceResolution(
+      {
+        token: 'test-token',
+        session: 'default',
+        command: 'replay',
+        positionals: [replayPath],
+        flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
+        meta: { cwd: root },
+      },
+      process.env,
+    ),
   ).toBeUndefined();
 });
 
@@ -51,14 +54,17 @@ test('native replay uses its authored Android runtime setting without an iOS app
     'runtime set --platform android --metro-port 8081\nopen com.example.demo\n',
   );
 
-  const resolution = await buildReplayTargetDeviceResolution({
-    token: 'test-token',
-    session: 'default',
-    command: 'replay',
-    positionals: [replayPath],
-    flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
-    meta: { cwd: root },
-  });
+  const resolution = await buildReplayTargetDeviceResolution(
+    {
+      token: 'test-token',
+      session: 'default',
+      command: 'replay',
+      positionals: [replayPath],
+      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
+      meta: { cwd: root },
+    },
+    process.env,
+  );
 
   // The request's own flags ride through untouched, so compare the decision this function makes:
   // the authored platform, and no iOS app-probe options.
@@ -81,17 +87,20 @@ test('a replay whose wire bundle has a malformed entry stays advisory', async ()
 
   for (const bundle of malformedBundles) {
     await expect(
-      buildReplayTargetDeviceResolution({
-        token: 'test-token',
-        session: 'default',
-        command: 'replay',
-        positionals: [],
-        flags: {
-          replayBackend: 'maestro',
-          replayScriptSource: bundle,
+      buildReplayTargetDeviceResolution(
+        {
+          token: 'test-token',
+          session: 'default',
+          command: 'replay',
+          positionals: [],
+          flags: {
+            replayBackend: 'maestro',
+            replayScriptSource: bundle,
+          },
+          meta: { cwd: mkdtempForTestSync('agent-device-replay-device-selection-') },
         },
-        meta: { cwd: mkdtempForTestSync('agent-device-replay-device-selection-') },
-      }),
+        process.env,
+      ),
     ).resolves.toBeUndefined();
   }
 });
@@ -101,19 +110,22 @@ test('a Maestro flow pre-binds an iOS replay to its static appId', async () => {
   const flowPath = path.join(root, 'checkout.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.demo\n---\n- launchApp\n');
 
-  const resolution = await buildReplayTargetDeviceResolution({
-    token: 'test-token',
-    session: 'default',
-    command: 'replay',
-    positionals: [flowPath],
-    flags: {
-      platform: 'ios',
-      replayBackend: 'maestro',
-      replayScriptSource: await maestroScriptSourceBundleFor(flowPath),
+  const resolution = await buildReplayTargetDeviceResolution(
+    {
+      token: 'test-token',
+      session: 'default',
+      command: 'replay',
+      positionals: [flowPath],
+      flags: {
+        platform: 'ios',
+        replayBackend: 'maestro',
+        replayScriptSource: await maestroScriptSourceBundleFor(flowPath),
+      },
+      meta: { cwd: root },
     },
-    meta: { cwd: root },
-  });
+    process.env,
+  );
 
-  expect(resolution?.options).toEqual(appTargetResolutionOptions('com.example.demo'));
+  expect(resolution?.options).toEqual(appTargetResolutionOptions('com.example.demo', process.env));
   expect(resolution?.options).toBeDefined();
 });

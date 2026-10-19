@@ -84,6 +84,7 @@ export async function handleAppDeploymentCommand(params: {
     const device = await resolveCommandDevice({
       session,
       flags,
+      env: sessionStore.host.env,
       platformServices: params.platformServices,
     });
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);
@@ -136,6 +137,7 @@ export async function handlePushNotificationCommand(
   const device = await resolveCommandDevice({
     session,
     flags,
+    env: sessionStore.host.env,
     platformServices: params.platformServices,
   });
   const facts = await requireRuntimeFacts(params.inspectFacts)(device);
@@ -186,6 +188,7 @@ export async function handleUninstallCommand(
   const device = await resolveCommandDevice({
     session,
     flags,
+    env: sessionStore.host.env,
     platformServices: params.platformServices,
   });
   const facts = await requireRuntimeFacts(params.inspectFacts)(device);

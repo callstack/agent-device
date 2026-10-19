@@ -88,7 +88,13 @@ export async function handleDoctorCommand(params: {
   }
 
   const context = hostDiagnosticsContext(options, stateDir, androidAdbExecutor);
-  const inventory = await appendDeviceInventoryCheck(checks, req, session, useColor);
+  const inventory = await appendDeviceInventoryCheck(
+    checks,
+    req,
+    session,
+    params.host.env,
+    useColor,
+  );
   const toolchain = await hostDiagnostics.toolchainCheck(
     session?.device.platform ?? inventory?.platform,
     context,

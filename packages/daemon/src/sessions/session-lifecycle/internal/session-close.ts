@@ -1,4 +1,4 @@
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -210,6 +210,7 @@ export async function handleSessionCloseCommands(
       req,
       sessionName,
       logPath,
+      env: params.host.env,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
       bindDevice: params.bindDevice,
@@ -432,11 +433,12 @@ async function closeWithoutSession(params: {
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
+  env: EnvMap;
   inspectFacts?: InspectDeviceRuntimeFacts;
   platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, inspectFacts, bindDevice, platformServices } = params;
+  const { req, sessionName, logPath, env, inspectFacts, bindDevice, platformServices } = params;
   const { requireNamedSessionHoldsDevice } =
     await import('../../../core/explicit-session-resolution.ts');
   requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session: undefined });
@@ -445,6 +447,7 @@ async function closeWithoutSession(params: {
   const device = await resolveCommandDevice({
     session: undefined,
     flags: req.flags,
+    env,
     platformServices,
   });
   const admission = await admitCloseRuntime({

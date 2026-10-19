@@ -172,8 +172,8 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
 
   expect(response.ok).toBe(true);
   expect(mockResolveTargetDevice.mock.calls).toEqual([
-    [{ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo' }],
-    [{ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo' }],
+    [{ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo', env: process.env }],
+    [{ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo', env: process.env }],
   ]);
   expect(sessionStore.get('session-app-aware')?.device.id).toBe(appDevice.id);
 });
@@ -208,7 +208,7 @@ test('fresh replay reserves its authored app simulator before any replay step', 
   expect(keys).toEqual(['session:fresh-replay', 'device:SIM-WITH-APP']);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     expect.objectContaining({ platform: 'ios' }),
-    { appleSimulatorAppTarget: 'com.example.demo' },
+    { appleSimulatorAppTarget: 'com.example.demo', env: process.env },
   );
 });
 
@@ -265,7 +265,7 @@ test('fresh replay preserves an authored Android platform before advisory lockin
   expect(keys).toEqual(['session:fresh-replay-android', 'device:ANDROID-EMULATOR']);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     expect.objectContaining({ platform: 'android' }),
-    undefined,
+    expect.objectContaining({ env: process.env }),
   );
 });
 

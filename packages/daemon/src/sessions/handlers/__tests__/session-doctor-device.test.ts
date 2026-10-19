@@ -48,7 +48,7 @@ test('doctor android inventory timeout surfaces the wedged-adb-server hint', asy
       return [];
     },
     async () => {
-      await appendDeviceInventoryCheck(checks, req, undefined, false);
+      await appendDeviceInventoryCheck(checks, req, undefined, process.env, false);
     },
   );
 
@@ -82,7 +82,7 @@ test('doctor inventory names as host devices only the platforms this host discov
       },
       local: async () => [androidEmulator],
     },
-    async () => await appendDeviceInventoryCheck([], req, undefined, false),
+    async () => await appendDeviceInventoryCheck([], req, undefined, process.env, false),
   );
 
   assert.deepEqual(

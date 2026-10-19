@@ -318,6 +318,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       const context = await resolvePlatformProviderRequestContext({
         req: lockedScope.req,
         existingSession: lockedScope.existingSession,
+        env: host.env,
         useDefaultWebProvider,
       });
       return context

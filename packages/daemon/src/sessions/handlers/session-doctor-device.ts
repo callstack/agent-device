@@ -1,5 +1,6 @@
 import { buildDeviceInventoryRequestFromFlags } from '@agent-device/device-selection/dispatch-resolve';
 import { readDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   countDeviceInventoryByGroup,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
@@ -40,9 +41,10 @@ export async function appendDeviceInventoryCheck(
   checks: DoctorCheck[],
   req: DaemonRequest,
   session: SessionState | undefined,
+  env: EnvMap,
   useColor: boolean,
 ): Promise<DoctorDeviceInventory | undefined> {
-  const selector = deviceInventorySelector(req, session);
+  const selector = deviceInventorySelector(req, session, env);
   try {
     const inventory = await readDoctorDeviceInventory(selector);
     const devices = filterInventoryForSelector(inventory.devices, selector);
@@ -126,17 +128,24 @@ export function resolveDoctorDeviceForAppCheck(
   return undefined;
 }
 
-function deviceInventorySelector(req: DaemonRequest, session: SessionState | undefined) {
+function deviceInventorySelector(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+  env: EnvMap,
+) {
   const flags = req.flags ?? {};
-  return buildDeviceInventoryRequestFromFlags({
-    platform: flags.platform ?? session?.device.platform,
-    target: flags.target ?? session?.device.target,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
-    androidDeviceAllowlist: flags.androidDeviceAllowlist,
-  });
+  return buildDeviceInventoryRequestFromFlags(
+    {
+      platform: flags.platform ?? session?.device.platform,
+      target: flags.target ?? session?.device.target,
+      device: flags.device,
+      udid: flags.udid,
+      serial: flags.serial,
+      iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+      androidDeviceAllowlist: flags.androidDeviceAllowlist,
+    },
+    env,
+  );
 }
 
 function filterInventoryForSelector(

@@ -29,11 +29,13 @@ const NO_SCRIPT_PUBLICATION_VIEW: ReplaySessionView['scriptPublication'] = {
 export function prepareReplaySession(params: {
   req: DaemonWireRequest;
   entryIndex: number;
+  /** The command's host working directory; a `--save-script` path resolves against it. */
+  hostCwd: string;
   sessionStore: ReplaySessionStore;
   sourcePath: string;
   coordinator: ReplayCoordinator;
 }): { ok: true; armSaveScript: () => void } | { ok: false; response: DaemonResponse } {
-  const { req, entryIndex, sessionStore, sourcePath, coordinator } = params;
+  const { req, entryIndex, hostCwd, sessionStore, sourcePath, coordinator } = params;
   const sessionPreflight = validateReplaySessionEntry({
     entryIndex,
     sessionStore,
@@ -42,7 +44,7 @@ export function prepareReplaySession(params: {
   if (sessionPreflight) return { ok: false, response: sessionPreflight };
 
   consumeReplayResumeState({ req, coordinator });
-  return prepareSaveScriptSession({ req, sessionStore, sourcePath, coordinator });
+  return prepareSaveScriptSession({ req, hostCwd, sessionStore, sourcePath, coordinator });
 }
 
 function validateReplaySessionEntry(params: {
@@ -65,10 +67,11 @@ function validateReplaySessionEntry(params: {
 function rejectSaveScriptArming(params: {
   saveScript: boolean | string | undefined;
   force: boolean | undefined;
+  hostCwd: string;
   preRunState: ReplaySessionView['scriptPublication'];
   sourcePath: string;
 }): DaemonResponse | undefined {
-  const { saveScript, force, preRunState, sourcePath } = params;
+  const { saveScript, force, hostCwd, preRunState, sourcePath } = params;
   if (saveScript && preRunState.kind === 'authoring') {
     return errorResponse(
       'INVALID_ARGS',
@@ -79,6 +82,7 @@ function rejectSaveScriptArming(params: {
     saveScript,
     liveForce: force,
     persistedForce: preRunState.targetForce || undefined,
+    hostCwd,
     sourcePath,
     existingSaveScriptPath: preRunState.targetPath,
   });
@@ -86,15 +90,17 @@ function rejectSaveScriptArming(params: {
 
 function prepareSaveScriptSession(params: {
   req: DaemonWireRequest;
+  hostCwd: string;
   sessionStore: ReplaySessionStore;
   sourcePath: string;
   coordinator: ReplayCoordinator;
 }): { ok: true; armSaveScript: () => void } | { ok: false; response: DaemonResponse } {
-  const { req, sourcePath, coordinator } = params;
+  const { req, hostCwd, sourcePath, coordinator } = params;
   const { saveScript, force } = req.flags ?? {};
   const rejection = rejectSaveScriptArming({
     saveScript,
     force,
+    hostCwd,
     preRunState: coordinator.view()?.scriptPublication ?? NO_SCRIPT_PUBLICATION_VIEW,
     sourcePath,
   });
@@ -173,14 +179,16 @@ function preflightSaveScriptTarget(params: {
   saveScript: boolean | string | undefined;
   liveForce: boolean | undefined;
   persistedForce: boolean | undefined;
+  hostCwd: string;
   sourcePath: string;
   existingSaveScriptPath: string | undefined;
 }): DaemonResponse | undefined {
-  const { saveScript, liveForce, persistedForce, sourcePath, existingSaveScriptPath } = params;
+  const { saveScript, liveForce, persistedForce, hostCwd, sourcePath, existingSaveScriptPath } =
+    params;
   if (!saveScript) return undefined;
   const targetPath =
     typeof saveScript === 'string'
-      ? expandSessionPath(saveScript, process.cwd())
+      ? expandSessionPath(saveScript, hostCwd)
       : (existingSaveScriptPath ?? healedScriptSiblingPath(sourcePath));
   const effectiveForce =
     Boolean(liveForce) || (Boolean(persistedForce) && targetPath === existingSaveScriptPath);

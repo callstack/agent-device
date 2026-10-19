@@ -78,9 +78,7 @@ describe('production device inventory composition', () => {
         withDeviceInventoryContext({ ...gateways, requestScope: testRequestScope }, () =>
           resolveTargetDeviceSelection(
             { platform: 'ios' },
-            {
-              appleSimulatorAppTarget: 'com.example.demo',
-            },
+            { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
           ),
         ),
     );

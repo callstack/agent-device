@@ -7,6 +7,7 @@ import {
   type MaestroPlatform,
 } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
@@ -177,6 +178,7 @@ async function prepareTypedMaestroReplay(
   const binding = await resolveMaestroReplayBinding({
     host,
     req,
+    env: command.host.env,
     sessionStore,
     sessionName,
     session,
@@ -191,10 +193,11 @@ async function prepareTypedMaestroReplay(
       req,
       sessionName,
       filePath,
+      hostCwd: command.host.cwd,
       platform: binding.platform,
       target: binding.target,
     }),
-    env: buildTypedMaestroEnv(req),
+    env: buildTypedMaestroEnv(req, command.host.env),
     signal: host.requestSignal(req.meta?.requestId),
   };
 }
@@ -202,21 +205,26 @@ async function prepareTypedMaestroReplay(
 async function resolveMaestroReplayBinding(params: {
   host: ReplayBackendHost;
   req: DaemonWireRequest;
+  env: EnvMap;
   sessionStore: ReplaySessionStore;
   sessionName: string;
   session: ReturnType<ReplaySessionStore['get']>;
   flow: MaestroFlow;
 }): Promise<MaestroReplayBinding> {
-  const { host, req, sessionStore, sessionName, session, flow } = params;
+  const { host, req, env, sessionStore, sessionName, session, flow } = params;
   const requestedPlatform = req.flags?.platform;
   const device =
     session?.device ??
     (requestedPlatform === 'android' || requestedPlatform === 'ios'
       ? undefined
-      : await host.resolveTargetDevice(req.flags ?? {}, {
-          appTarget: flow.appTarget,
-          platform: requestedPlatform,
-        }));
+      : await host.resolveTargetDevice(
+          req.flags ?? {},
+          {
+            appTarget: flow.appTarget,
+            platform: requestedPlatform,
+          },
+          env,
+        ));
   const platform = resolveMaestroPlatform(req, device);
   const runtimeHints = resolveReplayRuntimeHints({
     req,
@@ -228,6 +236,7 @@ async function resolveMaestroReplayBinding(params: {
   return await completeMaestroRuntimeBinding({
     host,
     req,
+    env,
     sessionStore,
     sessionName,
     device,
@@ -242,16 +251,21 @@ async function completeMaestroRuntimeBinding(
   params: {
     host: ReplayBackendHost;
     req: DaemonWireRequest;
+    env: EnvMap;
     sessionStore: ReplaySessionStore;
     sessionName: string;
     flow: MaestroFlow;
   } & MaestroReplayBinding,
 ): Promise<MaestroReplayBinding> {
   if (params.device || !requiresDeviceRuntimeDefaults(params.runtimeHints)) return params;
-  const device = await params.host.resolveTargetDevice(params.req.flags ?? {}, {
-    appTarget: params.flow.appTarget,
-    platform: params.platform,
-  });
+  const device = await params.host.resolveTargetDevice(
+    params.req.flags ?? {},
+    {
+      appTarget: params.flow.appTarget,
+      platform: params.platform,
+    },
+    params.env,
+  );
   return {
     device,
     platform: params.platform,
@@ -293,6 +307,7 @@ function buildTypedMaestroDefaults(params: {
   req: DaemonWireRequest;
   sessionName: string;
   filePath: string;
+  hostCwd: string;
   platform: Extract<MaestroPlatform, 'android' | 'ios'>;
   target: string;
 }): Record<string, string> {
@@ -301,15 +316,16 @@ function buildTypedMaestroDefaults(params: {
       req: params.req,
       sessionName: params.sessionName,
       resolvedPath: params.filePath,
+      hostCwd: params.hostCwd,
     }),
     AD_PLATFORM: params.platform,
     AD_TARGET: params.target,
   };
 }
 
-function buildTypedMaestroEnv(req: DaemonWireRequest): Record<string, string> {
+function buildTypedMaestroEnv(req: DaemonWireRequest, hostEnv: EnvMap): Record<string, string> {
   return {
-    ...collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
+    ...collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv, hostEnv)),
     ...parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
   };
 }

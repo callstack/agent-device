@@ -1,4 +1,4 @@
-import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
@@ -96,7 +96,12 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         req.meta?.providerCredentialFingerprint,
         providerCredentials,
       );
-      const { lease, reused } = await allocateOrRenewLease(req, leaseScope, leaseRegistry);
+      const { lease, reused } = await allocateOrRenewLease(
+        req,
+        leaseScope,
+        leaseRegistry,
+        args.host,
+      );
       const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
         let providerData: Record<string, unknown> | undefined;
@@ -191,11 +196,12 @@ async function allocateOrRenewLease(
   req: DaemonRequest,
   scope: LeaseScope,
   leaseRegistry: LeaseRegistry,
+  host: HostEnvironment,
 ): Promise<{ lease: DeviceLease; reused: boolean }> {
   const request = leaseScopeToAllocateRequest(scope);
   const renewed = leaseRegistry.renewRequestedLease(request);
   if (renewed) return { lease: renewed, reused: true };
-  const pickedDeviceKey = await pickProxyLeaseDeviceKey(req, scope);
+  const pickedDeviceKey = await pickProxyLeaseDeviceKey(req, scope, host.env);
   const activeLeaseIds = new Set(leaseRegistry.listActiveLeases().map((entry) => entry.leaseId));
   const lease = leaseRegistry.allocateLease(
     pickedDeviceKey ? { ...request, deviceKey: pickedDeviceKey } : request,
@@ -210,23 +216,27 @@ async function allocateOrRenewLease(
 async function pickProxyLeaseDeviceKey(
   req: DaemonRequest,
   scope: LeaseScope,
+  env: EnvMap,
 ): Promise<string | undefined> {
   if (!isProxyLeaseScope(scope) || scope.deviceKey) return undefined;
   const flags = req.flags ?? {};
   const { hasDeviceSelectionInput } = await import('../../core/device/device-selector-intent.ts');
   if (!hasDeviceSelectionInput(flags)) return undefined;
   const { resolveTargetDevice } = await import('@agent-device/device-selection/dispatch-resolve');
-  const device = await resolveTargetDevice({
-    platform:
-      flags.platform ??
-      (scope.leaseBackend ? platformForLeaseBackend(scope.leaseBackend) : undefined),
-    target: flags.target,
-    device: flags.device,
-    udid: flags.udid,
-    serial: flags.serial,
-    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
-    androidDeviceAllowlist: flags.androidDeviceAllowlist,
-  });
+  const device = await resolveTargetDevice(
+    {
+      platform:
+        flags.platform ??
+        (scope.leaseBackend ? platformForLeaseBackend(scope.leaseBackend) : undefined),
+      target: flags.target,
+      device: flags.device,
+      udid: flags.udid,
+      serial: flags.serial,
+      iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+      androidDeviceAllowlist: flags.androidDeviceAllowlist,
+    },
+    { env },
+  );
   return leaseDeviceKey({
     platform: publicPlatformString(device),
     target: device.target,

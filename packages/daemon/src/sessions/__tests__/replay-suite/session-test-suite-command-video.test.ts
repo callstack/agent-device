@@ -281,6 +281,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
 
   const responsePromise = runReplayTestCommand({
     ...splitReplayCommandRequest(request),
+    host: sessionStore.host,
     session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
     createSession: (sessionName, logPath) =>
       createReplaySession(sessionName, logPath, sessionStore),
