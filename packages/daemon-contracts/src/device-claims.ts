@@ -39,6 +39,7 @@ import {
 } from './device-claim-record.ts';
 import {
   isAbandonedDeviceClaim,
+  isAbandonedClaimOfThisDaemon,
   isClaimOwnedByThisDaemon,
   resolveExistingClaim,
   settleVerifiedOrphanedClaim,
@@ -295,6 +296,12 @@ async function settleAppClaims(
       const current = inspectDeviceClaimFile(resolveDeviceClaimPath(scanned.deviceKey, params.env));
       if (!current) return undefined;
       if (!current.claim) return current;
+      if (
+        isAbandonedClaimOfThisDaemon(current.claim, params.stateDir, readCurrentOwnerIdentity())
+      ) {
+        removeSupersededDeviceClaim(current.claim.deviceKey, params.env);
+        return undefined;
+      }
       if (!deviceClaimOwnerCannotRelease(current.classification)) return current;
       const settled = await settleVerifiedOrphanedClaim(
         current.claim,

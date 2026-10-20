@@ -196,7 +196,7 @@ export function isAbandonedDeviceClaim(claim: DeviceClaim): boolean {
   return claim.abandonedAtMs !== undefined;
 }
 
-function isAbandonedClaimOfThisDaemon(
+export function isAbandonedClaimOfThisDaemon(
   claim: DeviceClaim,
   stateDir: string,
   owner: ReturnType<typeof readCurrentOwnerIdentity>,

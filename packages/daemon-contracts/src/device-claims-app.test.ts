@@ -286,3 +286,38 @@ test("an app claim taken over this daemon's abandoned whole-Mac claim leaves oth
   });
   assert.equal(foreign.status, 'acquired');
 });
+
+test('whole-Mac acquisition supersedes only its own abandoned app claims', async () => {
+  const root = useClaimsRoot();
+  const app = await acquireDeviceClaim({
+    device: mac,
+    session: 'app',
+    workspace: '/app',
+    stateDir: root,
+    app: { bundleId: 'com.example.one' },
+  });
+  assert.equal(app.status, 'acquired');
+  if (app.status !== 'acquired') throw new Error('seed failed');
+  assert.equal(await abandonDeviceClaim(app.ownership, process.env), 'abandoned');
+  const whole = await acquireDeviceClaim({
+    device: mac,
+    session: 'whole',
+    workspace: '/whole',
+    stateDir: root,
+  });
+  assert.equal(whole.status, 'acquired');
+  assert.equal(fs.existsSync(resolveDeviceClaimPath(app.ownership.deviceKey, process.env)), false);
+
+  const foreignRoot = useClaimsRoot();
+  const foreignFile = await seedForeignMacClaim(foreignRoot, { bundleId: 'com.example.two' });
+  const foreign = JSON.parse(fs.readFileSync(foreignFile, 'utf8'));
+  fs.writeFileSync(foreignFile, JSON.stringify({ ...foreign, abandonedAtMs: Date.now() }));
+  const refused = await acquireDeviceClaim({
+    device: mac,
+    session: 'whole',
+    workspace: '/whole',
+    stateDir: foreignRoot,
+  });
+  assert.equal(refused.status, 'conflict');
+  assert.equal(fs.existsSync(foreignFile), true);
+});

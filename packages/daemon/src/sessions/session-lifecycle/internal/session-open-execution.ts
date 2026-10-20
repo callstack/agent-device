@@ -424,7 +424,7 @@ async function prepareOpenDispatchSession(params: {
 
 /**
  * A session scoped to one app opens it without bringing it to the front, which leaves the
- * frontmost app and every other session's app where they are (ADR 0034).
+ * frontmost app and every other session's app where they are (ADR 0035).
  */
 function opensAppInBackground(
   req: DaemonRequest,

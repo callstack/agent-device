@@ -222,7 +222,7 @@ function createOpenDeviceWait(params: {
 
 /**
  * The one app a session drives on its device, or `undefined` when it holds the whole device. An
- * app claim (ADR 0034) and a `macos-app` lease (ADR 0007, which takes no claim) each scope a
+ * app claim (ADR 0035) and a `macos-app` lease (ADR 0007, which takes no claim) each scope a
  * session to one app.
  */
 export function sessionHeldApp(

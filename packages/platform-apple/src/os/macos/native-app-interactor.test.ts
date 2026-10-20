@@ -1,3 +1,5 @@
+import { bindAppEvent } from '@agent-device/contracts/app-event-runtime';
+import { openMacOsApp } from './apps.ts';
 import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
@@ -241,3 +243,57 @@ function isNativeBackendRefusal(error: unknown): boolean {
     error.details?.reason === 'unsupported-device-backend'
   );
 }
+
+test('native app events deliver the URL to the session app in the background', async () => {
+  const calls: string[][] = [];
+  const device = {
+    platform: 'apple',
+    appleOs: 'macos',
+    id: 'host',
+    name: 'Mac',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  } as const;
+  const base: Interactor = {
+    ...runnerInteractor(),
+    open: async (app, options) => await openMacOsApp(device, app, options),
+  };
+  const interactor = macOsNativeAppInteractor(base, context, process.env);
+  const events = bindAppEvent(new AbortController().signal, async () => interactor);
+  const provider = createLocalAppleToolProvider({
+    runCommand: async (command, args) => {
+      if (command === 'open') calls.push(args);
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  });
+  await withAppleToolProvider(
+    provider,
+    async () =>
+      await events.triggerAppEvent({
+        eventUrl: 'https://example.com/event',
+        options: { appBundleId: 'com.apple.TextEdit' },
+      }),
+  );
+  assert.deepEqual(calls, [['-g', '-b', 'com.apple.TextEdit', 'https://example.com/event']]);
+});
+
+test('native URL scoping preserves bare URLs and explicitly configured app opens', async () => {
+  const calls: Array<unknown[]> = [];
+  const base: Interactor = {
+    ...runnerInteractor(),
+    open: async (...args) => {
+      calls.push(args);
+    },
+  };
+  const interactor = macOsNativeAppInteractor(base, context, process.env);
+  await interactor.open('https://example.com/bare');
+  await interactor.open('com.example.app');
+  const options = { url: 'example://explicit', background: false };
+  await interactor.open('com.example.app', options);
+  assert.deepEqual(calls, [
+    ['https://example.com/bare', undefined],
+    ['com.example.app', undefined],
+    ['com.example.app', options],
+  ]);
+});

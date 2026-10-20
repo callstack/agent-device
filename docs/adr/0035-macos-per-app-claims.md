@@ -18,7 +18,7 @@ Accepted (2026-10-08). Applies to the native macOS app backend (ADR 0031) only.
    sweep, and stale release take only their own key's lock and never create a claim.
 4. A per-app acquisition settles the device key's claim first: a live foreign whole-device claim
    is a conflict. A whole-device acquisition on a macOS device scans the per-app claims of that
-   device: dead or superseded owners are reconciled and removed, all other claims conflict, including this daemon's own app claims.
+   device: dead or superseded owners are reconciled and removed, all other live claims conflict, including this daemon's own. The owning daemon can supersede its abandoned app claims.
 5. In one daemon, a session holds either one app (an app claim, or a `macos-app` lease, which
    takes no claim) or the whole device. Two sessions on the device conflict unless each holds one
    app and the apps differ. The new-session conflict check and the `open --wait` that queues on it
@@ -38,7 +38,7 @@ Accepted (2026-10-08). Applies to the native macOS app backend (ADR 0031) only.
 
 The Mac is one device, so its one claim let a single session per Mac drive any macOS app. The
 native backend acts on the session app alone: accessibility actions on its elements, key events
-posted to its process, window capture, and (rule 7 of ADR 0035) a background `open`. None of
+posted to its process, window capture, and (rule 7 of ADR 0031) a background `open`. None of
 those moves the real pointer or changes the frontmost app, so two sessions on two apps cannot
 interfere through focus or the pointer. One host resource is shared: ScreenCaptureKit. Two helper
 processes capturing two app windows at the same moment failed (`screenshot failed`, or both hung
@@ -64,7 +64,7 @@ daemon's session holds), and `settings permission` (opens System Settings in fro
 **Background open follows the session's scope.** A session that holds one app opens it with
 `open -g`, because bringing it forward would move the frontmost app under every other session.
 A session that holds the whole Mac, including `open <app> --surface frontmost-app`, opens the app in
-front as before.
+front as before. Native app events that name a bundle deliver their URL to that app in the background; they do not use the default URL handler.
 
 ## Rejected alternatives
 
