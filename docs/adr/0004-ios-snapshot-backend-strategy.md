@@ -361,6 +361,8 @@ Raw projection remains exempt by contract.
 Overflow in acquired geometry is clipped to the cumulative visible area.
 Fully outside framed elements are omitted.
 The presentation result carries one aggregated `regular-geometry-clipped` quality note with clipped and dropped node counts.
+Clipping notes are published as `snapshotQualityNotes` independently of the capture verdict.
+A producer without a capture verdict does not receive an invented state or backend.
 Clipping does not change a healthy capture into a recovered or sparse capture.
 The blocking system-modal probe uses this presenter instead of publishing reported frames as regular output.
 Raw system-modal captures retain reported geometry.

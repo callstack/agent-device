@@ -45,7 +45,6 @@ export type SnapshotQualityNote = {
 
 export type SnapshotQualityVerdict = {
   state: SnapshotQualityState;
-  notes?: SnapshotQualityNote[];
   backend: SnapshotCaptureBackend;
   reason?: string;
   // 'deferred' = the penalty circuit breaker pre-selected a non-XCTest backend; nothing new
@@ -742,6 +741,7 @@ export type SnapshotState = {
   createdAt: number;
   truncated?: boolean;
   snapshotQuality?: SnapshotQualityVerdict;
+  snapshotQualityNotes?: SnapshotQualityNote[];
   comparisonSafe?: boolean;
   presentationKey?: string;
   /** Opaque equality key for iOS acquisition and presentation lineage. */

@@ -9,7 +9,12 @@ import {
   foldSnapshotRect,
   serializeRegularSnapshotPresentationNode,
 } from './snapshot-presentation-node.ts';
-import type { RawSnapshotNode, Rect, SnapshotOptions } from '@agent-device/kernel/snapshot';
+import type {
+  RawSnapshotNode,
+  Rect,
+  SnapshotOptions,
+  SnapshotQualityNote,
+} from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
 import {
   isAgentTarget,
@@ -43,6 +48,7 @@ export type AndroidUiHierarchySnapshotOptions = SnapshotOptions & {
 };
 
 export type AndroidBuiltSnapshot = {
+  qualityNotes?: SnapshotQualityNote[];
   nodes: AndroidRawSnapshotNode[];
   sourceNodes: AndroidUiHierarchy[];
   occlusionContext: {
@@ -55,6 +61,8 @@ export type AndroidBuiltSnapshot = {
 };
 
 type AndroidSnapshotBuildState = {
+  clippedNodeCount: number;
+  droppedNodeCount: number;
   nodes: AndroidRawSnapshotNode[];
   sourceNodes: AndroidUiHierarchy[];
   maxNodes?: number;
@@ -84,6 +92,8 @@ export function buildUiHierarchySnapshot(
     Math.max(1024, analysis.rawNodeCount * ANDROID_PRESENTATION_WORK_UNITS_PER_NODE),
   );
   const state: AndroidSnapshotBuildState = {
+    clippedNodeCount: 0,
+    droppedNodeCount: 0,
     nodes: [],
     sourceNodes: [],
     ...(maxNodes !== undefined ? { maxNodes } : {}),
@@ -146,6 +156,17 @@ export function buildUiHierarchySnapshot(
         androidSiblingOrderByNodeIndex: collectAndroidSiblingOrders(state.sourceNodes),
       },
       analysis: state.analysis,
+      ...(state.clippedNodeCount + state.droppedNodeCount > 0
+        ? {
+            qualityNotes: [
+              {
+                code: 'regular-geometry-clipped' as const,
+                clippedNodeCount: state.clippedNodeCount,
+                droppedNodeCount: state.droppedNodeCount,
+              },
+            ],
+          }
+        : {}),
     };
     return state.truncated ? { ...snapshot, truncated: true } : snapshot;
   } catch (error) {
@@ -271,6 +292,7 @@ function appendAndroidNodeIfPresented(
     isPositiveFiniteRect(node.rect) &&
     !isPositiveFiniteRect(effectiveRect)
   ) {
+    state.droppedNodeCount += 1;
     return parentIndex;
   }
   if (
@@ -284,6 +306,17 @@ function appendAndroidNodeIfPresented(
     )
   ) {
     return parentIndex;
+  }
+  if (
+    !state.options.raw &&
+    node.rect &&
+    effectiveRect &&
+    (node.rect.x !== effectiveRect.x ||
+      node.rect.y !== effectiveRect.y ||
+      node.rect.width !== effectiveRect.width ||
+      node.rect.height !== effectiveRect.height)
+  ) {
+    state.clippedNodeCount += 1;
   }
   const systemChrome =
     ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier);

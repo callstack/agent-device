@@ -10,6 +10,7 @@ import type {
   SnapshotBackend,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
+  SnapshotQualityNote,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
@@ -29,6 +30,7 @@ type AndroidSnapshotCaptureData = Readonly<{
   analysis: AndroidSnapshotAnalysis;
   androidSnapshot: AndroidSnapshotBackendMetadata;
   quality?: SnapshotQualityVerdict;
+  qualityNotes?: SnapshotQualityNote[];
   /** The input method window the helper captured, if any (see `androidSnapshotKeyboardFromTree`). */
   keyboard?: SnapshotKeyboardBandFact;
   /**

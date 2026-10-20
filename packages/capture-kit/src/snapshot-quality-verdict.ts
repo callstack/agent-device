@@ -1,4 +1,8 @@
-import type { SnapshotQualityState, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type {
+  SnapshotQualityNote,
+  SnapshotQualityState,
+  SnapshotQualityVerdict,
+} from '@agent-device/kernel/snapshot';
 import { SNAPSHOT_QUALITY_BACKEND_CAPABILITIES } from './snapshot-quality-backend-capabilities.ts';
 
 /**
@@ -44,7 +48,6 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
     return undefined;
   }
   const timing = readSnapshotQualityTiming(raw.timing);
-  const notes = readSnapshotQualityNotes(raw.notes);
   return {
     state: raw.state,
     backend: raw.backend,
@@ -58,7 +61,6 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
       ? raw.collapsedLeafIndexes.filter((entry): entry is number => typeof entry === 'number')
       : undefined,
     ...(timing ? { timing } : {}),
-    ...(notes ? { notes } : {}),
   };
 }
 
@@ -107,9 +109,9 @@ export function preferredSnapshotBackendForVerdict(
   return verdict?.backend === 'private-ax' ? 'private-ax' : undefined;
 }
 
-function readSnapshotQualityNotes(value: unknown): SnapshotQualityVerdict['notes'] {
+export function readSnapshotQualityNotes(value: unknown): SnapshotQualityNote[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const notes: NonNullable<SnapshotQualityVerdict['notes']> = [];
+  const notes: SnapshotQualityNote[] = [];
   for (const entry of value.slice(0, 1)) {
     if (!entry || typeof entry !== 'object') continue;
     const raw = entry as Record<string, unknown>;

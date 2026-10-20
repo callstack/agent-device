@@ -47,6 +47,7 @@ export function presentIosSnapshotAcquisition(
     const validatedViewport = snapshotViewportSizeFrom(presentation.validatedViewport);
     return {
       backend: 'xctest',
+      ...(presentation.qualityNotes ? { qualityNotes: presentation.qualityNotes } : {}),
       producer: acquired.acquisition.producer,
       nodes: [...presentation.payload.nodes],
       ...(acquired.acquisition.keyboard ? { keyboard: acquired.acquisition.keyboard } : {}),

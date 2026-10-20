@@ -518,6 +518,6 @@ test('a clipped system alert passes host validation and retains its typed qualit
     presentation.nodes.some((node) => node.label === 'Ask App Not to Track'),
     true,
   );
-  assert.deepEqual(read.quality?.notes, [note]);
+  assert.deepEqual(read.qualityNotes, [note]);
   assert.equal(read.quality?.state, 'healthy');
 });

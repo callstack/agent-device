@@ -3,6 +3,7 @@ import type {
   RawSnapshotNode,
   Rect,
   SnapshotNode,
+  SnapshotQualityNote,
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
 
@@ -222,6 +223,7 @@ export type IosSnapshotComparisonIdentity = Readonly<{
 }>;
 
 export type IosSnapshotPublication = Readonly<{
+  qualityNotes?: SnapshotQualityNote[];
   payload: IosSnapshotPublishedPayload;
   presentationKey: IosSnapshotPresentationKey;
   comparisonIdentity: IosSnapshotComparisonIdentity;

@@ -1,5 +1,5 @@
-import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { isGeometricallyActionable } from '@agent-device/kernel/rect';
+import type { Rect, RawSnapshotNode, SnapshotQualityNote } from '@agent-device/kernel/snapshot';
+import { isGeometricallyActionable, isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import { validateIosSnapshotGraph } from './graph.ts';
 import {
   collectModalContainedIndexes,
@@ -21,7 +21,11 @@ export function foldIosSnapshot(
   interactiveOnly: boolean,
   policy: IosSnapshotFoldPolicy,
   options: IosSnapshotFoldOptions = {},
-): { nodes: IosSnapshotPresentationNode[]; stats: IosSnapshotPresentationStats } {
+): {
+  nodes: IosSnapshotPresentationNode[];
+  stats: IosSnapshotPresentationStats;
+  qualityNotes?: SnapshotQualityNote[];
+} {
   validateIosSnapshotGraph(nodes);
   const modalContained = collectModalContainedIndexes(nodes);
   const presentable = nodes.filter((node) => !modalContained.has(node.index));
@@ -30,6 +34,8 @@ export function foldIosSnapshot(
   const kept: IosSnapshotPresentationNode[] = [];
   const hints = new Map<number, { above: boolean; below: boolean }>();
   let parentClipLookups = 0;
+  let clippedNodeCount = 0;
+  let droppedNodeCount = 0;
 
   for (const node of presentable) {
     const parentState = readParentState(node, states, () => {
@@ -46,6 +52,17 @@ export function foldIosSnapshot(
       policy,
     );
 
+    if (isPositiveFiniteRect(node.rect)) {
+      if (
+        decision.isIncluded &&
+        decision.effectiveRect &&
+        !sameRect(node.rect, decision.effectiveRect)
+      ) {
+        clippedNodeCount += 1;
+      } else if (!decision.isIncluded && !isPositiveFiniteRect(decision.effectiveRect)) {
+        droppedNodeCount += 1;
+      }
+    }
     recordHiddenContentHint(decision, parentAnchor, hints);
     const foldedNode = appendFoldedNode(node, decision, parentState, kept, viewport, options);
     const anchor = nextScrollAnchor(decision, parentAnchor, foldedNode.keptIndex);
@@ -60,6 +77,13 @@ export function foldIosSnapshot(
   const presented = applyHiddenContentHints(hints, kept);
   return {
     nodes: presented,
+    ...(clippedNodeCount + droppedNodeCount > 0
+      ? {
+          qualityNotes: [
+            { code: 'regular-geometry-clipped' as const, clippedNodeCount, droppedNodeCount },
+          ],
+        }
+      : {}),
     stats: {
       presentedNodeCount: presented.length,
       sourceNodeCount: nodes.length,
@@ -192,4 +216,13 @@ function applyHiddenContentHints(
       },
     };
   });
+}
+
+function sameRect(left: Rect, right: Rect): boolean {
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
 }

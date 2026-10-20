@@ -42,6 +42,7 @@ private struct SnapshotPresentationConformanceFixture: Decodable {
     let scope: String?
     let nodes: [Node]
     let expected: [ExpectedNode]
+    let expectedQualityNotes: [SnapshotQualityNote]
   }
 
   let version: Int
@@ -105,22 +106,11 @@ extension RunnerTests {
         scope: testCase.scope,
         raw: testCase.projection == "raw"
       )
-      let presented: [PresentedNode]
-      if testCase.projection == "raw" {
-        presented = try XCTUnwrap(
-          SnapshotPresentation.presentRaw(acquisition, options: options).nodes,
-          testCase.name
-        )
-      } else {
-        presented = try XCTUnwrap(
-          try SnapshotPresentation.presentRegular(
-            acquisition,
-            options: options,
-            policy: .cursorProjected
-          ).nodes,
-          testCase.name
-        )
-      }
+      let result = testCase.projection == "raw"
+        ? SnapshotPresentation.presentRaw(acquisition, options: options)
+        : try SnapshotPresentation.presentRegular(acquisition, options: options, policy: .cursorProjected)
+      let presented = result.nodes
+      XCTAssertEqual(result.qualityNotes, testCase.expectedQualityNotes, testCase.name)
 
       XCTAssertEqual(presented.count, testCase.expected.count, testCase.name)
       for (actual, expected) in zip(presented, testCase.expected) {

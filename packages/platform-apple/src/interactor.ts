@@ -280,6 +280,7 @@ async function captureAppleRunnerSnapshot(
     producer: 'apple-runner' as const,
     ...(presentation.viewport ? { viewport: presentation.viewport } : {}),
     ...(result.quality ? { quality: result.quality } : {}),
+    ...(result.qualityNotes ? { qualityNotes: result.qualityNotes } : {}),
     ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
     ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),

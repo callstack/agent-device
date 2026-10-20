@@ -16,6 +16,7 @@ import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality
 import {
   isSparseSnapshotQualityVerdict,
   readSnapshotQualityVerdict,
+  readSnapshotQualityNotes,
 } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import {
   createIosSnapshotRequest,
@@ -33,6 +34,7 @@ import type {
   RawSnapshotNode,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
+  SnapshotQualityNote,
   SnapshotViewportSize,
   IosTargetActivation,
   IosSnapshotObservation,
@@ -50,6 +52,7 @@ export type AppleRunnerSnapshotResult = Readonly<{
   truncated?: boolean;
   message?: string;
   quality?: SnapshotQualityVerdict;
+  qualityNotes?: SnapshotQualityNote[];
   qualityPayload?: IosRunnerQualityPayloadFacts;
   runnerFatal?: boolean;
   systemSurface?: IosSystemSurfaceProvenance;
@@ -88,6 +91,9 @@ export function readAppleSnapshotResult(
     nodes: nodes?.map(interpret),
     truncated: typeof result.truncated === 'boolean' ? result.truncated : undefined,
     quality: readSnapshotQualityVerdict(result.snapshotQuality),
+    qualityNotes: readSnapshotQualityNotes(
+      isRecord(result.snapshotQuality) ? result.snapshotQuality.notes : undefined,
+    ),
     qualityPayload: qualityPayload
       ? { ...qualityPayload, nodes: qualityPayload.nodes.map(interpret) }
       : qualityPayload,

@@ -245,7 +245,7 @@ and still trust the answer.
 
 Regular iOS snapshots clip overflowing elements to their visible area and omit elements entirely
 outside it, including system alerts at large text sizes. With `--json`,
-`snapshotQuality.notes` can include `code: "regular-geometry-clipped"` with `clippedNodeCount`
+`snapshotQualityNotes` can include `code: "regular-geometry-clipped"` with `clippedNodeCount`
 and `droppedNodeCount`. You can continue using visible controls. Use `--raw` to inspect reported
 frames before clipping.
 

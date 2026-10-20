@@ -73,6 +73,13 @@
           "parentIndex": 2,
           "hittable": true
         }
+      ],
+      "expectedQualityNotes": [
+        {
+          "code": "regular-geometry-clipped",
+          "clippedNodeCount": 1,
+          "droppedNodeCount": 0
+        }
       ]
     },
     {
@@ -130,7 +137,8 @@
           "parentIndex": 1,
           "hittable": true
         }
-      ]
+      ],
+      "expectedQualityNotes": []
     },
     {
       "name": "viewport edge clips while preserving positive actionability",
@@ -170,6 +178,13 @@
           "depth": 1,
           "parentIndex": 0,
           "hittable": true
+        }
+      ],
+      "expectedQualityNotes": [
+        {
+          "code": "regular-geometry-clipped",
+          "clippedNodeCount": 1,
+          "droppedNodeCount": 0
         }
       ]
     },
@@ -221,7 +236,8 @@
           "parentIndex": 0,
           "hittable": true
         }
-      ]
+      ],
+      "expectedQualityNotes": []
     },
     {
       "name": "largest text system alert clips content and omits an outside action",
@@ -286,6 +302,13 @@
           "depth": 1,
           "parentIndex": 0,
           "hittable": false
+        }
+      ],
+      "expectedQualityNotes": [
+        {
+          "code": "regular-geometry-clipped",
+          "clippedNodeCount": 2,
+          "droppedNodeCount": 1
         }
       ]
     },
@@ -360,7 +383,8 @@
           "parentIndex": 0,
           "hittable": true
         }
-      ]
+      ],
+      "expectedQualityNotes": []
     }
   ]
 }

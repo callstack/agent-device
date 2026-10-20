@@ -18,6 +18,7 @@ import {
   snapshotStateProvenance,
   type SnapshotState,
   type SnapshotViewportSize,
+  type SnapshotQualityNote,
 } from '@agent-device/kernel/snapshot';
 import {
   annotateCoveredSnapshotNodes,
@@ -48,6 +49,7 @@ export function buildSnapshotState(
     nodes?: RawSnapshotNode[];
     truncated?: boolean;
     quality?: unknown;
+    qualityNotes?: SnapshotQualityNote[];
     comparisonIdentity?: IosSnapshotComparisonIdentity;
     systemSurface?: IosSystemSurfaceProvenance;
     /** Foreground repair this capture's own command performed (#2682). */
@@ -81,7 +83,8 @@ export function buildSnapshotState(
     flags?.snapshotScope && backendScopesAfterWire(data?.backend)
       ? scopeSnapshotNodes(normalizedNodes, flags.snapshotScope)
       : normalizedNodes;
-  const snapshotQuality = snapshotCaptureAnnotationsFrom(data).quality;
+  const annotations = snapshotCaptureAnnotationsFrom(data);
+  const snapshotQuality = annotations.quality;
   const nodes = attachRefs(
     snapshotRaw
       ? scopedNodes
@@ -94,6 +97,7 @@ export function buildSnapshotState(
     createdAt: Date.now(),
     ...snapshotStateProvenance(data),
     ...(snapshotQuality ? { snapshotQuality } : {}),
+    ...(annotations.qualityNotes ? { snapshotQualityNotes: annotations.qualityNotes } : {}),
     ...(data.comparisonIdentity
       ? { comparisonKey: iosSnapshotComparisonIdentityKey(data.comparisonIdentity) }
       : {}),

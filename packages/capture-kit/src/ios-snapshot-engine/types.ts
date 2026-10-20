@@ -1,4 +1,4 @@
-import type { Rect, RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { Rect, RawSnapshotNode, SnapshotQualityNote } from '@agent-device/kernel/snapshot';
 
 export type IosSnapshotFoldPolicy = 'cursor-projected' | 'plain-viewport';
 
@@ -34,6 +34,7 @@ export type IosSnapshotEnginePresentation = Readonly<{
    */
   validatedViewport?: Rect;
   qualityNodes?: RawSnapshotNode[];
+  qualityNotes?: SnapshotQualityNote[];
   presentedIndexesBySourceIndex: ReadonlyMap<number, readonly number[]>;
   stats: IosSnapshotPresentationStats;
 }>;

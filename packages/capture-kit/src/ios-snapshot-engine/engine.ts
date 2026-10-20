@@ -44,6 +44,7 @@ export function publishIosSnapshot(
       ...(truncated === undefined ? {} : { truncated }),
     },
     presentationKey,
+    ...(presentation.qualityNotes ? { qualityNotes: presentation.qualityNotes } : {}),
     comparisonIdentity: buildIosSnapshotComparisonIdentity(input, request),
     residue:
       input.stage === 'acquired' ? [...input.acquisition.residue] : [...input.validation.residue],
@@ -168,6 +169,7 @@ function presentAcquiredSnapshot(
   return {
     nodes: compacted.nodes,
     validatedViewport: viewport,
+    ...(folded.qualityNotes ? { qualityNotes: folded.qualityNotes } : {}),
     ...(qualityNodes ? { qualityNodes } : {}),
     presentedIndexesBySourceIndex: remapPresentedIndexes(
       acquisition.nodes,

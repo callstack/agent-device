@@ -3,6 +3,7 @@ import type {
   SnapshotState,
   SnapshotOptions,
   SnapshotQualityVerdict,
+  SnapshotQualityNote,
   IosSnapshotObservation,
   ScreenshotOverlayRef,
   SnapshotViewportSize,
@@ -44,6 +45,7 @@ export type BackendSnapshotResult = {
     reason?: 'empty-interactive' | 'sharp-drop' | 'stuck-route';
   };
   quality?: SnapshotQualityVerdict;
+  qualityNotes?: SnapshotQualityNote[];
   warnings?: string[];
   observation?: IosSnapshotObservation;
 };

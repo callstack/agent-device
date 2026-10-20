@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { buildUiHierarchySnapshot, parseUiHierarchyTree } from '../ui-hierarchy.ts';
-import type { Rect } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotQualityNote } from '@agent-device/kernel/snapshot';
 
 type ConformanceNode = {
   index: number;
@@ -32,6 +32,7 @@ type ConformanceFixture = {
     scope: string | null;
     nodes: ConformanceNode[];
     expected: ConformanceExpectedNode[];
+    expectedQualityNotes: SnapshotQualityNote[];
   }>;
 };
 
@@ -96,5 +97,6 @@ test('Android XML parsing and presentation match the shared acquisition-to-prese
       hittable: node.hittable === true,
     }));
     assert.deepEqual(actual, testCase.expected, testCase.name);
+    assert.deepEqual(built.qualityNotes ?? [], testCase.expectedQualityNotes, testCase.name);
   }
 });
