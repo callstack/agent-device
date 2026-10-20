@@ -2,9 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  assertAndroidSnapshotHelperTouchSessionHeaders,
   isAndroidSnapshotHelperSessionCommandAcknowledged,
-  parseAndroidSnapshotHelperSessionHeaders,
+  parseAndroidSnapshotHelperSessionTouchResponse,
   parseAndroidSnapshotHelperSessionSnapshotResponse,
 } from '../snapshot-helper-session-protocol.ts';
 
@@ -113,12 +112,11 @@ test('rejects stale and truncated session snapshot responses', () => {
 
 test('validates touch and quit response identity from the same protocol headers', () => {
   const response = sessionResponse({ requestId: 'gesture-1', xml: '' });
-  const headers = parseAndroidSnapshotHelperSessionHeaders(response);
+  parseAndroidSnapshotHelperSessionTouchResponse(response, 'gesture-1');
 
-  assertAndroidSnapshotHelperTouchSessionHeaders(headers, 'gesture-1');
   assert.equal(isAndroidSnapshotHelperSessionCommandAcknowledged(response, 'gesture-1'), true);
   assert.throws(
-    () => assertAndroidSnapshotHelperTouchSessionHeaders(headers, 'gesture-stale'),
+    () => parseAndroidSnapshotHelperSessionTouchResponse(response, 'gesture-stale'),
     /stale output/,
   );
 });

@@ -164,15 +164,16 @@ export function waitForAndroidSnapshotHelperSessionReady(
   });
 }
 
-export function parseAndroidSnapshotHelperSessionHeaders(response: string): Record<string, string> {
+function parseAndroidSnapshotHelperSessionHeaders(response: string): Record<string, string> {
   const separator = response.indexOf('\n\n');
   return parseHeaders(response.slice(0, separator < 0 ? response.length : separator));
 }
 
-export function assertAndroidSnapshotHelperTouchSessionHeaders(
-  headers: Record<string, string>,
+export function parseAndroidSnapshotHelperSessionTouchResponse(
+  response: string,
   requestId: string,
-): void {
+): Record<string, string> {
+  const headers = parseAndroidSnapshotHelperSessionHeaders(response);
   if (headers.agentDeviceProtocol !== ANDROID_SNAPSHOT_HELPER_PROTOCOL) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -187,6 +188,10 @@ export function assertAndroidSnapshotHelperTouchSessionHeaders(
       { headers, requestId },
     );
   }
+  if (!response.includes('\n\n')) {
+    throw new AppError('COMMAND_FAILED', 'Android automation helper returned incomplete headers');
+  }
+  return headers;
 }
 
 export function isAndroidSnapshotHelperSessionCommandAcknowledged(

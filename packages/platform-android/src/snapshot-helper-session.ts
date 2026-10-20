@@ -15,8 +15,7 @@ import {
   type AndroidSnapshotHelperResolvedCaptureOptions,
 } from './snapshot-helper-capture.ts';
 import {
-  assertAndroidSnapshotHelperTouchSessionHeaders,
-  parseAndroidSnapshotHelperSessionHeaders,
+  parseAndroidSnapshotHelperSessionTouchResponse,
   requestAndroidSnapshotHelperSessionSnapshot,
   sendAndroidSnapshotHelperSessionCommand,
 } from './snapshot-helper-session-protocol.ts';
@@ -155,11 +154,7 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
       command,
       params.timeoutMs,
     );
-    headers = parseAndroidSnapshotHelperSessionHeaders(response);
-    assertAndroidSnapshotHelperTouchSessionHeaders(headers, requestId);
-    if (!response.includes('\n\n')) {
-      throw new AppError('COMMAND_FAILED', 'Android automation helper returned incomplete headers');
-    }
+    headers = parseAndroidSnapshotHelperSessionTouchResponse(response, requestId);
   } catch (error) {
     // Transport-level failure: the session process can no longer be trusted. Stop it so the next
     // command runs against a fresh helper instead of a wedged socket.
