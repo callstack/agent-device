@@ -158,7 +158,8 @@ export type DaemonCapability = (typeof DAEMON_CAPABILITIES)[number];
  *   predates the field names.
  * - `embedded`: the host that started the runtime owns the process. Nothing in the central
  *   lifecycle signals that PID, not even hung recovery or a forced stop: the host closes the
- *   runtime through its own close. A stop from outside refuses without a request or signal.
+ *   runtime through its own close. An outside stop refuses a live host without a request or
+ *   signal, and may retire the registration after proving the recorded host lifetime exited.
  * - `unknown`: the record states an owner this build does not recognize, so no process may be
  *   signaled on its strength. Signalling on a guess could end a host process, and a value this
  *   build cannot read is exactly the case where the safe answer is to do nothing.

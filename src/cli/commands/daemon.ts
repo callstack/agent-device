@@ -39,10 +39,7 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
   // One read decides every route below, so routing, retirement, and a `--clean` walk judge the same
   // record rather than three snapshots of a file another process may be rewriting.
   const record = readDaemonStopIdentity(paths.infoPath);
-  // Retained-runner cleanup works across the owner's whole process tree, which a host process shares
-  // with whatever else it runs. An embedded runtime's own close is the boundary a stop may cross, and
-  // a record that cannot prove its owner is not a licence to walk a process tree either. No record at all
-  // is not a refusal: there is nothing claimed, so there is nothing to clean.
+  // Cleanup may walk only a detached daemon's process tree; a host may own unrelated work.
   if (flags.clean === true && record.ownership !== 'absent' && record.ownership !== 'detached') {
     throw daemonCleanRefusedForUnprovenOwner(paths, record.ownership);
   }
@@ -60,16 +57,7 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
   return true;
 };
 
-/**
- * `--clean` walks the owner's whole process tree, which for a host process includes everything else
- * that host runs. An embedded runtime's own close is the only boundary a stop may cross, so this
- * refuses instead of reaching past it, and the stop without `--clean` still works.
- *
- * A record whose owner cannot be read is refused too: the tree this would walk may be a host's, and
- * the reason cleanup is allowed for a detached daemon is that its record proves the process is a
- * daemon of its own. This is not a bad flag — the flag is fine, the record is the problem — so it
- * reports as a failed command, like the other ownership refusals.
- */
+/** Refuses process-tree cleanup unless the record proves detached ownership. */
 function daemonCleanRefusedForUnprovenOwner(
   paths: DaemonPaths,
   record: DaemonStopIdentity['ownership'],

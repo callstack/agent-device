@@ -62,11 +62,11 @@ Clients retain managed and attach lifecycles. Managed clients may start a daemon
 
 The embedder supplies plugin objects directly. They follow the built-ins through the same registry validation; this runtime does not read the plugin store. Plugin failures remain inventory data. Logging adapters, a separate package entry, and disposal protocols are not required to own a daemon: the library exposes the client, its attach configuration, and `close()`.
 
-Decision history: the former explicit-start target is dropped; the client lifecycle continues to choose startup behavior. The main-entry API replaces the proposed host subpath and optional host controls, keeping ownership and attachment on the existing runtime and client paths (#3757).
+Decision history: owner-only close replaces external embedded shutdown so the CLI cannot end work its host owns; a proven host exit permits registration retirement. The former explicit-start target is dropped; the client lifecycle continues to choose startup behavior. The main-entry API replaces the proposed host subpath and optional host controls, keeping ownership and attachment on the existing runtime and client paths (#3757).
 
 ## Alternatives refused
 
-- **Outside shutdown of an embedded runtime.** The host that starts it owns its close. An authenticated shutdown request, completion record and outside waiter mix ownership and duplicate the host's close handle.
+- **Outside shutdown of an embedded runtime.** The host that starts it owns its close. Letting another process close the runtime would cross that ownership boundary and duplicate the host's close handle.
 
 - **Keep the manifest as the contract.** It cannot describe options-dependent credentials, and a
   bundled provider has no package to hold one.
