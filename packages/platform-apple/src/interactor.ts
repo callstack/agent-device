@@ -184,6 +184,22 @@ export function createAppleInteractor(
         runnerOpts,
       );
     },
+    // Volume presses reach the runner only on physical iPhone/iPad; the facts refuse every other
+    // kind, and Apple exposes no power press at all, so no `power` member exists here.
+    volumeUp: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'volumeUp', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
+    volumeDown: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'volumeDown', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
     tvRemote: async (button, durationMs) => {
       await runAppleRunnerCommand(
         device,

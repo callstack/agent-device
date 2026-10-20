@@ -157,6 +157,41 @@ export const conformedRuntimeBindings = {
         }),
       ),
   },
+  // Each `hardware-button` name is its own admission cell on the one `hardware-button`
+  // descriptor (#3848), so each owes its own refusal row, the way `orientation auto` does.
+  'hardware-button': {
+    plan: { refused: 'volumeUp', admitted: [] },
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundSystemButtonRuntime('hardware-button', {
+          device,
+          positionals: ['volume-up'],
+          ...bindings,
+        }),
+      ),
+  },
+  'hardware-button volume-down': {
+    plan: { refused: 'volumeDown', admitted: [], command: 'hardware-button' },
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundSystemButtonRuntime('hardware-button', {
+          device,
+          positionals: ['volume-down'],
+          ...bindings,
+        }),
+      ),
+  },
+  'hardware-button power': {
+    plan: { refused: 'power', admitted: [], command: 'hardware-button' },
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundSystemButtonRuntime('hardware-button', {
+          device,
+          positionals: ['power'],
+          ...bindings,
+        }),
+      ),
+  },
   'tv-remote': {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundTvRemoteRuntime({ device, positionals: ['down'], ...bindings })),

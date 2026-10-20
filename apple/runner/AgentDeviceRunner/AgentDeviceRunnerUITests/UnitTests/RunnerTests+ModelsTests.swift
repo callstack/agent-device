@@ -208,7 +208,9 @@ extension RunnerTests {
   /// Commands that did not exist at the merge-base, so no classification of its is compared with
   /// theirs. `appState` arrived with #2929, `pasteboardWrite` with the runner-written simulator
   /// clipboard.
-  private static let commandsNewerThanTheMergeBase: Set<CommandType> = [.appState, .pasteboardWrite]
+  private static let commandsNewerThanTheMergeBase: Set<CommandType> = [
+    .appState, .pasteboardWrite, .volumeUp, .volumeDown,
+  ]
 
   /// The commands production never runs through the prepared path's body: `executeOnMain` answers
   /// these before `executeOnMainPrepared` runs, and `executeDispatched` answers `snapshot` earlier
@@ -276,6 +278,14 @@ extension RunnerTests {
       (.appSwitcher, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
       (
         .actionButton,
+        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true)
+      ),
+      (
+        .volumeUp,
+        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true)
+      ),
+      (
+        .volumeDown,
         expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true)
       ),
       (.keyboardDismiss, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),

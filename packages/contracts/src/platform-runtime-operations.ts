@@ -127,6 +127,16 @@ export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });
 export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 export const appSwitcherRuntimeUse = defineUse({ required: ['appSwitcher'] });
 export const actionButtonRuntimeUse = defineUse({ required: ['actionButton'] });
+// `hardware-button`'s cells (ADR 0019 §9): the daemon admits and binds exactly the one the parsed
+// positional names, never all three (#3848).
+export const volumeUpRuntimeUse = defineUse({ required: ['volumeUp'] });
+export const volumeDownRuntimeUse = defineUse({ required: ['volumeDown'] });
+export const powerRuntimeUse = defineUse({ required: ['power'] });
+export const hardwareButtonRuntimePlanUses = Object.freeze([
+  volumeUpRuntimeUse,
+  volumeDownRuntimeUse,
+  powerRuntimeUse,
+] as const);
 export const appEventRuntimeUse = defineUse({ required: ['triggerAppEvent'] });
 export const settingsRuntimeUse = defineUse({ required: ['setSetting'] });
 export const settingReadUse = defineUse({ required: ['readSetting'] });

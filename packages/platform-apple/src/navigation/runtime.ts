@@ -160,6 +160,28 @@ function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
   return hasAppleActionButton(device) ? available : actionButtonOsUnavailable;
 }
 
+const volumeButtonOsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'hardware-button volume presses the iPhone/iPad volume key; this Apple leaf has none.',
+} as const);
+const volumeButtonSimulatorUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'hardware-button volume is supported on physical iPhone and iPad; iOS Simulators refuse because XCUIDevice exposes no volume press there.',
+} as const);
+/**
+ * `XCUIDevice.press(.volumeUp/.volumeDown)` is simulator-unavailable in the XCUITest header, so
+ * the local runner presses volume on a physical iPhone or iPad only. The iPhone/iPad leaf read is
+ * {@link hasAppleActionButton}; tvOS, macOS, watchOS and visionOS have no volume key to press and
+ * hear that refusal, not the simulator one (#3848 review).
+ */
+function appleVolumeButtonFact(device: DeviceInfo): RuntimeOperationFact {
+  if (!hasAppleActionButton(device)) return volumeButtonOsUnavailable;
+  if (device.kind !== 'device') return volumeButtonSimulatorUnavailable;
+  return available;
+}
+
 /**
  * The navigation cells: back, home, app-switcher, action-button, orientation, tv-remote, and
  * keyboard status/dismiss/enter.
@@ -172,6 +194,10 @@ export function appleNavigationFacts(device: DeviceInfo) {
       home: appleSpringboardFact(device, homeKindUnavailable),
       appSwitcher: appleSpringboardFact(device, appSwitcherKindUnavailable),
       actionButton: appleActionButtonFact(device),
+      // Power is the family denial: Apple exposes no public power/lock button press to XCUITest,
+      // on any kind or OS, so no cell overrides it.
+      volumeUp: appleVolumeButtonFact(device),
+      volumeDown: appleVolumeButtonFact(device),
     }),
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
     ...tvRemoteRuntimeOperationFacts({

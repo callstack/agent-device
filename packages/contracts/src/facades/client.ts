@@ -123,6 +123,7 @@ export type {
   ClipboardCommandOptions,
   FoldCommandOptions,
   DoctorCommandOptions,
+  HardwareButtonCommandOptions,
   HomeCommandOptions,
   KeyboardCommandOptions,
   OrientationCommandOptions,

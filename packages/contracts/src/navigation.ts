@@ -1,5 +1,5 @@
 import type { BackMode } from './back-mode.ts';
-import type { DeviceRotation, FoldPose } from './device-rotation.ts';
+import type { DeviceRotation, FoldPose, HardwareButtonName } from './device-rotation.ts';
 import type { FoldScreenReport } from './fold-runtime.ts';
 import type { SettleObservation } from './interaction.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
@@ -87,5 +87,18 @@ export type TvRemoteCommandResult = {
   action: 'tv-remote';
   button: TvRemoteButton;
   durationMs?: number;
+  message: string;
+};
+
+/**
+ * `hardware-button` — `{ action: 'hardware-button', button, message: 'Pressed hardware button <button>' }`.
+ *
+ * The button is the public name (`volume-up`, `volume-down`, `power`). The result reports that the
+ * press was dispatched; it carries no volume level or screen state, because the command observes
+ * neither (#3848).
+ */
+export type HardwareButtonCommandResult = {
+  action: 'hardware-button';
+  button: HardwareButtonName;
   message: string;
 };

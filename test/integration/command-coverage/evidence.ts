@@ -49,6 +49,12 @@ export const ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
     [C.fold],
     'Android admits the fold fact on emulators and refuses every other kind',
   );
+export const ANDROID_HARDWARE_BUTTON_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'packages/platform-android/src/runtime.test.ts',
+    [C.hardwareButton],
+    'Android admits the hardware-button facts on phones and tablets and refuses a TV target',
+  );
 export const ANDROID_UNINSTALL_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'test/integration/provider-scenarios/android-uninstall.test.ts',
@@ -92,6 +98,10 @@ export const APPLE_NAVIGATION_FACTS_EVIDENCE: RepositoryEvidence = {
 export const APPLE_ACTION_BUTTON_FACT_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',
   test: 'classifies the action-button fact for the %s leaf',
+};
+export const APPLE_HARDWARE_BUTTON_FACT_EVIDENCE: RepositoryEvidence = {
+  path: 'packages/platform-apple/src/runtime.test.ts',
+  test: 'classifies the hardware-button volume facts for the %s leaf',
 };
 export const APPLE_HOVER_DENIAL_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',

@@ -141,6 +141,31 @@ extension RunnerTests {
 #endif
   }
 
+  /// Presses a physical volume key once, returning false when this target cannot express the press.
+  ///
+  /// `XCUIDevice.press(_:)` declares `.volumeUp` and `.volumeDown` unavailable to simulator
+  /// builds (`XCUI_SIMULATOR_UNAVAILABLE` in the XCUITest header), so the press compiles only for
+  /// a physical-device build; a simulator target refuses rather than pressing a control that
+  /// does not exist there. Every iPhone and iPad carries a volume key, so no per-model probe is
+  /// needed the way the Action Button needs `hasHardwareButton(.action)`.
+  @discardableResult
+  func pressVolumeButton(_ button: CommandType) -> Bool {
+#if os(iOS) && !targetEnvironment(simulator)
+    switch button {
+    case .volumeUp:
+      XCUIDevice.shared.press(.volumeUp)
+      return true
+    case .volumeDown:
+      XCUIDevice.shared.press(.volumeDown)
+      return true
+    default:
+      return false
+    }
+#else
+    return false
+#endif
+  }
+
   func findElement(app: XCUIApplication, text: String) -> XCUIElement? {
     let predicate = NSPredicate(format: "label CONTAINS[c] %@ OR identifier CONTAINS[c] %@ OR value CONTAINS[c] %@", text, text, text)
     let element = app.descendants(matching: .any).matching(predicate).firstMatch

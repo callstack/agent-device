@@ -132,6 +132,63 @@ test('provider transport carries the Action Button press without an app activati
   });
 });
 
+// The volume press rides the same interactor seam and owes the session app the same nothing:
+// `hardware-button volume-up` must reach the provider transport as the `volumeUp` runner command
+// without activating the app (#3848).
+test('provider transport carries the hardware-button volume press without an app activation', async () => {
+  await withProviderScenarioResource(
+    createPhysicalInteractorSeamWorld,
+    async ({ daemon, calls }) => {
+      const lease = await allocateLease(daemon);
+      const request = { flags: leaseFlags(lease.leaseId), meta: leaseMeta(lease.leaseId) };
+      assertRpcOk(await daemon.callCommand('open', ['com.example.app'], request.flags, request));
+
+      calls.runner.length = 0;
+      assert.deepEqual(
+        assertRpcOk(
+          await daemon.callCommand('hardware-button', ['volume-up'], request.flags, request),
+        ),
+        {
+          action: 'hardware-button',
+          button: 'volume-up',
+          message: 'Pressed hardware button volume-up',
+        },
+      );
+      assert.ok(
+        calls.runner.some((call) => call.command.command === 'volumeUp'),
+        'expected volumeUp on the provider transport, not local XCTest',
+      );
+      assert.deepEqual(
+        calls.runner.filter((call) => call.command.command === 'activate'),
+        [],
+        'a hardware-button press must not activate the session app',
+      );
+    },
+  );
+});
+
+// Apple exposes no power press to XCUITest on any kind, so even the physical-device world refuses
+// `hardware-button power` at admission, before anything reaches the transport (#3848).
+test('provider transport refuses hardware-button power before any runner traffic', async () => {
+  await withProviderScenarioResource(
+    createPhysicalInteractorSeamWorld,
+    async ({ daemon, calls }) => {
+      const lease = await allocateLease(daemon);
+      const request = { flags: leaseFlags(lease.leaseId), meta: leaseMeta(lease.leaseId) };
+      assertRpcOk(await daemon.callCommand('open', ['com.example.app'], request.flags, request));
+
+      calls.runner.length = 0;
+      assertRpcError(
+        await daemon.callCommand('hardware-button', ['power'], request.flags, request),
+        500,
+        'UNSUPPORTED_OPERATION',
+        /hardware-button/,
+      );
+      assert.deepEqual(calls.runner, [], 'a refused power press must not reach the transport');
+    },
+  );
+});
+
 // A hinge pose is sent by a HID helper the host spawns inside a local iOS simulator, which a
 // provider-owned device is not, so the provider fixture states the refusal cell and admission
 // refuses before anything reaches the transport.
@@ -222,13 +279,22 @@ async function createInteractorSeamWorld() {
   return await createRunnerTransportWorld({ requestScope: false });
 }
 
+// The same seam with a physical iPhone leaf: the hardware-button volume fact admits a physical
+// device, so the press must reach the transport on this world (#3848).
+async function createPhysicalInteractorSeamWorld() {
+  return await createRunnerTransportWorld({
+    requestScope: false,
+    device: { ...DEVICE, kind: 'device' },
+  });
+}
+
 // The request-boundary seam: getAppleRunnerProvider scopes the whole request,
 // covering runner commands issued outside interactor methods.
 async function createRequestScopeWorld() {
   return await createRunnerTransportWorld({ requestScope: true });
 }
 
-async function createRunnerTransportWorld(options: { requestScope: boolean }) {
+async function createRunnerTransportWorld(options: { requestScope: boolean; device?: DeviceInfo }) {
   const calls: RunnerTransportCalls = { runner: [], opens: 0 };
   const runtime = createProviderRuntime(calls, options);
   const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
@@ -256,8 +322,9 @@ async function createRunnerTransportWorld(options: { requestScope: boolean }) {
 
 function createProviderRuntime(
   calls: RunnerTransportCalls,
-  options: { requestScope: boolean },
+  options: { requestScope: boolean; device?: DeviceInfo },
 ): ProviderDeviceRuntime {
+  const device = options.device ?? DEVICE;
   const transport: AppleRunnerProvider = {
     hasLiveSession: () => true,
     runCommand: async (_device, command, options) => {
@@ -267,23 +334,23 @@ function createProviderRuntime(
   };
   const leaseLifecycle: LeaseLifecycleProvider = {
     allocate: async (lease) =>
-      lease.leaseProvider === PROVIDER ? { provider: PROVIDER, deviceId: DEVICE.id } : undefined,
+      lease.leaseProvider === PROVIDER ? { provider: PROVIDER, deviceId: device.id } : undefined,
   };
   const deviceInventoryProvider: DeviceInventoryProvider = async (request) =>
-    request.leaseProvider === PROVIDER && request.leaseId ? [DEVICE] : null;
+    request.leaseProvider === PROVIDER && request.leaseId ? [device] : null;
   return {
     provider: PROVIDER,
     leaseLifecycle,
     deviceInventoryProvider,
-    ownsDevice: (device) => device.id === DEVICE.id,
-    getInteractor: (device, runnerContext) =>
-      device.id === DEVICE.id
-        ? createRunnerTransportInteractor(calls, transport, runnerContext)
+    ownsDevice: (candidate) => candidate.id === device.id,
+    getInteractor: (candidate, runnerContext) =>
+      candidate.id === device.id
+        ? createRunnerTransportInteractor(calls, transport, runnerContext, device)
         : undefined,
     ...(options.requestScope
       ? {
-          getAppleRunnerProvider: (device: DeviceInfo) =>
-            device.id === DEVICE.id ? transport : undefined,
+          getAppleRunnerProvider: (candidate: DeviceInfo) =>
+            candidate.id === device.id ? transport : undefined,
         }
       : {}),
     shutdown: async () => undefined,
@@ -294,9 +361,10 @@ function createRunnerTransportInteractor(
   calls: RunnerTransportCalls,
   transport: AppleRunnerProvider,
   runnerContext: RunnerContext | undefined,
+  device: DeviceInfo,
 ): Interactor {
   const runner = runnerContext ?? {};
-  const implementation = applePlugin.createInteractor(DEVICE, runner, {
+  const implementation = applePlugin.createInteractor(device, runner, {
     env: process.env,
     cwd: process.cwd(),
   });
@@ -311,7 +379,7 @@ function createRunnerTransportInteractor(
       return (...args: unknown[]) =>
         withAppleRunnerProvider(
           transport,
-          { deviceId: DEVICE.id, requestId: runner.requestId },
+          { deviceId: device.id, requestId: runner.requestId },
           async () => {
             const interactor = await implementation;
             const operation = interactor[property as keyof Interactor];

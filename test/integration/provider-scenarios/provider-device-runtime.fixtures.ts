@@ -270,6 +270,18 @@ function providerScenarioRuntimeFacts(
       // hardware exists on the iPhone/iPad leaf only, so the fixture reads the same kernel rule the
       // Apple owner's fact reads instead of restating it (#2699).
       actionButton: hasAppleActionButton(device) ? fakeProviderAvailable : fakeProviderUnavailable,
+      // The hardware-button volume press rides the same runner transport, and the XCUITest
+      // volume key exists on a physical iPhone/iPad only, so the fixture reads the same kind and
+      // leaf rule the Apple owner's fact reads (#3848). No Apple leaf presses power.
+      volumeUp:
+        device.kind === 'device' && hasAppleActionButton(device)
+          ? fakeProviderAvailable
+          : fakeProviderUnavailable,
+      volumeDown:
+        device.kind === 'device' && hasAppleActionButton(device)
+          ? fakeProviderAvailable
+          : fakeProviderUnavailable,
+      power: fakeProviderUnavailable,
       // A provider session has no host simulator for the fold HID helper, so no fixture leg poses
       // a hinge.
       setFoldPose: fakeProviderUnavailable,

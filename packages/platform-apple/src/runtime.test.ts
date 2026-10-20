@@ -350,6 +350,57 @@ test.each(Object.entries(leaves))(
   },
 );
 
+// The volume keys are the hardware-button cells Apple can press: `XCUIDevice.press(.volumeUp/
+// .volumeDown)` is simulator-unavailable in the XCUITest header, so only a physical iPhone or
+// iPad admits them. Each refusal names its own axis: the iOS-family simulator hears the kind
+// refusal, tvOS/macOS/watchOS/visionOS hear the leaf refusal for having no volume key at all.
+// Power is the family denial on every leaf: XCUITest exposes no power press.
+test.each([
+  ...Object.entries(leaves).map(([name, device]) => [name, device, false] as const),
+  ['ios physical device', appleDevice({ kind: 'device' }), true] as const,
+  ['ipados physical device', appleDevice({ kind: 'device', appleOs: 'ipados' }), true] as const,
+  [
+    'tvos physical device',
+    appleDevice({ kind: 'device', appleOs: 'tvos', target: 'tv' }),
+    false,
+  ] as const,
+])(
+  'classifies the hardware-button volume facts for the %s leaf',
+  async (_name, device, available) => {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    for (const operation of ['volumeUp', 'volumeDown'] as const) {
+      expectOperationAvailability(binding, operation, available);
+      if (available) continue;
+      // The iPhone/iPad simulator refuses on the kind (XCUIDevice hides the press); every leaf
+      // whose OS has no volume key refuses on the leaf, whichever kind it runs as.
+      expect(binding.facts.operations[operation]).toMatchObject(
+        device.appleOs === 'ios' || device.appleOs === 'ipados'
+          ? {
+              reason: 'unsupported-device-kind',
+              hint: expect.stringContaining('physical iPhone and iPad'),
+            }
+          : {
+              reason: 'unsupported-platform-leaf',
+              hint: expect.stringContaining('this Apple leaf has none'),
+            },
+      );
+    }
+    expectOperationAvailability(binding, 'power', false);
+    expect(binding.facts.operations.power).toMatchObject({
+      reason: 'unsupported-platform-leaf',
+      hint: expect.stringContaining('No Apple leaf carries this system button'),
+    });
+  },
+);
+
 test.each(Object.entries(leaves))(
   'classifies the fold fact for the %s leaf',
   async (_name, device) => {

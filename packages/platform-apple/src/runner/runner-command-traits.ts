@@ -74,6 +74,8 @@ export const RUNNER_COMMAND_TRAITS = {
   gestureViewport: READ_ONLY_TRAITS,
   appSwitcher: DEFAULT_TRAITS,
   actionButton: DEFAULT_TRAITS,
+  volumeUp: DEFAULT_TRAITS,
+  volumeDown: DEFAULT_TRAITS,
   keyboardDismiss: DEFAULT_TRAITS,
   keyboardReturn: DEFAULT_TRAITS,
   alert: readAlertActionTraits,

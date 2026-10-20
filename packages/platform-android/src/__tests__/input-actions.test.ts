@@ -6,6 +6,7 @@ import {
   longPressAndroid,
   pressAndroid,
   pressAndroidEnter,
+  pressAndroidHardwareButton,
   pressAndroidTvRemote,
   probeAndroidDisplayRotation,
   scrollAndroid,
@@ -421,6 +422,22 @@ test('homeAndroid presses keyevent 3', async () => {
     async ({ calls, device }) => {
       await homeAndroid(device);
       assert.deepEqual(calls, [['shell', 'input', 'keyevent', '3']]);
+    },
+  );
+});
+
+test('pressAndroidHardwareButton presses the volume and power keyevents', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      await pressAndroidHardwareButton(device, 'volumeUp');
+      await pressAndroidHardwareButton(device, 'volumeDown');
+      await pressAndroidHardwareButton(device, 'power');
+      assert.deepEqual(calls, [
+        ['shell', 'input', 'keyevent', '24'],
+        ['shell', 'input', 'keyevent', '25'],
+        ['shell', 'input', 'keyevent', '26'],
+      ]);
     },
   );
 });

@@ -21,6 +21,8 @@ import {
   clipboardDaemonWriter,
   foldCliReader,
   foldDaemonWriter,
+  hardwareButtonCliReader,
+  hardwareButtonDaemonWriter,
   keyboardCliReader,
   keyboardDaemonWriter,
   orientationCliReader,
@@ -384,6 +386,24 @@ describe('system command interface', () => {
       'tv-remote requires exactly one button',
     );
     expectInvalidArgs(() => tvRemoteCliReader(['blue'], flags()), 'button must be one of');
+  });
+
+  test('hardware-button reader and writer validate the button positional', () => {
+    expect(hardwareButtonCliReader(['volume-up'], flags())).toMatchObject({ button: 'volume-up' });
+    expect(hardwareButtonCliReader(['Volume-Down'], flags())).toMatchObject({
+      button: 'volume-down',
+    });
+    expect(
+      hardwareButtonDaemonWriter({ button: 'power' } as Record<string, unknown>).positionals,
+    ).toEqual(['power']);
+    expectInvalidArgs(() => hardwareButtonCliReader([], flags()), 'requires exactly one button');
+    expectInvalidArgs(
+      () => hardwareButtonCliReader(['volume-up', 'power'], flags()),
+      'requires exactly one button',
+    );
+    // Exact names only: no aliases, and nothing reaches the daemon for an unknown name.
+    expectInvalidArgs(() => hardwareButtonCliReader(['vol'], flags()), 'button must be one of');
+    expectInvalidArgs(() => hardwareButtonCliReader(['mute'], flags()), 'button must be one of');
   });
 });
 

@@ -276,6 +276,9 @@ await client.command.tvRemote({
 
 await client.command.appSwitcher();
 await client.command.actionButton();
+await client.command.hardwareButton({ button: 'volume-up' });
+await client.command.hardwareButton({ button: 'volume-down' });
+await client.command.hardwareButton({ button: 'power', platform: 'android' });
 await client.command.fold({ pose: 'open' });
 await client.command.telephony({ action: 'call', number: '5551234' });
 await client.command.telephony({ action: 'sms', number: '5551234', text: 'Your code is 1234' });
@@ -290,6 +293,8 @@ await client.command.fold({
 ```
 
 `fold` accepts either `pose` or `keyframes`. Keyframes use linear interpolation at roughly 60 updates per second; repeat an angle to hold it. Timestamps must start at zero and increase strictly, with 2–64 frames and a final timestamp no greater than 60,000ms. Angles must be finite and between 0° and 180°. The final timestamp bounds motion, excluding helper preparation and final hinge verification. A custom final angle is verified within 0.5°; interior angles must also settle. Cancellation stops the motion at its current angle. Re-snapshot afterwards, including after interrupted motion. Android emulators accept `pose` only.
+
+`hardwareButton` presses one phone hardware key once: `button` is `'volume-up'`, `'volume-down'`, or `'power'`. It takes no hold duration and activates no app; the result reports the dispatched press, not the OS reaction. Android presses all three on phones and tablets; a physical iPhone or iPad presses volume only; iOS Simulators, Android TV, and tvOS refuse (use `tvRemote` on TV targets).
 
 `press`, `click`, and `longpress` do not wait for a missing target to appear. When a screen is still loading, wait for its landmark before interacting:
 
@@ -314,6 +319,7 @@ Supported command methods:
 - `orientation`
 - `appSwitcher`
 - `actionButton`
+- `hardwareButton`
 - `fold`
 - `telephony`
 - `keyboard`

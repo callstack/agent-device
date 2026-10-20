@@ -63,6 +63,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'performGesturePlan',
   'performMultiTouchGesturePlan',
   'performTargetAuthoredDrag',
+  'power',
   'prepareAppleRunner',
   'prepareApplicationOpen',
   'querySelector',
@@ -90,6 +91,8 @@ export const RUNTIME_OPERATION_NAMES = [
   'typeText',
   'uninstallApp',
   'unlockOrientation',
+  'volumeDown',
+  'volumeUp',
   'writeClipboard',
 ] as const;
 

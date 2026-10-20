@@ -56,6 +56,9 @@ agent-device orientation landscape-left
 agent-device orientation auto
 agent-device app-switcher
 agent-device action-button
+agent-device hardware-button volume-up
+agent-device hardware-button volume-down
+agent-device hardware-button power
 agent-device fold closed
 agent-device fold half-open
 agent-device fold open
@@ -120,6 +123,9 @@ Back, orientation, and hardware buttons:
 - `orientation auto` hands rotation back to the sensor on ADB-backed Android, local or Limrun (`accelerometer_rotation=1`, `user_rotation` untouched), and reports `orientation: "auto"`. It does not wait for the display to rotate, because there is no target rotation: the sensor decides, and an emulator usually settles on portrait. Every other backend refuses `auto` with `UNSUPPORTED_OPERATION`.
 - `action-button` presses the iPhone or iPad Action Button once. It takes no arguments, no hold duration, and no `--settle`, and it doesn't activate the session app or drive Camera Control. Other platforms refuse it, and a model without the button (an iPhone SE, most iPad simulators) fails with `UNSUPPORTED_OPERATION`.
 - `action-button` reports that the press was dispatched, not what it triggered. Simulators run no Shortcuts or App Intents, so verify the outcome on a physical iPhone. Expect a press to take about five seconds on a Simulator.
+- `hardware-button volume-up|volume-down|power` presses one phone hardware key once, with no hold and no `--settle`, and it doesn't activate the session app. The response reports the dispatched press, not what the OS did with it: which audio stream a volume press moves and whether the HUD shows is device behavior the command does not claim.
+- Android presses all three keys on phones and tablets: the ADB-backed and helper paths send `input keyevent` 24/25/26, and an Appium-backed device presses the same keycodes through its `mobile: pressKey` route. A physical iPhone or iPad presses volume only, through the local runner or Appium's volume button press; no Apple leaf presses power. iOS Simulators refuse volume (`XCUIDevice` exposes no volume press there), and Android TV and tvOS targets refuse with a pointer to `tv-remote`.
+- A `power` press toggles the Android screen. After a press that turns it off, later commands may hit a locked screen; nothing in agent-device presses the key again to wake it.
 
 Fold a foldable device:
 

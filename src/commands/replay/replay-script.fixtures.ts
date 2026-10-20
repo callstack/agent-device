@@ -180,6 +180,7 @@ const REPLAY_SCRIPT_LINE_PLANS = {
   trace: GENERIC_REPLAY_LINE,
   'trigger-app-event': GENERIC_REPLAY_LINE,
   'tv-remote': GENERIC_REPLAY_LINE,
+  'hardware-button': GENERIC_REPLAY_LINE,
   uninstall: GENERIC_REPLAY_LINE,
   viewport: GENERIC_REPLAY_LINE,
   human_control: { waived: 'host-local control commands are never recorded in replay scripts' },

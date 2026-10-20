@@ -8,7 +8,10 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
 import { resolveBoundBackRuntime } from './back-runtime.ts';
-import { isSystemButtonCommand, resolveBoundSystemButtonRuntime } from './system-button-runtime.ts';
+import {
+  isSystemButtonRouteCommand,
+  resolveBoundSystemButtonRuntime,
+} from './system-button-runtime.ts';
 import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
 import { resolveBoundFoldRuntime } from './fold-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
@@ -36,9 +39,11 @@ export async function resolveGenericRuntimeExecution(
   }> &
     ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution> {
-  if (isSystemButtonCommand(params.req.command)) {
+  if (isSystemButtonRouteCommand(params.req.command)) {
     return await resolveBoundSystemButtonRuntime(params.req.command, {
       device: params.session.device,
+      // Only `hardware-button` reads these; the resolver owns the arity refusal for a miss.
+      positionals: params.req.positionals,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
       bindDevice: params.bindDevice,

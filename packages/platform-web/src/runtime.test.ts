@@ -212,8 +212,12 @@ test('clipboard, the app switcher, app events, settings and alerts carry no web 
     'readClipboard',
     'writeClipboard',
     'appSwitcher',
-    // The Action Button is iPhone/iPad hardware with no web analogue at all.
+    // The Action Button is iPhone/iPad hardware with no web analogue at all, and so are the
+    // phone volume and power keys the hardware-button command presses (#3848).
     'actionButton',
+    'volumeUp',
+    'volumeDown',
+    'power',
     // A foldable hinge is posed through the host's iOS simulator HID helper; the web target has
     // none.
     'setFoldPose',

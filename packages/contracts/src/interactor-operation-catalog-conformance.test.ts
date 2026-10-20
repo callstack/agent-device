@@ -36,6 +36,9 @@ const EXPECTATIONS: {
   writeClipboard: { method: 'writeClipboard', input: { text: '' } },
   appSwitcher: { method: 'appSwitcher', input: {} },
   actionButton: { method: 'actionButton', input: {} },
+  volumeUp: { method: 'volumeUp', input: {} },
+  volumeDown: { method: 'volumeDown', input: {} },
+  power: { method: 'power', input: {} },
   triggerAppEvent: { method: 'open', input: { eventUrl: 'myapp://x' } },
   setSetting: {
     method: 'setSetting',

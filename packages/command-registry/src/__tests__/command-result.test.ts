@@ -130,6 +130,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'orientation'
     | 'app-switcher'
     | 'action-button'
+    | 'hardware-button'
     | 'fold'
     | 'clipboard'
     | 'appstate'

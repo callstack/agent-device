@@ -99,6 +99,21 @@ export const INTERACTOR_OPERATIONS = [
     label: SYSTEM_BUTTON_LABELS.actionButton,
     bind: (signal, resolve) => bindSystemButton('actionButton', signal, resolve),
   },
+  {
+    operation: 'volumeUp',
+    label: SYSTEM_BUTTON_LABELS.volumeUp,
+    bind: (signal, resolve) => bindSystemButton('volumeUp', signal, resolve),
+  },
+  {
+    operation: 'volumeDown',
+    label: SYSTEM_BUTTON_LABELS.volumeDown,
+    bind: (signal, resolve) => bindSystemButton('volumeDown', signal, resolve),
+  },
+  {
+    operation: 'power',
+    label: SYSTEM_BUTTON_LABELS.power,
+    bind: (signal, resolve) => bindSystemButton('power', signal, resolve),
+  },
   { operation: 'triggerAppEvent', label: 'trigger-app-event', bind: bindAppEvent },
   { operation: 'setSetting', label: 'settings', bind: bindSetSetting },
   { operation: 'readSetting', label: 'settings read', bind: bindReadSetting },

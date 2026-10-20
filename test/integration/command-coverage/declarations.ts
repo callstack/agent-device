@@ -17,12 +17,14 @@ import {
   ANDROID_AUDIO_CONTRACT_EVIDENCE,
   ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE,
   ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
+  ANDROID_HARDWARE_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TELEPHONY_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_UNINSTALL_CONTRACT_EVIDENCE,
   ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE,
   APPLE_ACTION_BUTTON_FACT_EVIDENCE,
+  APPLE_HARDWARE_BUTTON_FACT_EVIDENCE,
   APPLE_HOVER_DENIAL_EVIDENCE,
   APPLE_NAVIGATION_FACTS_EVIDENCE,
   LINUX_HOVER_DENIAL_EVIDENCE,
@@ -1402,6 +1404,37 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       LINUX_RUNTIME_EVIDENCE.path,
       LINUX_RUNTIME_EVIDENCE.test,
       'the exact-owner runtime fact refuses an Action Button press on the Linux desktop',
+    ),
+  },
+  [C.hardwareButton]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_HARDWARE_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
+      'Android admits the hardware-button facts on phones and tablets through the keyevent path and refuses a TV target with a pointer to tv-remote',
+    ),
+    iosSimulator: iosSimulator.contract(
+      APPLE_HARDWARE_BUTTON_FACT_EVIDENCE.path,
+      APPLE_HARDWARE_BUTTON_FACT_EVIDENCE.test,
+      'the exact-owner runtime fact refuses hardware-button volume on the simulator leaf (XCUIDevice exposes no volume press there) and power on every leaf',
+    ),
+    macos: macos.contract(
+      APPLE_HARDWARE_BUTTON_FACT_EVIDENCE.path,
+      APPLE_HARDWARE_BUTTON_FACT_EVIDENCE.test,
+      'the exact-owner runtime fact refuses hardware-button on the macOS host leaf',
+    ),
+    tvos: tvos.contract(
+      APPLE_HARDWARE_BUTTON_FACT_EVIDENCE.path,
+      APPLE_HARDWARE_BUTTON_FACT_EVIDENCE.test,
+      'the exact-owner runtime fact refuses hardware-button on the tvOS leaf, whose remote has its own command family',
+    ),
+    web: web.contract(
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
+      'the exact-owner runtime fact refuses a hardware-button press on the web target',
+    ),
+    linux: linux.contract(
+      LINUX_RUNTIME_EVIDENCE.path,
+      LINUX_RUNTIME_EVIDENCE.test,
+      'the exact-owner runtime fact refuses a hardware-button press on every Linux leaf',
     ),
   },
   [C.fold]: {

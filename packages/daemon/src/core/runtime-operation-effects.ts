@@ -70,6 +70,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   performGesturePlan: 'mutates',
   performMultiTouchGesturePlan: 'mutates',
   performTargetAuthoredDrag: 'mutates',
+  power: 'mutates',
   prepareAppleRunner: 'repeatable',
   prepareApplicationOpen: 'repeatable',
   querySelector: 'repeatable',
@@ -97,5 +98,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   typeText: 'mutates',
   uninstallApp: 'mutates',
   unlockOrientation: 'mutates',
+  volumeDown: 'mutates',
+  volumeUp: 'mutates',
   writeClipboard: 'mutates',
 });

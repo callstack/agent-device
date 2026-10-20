@@ -432,6 +432,23 @@ export type Interactor = {
    * absent member as a successful no-op.
    */
   actionButton?(): Promise<void>;
+  /**
+   * Optional (parity with `home`): presses the physical volume-up key once, a control phone
+   * owners with a volume button carry. An owner without it leaves it undefined; its fact refuses
+   * the press before binding, and the system-button binder fails closed rather than resolving an
+   * absent member as a silent no-op.
+   */
+  volumeUp?(): Promise<void>;
+  /**
+   * Optional (parity with `volumeUp`): presses the physical volume-down key once.
+   */
+  volumeDown?(): Promise<void>;
+  /**
+   * Optional (parity with `volumeUp`): presses the physical power key once, which toggles the
+   * screen on Android. Apple exposes no public power/lock button press, so no Apple leaf carries
+   * it; an owner without it leaves it undefined and its fact refuses before binding.
+   */
+  power?(): Promise<void>;
   /** Optional: only Android implements a live status read (see {@link KeyboardStatusResult}). */
   keyboardStatus?(): Promise<KeyboardStatusResult>;
   /** Optional: platforms with no keyboard-dismiss concept leave it undefined. */

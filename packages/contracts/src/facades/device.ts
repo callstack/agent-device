@@ -46,7 +46,12 @@ export {
   ORIENTATION_REQUESTS,
   parseOrientationRequest,
   parseFoldPose,
+  HARDWARE_BUTTON_NAMES,
+  HARDWARE_BUTTON_NAME_LABELS,
+  HARDWARE_BUTTON_USAGE,
+  parseHardwareButtonPositionals,
 } from '../device-rotation.ts';
+export type { HardwareButton, HardwareButtonName } from '../device-rotation.ts';
 export {
   TELEPHONY_ACTIONS,
   TELEPHONY_CALL_ACTIONS,

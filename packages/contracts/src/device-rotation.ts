@@ -82,6 +82,98 @@ export function parseOrientationRequest(input: string | undefined): OrientationR
   return input?.trim().toLowerCase() === 'auto' ? 'auto' : parseDeviceRotation(input);
 }
 
+// ---- Hardware button ---------------------------------------------------------------------------
+// The `hardware-button` command's positional vocabulary lives beside the rotation vocabulary
+// because every entry that parses one command positional already evaluates this module; a module
+// of its own would join the eager closure of the daemon, replay-port, session-journal and CLI
+// entries that name a volume key (the eager-closure budgets in
+// scripts/__tests__/eager-closure-budgets.ts). The runtime-press vocabulary — the button family,
+// labels and binding — stays in system-button-runtime.ts. This module must not import from it,
+// type-only included: system-button-runtime.ts reaches this module through the snapshot and
+// interactor type graphs, so an edge back would close a contracts type cycle (layering R9/R10).
+// The label owner pins the drift with a type-level check instead — see system-button-runtime.ts.
+
+/**
+ * The phone hardware keys the `hardware-button` command selects between by positional, the way
+ * `keyboard <status|dismiss|enter>` selects a keyboard-family cell. `home`, `appSwitcher` and
+ * `actionButton` keep their own public commands, so each button has exactly one public route.
+ * Each name is a cell of {@link SYSTEM_BUTTONS}; system-button-runtime.ts checks that at
+ * compile time. The cells stay module-internal: consumers select a button by its public name.
+ */
+const HARDWARE_BUTTONS = ['volumeUp', 'volumeDown', 'power'] as const;
+
+export type HardwareButton = (typeof HARDWARE_BUTTONS)[number];
+
+/**
+ * The public positional names of the hardware keys: `volume-up`, `volume-down`, `power`.
+ * The literals are the same ones SYSTEM_BUTTON_LABELS carries for these buttons; the label
+ * owner's type-level check and the contracts tests refuse drift between the two lists.
+ */
+export type HardwareButtonName = 'volume-up' | 'volume-down' | 'power';
+
+/**
+ * The accepted positional values, in command order. `satisfies` turns an out-of-vocabulary
+ * typo into a build failure; the contracts test pins the list is exhaustive.
+ */
+export const HARDWARE_BUTTON_NAMES = [
+  'volume-up',
+  'volume-down',
+  'power',
+] as const satisfies readonly HardwareButtonName[];
+
+/** The CLI synopsis tail naming the accepted positional names. */
+export const HARDWARE_BUTTON_USAGE = `<${HARDWARE_BUTTON_NAMES.join('|')}>`;
+
+/**
+ * The public positional name each parsed button answers with, and the same literals
+ * SYSTEM_BUTTON_LABELS carries. Readers in eager-closure entries take the label from here
+ * rather than value-importing system-button-runtime.ts (#3848). The parse direction is
+ * derived by inverting this table rather than restating it.
+ */
+export const HARDWARE_BUTTON_NAME_LABELS = {
+  volumeUp: 'volume-up',
+  volumeDown: 'volume-down',
+  power: 'power',
+} as const satisfies Record<HardwareButton, HardwareButtonName>;
+
+const HARDWARE_BUTTON_NAME_MAP: ReadonlyMap<HardwareButtonName, HardwareButton> = new Map(
+  (Object.entries(HARDWARE_BUTTON_NAME_LABELS) as [HardwareButton, HardwareButtonName][]).map(
+    ([button, name]) => [name, button],
+  ),
+);
+
+/**
+ * Parses the `hardware-button` positional. Exact names only — no aliases — and an unknown name
+ * refuses with `INVALID_ARGS` before any device dispatch.
+ */
+/** Public entry for parsing one positional is {@link parseHardwareButtonPositionals}. */
+function parseHardwareButton(value: string | undefined): HardwareButton {
+  const normalized = value?.toLowerCase();
+  const button =
+    normalized === undefined
+      ? undefined
+      : HARDWARE_BUTTON_NAME_MAP.get(normalized as HardwareButtonName);
+  if (button) return button;
+  throw new AppError(
+    'INVALID_ARGS',
+    `hardware-button button must be one of: ${HARDWARE_BUTTON_NAMES.join(', ')}.`,
+  );
+}
+
+/**
+ * Owns the whole `hardware-button` positional contract: exactly one name, then the parse. The CLI
+ * reader and the daemon resolver both call this, so one typed answer serves both seams.
+ */
+export function parseHardwareButtonPositionals(positionals: readonly string[]): HardwareButton {
+  if (positionals.length !== 1) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `hardware-button requires exactly one button: ${HARDWARE_BUTTON_NAMES.join(', ')}.`,
+    );
+  }
+  return parseHardwareButton(positionals[0]);
+}
+
 // ---- Hinge pose ------------------------------------------------------------------------------
 // Lives beside the rotation vocabulary because every entry that reads one device pose already
 // evaluates this module; a module of its own would join the eager closure of entries that can

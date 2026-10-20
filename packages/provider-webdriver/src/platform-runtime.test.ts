@@ -620,6 +620,34 @@ test('a reachable provider with no overrides still admits its declared operation
   }
 });
 
+// The hardware-button split lives in the platform's declared map, not in a device-kind rule:
+// the Android map carries `power` (mobile pressKey 26) and volume on the pressKey keycodes, the
+// iOS map refuses power and carries volume on mobile pressButton (#3848).
+test('hardware-button facts follow the platform capability map', async () => {
+  const owner = (platform: CloudWebDriverPlatform) =>
+    createWebDriverPlatformRuntimeOwner({
+      host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+      owner: providerRuntimeOwner('browserstack', platform),
+      ownsDevice: () => true,
+      capabilities: capabilities(platform),
+      getInteractor: () => ({}) as unknown as Interactor,
+    });
+
+  const android = await owner('android').inspectFacts(device);
+  for (const key of ['volumeUp', 'volumeDown', 'power'] as const) {
+    expect(android.operations[key].available).toBe(true);
+  }
+
+  const iosDevice: DeviceInfo = { ...device, platform: 'apple', appleOs: 'ios' };
+  const ios = await owner('ios').inspectFacts(iosDevice);
+  expect(ios.operations.volumeUp.available).toBe(true);
+  expect(ios.operations.volumeDown.available).toBe(true);
+  expect(ios.operations.power).toMatchObject({
+    available: false,
+    reason: 'owner-capability-missing',
+  });
+});
+
 test('an Apple WebDriver dump bounded to one entry reports unnamed traffic without its identities', async () => {
   // Five keep-alive requests CFNetwork logged no URL for, and no connection
   // line to resolve them against: many more unnamed tasks than maxEntries.

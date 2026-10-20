@@ -42,7 +42,10 @@ import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime'
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
-import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
+import {
+  androidHardwareButtonAvailability,
+  systemButtonRuntimeOperationFacts,
+} from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -90,9 +93,10 @@ const keyboardKindUnavailable = unavailableFact(
 );
 const hoverUnavailable = unavailableFact('unsupported-platform-leaf');
 /**
- * `home` and `app-switcher` are the system buttons `input keyevent` can press. Any other (the
- * iPhone Action Button today) is hardware with no Android key event behind it, so there is no adb
- * path to admit even on the kinds every other Android cell admits.
+ * `home`, `app-switcher`, and the three `hardware-button` keys are the system buttons
+ * `input keyevent` can press. Any other (the iPhone Action Button today) is hardware with no
+ * Android key event behind it, so there is no adb path to admit even on the kinds every other
+ * Android cell admits.
  */
 const systemButtonUnavailable = unavailableFact(
   'unsupported-platform-leaf',
@@ -342,11 +346,16 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
         // `home` and `app-switcher` are one `input keyevent` each, admitted wherever the retired
-        // `ANDROID_ALL` bucket admitted them.
+        // `ANDROID_ALL` bucket admitted them. The hardware-button keys use the same keyevent path
+        // but the shared Android rule gates the target: a TV device refuses and points at
+        // `tv-remote`.
         ...systemButtonRuntimeOperationFacts({
           unsupported: systemButtonUnavailable,
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
+          volumeUp: androidHardwareButtonAvailability(device),
+          volumeDown: androidHardwareButtonAvailability(device),
+          power: androidHardwareButtonAvailability(device),
         }),
         ...androidFoldableFacts(device),
         ...androidTelephonyFacts(device),

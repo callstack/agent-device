@@ -53,6 +53,12 @@ const SNAPSHOT_VIEWPORT_PROBE_TIMEOUT_MS = 500;
 
 /** The Android `KEYCODE_ENTER` the IME's return key sends. */
 const ANDROID_KEYCODE_ENTER = 66;
+/** The Android `KEYCODE_VOLUME_UP` the `hardware-button volume-up` press sends. */
+const ANDROID_KEYCODE_VOLUME_UP = 24;
+/** The Android `KEYCODE_VOLUME_DOWN` the `hardware-button volume-down` press sends. */
+const ANDROID_KEYCODE_VOLUME_DOWN = 25;
+/** The Android `KEYCODE_POWER` the `hardware-button power` press sends. */
+const ANDROID_KEYCODE_POWER = 26;
 /** How a WebDriver dismiss lowers the iOS keyboard: Appium's hide-keyboard route. */
 const WEBDRIVER_DISMISS_MECHANISM = 'appium-hide-keyboard';
 
@@ -418,6 +424,41 @@ class WebDriverInteractor implements Interactor {
   async appSwitcher(): Promise<void> {
     this.requireSupport('appSwitcher');
     await this.client.executeScript('mobile: pressButton', [{ name: 'appSwitch' }]);
+  }
+
+  /**
+   * The volume legs split by backend because the two drivers expose different routes: XCUITest
+   * answers `mobile: pressButton` with the `volumeup`/`volumedown` names (the only hardware-key
+   * route it exposes), while UiAutomator2 registers no pressButton at all and presses the
+   * KEYCODE_VOLUME_UP/DOWN keycodes through `mobile: pressKey` — the same keyevents the local
+   * Android owner sends. The press lands on the system, which is what the command claims.
+   */
+  async volumeUp(): Promise<void> {
+    this.requireSupport('volumeUp');
+    await this.pressVolumeKey(ANDROID_KEYCODE_VOLUME_UP, 'volumeup');
+  }
+
+  async volumeDown(): Promise<void> {
+    this.requireSupport('volumeDown');
+    await this.pressVolumeKey(ANDROID_KEYCODE_VOLUME_DOWN, 'volumedown');
+  }
+
+  private async pressVolumeKey(androidKeycode: number, xcuiButtonName: string): Promise<void> {
+    if (this.backend === 'android') {
+      await this.client.executeScript('mobile: pressKey', [{ keycode: androidKeycode }]);
+      return;
+    }
+    await this.client.executeScript('mobile: pressButton', [{ name: xcuiButtonName }]);
+  }
+
+  /**
+   * Android presses KEYCODE_POWER through `mobile: pressKey`, the same keycode the local owner
+   * sends through `input keyevent`. iOS has no power press in any Appium route, and its
+   * capability map declares `power` unsupported, so the declaration refuses before this leg.
+   */
+  async power(): Promise<void> {
+    this.requireSupport('power');
+    await this.client.executeScript('mobile: pressKey', [{ keycode: ANDROID_KEYCODE_POWER }]);
   }
 
   async tvRemote(_button: TvRemoteButton, _durationMs?: number): Promise<void> {

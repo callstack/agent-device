@@ -78,6 +78,8 @@ const RUNNER_TRANSPORT_METHODS: Record<
   setOrientation: { invoke: (i) => i.setOrientation('portrait'), runnerCommand: 'rotate' },
   appSwitcher: { invoke: (i) => i.appSwitcher!(), runnerCommand: 'appSwitcher' },
   actionButton: { invoke: (i) => i.actionButton!(), runnerCommand: 'actionButton' },
+  volumeUp: { invoke: (i) => i.volumeUp!(), runnerCommand: 'volumeUp' },
+  volumeDown: { invoke: (i) => i.volumeDown!(), runnerCommand: 'volumeDown' },
   tvRemote: { invoke: (i) => i.tvRemote!('select'), runnerCommand: 'remotePress' },
   keyboardDismiss: { invoke: (i) => i.keyboardDismiss!(), runnerCommand: 'keyboardDismiss' },
   keyboardEnter: { invoke: (i) => i.keyboardEnter!(), runnerCommand: 'keyboardReturn' },

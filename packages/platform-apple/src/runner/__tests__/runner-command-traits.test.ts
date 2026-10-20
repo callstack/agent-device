@@ -60,6 +60,8 @@ test('runner command trait table pins lifecycle-sensitive command groups', () =>
       'rotate',
       'shutdown',
       'type',
+      'volumeDown',
+      'volumeUp',
     ],
   });
   assert.deepEqual(Object.values(groups).flat().sort(), [...RUNNER_COMMANDS].sort());

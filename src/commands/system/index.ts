@@ -18,6 +18,12 @@ import {
   parseTelephonyEventInput,
   parseTelephonyPositionals,
   telephonyPositionals,
+  // The hardware-button vocabulary arrives through the same eager device-vocabulary façade the
+  // orientation and fold readers use (#3848, eager-closure budgets).
+  HARDWARE_BUTTON_NAMES,
+  HARDWARE_BUTTON_NAME_LABELS,
+  HARDWARE_BUTTON_USAGE,
+  parseHardwareButtonPositionals,
 } from '@agent-device/contracts/device';
 import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
@@ -76,6 +82,7 @@ const ORIENTATION_COMMAND_NAME = 'orientation';
 const FOLD_COMMAND_NAME = 'fold';
 const APP_SWITCHER_COMMAND_NAME = 'app-switcher';
 const ACTION_BUTTON_COMMAND_NAME = 'action-button';
+const HARDWARE_BUTTON_COMMAND_NAME = 'hardware-button';
 const KEYBOARD_COMMAND_NAME = 'keyboard';
 const CLIPBOARD_COMMAND_NAME = 'clipboard';
 const TV_REMOTE_COMMAND_NAME = 'tv-remote';
@@ -160,6 +167,14 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
       action: constSchema('tv-remote'),
       button: tvRemoteButtonSchema,
       durationMs: numberSchema(),
+      message: stringSchema(),
+    },
+    ['action', 'button', 'message'],
+  ),
+  'hardware-button': objectSchema(
+    {
+      action: constSchema('hardware-button'),
+      button: enumSchema(HARDWARE_BUTTON_NAMES),
       message: stringSchema(),
     },
     ['action', 'button', 'message'],
@@ -262,6 +277,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   | 'fold'
   | 'action-button'
   | 'tv-remote'
+  | 'hardware-button'
   | 'telephony'
   | 'clipboard'
   | 'appstate'
@@ -316,6 +332,9 @@ const actionButtonCommandDescription =
   'Press the iPhone or iPad Action Button once. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the app keeps the state the press found. What the system does with the press is not observed by this command: Simulators run no Shortcuts or App Intents, so delivery to an assigned Shortcut is verifiable only on a physical iPhone.';
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote button on Android TV, tvOS, or Vega OS. Android TV also supports volume, power, media, channel, guide, captions, input, color keys, and android-keycode:N. tvOS and Vega OS support up, down, left, right, select, menu, home, and back. Phones and WebDriver sessions are unsupported. The aliases ok, center, and enter map to select.';
+
+const hardwareButtonCommandDescription =
+  'Press a phone hardware button once: volume-up, volume-down, or power. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the OS decides what the key does — which audio stream a volume press moves, and whether the HUD shows, is device behavior this command does not claim. Power toggles the Android screen; after a press that turns it off, later commands may hit a locked screen. Android (ADB-backed and Appium) presses all three on phones and tablets; a physical iPhone or iPad presses volume only through the local runner or Appium, never power. iOS Simulators, Android TV and tvOS targets refuse: on TV targets use tv-remote.';
 
 const telephonyCommandDescription =
   'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
@@ -413,6 +432,19 @@ const tvRemoteCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
+const hardwareButtonCommandMetadata = defineFieldCommandMetadata(
+  HARDWARE_BUTTON_COMMAND_NAME,
+  hardwareButtonCommandDescription,
+  {
+    button: requiredField(
+      enumField(
+        HARDWARE_BUTTON_NAMES,
+        'One press each. volume-up and volume-down move the system volume stream the OS selects; power toggles the screen on Android and is refused on every Apple leaf.',
+      ),
+    ),
+  },
+);
+
 const telephonyFields = {
   action: requiredField(
     enumField(
@@ -487,6 +519,11 @@ const tvRemoteCliSchema = {
   allowedFlags: ['durationMs'],
 } as const satisfies CommandSchemaOverride;
 
+const hardwareButtonCliSchema = {
+  usageOverride: `hardware-button ${HARDWARE_BUTTON_USAGE}`,
+  positionalArgs: ['button'],
+} as const satisfies CommandSchemaOverride;
+
 const telephonyCliSchema = {
   usageOverride: TELEPHONY_USAGE,
   listUsageOverride: 'telephony call|accept|cancel|sms <number> [text]',
@@ -527,6 +564,11 @@ export const tvRemoteCliReader: CliReader = (positionals, flags) => ({
   ...readTvRemoteInput(positionals, flags.durationMs),
 });
 
+export const hardwareButtonCliReader: CliReader = (positionals, flags) => ({
+  ...commonInputFromFlags(flags),
+  ...readHardwareButtonInput(positionals),
+});
+
 export const telephonyCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   ...parseTelephonyPositionals(positionals),
@@ -561,6 +603,11 @@ export const clipboardDaemonWriter: DaemonWriter = direct(CLIPBOARD_COMMAND_NAME
 export const tvRemoteDaemonWriter: DaemonWriter = direct(TV_REMOTE_COMMAND_NAME, (input) => [
   requiredDaemonString(input.button, 'tv-remote requires button'),
 ]);
+
+export const hardwareButtonDaemonWriter: DaemonWriter = direct(
+  HARDWARE_BUTTON_COMMAND_NAME,
+  (input) => [requiredDaemonString(input.button, 'hardware-button requires button')],
+);
 
 export const telephonyDaemonWriter: DaemonWriter = direct(TELEPHONY_COMMAND_NAME, (input) =>
   telephonyPositionals(parseTelephonyEventInput(input)),
@@ -689,6 +736,21 @@ const tvRemoteCommandFacet = defineCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters['tv-remote'],
 });
 
+const hardwareButtonCommandFacet = defineCommandFacet({
+  name: HARDWARE_BUTTON_COMMAND_NAME,
+  text: {
+    summary: 'Press a phone hardware button once',
+    cliDetail:
+      'Single press; no hold. Android presses volume-up, volume-down, and power on phones and tablets. A physical iPhone or iPad presses volume only; power is never supported on Apple targets. iOS Simulators, Android TV, and tvOS refuse — use tv-remote on TV targets.',
+  },
+  metadata: hardwareButtonCommandMetadata,
+  run: (client, input) => client.command.hardwareButton(input),
+  cliSchema: hardwareButtonCliSchema,
+  cliReader: hardwareButtonCliReader,
+  daemonWriter: hardwareButtonDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters['hardware-button'],
+});
+
 const telephonyCommandFacet = defineCommandFacet({
   name: TELEPHONY_COMMAND_NAME,
   text: {
@@ -717,6 +779,7 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     keyboardCommandFacet,
     clipboardCommandFacet,
     tvRemoteCommandFacet,
+    hardwareButtonCommandFacet,
     telephonyCommandFacet,
   ],
 });
@@ -772,6 +835,11 @@ function readTvRemoteInput(
     button: parseTvRemoteButton(args[0]),
     durationMs: effectiveDurationMs,
   });
+}
+
+function readHardwareButtonInput(positionals: string[]): Record<string, unknown> {
+  // One shared helper answers arity and parse for the CLI reader and the daemon resolver alike.
+  return { button: HARDWARE_BUTTON_NAME_LABELS[parseHardwareButtonPositionals(positionals)] };
 }
 
 function readKeyboardAction(

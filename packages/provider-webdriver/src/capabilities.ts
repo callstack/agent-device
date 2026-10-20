@@ -20,6 +20,9 @@ export type CloudWebDriverOperation =
   | 'orientation'
   | 'appSwitcher'
   | 'tvRemote'
+  | 'volumeUp'
+  | 'volumeDown'
+  | 'power'
   | 'clipboard.read'
   | 'clipboard.write'
   | 'settings'
@@ -103,6 +106,22 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
     support: 'partial',
     note: 'Uses provider/Appium mobile pressButton support where available.',
   },
+  // hardware-button legs. The base rows state the iOS route (XCUITest `mobile: pressButton`
+  // carries the volume names and exposes no power press at all); the Android platform entry below
+  // replaces all three with the `mobile: pressKey` keycodes UiAutomator2 presses, and lifts
+  // `power` from unsupported to partial.
+  volumeUp: {
+    support: 'partial',
+    note: 'Uses provider/Appium mobile pressButton volumeup support where available; real devices only.',
+  },
+  volumeDown: {
+    support: 'partial',
+    note: 'Uses provider/Appium mobile pressButton volumedown support where available; real devices only.',
+  },
+  power: {
+    support: 'unsupported',
+    note: 'XCUITest exposes no power press to Appium on any iOS session.',
+  },
   tvRemote: unsupported,
   'clipboard.read': {
     support: 'partial',
@@ -133,12 +152,32 @@ export function createCloudWebDriverCapabilities(options: {
   platform: CloudWebDriverPlatform;
   overrides?: CloudWebDriverCapabilityOverrides;
 }): CloudWebDriverProviderCapabilities {
+  const base: CloudWebDriverCapabilityMap =
+    options.platform === 'android'
+      ? {
+          ...BASE_WEBDRIVER_CAPABILITIES,
+          // UiAutomator2's execute map (checked against 8.x) registers no pressButton route; it
+          // presses any keycode through mobile pressKey — the same keyevents the local Android owner sends through `input keyevent`.
+          volumeUp: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 24 where available.',
+          },
+          volumeDown: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 25 where available.',
+          },
+          power: {
+            support: 'partial',
+            note: "Uses provider/Appium mobile pressKey keycode 26 where available; the screen state after the press is the device's own.",
+          },
+        }
+      : BASE_WEBDRIVER_CAPABILITIES;
   return {
     provider: options.provider,
     platform: options.platform,
     snapshotBackend: options.platform === 'ios' ? 'xctest' : 'android',
     snapshotSource: 'appium-page-source',
-    operations: applyCapabilityOverrides(BASE_WEBDRIVER_CAPABILITIES, options.overrides),
+    operations: applyCapabilityOverrides(base, options.overrides),
   };
 }
 

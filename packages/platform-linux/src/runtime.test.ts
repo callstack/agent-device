@@ -218,8 +218,12 @@ function expectLinuxNavigationAndKeyboardFacts(
     // R56: the Linux interactor's own `appSwitcher` throws, and the retired descriptor declared
     // `linux: {}`, so no Linux cell was ever admitted.
     'appSwitcher',
-    // The Action Button is iPhone/iPad hardware; the Linux desktop has no equivalent control.
+    // The Action Button is iPhone/iPad hardware; the Linux desktop has no equivalent control,
+    // and neither does it have the phone volume and power keys hardware-button presses (#3848).
     'actionButton',
+    'volumeUp',
+    'volumeDown',
+    'power',
     // Nor does it have a foldable hinge to pose.
     'setFoldPose',
     // Nor a modem to simulate a call or text message on.

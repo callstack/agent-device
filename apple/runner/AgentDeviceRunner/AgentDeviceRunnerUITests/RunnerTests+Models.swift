@@ -23,6 +23,8 @@ enum CommandType: String, Codable, CaseIterable {
   case rotate
   case appSwitcher
   case actionButton
+  case volumeUp
+  case volumeDown
   case keyboardDismiss
   case keyboardReturn
   case alert
@@ -292,7 +294,7 @@ extension Command {
     case .pasteboardWrite:
       return .deviceState
 
-    case .actionButton:
+    case .actionButton, .volumeUp, .volumeDown:
       return .presentedSurfaceMutation
 
     case .querySelector:

@@ -47,6 +47,8 @@ const REGISTRY_COUNTERPART: Record<RunnerName, RegistryRequest> = {
   gesture: { command: 'gesture' },
   appSwitcher: { command: 'app-switcher' },
   actionButton: { command: 'action-button' },
+  volumeUp: { command: 'hardware-button', positionals: ['volume-up'] },
+  volumeDown: { command: 'hardware-button', positionals: ['volume-down'] },
   keyboardDismiss: { command: 'keyboard', positionals: ['dismiss'] },
   keyboardReturn: { command: 'keyboard', positionals: ['enter'] },
   pasteboardWrite: { command: 'clipboard', positionals: ['write', 'x'] },

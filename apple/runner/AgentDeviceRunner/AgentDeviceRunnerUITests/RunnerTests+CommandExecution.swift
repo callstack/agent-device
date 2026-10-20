@@ -539,6 +539,18 @@ extension RunnerTests {
         )
       }
       return Response(ok: true, data: DataPayload(message: "actionButton"))
+    case .volumeUp, .volumeDown:
+      guard pressVolumeButton(command.command) else {
+        return Response(
+          ok: false,
+          error: ErrorPayload(
+            code: "UNSUPPORTED_OPERATION",
+            message: "\(command.command) requires a physical iPhone or iPad; XCUIDevice exposes no volume press on a simulator",
+            hint: "hardware-button volume-up/volume-down is supported on physical iOS devices through the runner or Appium; iOS Simulators have no pressable volume key."
+          )
+        )
+      }
+      return Response(ok: true, data: DataPayload(message: command.command.rawValue))
     case .keyboardDismiss:
       let result = dismissKeyboard(app: activeApp)
       if result.wasVisible && !result.dismissed {

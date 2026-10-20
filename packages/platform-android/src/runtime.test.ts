@@ -189,6 +189,51 @@ test.each([
   },
 );
 
+test('Android admits the hardware-button facts on phones and tablets and refuses a TV target', async () => {
+  for (const runtimeDevice of [
+    ANDROID_EMULATOR,
+    { ...ANDROID_EMULATOR, kind: 'device' as const },
+    UNKNOWN_KIND_DEVICE,
+  ]) {
+    const binding = await bindOrdinary(
+      createAndroidPlatformRuntime(androidNavigationHost()),
+      runtimeDevice,
+    );
+    // One `input keyevent` each on the same adb path `home` rides, on every kind with a device.
+    for (const operation of ['volumeUp', 'volumeDown', 'power'] as const) {
+      expect(binding.facts.operations[operation]).toEqual({ available: true });
+      expect(binding.operations[operation]).toBeTypeOf('function');
+    }
+  }
+
+  // A TV target has no phone volume/power semantics; the refusal points at `tv-remote`.
+  const tvDevice = { ...ANDROID_EMULATOR, kind: 'emulator' as const, target: 'tv' as const };
+  const tv = await bindOrdinary(createAndroidPlatformRuntime(androidNavigationHost()), tvDevice);
+  for (const operation of ['volumeUp', 'volumeDown', 'power'] as const) {
+    expect(tv.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-device-kind',
+      hint: 'hardware-button is not supported on Android TV targets; use tv-remote.',
+    });
+    expect(tv.operations[operation]).toBeUndefined();
+  }
+
+  // The synthetic `simulator` row has no device behind it, and its refusal names the hardware
+  // keys rather than borrowing another command's sentence.
+  const synthetic = await bindOrdinary(createAndroidPlatformRuntime(androidNavigationHost()), {
+    ...ANDROID_EMULATOR,
+    kind: 'simulator' as const,
+  });
+  for (const operation of ['volumeUp', 'volumeDown', 'power'] as const) {
+    expect(synthetic.facts.operations[operation]).toEqual({
+      available: false,
+      reason: 'unsupported-device-kind',
+      hint: 'hardware-button is supported on Android emulators and physical devices.',
+    });
+    expect(synthetic.operations[operation]).toBeUndefined();
+  }
+});
+
 test('admits Android tv-remote only for a real TV target', async () => {
   const tvDevice = { ...ANDROID_EMULATOR, kind: 'emulator' as const, target: 'tv' as const };
   const binding = await bindOrdinary(
@@ -338,6 +383,9 @@ test('the synthetic Android simulator cell refuses back/home/orientation/keyboar
     'readClipboard',
     'writeClipboard',
     'appSwitcher',
+    'volumeUp',
+    'volumeDown',
+    'power',
     'triggerAppEvent',
     'setSetting',
     'readAlert',

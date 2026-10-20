@@ -1,6 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import {
   FOLD_POSES,
+  HARDWARE_BUTTON_NAMES,
   ORIENTATION_REQUESTS,
   TELEPHONY_ACTIONS,
 } from '@agent-device/contracts/device';
@@ -43,6 +44,8 @@ export function buildStructuredActionSummary(action: SessionAction): string | un
       return 'Opened app switcher';
     case PUBLIC_COMMANDS.actionButton:
       return 'Pressed Action Button';
+    case PUBLIC_COMMANDS.hardwareButton:
+      return buildHardwareButtonActionSummary(result);
     case PUBLIC_COMMANDS.orientation:
       return buildOrientationActionSummary(result);
     case PUBLIC_COMMANDS.fold:
@@ -112,6 +115,8 @@ export function buildStructuredActionDetails(action: SessionAction): Record<stri
         button: isTvRemoteButton(result.button) ? result.button : undefined,
         durationMs: readSessionEventNumber(result.durationMs),
       });
+    case PUBLIC_COMMANDS.hardwareButton:
+      return compactDetails({ button: readEnum(result.button, HARDWARE_BUTTON_NAMES) });
     case PUBLIC_COMMANDS.gesture:
     case PUBLIC_COMMANDS.swipe:
       return buildGestureActionDetails(result);
@@ -259,6 +264,11 @@ function buildKeyboardActionDetails(result: Record<string, unknown>): Record<str
     attempts: readSessionEventNumber(result.attempts),
     mechanism: readEnum(result.mechanism, ['dismissKey']),
   });
+}
+
+function buildHardwareButtonActionSummary(result: Record<string, unknown>): string {
+  const button = readEnum(result.button, HARDWARE_BUTTON_NAMES);
+  return button === undefined ? 'Pressed hardware button' : `Pressed hardware button ${button}`;
 }
 
 function buildTvRemoteActionSummary(result: Record<string, unknown>): string {
