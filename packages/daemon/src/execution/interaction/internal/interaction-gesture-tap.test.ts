@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import {
   makeIosSession,
+  makeAndroidSession,
   authoringPublication,
 } from '../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
@@ -11,6 +12,8 @@ import {
   markRequestCanceled,
   clearRequestCanceled,
 } from '@agent-device/host-kit/request';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import { clearAndroidObservationFixture } from '../../../__tests__/support/android-observation-fixture.ts';
 import { handleInteractionCommands } from '../index.ts';
 import { gestureRuntimeBindingsFixture } from './__tests__/gesture-runtime-bindings.fixtures.ts';
 
@@ -27,7 +30,7 @@ const perform = vi.fn(async () => ({
 
 beforeEach(() => {
   gestures = gestureRuntimeBindingsFixture();
-  perform.mockClear();
+  perform.mockReset();
   registerRequestAbort(requestId);
 });
 
@@ -39,9 +42,10 @@ afterEach(() => {
 async function runGesture(
   input: Record<string, unknown>,
   command: 'gesture' | 'swipe' = 'gesture',
+  androidObservation?: AndroidObservationAdapter,
 ) {
   const sessionStore = makeSessionStore();
-  const session = makeIosSession('tap', {
+  const session = (androidObservation ? makeAndroidSession : makeIosSession)('tap', {
     appBundleId: 'com.example.tap',
     scriptPublication: authoringPublication('armed'),
   });
@@ -52,6 +56,7 @@ async function runGesture(
       return { ...surface, interactions: { ...surface.interactions, gesture: perform } };
     },
     platformServices: daemonPlatformServicesFixture(),
+    androidObservation,
     req: {
       token: 't',
       session: 'tap',
@@ -200,4 +205,101 @@ test('cancellation during the last tap records no completed action', async () =>
   });
   expect(actions).toEqual([]);
   expect(performed).toBe(3);
+});
+
+for (const canceled of [false, true]) {
+  test(`Android post-tap ANR recovery is ${canceled ? 'skipped after cancellation' : 'performed without cancellation'}`, async () => {
+    let dispatched = false;
+    const tap = vi.fn(clearAndroidObservationFixture.tap);
+    const openApp = vi.fn(clearAndroidObservationFixture.openApp);
+    const readBlockingDialog = vi.fn<AndroidObservationAdapter['readBlockingDialog']>(async () =>
+      dispatched
+        ? {
+            status: 'dialog',
+            focus: {
+              package: 'com.example.tap',
+              focusedWindow: 'Application Not Responding',
+              raw: '',
+            },
+          }
+        : { status: 'clear' },
+    );
+    const androidObservation: AndroidObservationAdapter = {
+      ...clearAndroidObservationFixture,
+      readBlockingDialog,
+      readSnapshotNodes: async () => [
+        {
+          index: 0,
+          ref: 'e0',
+          type: 'Button',
+          label: 'Close app',
+          rect: { x: 10, y: 20, width: 100, height: 40 },
+        },
+      ],
+      tap,
+      openApp,
+    };
+    const result = await perform();
+    perform.mockClear();
+    perform.mockImplementation(async () => {
+      dispatched = true;
+      if (canceled) markRequestCanceled(requestId);
+      return result;
+    });
+    const { response, actions } = await runGesture(
+      {
+        kind: 'tap',
+        points: [
+          { x: 80, y: 300 },
+          { x: 200, y: 450 },
+        ],
+      },
+      'gesture',
+      androidObservation,
+    );
+    expect(perform).toHaveBeenCalledTimes(1);
+    expect(response).toMatchObject({ ok: false, error: { code: 'COMMAND_FAILED' } });
+    if (canceled) {
+      expect(response).toMatchObject({ error: { details: { reason: 'request_canceled' } } });
+      expect(readBlockingDialog).toHaveBeenCalledTimes(1);
+      expect(tap).not.toHaveBeenCalled();
+      expect(openApp).not.toHaveBeenCalled();
+    } else {
+      expect(response && !response.ok ? response.error.details : undefined).not.toHaveProperty(
+        'reason',
+        'request_canceled',
+      );
+      expect(tap).toHaveBeenCalledTimes(1);
+      expect(openApp).toHaveBeenCalledTimes(1);
+    }
+    expect(actions).toEqual([]);
+  });
+}
+
+test('cancellation during the post-command dialog read prevents recording', async () => {
+  let reads = 0;
+  const androidObservation: AndroidObservationAdapter = {
+    ...clearAndroidObservationFixture,
+    readBlockingDialog: async () => {
+      if (++reads === 2) markRequestCanceled(requestId);
+      return { status: 'clear' };
+    },
+  };
+  const { response, actions } = await runGesture(
+    {
+      kind: 'tap',
+      points: [
+        { x: 80, y: 300 },
+        { x: 200, y: 450 },
+      ],
+    },
+    'gesture',
+    androidObservation,
+  );
+  expect(reads).toBe(2);
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'COMMAND_FAILED', details: { reason: 'request_canceled' } },
+  });
+  expect(actions).toEqual([]);
 });

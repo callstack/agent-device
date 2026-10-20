@@ -152,10 +152,14 @@ function buildGestureOutcome(
   const recording = result.kind === 'drag' ? result.recording : undefined;
   const sourceTarget = recording?.sourceTarget;
   const destinationTarget = recording?.destinationTarget;
+  const responseResult =
+    input.kind === 'tap' && (input.count ?? 1) > 1
+      ? { ...result, message: `Tapped ${input.points.length} points ${input.count} times` }
+      : result;
   return {
     positionals: dragRecordingPositionals(input, recording),
     flags: gestureReplayFlags(input, flags),
-    responseData: gestureResponseData(result, {
+    responseData: gestureResponseData(responseResult, {
       executionProfile: resolveExecutionProfile(gesture),
       ...(input.kind === 'tap'
         ? {
@@ -442,13 +446,9 @@ async function runGestureRepetitions(
       gestureAtIndex(index),
       params.req.internal,
     );
-    signal?.throwIfAborted();
     if (pauseMs > 0 && index + 1 < count) await sleep(pauseMs, signal);
   }
   if (!result) throw new Error('Gesture orchestration did not execute a gesture.');
-  if (result.kind === 'tap' && count > 1) {
-    return { ...result, message: `Tapped ${result.pointerCount} points ${count} times` };
-  }
   return result;
 }
 

@@ -48,16 +48,12 @@ const coordinateGestureCommand: RuntimeCommand<
   }
   await assertSupportedInteractionSurface(runtime, options, options.gesture.intent);
   const performGesture = runtime.backend.performGesture;
-  const signal = options.signal ?? runtime.signal;
-  signal?.throwIfAborted();
   const plan = buildGesturePlan(
     options.gesture,
     await resolveGestureViewport(runtime, options),
     runtime.backend.platform,
   );
-  signal?.throwIfAborted();
   const backendResult = await performGesture(toBackendContext(runtime, options), plan);
-  signal?.throwIfAborted();
   const formattedBackendResult = toBackendResult(backendResult);
   const from = centroidAt(plan.pointers, 0);
   const to = centroidAt(plan.pointers, -1);

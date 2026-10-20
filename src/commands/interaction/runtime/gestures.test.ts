@@ -257,13 +257,14 @@ test('each tap plans one repetition against a fresh viewport', async () => {
   assert.equal(result.message, 'Tapped 2 points');
 });
 
-test('an aborted tap propagates its typed cancellation even when the backend returns normally', async () => {
+test('a tap forwards its signal and propagates backend cancellation', async () => {
   const controller = new AbortController();
   const reason = createRequestCanceledError();
   const device = createInteractionDevice(selectorSnapshot(), {
     resolveGestureViewport: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
-    performGesture: async () => {
+    performGesture: async (context) => {
       controller.abort(reason);
+      context.signal?.throwIfAborted();
     },
   });
   await assert.rejects(
