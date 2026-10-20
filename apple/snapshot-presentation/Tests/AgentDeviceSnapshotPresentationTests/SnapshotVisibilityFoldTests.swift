@@ -21,7 +21,7 @@ final class SnapshotVisibilityFoldTests: XCTestCase {
         viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100)),
         interactiveOnly: false,
         policy: .cursorProjected
-      )
+      ).nodes
 
       XCTAssertEqual(folded.count, 2)
       let presentation = try XCTUnwrap(folded.last)

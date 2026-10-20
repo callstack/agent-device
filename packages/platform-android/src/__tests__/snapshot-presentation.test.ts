@@ -30,10 +30,7 @@ test('regular Android snapshots publish cumulative effective geometry while raw 
     rect: { x: 200, y: 300, width: 50, height: 50 },
     hittable: true,
   });
-  expect(regular.nodes.find((node) => node.label === 'Outside nested scroll')).toMatchObject({
-    rect: { x: 260, y: 360, width: 0, height: 0 },
-    hittable: undefined,
-  });
+  expect(regular.nodes.find((node) => node.label === 'Outside nested scroll')).toBeUndefined();
   expect(raw.nodes.find((node) => node.label === 'Partially visible')).toMatchObject({
     rect: { x: 200, y: 300, width: 120, height: 80 },
     hittable: true,
@@ -57,10 +54,7 @@ test('regular Android snapshots clip descendants to their owning window', () => 
   const regular = parseUiHierarchy(xml, 800, {});
   const dialogAction = regular.nodes.find((node) => node.label === 'Outside dialog');
 
-  expect(dialogAction).toMatchObject({
-    rect: { x: 120, y: 320, width: 0, height: 0 },
-    hittable: undefined,
-  });
+  expect(dialogAction).toBeUndefined();
 });
 
 test('regular Android invariant rejects a framed node outside its cumulative clip', () => {

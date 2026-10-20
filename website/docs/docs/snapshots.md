@@ -243,6 +243,12 @@ and still trust the answer.
 
 ## iOS capture behavior
 
+Regular iOS snapshots clip overflowing elements to their visible area and omit elements entirely
+outside it, including system alerts at large text sizes. With `--json`,
+`snapshotQuality.notes` can include `code: "regular-geometry-clipped"` with `clippedNodeCount`
+and `droppedNodeCount`. You can continue using visible controls. Use `--raw` to inspect reported
+frames before clipping.
+
 iOS snapshots use XCTest on simulators and physical devices. You can't pick the capture backend. `--raw` switches between two strategies, and each strategy
 decides which backends it tries.
 

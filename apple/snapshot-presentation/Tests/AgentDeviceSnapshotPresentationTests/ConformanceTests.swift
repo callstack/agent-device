@@ -57,5 +57,8 @@ final class ConformanceTests: XCTestCase {
 
     XCTAssertEqual(result.nodes.map(\.label), ["App", "Continue"])
     XCTAssertEqual(result.nodes[1].rect, SnapshotRect(x: 80, y: 10, width: 20, height: 20))
+    XCTAssertEqual(result.qualityNotes.first?.code, .regularGeometryClipped)
+    XCTAssertEqual(result.qualityNotes.first?.clippedNodeCount, 1)
+    XCTAssertEqual(result.qualityNotes.first?.droppedNodeCount, 0)
   }
 }

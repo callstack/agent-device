@@ -333,11 +333,28 @@ public struct PresentedNode: Codable, Equatable {
   }
 }
 
+public struct SnapshotQualityNote: Codable, Equatable {
+  public enum Code: String, Codable {
+    case regularGeometryClipped = "regular-geometry-clipped"
+  }
+
+  public let code: Code
+  public let clippedNodeCount: Int
+  public let droppedNodeCount: Int
+
+  init(clippedNodeCount: Int, droppedNodeCount: Int) {
+    self.code = .regularGeometryClipped
+    self.clippedNodeCount = clippedNodeCount
+    self.droppedNodeCount = droppedNodeCount
+  }
+}
+
 public struct SnapshotPresentationResult {
   public let nodes: [PresentedNode]
   public let truncated: Bool
   public let effectiveDepth: Int?
   public let customActions: SnapshotCustomActionCoverage?
+  public let qualityNotes: [SnapshotQualityNote]
   public let qualityNodes: [PresentedNode]?
 
   public init(
@@ -345,12 +362,14 @@ public struct SnapshotPresentationResult {
     truncated: Bool,
     effectiveDepth: Int?,
     customActions: SnapshotCustomActionCoverage?,
-    qualityNodes: [PresentedNode]?
+    qualityNodes: [PresentedNode]?,
+    qualityNotes: [SnapshotQualityNote] = []
   ) {
     self.nodes = nodes
     self.truncated = truncated
     self.effectiveDepth = effectiveDepth
     self.customActions = customActions
     self.qualityNodes = qualityNodes
+    self.qualityNotes = qualityNotes
   }
 }

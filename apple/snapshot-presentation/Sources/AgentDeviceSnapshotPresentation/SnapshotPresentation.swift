@@ -30,15 +30,16 @@ public enum SnapshotPresentation {
       policy: policy
     )
     try SnapshotPresentationInvariant.validateRegular(
-      folded,
+      folded.nodes,
       viewport: acquisition.viewport,
       policy: policy
     )
     return project(
-      folded,
+      folded.nodes,
       acquisition: acquisition,
       options: options,
-      projection: .regular
+      projection: .regular,
+      qualityNotes: folded.qualityNotes
     )
   }
 

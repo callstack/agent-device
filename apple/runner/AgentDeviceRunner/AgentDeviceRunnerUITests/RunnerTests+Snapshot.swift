@@ -169,7 +169,8 @@ extension RunnerTests {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
     if let blocking = boundedBlockingSystemAlertSnapshot(
       deadline: deadline,
-      penaltyTarget: .prepared(bundleId: target.bundleId)
+      penaltyTarget: .prepared(bundleId: target.bundleId),
+      options: options
     ) {
       return blocking
     }
@@ -298,7 +299,8 @@ extension RunnerTests {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
     if let blocking = boundedBlockingSystemAlertSnapshot(
       deadline: deadline,
-      penaltyTarget: .prepared(bundleId: target.bundleId)
+      penaltyTarget: .prepared(bundleId: target.bundleId),
+      options: options
     ) {
       return blocking
     }
@@ -316,7 +318,8 @@ extension RunnerTests {
   /// An abandoned probe penalizes the XCTest channel for `penaltyTarget`.
   func boundedBlockingSystemAlertSnapshot(
     deadline: Date,
-    penaltyTarget: SnapshotProbePenaltyTarget
+    penaltyTarget: SnapshotProbePenaltyTarget,
+    options: PresentationOptions
   ) -> DataPayload? {
     boundedBlockingSystemAlertSnapshotBody(
       deadline: deadline,
@@ -327,7 +330,7 @@ extension RunnerTests {
         return override(probeDeadline)
       }
       #endif
-      return self.blockingSystemAlertSnapshot(deadline: probeDeadline)
+      return try self.blockingSystemAlertSnapshot(options: options, deadline: probeDeadline)
     }
   }
 
@@ -339,7 +342,7 @@ extension RunnerTests {
   private func boundedBlockingSystemAlertSnapshotBody(
     deadline: Date,
     penaltyTarget: SnapshotProbePenaltyTarget,
-    probe: @escaping @MainActor (Date) -> DataPayload?
+    probe: @escaping @MainActor (Date) throws -> DataPayload?
   ) -> DataPayload? {
     #if os(macOS)
       return nil
@@ -374,7 +377,7 @@ extension RunnerTests {
         }
       ) {
         penaltyIdentity.captureFromMain(bundleId: self.mainOwned.bundleId)
-        return probe(probeDeadline)
+        return try probe(probeDeadline)
       }
     } catch {
       NSLog(

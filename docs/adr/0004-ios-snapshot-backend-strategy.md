@@ -358,8 +358,15 @@ macOS/tvOS use plain viewport intersection.
 Before it constructs `SnapshotPresentation.PresentedNode`, the presentation owner validates every framed regular node against its cumulative effective clip.
 Frameless and degenerate semantic carriers stay eligible but are never actionable.
 Raw projection remains exempt by contract.
-A violation is a typed `IOS_SNAPSHOT_PRESENTATION_FAILED` capture failure with the named `presentation-failed` snapshot-quality reason.
-Recovery and the existing TypeScript verdict/warning contract preserve that failure.
+Overflow in acquired geometry is clipped to the cumulative visible area.
+Fully outside framed elements are omitted.
+The presentation result carries one aggregated `regular-geometry-clipped` quality note with clipped and dropped node counts.
+Clipping does not change a healthy capture into a recovered or sparse capture.
+The blocking system-modal probe uses this presenter instead of publishing reported frames as regular output.
+Raw system-modal captures retain reported geometry.
+A violation in already-presented geometry remains a typed `IOS_SNAPSHOT_PRESENTATION_FAILED` capture failure with the named `presentation-failed` snapshot-quality reason.
+The host validator retains its cumulative-clip check.
+Decision history: #3801 permits acquisition overflow from system alerts at large Dynamic Type sizes and requires clipping with a typed quality note instead of capture failure.
 
 Inside the runner, the viewport is a declared fact, not a rectangle.
 `SnapshotViewport` has the cases of the host's `IosViewportEvidence` (#2891):

@@ -23,10 +23,7 @@ test('builder clips each Android node to its owning window before regular presen
   </hierarchy>`);
 
   const { nodes } = buildUiHierarchySnapshot(tree, undefined, {});
-  expect(nodes.find((node) => node.label === 'Outside dialog')).toMatchObject({
-    rect: { x: 120, y: 320, width: 0, height: 0 },
-    hittable: undefined,
-  });
+  expect(nodes.find((node) => node.label === 'Outside dialog')).toBeUndefined();
 });
 
 test('system-bar membership survives omitted containers and stays separate from the shade and overlays', () => {

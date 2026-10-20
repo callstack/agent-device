@@ -33,7 +33,8 @@ extension SnapshotPresentation {
     _ projectionNodes: [SnapshotPresentationNode],
     acquisition: SnapshotAcquisition,
     options: PresentationOptions,
-    projection: CaptureHint.Projection
+    projection: CaptureHint.Projection,
+    qualityNotes: [SnapshotQualityNote] = []
   ) -> SnapshotPresentationResult {
     let scopedRawNodes = applyScope(to: projectionNodes, options: options, projection: projection)
     let nodes = presentedNodes(
@@ -49,7 +50,8 @@ extension SnapshotPresentation {
       truncated: acquisition.truncated,
       effectiveDepth: acquisition.effectiveDepth,
       customActions: acquisition.customActions,
-      qualityNodes: qualityNodes
+      qualityNodes: qualityNodes,
+      qualityNotes: qualityNotes
     )
   }
 

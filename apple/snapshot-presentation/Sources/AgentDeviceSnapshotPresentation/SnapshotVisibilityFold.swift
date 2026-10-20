@@ -151,12 +151,17 @@ public enum SnapshotVisibilityFold {
     )
   }
 
+  public struct Result {
+    public let nodes: [SnapshotPresentationNode]
+    public let qualityNotes: [SnapshotQualityNote]
+  }
+
   public static func fold(
     _ nodes: [RawAXNode],
     viewport: SnapshotViewport,
     interactiveOnly: Bool,
     policy: Policy
-  ) -> [SnapshotPresentationNode] {
+  ) -> Result {
     var hasChildren = [Bool](repeating: false, count: nodes.count)
     for node in nodes {
       if let parentIndex = node.parentIndex, parentIndex >= 0, parentIndex < nodes.count {
@@ -167,6 +172,8 @@ public enum SnapshotVisibilityFold {
     var states = [BranchState?](repeating: nil, count: nodes.count)
     var kept: [SnapshotPresentationNode] = []
     var hints: [Int: (above: Bool, below: Bool)] = [:]
+    var clippedNodeCount = 0
+    var droppedNodeCount = 0
 
     for (offset, node) in nodes.enumerated() {
       let parentState = node.parentIndex.flatMap { states[$0] }
@@ -181,6 +188,14 @@ public enum SnapshotVisibilityFold {
         hasChildren: hasChildren[offset],
         policy: policy
       )
+
+      if SnapshotGeometry.isPositiveFinite(rect) {
+        if decision.isIncluded && decision.effectiveFrame != rect {
+          clippedNodeCount += 1
+        } else if !decision.isIncluded && !SnapshotGeometry.isPositiveFinite(decision.effectiveFrame) {
+          droppedNodeCount += 1
+        }
+      }
 
       if let hiddenFrame = decision.hiddenContentFrame, let parentAnchor {
         rememberHiddenContentHint(for: hiddenFrame, relativeTo: parentAnchor, hints: &hints)
@@ -224,7 +239,10 @@ public enum SnapshotVisibilityFold {
         keptDepth: keptDepth
       )
     }
-    return applyHiddenContentHints(hints, to: kept)
+    let notes = clippedNodeCount + droppedNodeCount > 0
+      ? [SnapshotQualityNote(clippedNodeCount: clippedNodeCount, droppedNodeCount: droppedNodeCount)]
+      : []
+    return Result(nodes: applyHiddenContentHints(hints, to: kept), qualityNotes: notes)
   }
 
   /// The fold's share of the `hittable` policy (#2891). A declared `false` is kept; anything the

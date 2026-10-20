@@ -751,7 +751,8 @@ extension RunnerTests {
     // occupied main (#2781).
     return boundedBlockingSystemAlertSnapshot(
       deadline: probeDeadline,
-      penaltyTarget: .mainOwnedTarget
+      penaltyTarget: .mainOwnedTarget,
+      options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
     ) != nil
 #else
     return false

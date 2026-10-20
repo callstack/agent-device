@@ -222,6 +222,145 @@
           "hittable": true
         }
       ]
+    },
+    {
+      "name": "largest text system alert clips content and omits an outside action",
+      "projection": "regular",
+      "scope": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Alert",
+          "label": "System alert",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "depth": 0,
+          "parentIndex": null,
+          "hittable": false
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Visible action",
+          "rect": { "x": 20, "y": 210, "width": 280, "height": 60 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": true
+        },
+        {
+          "index": 2,
+          "type": "StaticText",
+          "label": "Overflowing title",
+          "rect": { "x": 20, "y": 20, "width": 280, "height": 230 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": false
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "Outside action",
+          "rect": { "x": 20, "y": 260, "width": 280, "height": 44 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": true
+        }
+      ],
+      "expected": [
+        {
+          "label": "System alert",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "depth": 0,
+          "parentIndex": null,
+          "hittable": false
+        },
+        {
+          "label": "Visible action",
+          "rect": { "x": 20, "y": 210, "width": 280, "height": 30 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": true
+        },
+        {
+          "label": "Overflowing title",
+          "rect": { "x": 20, "y": 20, "width": 280, "height": 220 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": false
+        }
+      ]
+    },
+    {
+      "name": "raw system alert retains overflowing and outside frames",
+      "projection": "raw",
+      "scope": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Alert",
+          "label": "System alert",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "depth": 0,
+          "parentIndex": null,
+          "hittable": false
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Visible action",
+          "rect": { "x": 20, "y": 210, "width": 280, "height": 60 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": true
+        },
+        {
+          "index": 2,
+          "type": "StaticText",
+          "label": "Overflowing title",
+          "rect": { "x": 20, "y": 20, "width": 280, "height": 230 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": false
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "Outside action",
+          "rect": { "x": 20, "y": 260, "width": 280, "height": 44 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": true
+        }
+      ],
+      "expected": [
+        {
+          "label": "System alert",
+          "rect": { "x": 0, "y": 0, "width": 320, "height": 240 },
+          "depth": 0,
+          "parentIndex": null,
+          "hittable": false
+        },
+        {
+          "label": "Visible action",
+          "rect": { "x": 20, "y": 210, "width": 280, "height": 60 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": true
+        },
+        {
+          "label": "Overflowing title",
+          "rect": { "x": 20, "y": 20, "width": 280, "height": 230 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": false
+        },
+        {
+          "label": "Outside action",
+          "rect": { "x": 20, "y": 260, "width": 280, "height": 44 },
+          "depth": 1,
+          "parentIndex": 0,
+          "hittable": true
+        }
+      ]
     }
   ]
 }

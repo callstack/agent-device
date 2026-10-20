@@ -484,3 +484,40 @@ for (const device of [IOS_SIMULATOR, MACOS_DEVICE]) {
     assert.equal('checked' in nodes[0]!, false);
   });
 }
+
+test('a clipped system alert passes host validation and retains its typed quality note', () => {
+  const note = { code: 'regular-geometry-clipped', clippedNodeCount: 1, droppedNodeCount: 1 };
+  const read = readAppleSnapshotResult(
+    {
+      nodes: [
+        {
+          index: 0,
+          type: 'Alert',
+          label: 'Tracking',
+          rect: { x: 18, y: 70, width: 354, height: 716 },
+          depth: 0,
+          hittable: false,
+        },
+        {
+          index: 1,
+          type: 'Button',
+          label: 'Ask App Not to Track',
+          rect: { x: 48, y: 700, width: 294, height: 86 },
+          depth: 1,
+          parentIndex: 0,
+          hittable: true,
+        },
+      ],
+      truncated: false,
+      snapshotQuality: { state: 'healthy', backend: 'tree', notes: [note] },
+    },
+    IOS_SIMULATOR,
+  );
+  const presentation = presentAppleRunnerSnapshot('device-1', { interactiveOnly: true }, read);
+  assert.equal(
+    presentation.nodes.some((node) => node.label === 'Ask App Not to Track'),
+    true,
+  );
+  assert.deepEqual(read.quality?.notes, [note]);
+  assert.equal(read.quality?.state, 'healthy');
+});

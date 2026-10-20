@@ -268,6 +268,13 @@ function appendAndroidNodeIfPresented(
 ): number | undefined {
   if (
     !state.options.raw &&
+    isPositiveFiniteRect(node.rect) &&
+    !isPositiveFiniteRect(effectiveRect)
+  ) {
+    return parentIndex;
+  }
+  if (
+    !state.options.raw &&
     !shouldIncludeAndroidNode(
       node,
       state.options,

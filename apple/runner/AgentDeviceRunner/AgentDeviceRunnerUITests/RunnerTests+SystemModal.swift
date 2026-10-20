@@ -4,21 +4,22 @@ import AgentDeviceSnapshotPresentation
 extension RunnerTests {
   // MARK: - Blocking System Modal Snapshot
 
-  func blockingSystemAlertSnapshot(deadline: Date = .distantFuture) -> DataPayload? {
+  func blockingSystemAlertSnapshot(options: PresentationOptions, deadline: Date = .distantFuture) throws -> DataPayload? {
     #if os(macOS)
       return nil
     #else
     guard case .resolved(let resolvedModal) = resolveBlockingSystemModal(deadline: deadline) else {
       return nil
     }
-    return snapshotForBlockingSystemModal(resolvedModal, deadline: deadline)
+    return try snapshotForBlockingSystemModal(resolvedModal, options: options, deadline: deadline)
     #endif
   }
 
   func snapshotForBlockingSystemModal(
     _ resolvedModal: ResolvedBlockingSystemModal,
+    options: PresentationOptions = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
     deadline: Date = .distantFuture
-  ) -> DataPayload? {
+  ) throws -> DataPayload? {
     let modal = resolvedModal.root
     let actions = resolvedModal.actions
 
@@ -34,7 +35,7 @@ extension RunnerTests {
     ) else {
       return nil
     }
-    var nodes: [PresentedNode] = [modalNode]
+    var nodes: [RawAXNode] = [modalNode]
 
     for action in actions {
       guard let actionNode = safeMakeSnapshotNode(
@@ -71,15 +72,43 @@ extension RunnerTests {
 
     // The probe resolved a blocking modal over the app, so this payload states its own subject rather
     // than leaving a reader to infer it from a tree that holds only the modal (#3565).
-    return Self.blockingSystemModalPayload(nodes: nodes)
+    return try Self.blockingSystemModalPayload(nodes: nodes, options: options)
   }
 
   /// The payload a resolved blocking system modal publishes: the modal's own tree, and the fact that
   /// the modal is what it describes. The probe is the one capture that states `presented` without
   /// reading a window structure — its tree holds only the modal, so nothing downstream could read the
   /// presentation out of it (#3565). Split from the probe body because that body needs a device.
-  static func blockingSystemModalPayload(nodes: [PresentedNode]) -> DataPayload {
-    DataPayload(nodes: nodes, truncated: false, presentedSurface: .presented)
+  static func blockingSystemModalPayload(
+    nodes: [RawAXNode],
+    options: PresentationOptions = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
+  ) throws -> DataPayload {
+    let acquisition = SnapshotAcquisition(
+      hint: SnapshotPresentation.captureHint(for: options),
+      nodes: nodes,
+      truncated: false,
+      effectiveDepth: nil,
+      viewport: nodes.first.map { .derived(box: $0.rect.cgRect) } ?? .missing(reason: .notProvided)
+    )
+    let result = options.raw
+      ? SnapshotPresentation.presentRaw(acquisition, options: options)
+      : try SnapshotPresentation.presentRegular(acquisition, options: options, policy: .cursorProjected)
+    return DataPayload(
+      nodes: result.nodes,
+      truncated: false,
+      qualityPayload: result.qualityNodes.map { SnapshotQualityPayload(nodes: $0, truncated: false) },
+      snapshotQuality: SnapshotQuality(
+        state: .healthy,
+        backend: SnapshotBackendKind.recursiveTree.rawValue,
+        reason: nil,
+        reasonCode: nil,
+        effectiveDepth: nil,
+        collapsedLeafIndexes: nil,
+        customActions: nil,
+        notes: result.qualityNotes.isEmpty ? nil : result.qualityNotes
+      ),
+      presentedSurface: .presented
+    )
   }
 
   func firstBlockingSystemModal(
@@ -231,27 +260,25 @@ extension RunnerTests {
     depth: Int,
     parentIndex: Int? = nil,
     hittableOverride: Bool? = nil
-  ) -> PresentedNode {
+  ) -> RawAXNode {
     let label = (labelOverride ?? element.label).trimmingCharacters(in: .whitespacesAndNewlines)
     let identifier = (identifierOverride ?? element.identifier).trimmingCharacters(in: .whitespacesAndNewlines)
     let value = element.value.map { String(describing: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
-    return SnapshotPresentation.singleElementRead(
-      RawAXNode(
-        index: index,
-        type: type,
-        label: label.isEmpty ? nil : label,
-        identifier: identifier.isEmpty ? nil : identifier,
-        value: value.flatMap { $0.isEmpty ? nil : $0 },
-        rect: SnapshotRect(element.frame),
-        enabled: element.isEnabled,
-        focused: nil,
-        selected: nil,
-        hittable: hittableOverride ?? element.isHittable,
-        depth: depth,
-        parentIndex: parentIndex,
-        hiddenContentAbove: nil,
-        hiddenContentBelow: nil
-      )
+    return RawAXNode(
+      index: index,
+      type: type,
+      label: label.isEmpty ? nil : label,
+      identifier: identifier.isEmpty ? nil : identifier,
+      value: value.flatMap { $0.isEmpty ? nil : $0 },
+      rect: SnapshotRect(element.frame),
+      enabled: element.isEnabled,
+      focused: nil,
+      selected: nil,
+      hittable: hittableOverride ?? element.isHittable,
+      depth: depth,
+      parentIndex: parentIndex,
+      hiddenContentAbove: nil,
+      hiddenContentBelow: nil
     )
   }
 
@@ -264,7 +291,7 @@ extension RunnerTests {
     depth: Int,
     parentIndex: Int? = nil,
     hittableOverride: Bool? = nil
-  ) -> PresentedNode? {
+  ) -> RawAXNode? {
     safely("MODAL_NODE") {
       makeSnapshotNode(
         element: element,

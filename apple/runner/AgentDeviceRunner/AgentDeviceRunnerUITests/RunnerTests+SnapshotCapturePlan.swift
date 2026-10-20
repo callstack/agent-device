@@ -39,6 +39,7 @@ struct SnapshotQuality: Codable {
   let customActions: SnapshotCustomActionCoverage?
   /// Response-level timing for the accepted backend attempt, never repeated per node.
   var timing: SnapshotCaptureTiming? = nil
+  var notes: [SnapshotQualityNote]? = nil
 }
 
 enum SnapshotXCTestChannelPlanState: Equatable {
@@ -82,6 +83,7 @@ struct SnapshotBackendCapture {
   var customActions: SnapshotCustomActionCoverage? = nil
   var qualityPayload: DataPayload? = nil
   var timing: SnapshotCaptureTiming? = nil
+  var qualityNotes: [SnapshotQualityNote] = []
   /// The keyboard band this capture measured, carried beside the tree it came with (#2660). Only the
   /// tree tier reads the keyboard, so only that tier has one; the daemon reads a missing band as "this
   /// producer could not measure", which is exactly what the query-sweep and private-AX tiers did.
@@ -108,6 +110,7 @@ extension RunnerTests {
       qualityPayload: result.qualityNodes.map {
         DataPayload(nodes: $0, truncated: result.truncated)
       },
+      qualityNotes: result.qualityNotes,
       presentedSurface: SnapshotPresentedSurface.classify(acquisition)
     )
   }
@@ -755,7 +758,8 @@ extension RunnerTests {
       effectiveDepth: capture.effectiveDepth,
       collapsedLeafIndexes: Self.collapsedLeafIndexes(payload.nodes ?? []),
       customActions: capture.customActions,
-      timing: capture.timing
+      timing: capture.timing,
+      notes: capture.qualityNotes.isEmpty ? nil : capture.qualityNotes
     )
     return DataPayload(
       message: payload.message,

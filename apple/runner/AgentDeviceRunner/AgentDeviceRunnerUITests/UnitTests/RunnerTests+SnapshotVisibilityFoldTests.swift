@@ -30,7 +30,7 @@ extension RunnerTests {
       viewport: .reported(box: viewport),
       interactiveOnly: interactiveOnly,
       policy: policy
-    )
+    ).nodes
   }
 
   func testRegularFoldClipsScrollOverflowReparentsAndBooksHints() {
@@ -178,7 +178,7 @@ extension RunnerTests {
       viewport: .missing(reason: .notProvided),
       interactiveOnly: false,
       policy: .cursorProjected
-    )
+    ).nodes
 
     let carrier = try XCTUnwrap(folded.first { $0.raw.label == "Clipped carrier" })
     XCTAssertEqual(carrier.raw.hittable, false, "a clipped-to-nothing frame is evidence, not a gap")

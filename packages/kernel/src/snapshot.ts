@@ -37,8 +37,15 @@ export const SNAPSHOT_QUALITY_STATES = ['healthy', 'recovered', 'sparse'] as con
 
 export type SnapshotQualityState = (typeof SNAPSHOT_QUALITY_STATES)[number];
 
+export type SnapshotQualityNote = {
+  code: 'regular-geometry-clipped';
+  clippedNodeCount: number;
+  droppedNodeCount: number;
+};
+
 export type SnapshotQualityVerdict = {
   state: SnapshotQualityState;
+  notes?: SnapshotQualityNote[];
   backend: SnapshotCaptureBackend;
   reason?: string;
   // 'deferred' = the penalty circuit breaker pre-selected a non-XCTest backend; nothing new

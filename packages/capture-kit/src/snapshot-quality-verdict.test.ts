@@ -156,3 +156,27 @@ test('the contracts re-read calls a verdict a verdict on every payload', () => {
     );
   }
 });
+
+test('geometry clipping is an informational typed note on a healthy capture', () => {
+  const note = { code: 'regular-geometry-clipped', clippedNodeCount: 2, droppedNodeCount: 1 };
+  const verdict = readSnapshotQualityVerdict({ state: 'healthy', backend: 'tree', notes: [note] });
+  assert.equal(verdict?.state, 'healthy');
+  assert.deepEqual(verdict?.notes, [note]);
+  assert.equal(verdict?.reasonCode, undefined);
+  for (const notes of [
+    [{ ...note, code: 'unknown' }],
+    [{ ...note, clippedNodeCount: -1 }],
+    [{ ...note, droppedNodeCount: 0.5 }],
+    [{ ...note, clippedNodeCount: 0, droppedNodeCount: 0 }],
+    [{ ...note, clippedNodeCount: Infinity }],
+  ]) {
+    assert.equal(
+      readSnapshotQualityVerdict({ state: 'healthy', backend: 'tree', notes })?.notes,
+      undefined,
+    );
+  }
+  assert.deepEqual(
+    readSnapshotQualityVerdict({ state: 'healthy', backend: 'tree', notes: [note, note] })?.notes,
+    [note],
+  );
+});

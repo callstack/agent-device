@@ -44,6 +44,7 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
     return undefined;
   }
   const timing = readSnapshotQualityTiming(raw.timing);
+  const notes = readSnapshotQualityNotes(raw.notes);
   return {
     state: raw.state,
     backend: raw.backend,
@@ -57,6 +58,7 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
       ? raw.collapsedLeafIndexes.filter((entry): entry is number => typeof entry === 'number')
       : undefined,
     ...(timing ? { timing } : {}),
+    ...(notes ? { notes } : {}),
   };
 }
 
@@ -103,4 +105,30 @@ export function preferredSnapshotBackendForVerdict(
   verdict: SnapshotQualityVerdict | undefined,
 ): 'private-ax' | undefined {
   return verdict?.backend === 'private-ax' ? 'private-ax' : undefined;
+}
+
+function readSnapshotQualityNotes(value: unknown): SnapshotQualityVerdict['notes'] {
+  if (!Array.isArray(value)) return undefined;
+  const notes: NonNullable<SnapshotQualityVerdict['notes']> = [];
+  for (const entry of value.slice(0, 1)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const raw = entry as Record<string, unknown>;
+    if (raw.code !== 'regular-geometry-clipped') continue;
+    if (
+      typeof raw.clippedNodeCount !== 'number' ||
+      !Number.isSafeInteger(raw.clippedNodeCount) ||
+      raw.clippedNodeCount < 0 ||
+      typeof raw.droppedNodeCount !== 'number' ||
+      !Number.isSafeInteger(raw.droppedNodeCount) ||
+      raw.droppedNodeCount < 0 ||
+      raw.clippedNodeCount + raw.droppedNodeCount === 0
+    )
+      continue;
+    notes.push({
+      code: raw.code,
+      clippedNodeCount: raw.clippedNodeCount,
+      droppedNodeCount: raw.droppedNodeCount,
+    });
+  }
+  return notes.length > 0 ? notes : undefined;
 }
