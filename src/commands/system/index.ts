@@ -756,7 +756,7 @@ function readTvRemoteInput(
   if (args.length !== 1) {
     throw new AppError(
       'INVALID_ARGS',
-      `tv-remote requires exactly one button: ${TV_REMOTE_BUTTONS.join(', ')}.`,
+      `tv-remote requires exactly one button: ${TV_REMOTE_BUTTONS.join(', ')}, or android-keycode:<n>.`,
     );
   }
   const effectiveDurationMs =

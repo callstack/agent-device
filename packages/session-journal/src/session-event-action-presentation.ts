@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, FOLD_POSES, TELEPHONY_ACTIONS } from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
-import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
+import { isTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isKeyboardAction } from './keyboard-actions.ts';
 import {
@@ -105,7 +105,7 @@ export function buildStructuredActionDetails(action: SessionAction): Record<stri
       return buildKeyboardActionDetails(result);
     case PUBLIC_COMMANDS.tvRemote:
       return compactDetails({
-        button: readEnum(result.button, TV_REMOTE_BUTTONS),
+        button: isTvRemoteButton(result.button) ? result.button : undefined,
         durationMs: readSessionEventNumber(result.durationMs),
       });
     case PUBLIC_COMMANDS.gesture:
@@ -257,7 +257,7 @@ function buildKeyboardActionDetails(result: Record<string, unknown>): Record<str
 }
 
 function buildTvRemoteActionSummary(result: Record<string, unknown>): string {
-  const button = readEnum(result.button, TV_REMOTE_BUTTONS);
+  const button = isTvRemoteButton(result.button) ? result.button : undefined;
   return button ? `Pressed TV remote ${button}` : 'Used TV remote';
 }
 

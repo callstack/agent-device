@@ -113,13 +113,17 @@ export type VegaTvRemoteKey = Extract<
 
 export function parseTvRemoteButton(value: string | undefined): TvRemoteButton {
   const normalized = value?.toLowerCase();
-  if (isNamedTvRemoteButton(normalized) || isAndroidKeycode(normalized)) return normalized;
+  if (isTvRemoteButton(normalized)) return normalized;
   const canonical = normalized ? TV_REMOTE_BUTTON_ALIAS_MAP.get(normalized) : undefined;
   if (canonical) return canonical;
   throw new AppError(
     'INVALID_ARGS',
     `tv-remote button must be one of: ${TV_REMOTE_BUTTONS.join(', ')}, or android-keycode:<n> with n from 1 to ${MAX_ANDROID_KEYCODE}.`,
   );
+}
+
+export function isTvRemoteButton(value: unknown): value is TvRemoteButton {
+  return isNamedTvRemoteButton(value) || isAndroidKeycode(value);
 }
 
 function isNamedTvRemoteButton(value: unknown): value is NamedTvRemoteButton {

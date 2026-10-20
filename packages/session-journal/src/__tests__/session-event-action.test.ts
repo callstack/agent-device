@@ -19,6 +19,25 @@ function action(
   };
 }
 
+test.each(['volume-down', 'android-keycode:300'])(
+  'TV action events retain button %s in summaries and details',
+  (button) => {
+    const press = action('tv-remote', { button, durationMs: 500 });
+    assert.equal(buildActionSummary(press), `Pressed TV remote ${button}`);
+    assert.equal(buildActionDetails(press).button, button);
+    assert.equal(buildActionDetails(press).durationMs, 500);
+  },
+);
+
+test.each(['volume-sideways', 'android-keycode:2147483648'])(
+  'TV action events omit invalid button %s',
+  (button) => {
+    const press = action('tv-remote', { button });
+    assert.equal(buildActionSummary(press), 'Used TV remote');
+    assert.equal(buildActionDetails(press).button, undefined);
+  },
+);
+
 test('scroll action events describe direction and distance', () => {
   const byPixels = action('scroll', {
     direction: 'down',
