@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { emitDiagnostic, getDiagnosticsMeta, updateDiagnosticsScope } from './diagnostics.ts';
+import {
+  emitDiagnostic,
+  flushDiagnosticsToSessionFile,
+  getDiagnosticsMeta,
+  updateDiagnosticsScope,
+} from './diagnostics.ts';
 
 export type ExecSettlementReason =
   | 'success'
@@ -38,6 +43,7 @@ export function createExecTraceContext(
   const started = performance.now();
   const execId = randomUUID();
   let pid: number | undefined;
+  let settlementEmitted = false;
   const command = path.basename(cmd);
   const simctlArgs = args[1] === '--set' ? args.slice(3) : args.slice(1);
   const operation =
@@ -55,6 +61,8 @@ export function createExecTraceContext(
       durationMs: performance.now() - started,
       data: { execId, command, operation, event, pid, timeoutMs, ...data },
     });
+    if (event === 'settled') settlementEmitted = true;
+    if (event === 'close' && settlementEmitted && envTraceEnabled) flushDiagnosticsToSessionFile();
   };
   emit('spawn_start');
   return { emit };

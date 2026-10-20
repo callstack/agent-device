@@ -186,3 +186,37 @@ test('background tracing is opt-in and retains a successful completion', async (
   expect(rows.map((row) => row.data.event)).toEqual(['spawn_start', 'spawn', 'settled']);
   expect(JSON.stringify(rows)).not.toContain('private-argument');
 });
+
+test('environment-only trace persists close after the request finalization flush', async () => {
+  vi.useFakeTimers();
+  const fixture = processFixture();
+  const logPath = path.join(mkdtempForTestSync('exec-late-close-'), 'request.ndjson');
+  await withCommandHost(
+    { host: { env: { AGENT_DEVICE_EXEC_TRACE: '1' }, cwd: process.cwd() }, requestEnv: undefined },
+    () =>
+      withDiagnosticsScope({ requestId: 'late-close', logPath }, async () => {
+        const result = runCmd('xcrun', ['simctl', 'list', 'devices', '-j'], { timeoutMs: 100 });
+        const rejection = expect(result).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+        fixture.child.emit('spawn');
+        fixture.exit(0);
+        await vi.advanceTimersByTimeAsync(100);
+        await rejection;
+        flushDiagnosticsToSessionFile();
+        fixture.child.emit('close', 0, null);
+        const rows = fs
+          .readFileSync(logPath, 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line) as Row);
+        expect(rows.map((row) => row.data.event)).toEqual([
+          'spawn_start',
+          'spawn',
+          'exit',
+          'deadline',
+          'settled',
+          'close',
+        ]);
+        expect(new Set(rows.map((row) => row.data.execId)).size).toBe(1);
+      }),
+  );
+});
