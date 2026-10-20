@@ -247,35 +247,52 @@ for (const fixedLogPath of [true, false]) {
   });
 }
 
-for (const exitBeforeAbort of [false, true]) {
-  test(`background abort records observed order and settles without close (exitBeforeAbort=${exitBeforeAbort})`, async () => {
-    const fixture = processFixture();
-    const controller = new AbortController();
-    const rows = await capture(
-      false,
-      async () => {
-        const { wait } = runCmdBackground('/usr/bin/tool', [], { signal: controller.signal });
-        const rejected = expect(wait).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
-        fixture.child.emit('spawn');
-        if (exitBeforeAbort) fixture.exit(0);
-        controller.abort();
-        if (!exitBeforeAbort) fixture.exit(0);
-        await rejected;
-        fixture.child.emit('close', 0, null);
-      },
-      true,
-    );
-    expect(rows.map((row) => row.data.event)).toEqual([
-      'spawn_start',
-      'spawn',
-      ...(exitBeforeAbort ? ['exit', 'abort'] : ['abort', 'exit']),
-      'settled',
-      'close',
-    ]);
-    expect(rows.at(-2)?.data.reason).toBe('abort');
-    expect(new Set(rows.map((row) => row.data.execId)).size).toBe(1);
-    expect(fixture.kill).toHaveBeenCalledTimes(exitBeforeAbort ? 0 : 1);
-  });
+for (const background of [false, true]) {
+  for (const exitBeforeAbort of [false, true]) {
+    test(`cancellation outside request scope retains order and correlation (background=${background}, exitBeforeAbort=${exitBeforeAbort})`, async () => {
+      const fixture = processFixture();
+      const controller = new AbortController();
+      const logPath = path.join(mkdtempForTestSync('exec-external-abort-'), 'request.ndjson');
+      const { wait } = await withCommandHost(
+        {
+          host: { env: { AGENT_DEVICE_EXEC_TRACE: '1' }, cwd: process.cwd() },
+          requestEnv: undefined,
+        },
+        () =>
+          withDiagnosticsScope({ requestId: 'origin-request', logPath }, () => {
+            const options = { signal: controller.signal };
+            const pending = background
+              ? runCmdBackground('/usr/bin/tool', [], options).wait
+              : runCmd('/usr/bin/tool', [], options);
+            const wait = pending.catch((error: unknown) => error);
+            fixture.child.emit('spawn');
+            if (exitBeforeAbort) fixture.exit(0);
+            flushDiagnosticsToSessionFile();
+            return { wait };
+          }),
+      );
+      controller.abort();
+      if (!exitBeforeAbort) fixture.exit(0);
+      expect(await wait).toMatchObject({ code: 'COMMAND_FAILED' });
+      fixture.child.emit('close', 0, null);
+      const rows = fs
+        .readFileSync(logPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as Row);
+      expect(rows.map((row) => row.data.event)).toEqual([
+        'spawn_start',
+        'spawn',
+        ...(exitBeforeAbort ? ['exit', 'abort'] : ['abort', 'exit']),
+        'settled',
+        'close',
+      ]);
+      expect(rows.at(-2)?.data.reason).toBe('abort');
+      expect(rows.every((row) => row.requestId === 'origin-request')).toBe(true);
+      expect(new Set(rows.map((row) => row.data.execId)).size).toBe(1);
+      expect(fixture.kill).toHaveBeenCalledTimes(exitBeforeAbort ? 0 : 1);
+    });
+  }
 }
 
 for (const spawnError of [false, true]) {

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { parseBooleanLiteral, type EnvMap } from '@agent-device/kernel/source-value';
@@ -46,19 +47,21 @@ export function createExecTraceContext(
   let pid: number | undefined;
   let settlementEmitted = false;
   const command = path.basename(cmd);
-  const emit = (event: ExecLifecycleEvent, data: ExecLifecycleData = {}): void => {
-    pid = data.pid ?? pid;
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'exec_command',
-      durationMs: performance.now() - started,
-      data: { execId, command, event, pid, timeoutMs, ...data },
-    });
-    if (event === 'settled') settlementEmitted = true;
-    if (envTraceEnabled && (event === 'settled' || (event === 'close' && settlementEmitted))) {
-      flushDiagnosticsToSessionFile();
-    }
-  };
+  const emit = AsyncLocalStorage.bind(
+    (event: ExecLifecycleEvent, data: ExecLifecycleData = {}): void => {
+      pid = data.pid ?? pid;
+      emitDiagnostic({
+        level: 'debug',
+        phase: 'exec_command',
+        durationMs: performance.now() - started,
+        data: { execId, command, event, pid, timeoutMs, ...data },
+      });
+      if (event === 'settled') settlementEmitted = true;
+      if (envTraceEnabled && (event === 'settled' || (event === 'close' && settlementEmitted))) {
+        flushDiagnosticsToSessionFile();
+      }
+    },
+  );
   emit('spawn_start');
   return { emit };
 }
