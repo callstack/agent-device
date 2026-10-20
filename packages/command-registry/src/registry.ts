@@ -1500,9 +1500,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'hardwareKey' },
     frameworkTier: 'extended',
-    // Admission is the owner's `hardwareKey` fact, a member of the system-button family. No
-    // post-action observation, as for `action-button`: the key goes to the system and the media
-    // session rather than the session app, and power/sleep leave the display off.
+    // Admission is the owner's standalone `hardwareKey` fact. No post-action observation, as for
+    // `action-button`: the key goes to the system and the media session rather than the session
+    // app, and power/sleep leave the display off.
     ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: [hardwareKeyRuntimeUse] },
   },
