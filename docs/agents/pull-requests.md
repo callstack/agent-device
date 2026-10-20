@@ -50,6 +50,7 @@ Measure with `git diff --stat origin/main...HEAD`.
 Stack only layers that can merge independently.
 Rename-only `refactor(move)` PRs are exempt when `git diff -M90% --stat origin/main...HEAD` proves no material content change.
 Use conventional commit prefixes, without agent tags.
+Never push tags.
 Put enforcement edits in a final `chore(gates): <what and why>` commit.
 
 For conflicts or relevant upstream changes, rebase. Disjoint changes alone do not require rebase.

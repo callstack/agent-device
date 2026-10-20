@@ -48,7 +48,7 @@ To find out why an interaction renders slowly, record a React profile around it:
 
 ```bash
 agent-device react-devtools profile start
-agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
+agent-device fill 'id="catalog-search"' "tart" --delay-ms 100
 agent-device react-devtools profile stop
 ```
 
