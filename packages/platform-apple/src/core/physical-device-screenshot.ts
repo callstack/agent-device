@@ -1,3 +1,4 @@
+import type { ScreenshotCaptureFacts } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
@@ -22,7 +23,7 @@ export async function captureCoreDeviceScreenshot(
   device: DeviceInfo,
   outPath: string,
   options: IosPhysicalDeviceScreenshotOptions,
-): Promise<void> {
+): Promise<ScreenshotCaptureFacts> {
   if (!options.preferRunner) {
     try {
       await runIosDevicectl(
@@ -32,7 +33,7 @@ export async function captureCoreDeviceScreenshot(
           deviceId: device.id,
         },
       );
-      return;
+      return { iosPhysicalCaptureBackend: 'coredevice' };
     } catch (error) {
       if (!shouldFallbackToRunnerForIosScreenshot(error)) throw error;
       emitPhysicalScreenshotFallbackDiagnostic(device, error);
@@ -40,19 +41,22 @@ export async function captureCoreDeviceScreenshot(
   }
 
   const result = await runRunnerScreenshot(device, options, false);
-  if (await writeInlineRunnerScreenshot(result, outPath)) return;
+  if (await writeInlineRunnerScreenshot(result, outPath))
+    return { iosPhysicalCaptureBackend: 'xctest' };
 
   const remoteFileName = readRunnerScreenshotPath(result);
   await copyCoreDeviceRunnerFile(device, remoteFileName, outPath, options.env);
+  return { iosPhysicalCaptureBackend: 'xctest' };
 }
 
 export async function captureXctestDeviceScreenshot(
   device: DeviceInfo,
   outPath: string,
   options: IosPhysicalDeviceScreenshotOptions,
-): Promise<void> {
+): Promise<ScreenshotCaptureFacts> {
   const result = await runRunnerScreenshot(device, options, true);
-  if (await writeInlineRunnerScreenshot(result, outPath)) return;
+  if (await writeInlineRunnerScreenshot(result, outPath))
+    return { iosPhysicalCaptureBackend: 'xctest' };
   throw new AppError(
     'COMMAND_FAILED',
     'Failed to capture iOS screenshot: XCTest runner returned no inline image',

@@ -5,7 +5,12 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { ANDROID_EMULATOR, IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  IOS_DEVICE,
+  IOS_SIMULATOR,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { makeSession } from '../__tests__/support/session-factories.ts';
 import type { GenericPlatformExecutionParams } from '../core/generic-leaf-execution.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
@@ -428,3 +433,49 @@ test('the result record omits the display rotation when the capture reported non
 
   expect(await executeResult(resolved, session, req)).not.toHaveProperty('displayRotation');
 });
+
+for (const backend of ['coredevice', 'xctest', undefined] as const) {
+  for (const crop of [false, true]) {
+    test(`physical iPhone capture backend=${backend}, crop=${crop} enforces capture evidence`, async () => {
+      const fixture = screenshotRuntimeFixture({
+        onCapture: ({ outPath }) => {
+          writeSolidPng(outPath);
+          return backend ? { iosPhysicalCaptureBackend: backend } : {};
+        },
+        snapshotResult: () => ({ nodes: CROP_TREE, backend: 'xctest', producer: 'apple-runner' }),
+      });
+      const session = makeSession('iphone', { device: IOS_DEVICE });
+      const outPath = path.join(mkdtempForTestSync('physical-crop'), 'screen.png');
+      const req = screenshotRequest({
+        positionals: [outPath],
+        flags: crop ? { screenshotCropOn: 'label="Save"' } : {},
+      });
+      const resolved = await resolveScreenshotGenericExecution({
+        hostCwd: process.cwd(),
+        createCommandSurface: testCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req,
+        session,
+        inspectFacts: fixture.inspectFacts,
+        bindDevice: fixture.bindDevice,
+      });
+      if (crop && backend !== 'coredevice') {
+        await expect(executeResult(resolved, session, req)).rejects.toMatchObject({
+          code: 'UNSUPPORTED_OPERATION',
+          message:
+            'screenshot --crop-on is not accepted on ios-physical-non-coredevice-capture targets',
+          details: {
+            reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
+            rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+          },
+        });
+        expect(fixture.captureSnapshot).not.toHaveBeenCalled();
+      } else {
+        const result = await executeResult(resolved, session, req);
+        expect(result).toMatchObject(crop ? { width: 40, height: 20 } : { width: 100, height: 50 });
+        expect(fixture.captureSnapshot).toHaveBeenCalledTimes(crop ? 1 : 0);
+      }
+      expect(fixture.captureScreenshot).toHaveBeenCalledTimes(1);
+    });
+  }
+}

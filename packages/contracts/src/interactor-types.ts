@@ -74,7 +74,11 @@ export type ScreenshotOptions = {
  * rendered the pixels in, so a landscape value pairs with a landscape image; it is absent when the
  * owner has no rotation reading it can stand behind for this capture.
  */
-export type ScreenshotCaptureFacts = Readonly<{ displayRotation?: DeviceRotation }>;
+export type ScreenshotCaptureFacts = Readonly<{
+  displayRotation?: DeviceRotation;
+  /** Actual physical iOS capture route, including any fallback from CoreDevice to XCTest. */
+  iosPhysicalCaptureBackend?: 'coredevice' | 'xctest';
+}>;
 
 export type ElementSelectorKey = 'id' | 'label' | 'text' | 'value';
 

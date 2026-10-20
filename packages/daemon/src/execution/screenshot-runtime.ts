@@ -30,7 +30,10 @@ import type {
   ResolvedGenericExecution,
 } from '../core/generic-leaf-execution.ts';
 import { createReadonlyRuntimeSessionStore } from '../core/runtime-session.ts';
-import { assertScreenshotCropPolicy } from './screenshot-crop-target.ts';
+import {
+  assertScreenshotCropCapture,
+  assertScreenshotCropPolicy,
+} from './screenshot-crop-target.ts';
 import { buildScreenshotCropWarnings, cropScreenshotToSelector } from './screenshot-crop.ts';
 import { annotateScreenshotWithRefs } from '@agent-device/capture-kit/screenshot-overlay';
 import {
@@ -373,6 +376,7 @@ function createBoundScreenshotBackend(
         execution: screenshotExecutionFromContext(dispatchContext),
       });
       if (crop) {
+        assertScreenshotCropCapture(session.device, facts);
         const outcome = await cropScreenshotToSelector({
           device: session.device,
           session,
