@@ -23,6 +23,7 @@ import {
   completeAndroidFillVerification,
   isAndroidFillCommitDropped,
   readAndroidFillTargetBeforeMutation,
+  reportAndroidFillUnconfirmed,
   verifyAndroidFilledText,
   type AndroidFillVerification,
 } from './fill-verification.ts';
@@ -127,7 +128,7 @@ export async function fillAndroid(
         return completeAndroidFillVerification(text, beforeTarget, verification);
       }
       const unconfirmed = buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification);
-      if (unconfirmed) return completeAndroidFillVerification(text, beforeTarget, verification);
+      if (unconfirmed) return reportAndroidFillUnconfirmed(unconfirmed);
     }
   } catch (error) {
     throw discloseDispatchAfterSteps(error, dispatchedSteps);

@@ -172,14 +172,7 @@ export function completeAndroidFillVerification(
   const unconfirmed = verification
     ? buildAndroidFillUnconfirmedVerification(expected, beforeTarget, verification)
     : null;
-  if (unconfirmed) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'android_fill_verification_unconfirmed',
-      data: { target: unconfirmed.target },
-    });
-    return unconfirmed;
-  }
+  if (unconfirmed) return reportAndroidFillUnconfirmed(unconfirmed);
   throw discloseDispatch(
     new AppError(
       'COMMAND_FAILED',
@@ -188,6 +181,17 @@ export function completeAndroidFillVerification(
     ),
     'unknown',
   );
+}
+
+export function reportAndroidFillUnconfirmed(
+  unconfirmed: FillUnconfirmedVerification,
+): FillUnconfirmedVerification {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_fill_verification_unconfirmed',
+    data: { target: unconfirmed.target },
+  });
+  return unconfirmed;
 }
 
 /** Whether a failed fill left an observed field empty, showing its hint, or holding its old value. */
