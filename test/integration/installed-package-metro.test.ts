@@ -301,29 +301,12 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       );
     }
     await typeCheckInstalledPluginContract(consumerRoot);
-    const hosted = readJson(
-      await execFileText(
-        process.execPath,
-        [
-          '--input-type=module',
-          '-e',
-          String.raw`
-import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
-import { promisify } from 'node:util';
-import { createAgentDeviceClient } from 'agent-device';
-import { startAgentDevice } from 'agent-device/host';
-
-const exec = promisify(execFile);
-const cwd = process.cwd();
-const beforeEnv = { ...process.env };
-const listeners = ['SIGINT', 'SIGTERM', 'uncaughtException', 'unhandledRejection'];
-const beforeListeners = listeners.map((event) => process.listeners(event));
-const disposed = [];
-const setups = [];
-function fixture(provider) {
+    fs.writeFileSync(
+      path.join(consumerRoot, 'fixture-plugin.mjs'),
+      String.raw`
+export const disposed = [];
+export const setups = [];
+export function fixture(provider) {
   return {
     apiVersion: 2,
     provider,
@@ -352,6 +335,29 @@ function fixture(provider) {
     },
   };
 }
+`,
+    );
+    const hosted = readJson(
+      await execFileText(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          String.raw`
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { createAgentDeviceClient } from 'agent-device';
+import { startAgentDevice } from 'agent-device/host';
+
+const exec = promisify(execFile);
+const cwd = process.cwd();
+const beforeEnv = { ...process.env };
+const listeners = ['SIGINT', 'SIGTERM', 'uncaughtException', 'unhandledRejection'];
+const beforeListeners = listeners.map((event) => process.listeners(event));
+import { fixture, disposed, setups } from './fixture-plugin.mjs';
 fs.mkdirSync(path.join(cwd, '.agent-device'), { recursive: true });
 fs.writeFileSync(path.join(cwd, '.agent-device/config.json'), '{broken plugin store');
 const supplied = {
