@@ -11,6 +11,7 @@ const PROCESS_ENTRIES = new Set([
   'src/cli.ts',
   'src/daemon.ts',
   'src/agent-device-client.ts',
+  'src/host.ts',
   'packages/capture-kit/src/png-worker.ts',
   'packages/react-native/src/companion/companion-tunnel.ts',
   'packages/react-native/src/companion/client-companion-tunnel-worker.ts',
@@ -24,7 +25,7 @@ const PROCESS_ENTRIES = new Set([
   'src/daemon-client/daemon-client-ensuring.ts',
 ]);
 // src/cli/** and scripts/** are entry trees. Apple native helper executables live outside the
-// TypeScript source trees. Reserve agent-device/host's entry here when #3757 supplies its path.
+// TypeScript source trees.
 
 /** Only command execution and spawn adapters may consult the ambient command-host scope. */
 const COMMAND_HOST_BOUNDARIES = new Set([
