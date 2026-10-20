@@ -1,8 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, FOLD_POSES, TELEPHONY_ACTIONS } from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
-import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
-import { isHardwareKeyToken } from '@agent-device/contracts/hardware-key';
+import { isHardwareKeyToken, TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isKeyboardAction } from './keyboard-actions.ts';
 import {

@@ -30,8 +30,10 @@ import {
   bindProviderSnapshotInteractor,
   type SnapshotRuntimePresenter,
 } from '@agent-device/contracts/snapshot-runtime';
-import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
-import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/hardware-key-runtime';
+import {
+  tvRemoteRuntimeOperationFacts,
+  hardwareKeyRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
 import {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,

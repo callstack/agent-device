@@ -29,8 +29,10 @@ import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
-import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
-import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/hardware-key-runtime';
+import {
+  tvRemoteRuntimeOperationFacts,
+  hardwareKeyRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
 import {
   type DeviceBinding,
   type RuntimeFacts,

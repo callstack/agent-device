@@ -23,11 +23,9 @@ import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
   HARDWARE_KEYS,
   HARDWARE_KEY_USAGE,
-  parseHardwareKey,
-} from '@agent-device/contracts/hardware-key';
-import {
   TV_REMOTE_BUTTONS,
   TV_REMOTE_BUTTON_USAGE,
+  parseHardwareKey,
   parseTvRemoteButton,
   tvRemoteDurationMode,
 } from '@agent-device/contracts/tv-remote';

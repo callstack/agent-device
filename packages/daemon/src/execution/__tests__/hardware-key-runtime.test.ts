@@ -13,7 +13,7 @@ import {
   hardwareKeyRuntimeUse,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/hardware-key-runtime';
+import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import { deviceShape } from '@agent-device/kernel/device';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';

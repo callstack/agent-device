@@ -5,8 +5,10 @@ import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orient
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
-import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
-import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/hardware-key-runtime';
+import {
+  tvRemoteRuntimeOperationFacts,
+  hardwareKeyRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
 import {
   hasAppleActionButton,
   isTvOsDevice,

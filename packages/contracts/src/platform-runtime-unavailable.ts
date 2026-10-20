@@ -22,8 +22,10 @@ import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
 import { backRuntimeOperationFacts } from './back-runtime.ts';
 import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
-import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
-import { hardwareKeyRuntimeOperationFacts } from './hardware-key-runtime.ts';
+import {
+  tvRemoteRuntimeOperationFacts,
+  hardwareKeyRuntimeOperationFacts,
+} from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { systemButtonRuntimeOperationFacts } from './system-button-runtime.ts';

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { HardwareKeyToken } from '@agent-device/contracts/hardware-key';
+import type { HardwareKeyToken } from '@agent-device/contracts/tv-remote';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import type { WebDriverClient } from './webdriver-client.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';

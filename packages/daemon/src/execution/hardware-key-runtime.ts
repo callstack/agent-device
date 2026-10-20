@@ -1,7 +1,7 @@
-import type { HardwareKeyInput } from '@agent-device/contracts/hardware-key-runtime';
+import type { HardwareKeyInput } from '@agent-device/contracts/tv-remote-runtime';
 import { hardwareKeyRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
-import { parseHardwareKey, type HardwareKeyToken } from '@agent-device/contracts/hardware-key';
+import { parseHardwareKey, type HardwareKeyToken } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';

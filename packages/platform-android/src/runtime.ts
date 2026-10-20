@@ -47,8 +47,10 @@ import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboar
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
-import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
-import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/hardware-key-runtime';
+import {
+  tvRemoteRuntimeOperationFacts,
+  hardwareKeyRuntimeOperationFacts,
+} from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidSetting } from './settings.ts';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';

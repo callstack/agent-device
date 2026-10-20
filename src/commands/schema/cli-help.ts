@@ -1,5 +1,5 @@
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { HARDWARE_KEY_USAGE } from '@agent-device/contracts/hardware-key';
+import { HARDWARE_KEY_USAGE } from '@agent-device/contracts/tv-remote';
 import { getReplayBackendDeclaration } from '@agent-device/replay-port/replay-backend-declarations';
 import { normalizeCliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
 import { helpBody } from '@agent-device/command-registry/command-text';

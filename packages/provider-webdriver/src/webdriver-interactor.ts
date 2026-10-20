@@ -15,11 +15,7 @@ import {
   type ScrollDirection,
   buildScrollGesturePlan,
 } from '@agent-device/contracts/scroll-gesture';
-import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
-import {
-  type HardwareKeyToken,
-  toAndroidHardwareKeycode,
-} from '@agent-device/contracts/hardware-key';
+import type { HardwareKeyToken, TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
@@ -428,13 +424,10 @@ class WebDriverInteractor implements Interactor {
     this.unsupported('tvRemote');
   }
 
-  /**
-   * Android sends the key through `mobile: pressKey`, the same route the keyboard Enter press
-   * uses, so a named key and a raw `android-keycode:<n>` both arrive already resolved to a
-   * keycode. XCUITest exposes no key press, so the iOS leg refuses through the capability map.
-   */
+  /** Android presses the key through `mobile: pressKey`; the iOS capability map refuses it. */
   async hardwareKey(key: HardwareKeyToken): Promise<void> {
     this.requireSupport('hardwareKey');
+    const { toAndroidHardwareKeycode } = await import('@agent-device/contracts/tv-remote');
     await this.client.executeScript('mobile: pressKey', [
       { keycode: toAndroidHardwareKeycode(key) },
     ]);

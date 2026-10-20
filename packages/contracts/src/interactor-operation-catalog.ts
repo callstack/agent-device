@@ -10,8 +10,12 @@ import {
 import { KEYBOARD_ACTION_LABELS, bindKeyboardAction } from './keyboard-runtime.ts';
 import { bindOrientation } from './orientation-runtime.ts';
 import { bindReadSetting, bindSetSetting } from './settings-runtime.ts';
-import { TV_REMOTE_LABEL, bindTvRemote } from './tv-remote-runtime.ts';
-import { HARDWARE_KEY_LABEL, bindHardwareKey } from './hardware-key-runtime.ts';
+import {
+  TV_REMOTE_LABEL,
+  bindTvRemote,
+  HARDWARE_KEY_LABEL,
+  bindHardwareKey,
+} from './tv-remote-runtime.ts';
 import {
   localInteractorSource,
   providerInteractorSource,

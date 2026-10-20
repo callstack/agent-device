@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
-import { bindHardwareKey, hardwareKeyRuntimeOperationFacts } from './hardware-key-runtime.ts';
+import { bindHardwareKey, hardwareKeyRuntimeOperationFacts } from './tv-remote-runtime.ts';
 
 const device = {
   platform: 'android',
