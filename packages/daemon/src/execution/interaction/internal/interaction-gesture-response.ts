@@ -1,12 +1,16 @@
-import type { GestureIntent } from '@agent-device/contracts/gesture-plan-types';
+import type {
+  GestureContactCount,
+  GestureIntent,
+} from '@agent-device/contracts/gesture-plan-types';
 import type { Point } from '@agent-device/kernel/snapshot';
 
 type GestureResponseResult = {
   kind: GestureIntent | 'drag';
   durationMs: number;
-  pointerCount: 1 | 2;
+  pointerCount: GestureContactCount;
   from: Point;
   to: Point;
+  tapSeries?: Record<string, unknown>;
   targets?: unknown;
   backendResult?: Record<string, unknown>;
   message?: string;
@@ -26,6 +30,7 @@ export function gestureResponseData(
     from: result.from,
     to: result.to,
     ...(result.kind === 'drag' ? { targets: result.targets } : {}),
+    ...(result.tapSeries ?? {}),
     ...(result.backendResult ?? {}),
     ...extra,
     ...(executionProfile

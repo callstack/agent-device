@@ -914,3 +914,41 @@ test('formatDivergenceActionLabel categorically drops fill/type text but keeps t
 // which this package cannot import without an R11 package→root-src escape
 // (#1478 P5 scoping dossier §5d). It exercises this package's exports via
 // the `@agent-device/ad-script` specifier instead of duplicating the codec.
+
+test('a recorded gesture tap round-trips its contacts and series flags', () => {
+  const action: SessionAction = {
+    ts: Date.now(),
+    command: 'gesture',
+    positionals: ['tap', '80', '300', '200', '450'],
+    flags: { holdMs: 40, count: 3, pauseMs: 100 },
+  };
+  const script = formatReplayScriptForTest([action]);
+  assert.equal(script, 'gesture "tap" 80 300 200 450 --hold-ms 40 --count 3 --pause-ms 100\n');
+
+  const [parsed] = parseReplayScriptDetailed(script).actions;
+  assert.deepEqual(parsed?.positionals, ['tap', '80', '300', '200', '450']);
+  assert.deepEqual(parsed?.flags, { holdMs: 40, count: 3, pauseMs: 100 });
+});
+
+test('an .ad gesture tap with an odd coordinate count is refused before replay', () => {
+  assert.throws(() => parseReplayScriptDetailed('gesture tap 80 300 200\n'), {
+    code: 'INVALID_ARGS',
+    message: /gesture tap accepts 4 to 10 arguments: .* \(line 1\)\./,
+  });
+});
+
+test('an .ad gesture line refuses a flag its kind does not read, as the CLI does', () => {
+  for (const [line, message] of [
+    ['gesture pinch 1.5 --count 3', 'gesture pinch does not read --count (line 1).'],
+    [
+      'gesture tap 80 300 200 450 --pointer-count 3',
+      'gesture tap does not read --pointer-count (line 1).',
+    ],
+    [
+      'gesture pan 100 400 0 -200 500 --hold-ms 40',
+      'gesture pan does not read --hold-ms (line 1).',
+    ],
+  ] as const) {
+    assert.throws(() => parseReplayScriptDetailed(`${line}\n`), { code: 'INVALID_ARGS', message });
+  }
+});

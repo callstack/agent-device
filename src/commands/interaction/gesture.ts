@@ -20,6 +20,11 @@ export const gestureDaemonWriters = {
 function gestureInputFromCli(positionals: string[], flags: CliFlags): Record<string, unknown> {
   return {
     ...commonInputFromFlags(flags),
-    ...gesturePayloadFromPositionals(positionals, flags.pointerCount),
+    ...gesturePayloadFromPositionals(positionals, {
+      pointerCount: flags.pointerCount,
+      holdMs: flags.holdMs,
+      count: flags.count,
+      pauseMs: flags.pauseMs,
+    }),
   };
 }

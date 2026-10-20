@@ -338,3 +338,25 @@ test('telephony action events name the simulated event and carry neither number 
   assert.equal(serialized.includes('5551234'), false);
   assert.equal(serialized.includes('private msg'), false);
 });
+
+test('a cancelled multi-finger tap series records its kind and how many repetitions completed', () => {
+  const tap = action('gesture', {
+    kind: 'tap',
+    durationMs: 50,
+    pointerCount: 5,
+    count: 3,
+    completed: 1,
+    pauseMs: 100,
+    message: 'Tapped 5 points 1 of 3 times; the request was cancelled',
+  });
+  assert.equal(buildActionSummary(tap), 'Ran tap gesture');
+  assert.deepEqual(buildActionDetails(tap), {
+    command: 'gesture',
+    kind: 'tap',
+    durationMs: 50,
+    pointerCount: 5,
+    count: 3,
+    completed: 1,
+    pauseMs: 100,
+  });
+});

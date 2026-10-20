@@ -6,6 +6,7 @@ import {
   distance,
   finalSpan,
   initialSpan,
+  isErrorWithReason,
   LANDSCAPE,
   normalizedAngle,
   PORTRAIT,
@@ -247,4 +248,117 @@ function rotationDeltaThrough(plan: Parameters<typeof rotationDelta>[0], index: 
       requiredPoint(plan.pointers[1].samples[index]?.point).x,
   );
   return ((end - start) * 180) / Math.PI;
+}
+
+describe('multi-finger tap plans', () => {
+  test('touches every point at once and lifts them together after the hold', () => {
+    const plan = buildGesturePlan(
+      {
+        intent: 'tap',
+        points: [
+          { x: 80, y: 300 },
+          { x: 200, y: 450 },
+          { x: 310, y: 600 },
+          { x: 120, y: 700 },
+          { x: 260, y: 200 },
+        ],
+        holdMs: 60,
+      },
+      PORTRAIT,
+    );
+    assert.equal(plan.topology, 'multi');
+    assert.equal(plan.intent, 'tap');
+    assert.equal(plan.durationMs, 60);
+    assert.deepEqual(plan.pointers, [
+      { pointerId: 0, samples: [sample(0, 80, 300), sample(60, 80, 300)] },
+      { pointerId: 1, samples: [sample(0, 200, 450), sample(60, 200, 450)] },
+      { pointerId: 2, samples: [sample(0, 310, 600), sample(60, 310, 600)] },
+      { pointerId: 3, samples: [sample(0, 120, 700), sample(60, 120, 700)] },
+      { pointerId: 4, samples: [sample(0, 260, 200), sample(60, 260, 200)] },
+    ]);
+  });
+
+  test('holds for 50 ms when no hold is given', () => {
+    const plan = buildGesturePlan(
+      {
+        intent: 'tap',
+        points: [
+          { x: 100, y: 100 },
+          { x: 200, y: 100 },
+        ],
+      },
+      PORTRAIT,
+    );
+    assert.equal(plan.durationMs, 50);
+  });
+
+  test('refuses one point and six points, accepting two and five', () => {
+    const points = [100, 140, 180, 220, 260, 300].map((x) => ({ x, y: 400 }));
+    for (const count of [1, 6]) {
+      assert.throws(
+        () => buildGesturePlan({ intent: 'tap', points: points.slice(0, count) }, PORTRAIT),
+        { code: 'INVALID_ARGS', message: 'gesture tap requires 2 to 5 points' },
+      );
+    }
+    for (const count of [2, 5]) {
+      assert.equal(
+        buildGesturePlan({ intent: 'tap', points: points.slice(0, count) }, PORTRAIT).pointers
+          .length,
+        count,
+      );
+    }
+  });
+
+  test('refuses two contacts on the same point but not two points one unit apart', () => {
+    assert.throws(
+      () =>
+        buildGesturePlan(
+          {
+            intent: 'tap',
+            points: [
+              { x: 100, y: 100 },
+              { x: 150, y: 100 },
+              { x: 100, y: 100 },
+            ],
+          },
+          PORTRAIT,
+        ),
+      (error: unknown) => isErrorWithReason(error, 'INVALID_ARGS', 'GESTURE_TAP_DUPLICATE_POINT'),
+    );
+    assert.equal(
+      buildGesturePlan(
+        {
+          intent: 'tap',
+          points: [
+            { x: 100, y: 100 },
+            { x: 101, y: 100 },
+          ],
+        },
+        PORTRAIT,
+      ).pointers.length,
+      2,
+    );
+  });
+
+  test('refuses a point outside the viewport', () => {
+    assert.throws(
+      () =>
+        buildGesturePlan(
+          {
+            intent: 'tap',
+            points: [
+              { x: 100, y: 100 },
+              { x: 391, y: 100 },
+            ],
+          },
+          PORTRAIT,
+        ),
+      (error: unknown) =>
+        isErrorWithReason(error, 'INVALID_ARGS', 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS'),
+    );
+  });
+});
+
+function sample(offsetMs: number, x: number, y: number) {
+  return { offsetMs, point: { x, y } };
 }

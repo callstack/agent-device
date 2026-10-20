@@ -66,6 +66,7 @@ export type {
   SettleCommandOptions,
   SwipeGestureOptions,
   SwipeOptions,
+  TapGestureOptions,
   TransformGestureOptions,
   TypeTextOptions,
 } from '../client-gesture.ts';

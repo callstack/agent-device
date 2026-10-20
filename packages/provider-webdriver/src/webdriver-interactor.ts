@@ -727,6 +727,10 @@ function webDriverOperationForGesture(plan: GesturePlan): CloudWebDriverOperatio
       return 'pinch';
     case 'rotate':
       return 'rotateGesture';
+    case 'tap':
+      // Two-contact transform support does not prove a provider delivers up to five simultaneous
+      // contacts, so a tap needs its own opt-in.
+      return 'tapGesture';
   }
 }
 

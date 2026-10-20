@@ -50,8 +50,11 @@ const SWIPE_NUMERIC_FLAG_MAP = new Map<string, 'count' | 'pauseMs'>([
   ['--count', 'count'],
   ['--pause-ms', 'pauseMs'],
 ]);
-const GESTURE_NUMERIC_FLAG_MAP = new Map<string, 'pointerCount'>([
+const GESTURE_NUMERIC_FLAG_MAP = new Map<string, 'pointerCount' | 'holdMs' | 'count' | 'pauseMs'>([
   ['--pointer-count', 'pointerCount'],
+  ['--hold-ms', 'holdMs'],
+  ['--count', 'count'],
+  ['--pause-ms', 'pauseMs'],
 ]);
 
 const TYPING_NUMERIC_FLAG_MAP = new Map<string, 'delayMs'>([['--delay-ms', 'delayMs']]);
@@ -289,6 +292,9 @@ export function appendScriptSeriesFlags(
     if (typeof flags.pointerCount === 'number') {
       parts.push('--pointer-count', String(flags.pointerCount));
     }
+    if (typeof flags.holdMs === 'number') parts.push('--hold-ms', String(flags.holdMs));
+    if (typeof flags.count === 'number') parts.push('--count', String(flags.count));
+    if (typeof flags.pauseMs === 'number') parts.push('--pause-ms', String(flags.pauseMs));
     return;
   }
   if (isTypingCommand(action.command) && typeof flags.delayMs === 'number') {

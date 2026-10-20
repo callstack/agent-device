@@ -165,6 +165,15 @@ function gesturePayloadArbByKind(
       degrees: fc.integer({ min: -720, max: 720 }),
       durationMs,
     }),
+    tap: fc.record({
+      kind: fc.constant('tap' as const),
+      points: fc.uniqueArray(origin, {
+        minLength: 2,
+        maxLength: 5,
+        selector: (point) => `${point.x},${point.y}`,
+      }),
+      holdMs: fc.option(fc.integer({ min: 16, max: 2000 }), { nil: undefined }),
+    }),
   };
 }
 

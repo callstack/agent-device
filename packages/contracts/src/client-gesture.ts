@@ -143,6 +143,14 @@ export type RotateGestureOptions = DeviceCommandBaseOptions & {
 
 export type TransformGestureOptions = DeviceCommandBaseOptions & TransformGestureParams;
 
+/** Touches 2 to 5 points and holds them for `holdMs`; `count` repeats the same contacts. */
+export type TapGestureOptions = DeviceCommandBaseOptions & {
+  points: { x: number; y: number }[];
+  holdMs?: number;
+  count?: number;
+  pauseMs?: number;
+};
+
 export type ScrollOptions = DeviceCommandBaseOptions &
   SettleCommandOptions & {
     direction: ScrollInputDirection;

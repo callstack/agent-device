@@ -217,3 +217,80 @@ test('runtime multi-touch planning prefers backend viewport geometry without a s
     { x: 0, y: 0, width: 300, height: 600 },
   );
 });
+
+test('a tap series replans each repetition against a fresh viewport, with its pause between', async () => {
+  const viewportReads: unknown[] = [];
+  const plans: unknown[] = [];
+  const sleeps: number[] = [];
+  const device = createInteractionDevice(selectorSnapshot(), {
+    resolveGestureViewport: async () => {
+      viewportReads.push('read');
+      // The device rotates after the first repetition.
+      return viewportReads.length === 1
+        ? { x: 0, y: 0, width: 400, height: 800 }
+        : { x: 0, y: 0, width: 800, height: 400 };
+    },
+    performGesture: async (_context, plan) => {
+      plans.push(plan);
+    },
+    clock: { now: () => 0, sleep: async (ms) => void sleeps.push(ms) },
+  });
+  const points = [
+    { x: 100, y: 200 },
+    { x: 160, y: 260 },
+  ];
+
+  const result = await device.interactions.gesture({
+    gesture: { intent: 'tap', points, count: 3, pauseMs: 100 },
+  });
+
+  assert.equal(viewportReads.length, 3);
+  assert.deepEqual(
+    plans.map((plan) => (plan as { viewport: unknown }).viewport),
+    [
+      { x: 0, y: 0, width: 400, height: 800 },
+      { x: 0, y: 0, width: 800, height: 400 },
+      { x: 0, y: 0, width: 800, height: 400 },
+    ],
+  );
+  assert.deepEqual(sleeps, [100, 100]);
+  assert.equal(result.kind, 'tap');
+  assert.equal(result.pointerCount, 2);
+  assert.deepEqual('tapSeries' in result ? result.tapSeries : undefined, {
+    points,
+    holdMs: 50,
+    count: 3,
+    pauseMs: 100,
+    completed: 3,
+  });
+  assert.equal(result.message, 'Tapped 2 points 3 times');
+});
+
+test('an aborted tap series stops between repetitions and reports what completed', async () => {
+  const controller = new AbortController();
+  let performed = 0;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performGesture: async () => {
+      performed += 1;
+      controller.abort();
+    },
+    clock: { now: () => 0, sleep: async () => {} },
+  });
+
+  const result = await device.interactions.gesture({
+    signal: controller.signal,
+    gesture: {
+      intent: 'tap',
+      points: [
+        { x: 100, y: 200 },
+        { x: 160, y: 260 },
+      ],
+      count: 3,
+    },
+  });
+
+  assert.equal(performed, 1);
+  assert.equal('tapSeries' in result ? result.tapSeries?.completed : undefined, 1);
+  assert.equal(result.message, 'Tapped 2 points 1 of 3 times; the request was cancelled');
+});

@@ -267,7 +267,7 @@ function buildTvRemoteActionSummary(result: Record<string, unknown>): string {
 }
 
 function buildGestureActionSummary(result: Record<string, unknown>): string {
-  const kind = readEnum(result.kind, ['fling', 'pan', 'pinch', 'rotate', 'transform']);
+  const kind = readEnum(result.kind, ['fling', 'pan', 'pinch', 'rotate', 'transform', 'tap']);
   return kind ? `Ran ${kind} gesture` : 'Ran gesture';
 }
 
@@ -278,7 +278,7 @@ function buildSwipeActionSummary(result: Record<string, unknown>): string {
 
 function buildGestureActionDetails(result: Record<string, unknown>): Record<string, unknown> {
   return compactDetails({
-    kind: readEnum(result.kind, ['fling', 'pan', 'pinch', 'rotate', 'transform']),
+    kind: readEnum(result.kind, ['fling', 'pan', 'pinch', 'rotate', 'transform', 'tap']),
     durationMs: readSessionEventNumber(result.durationMs),
     pointerCount: readSessionEventNumber(result.pointerCount),
     x1: readSessionEventNumber(result.x1),
@@ -286,6 +286,7 @@ function buildGestureActionDetails(result: Record<string, unknown>): Record<stri
     x2: readSessionEventNumber(result.x2),
     y2: readSessionEventNumber(result.y2),
     count: readSessionEventNumber(result.count),
+    completed: readSessionEventNumber(result.completed),
     pauseMs: readSessionEventNumber(result.pauseMs),
     pattern: readEnum(result.pattern, ['one-way', 'ping-pong']),
     scale: readSessionEventNumber(result.scale),

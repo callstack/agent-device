@@ -30,3 +30,34 @@ test('gesture response builder preserves the dual-target drag disclosure and tim
     timing: { executionProfile: 'timed-pan', gestureDurationMs: 1_300 },
   });
 });
+
+test('a tap response lists its contacts and how many repetitions completed', () => {
+  const points = [
+    { x: 80, y: 300 },
+    { x: 200, y: 450 },
+    { x: 310, y: 600 },
+  ];
+  expect(
+    gestureResponseData({
+      kind: 'tap',
+      durationMs: 50,
+      pointerCount: 3,
+      from: { x: 196.66666666666666, y: 450 },
+      to: { x: 196.66666666666666, y: 450 },
+      tapSeries: { points, holdMs: 50, count: 4, pauseMs: 100, completed: 4 },
+      message: 'Tapped 3 points 4 times',
+    }),
+  ).toEqual({
+    kind: 'tap',
+    durationMs: 50,
+    pointerCount: 3,
+    from: { x: 196.66666666666666, y: 450 },
+    to: { x: 196.66666666666666, y: 450 },
+    points,
+    holdMs: 50,
+    count: 4,
+    pauseMs: 100,
+    completed: 4,
+    message: 'Tapped 3 points 4 times',
+  });
+});

@@ -129,6 +129,7 @@ import type {
   SwipeOptions,
   TelephonyCommandOptions,
   TraceOptions,
+  TapGestureOptions,
   TransformGestureOptions,
   TvRemoteCommandOptions,
   TypeTextOptions,
@@ -274,6 +275,7 @@ export type AgentDeviceClient = {
     pinch: (options: PinchOptions) => Promise<CommandRequestResult>;
     rotateGesture: (options: RotateGestureOptions) => Promise<CommandRequestResult>;
     transformGesture: (options: TransformGestureOptions) => Promise<CommandRequestResult>;
+    tapGesture: (options: TapGestureOptions) => Promise<CommandRequestResult>;
     get: (options: GetOptions) => Promise<CommandRequestResult>;
     is: (options: IsOptions) => Promise<CommandRequestResult>;
     find: (options: FindOptions) => Promise<CommandResult<'find'>>;

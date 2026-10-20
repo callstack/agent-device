@@ -26,6 +26,7 @@ import type {
   SessionSaveScriptOptions,
   SessionSaveScriptResult,
   SwipeGestureOptions,
+  TapGestureOptions,
   TransformGestureOptions,
 } from '@agent-device/contracts/client';
 import type { AgentArtifactsResult } from '@agent-device/contracts/observability';
@@ -466,6 +467,7 @@ export function createAgentDeviceClient(
         await executeCommand('gesture', centeredGestureInput('rotate', options)),
       transformGesture: async (options) =>
         await executeCommand('gesture', transformGestureInput(options)),
+      tapGesture: async (options) => await executeCommand('gesture', tapGestureInput(options)),
       get: async (options) => await executeCommand('get', options),
       is: async (options) => await executeCommand('is', options),
       find: async (options) => await executeCommand('find', options),
@@ -544,6 +546,12 @@ function transformGestureInput(
 ): InternalRequestOptions & Record<string, unknown> {
   const { x, y, dx, dy, ...common } = options;
   return { ...common, kind: 'transform', origin: { x, y }, delta: { x: dx, y: dy } };
+}
+
+function tapGestureInput(
+  options: TapGestureOptions,
+): InternalRequestOptions & Record<string, unknown> {
+  return { ...options, kind: 'tap' };
 }
 
 function assertCompleteGestureCenter(

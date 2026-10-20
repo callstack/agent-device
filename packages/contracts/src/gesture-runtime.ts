@@ -45,8 +45,9 @@ export type GestureViewportInput = Readonly<{
  *   check refused a plain gesture (web, watchOS, visionOS).
  * - `performDirectionalFlingPlan` — `gesture fling --direction`, whose speed semantics Linux
  *   cannot honor even though it executes coordinate flings through its drag primitive.
- * - `performMultiTouchGesturePlan` — pinch/rotate/transform and two-pointer pan. On Apple this is
- *   the two-finger XCTest synthesis, which runs on iOS/iPadOS simulators and physical devices.
+ * - `performMultiTouchGesturePlan` — pinch/rotate/transform, two-pointer pan, and multi-finger tap.
+ *   On Apple this is the multi-touch XCTest synthesis, which runs on iOS/iPadOS simulators and
+ *   physical devices.
  * - `performTargetAuthoredDrag` — `gesture drag`, which needs an adapter preserving source hold,
  *   timed movement, and destination hold.
  */

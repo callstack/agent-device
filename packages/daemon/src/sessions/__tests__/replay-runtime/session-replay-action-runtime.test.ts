@@ -177,3 +177,34 @@ test('a scroll step carries its parsed --until flag onto the dispatch', async ()
   expect(dispatched?.positionals).toEqual(['down']);
   expect(dispatched?.flags?.until).toBe('label="Checkout"');
 });
+
+test('a gesture line whose kind came from a variable still refuses a flag the kind does not read', async () => {
+  const action: SessionAction = {
+    ts: 0,
+    command: 'gesture',
+    positionals: ['${KIND}', '1.5'],
+    flags: { count: 3 },
+  };
+  let dispatched = false;
+  const response = await invokeReplayAction({
+    req: REPLAY_REQUEST,
+    sessionName: 'default',
+    action,
+    resolved: { ...action, positionals: ['pinch', '1.5'] },
+    filePath: 'flow.ad',
+    line: 1,
+    step: 1,
+    resolvedSessionScope: undefined,
+    dependencies: replayDaemonDependencies,
+    invoke: async () => {
+      dispatched = true;
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(dispatched).toBe(false);
+  expect(response.ok).toBe(false);
+  expect(response.ok ? undefined : response.error.message).toContain(
+    'gesture pinch does not read --count (after variable substitution).',
+  );
+});

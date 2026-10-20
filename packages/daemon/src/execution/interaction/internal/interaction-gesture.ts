@@ -431,10 +431,19 @@ function swipeMotionAtIndex(
   return { ...input, from: input.to, to: input.from };
 }
 
+/** The flag-carried gesture inputs a `.ad` line needs, whichever surface the request came from. */
 function gestureReplayFlags(
   input: GesturePayload,
   flags: InteractionRouteInput['req']['flags'],
 ): InteractionRouteInput['req']['flags'] {
+  if (input.kind === 'tap') {
+    return {
+      ...flags,
+      ...(input.holdMs === undefined ? {} : { holdMs: input.holdMs }),
+      ...(input.count === undefined ? {} : { count: input.count }),
+      ...(input.pauseMs === undefined ? {} : { pauseMs: input.pauseMs }),
+    };
+  }
   if (input.kind !== 'pan' || input.pointerCount === undefined) return flags;
   return { ...flags, pointerCount: input.pointerCount };
 }

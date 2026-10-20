@@ -374,6 +374,33 @@ export function pointField(description: string): CommandField<PointInput> {
   );
 }
 
+export function pointArrayField(
+  description: string,
+  options: { min: number; max: number },
+): CommandField<PointInput[]> {
+  return optionalField(
+    {
+      type: 'array',
+      description,
+      items: pointSchema('One contact point.'),
+      minItems: options.min,
+      maxItems: options.max,
+    },
+    (record, key) => (record[key] === undefined ? undefined : readPointArray(record, key)),
+  );
+}
+
+function readPointArray(record: Record<string, unknown>, key: string): PointInput[] {
+  const value = record[key];
+  if (!Array.isArray(value)) {
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be an array of points.`);
+  }
+  return value.map((item: unknown, index) => {
+    const itemKey = `${key}[${index}]`;
+    return readPoint({ [itemKey]: item }, itemKey);
+  });
+}
+
 export function selectorSnapshotFields() {
   return {
     depth: integerField('Snapshot traversal depth.', { min: 0 }),

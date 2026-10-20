@@ -81,6 +81,50 @@ test('dual-pointer plans normalize to a transform request and preserve exact sam
   );
 });
 
+test('a multi-finger tap normalizes to a tap request with one stationary path per contact', () => {
+  const tap = buildGesturePlan(
+    {
+      intent: 'tap',
+      points: [
+        { x: 100, y: 200 },
+        { x: 200, y: 300 },
+        { x: 300, y: 400 },
+      ],
+      holdMs: 40,
+    },
+    viewport,
+  );
+  const request = normalizeAndroidTouchHelperGestureRequest(lowerAndroidTouchPlan(tap));
+
+  assert.deepEqual(request, {
+    kind: 'tap',
+    durationMs: 40,
+    pointers: [
+      {
+        pointerId: 0,
+        samples: [
+          { offsetMs: 0, x: 100, y: 200 },
+          { offsetMs: 40, x: 100, y: 200 },
+        ],
+      },
+      {
+        pointerId: 1,
+        samples: [
+          { offsetMs: 0, x: 200, y: 300 },
+          { offsetMs: 40, x: 200, y: 300 },
+        ],
+      },
+      {
+        pointerId: 2,
+        samples: [
+          { offsetMs: 0, x: 300, y: 400 },
+          { offsetMs: 40, x: 300, y: 400 },
+        ],
+      },
+    ],
+  });
+});
+
 test('long press lowers to a stationary single-pointer helper request', () => {
   const request = normalizeAndroidTouchHelperGestureRequest(longPressPlan());
   assert.equal(request.kind, 'swipe');

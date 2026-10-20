@@ -16,10 +16,13 @@ import type {
   ScrollOptions,
   SwipeGestureOptions,
   SwipeOptions,
+  TapGestureOptions,
   TransformGestureOptions,
   TypeTextOptions,
 } from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import type { FlagKey } from '@agent-device/command-registry/flag-types';
+import { GESTURE_FLAGS_BY_KIND } from '@agent-device/contracts/gesture-normalization';
 import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import {
   REPEATED_TOUCH_FLAGS,
@@ -60,6 +63,7 @@ import {
   type PressInput,
   type RotateInput,
   type SwipeGestureInput,
+  type TapInput,
   type TransformInput,
 } from './metadata.ts';
 import { interactionCliOutputFormatters } from './output.ts';
@@ -346,6 +350,13 @@ export const INTERACTION_COMMAND_OUTPUT_SCHEMAS = {
   'press' | 'click' | 'fill' | 'longpress' | 'hover' | 'find'
 >;
 
+/** The `.ad` preflight owns the same table, so `gesture pinch --count 3` is refused on both paths. */
+const GESTURE_FLAGS_BY_ACTION: Readonly<Record<string, readonly FlagKey[]>> = GESTURE_FLAGS_BY_KIND;
+
+const GESTURE_CLI_FLAGS: readonly FlagKey[] = [
+  ...new Set(Object.values(GESTURE_FLAGS_BY_ACTION).flat()),
+];
+
 const interactionCliSchemas = {
   get: {
     usageOverride: 'get text|attrs <@ref|selector>',
@@ -411,12 +422,13 @@ const interactionCliSchemas = {
     allowedFlags: ['count', 'pauseMs', 'pattern'],
   },
   gesture: {
-    usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
+    usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|tap|drag> ...',
     usageFlags: [],
-    listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|drag> ...',
-    positionalArgs: ['pan|fling|swipe|pinch|rotate|transform|drag', 'args?'],
+    listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform|tap|drag> ...',
+    positionalArgs: ['pan|fling|swipe|pinch|rotate|transform|tap|drag', 'args?'],
     allowsExtraPositionals: true,
-    allowedFlags: ['pointerCount'],
+    allowedFlags: GESTURE_CLI_FLAGS,
+    flagsByAction: GESTURE_FLAGS_BY_ACTION,
   },
   focus: {
     positionalArgs: ['x', 'y'],
@@ -619,9 +631,9 @@ const findCommandFacet = defineCommandFacet({
 const gestureCommandFacet = defineCommandFacet({
   name: 'gesture',
   text: {
-    summary: 'Run pan, fling, swipe, pinch, rotate, transform, or drag gestures',
+    summary: 'Run pan, fling, swipe, pinch, rotate, transform, tap, or drag gestures',
     cliDetail:
-      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
+      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
   },
   metadata: metadata('gesture'),
   run: async (client, input) => {
@@ -638,6 +650,8 @@ const gestureCommandFacet = defineCommandFacet({
         return await client.interactions.rotateGesture(toRotateOptions(input));
       case 'transform':
         return await client.interactions.transformGesture(toTransformOptions(input));
+      case 'tap':
+        return await client.interactions.tapGesture(toTapGestureOptions(input));
       case 'drag':
         return await client.interactions.drag(toDragOptions(input));
     }
@@ -807,6 +821,16 @@ function toRotateOptions(input: RotateInput): RotateGestureOptions {
     degrees: input.degrees,
     x: input.origin?.x,
     y: input.origin?.y,
+  };
+}
+
+function toTapGestureOptions(input: TapInput): TapGestureOptions {
+  return {
+    ...commonToClientOptions(input),
+    points: input.points,
+    holdMs: input.holdMs,
+    count: input.count,
+    pauseMs: input.pauseMs,
   };
 }
 

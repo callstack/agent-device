@@ -13,7 +13,10 @@ test('commands topic includes concise command catalog entries', async () => {
   assert.match(usageText, /clipboard read \| clipboard write <text>/);
   assert.match(usageText, /keyboard \[action\]/);
   assert.match(usageText, /trigger-app-event\s{2,}Invoke an app-defined automation event/);
-  assert.match(usageText, /gesture <pan\|fling\|swipe\|pinch\|rotate\|transform\|drag> \.\.\./);
+  assert.match(
+    usageText,
+    /gesture <pan\|fling\|swipe\|pinch\|rotate\|transform\|tap\|drag> \.\.\./,
+  );
   assert.doesNotMatch(
     usageText,
     /install-from-source <url> \| install-from-source --github-actions-artifact/,

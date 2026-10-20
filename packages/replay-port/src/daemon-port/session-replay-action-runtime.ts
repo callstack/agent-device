@@ -4,6 +4,7 @@ import type { ReplayDispatchRequest, ReplayInvoke } from '@agent-device/contract
 import { mergeParentFlags } from '@agent-device/command-registry/batch';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
+  describeReplayGestureFlagError,
   gesturePayloadFromPositionals,
   swipePayloadFromPositionals,
 } from '@agent-device/contracts/gesture-normalization';
@@ -141,6 +142,15 @@ async function invokeResolvedReplayAction(params: {
 }): Promise<DaemonResponse> {
   const { req, sessionName, resolved, sourceAction, invoke, resolvedSessionScope, dependencies } =
     params;
+  // The parse-time preflight cannot see a kind written as `${VAR}`; check the line's own flags
+  // again once it is resolved. Parent flags may carry project defaults, so they are not checked.
+  const gestureFlagError = describeReplayGestureFlagError(
+    resolved.command,
+    resolved.positionals ?? [],
+    resolved.flags ?? {},
+    'after variable substitution',
+  );
+  if (gestureFlagError) throw new AppError('INVALID_ARGS', gestureFlagError);
   const flags = mergeParentFlags(req.flags, { ...(resolved.flags ?? {}) });
   const recordedInputVariable =
     sourceAction.command === 'fill'
@@ -181,7 +191,12 @@ function buildReplayInteractionRequest(
       ...baseReq,
       command: action.command,
       positionals: [],
-      input: gesturePayloadFromPositionals(positionals, baseReq.flags?.pointerCount),
+      input: gesturePayloadFromPositionals(positionals, {
+        pointerCount: baseReq.flags?.pointerCount,
+        holdMs: baseReq.flags?.holdMs,
+        count: baseReq.flags?.count,
+        pauseMs: baseReq.flags?.pauseMs,
+      }),
     };
   }
   if (action.command === 'swipe') {

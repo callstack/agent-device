@@ -246,7 +246,7 @@ test('MCP gesture tool exposes generic drag endpoints and bounded timing phases'
   assert.deepEqual(gesture.inputSchema.properties?.kind, {
     type: 'string',
     description: 'Gesture variant.',
-    enum: ['pan', 'fling', 'swipe', 'pinch', 'rotate', 'transform', 'drag'],
+    enum: ['pan', 'fling', 'swipe', 'pinch', 'rotate', 'transform', 'tap', 'drag'],
   });
   assert.deepEqual(gesture.inputSchema.properties?.source, {
     type: 'string',

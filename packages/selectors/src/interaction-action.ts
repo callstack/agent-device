@@ -19,7 +19,8 @@ export type InteractionAction =
   | 'drag'
   | 'fling'
   | 'rotate'
-  | 'transform';
+  | 'transform'
+  | 'tap';
 
 /**
  * The passive verb a refusal uses for the action it declined, so every acting guard that refuses
@@ -31,6 +32,7 @@ export function interactionVerb(action: InteractionAction): string {
   switch (action) {
     case 'click':
     case 'press':
+    case 'tap':
       return 'be tapped';
     case 'fill':
       return 'be filled';

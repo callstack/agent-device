@@ -1,4 +1,4 @@
-import type { PointerTrajectory } from '@agent-device/contracts/gesture-plan-types';
+import type { PointerTrajectory, TapPointerId } from '@agent-device/contracts/gesture-plan-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
@@ -39,12 +39,12 @@ const HELPER_NO_FINAL_RESULT = 'ANDROID_TOUCH_HELPER_NO_FINAL_RESULT';
 const HELPER_REPORTED_FAILURE = 'ANDROID_TOUCH_HELPER_REPORTED_FAILURE';
 
 type AndroidPlannedPointerTrajectory = {
-  pointerId: 0 | 1;
+  pointerId: TapPointerId;
   samples: Array<{ offsetMs: number; x: number; y: number }>;
 };
 
 type AndroidTouchHelperGestureRequest = {
-  kind: 'swipe' | 'transform';
+  kind: 'swipe' | 'transform' | 'tap';
   durationMs: number;
   pointers: AndroidPlannedPointerTrajectory[];
 };
@@ -158,14 +158,14 @@ export function normalizeAndroidTouchHelperGestureRequest(
   plan: AndroidLoweredTouchPlan,
 ): AndroidTouchHelperGestureRequest {
   return {
-    kind: plan.topology === 'single' ? 'swipe' : 'transform',
+    kind: plan.topology === 'single' ? 'swipe' : plan.intent === 'tap' ? 'tap' : 'transform',
     durationMs: plan.durationMs,
     pointers: plan.pointers.map(toAndroidPlannedPointerTrajectory),
   };
 }
 
 function toAndroidPlannedPointerTrajectory(
-  pointer: PointerTrajectory,
+  pointer: PointerTrajectory<TapPointerId>,
 ): AndroidPlannedPointerTrajectory {
   return {
     pointerId: pointer.pointerId,
