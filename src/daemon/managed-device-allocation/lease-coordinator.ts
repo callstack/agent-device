@@ -241,7 +241,7 @@ export function createManagedLeaseCoordinator(options: {
   ): Promise<ManagedLeaseAcquisition> {
     if (result.status === 'refused') return refusalOf(result.record);
     if (result.status === 'abandoned') return await abandon(ref, 'abandoned');
-    if (result.status === 'cleanup-pending') {
+    if (result.status === 'cleanup-pending' || published.has(operationKey(ref))) {
       const released = await journal.release(ref);
       return unavailable(
         released.status === 'released' ? 'handoff-failed' : 'allocator-uncertain',

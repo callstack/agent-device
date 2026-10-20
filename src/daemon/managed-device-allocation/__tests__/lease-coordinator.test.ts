@@ -42,9 +42,22 @@ afterEach(() => {
 
 type Script = NonNullable<Parameters<typeof createScriptedManagedDeviceAllocator>[0]>['script'];
 
-function setup(script: Script, handoff: Partial<ManagedLeaseHandoff> = {}) {
+function setup(
+  script: Script,
+  handoff: Partial<ManagedLeaseHandoff> = {},
+  failTransition?: string,
+) {
   const root = mkdtempForTestSync('managed-lease-coordinator-');
-  const store = createAllocationOperationStore({ allocationsDir: path.join(root, 'allocations') });
+  const durable = createAllocationOperationStore({
+    allocationsDir: path.join(root, 'allocations'),
+  });
+  const store: typeof durable = {
+    ...durable,
+    transition: async (...args) => {
+      if (args[2].kind === failTransition) throw new Error('disk full');
+      return await durable.transition(...args);
+    },
+  };
   const allocator = createScriptedManagedDeviceAllocator({ script });
   const events: string[] = [];
   const coordinator = createManagedLeaseCoordinator({
@@ -63,7 +76,7 @@ function setup(script: Script, handoff: Partial<ManagedLeaseHandoff> = {}) {
     },
   });
   const recordFor = () => {
-    const read = store.read(ALLOCATION_REQUEST);
+    const read = durable.read(ALLOCATION_REQUEST);
     if (read.status !== 'found') throw new Error(`expected a journal record, got ${read.status}`);
     return read.record;
   };
@@ -262,6 +275,20 @@ test('an acquisition abandoned during handoff tears the published device down an
     status: 'unavailable',
     reason: 'abandoned',
   });
+  expect(events).toEqual(['publish', 'teardown after requestLease']);
+  expect(allocator.calls.at(-1)?.method).toBe('releaseLease');
+  expect(recordFor()).toMatchObject({ binding: 'cleaned', release: 'released' });
+  expect(coordinator.binding(OWNER)).toBeUndefined();
+});
+
+test('a published device whose journal write fails is torn down and its lease released', async () => {
+  const { allocator, coordinator, events, recordFor, acquire } = setup(
+    { requestLease: [granted()], releaseLease: [undefined] },
+    {},
+    'binding-published',
+  );
+
+  expect(await acquire()).toMatchObject({ status: 'unavailable', reason: 'handoff-failed' });
   expect(events).toEqual(['publish', 'teardown after requestLease']);
   expect(allocator.calls.at(-1)?.method).toBe('releaseLease');
   expect(recordFor()).toMatchObject({ binding: 'cleaned', release: 'released' });
