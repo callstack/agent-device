@@ -53,7 +53,9 @@ const LEGACY_FILE_LINE_CAPS = {
   'src/daemon-client/__tests__/daemon-client.test.ts': 1340,
   'src/mcp/__tests__/command-tools.test.ts': 1029,
   'test/integration/provider-scenarios/android-lifecycle.test.ts': 1227,
-  'packages/command-registry/src/registry.ts': 2179,
+  // A command must add its descriptor to RAW_COMMAND_DESCRIPTORS, so this cap is re-pinned per
+  // added command; the statement-neutral split (ADR 0027) is the path to shrinking it.
+  'packages/command-registry/src/registry.ts': 2191,
   'packages/host-kit/src/internal/exec.ts': 1032,
   'packages/react-native/src/metro/client-metro.ts': 1123,
   'src/cli/commands/connection-runtime.ts': 1019,
