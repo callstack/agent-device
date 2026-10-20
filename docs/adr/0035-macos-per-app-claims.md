@@ -38,7 +38,7 @@ Accepted (2026-10-08). Applies to the native macOS app backend (ADR 0031) only.
 
 The Mac is one device, so its one claim let a single session per Mac drive any macOS app. The
 native backend acts on the session app alone: accessibility actions on its elements, key events
-posted to its process, window capture, and (rule 7 of ADR 0031) a background `open`. None of
+posted to its process, window capture, and (rule 8 of ADR 0031) a background `open`. None of
 those moves the real pointer or changes the frontmost app, so two sessions on two apps cannot
 interfere through focus or the pointer. One host resource is shared: ScreenCaptureKit. Two helper
 processes capturing two app windows at the same moment failed (`screenshot failed`, or both hung

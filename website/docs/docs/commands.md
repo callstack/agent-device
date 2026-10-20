@@ -95,7 +95,7 @@ Device claims and the daemon:
 
 Open apps and links:
 
-- `open [app|url] [url]` boots and activates the selected target when needed. `open <url>` opens deep links on Android and iOS, and `open <app> <url>` opens a deep link in that app on iOS.
+- `open [app|url] [url]` boots the selected device when needed and opens the target in a session. `open <url>` opens deep links on Android and iOS, and `open <app> <url>` opens a deep link in that app on iOS. See [Desktop targets](#desktop-targets) for macOS activation behavior.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom-scheme URLs need an active app in the session.
 - `open <app> --wait <ms>` waits up to that budget for a device another session holds, then fails with `DEVICE_IN_USE`. The wait extends the command's timeout, so you don't need a longer `--timeout`. A claim held by another workspace's daemon is not waited for; `open` returns its recovery command at once. Device-mutating commands like `install` and `reinstall` never wait either: a claim held by another session fails them at once, and when the caller sends a workspace, another workspace's claim under the same session name fails too. See [Sessions](/docs/sessions#wait-for-a-slow-or-busy-device).
 - `open <app> --launch-console <path>` captures launch-time stdout/stderr for iOS simulator app launches. It is not valid for URL opens or other targets.
@@ -340,7 +340,11 @@ agent-device snapshot -i --platform apple --target desktop
 - macOS also supports `clipboard read|write`, `trigger-app-event`, `logs`, `network dump`, `audio probe`, `alert`, and part of `settings` (see [Settings helpers](#settings-helpers)). `audio probe` samples host system audio and needs Screen Recording permission; see [Debugging & Profiling](/docs/debugging-profiling#audio-probes).
 - Mobile-only commands are unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `fold`, `install`, `reinstall`, `uninstall`, `install-from-source`, and `push`.
 
-- With the native backend, app sessions claim one bundle id and open it in the background. Sessions on different apps can run together within one daemon or across daemons that share a claims directory. Same-app and whole-Mac claims conflict. `open --wait` waits only for sessions in the same daemon. An app claim can reopen only its app on the `app` surface; use `open <app> <url>` for links. Copies of one app need distinct bundle ids. Helper screenshots run one at a time. Use one agent-device version per claims directory; older daemons do not enforce app claims. `macos-app` leases take no host claim, so their exclusion applies only within one daemon.
+- With the native backend, app sessions claim one bundle id. Sessions on different apps can run together within one daemon or across daemons that share a claims directory. Same-app and whole-Mac claims conflict. `open --wait` waits only for sessions in the same daemon. An app claim can reopen only its app on the `app` surface; use `open <app> <url>` for links. Copies of one app need distinct bundle ids. Helper screenshots run one at a time. Use one agent-device version per claims directory; older daemons do not enforce app claims. `macos-app` leases take no host claim, so their exclusion applies only within one daemon.
+
+Native app-scoped opens keep the app in the background; XCTest opens and explicit `--surface frontmost-app` opens activate it. The backend selects this behavior; there is no activation flag. `--foreground` requests an initial snapshot. Run `agent-device help open` for the versioned contract.
+
+`frontmost-app` and `menubar` pointer actions move the real pointer. `settings permission` opens System Settings in front, and clipboard and appearance changes affect the whole Mac. `close <other app>` can quit an app held by another session.
 
 Set `AGENT_DEVICE_MACOS_APP_BACKEND=native` to run macOS app sessions without XCTest. There is no Automation Mode overlay, the app can stay behind other windows, and your pointer stays yours while a drawn pointer shows each action.
 

@@ -40,7 +40,10 @@ Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
    Other helper surfaces retain 12 levels.
 6. Screenshots capture only the session app's front window through ScreenCaptureKit.
 
-7. A native `app` session whose target resolves before launch claims only that app. `open` launches or reopens that app with `open -g` ([ADR 0035](0035-macos-per-app-claims.md)).
+7. A native `app` session whose target resolves before launch claims only that app ([ADR 0035](0035-macos-per-app-claims.md)).
+8. Native app-scoped opens keep the app in the background; XCTest opens and explicit `--surface frontmost-app` opens activate it.
+   The backend selects this behavior without an activation flag.
+   `--foreground` retains its initial-snapshot meaning.
 
 ## Context
 
@@ -51,6 +54,12 @@ The macOS helper already reads accessibility trees for helper surfaces with the 
 It can therefore serve an app session without a test session while the app remains behind the user's windows.
 
 ## Decision details
+
+**Open activation.**
+An open scoped to one native app uses `open -g`, including a `macos-app` lease.
+Unresolved targets and other surfaces retain whole-Mac launch behavior.
+The backend opt-in supplies the activation choice accepted in [#3338](https://github.com/callstack/agent-device/issues/3338).
+Commands that affect host-global state retain their scope under ADR 0035.
 
 **Pointer delivery.**
 Initial `CGEventPostToPid` measurements used Calculator (SwiftUI) without window fields.
@@ -107,6 +116,12 @@ A persistent pointer would require a long-lived helper.
 
 ## Rejected alternatives
 
+- **Overload `--foreground` to activate the app.**
+  Callers already use it to request an initial snapshot.
+  It is absent from recorded opens, so overloading it would also change replay defaults.
+- **Add a dedicated activation flag.**
+  The backend already selects the supported background app path.
+  A flag would introduce another choice without supplying a background interaction path for XCTest.
 - **Suppress Automation Mode.**
   `automationmodetool` removes the authentication prompt, not the overlay.
   The runner still controls the pointer.
