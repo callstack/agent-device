@@ -12,6 +12,7 @@ import {
   skipWhenLoopbackUnavailable,
   listenOnLoopback,
 } from '@agent-device/test-kit';
+import * as metadata from '../daemon-client-metadata.ts';
 import type { DaemonBinding } from '@agent-device/contracts/client';
 import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
@@ -73,7 +74,7 @@ async function refusalFrom(promise: Promise<unknown>): Promise<AppError> {
 }
 
 /** A socket stand-in that keeps every request line it was sent, token included. */
-async function startRecordingSocketDaemon() {
+async function startRecordingSocketDaemon(expectedToken?: () => string) {
   const requests: Record<string, any>[] = [];
   const server = net.createServer((socket) => {
     socket.setEncoding('utf8');
@@ -82,8 +83,13 @@ async function startRecordingSocketDaemon() {
     socket.on('data', (chunk) => {
       buffered += chunk;
       if (!buffered.includes('\n')) return;
-      requests.push(JSON.parse(buffered) as Record<string, unknown>);
-      socket.write(`${JSON.stringify({ ok: true, data: { devices: [] } })}\n`);
+      const request = JSON.parse(buffered) as Record<string, unknown>;
+      requests.push(request);
+      const response =
+        expectedToken && request.token !== expectedToken()
+          ? { ok: false, error: { code: 'UNAUTHORIZED', message: 'Invalid daemon token' } }
+          : { ok: true, data: { devices: [] } };
+      socket.write(`${JSON.stringify(response)}\n`);
     });
   });
   return { server, port: await listenOnLoopback(server), requests };
@@ -417,4 +423,49 @@ test('a pinned client keeps its hands off the state directory it was given', asy
   assert.equal(settings.ownedStateDir, undefined);
   assert.deepEqual(settings.daemonBinding, pin);
   assert.equal(settings.paths.baseDir, paths.baseDir);
+});
+
+test('replacement after binding lookup cannot authenticate a pinned request with the new token', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  let token = 'local-secret';
+  const daemon = await startRecordingSocketDaemon(() => token);
+  const { info } = await registerDaemon(paths, { socketPort: daemon.port, ownership: 'embedded' });
+  token = info.token;
+  const readInfo = metadata.daemonInfoFromRecord;
+  const lookup = vi.spyOn(metadata, 'daemonInfoFromRecord').mockImplementation((record) => {
+    const observed = readInfo(record);
+    // The replacement reuses the endpoint and process lifetime after this lookup. Its auth token
+    // changes, so a request can only succeed here if the client incorrectly adopts the new token.
+    token = 'replacement-token';
+    const replaced = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8'));
+    fs.writeFileSync(paths.infoPath, JSON.stringify({ ...replaced, token }));
+    return observed;
+  });
+  try {
+    const response = await createDaemonTransport(createTestHostEnvironment())(
+      {
+        session: 'default',
+        command: 'devices',
+        positionals: [],
+        flags: { stateDir, daemonTransport: 'socket' },
+      },
+      { daemonBinding: pinTo(info) },
+    );
+    assert.equal(lookup.mock.calls.length, 1);
+    assert.deepEqual(response, {
+      ok: false,
+      error: { code: 'UNAUTHORIZED', message: 'Invalid daemon token' },
+    });
+    assert.equal(
+      daemon.requests.length,
+      1,
+      'authentication failure never retries against a replacement',
+    );
+    assert.equal(daemon.requests[0]?.token, info.token);
+    assert.equal(spawn.mock.calls.length, 0);
+  } finally {
+    lookup.mockRestore();
+    await closeLoopbackServer(daemon.server);
+  }
 });
