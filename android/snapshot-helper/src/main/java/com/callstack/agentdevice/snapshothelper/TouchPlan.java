@@ -5,9 +5,11 @@ import java.nio.charset.StandardCharsets;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Validated planned-touch payload: one or two complete pointer trajectories. */
+/** Validated planned-touch payload: one, two, or (for a tap) up to five pointer trajectories. */
 final class TouchPlan {
   static final String PAYLOAD_PROTOCOL = "android-touch-plan-v1";
+  /** Mirrors GESTURE_MAX_CONTACTS in packages/contracts/src/gesture-plan-types.ts. */
+  static final int MAX_CONTACTS = 5;
   private static final int MIN_DURATION_MS = 0;
   private static final int MAX_DURATION_MS = 120_000;
 
@@ -33,7 +35,7 @@ final class TouchPlan {
       throw new IllegalArgumentException("Unsupported protocol: " + protocol);
     }
     String kind = payload.getString("kind");
-    if (!"swipe".equals(kind) && !"transform".equals(kind)) {
+    if (!"swipe".equals(kind) && !"transform".equals(kind) && !"tap".equals(kind)) {
       throw new IllegalArgumentException("Unsupported kind: " + kind);
     }
     int durationMs = requireDuration(payload.getInt("durationMs"));
@@ -43,11 +45,7 @@ final class TouchPlan {
 
   private static PointerPath[] readPointers(JSONArray pointers, String kind, int durationMs)
       throws Exception {
-    int expectedCount = "swipe".equals(kind) ? 1 : 2;
-    if (pointers.length() != expectedCount) {
-      throw new IllegalArgumentException(
-          "Planned " + kind + " gesture requires exactly " + expectedCount + " pointer paths");
-    }
+    int expectedCount = expectedPointerCount(kind, pointers.length());
     PointerPath[] result = new PointerPath[expectedCount];
     for (int pointerIndex = 0; pointerIndex < expectedCount; pointerIndex += 1) {
       JSONObject pointer = pointers.getJSONObject(pointerIndex);
@@ -84,17 +82,53 @@ final class TouchPlan {
       }
       result[pointerIndex] = new PointerPath(parsed);
     }
-    if (expectedCount == 2) assertMatchingSamples(result[0], result[1]);
+    for (int pointerIndex = 1; pointerIndex < expectedCount; pointerIndex += 1) {
+      assertMatchingSamples(result[0], result[pointerIndex]);
+    }
+    if ("tap".equals(kind)) assertStationaryDistinctContacts(result);
     return result;
   }
 
-  private static void assertMatchingSamples(PointerPath first, PointerPath second) {
-    if (first.samples.length != second.samples.length) {
+  private static int expectedPointerCount(String kind, int actual) {
+    if ("tap".equals(kind)) {
+      if (actual < 2 || actual > MAX_CONTACTS) {
+        throw new IllegalArgumentException(
+            "Planned tap gesture requires 2 to " + MAX_CONTACTS + " pointer paths");
+      }
+      return actual;
+    }
+    int expected = "swipe".equals(kind) ? 1 : 2;
+    if (actual != expected) {
+      throw new IllegalArgumentException(
+          "Planned " + kind + " gesture requires exactly " + expected + " pointer paths");
+    }
+    return expected;
+  }
+
+  private static void assertMatchingSamples(PointerPath first, PointerPath other) {
+    if (first.samples.length != other.samples.length) {
       throw new IllegalArgumentException("Planned pointer paths must have matching samples");
     }
     for (int index = 0; index < first.samples.length; index += 1) {
-      if (first.samples[index].offsetMs != second.samples[index].offsetMs) {
+      if (first.samples[index].offsetMs != other.samples[index].offsetMs) {
         throw new IllegalArgumentException("Planned pointer sample offsets must match");
+      }
+    }
+  }
+
+  private static void assertStationaryDistinctContacts(PointerPath[] pointers) {
+    for (int pointerIndex = 0; pointerIndex < pointers.length; pointerIndex += 1) {
+      PointerSample start = pointers[pointerIndex].samples[0];
+      for (PointerSample sample : pointers[pointerIndex].samples) {
+        if (sample.x != start.x || sample.y != start.y) {
+          throw new IllegalArgumentException("Planned tap contacts must not move");
+        }
+      }
+      for (int earlier = 0; earlier < pointerIndex; earlier += 1) {
+        PointerSample other = pointers[earlier].samples[0];
+        if (other.x == start.x && other.y == start.y) {
+          throw new IllegalArgumentException("Planned tap contacts must start on distinct points");
+        }
       }
     }
   }

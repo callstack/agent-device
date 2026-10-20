@@ -77,14 +77,16 @@ adb shell am instrument -w -e mode gesture -e payloadBase64 "$PAYLOAD" \
 
 The `gesture` payload is a base64-encoded JSON object using protocol `android-touch-plan-v1`:
 
-- `kind`: `swipe` (one pointer) or `transform` (two pointers, e.g. pinch/rotate)
+- `kind`: `swipe` (one pointer), `transform` (two pointers, e.g. pinch/rotate), or `tap` (2 to 5
+  stationary pointers on distinct points)
 - `durationMs`: integer, `0`-`120000`
 - `pointers`: array of `{ pointerId, samples }`, `pointerId`s ordered from `0`, one pointer for
-  `swipe` and exactly two for `transform`
+  `swipe`, exactly two for `transform`, and 2 to 5 for `tap`
 - each pointer's `samples` is `{ offsetMs, x, y }[]` with at least two entries; `offsetMs` values
   must be strictly increasing (equal offsets are only allowed when `durationMs` is `0`), the first
-  sample's `offsetMs` must be `0`, and the last must equal `durationMs`. For `transform` gestures,
-  both pointers must share the same `offsetMs` sequence.
+  sample's `offsetMs` must be `0`, and the last must equal `durationMs`. For `transform` and `tap`
+  gestures, every pointer must share the same `offsetMs` sequence, and a `tap` pointer must not
+  move.
 
 ## Persistent Session
 

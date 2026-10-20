@@ -12,17 +12,17 @@ final class TouchPlanInjector {
   static int inject(UiAutomation automation, TouchPlan plan) {
     long downTime = SystemClock.uptimeMillis();
     long eventTime = downTime;
-    PointerState active = pointerStateAt(plan, 0).firstOnly();
+    PointerState active = pointerStateAt(plan, 0).firstN(1);
     int count = 0;
     try {
       for (PointerEventSchedule.Step step :
           PointerEventSchedule.create(plan.pointers.length, sampleOffsets(plan))) {
-        active = pointerStateAt(plan, step.sampleIndex);
-        if (step.pointerCount == 1) active = active.firstOnly();
+        active = pointerStateAt(plan, step.sampleIndex).firstN(step.pointerCount);
         eventTime = downTime + step.offsetMs;
         injectEvent(
             automation,
-            motionEvent(downTime, eventTime, motionEventAction(step.action), active),
+            motionEvent(
+                downTime, eventTime, motionEventAction(step.action, step.pointerCount), active),
             step.waitForDispatch);
         count += 1;
       }
@@ -42,16 +42,18 @@ final class TouchPlanInjector {
     return offsets;
   }
 
-  private static int motionEventAction(PointerEventSchedule.Action action) {
+  /** The changing contact of a pointer transition is the highest active index. */
+  private static int motionEventAction(PointerEventSchedule.Action action, int pointerCount) {
+    int changingIndex = (pointerCount - 1) << MotionEvent.ACTION_POINTER_INDEX_SHIFT;
     switch (action) {
       case DOWN:
         return MotionEvent.ACTION_DOWN;
       case POINTER_DOWN:
-        return MotionEvent.ACTION_POINTER_DOWN | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT);
+        return MotionEvent.ACTION_POINTER_DOWN | changingIndex;
       case MOVE:
         return MotionEvent.ACTION_MOVE;
       case POINTER_UP:
-        return MotionEvent.ACTION_POINTER_UP | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT);
+        return MotionEvent.ACTION_POINTER_UP | changingIndex;
       case UP:
         return MotionEvent.ACTION_UP;
       default:
@@ -146,8 +148,10 @@ final class TouchPlanInjector {
       this.y = y;
     }
 
-    PointerState firstOnly() {
-      return new PointerState(new float[] {x[0]}, new float[] {y[0]});
+    PointerState firstN(int pointerCount) {
+      if (pointerCount == count) return this;
+      return new PointerState(
+          java.util.Arrays.copyOf(x, pointerCount), java.util.Arrays.copyOf(y, pointerCount));
     }
   }
 }
