@@ -2,6 +2,7 @@
 
 import type { ClickButton } from './click-button.ts';
 import type { GesturePointerCount } from './gesture-plan-types.ts';
+import type { GesturePayload } from './gesture-input.ts';
 import type {
   ScrollDirection,
   ScrollInputDirection,
@@ -77,6 +78,8 @@ export type SwipeOptions = DeviceCommandBaseOptions & {
   pauseMs?: number;
   pattern?: SwipePattern;
 };
+
+export type GestureOptions = DeviceCommandBaseOptions & GesturePayload;
 
 export type PanOptions = DeviceCommandBaseOptions & {
   x: number;

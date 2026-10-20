@@ -94,6 +94,7 @@ import type {
   FindOptions,
   FlingOptions,
   FocusOptions,
+  GestureOptions,
   GetOptions,
   HomeCommandOptions,
   HoverOptions,
@@ -259,6 +260,7 @@ export type AgentDeviceClient = {
     diff: (options: CaptureDiffOptions) => Promise<CommandResult<'diff'>>;
   };
   interactions: {
+    gesture: (options: GestureOptions) => Promise<CommandRequestResult>;
     click: (options: ClickOptions) => Promise<CommandResult<'click'>>;
     press: (options: PressOptions) => Promise<CommandResult<'press'>>;
     longPress: (options: LongPressOptions) => Promise<CommandResult<'longpress'>>;

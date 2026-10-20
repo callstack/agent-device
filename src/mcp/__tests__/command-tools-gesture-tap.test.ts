@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceClient } from '../../client/client-types.ts';
+import { createAgentDeviceClient } from '../../agent-device-client.ts';
+import { createTransport } from '../../__tests__/client-transport-fixture.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 
 test('MCP gesture tool exposes tap contacts bounded to 2 to 5 points', () => {
@@ -27,21 +28,12 @@ test('MCP gesture tool exposes tap contacts bounded to 2 to 5 points', () => {
   });
 });
 
-test('MCP gesture tap reaches the client tapGesture method with its contacts and series', async () => {
-  const calls: unknown[] = [];
+test('MCP gesture tap sends its contacts and series to the daemon', async () => {
+  const setup = createTransport(() => ({ ok: true, data: { message: 'Tapped 2 points 3 times' } }));
   const executor = createCommandToolExecutor({
-    createClient: () =>
-      ({
-        interactions: {
-          tapGesture: async (options: unknown) => {
-            calls.push(options);
-            return { message: 'Tapped 2 points 3 times' };
-          },
-        },
-      }) as unknown as AgentDeviceClient,
+    createClient: () => createAgentDeviceClient(setup.config, { transport: setup.transport }),
   });
-
-  const result = await executor.execute('gesture', {
+  const input = {
     kind: 'tap',
     points: [
       { x: 80, y: 300 },
@@ -50,18 +42,11 @@ test('MCP gesture tap reaches the client tapGesture method with its contacts and
     holdMs: 40,
     count: 3,
     pauseMs: 100,
-  });
-
+  };
+  const result = await executor.execute('gesture', input);
   assert.equal(result.isError, false);
-  assert.deepEqual(calls, [
-    {
-      points: [
-        { x: 80, y: 300 },
-        { x: 200, y: 450 },
-      ],
-      holdMs: 40,
-      count: 3,
-      pauseMs: 100,
-    },
-  ]);
+  assert.equal(setup.calls.length, 1);
+  assert.equal(setup.calls[0]?.command, 'gesture');
+  assert.deepEqual(setup.calls[0]?.positionals, []);
+  assert.deepEqual(setup.calls[0]?.input, input);
 });

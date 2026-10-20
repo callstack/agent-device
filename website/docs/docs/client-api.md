@@ -333,13 +333,19 @@ Domain client methods:
 - `client.leases.allocate()`, `heartbeat()`, `release()`. Pass `retainOnClose: true` to `allocate()` when you release the lease yourself; session `close` then leaves it active until `release()`, expiry, or daemon shutdown. The returned lease has `retainOnClose: true` only when the daemon honored it. Keep heartbeating a retained lease between sessions: it expires after its `ttlMs` like any other lease. Pass `leaseId` (16 to 128 hex characters) to `allocate()` to name a new lease with an id the daemon has never issued, or to get back your live lease with that id when you retry with the same tenant, run, client, lease backend, and provider (and no device, or the leased one), then use the returned `leaseId`: a run that already holds a lease gets that one back, and an older daemon mints its own. `allocate()` with a `leaseProvider` the daemon has no runtime for fails with `UNSUPPORTED_OPERATION`, reason `provider-not-registered`, and `details.registeredProviders`; no lease is recorded. Leases with no provider, `proxy`, or `cloud` need no runtime.
 - `client.metro.prepare()`, `reload()`
 - `client.capture.snapshot()`, `screenshot()`, `diff()`
-- `client.interactions.click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `drag()`, `fling()`, `swipeGesture()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `tapGesture()`, `get()`, `is()`, `find()`
+- `client.interactions.gesture()`, `click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `drag()`, `fling()`, `swipeGesture()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `tapGesture()`, `get()`, `is()`, `find()`
 - `client.replay.run()` and `client.replay.test()`
 - `client.batch.run()`
 - `client.observability.perf(options)`, `logs()`, `events()`, `network()`, and `audio()`
 - `client.debug.symbols()`
 - `client.recording.record()` and `client.recording.trace()`
 - `client.settings.update()`
+
+Use `client.interactions.gesture()` with a `kind` and the corresponding [gesture inputs](/docs/commands#pointer-and-gestures):
+
+```ts
+await client.interactions.gesture({ kind: 'pan', origin: { x: 100, y: 200 }, delta: { x: 40, y: -20 } });
+```
 
 If the daemon returns a missing or non-object lease, or a lease without a non-empty string for `leaseId`, `tenantId`, `runId`, or `backend`, `client.leases.allocate()` and `client.leases.heartbeat()` reject with `COMMAND_FAILED` and `details.reason: "INVALID_LEASE_RESPONSE"`.
 The original daemon response is available in `error.details.response`.

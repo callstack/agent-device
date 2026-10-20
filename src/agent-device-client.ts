@@ -452,6 +452,7 @@ export function createAgentDeviceClient(
       diff: async (options) => await executeCommand<CommandResult<'diff'>>('diff', options),
     },
     interactions: {
+      gesture: async (options) => await executeCommand('gesture', options),
       click: async (options) => await executeCommand('click', options),
       press: async (options) => await executeCommand('press', options),
       longPress: async (options) => await executeCommand('longpress', options),

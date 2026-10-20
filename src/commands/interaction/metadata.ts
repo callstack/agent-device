@@ -1,14 +1,7 @@
 import { CLICK_BUTTONS } from '@agent-device/contracts/click-button';
 import {
-  type DragGesturePayload,
-  type FlingGesturePayload,
   GESTURE_KINDS,
-  type PanGesturePayload,
-  type PinchGesturePayload,
-  type RotateGesturePayload,
-  type SwipeGesturePayload,
-  type TapGesturePayload,
-  type TransformGesturePayload,
+  type GesturePayload,
   readGesturePayload,
 } from '@agent-device/contracts/gesture-input';
 import {
@@ -270,24 +263,7 @@ export type LongPressInput = InferCommandInput<typeof longPressFields>;
 export type HoverInput = InferCommandInput<typeof hoverFields>;
 export type GetInput = InferCommandInput<typeof getFields>;
 
-export type PanInput = CommonCommandInput & PanGesturePayload;
-export type FlingInput = CommonCommandInput & FlingGesturePayload;
-export type SwipeGestureInput = CommonCommandInput & SwipeGesturePayload;
-export type PinchInput = CommonCommandInput & PinchGesturePayload;
-export type RotateInput = CommonCommandInput & RotateGesturePayload;
-export type TransformInput = CommonCommandInput & TransformGesturePayload;
-export type TapInput = CommonCommandInput & TapGesturePayload;
-export type DragInput = CommonCommandInput & DragGesturePayload;
-
-export type GestureInput =
-  | PanInput
-  | FlingInput
-  | SwipeGestureInput
-  | PinchInput
-  | RotateInput
-  | TransformInput
-  | TapInput
-  | DragInput;
+export type GestureInput = CommonCommandInput & GesturePayload;
 
 export const interactionCommandMetadata = [
   defineInteractionCommandMetadata('click', clickFields),
@@ -309,7 +285,7 @@ export const interactionCommandMetadata = [
 
 export function readGestureInput(input: unknown): GestureInput {
   const record = readInputRecord(input);
-  return { ...readCommonInput(record), ...readGesturePayload(record) } as GestureInput;
+  return { ...readCommonInput(record), ...readGesturePayload(record) };
 }
 
 function defineInteractionCommandMetadata<

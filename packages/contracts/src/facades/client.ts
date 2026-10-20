@@ -56,6 +56,7 @@ export type {
   FillOptions,
   FlingOptions,
   FocusOptions,
+  GestureOptions,
   HoverOptions,
   LongPressOptions,
   PanOptions,

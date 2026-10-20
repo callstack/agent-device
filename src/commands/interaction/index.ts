@@ -1,27 +1,20 @@
 import type {
   ClickOptions,
-  DragOptions,
   FillOptions,
   FindOptions,
-  FlingOptions,
   FocusOptions,
   GetOptions,
   HoverOptions,
   IsOptions,
   LongPressOptions,
-  PanOptions,
-  PinchOptions,
   PressOptions,
-  RotateGestureOptions,
   ScrollOptions,
-  SwipeGestureOptions,
   SwipeOptions,
-  TapGestureOptions,
-  TransformGestureOptions,
   TypeTextOptions,
 } from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
+import { readGesturePayload } from '@agent-device/contracts/gesture-input';
 import { GESTURE_FLAGS_BY_KIND } from '@agent-device/contracts/gesture-normalization';
 import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import {
@@ -52,19 +45,11 @@ import { interactionCliReaders, interactionDaemonWriters } from './interactions.
 import {
   interactionCommandMetadata,
   type ClickInput,
-  type DragInput,
   type FillInput,
-  type FlingInput,
   type GetInput,
   type HoverInput,
   type LongPressInput,
-  type PanInput,
-  type PinchInput,
   type PressInput,
-  type RotateInput,
-  type SwipeGestureInput,
-  type TapInput,
-  type TransformInput,
 } from './metadata.ts';
 import { interactionCliOutputFormatters } from './output.ts';
 import { selectorCliReaders, selectorDaemonWriters } from './selectors.ts';
@@ -636,26 +621,8 @@ const gestureCommandFacet = defineCommandFacet({
       'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
   },
   metadata: metadata('gesture'),
-  run: async (client, input) => {
-    switch (input.kind) {
-      case 'pan':
-        return await client.interactions.pan(toPanOptions(input));
-      case 'fling':
-        return await client.interactions.fling(toFlingOptions(input));
-      case 'swipe':
-        return await client.interactions.swipeGesture(toSwipeGestureOptions(input));
-      case 'pinch':
-        return await client.interactions.pinch(toPinchOptions(input));
-      case 'rotate':
-        return await client.interactions.rotateGesture(toRotateOptions(input));
-      case 'transform':
-        return await client.interactions.transformGesture(toTransformOptions(input));
-      case 'tap':
-        return await client.interactions.tapGesture(toTapGestureOptions(input));
-      case 'drag':
-        return await client.interactions.drag(toDragOptions(input));
-    }
-  },
+  run: (client, input) =>
+    client.interactions.gesture({ ...readGesturePayload(input), ...commonToClientOptions(input) }),
   cliSchema: interactionCliSchemas.gesture,
   cliReader: gestureCliReaders.gesture,
   daemonWriter: gestureDaemonWriters.gesture,
@@ -763,86 +730,5 @@ function toGetOptions(input: GetInput): GetOptions {
     // `readInput`, and is then dropped here (#1303 regression, same re-projection
     // cause as the `--no-record` gap this change fixes).
     record: input.record,
-  };
-}
-
-function toPanOptions(input: PanInput): PanOptions {
-  return {
-    ...commonToClientOptions(input),
-    x: input.origin.x,
-    y: input.origin.y,
-    dx: input.delta.x,
-    dy: input.delta.y,
-    pointerCount: input.pointerCount,
-    durationMs: input.durationMs,
-  };
-}
-
-function toDragOptions(input: DragInput): DragOptions {
-  return {
-    ...commonToClientOptions(input),
-    source: input.source,
-    destination: input.destination,
-    sourceHoldMs: input.sourceHoldMs,
-    moveMs: input.moveMs,
-    destinationHoldMs: input.destinationHoldMs,
-  };
-}
-
-function toFlingOptions(input: FlingInput): FlingOptions {
-  return {
-    ...commonToClientOptions(input),
-    direction: input.direction,
-    x: input.origin.x,
-    y: input.origin.y,
-    distance: input.distance,
-  };
-}
-
-function toSwipeGestureOptions(input: SwipeGestureInput): SwipeGestureOptions {
-  return {
-    ...commonToClientOptions(input),
-    preset: input.preset,
-  };
-}
-
-function toPinchOptions(input: PinchInput): PinchOptions {
-  return {
-    ...commonToClientOptions(input),
-    scale: input.scale,
-    x: input.origin?.x,
-    y: input.origin?.y,
-  };
-}
-
-function toRotateOptions(input: RotateInput): RotateGestureOptions {
-  return {
-    ...commonToClientOptions(input),
-    degrees: input.degrees,
-    x: input.origin?.x,
-    y: input.origin?.y,
-  };
-}
-
-function toTapGestureOptions(input: TapInput): TapGestureOptions {
-  return {
-    ...commonToClientOptions(input),
-    points: input.points,
-    holdMs: input.holdMs,
-    count: input.count,
-    pauseMs: input.pauseMs,
-  };
-}
-
-function toTransformOptions(input: TransformInput): TransformGestureOptions {
-  return {
-    ...commonToClientOptions(input),
-    x: input.origin.x,
-    y: input.origin.y,
-    dx: input.delta.x,
-    dy: input.delta.y,
-    scale: input.scale,
-    degrees: input.degrees,
-    durationMs: input.durationMs,
   };
 }

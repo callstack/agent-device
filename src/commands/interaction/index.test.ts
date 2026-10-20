@@ -1,29 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { AgentDeviceClient } from '../../client/client-types.ts';
+import { createAgentDeviceClient } from '../../agent-device-client.ts';
+import { createTransport } from '../../__tests__/client-transport-fixture.ts';
 import { gestureCliReaders } from './gesture.ts';
 import { interactionCommandFamily } from './index.ts';
 
 const NO_FLAGS = {} as CliFlags;
-
-/**
- * The gesture `run` projection is exercised through the family's executable
- * definition — the same `invoke` path the CLI/daemon/MCP surfaces dispatch
- * through — with a client that records which interaction method each gesture
- * kind lands on and with which options.
- */
-function recordingGestureClient(calls: Array<{ method: string; options: unknown }>) {
-  const interactions = new Proxy(
-    {},
-    {
-      get: (_target, method: string) => async (options: unknown) => {
-        calls.push({ method, options });
-        return { ok: true };
-      },
-    },
-  );
-  return { interactions } as unknown as AgentDeviceClient;
-}
 
 function gestureDefinition() {
   const definition = interactionCommandFamily.definitions.find((entry) => entry.name === 'gesture');
@@ -31,38 +13,41 @@ function gestureDefinition() {
   return definition;
 }
 
-describe('gesture run dispatch', () => {
-  // Each entry pins both halves of the run projection: which
-  // `client.interactions.*` method the kind routes to and how its payload
-  // lands on that method's options (`gesture.test.ts` covers the reader and
-  // daemon writer, not this client-side projection).
+describe('gesture command transport', () => {
   test.for([
     {
       argv: ['pan', '10', '20', '5', '6', '300'],
-      method: 'pan',
-      options: { x: 10, y: 20, dx: 5, dy: 6, durationMs: 300 },
+      input: { kind: 'pan', origin: { x: 10, y: 20 }, delta: { x: 5, y: 6 }, durationMs: 300 },
     },
     {
       argv: ['fling', 'up', '10', '20', '400'],
-      method: 'fling',
-      options: { direction: 'up', x: 10, y: 20, distance: 400 },
+      input: { kind: 'fling', direction: 'up', origin: { x: 10, y: 20 }, distance: 400 },
     },
-    { argv: ['swipe', 'left-edge'], method: 'swipeGesture', options: { preset: 'left-edge' } },
-    { argv: ['pinch', '2', '30', '40'], method: 'pinch', options: { scale: 2, x: 30, y: 40 } },
+    { argv: ['swipe', 'left-edge'], input: { kind: 'swipe', preset: 'left-edge' } },
+    {
+      argv: ['pinch', '2', '30', '40'],
+      input: { kind: 'pinch', scale: 2, origin: { x: 30, y: 40 } },
+    },
+    { argv: ['pinch', '2'], input: { kind: 'pinch', scale: 2 } },
     {
       argv: ['rotate', '45', '10', '20'],
-      method: 'rotateGesture',
-      options: { degrees: 45, x: 10, y: 20 },
+      input: { kind: 'rotate', degrees: 45, origin: { x: 10, y: 20 } },
     },
     {
       argv: ['transform', '10', '20', '5', '6', '1.5', '45', '250'],
-      method: 'transformGesture',
-      options: { x: 10, y: 20, dx: 5, dy: 6, scale: 1.5, degrees: 45, durationMs: 250 },
+      input: {
+        kind: 'transform',
+        origin: { x: 10, y: 20 },
+        delta: { x: 5, y: 6 },
+        scale: 1.5,
+        degrees: 45,
+        durationMs: 250,
+      },
     },
     {
       argv: ['drag', 'id="drag-source"', '@e2~s42', '700', '600', '200'],
-      method: 'drag',
-      options: {
+      input: {
+        kind: 'drag',
         source: 'id="drag-source"',
         destination: '@e2~s42',
         sourceHoldMs: 700,
@@ -70,24 +55,29 @@ describe('gesture run dispatch', () => {
         destinationHoldMs: 200,
       },
     },
-  ])(
-    '%argv routes to client.interactions.%method with projected options',
-    async ({ argv, method, options }) => {
-      const calls: Array<{ method: string; options: unknown }> = [];
-      const input = gestureCliReaders.gesture(argv, NO_FLAGS);
-      await gestureDefinition().invoke(recordingGestureClient(calls), input);
-      expect(calls).toHaveLength(1);
-      expect(calls[0]?.method).toBe(method);
-      expect(calls[0]?.options).toMatchObject(options);
-    },
-  );
-
-  test('pinch without an origin still projects the scale', async () => {
-    const calls: Array<{ method: string; options: unknown }> = [];
-    const input = gestureCliReaders.gesture(['pinch', '2'], NO_FLAGS);
-    await gestureDefinition().invoke(recordingGestureClient(calls), input);
-    const options = calls[0]?.options as { scale?: number; x?: unknown } | undefined;
-    expect(options).toMatchObject({ scale: 2 });
-    expect(options?.x).toBeUndefined();
+  ])('$argv sends structured input through the client transport', async ({ argv, input }) => {
+    const setup = createTransport(() => ({ ok: true, data: { message: 'Performed gesture' } }));
+    const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+    const parsed = gestureCliReaders.gesture(argv, NO_FLAGS);
+    const result = await gestureDefinition().invoke(client, {
+      ...parsed,
+      session: 'gesture-test',
+      deviceTarget: 'mobile',
+      udid: 'gesture-device',
+    });
+    expect(result).toEqual({ message: 'Performed gesture' });
+    expect(setup.calls).toHaveLength(1);
+    expect(setup.calls[0]).toMatchObject({
+      command: 'gesture',
+      positionals: [],
+      session: 'gesture-test',
+      flags: { target: 'mobile', udid: 'gesture-device' },
+    });
+    expect(setup.calls[0]?.input).toEqual({
+      ...input,
+      session: 'gesture-test',
+      deviceTarget: 'mobile',
+      udid: 'gesture-device',
+    });
   });
 });
