@@ -83,6 +83,7 @@ export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<s
     ...publicSnapshotCaptureAnnotations({
       ...result,
       ...(result.snapshotQuality ? { quality: result.snapshotQuality } : {}),
+      ...(result.snapshotQualityNotes ? { qualityNotes: result.snapshotQualityNotes } : {}),
     }),
     ...(result.unchanged ? { unchanged: result.unchanged } : {}),
     ...(result.snapshotDiagnostics ? { snapshotDiagnostics: result.snapshotDiagnostics } : {}),

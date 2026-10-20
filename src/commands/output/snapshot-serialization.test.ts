@@ -143,3 +143,27 @@ test('serializeSnapshotResult omits a presented surface the producer did not rea
 
   assert.equal('presentedSurface' in data, false);
 });
+
+test('serializeSnapshotResult retains clipping notes with or without a capture verdict', () => {
+  const snapshotQualityNotes = [
+    { code: 'regular-geometry-clipped' as const, clippedNodeCount: 1, droppedNodeCount: 1 },
+  ];
+  for (const snapshotQuality of [
+    undefined,
+    { state: 'healthy' as const, backend: 'tree' as const },
+  ]) {
+    const data = serializeSnapshotResult({
+      nodes: [],
+      identifiers: { session: 'qa' },
+      snapshotQualityNotes,
+      ...(snapshotQuality ? { snapshotQuality } : {}),
+    });
+    assert.deepEqual(data.snapshotQualityNotes, snapshotQualityNotes);
+    assert.equal(data.snapshotQuality, snapshotQuality);
+  }
+  assert.equal(
+    'snapshotQualityNotes' in
+      serializeSnapshotResult({ nodes: [], identifiers: { session: 'qa' } }),
+    false,
+  );
+});

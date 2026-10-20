@@ -669,3 +669,13 @@ test('attrs digests preserve interpreted RN mixed, expanded and busy evidence wi
     expect(digest.node).toEqual({ ...COMPACT_NODE, iosValueSemantics });
   }
 });
+
+test('snapshot digest carries independent clipping notes without inventing a verdict', () => {
+  const snapshotQualityNotes = [
+    { code: 'regular-geometry-clipped', clippedNodeCount: 1, droppedNodeCount: 1 },
+  ];
+  const digest = snapshotView!({ nodes: [], snapshotQualityNotes }, 'digest');
+  expect(digest.snapshotQualityNotes).toEqual(snapshotQualityNotes);
+  expect(digest).not.toHaveProperty('snapshotQuality');
+  expect(snapshotView!({ nodes: [] }, 'digest')).not.toHaveProperty('snapshotQualityNotes');
+});
