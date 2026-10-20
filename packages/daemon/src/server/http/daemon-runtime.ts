@@ -74,6 +74,7 @@ import {
   type RuntimeStateHandle,
 } from '@agent-device/host-kit/runtime-slots';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   readCurrentOwnerIdentity,
@@ -229,7 +230,7 @@ export type DaemonRuntimeOptions = {
    */
   ownership?: DaemonRuntimeOwnership;
   /** The daemon code an embedder loaded; its process entry belongs to the host application. */
-  codeIdentity?: { origin: 'installed' | 'checkout'; codeSignature: string };
+  codeIdentity?: { origin: DaemonCodeOrigin; codeSignature?: string };
 };
 
 export type DaemonRuntimeController = {

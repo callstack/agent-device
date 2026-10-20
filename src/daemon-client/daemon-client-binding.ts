@@ -1,4 +1,5 @@
 import type { DaemonBinding } from '@agent-device/contracts/client';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import { daemonIdentityOf } from './daemon-lifecycle-errors.ts';
@@ -17,7 +18,7 @@ export function daemonBindingMismatchError(
       stateDir,
       bound: { pid: binding.pid, processStartTime: binding.processStartTime },
       ...(registered ? { registered: daemonIdentityOf(registered) } : {}),
-      hint: `Check ${stateDir}/daemon.json or obtain clientConfig from a running host. A pinned client never starts or replaces a daemon.`,
+      hint: `Check ${shellQuoteIfNeeded(`${stateDir}/daemon.json`)} or obtain clientConfig from a running host. A pinned client never starts or replaces a daemon.`,
     },
   );
 }

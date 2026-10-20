@@ -12,7 +12,10 @@ export async function startAgentDevice(options: StartAgentDeviceOptions): Promis
   const sourceHost = options.host ?? captureHostEnvironment(process);
   const host = { env: { ...sourceHost.env }, cwd: sourceHost.cwd };
   if (typeof options.stateDir !== 'string' || options.stateDir.trim().length === 0) {
-    throw new AppError('INVALID_ARGS', 'startAgentDevice requires a stateDir.');
+    throw new AppError('INVALID_ARGS', 'startAgentDevice requires a stateDir.', {
+      reason: 'host_state_dir_required',
+      hint: 'Pass an explicit stateDir to startAgentDevice({ stateDir }).',
+    });
   }
   const candidates: PluginCandidate[] = (options.plugins ?? []).map((plugin) => ({
     source: 'embedder',
@@ -43,7 +46,7 @@ export async function startAgentDevice(options: StartAgentDeviceOptions): Promis
     stdout: output,
     stderr: output,
     ownership: 'embedded',
-    codeIdentity: { codeSignature: 'unknown', ...codeIdentity },
+    codeIdentity,
     composeDeps: async (input) => await composeDaemonRuntimeDeps(input, candidates),
   });
   try {

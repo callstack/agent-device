@@ -56,7 +56,7 @@ export type DaemonRegistrationFields = Readonly<{
   token: string;
   version: string;
   codeOrigin: DaemonCodeOrigin;
-  codeSignature: string;
+  codeSignature?: string;
   policyDigest?: string;
   /** What this daemon can do beyond the base RPC contract; absent from daemons that predate it. */
   capabilities?: readonly DaemonCapability[];

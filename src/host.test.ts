@@ -12,6 +12,7 @@ import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/tes
 import type { PluginCandidate } from '@agent-device/plugins/registry';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { stopRecordedDaemon } from './daemon-client/daemon-client-stop.ts';
+import * as daemonLaunchSpec from './daemon-client/daemon-launch-spec.ts';
 import { startAgentDevice } from './host.ts';
 
 const composition = vi.hoisted(() => ({
@@ -123,6 +124,25 @@ test('a host publishes its own process as the runtime an outside stop must not s
   } finally {
     await host.close();
     removeStateDir(stateDir);
+  }
+});
+
+test('an installed host publishes no checkout code signature', async () => {
+  const identity = vi
+    .spyOn(daemonLaunchSpec, 'resolveLocalDaemonCodeIdentity')
+    .mockResolvedValue({ origin: 'installed' });
+  try {
+    const { stateDir, paths, host } = await bootHost();
+    try {
+      const record = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8'));
+      expect(record.codeOrigin).toBe('installed');
+      expect(record).not.toHaveProperty('codeSignature');
+    } finally {
+      await host.close();
+      removeStateDir(stateDir);
+    }
+  } finally {
+    identity.mockRestore();
   }
 });
 
@@ -244,6 +264,10 @@ test('a host without a state directory is refused, never a daemon in an inherite
     // directory nobody picked for this process.
     expect(refusal, JSON.stringify(stateDir)).toMatchObject({
       code: 'INVALID_ARGS',
+      details: {
+        reason: 'host_state_dir_required',
+        hint: 'Pass an explicit stateDir to startAgentDevice({ stateDir }).',
+      },
     });
   }
   expect(fs.existsSync('/tmp/agent-device-host-entry-inherited/daemon.json')).toBe(false);
