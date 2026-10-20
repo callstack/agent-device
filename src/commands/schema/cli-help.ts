@@ -258,7 +258,7 @@ Vega OS:
   Snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance commands remain unsupported until their Vega backends are implemented.
 
 Buttons:
-  tv-remote [press|longpress] <button> [--duration-ms <ms>]
+  Examples: tv-remote longpress select; tv-remote press select --duration-ms 500. Syntax: tv-remote [press|longpress] <button> [--duration-ms <ms>]
   All TV backends: up, down, left, right, select, menu, home, back.
   Android TV also accepts volume-up, volume-down, mute, power, sleep, wake, media-play-pause, media-next, media-previous, media-rewind, media-fast-forward, channel-up, channel-down, last-channel, guide, info, captions, tv-input, color-red, color-green, color-yellow, and color-blue.
   android-keycode:<n> sends a raw Android TV keycode from 1 to 2147483647. tvOS and Vega OS refuse these additional buttons. Phones and WebDriver sessions refuse tv-remote. Power and sleep can turn the screen off; success confirms dispatch without waiting for an app or screen change.

@@ -23,6 +23,7 @@ import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
   type TvRemoteButton,
   TV_REMOTE_BUTTONS,
+  TV_REMOTE_ANDROID_KEYCODE_PATTERN,
   TV_REMOTE_BUTTON_USAGE,
   parseTvRemoteButton,
   tvRemoteDurationMode,
@@ -84,9 +85,14 @@ const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
 const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss', 'enter', 'return'] as const;
 
-const tvRemoteButtonSchema = stringSchema(
-  `TV remote button: ${TV_REMOTE_BUTTONS.join(', ')}. Android TV also accepts android-keycode:<n> with n from 1 to 2147483647.`,
-);
+const tvRemoteButtonSchema: JsonSchema = {
+  description:
+    'TV remote button. Android TV also accepts android-keycode:<n> with n from 1 to 2147483647.',
+  oneOf: [
+    enumSchema(TV_REMOTE_BUTTONS),
+    { type: 'string', pattern: TV_REMOTE_ANDROID_KEYCODE_PATTERN.source },
+  ],
+};
 
 /**
  * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into

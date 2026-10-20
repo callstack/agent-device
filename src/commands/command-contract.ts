@@ -3,6 +3,7 @@ import type { InputAudienceMap } from './input-audience.ts';
 export type JsonSchema = {
   type?: string | readonly string[];
   description?: string;
+  pattern?: string;
   properties?: Record<string, JsonSchema>;
   required?: readonly string[];
   additionalProperties?: boolean | JsonSchema;

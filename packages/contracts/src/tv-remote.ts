@@ -95,6 +95,10 @@ export const TV_REMOTE_BUTTONS = Object.keys(
 const ANDROID_KEYCODE_PREFIX = 'android-keycode:';
 const MAX_ANDROID_KEYCODE = 2_147_483_647;
 
+/** Canonical decimal Android keycodes in the positive Java int range. */
+export const TV_REMOTE_ANDROID_KEYCODE_PATTERN =
+  /^android-keycode:(?:[1-9][0-9]{0,8}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])(?![\s\S])/;
+
 export const TV_REMOTE_BUTTON_USAGE = `<${TV_REMOTE_BUTTONS.join('|')}|android-keycode:<n>>`;
 
 type NamedTvRemoteButton = (typeof TV_REMOTE_BUTTONS)[number];
@@ -131,9 +135,7 @@ function isNamedTvRemoteButton(value: unknown): value is NamedTvRemoteButton {
 }
 
 function isAndroidKeycode(value: unknown): value is `android-keycode:${number}` {
-  if (typeof value !== 'string' || !value.startsWith(ANDROID_KEYCODE_PREFIX)) return false;
-  const digits = value.slice(ANDROID_KEYCODE_PREFIX.length);
-  return /^[1-9]\d{0,9}$/.test(digits) && Number(digits) <= MAX_ANDROID_KEYCODE;
+  return typeof value === 'string' && TV_REMOTE_ANDROID_KEYCODE_PATTERN.test(value);
 }
 
 export function tvRemoteButtonsForPlatform(platform: 'apple' | 'vega'): readonly TvRemoteButton[] {
