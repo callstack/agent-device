@@ -168,6 +168,57 @@ test('a whole-Mac claim and a foreign app claim exclude each other in both order
   assert.equal(app.conflict.claim?.app, undefined);
 });
 
+test.each(['invalid-json', 'unknown'] as const)(
+  'whole-Mac acquisition refuses an unverifiable claim scan: %s',
+  async (failure) => {
+    const root = useClaimsRoot();
+    const file = await seedForeignMacClaim(root, { bundleId: 'com.example.one' });
+    if (failure === 'invalid-json') fs.writeFileSync(file, '{');
+    else
+      vi.spyOn(claimInspection, 'inspectDeviceClaims').mockReturnValue([
+        { fileName: path.basename(root), classification: 'unknown', error: 'EACCES' },
+      ]);
+    const before = fs.readFileSync(file, 'utf8');
+    const whole = await acquireDeviceClaim({
+      device: mac,
+      session: 'whole',
+      workspace: '/whole',
+      stateDir: root,
+    });
+    assert.equal(whole.status, 'conflict');
+    assert.equal(
+      fs.existsSync(resolveDeviceClaimPath(canonicalLocalDeviceKey(mac), process.env)),
+      false,
+    );
+    assert.equal(fs.readFileSync(file, 'utf8'), before);
+  },
+);
+
+test('whole-Mac acquisition ignores a readable claim for another device', async () => {
+  const root = useClaimsRoot();
+  const other = await acquireDeviceClaim({
+    device: {
+      platform: 'apple',
+      appleOs: 'ios',
+      id: 'ios-other',
+      name: 'Other',
+      kind: 'simulator',
+      booted: true,
+    },
+    session: 'ios',
+    workspace: '/ios',
+    stateDir: root,
+  });
+  assert.equal(other.status, 'acquired');
+  const whole = await acquireDeviceClaim({
+    device: mac,
+    session: 'whole',
+    workspace: '/whole',
+    stateDir: root,
+  });
+  assert.equal(whole.status, 'acquired');
+});
+
 test("a daemon's own app claims exclude whole-Mac session and transient claims", async () => {
   const root = useClaimsRoot();
   const app = await acquireDeviceClaim({

@@ -293,7 +293,8 @@ async function settleAppClaims(
   const appKeyPrefix = appScopedDeviceKey(deviceKey, '');
   for (const entry of inspectDeviceClaims({}, params.env)) {
     const scanned = entry.claim;
-    if (!scanned?.app || !scanned.deviceKey.startsWith(appKeyPrefix)) continue;
+    if (!scanned) return { conflict: entry, abandoned: [] };
+    if (!scanned.app || !scanned.deviceKey.startsWith(appKeyPrefix)) continue;
     const conflict = await withDeviceClaimLock(scanned.deviceKey, params.env, async () => {
       const current = inspectDeviceClaimFile(resolveDeviceClaimPath(scanned.deviceKey, params.env));
       if (!current) return undefined;
