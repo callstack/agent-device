@@ -157,6 +157,9 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
     );
     headers = parseAndroidSnapshotHelperSessionHeaders(response);
     assertAndroidSnapshotHelperTouchSessionHeaders(headers, requestId);
+    if (!response.includes('\n\n')) {
+      throw new AppError('COMMAND_FAILED', 'Android automation helper returned incomplete headers');
+    }
   } catch (error) {
     // Transport-level failure: the session process can no longer be trusted. Stop it so the next
     // command runs against a fresh helper instead of a wedged socket.

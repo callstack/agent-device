@@ -88,7 +88,10 @@ export async function fillAndroid(
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (
     delayMs === 0 &&
-    (await runAndroidAutomationHelper(device, 'input', { kind: 'fill', x, y, text }))
+    (await runAndroidAutomationHelper(device, {
+      action: 'input',
+      input: { kind: 'fill', x, y, text },
+    }))
   ) {
     emitAndroidTextDiagnostic('fill', 'android-helper', text);
     const verification = await verifyAndroidFilledText(device, x, y, text, helper, beforeCapture);

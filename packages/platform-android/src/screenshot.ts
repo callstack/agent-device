@@ -100,9 +100,9 @@ async function settledWithin<T>(pending: Promise<T>, graceMs: number): Promise<T
 
 async function captureAndroidScreenshot(device: DeviceInfo, outPath: string): Promise<void> {
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
-  const helper = await runAndroidAutomationHelper(device, 'screenshot');
+  const helper = await runAndroidAutomationHelper(device, { action: 'screenshot' });
   const bytes = helper
-    ? Buffer.from(helper.payloadBase64 ?? '', 'base64')
+    ? helper
     : (await runAndroidExecOut(device, ['screencap', '-p'], { binaryStdout: true })).stdoutBuffer;
   if (!bytes) {
     throw new AppError('COMMAND_FAILED', 'Failed to capture screenshot');

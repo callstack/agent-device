@@ -25,12 +25,14 @@ async function isolated<T>(run: () => Promise<T>): Promise<T> {
 
 test('a warm app open uses the helper launch result and preserves launched package identity', async () => {
   helper.mockResolvedValue({
-    launchOutputBase64: Buffer.from(
-      'Status: ok\nActivity: com.example.app/.MainActivity\n',
-    ).toString('base64'),
+    kind: 'launched',
+    output: 'Status: ok\nActivity: com.example.app/.MainActivity\n',
   });
   await expect(isolated(() => openAndroidApp(ANDROID_EMULATOR, pkg))).resolves.toBe(pkg);
-  expect(helper).toHaveBeenCalledWith(ANDROID_EMULATOR, 'app', { kind: 'open', packageName: pkg });
+  expect(helper).toHaveBeenCalledWith(ANDROID_EMULATOR, {
+    action: 'app',
+    input: { kind: 'open', packageName: pkg },
+  });
   expect(hostShell).not.toHaveBeenCalled();
 });
 
@@ -43,7 +45,8 @@ test('a helper error after possible application mutation is returned without a s
 
 test('an unsuccessful helper launch is a failure and is never retried as a host launch', async () => {
   helper.mockResolvedValue({
-    launchOutputBase64: Buffer.from('Status: timeout\n').toString('base64'),
+    kind: 'launched',
+    output: 'Status: timeout\n',
   });
   await expect(isolated(() => openAndroidApp(ANDROID_EMULATOR, pkg))).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
@@ -54,7 +57,7 @@ test('an unsuccessful helper launch is a failure and is never retried as a host 
 test.each([true, false])(
   'an unavailable helper component distinguishes installed=%s without resending a launch',
   async (installed) => {
-    helper.mockResolvedValue({ componentUnavailable: 'true' });
+    helper.mockResolvedValue({ kind: 'component-unavailable' });
     hostShell.mockResolvedValue({
       stdout: installed ? 'package:/data/app/base.apk\n' : '',
       stderr: '',

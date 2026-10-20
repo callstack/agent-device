@@ -257,17 +257,17 @@ async function tryAndroidHelperLaunch(
   )
     return undefined;
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
-  const result = await runAndroidAutomationHelper(device, 'app', {
-    kind: 'open',
-    packageName,
+  const result = await runAndroidAutomationHelper(device, {
+    action: 'app',
+    input: { kind: 'open', packageName },
   });
   if (!result) return undefined;
   if (
-    result.componentUnavailable === 'true' &&
+    result.kind === 'component-unavailable' &&
     !(await isAndroidPackageInstalled(device, packageName))
   )
     throw buildAndroidPackageNotInstalledError(packageName);
-  const stdout = Buffer.from(result.launchOutputBase64 ?? '', 'base64').toString('utf8');
+  const stdout = result.kind === 'launched' ? result.output : '';
   if (!/^Status: ok\r?$/m.test(stdout)) {
     throw new AppError('COMMAND_FAILED', 'Android helper could not launch the application', {
       packageName,

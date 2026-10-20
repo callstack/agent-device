@@ -15,8 +15,18 @@ import {
 export type AndroidHelperInput =
   | { kind: 'tap'; x: number; y: number }
   | { kind: 'key'; keyCode: number }
-  | { kind: 'fill'; x: number; y: number; text: string }
-  | { kind: 'open'; packageName: string };
+  | { kind: 'fill'; x: number; y: number; text: string };
+
+type AndroidAutomationRequest =
+  | { action: 'input'; input: AndroidHelperInput }
+  | { action: 'app'; input: { kind: 'open'; packageName: string } }
+  | { action: 'screenshot' }
+  | { action: 'focus' };
+
+type AndroidHelperFocus = { focusedPackage?: string; windowType?: string };
+type AndroidHelperAppResult =
+  | { kind: 'component-unavailable' }
+  | { kind: 'launched'; output: string };
 
 const ACTION_POLICY = {
   input: { mutation: true, timeoutMs: 30_000 },
@@ -26,23 +36,58 @@ const ACTION_POLICY = {
 } as const;
 
 /** Reuses the session's automation context without starting instrumentation for sessionless input. */
+export function runAndroidAutomationHelper(
+  device: DeviceInfo,
+  request: Extract<AndroidAutomationRequest, { action: 'input' }>,
+): Promise<true | undefined>;
+export function runAndroidAutomationHelper(
+  device: DeviceInfo,
+  request: Extract<AndroidAutomationRequest, { action: 'screenshot' }>,
+): Promise<Buffer | undefined>;
+export function runAndroidAutomationHelper(
+  device: DeviceInfo,
+  request: Extract<AndroidAutomationRequest, { action: 'focus' }>,
+): Promise<AndroidHelperFocus | undefined>;
+export function runAndroidAutomationHelper(
+  device: DeviceInfo,
+  request: Extract<AndroidAutomationRequest, { action: 'app' }>,
+): Promise<AndroidHelperAppResult | undefined>;
 export async function runAndroidAutomationHelper(
   device: DeviceInfo,
-  action: keyof typeof ACTION_POLICY,
-  input?: AndroidHelperInput,
-): Promise<Record<string, string> | undefined> {
+  request: AndroidAutomationRequest,
+): Promise<true | AndroidHelperAppResult | Buffer | AndroidHelperFocus | undefined> {
+  const { action } = request;
   const deviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   if (!(await getLiveAndroidSnapshotHelperSession(deviceKey))?.commands.has(action))
     return undefined;
   const prepared = await prepareAndroidAutomationHelper(device);
   try {
-    return await runAndroidSnapshotHelperSessionTouchCommand({
+    const headers = await runAndroidSnapshotHelperSessionTouchCommand({
       deviceKey,
       action,
       helper: androidAutomationHelperIdentity(prepared.artifact),
-      payloadBase64: input ? Buffer.from(JSON.stringify(input)).toString('base64') : undefined,
+      payloadBase64:
+        'input' in request
+          ? Buffer.from(JSON.stringify(request.input)).toString('base64')
+          : undefined,
       timeoutMs: ACTION_POLICY[action].timeoutMs,
     });
+    if (!headers) return undefined;
+    switch (action) {
+      case 'input':
+        return true;
+      case 'screenshot':
+        return decodeHelperPayload(headers, 'payloadBase64', false);
+      case 'focus':
+        return { focusedPackage: headers.focusedPackage, windowType: headers.windowType };
+      case 'app':
+        return headers.componentUnavailable === 'true'
+          ? { kind: 'component-unavailable' }
+          : {
+              kind: 'launched',
+              output: decodeHelperPayload(headers, 'launchOutputBase64', true).toString('utf8'),
+            };
+    }
   } catch (error) {
     if (
       ACTION_POLICY[action].mutation &&
@@ -60,4 +105,19 @@ export async function runAndroidAutomationHelper(
     });
     return undefined;
   }
+}
+
+function decodeHelperPayload(
+  headers: Record<string, string>,
+  field: string,
+  allowEmpty: boolean,
+): Buffer {
+  const encoded = headers[field];
+  const bytes = encoded === undefined ? undefined : Buffer.from(encoded, 'base64');
+  if (!bytes || (!allowEmpty && bytes.length === 0) || bytes.toString('base64') !== encoded) {
+    throw new AppError('COMMAND_FAILED', 'Android automation helper returned malformed payload', {
+      field,
+    });
+  }
+  return bytes;
 }

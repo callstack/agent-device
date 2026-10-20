@@ -15,8 +15,16 @@ import { prepareAndroidAutomationHelper } from './automation-helper-artifact.ts'
 import { ANDROID_EMULATOR } from './__tests__/test-utils/device-fixtures.ts';
 
 test('an older helper is not sent unadvertised input, screenshot, or focus commands', async () => {
-  for (const action of ['input', 'screenshot', 'focus'] as const) {
-    await expect(runAndroidAutomationHelper(ANDROID_EMULATOR, action)).resolves.toBeUndefined();
+  for (const request of [
+    () =>
+      runAndroidAutomationHelper(ANDROID_EMULATOR, {
+        action: 'input',
+        input: { kind: 'key', keyCode: 4 },
+      }),
+    () => runAndroidAutomationHelper(ANDROID_EMULATOR, { action: 'screenshot' }),
+    () => runAndroidAutomationHelper(ANDROID_EMULATOR, { action: 'focus' }),
+  ]) {
+    await expect(request()).resolves.toBeUndefined();
   }
   expect(prepareAndroidAutomationHelper).not.toHaveBeenCalled();
 });
