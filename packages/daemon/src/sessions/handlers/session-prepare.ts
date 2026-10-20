@@ -1,3 +1,4 @@
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { prepareAppleRunnerRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
@@ -61,18 +62,22 @@ export async function handlePrepareCommand(params: {
 
   // Device selection is side-effect free enough for facts admission. The bound lifecycle owns
   // readiness, keeping provider-first facts as the sole support authority.
-  const device = await resolveCommandDevice({
-    session,
-    flags,
-    env: sessionStore.host.env,
-    platformServices: params.platformServices,
-  });
-  const admission = await admitPrepareRuntime({
-    device,
-    inspectFacts: params.inspectFacts,
-    platformServices: params.platformServices,
-    bindDevice: params.bindDevice,
-  });
+  const device = await withPreparePhase('prepare_resolve_device', () =>
+    resolveCommandDevice({
+      session,
+      flags,
+      env: sessionStore.host.env,
+      platformServices: params.platformServices,
+    }),
+  );
+  const admission = await withPreparePhase('prepare_admit_runtime', () =>
+    admitPrepareRuntime({
+      device,
+      inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
+    }),
+  );
   if (admission.type === 'response') return admission.response;
 
   const startedAtMs = Date.now();
@@ -150,4 +155,17 @@ function normalizeOptionalTimingMs(value: number | undefined): number | undefine
 
 function normalizeTimingMs(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+}
+
+async function withPreparePhase<T>(
+  phase: 'prepare_resolve_device' | 'prepare_admit_runtime',
+  run: () => Promise<T>,
+): Promise<T> {
+  const started = performance.now();
+  emitDiagnostic({ phase, data: { event: 'start' } });
+  try {
+    return await run();
+  } finally {
+    emitDiagnostic({ phase, durationMs: performance.now() - started, data: { event: 'settled' } });
+  }
 }

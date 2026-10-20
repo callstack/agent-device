@@ -80,6 +80,8 @@ runs:
           XCTEST_LANE=pr node --experimental-strip-types scripts/xctest-run-summary.ts
       shell: bash
     - name: Preflight iOS runner through public CLI
+      env:
+        AGENT_DEVICE_EXEC_TRACE: '1'
       run: |
         pnpm clean:daemon
         # The public-SDK record is the cold-startup evidence; the CLI timer only wraps attach.
