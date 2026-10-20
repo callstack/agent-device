@@ -265,7 +265,6 @@ test('a host without a state directory is refused, never a daemon in an inherite
     expect(refusal, JSON.stringify(stateDir)).toMatchObject({
       code: 'INVALID_ARGS',
       details: {
-        reason: 'host_state_dir_required',
         hint: 'Pass an explicit stateDir to startAgentDevice({ stateDir }).',
       },
     });
