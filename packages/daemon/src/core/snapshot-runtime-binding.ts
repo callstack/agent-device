@@ -140,16 +140,7 @@ export async function admitAndBindSnapshotCapture(
   );
   return Object.freeze({
     ok: true,
-    capture: async (input: CaptureSnapshotInput) => {
-      const shortIdleWait =
-        (command === 'snapshot' || command === 'diff') &&
-        canUseShortAndroidSnapshotIdleWait(session);
-      return await bound.captureSnapshot(
-        shortIdleWait
-          ? { ...input, options: { ...input.options, androidIdleWait: 'short' } }
-          : input,
-      );
-    },
+    capture: async (input: CaptureSnapshotInput) => await bound.captureSnapshot(input),
     ...(bound.readTextAtPoint ? { readTextAtPoint: bound.readTextAtPoint } : {}),
     ...(bound.findText ? { findText: bound.findText } : {}),
     ...(bound.focusPoint ? { focusPoint: bound.focusPoint } : {}),
@@ -222,7 +213,12 @@ export async function resolveBoundSnapshotCaptureRuntime(
     session,
     device,
     snapshotScope: resolvedScope.scope,
-    captureSnapshot: async () => await bound.capture(captureInput),
+    captureSnapshot: async () =>
+      await bound.capture(
+        canUseShortAndroidSnapshotIdleWait(session)
+          ? { ...captureInput, options: { ...captureInput.options, androidIdleWait: 'short' } }
+          : captureInput,
+      ),
   });
 }
 
