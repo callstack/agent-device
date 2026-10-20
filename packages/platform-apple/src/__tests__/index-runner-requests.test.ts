@@ -120,6 +120,7 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     IOS_SIMULATOR,
     (i) => i.performGesture!(pinchPlan()),
   ],
+  'ios-simulator.interactions-gesture.tap': [IOS_SIMULATOR, (i) => i.performGesture!(tapPlan())],
   'tvos.interactions-scroll.remote-press': [
     TVOS_SIMULATOR,
     (i) => i.scroll('down', { durationMs: 300 }),
@@ -277,6 +278,23 @@ test('every Apple request site builds exactly its golden runner request', async 
 function onlyRequest(name: string, calls: RecordedRunnerCall[]): RunnerCommand {
   if (calls.length !== 1) throw new Error(`${name} sent ${calls.length} runner requests`);
   return calls[0]!.command;
+}
+
+function tapPlan(): GesturePlan {
+  const contact = (pointerId: 0 | 1 | 2, x: number, y: number) => ({
+    pointerId,
+    samples: [
+      { offsetMs: 0, point: { x, y } },
+      { offsetMs: 50, point: { x, y } },
+    ],
+  });
+  return {
+    topology: 'multi',
+    intent: 'tap',
+    durationMs: 50,
+    viewport: { x: 0, y: 0, width: 390, height: 844 },
+    pointers: [contact(0, 100, 300), contact(1, 200, 450), contact(2, 300, 600)],
+  };
 }
 
 function pinchPlan(): GesturePlan {
