@@ -104,17 +104,6 @@ export async function readScrollEdgeState(
 }
 
 /**
- * Is there hidden content left at this edge? The same question `runScrollEdgePasses` loops on,
- * exposed for callers with their own stop condition (`scroll --until`) so both read one signal.
- */
-export async function canScrollFurtherAtEdge(
-  nodes: readonly (RawSnapshotNode | SnapshotNode)[],
-  edge: ScrollEdge,
-): Promise<boolean> {
-  return (await readScrollEdgeState(nodes, edge)).canScroll;
-}
-
-/**
  * The on-screen signature the `--until` loop tracks to notice a stuck container, computed the same
  * way `captureScrollEdgeState` derives it, so both loops read one signal. Pure: no capture happens.
  */
@@ -167,16 +156,17 @@ function pushScrollSurfaceSignature(
  * an explicit small budget still reports itself, and the first observation precedes the first
  * gesture so an already-satisfied stop costs no scroll.
  */
-export async function runScrollPasses<TObservation, TResult>(params: {
+export async function runScrollPasses<TObservation, TAccepted, TResult>(params: {
   signal?: AbortSignal;
   observe: () => Promise<TObservation>;
-  refuse: (observation: TObservation) => AppError | undefined;
-  /** True ends the loop with this pass count; a terminal outcome of its own throws instead. */
-  shouldStop: (observation: TObservation, passes: number) => Promise<boolean>;
+  /** Refuses an unreadable capture before its contents reach the decision. */
+  accept: (observation: TObservation) => TAccepted;
+  decide: (
+    observation: TAccepted,
+    passes: number,
+  ) => Promise<{ stop: true } | { stop: false; fingerprint?: string }>;
   passLimit: number;
   passLimitError: (passes: number) => AppError;
-  /** The surface signature the stuck window tracks; `undefined` keeps a pass out of it. */
-  fingerprint: (observation: TObservation) => Promise<string | undefined>;
   noProgressError: (passes: number) => AppError;
   scroll: () => Promise<TResult>;
   /**
@@ -187,7 +177,7 @@ export async function runScrollPasses<TObservation, TResult>(params: {
    */
   settleAfterPass?: () => Promise<void>;
 }): Promise<{ passes: number; result?: TResult }> {
-  const { observe, refuse, shouldStop, passLimit, scroll, settleAfterPass } = params;
+  const { observe, accept, decide, passLimit, scroll, settleAfterPass } = params;
   let passes = 0;
   let result: TResult | undefined;
   const recentSignatures: string[] = [];
@@ -195,17 +185,11 @@ export async function runScrollPasses<TObservation, TResult>(params: {
     params.signal?.throwIfAborted();
     const observation = await observe();
     params.signal?.throwIfAborted();
-    const refusal = refuse(observation);
-    if (refusal) throw refusal;
-    const stopped = await shouldStop(observation, passes);
+    const decision = await decide(accept(observation), passes);
     params.signal?.throwIfAborted();
-    if (stopped) return { passes, result };
+    if (decision.stop) return { passes, result };
     if (passes >= passLimit) throw params.passLimitError(passes);
-    pushScrollSurfaceSignature(
-      recentSignatures,
-      await params.fingerprint(observation),
-      SCROLL_EDGE_STUCK_WINDOW,
-    );
+    pushScrollSurfaceSignature(recentSignatures, decision.fingerprint, SCROLL_EDGE_STUCK_WINDOW);
     if (scrollSurfaceIsStuck(recentSignatures)) throw params.noProgressError(passes);
     params.signal?.throwIfAborted();
     result = await scroll();
@@ -243,11 +227,14 @@ export async function runScrollEdgePasses<TResult>(params: {
   return await runScrollPasses({
     signal: params.signal,
     observe,
-    refuse: (observation) =>
-      isScrollEdgeRefused(observation)
-        ? buildScrollEdgeCaptureError(edge, observation.refused)
-        : undefined,
-    shouldStop: async (observation) => !isScrollEdgeRefused(observation) && !observation.canScroll,
+    accept: (observation) => {
+      if (isScrollEdgeRefused(observation)) {
+        throw buildScrollEdgeCaptureError(edge, observation.refused);
+      }
+      return observation;
+    },
+    decide: async (state) =>
+      state.canScroll ? { stop: false, fingerprint: state.fingerprint } : { stop: true },
     passLimit: SCROLL_EDGE_PASS_LIMIT,
     passLimitError: (passes) =>
       new AppError(
@@ -260,8 +247,6 @@ export async function runScrollEdgePasses<TResult>(params: {
           hint: 'The scoped scroll container still reports hidden content. Run scroll <dir> --until <selector> to stop on the element you are after, or snapshot -i to inspect the current state.',
         },
       ),
-    fingerprint: async (observation) =>
-      isScrollEdgeRefused(observation) ? undefined : observation.fingerprint,
     noProgressError: (passes) => buildScrollEdgeNoProgressError(edge, passes),
     scroll,
     ...(settleAfterPass ? { settleAfterPass: async () => await settleAfterPass(scope) } : {}),

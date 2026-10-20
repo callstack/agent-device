@@ -13,10 +13,9 @@ import { evaluateIsPredicate } from '@agent-device/selectors';
 import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import {
-  canScrollFurtherAtEdge,
+  readScrollEdgeState,
   runScrollPasses,
   scrollNoProgressHint,
-  scrollSurfaceFingerprint,
   verticalEdgeFor,
   type ScrollCaptureRefusal,
 } from '@agent-device/capture-kit/scroll-edge-state';
@@ -59,27 +58,24 @@ export async function runScrollUntilVisible<TResult>(params: {
     const { passes, result } = await runScrollPasses({
       signal: params.signal,
       observe: capture,
-      refuse: (captured) => {
+      accept: (captured) => {
         const refusal = scrollCaptureRefusal(captured);
-        return refusal ? scrollUntilCaptureError(direction, selector, refusal) : undefined;
+        if (refusal) throw scrollUntilCaptureError(direction, selector, refusal);
+        return captured.nodes as SnapshotNode[];
       },
-      shouldStop: async (captured, passes) => {
-        const nodes = (captured.nodes ?? []) as SnapshotNode[];
-        if (await isSelectorVisible(nodes, selector, platform)) return true;
-        if (edge && !(await canScrollFurtherAtEdge(nodes, edge))) {
+      decide: async (nodes, passes) => {
+        if (await isSelectorVisible(nodes, selector, platform)) return { stop: true };
+        // Horizontal scrolling has no edge analyzer and uses only the pass budget.
+        if (!edge) return { stop: false };
+        const state = await readScrollEdgeState(nodes, edge);
+        if (!state.canScroll) {
           throw scrollUntilNotFoundError(direction, selector, 'edge-reached', passes);
         }
-        return false;
+        return { stop: false, fingerprint: state.fingerprint };
       },
       passLimit: params.passLimit ?? DEFAULT_SCROLL_UNTIL_PASSES,
       passLimitError: (passes) =>
         scrollUntilNotFoundError(direction, selector, 'pass-limit', passes),
-      // Vertical only: a stuck container revisits the same one or two signatures. A horizontal
-      // scroll has no analyzer to read a surface off, so it is bounded by the pass budget alone.
-      fingerprint: async (captured) =>
-        edge
-          ? await scrollSurfaceFingerprint((captured.nodes ?? []) as SnapshotNode[], edge)
-          : undefined,
       noProgressError: (passes) => scrollUntilNoProgressError(direction, selector, passes),
       scroll: async () => {
         scrolled = true;

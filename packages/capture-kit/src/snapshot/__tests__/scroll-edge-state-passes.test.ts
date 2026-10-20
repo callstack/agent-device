@@ -11,17 +11,19 @@ const NO_PROGRESS = new AppError('COMMAND_FAILED', 'stuck', { reason: 'stuck' })
 
 /** Drives the shared loop over scripted frames, counting what it asked for. */
 async function run(frames: Frame[], passLimit = 10) {
-  const calls = { observe: 0, shouldStop: 0, scroll: 0, settle: 0 };
+  const calls = { observe: 0, decide: 0, scroll: 0, settle: 0 };
   const outcome = runScrollPasses({
     observe: async () => frames[Math.min(calls.observe++, frames.length - 1)]!,
-    refuse: (frame) => (frame.readable ? undefined : REFUSED),
-    shouldStop: async (frame) => {
-      calls.shouldStop += 1;
-      return frame.done;
+    accept: (frame) => {
+      if (!frame.readable) throw REFUSED;
+      return frame;
+    },
+    decide: async (frame) => {
+      calls.decide += 1;
+      return frame.done ? { stop: true } : { stop: false, fingerprint: frame.fingerprint };
     },
     passLimit,
     passLimitError: () => PASS_LIMIT,
-    fingerprint: async (frame) => frame.fingerprint,
     noProgressError: () => NO_PROGRESS,
     scroll: async () => ({ pass: ++calls.scroll }),
     settleAfterPass: async () => {
@@ -50,7 +52,7 @@ test('runScrollPasses: scrolls and settles once per pass and reports the last ge
 test('runScrollPasses: refuses an unreadable observation before asking the stop condition', async () => {
   const { outcome, calls } = await run([{ readable: false, done: true }]);
   await assert.rejects(outcome, (error) => error === REFUSED);
-  assert.equal(calls.shouldStop, 0);
+  assert.equal(calls.decide, 0);
   assert.equal(calls.scroll, 0);
 });
 
