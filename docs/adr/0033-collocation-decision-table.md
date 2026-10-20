@@ -7,7 +7,7 @@ Each candidate has a `move`, `merge`, or `keep` decision with rationale.
 Moves use `refactor(move)` PRs.
 Git history retains completed move batches.
 
-The allocator design withdrawal removed `packages/managed-allocation` on 2026-10-10; see [ADR 0021](0021-host-simlock-managed-device-allocation.md).
+The allocator design withdrawal removed `packages/managed-allocation` on 2026-10-10; see [ADR 0021](0021-simlock-leased-devices.md).
 The `src/managed-device-allocation.ts` row and Batch 1 record a move that landed in #3287.
 The removal of the package then deleted the moved file.
 Nothing moves there now.
@@ -63,7 +63,7 @@ All its consumers occupy one zone that already owns the operations represented b
 | `src/device-boot.ts` | keep | Device-selection, platforms, and daemon-server consume this boot-phase vocabulary. |
 | `src/facades/device.ts` | keep | This is the published facade of the contracts package. Facades are the package boundary, not movable content. |
 | `src/interaction-guarantees.ts` | keep | AGENTS.md names this declaration site for interaction dispatch paths and guarantee cells under ADR 0011. Cross-language golden tables in `contracts/fixtures/` bind it to this package. |
-| `src/managed-device-allocation.ts` | move (batch 1, landed in #3287; package removed 2026-10-10) → `packages/managed-allocation` | Only managed-allocation and its dependent daemon composition consume this port and vocabulary; see [ADR 0021](0021-host-simlock-managed-device-allocation.md) §4, the withdrawn design. No other contracts file or zone imports it. Types therefore belong beside their implementing operations. |
+| `src/managed-device-allocation.ts` | move (batch 1, landed in #3287; package removed 2026-10-10) → `packages/managed-allocation` | Only managed-allocation and its dependent daemon composition consume this port and vocabulary; see [ADR 0021](0021-simlock-leased-devices.md) §4, the withdrawn design. No other contracts file or zone imports it. Types therefore belong beside their implementing operations. |
 | `src/wait-runtime-plan.ts` | keep | Command-registry and daemon-server share it. Both are spine zones; contracts is the only seam below them. |
 
 ### device-selection
