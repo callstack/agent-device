@@ -30,6 +30,7 @@ import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/syste
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/hardware-key-runtime';
 import {
   type DeviceBinding,
   type RuntimeFacts,
@@ -514,6 +515,7 @@ function webDriverFacts(
     back: backUnavailable,
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
+    hardwareKey: hardwareKeyUnavailable,
     keyboard: keyboardUnavailable,
     clipboard: clipboardUnavailable,
     systemButton: systemButtonUnavailable,
@@ -627,8 +629,8 @@ function webDriverFacts(
         unsupported: systemButtonUnavailable,
         home: declared('home', homeUnavailable),
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
-        hardwareKey: hardwareKeyUnavailable,
       }),
+      ...hardwareKeyRuntimeOperationFacts({ hardwareKey: hardwareKeyUnavailable }),
       setFoldPose: foldUnavailable,
       sendTelephonyEvent: telephonyUnavailable,
       // The deep link opens through the same reachable interactor `open` every lifecycle command

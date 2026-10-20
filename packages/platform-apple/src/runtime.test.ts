@@ -363,11 +363,11 @@ test.each(Object.entries(leaves))(
       },
     });
     // The runner presses only the home and Action Button controls, so no Apple leaf admits a
-    // volume, power, or media key: the system-button family denial answers for it.
+    // volume, power, or media key: the hardwareKey cell states that refusal.
     expect(binding.facts.operations.hardwareKey).toEqual({
       available: false,
       reason: 'unsupported-platform-leaf',
-      hint: 'No Apple leaf carries this system button.',
+      hint: 'hardware-key is supported on Android through ADB key events.',
     });
     expect(binding.operations.hardwareKey).toBeUndefined();
   },

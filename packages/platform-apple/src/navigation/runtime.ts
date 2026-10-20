@@ -6,6 +6,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/hardware-key-runtime';
 import {
   hasAppleActionButton,
   isTvOsDevice,
@@ -131,11 +132,16 @@ function appleKeyboardEnterFact(device: DeviceInfo): RuntimeOperationFact {
   return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
 }
 
-/** The family denial covers `hardwareKey`: the runner presses no volume, power, or media key. */
 const systemButtonUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'No Apple leaf carries this system button.',
+} as const);
+/** The runner presses no volume, power, or media key, so no Apple leaf admits one. */
+const hardwareKeyUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'hardware-key is supported on Android through ADB key events.',
 } as const);
 const actionButtonKindUnavailable = Object.freeze({
   available: false,
@@ -174,6 +180,7 @@ export function appleNavigationFacts(device: DeviceInfo) {
     }),
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),
+    ...hardwareKeyRuntimeOperationFacts({ hardwareKey: hardwareKeyUnavailable }),
     ...keyboardRuntimeOperationFacts({
       unsupported: keyboardCellUnavailable,
       status: appleKeyboardStatusFact(device),

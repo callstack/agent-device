@@ -463,6 +463,7 @@ function sourceRuntimeFacts(
       back: unavailable,
       setOrientation: unavailable,
       tvRemote: unavailable,
+      hardwareKey: unavailable,
       ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
       ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
       ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),

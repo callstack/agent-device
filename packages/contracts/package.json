@@ -260,6 +260,14 @@
       "types": "./src/input-validation.ts",
       "default": "./src/input-validation.ts"
     },
+    "./hardware-key": {
+      "types": "./src/hardware-key.ts",
+      "default": "./src/hardware-key.ts"
+    },
+    "./hardware-key-runtime": {
+      "types": "./src/hardware-key-runtime.ts",
+      "default": "./src/hardware-key-runtime.ts"
+    },
     "./is-predicate": {
       "types": "./src/is-predicate.ts",
       "default": "./src/is-predicate.ts"

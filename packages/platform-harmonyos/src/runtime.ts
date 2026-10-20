@@ -266,6 +266,10 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...orientationRuntimeOperationFacts({ orientation: harmonyPlatformLeafUnavailable }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: harmonyPlatformLeafUnavailable }),
+        // HDC has no volume, power, or media key event to press. Stated directly rather than
+        // through `hardwareKeyRuntimeOperationFacts`, so this owner does not evaluate the
+        // hardware-key binder for a leaf that never admits it (eager-closure budgets).
+        hardwareKey: harmonyPlatformLeafUnavailable,
         // HDC drives dismissal and the enter key; any other keyboard operation is a leaf gap.
         ...keyboardRuntimeOperationFacts({
           unsupported: harmonyPlatformLeafUnavailable,

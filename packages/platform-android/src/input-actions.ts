@@ -22,8 +22,10 @@ import {
 } from '@agent-device/contracts/scroll-gesture';
 import {
   type HardwareKeyToken,
-  type TvRemoteButton,
   toAndroidHardwareKeycode,
+} from '@agent-device/contracts/hardware-key';
+import {
+  type TvRemoteButton,
   toAndroidTvRemoteKeyevent,
 } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';

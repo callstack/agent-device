@@ -11,6 +11,7 @@ import { KEYBOARD_ACTION_LABELS, bindKeyboardAction } from './keyboard-runtime.t
 import { bindOrientation } from './orientation-runtime.ts';
 import { bindReadSetting, bindSetSetting } from './settings-runtime.ts';
 import { TV_REMOTE_LABEL, bindTvRemote } from './tv-remote-runtime.ts';
+import { HARDWARE_KEY_LABEL, bindHardwareKey } from './hardware-key-runtime.ts';
 import {
   localInteractorSource,
   providerInteractorSource,
@@ -20,12 +21,7 @@ import {
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
-import {
-  bindHardwareKey,
-  bindSystemButton,
-  HARDWARE_KEY_LABEL,
-  SYSTEM_BUTTON_LABELS,
-} from './system-button-runtime.ts';
+import { bindSystemButton, SYSTEM_BUTTON_LABELS } from './system-button-runtime.ts';
 
 /**
  * How a facet turns one resolved interactor into its own typed operations. Every catalog member

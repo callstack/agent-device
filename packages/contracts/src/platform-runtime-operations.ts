@@ -26,6 +26,7 @@ import type { OrientationRuntimeOperations } from './orientation-runtime.ts';
 import type { FoldRuntimeOperations } from './fold-runtime.ts';
 import type { TelephonyRuntimeOperations } from './telephony-runtime.ts';
 import type { TvRemoteRuntimeOperations } from './tv-remote-runtime.ts';
+import type { HardwareKeyRuntimeOperations } from './hardware-key-runtime.ts';
 import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type { ClipboardRuntimeOperations } from './clipboard-runtime.ts';
 import type { SystemButtonRuntimeOperations } from './system-button-runtime.ts';
@@ -81,6 +82,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   FoldRuntimeOperations &
   TelephonyRuntimeOperations &
   TvRemoteRuntimeOperations &
+  HardwareKeyRuntimeOperations &
   KeyboardRuntimeOperations &
   ClipboardRuntimeOperations &
   SystemButtonRuntimeOperations &

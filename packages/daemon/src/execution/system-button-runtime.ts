@@ -1,7 +1,6 @@
 import {
   actionButtonRuntimeUse,
   appSwitcherRuntimeUse,
-  hardwareKeyRuntimeUse,
   homeRuntimeUse,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
@@ -10,9 +9,7 @@ import type {
   SystemButton,
   SystemButtonInput,
 } from '@agent-device/contracts/system-button-runtime';
-import { parseHardwareKey, type HardwareKeyToken } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from '../core/context.ts';
 import type { ResolvedGenericExecution } from '../core/generic-leaf-execution.ts';
@@ -87,52 +84,4 @@ export async function resolveBoundSystemButtonRuntime(
       return { action: command, ...successText(row.message) };
     },
   );
-}
-
-function readHardwareKey(positionals: readonly string[]): HardwareKeyToken {
-  if (positionals.length !== 1) {
-    throw new AppError('INVALID_ARGS', 'hardware-key requires exactly one key');
-  }
-  return parseHardwareKey(positionals[0]);
-}
-
-/**
- * `hardware-key <key>`: the family's one control with an argument. The key is parsed before
- * admission, so a malformed request never inspects or binds a device.
- */
-export async function resolveBoundHardwareKeyRuntime(
-  params: { device: DeviceInfo; positionals: readonly string[] } & RuntimeAdmissionBindings,
-): Promise<ResolvedGenericExecution> {
-  const key = readHardwareKey(params.positionals);
-  return await resolveBoundGenericRuntime(
-    {
-      command: 'hardware-key',
-      device: params.device,
-      use: hardwareKeyRuntimeUse,
-      inspectFacts: params.inspectFacts,
-      platformServices: params.platformServices,
-      bindDevice: params.bindDevice,
-    },
-    async (runtime: BoundDeviceRuntime<typeof hardwareKeyRuntimeUse>, context) => {
-      await runtime.operations.hardwareKey({ ...systemButtonInput(context), key });
-      return { action: 'hardware-key', key, ...successText(`Pressed hardware key ${key}`) };
-    },
-  );
-}
-
-/** The family's commands: the no-argument buttons plus `hardware-key`, its one keyed control. */
-type SystemControlCommand = SystemButtonCommand | 'hardware-key';
-
-export function isSystemControlCommand(command: string): command is SystemControlCommand {
-  return command === 'hardware-key' || isSystemButtonCommand(command);
-}
-
-/** The generic route's one arm for the system-button family. */
-export async function resolveBoundSystemControlRuntime(
-  command: SystemControlCommand,
-  params: { device: DeviceInfo; positionals: readonly string[] } & RuntimeAdmissionBindings,
-): Promise<ResolvedGenericExecution> {
-  return command === 'hardware-key'
-    ? await resolveBoundHardwareKeyRuntime(params)
-    : await resolveBoundSystemButtonRuntime(command, params);
 }

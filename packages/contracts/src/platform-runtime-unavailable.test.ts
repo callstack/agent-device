@@ -42,6 +42,7 @@ const UNAVAILABLE_FACTS: UnavailablePlatformRuntimeFacts = {
   back: { available: false, reason: 'unsupported-provider-mode' },
   orientation: { available: false, reason: 'unsupported-provider-mode' },
   tvRemote: { available: false, reason: 'unsupported-provider-mode' },
+  hardwareKey: { available: false, reason: 'unsupported-provider-mode' },
   keyboard: { available: false, reason: 'unsupported-provider-mode' },
   clipboard: { available: false, reason: 'unsupported-provider-mode' },
   systemButton: { available: false, reason: 'unsupported-provider-mode' },

@@ -200,6 +200,7 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     back: backUnavailable,
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
+    hardwareKey: systemButtonUnavailable,
     clipboard: clipboardUnavailable,
     systemButton: systemButtonUnavailable,
     fold: foldUnavailable,

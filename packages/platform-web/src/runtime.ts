@@ -414,6 +414,10 @@ function webRuntimeFacts(
         profileReport: navigationUnavailable,
       }),
       ...systemButtonRuntimeOperationFacts({ unsupported: navigationUnavailable }),
+      // No browser key-event channel exists. Stated directly rather than through
+      // `hardwareKeyRuntimeOperationFacts`, so this owner does not evaluate the hardware-key
+      // binder for a leaf that never admits it (eager-closure budgets).
+      hardwareKey: navigationUnavailable,
       setFoldPose: navigationUnavailable,
       sendTelephonyEvent: navigationUnavailable,
       ...appEventRuntimeOperationFacts({ triggerAppEvent: navigationUnavailable }),

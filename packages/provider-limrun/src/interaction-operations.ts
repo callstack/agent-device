@@ -31,6 +31,7 @@ import {
   type SnapshotRuntimePresenter,
 } from '@agent-device/contracts/snapshot-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/hardware-key-runtime';
 import {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
@@ -286,9 +287,9 @@ export function limrunAlertOperationFacts(
 }
 
 /**
- * The Android leg rides the local family's own interactor factory for `home`, `appSwitcher`, and
- * `hardwareKey`, the same `input keyevent` channel. The iOS direct session presses `home` through
- * Limrun's button actions and refuses the rest. No Limrun session exposes the action button.
+ * The Android leg rides the local family's own interactor factory for `home` and `appSwitcher`,
+ * the same `input keyevent` channel. The iOS direct session presses `home` through Limrun's button
+ * actions and refuses the rest. No Limrun session exposes the action button.
  */
 export function limrunSystemButtonOperationFacts(
   device: DeviceInfo,
@@ -302,7 +303,6 @@ export function limrunSystemButtonOperationFacts(
       unsupported: systemButtonUnavailable,
       home: available,
       appSwitcher: available,
-      hardwareKey: available,
     });
   }
   return systemButtonRuntimeOperationFacts({
@@ -310,6 +310,24 @@ export function limrunSystemButtonOperationFacts(
     home: available,
     appSwitcher: appSwitcherUnavailableIos,
   });
+}
+
+/**
+ * `hardwareKey` rides the same `input keyevent` channel as `home` on the Android leg, so every
+ * Android session admits it. The iOS direct session's button actions carry no volume, power, or
+ * media key, and a live session binds no interactor at all.
+ */
+export function limrunHardwareKeyOperationFacts(
+  device: DeviceInfo,
+  liveSessionUnavailable?: RuntimeOperationUnavailability,
+) {
+  if (liveSessionUnavailable) {
+    return hardwareKeyRuntimeOperationFacts({ hardwareKey: liveSessionUnavailable });
+  }
+  if (device.platform === 'android') {
+    return hardwareKeyRuntimeOperationFacts({ hardwareKey: available });
+  }
+  return hardwareKeyRuntimeOperationFacts({ hardwareKey: systemButtonUnavailable });
 }
 
 /**

@@ -1,8 +1,9 @@
 import type { BackMode } from './back-mode.ts';
 import type { DeviceRotation, FoldPose } from './device-rotation.ts';
 import type { FoldScreenReport } from './fold-runtime.ts';
+import type { HardwareKeyToken } from './hardware-key.ts';
 import type { SettleObservation } from './interaction.ts';
-import type { HardwareKeyToken, TvRemoteButton } from './tv-remote.ts';
+import type { TvRemoteButton } from './tv-remote.ts';
 
 /**
  * Closed results of the navigation/global action commands. Each mirrors its

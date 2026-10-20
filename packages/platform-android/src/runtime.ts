@@ -48,6 +48,7 @@ import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-i
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import { hardwareKeyRuntimeOperationFacts } from '@agent-device/contracts/hardware-key-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidSetting } from './settings.ts';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
@@ -341,13 +342,12 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           readTextAtPoint: device.kind === 'simulator' ? elementTextKindUnavailable : available,
         }),
         ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
-        // `home`, `app-switcher`, and every hardware key are one `input keyevent` each, admitted
-        // wherever the retired `ANDROID_ALL` bucket admitted `home`.
+        // `home` and `app-switcher` are one `input keyevent` each, admitted wherever the retired
+        // `ANDROID_ALL` bucket admitted `home`.
         ...systemButtonRuntimeOperationFacts({
           unsupported: systemButtonUnavailable,
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
-          hardwareKey: androidTouchFact(device),
         }),
         ...androidFoldableFacts(device),
         ...androidTelephonyFacts(device),
@@ -383,6 +383,9 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...orientationRuntimeOperationFacts({ orientation: androidTouchFact(device) }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: androidTvRemoteFact(device) }),
+        // Every hardware key is one `input keyevent`, admitted wherever the retired
+        // `ANDROID_ALL` bucket admitted `home`.
+        ...hardwareKeyRuntimeOperationFacts({ hardwareKey: androidTouchFact(device) }),
         // The only owner with a live IME status read; dismiss/enter share every other
         // interaction cell's kind gate (parity with the retired `keyboard` bucket).
         ...keyboardRuntimeOperationFacts({

@@ -2,27 +2,16 @@ import { requireInteractorMethod } from './interactor-operation-binding.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
-import type { HardwareKeyToken } from './tv-remote.ts';
 
 /**
  * The system buttons: one press each, no arguments, nothing returned. `home` and `appSwitcher`
  * reach a springboard or recents surface; `actionButton` presses iPhone/iPad hardware. What
  * varies between them is which owners carry the control, and that is the fact table's job, not
  * a per-button module's: a button joins this list and its owners state a cell.
- *
- * `hardwareKey` is the family's one control that takes an argument: a single cell admits every
- * volume, power, and media key, because an owner either has a key-event channel or has none.
  */
 export const SYSTEM_BUTTONS = ['home', 'appSwitcher', 'actionButton'] as const;
 
 export type SystemButton = (typeof SYSTEM_BUTTONS)[number];
-
-type SystemControl = SystemButton | 'hardwareKey';
-
-const SYSTEM_CONTROLS = [
-  ...SYSTEM_BUTTONS,
-  'hardwareKey',
-] as const satisfies readonly SystemControl[];
 
 /** How a provider fail-closed refusal names each button to the caller. */
 export const SYSTEM_BUTTON_LABELS = {
@@ -38,18 +27,13 @@ export type SystemButtonInput = Readonly<{
   execution?: SnapshotRuntimeExecution;
 }>;
 
-/** One hardware key press: the parsed key plus the same runner metadata a button carries. */
-type HardwareKeyInput = SystemButtonInput & Readonly<{ key: HardwareKeyToken }>;
-
 /** A press returns nothing; every leaf discarded whatever the interactor answered. */
-export type SystemButtonRuntimeOperations = Readonly<
-  {
-    [Button in SystemButton]: (input: SystemButtonInput) => Promise<void>;
-  } & { hardwareKey: (input: HardwareKeyInput) => Promise<void> }
->;
+export type SystemButtonRuntimeOperations = Readonly<{
+  [Button in SystemButton]: (input: SystemButtonInput) => Promise<void>;
+}>;
 
 export type SystemButtonRuntimeOperationFacts = Readonly<{
-  [Control in SystemControl]: RuntimeOperationFact;
+  [Button in SystemButton]: RuntimeOperationFact;
 }>;
 
 /**
@@ -65,15 +49,15 @@ export type SystemButtonRuntimeOperationFacts = Readonly<{
  */
 export type SystemButtonRuntimeOperationFactsInput = Readonly<
   { unsupported: RuntimeOperationUnavailability } & {
-    [Control in SystemControl]?: RuntimeOperationFact;
+    [Button in SystemButton]?: RuntimeOperationFact;
   }
 >;
 
 export function systemButtonRuntimeOperationFacts(
   input: SystemButtonRuntimeOperationFactsInput,
 ): SystemButtonRuntimeOperationFacts {
-  const facts = {} as Record<SystemControl, RuntimeOperationFact>;
-  for (const control of SYSTEM_CONTROLS) facts[control] = input[control] ?? input.unsupported;
+  const facts = {} as Record<SystemButton, RuntimeOperationFact>;
+  for (const button of SYSTEM_BUTTONS) facts[button] = input[button] ?? input.unsupported;
   return Object.freeze(facts);
 }
 
@@ -110,26 +94,4 @@ export function bindSystemButton<Button extends SystemButton>(
   return Object.freeze({ [button]: press }) as Readonly<
     Pick<SystemButtonRuntimeOperations, Button>
   >;
-}
-
-/** How a fail-closed refusal names the hardware key press to the caller, matching the command. */
-export const HARDWARE_KEY_LABEL = 'hardware-key';
-
-/**
- * Captures one selected owner's interactor authority for the lifetime of a request binding and
- * presses one hardware key through it, under the same fail-closed rule as {@link bindSystemButton}.
- */
-export function bindHardwareKey(
-  signal: AbortSignal,
-  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
-): Readonly<Pick<SystemButtonRuntimeOperations, 'hardwareKey'>> {
-  return Object.freeze({
-    hardwareKey: async (input: HardwareKeyInput): Promise<void> => {
-      const interactor = await resolvePressInteractor(input, signal, resolveInteractor);
-      await requireInteractorMethod(interactor.hardwareKey, HARDWARE_KEY_LABEL).call(
-        interactor,
-        input.key,
-      );
-    },
-  });
 }

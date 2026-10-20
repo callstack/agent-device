@@ -29,12 +29,12 @@ import type {
 import { dispatchSnapshotDiffViaRuntime } from '../../sessions/snapshot-diff-runtime.ts';
 import {
   isSystemButtonCommand,
-  resolveBoundHardwareKeyRuntime,
   resolveBoundSystemButtonRuntime,
   type SystemButtonCommand,
 } from '../../execution/system-button-runtime.ts';
 import { resolveBoundTelephonyRuntime } from '../../execution/telephony-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from '../../execution/tv-remote-runtime.ts';
+import { resolveBoundHardwareKeyRuntime } from '../../execution/hardware-key-runtime.ts';
 import { resolveBoundTypeTextRuntime } from '../../execution/type-text-runtime.ts';
 import { resolveBoundViewportRuntime } from '../../execution/viewport-runtime.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';

@@ -74,6 +74,7 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
             back: { available: false, reason: 'unsupported-platform-leaf' },
             orientation: { available: false, reason: 'unsupported-platform-leaf' },
             tvRemote: { available: false, reason: 'unsupported-platform-leaf' },
+            hardwareKey: { available: false, reason: 'unsupported-platform-leaf' },
             keyboard: { available: false, reason: 'unsupported-platform-leaf' },
             clipboard: { available: false, reason: 'unsupported-platform-leaf' },
             systemButton: { available: false, reason: 'unsupported-platform-leaf' },

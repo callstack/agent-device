@@ -60,6 +60,7 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   fold: RuntimeOperationUnavailability;
   telephony: RuntimeOperationUnavailability;
   tvRemote: RuntimeOperationUnavailability;
+  hardwareKey: RuntimeOperationUnavailability;
   keyboard: RuntimeOperationUnavailability;
   clipboard: RuntimeOperationUnavailability;
   systemButton: RuntimeOperationUnavailability;
@@ -117,6 +118,7 @@ const UNAVAILABLE_CELLS = {
   fold: true,
   telephony: true,
   tvRemote: true,
+  hardwareKey: true,
   keyboard: true,
   clipboard: true,
   systemButton: true,
@@ -243,6 +245,10 @@ export function createUnavailablePlatformRuntimeFacts(
       setFoldPose: frozen.fold,
       sendTelephonyEvent: frozen.telephony,
       ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
+      // Stated directly rather than through `hardwareKeyRuntimeOperationFacts`, so this hub does
+      // not evaluate the hardware-key binder for owners that carry no key-event channel
+      // (eager-closure budgets).
+      hardwareKey: frozen.hardwareKey,
       ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
       ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...systemButtonRuntimeOperationFacts({ unsupported: frozen.systemButton }),
