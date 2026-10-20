@@ -16,7 +16,7 @@ const PROCESS_ENTRIES = new Set([
   'packages/react-native/src/companion/companion-tunnel.ts',
   'packages/react-native/src/companion/client-companion-tunnel-worker.ts',
   'packages/maestro/src/daemon-port/run-script-http-child.ts',
-  // Released SDK defaults; #3759 removes these captures after startAgentDevice ships (#3757).
+  // Released SDK defaults; #3759 removes these captures in 0.22.
   'src/io.ts',
   'src/sdk/host.ts',
   'src/mcp/command-tools.ts',
