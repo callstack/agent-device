@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  HARDWARE_KEYS,
-  parseHardwareKey,
-  toAndroidHardwareKeycode,
-} from './hardware-key.ts';
+import { HARDWARE_KEYS, parseHardwareKey, toAndroidHardwareKeycode } from './hardware-key.ts';
 
 test('every hardware key maps to its Android KeyEvent keycode', () => {
   assert.deepEqual(
