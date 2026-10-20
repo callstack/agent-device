@@ -9,6 +9,7 @@ import {
   assertElementText,
   assertElementTextAfterScrolling,
   assertJsonContains,
+  assertWaitSelector,
   assertWaitText,
 } from './live-assertions.ts';
 import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
@@ -90,6 +91,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await assertWaitText(context, 'Automation lab');
   verifyCommand(context, C.click, 'selector click opens the automation route');
 
+  await assertWaitSelector(context, 'id="automation-open-sheet" visible=true');
   await runStep(context, 'open fixture sheet', ['click', 'id="automation-open-sheet"']);
   await assertWaitText(context, 'Automation sheet');
   await runStep(context, 'close fixture sheet', ['click', 'id="automation-close-sheet"']);
