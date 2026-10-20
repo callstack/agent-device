@@ -77,14 +77,16 @@ adb shell am instrument -w -e mode gesture -e payloadBase64 "$PAYLOAD" \
 
 The `gesture` payload is a base64-encoded JSON object using protocol `android-touch-plan-v1`:
 
-- `kind`: `swipe` (one pointer) or `transform` (two pointers, e.g. pinch/rotate)
+- `kind`: `swipe` (one pointer), `transform` (two pointers, e.g. pinch/rotate), or `tap` (2 to 5
+  stationary pointers on distinct points)
 - `durationMs`: integer, `0`-`120000`
 - `pointers`: array of `{ pointerId, samples }`, `pointerId`s ordered from `0`, one pointer for
-  `swipe` and exactly two for `transform`
+  `swipe`, exactly two for `transform`, and 2 to 5 for `tap`
 - each pointer's `samples` is `{ offsetMs, x, y }[]` with at least two entries; `offsetMs` values
   must be strictly increasing (equal offsets are only allowed when `durationMs` is `0`), the first
-  sample's `offsetMs` must be `0`, and the last must equal `durationMs`. For `transform` gestures,
-  both pointers must share the same `offsetMs` sequence.
+  sample's `offsetMs` must be `0`, and the last must equal `durationMs`. For `transform` and `tap`
+  gestures, every pointer must share the same `offsetMs` sequence, and a `tap` pointer must not
+  move.
 
 ## Persistent Session
 
@@ -95,10 +97,16 @@ connection: the client connects, sends a single command line, reads the response
 closes that connection; the process stays alive for the next connection:
 
 - `snapshot <requestId>` — capture and return an XML snapshot, same semantics as the default mode
+- `snapshot-immediate <requestId>` — capture fresh XML without an idle wait when the caller owns settling
+- `input <requestId> <payloadBase64>` — inject a tap, key, or point-targeted text replacement
+- `focus <requestId>` — read the focused window type and root package after clearing the accessibility cache
+- `screenshot <requestId>` — return a PNG in the `payloadBase64` header
 - `viewport <requestId>` — return interactive-window viewport bounds
 - `gesture <requestId> <payloadBase64>` — inject a planned touch gesture (same payload as the
   one-shot `gesture` mode)
 - `quit <requestId>` — acknowledge and stop the session
+
+The ready record advertises optional operations in `sessionCommands`. A host must check support before sending them. Text replacement retains a focus tap; the host owns post-write verification. Input failures must not be resent because a mutation may already have reached the app.
 
 `viewport` and `gesture` responses are headers-only (no body): `kind`, `injectedEvents`,
 `elapsedMs` for `gesture`, and `x`, `y`, `width`, `height` for `viewport`. `snapshot` responses carry
@@ -156,3 +164,7 @@ The release manifest is a stable provider contract for the current helper protoc
 resolve the APK from `apkUrl`, verify `sha256`, install it with `adb install -r <apk>`, and run
 `instrumentationRunner`. Manifests up to 0.21.3 also carried an `installArgs` array; it only ever
 spelled `install -r` (plus `-t` while the helper was `testOnly`), so consumers can ignore it.
+
+Capture metadata reports `cacheInvalidated` when the capture cleared the platform node cache through `UiAutomation.clearCache()`. A complete capture with that evidence need not change routes after a control press. Incomplete captures and captures without that evidence retain freshness recovery.
+
+Warm application open commands use the same automation session. Close retains the existing foreground and process-absence checks. A failed application command is never resent.

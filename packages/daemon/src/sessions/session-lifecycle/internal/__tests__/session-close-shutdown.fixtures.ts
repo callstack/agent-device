@@ -65,7 +65,11 @@ import {
   stopIosRunnerSession,
 } from '@agent-device/platform-apple/runner/operations';
 import { cleanupAppleXctracePerfCapture } from '@agent-device/platform-apple/perf';
-import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
+import {
+  WEB_DESKTOP_DEVICE,
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import {
   acquireDeviceClaim,
   inspectDeviceClaims,
@@ -108,7 +112,7 @@ const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({
 
 function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-session-close-shutdown-');
-  return new SessionStore(path.join(root, 'sessions'));
+  return new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 }
 
 function makeSession(name: string, device: SessionState['device']): SessionState {

@@ -1,21 +1,26 @@
 import { ensureManagedDaemon } from './daemon-client-lifecycle.ts';
 import { assertDaemonPolicyMatches, observeLocalDaemon } from './daemon-client-startup.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
+import { daemonBindingMismatchError } from './daemon-client-binding.ts';
 import { daemonIncompatibleError, daemonNotRunningError } from './daemon-lifecycle-errors.ts';
 
-/**
- * Connects to the local daemon registered in the state directory and nothing else: it never starts,
- * replaces or kills one. What the registration says is judged by the same ladder a managed client
- * uses, so a daemon an attach client accepts is one a managed client would also reuse.
- */
-async function attachLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
+/** Resolves a managed daemon, or observes and verifies the one an attach client may use. */
+export async function connectToDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
+  if (settings.remoteBaseUrl || settings.daemonLifecycle !== 'attach') {
+    return await ensureManagedDaemon(settings);
+  }
   const stateDir = settings.paths.baseDir;
   const observed = await observeLocalDaemon(settings, { refineUnreachable: true });
-  if (!observed) throw daemonNotRunningError(stateDir);
+  if (!observed) {
+    if (settings.daemonBinding) {
+      throw daemonBindingMismatchError(settings.daemonBinding, null, stateDir);
+    }
+    throw daemonNotRunningError(stateDir);
+  }
   const { info, decision } = observed;
   switch (decision.kind) {
     case 'reuse':
-      return { info, startedByClient: false };
+      break;
     case 'refuseNewer':
       throw await daemonIncompatibleError({ info, mismatch: 'newer', stateDir });
     case 'replace':
@@ -23,15 +28,15 @@ async function attachLocalDaemon(settings: DaemonClientSettings): Promise<Ensure
         ? daemonNotRunningError(stateDir, info)
         : await daemonIncompatibleError({ info, mismatch: decision.cause, stateDir });
   }
-}
-
-/** The daemon a request goes to, by the lifecycle its client chose. A remote one is never ours. */
-export async function connectToDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
-  if (settings.remoteBaseUrl || settings.daemonLifecycle !== 'attach') {
-    return await ensureManagedDaemon(settings);
+  const binding = settings.daemonBinding;
+  if (
+    binding &&
+    (info.token !== binding.token ||
+      info.pid !== binding.pid ||
+      info.processStartTime !== binding.processStartTime)
+  ) {
+    throw daemonBindingMismatchError(binding, info, stateDir);
   }
-  const attached = await attachLocalDaemon(settings);
-  // Checked on this branch too: attaching must not hand a policy-bound caller a daemon without it.
-  await assertDaemonPolicyMatches(attached.info, settings.paths.baseDir, settings.host);
-  return attached;
+  await assertDaemonPolicyMatches(info, stateDir, settings.host);
+  return { info, startedByClient: false };
 }

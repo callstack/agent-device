@@ -153,7 +153,7 @@ function assertReplayActionFitsViewport(action: ReplayAction, viewport: Viewport
   if (action.command === 'gesture') {
     const pointerCount =
       typeof action.flags.pointerCount === 'number' ? action.flags.pointerCount : undefined;
-    const payload = gesturePayloadFromPositionals(positionals, pointerCount);
+    const payload = gesturePayloadFromPositionals(positionals, { pointerCount });
     buildGesturePlan(normalizePublicGesture(payload).gesture, viewport, 'ios');
   }
 }

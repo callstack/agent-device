@@ -3,6 +3,7 @@ import {
   ANDROID_EMULATOR,
   IOS_DEVICE,
   IOS_SIMULATOR,
+  IPADOS_SIMULATOR,
   LINUX_DEVICE,
   MACOS_DEVICE,
   TVOS_SIMULATOR,
@@ -28,6 +29,23 @@ type CropTargetDevice = Readonly<{
   surface: SessionSurface | undefined;
 }>;
 
+const IPADOS_DEVICE: DeviceInfo = { ...IPADOS_SIMULATOR, kind: 'device' };
+const IOS_DEVICE_COREDEVICE: DeviceInfo = {
+  ...IOS_DEVICE,
+  iosPhysicalDeviceBackend: 'coredevice',
+};
+const IOS_DEVICE_XCTEST: DeviceInfo = {
+  ...IOS_DEVICE,
+  iosPhysicalDeviceBackend: 'xctest',
+};
+
+/** The cells with live pixel-identity evidence; every other cell stays rejected. */
+const ACCEPTED_CROP_TARGETS: readonly CropTargetDevice['target'][] = [
+  'ios-simulator',
+  'android-emulator',
+  'ios-physical',
+];
+
 /** One device per matrix cell: the classifier's whole reachable output, named by its cell. */
 const CROP_TARGET_DEVICES: readonly CropTargetDevice[] = [
   { target: 'ios-simulator', device: IOS_SIMULATOR, surface: undefined },
@@ -35,6 +53,8 @@ const CROP_TARGET_DEVICES: readonly CropTargetDevice[] = [
   { target: 'android-device', device: ANDROID_DEVICE, surface: undefined },
   { target: 'macos-app-window', device: MACOS_DEVICE, surface: 'app' },
   { target: 'ios-physical', device: IOS_DEVICE, surface: undefined },
+  { target: 'ios-physical-xctest', device: IOS_DEVICE_XCTEST, surface: undefined },
+  { target: 'ipados-physical', device: IPADOS_DEVICE, surface: undefined },
   { target: 'macos-helper', device: MACOS_DEVICE, surface: 'desktop' },
   { target: 'web', device: WEB_DESKTOP_DEVICE, surface: undefined },
   { target: 'linux', device: LINUX_DEVICE, surface: undefined },
@@ -59,7 +79,7 @@ test('the classifier and the acceptance matrix agree one-to-one, and the accepte
   }
   expect(CROP_TARGET_DEVICES.map((row) => row.target)).toEqual(matrixTargets);
   for (const cell of SCREENSHOT_CROP_TARGET_CELLS) {
-    if (cell.target === 'ios-simulator' || cell.target === 'android-emulator') {
+    if (ACCEPTED_CROP_TARGETS.includes(cell.target)) {
       expect(cell.status).toBe('accepted');
     } else {
       expect(cell).toEqual({
@@ -69,6 +89,66 @@ test('the classifier and the acceptance matrix agree one-to-one, and the accepte
       });
     }
   }
+});
+
+test('a physical iPad has its own cell, and an iPad simulator stays in the simulator cell', () => {
+  expect(classifyScreenshotCropTarget(IPADOS_DEVICE, undefined)).toBe('ipados-physical');
+  expect(classifyScreenshotCropTarget(IPADOS_SIMULATOR, undefined)).toBe('ios-simulator');
+});
+
+test('a physical iPhone on CoreDevice passes the policy', () => {
+  expect(classifyScreenshotCropTarget(IOS_DEVICE_COREDEVICE, undefined)).toBe('ios-physical');
+  expect(() =>
+    assertScreenshotCropPolicy({
+      device: IOS_DEVICE_COREDEVICE,
+      surface: undefined,
+      cropOn: 'label="Continue"',
+      overlayRefs: false,
+      fullscreen: false,
+    }),
+  ).not.toThrow();
+});
+
+test('a physical iPhone on the XCTest backend is refused with the pending-evidence reason, naming its own cell', () => {
+  expect(() =>
+    assertScreenshotCropPolicy({
+      device: IOS_DEVICE_XCTEST,
+      surface: undefined,
+      cropOn: 'label="Continue"',
+      overlayRefs: false,
+      fullscreen: false,
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'screenshot --crop-on is not accepted on ios-physical-xctest targets',
+      details: {
+        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
+        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+      },
+    }),
+  );
+});
+
+test('a physical iPad is refused with the pending-evidence reason, naming its own cell', () => {
+  expect(() =>
+    assertScreenshotCropPolicy({
+      device: IPADOS_DEVICE,
+      surface: undefined,
+      cropOn: 'label="Continue"',
+      overlayRefs: false,
+      fullscreen: false,
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'screenshot --crop-on is not accepted on ipados-physical targets',
+      details: {
+        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
+        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+      },
+    }),
+  );
 });
 
 const MACOS_SURFACE_BACKENDS: Record<SessionSurface, MacOsSurfaceBackend> = {
@@ -168,7 +248,9 @@ test('a matrix-rejected target is refused with the pending-evidence reason', () 
 });
 
 test('an accepted target with a valid selector passes the policy', () => {
-  expect(() =>
-    assertScreenshotCropPolicy({ device: ANDROID_EMULATOR, surface: undefined, ...POLICY_BASE }),
-  ).not.toThrow();
+  for (const device of [IOS_SIMULATOR, ANDROID_EMULATOR]) {
+    expect(() =>
+      assertScreenshotCropPolicy({ device, surface: undefined, ...POLICY_BASE }),
+    ).not.toThrow();
+  }
 });

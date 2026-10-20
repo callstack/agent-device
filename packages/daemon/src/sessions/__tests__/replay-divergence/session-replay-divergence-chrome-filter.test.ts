@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   makeAndroidSession,
   makeIosSession,
@@ -99,7 +99,10 @@ function keyboardSwampedNodes(actionableLabel: string) {
 
 test('buildReplayFailureDivergence excludes keyboard chrome from screen.refs and surfaces the actionable target within the cap', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-keyboard-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -210,7 +213,10 @@ function structuralNoiseNodes() {
 
 test('buildReplayFailureDivergence drops unlabeled non-interactive structural nodes so actionable controls surface within the cap', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-structural-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -325,7 +331,10 @@ function keyboardWithAccessoryNodes() {
 
 test('buildReplayFailureDivergence keeps an app inputAccessoryView control in screen.refs while filtering keyboard keys', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-accessory-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -380,7 +389,10 @@ test('buildReplayFailureDivergence keeps an app inputAccessoryView control in sc
 // on-device transport that produces the pre-walk raw tree is stubbed.
 test('buildReplayFailureDivergence excludes Android status-bar/IME chrome from screen.refs on a real (walked) non-raw capture', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-android-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,

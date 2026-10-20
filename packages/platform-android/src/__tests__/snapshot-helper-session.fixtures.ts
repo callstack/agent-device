@@ -57,6 +57,11 @@ export type PersistentSnapshotHelperProviderOptions = {
   processes: FakeAndroidProcess[];
   sessionResponseMode?: 'ok' | 'malformed';
   sessionXml?: (sessionIndex: number, snapshotCount: number) => string;
+  sessionRequests?: string[];
+  sessionSnapshotMetadata?: (sessionIndex: number, snapshotCount: number) => Record<string, string>;
+  sessionInput?: (input: { kind: string; text?: string }) => void;
+  sessionCommands?: string[];
+  sessionCommand?: (command: string) => Record<string, string> | undefined;
   stalledSessionCleanup?: boolean;
   oneShotAttempts?: (readonly string[])[];
   oneShotXml?: string;
@@ -84,6 +89,7 @@ export function createPersistentSnapshotHelperProvider(
       const server = net.createServer((socket) => {
         socket.once('data', (chunk) => {
           const command = chunk.toString('utf8').trim();
+          options.sessionRequests?.push(command);
           const [, requestId = ''] = command.split(/\s+/, 2);
           if (command.startsWith('quit')) {
             socket.end(sessionResponse({ requestId, body: '' }));
@@ -92,6 +98,18 @@ export function createPersistentSnapshotHelperProvider(
           }
           if (options.sessionResponseMode === 'malformed') {
             socket.end('malformed session response');
+            return;
+          }
+          const response = options.sessionCommand?.(command);
+          if (response) {
+            socket.end(sessionResponse({ requestId, body: '', metadata: response }));
+            return;
+          }
+          if (command.startsWith('input')) {
+            options.sessionInput?.(
+              JSON.parse(Buffer.from(command.split(' ')[2]!, 'base64').toString('utf8')),
+            );
+            socket.end(sessionResponse({ requestId, body: '' }));
             return;
           }
           if (command.startsWith('viewport')) {
@@ -125,6 +143,7 @@ export function createPersistentSnapshotHelperProvider(
                   nodeCount: '1',
                   truncated: 'false',
                   elapsedMs: '8',
+                  ...options.sessionSnapshotMetadata?.(sessionIndex, snapshotCount),
                 },
               }),
             );
@@ -136,6 +155,7 @@ export function createPersistentSnapshotHelperProvider(
           process.stdout.write(
             [
               'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+              `INSTRUMENTATION_STATUS: sessionCommands=${options.sessionCommands?.join(',') ?? `${options.sessionInput ? 'input,' : ''}snapshot-immediate`}`,
               'INSTRUMENTATION_STATUS: sessionReady=true',
               'INSTRUMENTATION_STATUS_CODE: 2',
               '',
@@ -269,6 +289,7 @@ export function createSessionProvider(options: SessionProviderOptions): AndroidA
         process.stdout.write(
           [
             'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+            'INSTRUMENTATION_STATUS: sessionCommands=snapshot-immediate',
             'INSTRUMENTATION_STATUS: sessionReady=true',
             'INSTRUMENTATION_STATUS_CODE: 2',
             '',

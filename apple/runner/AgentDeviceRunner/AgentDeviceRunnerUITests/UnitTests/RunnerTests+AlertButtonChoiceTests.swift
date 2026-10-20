@@ -1,9 +1,41 @@
 import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+private struct AlertButtonChoiceFixture: Decodable {
+  let name: String
+  let labels: [String]
+  let action: String
+  let expected: Int?
+  let xctestPopupMarkerExpected: Int?
+  let xctestPopupMarker: Bool?
+}
+
 extension RunnerTests {
-  func testAlertAcceptTreatsOpenAsAffirmative() {
-    XCTAssertTrue(RunnerAlertButtonChoice.isAcceptButton("Open"))
+  func testAlertButtonChoicesMatchGoldenFixture() throws {
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("contracts/fixtures/ios-alert-button-choice.json")
+    let fixtures = try JSONDecoder().decode([AlertButtonChoiceFixture].self, from: Data(contentsOf: fixtureURL))
+    XCTAssertFalse(fixtures.isEmpty)
+    for fixture in fixtures {
+      XCTAssertEqual(
+        RunnerAlertButtonChoice.buttonIndex(for: fixture.labels, action: fixture.action),
+        fixture.expected, fixture.name
+      )
+      if fixture.xctestPopupMarker == true {
+        XCTAssertEqual(
+          RunnerAlertButtonChoice.buttonIndex(
+            for: fixture.labels, action: fixture.action, popupMarkerSurface: true
+          ),
+          fixture.xctestPopupMarkerExpected, fixture.name
+        )
+      }
+    }
   }
 
   func testAlertDismissPicksTheTrackingPromptDeclineLabel() {
@@ -131,7 +163,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     // Resolution is a pure read; a contended hosted simulator can spend far more than the 10 s
     // command timeout on it, so it runs under the sibling fixtures' resolution allowance.
     let alert = try XCTUnwrap(
@@ -160,7 +192,7 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.alerts.firstMatch.waitForFixtureExistence(timeout: appExistenceTimeout))
     let alert = try XCTUnwrap(
       resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.alertResolutionAllowance))
     )

@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -47,7 +47,10 @@ async function buildFailureScenario(
 ) {
   const root = mkdtempForTestSync('agent-device-maestro-suggestions-');
   const sessionName = 'default';
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, maestroFlowForCommand(command));
@@ -94,7 +97,10 @@ function maestroFlowForCommand(command: MaestroRuntimeCommand): string {
 
 test('typed Maestro failure diagnostics render expanded selector values without extra flags', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-expanded-selector-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
@@ -157,7 +163,10 @@ test('typed Maestro failure diagnostics render expanded selector values without 
 
 test('typed Maestro nested scopes retain resolved target values after unwind', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-nested-redaction-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
@@ -254,7 +263,10 @@ test('typed Maestro nested scopes retain resolved target values after unwind', a
 test('typed Maestro renders flow-local values when static include resolution fails', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-include-redaction-');
   const sessionName = 'default';
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
   const flowName = 'checkout-details';

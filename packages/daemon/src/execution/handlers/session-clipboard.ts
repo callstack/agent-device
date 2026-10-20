@@ -167,7 +167,12 @@ export async function handleSessionClipboardCommand(params: {
     return errorResponse('INVALID_ARGS', 'clipboard requires a subcommand: read or write');
   }
 
-  const device = await resolveCommandDevice({ session, flags, platformServices });
+  const device = await resolveCommandDevice({
+    session,
+    flags,
+    env: sessionStore.host.env,
+    platformServices,
+  });
   if (ref) sessionStore.requireCurrent(ref);
   const bound = await resolveBoundClipboardRuntime({
     device,

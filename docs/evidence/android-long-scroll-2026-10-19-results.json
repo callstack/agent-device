@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-19",
+  "device": {
+    "name": "Pixel_7_CI",
+    "serial": "emulator-5554",
+    "androidApi": 36,
+    "helperVersion": "0.21.29-dev",
+    "backend": "android-helper"
+  },
+  "apks": [
+    {
+      "package": "dev.e2e.benchmark",
+      "sha256": "b163e985ebd8340bf10447cdf6826aea37e429ee8c4382f9179c863c8c0619b2"
+    },
+    {
+      "package": "com.callstack.agentdevicelab",
+      "sha256": "4f332d39e76899b86e7006cda5d43ade6211733fe85ffe4552735e3e56c867b4"
+    }
+  ],
+  "profile": {
+    "kind": "historical full 42-case suite, not rerun for this change",
+    "startedAt": "2026-10-19T17:33:33.466Z",
+    "durationMs": 273989,
+    "operations": [
+      {
+        "command": "snapshot",
+        "calls": 756,
+        "totalMs": 63493,
+        "medianMs": 53.0,
+        "maxMs": 592
+      },
+      {
+        "command": "open",
+        "calls": 43,
+        "totalMs": 38720,
+        "medianMs": 857,
+        "maxMs": 1853
+      },
+      {
+        "command": "scroll",
+        "calls": 69,
+        "totalMs": 34307,
+        "medianMs": 519,
+        "maxMs": 666
+      },
+      {
+        "command": "press",
+        "calls": 97,
+        "totalMs": 12901,
+        "medianMs": 63,
+        "maxMs": 469
+      },
+      {
+        "command": "fill",
+        "calls": 15,
+        "totalMs": 4635,
+        "medianMs": 254,
+        "maxMs": 506
+      },
+      {
+        "command": "longpress",
+        "calls": 3,
+        "totalMs": 3375,
+        "medianMs": 1253,
+        "maxMs": 1268
+      }
+    ]
+  },
+  "comparison": {
+    "order": "ABBA",
+    "includes": "target search, final snapshot and target press; app/menu setup and final semantic read excluded equally",
+    "target": "row-512; exact Found Row 0512 after press required for every successful sample",
+    "gestureDurationMs": 300,
+    "maxPasses": 90,
+    "samples": [
+      {
+        "arm": "manual",
+        "sourceCommit": "507ef2376621d78aa76cf531bedc5abdf30e7a5a",
+        "workflowMs": 44850.218,
+        "passes": 55,
+        "exitCode": 0,
+        "startedAtUnix": 1792434973.6624231,
+        "finishedAtUnix": 1792435022.0873952,
+        "hostLoadBefore": [4.01806640625, 4.5986328125, 8.34912109375],
+        "hostLoadAfter": [4.53271484375, 4.56494140625, 8.13671875],
+        "rawSha256": "8482547a705c6a5f2fe54cf5584557e5d1b7e3810d9f87ede0affa3c4ccf3892",
+        "timings": [
+          {
+            "name": "scroll",
+            "count": 55,
+            "sumMs": 28039.502,
+            "medianMs": 527.285
+          },
+          {
+            "name": "snapshot",
+            "count": 55,
+            "sumMs": 16714.394,
+            "medianMs": 300.552
+          },
+          {
+            "name": "targetPress",
+            "count": 1,
+            "sumMs": 96.322,
+            "medianMs": 96.322
+          }
+        ]
+      },
+      {
+        "arm": "until",
+        "sourceCommit": "b5f7e70590",
+        "workflowMs": 27529.686,
+        "passes": 55,
+        "exitCode": 0,
+        "startedAtUnix": 1792435022.087788,
+        "finishedAtUnix": 1792435053.1479082,
+        "hostLoadBefore": [4.53271484375, 4.56494140625, 8.13671875],
+        "hostLoadAfter": [5.7763671875, 4.85986328125, 8.119140625],
+        "rawSha256": "0e9dcbf186ec7c0e5623c6f78ed5f17888031fee5b8dfef384851f4034b37584",
+        "timings": [
+          {
+            "name": "scrollUntil",
+            "ms": 27118.897459
+          },
+          {
+            "name": "snapshot",
+            "ms": 293.46962500000154
+          },
+          {
+            "name": "targetPress",
+            "ms": 117.31879200000185
+          }
+        ]
+      },
+      {
+        "arm": "until",
+        "sourceCommit": "b5f7e70590",
+        "workflowMs": 27632.46,
+        "passes": 55,
+        "exitCode": 0,
+        "startedAtUnix": 1792435053.148298,
+        "finishedAtUnix": 1792435083.249852,
+        "hostLoadBefore": [5.7763671875, 4.85986328125, 8.119140625],
+        "hostLoadAfter": [6.412109375, 5.16015625, 8.11767578125],
+        "rawSha256": "1e3bb9c4ac8ec92a8aaf066a444d2a493ac8afd89b5c22aae741035f643c54c7",
+        "timings": [
+          {
+            "name": "scrollUntil",
+            "ms": 27220.094417
+          },
+          {
+            "name": "snapshot",
+            "ms": 331.74420800000007
+          },
+          {
+            "name": "targetPress",
+            "ms": 80.6217080000024
+          }
+        ]
+      },
+      {
+        "arm": "manual",
+        "sourceCommit": "507ef2376621d78aa76cf531bedc5abdf30e7a5a",
+        "workflowMs": 44170.108,
+        "passes": 55,
+        "exitCode": 0,
+        "startedAtUnix": 1792435083.25021,
+        "finishedAtUnix": 1792435129.74676,
+        "hostLoadBefore": [6.412109375, 5.16015625, 8.11767578125],
+        "hostLoadAfter": [6.4677734375, 5.40185546875, 8.03857421875],
+        "rawSha256": "4acf858d3c9341e8eec747d44ed5310e13148c6199cc53c61d63fe13964c2828",
+        "timings": [
+          {
+            "name": "scroll",
+            "count": 55,
+            "sumMs": 27539.891,
+            "medianMs": 516.871
+          },
+          {
+            "name": "snapshot",
+            "count": 55,
+            "sumMs": 16526.446,
+            "medianMs": 290.709
+          },
+          {
+            "name": "targetPress",
+            "count": 1,
+            "sumMs": 103.772,
+            "medianMs": 103.772
+          }
+        ]
+      }
+    ],
+    "medianMs": {
+      "manual": 44510.163,
+      "until": 27581.073
+    },
+    "savedMs": 16929.09,
+    "reductionPercent": 38.03421254602011
+  },
+  "finalSourceVerification": {
+    "sourceCommit": "ce71f344a3",
+    "benchmarkRecording": {
+      "workflowMs": 27941.681124,
+      "maxPassesPreserved": 90,
+      "target": "Found Row 0512"
+    },
+    "replay": {
+      "replayed": 6,
+      "healed": 0,
+      "session": "android-scroll-profile",
+      "sessionActive": true,
+      "artifactPaths": [],
+      "snapshotDiagnostics": {
+        "stats": {
+          "count": 7,
+          "p50Ms": 57,
+          "p95Ms": 272,
+          "maxMs": 272,
+          "slowThresholdMs": 1500,
+          "platform": "android",
+          "backends": {
+            "android": 7
+          }
+        }
+      },
+      "message": "Replayed 6 steps in 33.5s This session's daemon was kept alive because its script left the session active; pass --session android-scroll-profile on your next command to reach it.",
+      "hint": "This session's daemon was kept alive because its script left the session active; pass --session android-scroll-profile on your next command to reach it."
+    },
+    "testApp": [
+      {
+        "arm": "manual",
+        "elapsedMs": 5926.68275,
+        "passes": 7,
+        "title": "Seasonal Footer Pick",
+        "androidSnapshot": {
+          "backend": "android-helper",
+          "pixelDensity": 2.625,
+          "helperVersion": "0.21.29-dev",
+          "helperApiVersion": "2",
+          "helperTransport": "persistent-session",
+          "helperSessionReused": false,
+          "installReason": "current",
+          "waitForIdleTimeoutMs": 500,
+          "waitForIdleQuietMs": 100,
+          "timeoutMs": 2000,
+          "maxDepth": 128,
+          "maxNodes": 5000,
+          "rootPresent": true,
+          "cacheInvalidated": true,
+          "captureMode": "interactive-windows",
+          "windowCount": 2,
+          "missingRootWindowTypes": [],
+          "nodeCount": 267,
+          "helperTruncated": false,
+          "elapsedMs": 142
+        }
+      },
+      {
+        "arm": "until",
+        "elapsedMs": 4027.1003330000003,
+        "passes": 7,
+        "title": "Seasonal Footer Pick",
+        "result": {
+          "direction": "down",
+          "until": "id=\"details-seasonal-footer\"",
+          "passes": 7,
+          "x1": 540,
+          "y1": 1920,
+          "x2": 540,
+          "y2": 480,
+          "referenceWidth": 1080,
+          "referenceHeight": 2400,
+          "pixels": 1440,
+          "backend": "android-helper",
+          "helperVersion": "0.21.29-dev",
+          "installReason": "current",
+          "helperKind": "swipe",
+          "helperApiVersion": "2",
+          "injectedEvents": 21,
+          "elapsedMs": 351,
+          "helperTransport": "persistent-session",
+          "message": "Scrolled down 7 passes until id=\"details-seasonal-footer\" was visible"
+        },
+        "androidSnapshot": {
+          "backend": "android-helper",
+          "pixelDensity": 2.625,
+          "helperVersion": "0.21.29-dev",
+          "helperApiVersion": "2",
+          "helperTransport": "persistent-session",
+          "helperSessionReused": false,
+          "installReason": "current",
+          "waitForIdleTimeoutMs": 500,
+          "waitForIdleQuietMs": 100,
+          "timeoutMs": 2000,
+          "maxDepth": 128,
+          "maxNodes": 5000,
+          "rootPresent": true,
+          "cacheInvalidated": true,
+          "captureMode": "interactive-windows",
+          "windowCount": 2,
+          "missingRootWindowTypes": [],
+          "nodeCount": 267,
+          "helperTruncated": false,
+          "elapsedMs": 140
+        }
+      },
+      {
+        "arm": "one-pass-refusal",
+        "error": {
+          "code": "COMMAND_FAILED",
+          "message": "scroll down spent its 1-pass budget without id=\"details-seasonal-footer\" becoming visible",
+          "reason": "scroll_until_pass_limit",
+          "passes": 1
+        }
+      }
+    ]
+  },
+  "rejectedDurationExperiment": {
+    "orderMs": [300, 150, 150, 300],
+    "passes": [55, 61, 61, 55],
+    "workflowMs": [47462.889248, 48826.80208400002, 45803.86145000001, 44127.14453900001],
+    "decision": "Shorter swipes reduced single-command latency but made less progress and did not improve this workflow."
+  },
+  "providerIntegration": {
+    "command": "pnpm exec vitest run --project provider-integration test/integration/provider-scenarios/scroll-until.test.ts",
+    "baseCommit": "507ef2376621d78aa76cf531bedc5abdf30e7a5a",
+    "base": {
+      "passed": 3,
+      "failed": 2,
+      "failures": [
+        "search limited to 12 despite maxPasses 14",
+        "maxPasses 1 ignored; missing expected rejection"
+      ]
+    },
+    "feature": {
+      "passed": 5,
+      "failed": 0
+    },
+    "specSha256": "9cc972d09643dda62e0afe12fc55c8a4607cac104b7270da39beebab7013eed9"
+  }
+}

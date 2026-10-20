@@ -1,9 +1,5 @@
 import XCTest
 
-// Text-entry readiness: whether the target is actually able to receive text yet. The waits, the
-// keyboard signals they read, and the focus corroboration that ends the hardware-keyboard window.
-// RunnerTests+TextEntryFocus.swift is the only caller of the two non-private entries here; nothing
-// in this file reaches back into it.
 extension RunnerTests {
   func focusedTextInput(app: XCUIApplication) -> XCUIElement? {
 #if os(iOS)
@@ -35,7 +31,7 @@ extension RunnerTests {
     timeout: TimeInterval = TextEntryTiming.readinessTimeout
   ) -> XCUIElement? {
 #if os(iOS)
-    var latest = resolveTextEntryElement(app: app, target: target)
+    let candidate = resolveTextEntryElement(app: app, target: target)
     let keyboardVisibleAtEntry = isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(timeout)
     var hardwareKeyboardFallback = Date().addingTimeInterval(
@@ -43,19 +39,13 @@ extension RunnerTests {
     )
     var sawSoftwareKeyboard = false
     while Date() < deadline {
-      if let focused = focusedTextInput(app: app) {
-        latest = focused
-        if isKeyboardVisible(app: app) {
-          return focused
-        }
-      }
       // Fast-path on a keyboard hidden->visible transition: our tapped field gained focus, so
       // return immediately instead of burning the full readinessTimeout (warmup-first-char echo
       // + post-type verify/repair remain as drop safety nets). When the keyboard was ALREADY up
       // (back-to-back fills), this isn't a focus signal — fall through to the settle/timeout so
       // text isn't sent to the previously-focused field.
       if keyboardBecameVisible(app: app, wasVisibleAtEntry: keyboardVisibleAtEntry) {
-        return latest
+        return candidate
       }
       sawSoftwareKeyboard = sawSoftwareKeyboard || keyboardElementExists(app: app)
       // A responder that takes no software keyboard (hardware keyboard connected, or a custom
@@ -64,7 +54,7 @@ extension RunnerTests {
       // simulator state (#1874): on a loaded host the keyboard is merely late, and returning here
       // handed the caller an element that had not taken focus yet. Ask the target itself instead,
       // and re-arm rather than re-asking every poll — the query is cheap, not free.
-      if !sawSoftwareKeyboard, Date() >= hardwareKeyboardFallback, let candidate = latest {
+      if !sawSoftwareKeyboard, Date() >= hardwareKeyboardFallback, let candidate {
         if keyboardFocusConfirmed(app: app, element: candidate) {
           return candidate
         }
@@ -74,7 +64,7 @@ extension RunnerTests {
       }
       sleepFor(TextEntryTiming.pollInterval)
     }
-    return focusedTextInput(app: app) ?? latest
+    return candidate
 #else
     return resolveTextEntryElement(app: app, target: target)
 #endif
@@ -96,7 +86,7 @@ extension RunnerTests {
   /// field is then, which is the moment the read it replaced ran at.
   func waitForTextEntryReadinessAfterTap(app: XCUIApplication, element: XCUIElement) {
 #if os(iOS)
-    if waitForFocusedTextInput(app: app, timeout: TextEntryTiming.readinessTimeout) != nil {
+    if waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout) {
       return
     }
     guard let settled = safely("TEXT_ENTRY_READINESS_FRAME", { try? element.snapshot() }) else {
@@ -105,20 +95,20 @@ extension RunnerTests {
     let frame = settled.frame
     if !frame.isEmpty {
       _ = tapAt(app: app, x: frame.midX, y: frame.midY)
-      _ = waitForFocusedTextInput(app: app, timeout: TextEntryTiming.readinessTimeout)
+      _ = waitForTextEntryFocus(app: app, element: element, timeout: TextEntryTiming.readinessTimeout)
     }
 #endif
   }
 
-  private func waitForFocusedTextInput(app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
+  private func waitForTextEntryFocus(app: XCUIApplication, element: XCUIElement, timeout: TimeInterval) -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
-      if let focused = focusedTextInput(app: app) {
-        return focused
+      if keyboardFocusConfirmed(app: app, element: element) {
+        return true
       }
       sleepFor(TextEntryTiming.pollInterval)
     }
-    return focusedTextInput(app: app)
+    return keyboardFocusConfirmed(app: app, element: element)
   }
 
   func keyboardBecameVisible(app: XCUIApplication, wasVisibleAtEntry: Bool) -> Bool {
@@ -142,18 +132,17 @@ extension RunnerTests {
       // An element that no longer resolves reads as identifier "" and frame `.zero`, which would
       // match any focused element that also reports an empty frame. Require a real frame first,
       // so a dead handle cannot corroborate anything.
-      let frame = element.frame
-      guard !frame.isEmpty else {
+      guard element.exists, let expected = try? element.snapshot(), !expected.frame.isEmpty else {
         return false
       }
       let focused = app
         .descendants(matching: .any)
         .matching(NSPredicate(format: "hasKeyboardFocus == 1"))
         .firstMatch
-      guard focused.exists else {
+      guard focused.exists, let observed = try? focused.snapshot() else {
         return false
       }
-      return focused.identifier == element.identifier && focused.frame == frame
+      return observed.identifier == expected.identifier && observed.frame == expected.frame
     }
 #else
     return false

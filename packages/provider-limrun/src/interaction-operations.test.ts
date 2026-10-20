@@ -46,6 +46,7 @@ test('the Android leg admits back/orientation and gates tv-remote on a real TV t
   const mobile = limrunNavigationOperationFacts(androidMobileDevice);
   expect(mobile.back).toEqual({ available: true });
   expect(mobile.setOrientation).toEqual({ available: true });
+  expect(mobile.unlockOrientation).toEqual({ available: true });
   expect(mobile.tvRemote).toEqual({
     available: false,
     reason: 'unsupported-device-kind',
@@ -125,17 +126,18 @@ test('the iOS leg serves the simctl settings only and reads nothing back', () =>
   ).toEqual(liveSessionUnavailable);
 });
 
-// R59: same split again — the Android leg reuses the local family's interactor, and the iOS
-// direct session has no XCUITest runner to read a sheet from.
-test('alert legs ride the Android interactor and are refused on the iOS leg', () => {
+// R59 split, then #3349 closed the iOS half: the Android leg reuses the local family's
+// interactor, and the iOS direct session reads system alerts from its element-tree capture and
+// presses their buttons through its touch seam, so a live session serves all four legs on both
+// platforms.
+test('alert legs are available on both legs of a live session and refused without one', () => {
   for (const leg of ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'] as const) {
     expect(limrunAlertOperationFacts(androidMobileDevice)[leg]).toEqual({ available: true });
-    expect(limrunAlertOperationFacts(iosDevice)[leg]).toEqual({
-      available: false,
-      reason: 'unsupported-provider-mode',
-      hint: 'Limrun iOS direct sessions do not expose alert inspection yet.',
-    });
+    expect(limrunAlertOperationFacts(iosDevice)[leg]).toEqual({ available: true });
     expect(limrunAlertOperationFacts(androidMobileDevice, liveSessionUnavailable)[leg]).toEqual(
+      liveSessionUnavailable,
+    );
+    expect(limrunAlertOperationFacts(iosDevice, liveSessionUnavailable)[leg]).toEqual(
       liveSessionUnavailable,
     );
   }
@@ -145,6 +147,7 @@ test('the iOS leg admits back/orientation but explicitly refuses tv-remote', () 
   const facts = limrunNavigationOperationFacts(iosDevice);
   expect(facts.back).toEqual({ available: true });
   expect(facts.setOrientation).toEqual({ available: true });
+  expect(facts.unlockOrientation.available).toBe(false);
   expect(facts.tvRemote).toEqual({
     available: false,
     reason: 'unsupported-provider-mode',
@@ -156,6 +159,7 @@ test('a dead session closes all three navigation cells with the same reason rega
   const facts = limrunNavigationOperationFacts(androidTvDevice, liveSessionUnavailable);
   expect(facts.back).toEqual(liveSessionUnavailable);
   expect(facts.setOrientation).toEqual(liveSessionUnavailable);
+  expect(facts.unlockOrientation).toEqual(liveSessionUnavailable);
   expect(facts.tvRemote).toEqual(liveSessionUnavailable);
 });
 

@@ -1,3 +1,4 @@
+import { gestureHelpTopic } from './cli-help-gestures.ts';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { getReplayBackendDeclaration } from '@agent-device/replay-port/replay-backend-declarations';
 import { normalizeCliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
@@ -78,8 +79,8 @@ Command shape:
   Command lines only -- no prose, numbering, fences, pipes, or grep/head/tail/jq; raw output carries refs/hints for the next step. Order: subcommand, positionals, flags: agent-device open com.example.app --session checkout --platform android --relaunch
   Chain confident consecutive steps with &&: press 'label="Search"' --settle && fill 'label="Search"' "query" --settle. Fall back to one command at a time when a step is uncertain (ambiguous match, network-backed result, unseen screen).
   Refs look like @e12; use the exact ref from the latest snapshot -i, never a placeholder (@ref, @eN, @Label_Name). Pin with ~s<n> (press @e12~s4); every platform rejects a stale pinned ref -- refresh with snapshot -i or use a selector.
-  close = agent-device close. App back is back; system back is back --system. Taps are press/click. type never takes --settle: run type, then diff snapshot to verify. Known flow: batch --steps-file ./steps.json (help batch).
-  Gestures: scroll/swipe for lists/flicks; gesture pan|fling|pinch|rotate|transform|drag for multi-touch. Shapes and platform quirks: help gestures.
+  close = agent-device close. App back is back; system back is back --system. Single taps are press/click; gesture tap touches 2 to 5 points at once. type never takes --settle: run type, then diff snapshot to verify. Known flow: batch --steps-file ./steps.json (help batch).
+  Gestures: scroll/swipe for lists/flicks; gesture pan|fling|pinch|rotate|transform|tap|drag for multi-touch. Shapes and platform quirks: help gestures.
 
 Bootstrap:
   open --foreground -> snapshot. Selection: explicit --device/--udid/--serial, then session, booted/bootable local, or provider; --platform/--target only filter. Ambiguous/empty fails with bounded retry selectors; no provider fallback.
@@ -191,42 +192,7 @@ Recording:
   record contact-sheet <video.mp4> [--out <sheet.png>] reads an exported MP4 back and writes one PNG holding the frames where the screen visibly changed, each labeled with its elapsed time. It is how you read a recording you cannot play, and it needs no session or device; the frames come out of that file, so the sheet cannot describe a screen the video does not contain. The sample grid is bounded and spread over the whole clip, so it reports coverage, not a review: a flash that opens and closes between two sample times is not in it. Needs a macOS host and an MP4 (a WebM recording is refused).
   Tracing: trace start ./trace.log, trace stop ./trace.log (path is positional, not --path).`,
   },
-  gestures: {
-    summary: 'Full multi-touch gesture shapes and platform quirks',
-    body: `agent-device help gestures
-
-Full command shapes and platform quirks for touch/pointer gestures beyond scroll/swipe. Read this when a task needs multi-touch, a repeated gesture series, or exact per-platform verification.
-
-Shapes:
-  agent-device longpress 300 500 800
-  agent-device longpress @e12 800
-  agent-device swipe 320 500 40 500 --count 8 --pause-ms 30 --pattern ping-pong
-  agent-device gesture pan 200 420 0 -80 500
-  agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
-  agent-device scroll down --until 'id=submit'
-  agent-device gesture fling right 200 420 180
-  agent-device gesture pinch 0.5 200 400
-  agent-device gesture rotate 35 200 420
-  agent-device gesture transform 200 420 80 -40 2 35 700
-  scroll <dir> --until <selector> repeats scroll-and-check passes until that element is on screen, then stops: one request instead of a scroll-then-snapshot loop, and it stops on the target rather than overshooting it. It reports the passes it spent, fails when the content runs out first, and is refused on top/bottom, which already stop themselves.
-  longpress accepts coordinates, @refs, or selectors; prefer @ref/selector, coordinates only as a fallback. Duration and gesture scale/center are positional. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan. Keep count/pause/pattern on one swipe: --count (cap 200), --pause-ms (cap 10000ms), --pattern ping-pong; the combined swipe/pause schedule is capped at 60000ms.
-  For repeated iOS smoke checks: press <x> <y> --count <n> --jitter-px <n> for tap series, swipe <x1> <y1> <x2> <y2> --count <n> for drag series.
-
-Platform quirks:
-  iOS simulator transform/pinch/rotate use private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output.
-  Android transform injects a geometric two-finger path; app recognizers may report non-exact pan/scale/rotation -- verify semantic app state or coarse per-component effects instead of exact numeric deltas unless the app exposes stable metrics. If Android needs exact values, prefer isolated gesture pan --pointer-count 2, gesture pinch, or gesture rotate over one combined transform:
-    agent-device gesture transform 200 420 80 -40 2 35 700 --platform android
-    agent-device wait text "pan changed yes" 3000 --platform android
-  tvOS coordinate pan and fling preserve only the dominant direction as a remote swipe; authored endpoints and duration are not preserved.
-  Gesture planning prefers the active-app frame; a backend without a gesture viewport resolver falls back to the visible snapshot union, which can be less accurate near edges.
-  Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.
-
-macOS:
-  Context menus are secondary clicks, not long presses: agent-device click @e66 --button secondary --platform macos, then snapshot -i.
-  For fast desktop list traversal, prefer fixed pixel wheel steps and batch them when no snapshot is needed between passes:
-    agent-device scroll down --pixels 200 --duration-ms 50 --platform macos
-    agent-device batch --steps '[{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}},{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}}]' --platform macos`,
-  },
+  gestures: gestureHelpTopic,
   tv: {
     summary: 'Android TV, tvOS, and Vega VVD focus-first remote navigation',
     body: `agent-device help tv
@@ -514,6 +480,7 @@ Runner and daemon lifecycle (applies to simulators too):
   Each AGENT_DEVICE_STATE_DIR runs its own daemon. It self-exits after an idle window (default 5 minutes, matching the runner idle-stop default) once it has no open sessions, no in-flight requests, and no active recording; set AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS to override, or 0 to disable idle reap.
   A client starting a local daemon waits while the daemon process stays alive and keeps publishing startup progress, so an overloaded host makes startup slower, not failed. It stops at a ceiling (default 120 s; set AGENT_DEVICE_DAEMON_STARTUP_TIMEOUT_MS to a positive integer number of milliseconds to override) and names the outcome in error details.reason: startup-exited (the process ended before registering), startup-stalled (alive, no startup progress for a fixed 60 s window the ceiling variable does not change), or startup-ceiling (a startup was still live when the ceiling passed — this client's daemon or another client's; the client stops its own launch and never signals another client's live daemon. Only a progressing own launch outlasts the 60 s stall window, so a ceiling set below 60 s also ends a silent own launch this way). details.phases carries the startup phase timings it observed and details.startupTimeoutMs the effective ceiling. Branch on details.reason, never on the message. The variable is read only when a client must start a daemon: a value that is not a positive integer fails with INVALID_ARGS before the daemon spawns, and a client that only attaches to or reuses a running daemon never reads it.
   A command that needs the shared local daemon starts it for its state dir when none runs (device status and device release --stale never contact one). When the running daemon comes from another version or build, the command replaces it only if the daemon reports no work: no in-flight request, session, repair session, or live lease (a streaming resumable upload and a host human-control hold that names no lease are not counted); otherwise it fails with details.reason daemon-busy and leaves the daemon alone. A daemon that agreed to leave is waited for up to 60 s and never signaled while it drains; one still running then fails with details.reason daemon-drain-timeout unless it answers nothing and is provably a daemon process, which is force-retired. A daemon from a release that predates this check is never replaced and fails with daemon-incompatible. End a busy or older daemon deliberately with agent-device daemon stop --state-dir <path>. Node clients pick daemonLifecycle 'attach' (never starts or replaces a daemon; fails with daemon-not-running or daemon-incompatible) or 'managed' (the default until 0.22), and ensureDaemon() starts or replaces one explicitly.
+  daemon stop --state-dir <path> stops a detached daemon with process signals after verifying its identity. For a host-owned runtime, it sends an authenticated shutdown request over the registered local transport and waits for the close report without signaling the host. daemon status shows host-owned or owner-not-recognized. Managed clients reuse a matching host-owned runtime. Takeover, drain, and timeout recovery ask the central retirement, which judges the record's owner once: a live host-owned or unrecognized owner is refused without a signal, while a record whose owner provably exited is retired like any abandoned one so the state directory stays usable. Stop can also ask a readable record with unrecognized ownership: an embedded runtime can close itself, but a detached answer fails with details.reason daemon-not-embedded and a record-repair hint, without signaling. For these shutdown requests, a record without usable transport or token fails with daemon-embedded-stop-unreachable. An unconfirmed close, including after connection failure, fails with daemon-shutdown-unconfirmed. Without --clean, an unreadable daemon.json fails stop with daemon-record-unreadable. Detached stop and cleanup use the lifetime and ownership from one registration read. A retained close returns stopped: true with warnings and cleanupConfidence: unknown (exit 0): it stopped serving, but resource cleanup is unconfirmed. --clean requires proven detached ownership; host-owned, unrecognized and unreadable records fail with daemon-clean-not-detached because that cleanup walks the owner's whole process tree.
   On a machine shared by several agents, set AGENT_DEVICE_SESSION_IDLE_TIMEOUT_MS to also expire an individual session that has taken a host-global device claim and then received no commands for that long; the claim is released and the next command on that session answers SESSION_NOT_FOUND with details.reason SESSION_IDLE_EXPIRED naming the window and the device. Off by default, because on a shared host "idle" and "thinking" are indistinguishable: only set it where an abandoned claim blocking every other agent is the worse failure. Sessions holding a remote lease or any active capture (recording, logs, audio, performance, or trace) are never expired this way.
   A stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically instead of failing with "is already owned by another agent-device daemon". A live owner's runner is also reclaimed when the requesting daemon holds the host-global device claim for that device: claims are exclusive, so holding one proves the runner's owner released the device and merely kept the runner warm. The error remains only for owners outside claim arbitration (a pre-claims build, or daemons pointed at different claim stores).
 
@@ -525,7 +492,7 @@ For iOS SpringBoard, widget, or other system-UI surfaces, read agent-device help
 
 Use this when a task needs iOS SpringBoard (home screen), widget add/edit/remove, or other system-UI surfaces instead of the app under test.
 
-This works today by opening SpringBoard as the session app; there is no separate widget/system command. System labels vary by iOS version and locale, so discover them from the current snapshot instead of relying on the literal strings shown below. This workflow is verified on iOS simulator; physical-iPhone SpringBoard support is not yet verified.
+This works today by opening SpringBoard as the session app; there is no separate widget/system command. System labels vary by iOS version and locale, so discover them from the current snapshot instead of relying on the literal strings shown below. This workflow is verified on iOS simulator. On a physical iPhone, opening SpringBoard, snapshot -i, and selector presses on visible home-screen icons are verified; the widget add/edit/remove steps are not yet verified on a physical iPhone.
 
 Core loop:
   1. Reach the app state you want to prepare (for example, arrange the widget/Live Activity data the app should show) with normal app automation, then agent-device open com.apple.springboard --platform ios. From an existing app session, agent-device home first also lands on the home screen, but open com.apple.springboard is what actually binds the session to SpringBoard for selector-driven commands.

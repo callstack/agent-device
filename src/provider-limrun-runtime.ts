@@ -1,3 +1,4 @@
+import { captureSdkHost } from './sdk/host.ts';
 import type {
   DeviceInventoryProvider,
   LeaseLifecycleProvider,
@@ -24,7 +25,10 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
   readonly provider = LIMRUN_PROVIDER;
 
   constructor(options: LimrunRuntimeOptions) {
-    this.implementation = createLimrunRuntime(options, createLimrunRuntimeDependencies());
+    this.implementation = createLimrunRuntime(
+      options,
+      createLimrunRuntimeDependencies(captureSdkHost()),
+    );
   }
 
   get leaseLifecycle(): LeaseLifecycleProvider {

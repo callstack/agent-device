@@ -380,7 +380,10 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           accept: androidTouchFact(device),
           dismiss: androidTouchFact(device),
         }),
-        ...orientationRuntimeOperationFacts({ orientation: androidTouchFact(device) }),
+        ...orientationRuntimeOperationFacts({
+          orientation: androidTouchFact(device),
+          unlock: androidTouchFact(device),
+        }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: androidTvRemoteFact(device) }),
         // The only owner with a live IME status read; dismiss/enter share every other
         // interaction cell's kind gate (parity with the retired `keyboard` bucket).

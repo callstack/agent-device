@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type {
   CliFlags,
   CommandFlags,
@@ -97,6 +98,9 @@ export type DaemonWriter = (input: CommandInput) => DaemonCommandRequest;
  * `runFlow` includes on demand. The registry awaits whichever kind a command declares, so the
  * asynchrony stays inside the one writer that needs it.
  */
-export type AsyncDaemonWriter = (input: CommandInput) => Promise<DaemonCommandRequest>;
+export type AsyncDaemonWriter = (
+  input: CommandInput,
+  host: HostEnvironment,
+) => Promise<DaemonCommandRequest>;
 
 export type AnyDaemonWriter = DaemonWriter | AsyncDaemonWriter;

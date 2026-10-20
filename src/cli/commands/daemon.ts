@@ -3,21 +3,22 @@ import {
   type PluginInventoryEntry,
 } from '@agent-device/contracts/plugin-inventory';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import {
-  readDaemonStopIdentity,
-  stopDaemon,
-  type DaemonStopResult,
-} from '@agent-device/daemon-contracts/daemon-stop';
+import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   isUnusableRecord,
   readDaemonStatus,
+  readDaemonStopIdentity,
+  readStopCleanupOwner,
   type DaemonStatus,
+  type DaemonStopIdentity,
 } from '@agent-device/daemon-contracts/daemon-registration';
-import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
+import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
 import { AppError } from '@agent-device/kernel/errors';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 import { createDaemonOwnerCleanup } from '../../platform-runtime-daemon-owner-cleanup.ts';
+import { stopRecordedDaemon } from '../../daemon-client/daemon-client-stop.ts';
 
 export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, host }) => {
   const daemonOwnerCleanup = createDaemonOwnerCleanup(host);
@@ -35,15 +36,23 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
     await writeCommandOutput(flags, shown, () => renderDaemonStatus(shown));
     return true;
   }
-  const identity = readDaemonStopIdentity(paths.infoPath);
-  const stopped = await stopDaemon({ paths });
-  const report = stopped.mode === 'graceful' ? readDaemonShutdownReport(paths.baseDir) : null;
-  const result = mergeShutdownReport(stopped, report);
-  const shouldClean = flags.clean === true && identity !== null && result.stopped;
+  // One read decides every route below, so routing, retirement, and a `--clean` walk judge the same
+  // record rather than three snapshots of a file another process may be rewriting.
+  const record = readDaemonStopIdentity(paths.infoPath);
+  // Retained-runner cleanup works across the owner's whole process tree, which a host process shares
+  // with whatever else it runs. An embedded runtime's own close is the boundary a stop may cross, and
+  // a record that cannot prove its owner is not a licence to walk a process tree either. No record at all
+  // is not a refusal: there is nothing claimed, so there is nothing to clean.
+  if (flags.clean === true && record.ownership !== 'absent' && record.ownership !== 'detached') {
+    throw daemonCleanRefusedForUnprovenOwner(paths, record.ownership);
+  }
+  const result = await stopRecordedDaemon(record, { paths, host });
+  const cleanupOwner = readStopCleanupOwner(record);
+  const shouldClean = flags.clean === true && cleanupOwner !== null && result.stopped;
   if (shouldClean) {
     await daemonOwnerCleanup.cleanup({
-      pid: identity.pid,
-      startTime: identity.processStartTime,
+      pid: cleanupOwner.pid,
+      startTime: cleanupOwner.processStartTime,
     });
   }
   const data = { ...result, clean: shouldClean };
@@ -51,82 +60,49 @@ export const daemonCommand: ClientCommandHandler = async ({ positionals, flags, 
   return true;
 };
 
-function mergeShutdownReport(
-  stopped: DaemonStopResult,
-  report: ReturnType<typeof readDaemonShutdownReport>,
-): DaemonStopResult {
-  if (stopped.mode !== 'graceful' || report) {
-    return report
-      ? {
-          ...stopped,
-          providerReleases: { status: 'completed', ...report.providerReleases },
-          claimsReleased: report.claims.released,
-          claimsOrphaned: report.claims.orphaned,
-          claimsSuperseded: report.claims.superseded,
-          claimsUnattributable: report.claims.unattributable,
-          warnings: [
-            ...stopped.warnings,
-            ...supersededClaimWarnings(report.claims.superseded),
-            ...orphanedClaimWarnings(report.claims.orphaned),
-            ...unattributableClaimWarnings(report.claims.unattributable),
-          ],
-        }
-      : stopped;
-  }
-  return {
-    ...stopped,
-    cleanupConfidence: 'unknown',
-    providerReleases: { status: 'unknown', released: [], pending: null },
-    warnings: [
-      ...stopped.warnings,
-      'The graceful shutdown report is unavailable, so provider cleanup state is unknown. Provider allocations may remain active.',
-    ],
-  };
-}
-
-/** A superseded claim is not a failure to report as one, but the operator's
- * device is now owned elsewhere, so it must not pass silently. */
-function supersededClaimWarnings(superseded: DaemonStopResult['claimsSuperseded']): string[] {
-  if (superseded.length === 0) return [];
-  const devices = superseded.map((claim) => claim.deviceId).join(', ');
-  return [
-    `Another owner had already claimed ${devices} before this daemon released it, so those devices are now owned elsewhere.`,
-  ];
-}
-
-/** An orphaned claim keeps holding its device after the daemon is gone, and
- * only `device release --stale` or the next open settles it — say so instead
- * of leaving the block discoverable through --json alone.
+/**
+ * `--clean` walks the owner's whole process tree, which for a host process includes everything else
+ * that host runs. An embedded runtime's own close is the only boundary a stop may cross, so this
+ * refuses instead of reaching past it, and the stop without `--clean` still works.
  *
- * A record whose owner could not be attributed is NOT reported here. Those are what
- * `--stale` hides and refuses, so this sentence would send the operator to a route that cannot
- * succeed; {@link unattributableClaimWarnings} names the view that does show them. */
-function orphanedClaimWarnings(orphaned: DaemonStopResult['claimsOrphaned']): string[] {
-  if (orphaned.length === 0) return [];
-  const devices = orphaned.map((claim) => claim.deviceId).join(', ');
-  return [
-    `Ownership of ${devices} was not released cleanly; the claim now blocks other owners until it is settled. Inspect with: agent-device device status --stale, then release with: agent-device device release --stale.`,
-  ];
+ * A record whose owner cannot be read is refused too: the tree this would walk may be a host's, and
+ * the reason cleanup is allowed for a detached daemon is that its record proves the process is a
+ * daemon of its own. This is not a bad flag — the flag is fine, the record is the problem — so it
+ * reports as a failed command, like the other ownership refusals.
+ */
+function daemonCleanRefusedForUnprovenOwner(
+  paths: DaemonPaths,
+  record: DaemonStopIdentity['ownership'],
+): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'This daemon record does not prove the process is a daemon of its own, so its retained-runner cleanup cannot be run from here.',
+    {
+      reason: 'daemon-clean-not-detached',
+      stateDir: paths.baseDir,
+      ownership: record,
+      hint: daemonCleanRefusalHint(paths, record),
+    },
+  );
 }
 
 /**
- * What the three provable buckets each get an exact remedy for, this one does not: settling a claim
- * always rests on a proof about its owner, and this record names none. So the warning states only
- * what is known, points at the view that lists these records — the default one, because `--stale`
- * filters records without a decodable owner out — and does not promise a release that would clear
- * them. `device release --stale` refuses every record that names no owner, and the next `open` refuses
- * to overwrite one.
+ * What to do next, which depends on whether a plain `daemon stop` has a route left for this record.
+ * A readable record naming a host or an unfamiliar owner does: that stop asks the running process to
+ * leave and never signals it. A record that cannot be read has none — the same stop refuses it for the
+ * same reason — so its hint names the record repair instead of sending the operator to a second refusal.
  */
-function unattributableClaimWarnings(
-  unattributable: DaemonStopResult['claimsUnattributable'],
-): string[] {
-  if (unattributable.length === 0) return [];
-  const devices = unattributable.map((claim) => claim.deviceId).join(', ');
-  return [
-    `A claim for ${devices} remains whose owner could not be read, so this daemon cannot say whether those devices are free. ` +
-      'No device release route settles it: --stale proves staleness from the recorded owner and refuses records that name none, ' +
-      'and open refuses to overwrite them. Inspect with: agent-device device status.',
-  ];
+function daemonCleanRefusalHint(
+  paths: DaemonPaths,
+  record: DaemonStopIdentity['ownership'],
+): string {
+  if (record === 'unreadable') {
+    return `Nothing was signaled. Check what owns that process, then repair the record: stop it by its own means and remove ${shellQuoteIfNeeded(`${paths.baseDir}/daemon.json`)} so a daemon can register again.`;
+  }
+  if (record === 'embedded') {
+    return 'Stop it without --clean, which drains it through its own close, or let the host that started it close it.';
+  }
+  return 'Stop it without --clean, which asks the running process to leave and reports what it answers.';
 }
 
 function renderDaemonStop(
@@ -147,7 +123,18 @@ function renderDaemonStatus(
     return `The daemon record for ${status.stateDir} is ${status.state === 'invalid' ? 'not a valid record' : 'unreadable'}, so whether a daemon runs there is unknown.`;
   }
   if (status.state === 'stopped') return `No running daemon for ${status.stateDir}.`;
-  const details = [`pid ${status.pid}`, status.version, status.transport].filter(Boolean);
+  const details = [
+    `pid ${status.pid}`,
+    // An embedded pid belongs to a host process, and an unrecognized owner says the record states an
+    // owner this build cannot read; either way, what a stop may do to that pid changes.
+    status.ownership === 'embedded'
+      ? 'host-owned'
+      : status.ownership === 'unknown'
+        ? 'owner-not-recognized'
+        : null,
+    status.version,
+    status.transport,
+  ].filter(Boolean);
   return [
     `Daemon running (${details.join(', ')}) for ${status.stateDir}.`,
     ...(status.plugins.length === 0

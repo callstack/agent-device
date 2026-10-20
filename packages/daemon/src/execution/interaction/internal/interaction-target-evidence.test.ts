@@ -9,7 +9,7 @@ import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { makeAuthoringSession } from '../../../__tests__/support/session-factories.ts';
 import { SessionScriptWriter } from '../../../core/session-script-writer.ts';
 import type { SessionState } from '../../../core/session-state.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { installLegacyCaptureInteractorResolution } from '../../../__tests__/support/legacy-capture-interactor-resolution.ts';
 import { captureAndStoreSnapshot } from '../../../__tests__/support/command-surface-override-fake.ts';
 import {
@@ -203,7 +203,10 @@ function expectDescendantBasedRecording(session: SessionState): void {
 
 function writeSessionScript(session: SessionState): string {
   const root = mkdtempForTestSync('agent-device-press-retarget-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment().cwd,
+  );
   const written = writer.write(session);
   if (!written.written) throw new Error('expected the script to be written');
   return fs.readFileSync(written.path, 'utf8');

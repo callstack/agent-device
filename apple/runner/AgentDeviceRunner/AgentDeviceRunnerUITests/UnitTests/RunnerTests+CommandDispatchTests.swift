@@ -304,50 +304,60 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testSkipAppActivationPreflightIncludesForegroundCachedCoordinateOnlyTaps() throws {
-    app.launch()
-    mainOwned.app = app
-    mainOwned.bundleId = nil
-    defer {
-      mainOwned.app = nil
-      mainOwned.bundleId = nil
-      app.terminate()
-    }
-    let tap = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
-    )
-
-    XCTAssertTrue(shouldSkipAppActivationPreflight(tap))
-  }
-
-  @MainActor
-  func testSkipAppActivationPreflightRejectsMissingChangedAndBackgroundTargets() throws {
+  func testSkipAppActivationPreflightRequiresCachedForegroundCoordinateOnlyTap() throws {
     let coordinateTap = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
     )
+    let scroll = try runnerCommandFixture(
+      #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
+    )
     mainOwned.app = nil
     mainOwned.bundleId = nil
-    XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap))
+    XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap), "a tap needs a cached target")
+    XCTAssertFalse(shouldSkipAppActivationPreflight(scroll), "a scroll needs a cached target")
 
     app.launch()
     mainOwned.app = app
-    mainOwned.bundleId = "com.example.current"
     defer {
       mainOwned.app = nil
       mainOwned.bundleId = nil
       app.terminate()
     }
+    XCTAssertEqual(app.state, .runningForeground)
+    XCTAssertTrue(shouldSkipAppActivationPreflight(coordinateTap))
+
+    let guardedCommands: [(String, String)] = [
+      ("selector tap", #"{"command":"tap","commandId":"selector-tap","selectorKey":"label","selectorValue":"Search","synthesized":true}"#),
+      ("mixed sequence", """
+      {"command":"sequence","commandId":"mixed-sequence","steps":[
+        {"kind":"tap","x":10,"y":20,"synthesized":true},
+        {"kind":"doubleTap","x":30,"y":40}
+      ]}
+      """),
+      ("drag", #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40}"#),
+      ("scroll", #"{"command":"scroll","commandId":"scroll-2","direction":"down","pixels":400}"#),
+      ("sequence", """
+      {"command":"sequence","commandId":"seq-1","steps":[
+        {"kind":"tap","x":10,"y":20,"synthesized":true},
+        {"kind":"longPress","x":10,"y":200,"durationMs":300}
+      ]}
+      """)
+    ]
+    for (name, json) in guardedCommands {
+      let command = try runnerCommandFixture(json)
+      XCTAssertFalse(shouldSkipAppActivationPreflight(command), name)
+    }
+
+    mainOwned.bundleId = "com.example.current"
     let changedBundleTap = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-2","appBundleId":"com.example.other","x":10,"y":20}"#
     )
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(changedBundleTap))
+    XCTAssertFalse(shouldSkipAppActivationPreflight(changedBundleTap), "a different bundle needs activation")
 
     app.terminate()
-    mainOwned.app = app
     mainOwned.bundleId = nil
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap))
+    XCTAssertEqual(app.state, .notRunning)
+    XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap), "a terminated cached target needs activation")
   }
 
   @MainActor
@@ -536,80 +546,6 @@ extension RunnerTests {
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
 
-  @MainActor
-  func testSkipAppActivationPreflightRejectsSelectorAndMixedSequenceGestures() throws {
-    app.launch()
-    mainOwned.app = app
-    mainOwned.bundleId = nil
-    defer {
-      mainOwned.app = nil
-      mainOwned.bundleId = nil
-      app.terminate()
-    }
-    let selectorTap = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-1","selectorKey":"label","selectorValue":"Search","synthesized":true}"#
-    )
-    let standardDrag = try runnerCommandFixture(
-      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40}"#
-    )
-    let mixedSequence = try runnerCommandFixture(
-      """
-      {"command":"sequence","commandId":"seq-1","steps":[
-        {"kind":"tap","x":10,"y":20,"synthesized":true},
-        {"kind":"doubleTap","x":30,"y":40}
-      ]}
-      """
-    )
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(selectorTap))
-    XCTAssertFalse(shouldSkipAppActivationPreflight(standardDrag))
-    XCTAssertFalse(shouldSkipAppActivationPreflight(mixedSequence))
-  }
-
-  // Launches nothing, but still simulator-only: `shouldSkipAppActivationPreflight` is
-  // `#if os(iOS) …guards… #else return false #endif`, so on macOS this asserts a compile-time
-  // literal and no edit to the iOS body could make it red. Its five siblings above and below
-  // are gated for the same reason.
-  @MainActor
-  func testSkipAppActivationPreflightRequiresCachedForegroundTarget() throws {
-    mainOwned.app = nil
-    mainOwned.bundleId = nil
-    let scroll = try runnerCommandFixture(
-      #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
-    )
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(scroll))
-  }
-
-  @MainActor
-  func testSkipAppActivationPreflightKeepsDragScrollAndSequenceOnForegroundGuard() throws {
-    app.launch()
-    mainOwned.app = app
-    mainOwned.bundleId = nil
-    defer {
-      mainOwned.app = nil
-      mainOwned.bundleId = nil
-      app.terminate()
-    }
-    let drag = try runnerCommandFixture(
-      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40}"#
-    )
-    let scroll = try runnerCommandFixture(
-      #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
-    )
-    let sequence = try runnerCommandFixture(
-      """
-      {"command":"sequence","commandId":"seq-1","steps":[
-        {"kind":"tap","x":10,"y":20,"synthesized":true},
-        {"kind":"longPress","x":10,"y":200,"durationMs":300}
-      ]}
-      """
-    )
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(drag))
-    XCTAssertFalse(shouldSkipAppActivationPreflight(scroll))
-    XCTAssertFalse(shouldSkipAppActivationPreflight(sequence))
-  }
 #endif
 
   func testDispatchReturnsBusyBeforeQueueingMainThreadWork() throws {
@@ -706,7 +642,7 @@ extension RunnerTests {
   private func startMacTargetAndLoseTheForeground() throws -> XCUIApplication {
     let target = XCUIApplication(bundleIdentifier: Self.macBackgroundTargetBundleId)
     target.launch()
-    XCTAssertTrue(target.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(target.waitForFixtureExistence(timeout: appExistenceTimeout))
     _ = XCUIApplication(bundleIdentifier: Self.macForegroundStealBundleId).activate()
     XCTAssertTrue(
       target.wait(for: .runningBackground, timeout: 10),

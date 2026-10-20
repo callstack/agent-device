@@ -11,13 +11,16 @@ import {
 } from './gesture-normalization.ts';
 
 test('CLI and .ad positionals normalize at one explicit syntax seam', () => {
-  assert.deepEqual(gesturePayloadFromPositionals(['pan', '10', '20', '30', '-40', '500'], 2), {
-    kind: 'pan',
-    origin: { x: 10, y: 20 },
-    delta: { x: 30, y: -40 },
-    durationMs: 500,
-    pointerCount: 2,
-  });
+  assert.deepEqual(
+    gesturePayloadFromPositionals(['pan', '10', '20', '30', '-40', '500'], { pointerCount: 2 }),
+    {
+      kind: 'pan',
+      origin: { x: 10, y: 20 },
+      delta: { x: 30, y: -40 },
+      durationMs: 500,
+      pointerCount: 2,
+    },
+  );
 });
 
 test('CLI and .ad coordinate swipes normalize at one explicit syntax seam', () => {
@@ -269,4 +272,65 @@ test('multi-touch aliases become constraints on transform motion', () => {
   assert.deepEqual(normalizePublicGesture({ kind: 'rotate', degrees: -45 }), {
     gesture: { intent: 'rotate', origin: undefined, degrees: -45 },
   });
+});
+
+test('gesture tap reads 2 to 5 point pairs and the tap flags', () => {
+  assert.deepEqual(
+    gesturePayloadFromPositionals(['tap', '10', '20', '30', '40', '50', '60'], {
+      holdMs: 40,
+      count: 2,
+      pauseMs: 100,
+    }),
+    {
+      kind: 'tap',
+      points: [
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+        { x: 50, y: 60 },
+      ],
+      holdMs: 40,
+      count: 2,
+      pauseMs: 100,
+    },
+  );
+});
+
+test('gesture tap refuses odd, too few and too many coordinates', () => {
+  const usage = 'gesture tap accepts 4 to 10 arguments: x1 y1 x2 y2 [x3 y3 [x4 y4 [x5 y5]]].';
+  for (const args of [
+    ['10', '20'],
+    ['10', '20', '30', '40', '50'],
+    Array.from({ length: 12 }, (_, index) => String(index * 10)),
+  ]) {
+    assert.throws(() => gesturePayloadFromPositionals(['tap', ...args]), {
+      code: 'INVALID_ARGS',
+      message: usage,
+    });
+  }
+});
+
+test('a recorded tap line keeps only its contacts, and replays to the same payload', () => {
+  const payload = {
+    kind: 'tap' as const,
+    points: [
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ],
+    holdMs: 40,
+    count: 3,
+    pauseMs: 100,
+  };
+  const positionals = gesturePayloadToPositionals(payload);
+  assert.deepEqual(positionals, ['tap', '10', '20', '30', '40']);
+  assert.deepEqual(
+    gesturePayloadFromPositionals(positionals, { holdMs: 40, count: 3, pauseMs: 100 }),
+    payload,
+  );
+});
+
+test('an .ad tap line with an odd coordinate count reports its source', () => {
+  assert.equal(
+    describeReplayGestureArityError('gesture', ['tap', '10', '20', '30'], 'line 4'),
+    'gesture tap accepts 4 to 10 arguments: x1 y1 x2 y2 [x3 y3 [x4 y4 [x5 y5]]] (line 4).',
+  );
 });

@@ -1,6 +1,5 @@
 /**
- * Commands that run OVER a live automation-helper session: snapshot capture and the touch commands
- * that piggyback on it. Session ownership itself — starting, reusing, retiring — belongs to
+ * Commands that run over a live automation-helper session: acquisition, input, and focus reads. Session ownership itself — starting, reusing, retiring — belongs to
  * `snapshot-helper-session-lifecycle.ts`, which this module acquires through.
  */
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
@@ -57,6 +56,7 @@ async function captureFromAndroidSnapshotHelperSession(params: {
       port: session.port,
       commandTimeoutMs: resolved.commandTimeoutMs,
       signal: options.signal,
+      skipIdleWait: options.skipIdleWait && session.commands.has('snapshot-immediate'),
     });
     session.capturedCount += 1;
     return {
@@ -97,11 +97,17 @@ async function captureFromAndroidSnapshotHelperSession(params: {
 // (a second instrumentation for the helper package would force-stop the session that has it). They
 // never start a session: without one, callers use the same helper APK through a one-shot
 // `am instrument` run instead.
-export type AndroidTouchHelperAction = 'gesture' | 'viewport';
+export type AndroidTouchHelperAction =
+  | 'gesture'
+  | 'viewport'
+  | 'input'
+  | 'screenshot'
+  | 'focus'
+  | 'app';
 
 /**
- * Only a gesture injects input, so only its failures say whether input reached the device. Its
- * failure is `unknown` unless the host adb refused the launch: an `ok=false` result carries the
+ * Gestures and input commands mutate the app, so their failures disclose whether input reached it. A
+ * mutation failure is `unknown` unless the host adb refused the launch: an `ok=false` result carries the
  * thrown `errorType` but no count of events injected before the throw, so a parse refusal and a
  * mid-injection failure read alike.
  */
@@ -109,7 +115,7 @@ export function discloseHelperTouchDispatch(
   action: AndroidTouchHelperAction,
   error: unknown,
 ): unknown {
-  if (action !== 'gesture' || !(error instanceof AppError)) return error;
+  if ((action !== 'gesture' && action !== 'input') || !(error instanceof AppError)) return error;
   return discloseDispatch(error, isAdbHostRefusal(error) ? 'no' : 'unknown');
 }
 
@@ -120,7 +126,7 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   payloadBase64?: string;
   timeoutMs: number;
 }): Promise<Record<string, string> | undefined> {
-  const session = getLiveAndroidSnapshotHelperSession(params.deviceKey);
+  const session = await getLiveAndroidSnapshotHelperSession(params.deviceKey);
   if (!session) return undefined;
   if (!matchesSessionHelperIdentity(session.helper, params.helper)) {
     // A different helper binary was selected for this device (e.g. a provider-supplied artifact).
@@ -159,14 +165,14 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   }
   if (headers.ok !== 'true') {
     // The helper ran and reported a structured failure; the session itself stays healthy.
-    throw discloseHelperTouchDispatch(
-      params.action,
-      new AppError(
-        'COMMAND_FAILED',
-        headers.message || headers.errorType || `Android automation helper ${params.action} failed`,
-        { errorType: headers.errorType, helper: headers },
-      ),
+    const failure = new AppError(
+      'COMMAND_FAILED',
+      headers.message || headers.errorType || `Android automation helper ${params.action} failed`,
+      { errorType: headers.errorType, helper: headers },
     );
+    throw params.action === 'input' && headers.injected === 'false'
+      ? discloseDispatch(failure, 'no')
+      : discloseHelperTouchDispatch(params.action, failure);
   }
   return headers;
 }

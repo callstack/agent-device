@@ -1,4 +1,5 @@
 import { loadAndroidMechanics } from '../platform-runtime-android-mechanics.ts';
+import { withSdkHost } from './host.ts';
 
 type ResolveAndroidArchivePackageName =
   typeof import('@agent-device/platform-android/mechanics').resolveAndroidArchivePackageName;
@@ -6,6 +7,8 @@ type ResolveAndroidArchivePackageName =
 export async function resolveAndroidArchivePackageName(
   ...args: Parameters<ResolveAndroidArchivePackageName>
 ): Promise<Awaited<ReturnType<ResolveAndroidArchivePackageName>>> {
-  const { resolveAndroidArchivePackageName: resolve } = await loadAndroidMechanics();
-  return await resolve(...args);
+  return await withSdkHost(async () => {
+    const { resolveAndroidArchivePackageName: resolve } = await loadAndroidMechanics();
+    return await resolve(...args);
+  });
 }

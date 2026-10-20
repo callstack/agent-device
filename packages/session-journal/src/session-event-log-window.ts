@@ -63,7 +63,7 @@ export type SessionEventLogWindow = {
  * `maxBytes` of history after any rotation. A non-integer value is ignored
  * rather than parsed leniently: `5MB` is not 5 bytes.
  */
-export function resolveSessionEventLogMaxBytes(env: NodeJS.ProcessEnv = process.env): number {
+export function resolveSessionEventLogMaxBytes(env: NodeJS.ProcessEnv): number {
   const raw = env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES?.trim();
   if (raw === undefined || !/^\d+$/.test(raw)) return DEFAULT_EVENT_LOG_MAX_BYTES;
   const parsed = Number(raw);

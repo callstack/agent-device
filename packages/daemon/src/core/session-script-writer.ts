@@ -112,9 +112,12 @@ function isPublicationWriteBlocked(session: SessionState): boolean {
 
 export class SessionScriptWriter {
   private readonly sessionsDir: string;
+  /** The runtime host's working directory, the base every recorded script target resolves against. */
+  private readonly hostCwd: string;
 
-  constructor(sessionsDir: string) {
+  constructor(sessionsDir: string, hostCwd: string) {
     this.sessionsDir = sessionsDir;
+    this.hostCwd = hostCwd;
   }
 
   write(session: SessionState, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
@@ -160,7 +163,7 @@ export class SessionScriptWriter {
   private resolveScriptPath(session: SessionState): string {
     const targetPath = scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION);
     if (targetPath) {
-      return expandSessionPath(targetPath, process.cwd());
+      return expandSessionPath(targetPath, this.hostCwd);
     }
     const safeName = safeSessionName(session.name);
     const timestamp = new Date(session.createdAt).toISOString().replaceAll(/[:.]/g, '-');

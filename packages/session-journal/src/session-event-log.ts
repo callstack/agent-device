@@ -64,6 +64,8 @@ export function appendSessionEvent(
   eventLogPath: string,
   sessionName: string,
   event: SessionEventLogInput,
+  /** The runtime host's environment: the source of the active-file rotation cap. */
+  env: NodeJS.ProcessEnv,
 ): void {
   const entry = redactDiagnosticData({
     version: EVENT_LOG_VERSION,
@@ -71,7 +73,7 @@ export function appendSessionEvent(
     session: sessionName,
     ...event,
   } satisfies SessionEventLogEntry);
-  queueEventLogWrite(eventLogPath, `${JSON.stringify(entry)}\n`);
+  queueEventLogWrite(eventLogPath, `${JSON.stringify(entry)}\n`, env);
 }
 
 export async function flushSessionEventLogWrites(eventLogPath?: string): Promise<void> {
@@ -81,13 +83,13 @@ export async function flushSessionEventLogWrites(eventLogPath?: string): Promise
   await pending;
 }
 
-function queueEventLogWrite(eventLogPath: string, line: string): void {
+function queueEventLogWrite(eventLogPath: string, line: string, env: NodeJS.ProcessEnv): void {
   const previous = pendingEventLogWrites.get(eventLogPath) ?? Promise.resolve();
   const pending = previous
     .catch(() => undefined)
     .then(async () => {
       await ensureEventLogDir(eventLogPath);
-      await rotateSessionEventLogIfNeeded(eventLogPath, resolveSessionEventLogMaxBytes());
+      await rotateSessionEventLogIfNeeded(eventLogPath, resolveSessionEventLogMaxBytes(env));
       await fs.promises.appendFile(eventLogPath, line, 'utf8');
     })
     .catch((error) => {
@@ -131,14 +133,20 @@ export function appendActionEvent(
   eventLogPath: string,
   sessionName: string,
   action: SessionAction,
+  env: NodeJS.ProcessEnv,
 ): void {
-  appendSessionEvent(eventLogPath, sessionName, {
-    kind: 'action.recorded',
-    requestId: getDiagnosticsMeta().requestId,
-    command: action.command,
-    summary: buildActionSummary(action),
-    details: buildActionDetails(action),
-  });
+  appendSessionEvent(
+    eventLogPath,
+    sessionName,
+    {
+      kind: 'action.recorded',
+      requestId: getDiagnosticsMeta().requestId,
+      command: action.command,
+      summary: buildActionSummary(action),
+      details: buildActionDetails(action),
+    },
+    env,
+  );
 }
 
 export function buildRequestStartedEvent(params: { req: DaemonRequest }): SessionEventLogInput {

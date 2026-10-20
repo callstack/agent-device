@@ -109,11 +109,16 @@ test.each([
     available: false,
     reason: 'unsupported-platform-leaf',
   });
+  expect(facts.operations.unlockOrientation).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
   expect(facts.operations.tvRemote).toEqual({
     available: false,
     reason: 'unsupported-platform-leaf',
   });
   expect(binding.operations.setOrientation).toBeUndefined();
+  expect(binding.operations.unlockOrientation).toBeUndefined();
   expect(binding.operations.tvRemote).toBeUndefined();
   // Android's live IME status read has no HarmonyOS counterpart.
   expect(facts.operations.keyboardStatus).toEqual({

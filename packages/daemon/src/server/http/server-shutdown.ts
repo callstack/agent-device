@@ -5,17 +5,10 @@ import type {
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import type { DaemonServer } from './transport.ts';
 import { sleep } from '@agent-device/host-kit/retry';
-import { createRequestCancelRuntimeState } from '@agent-device/host-kit/request';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { SessionStore } from '../../core/session-store.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
-import { createProviderDeviceAdmissionRuntimeState } from '../../core/provider-device-admission.ts';
-import { createInteractorResolutionRuntimeState } from '../../core/interactor-resolution.ts';
-import { createArtifactTrackingRuntimeState } from '../../resources/artifact-tracking.ts';
-import { createResumableUploadRuntimeState } from '../resumable-upload.ts';
-import { createMaterializedPathRuntimeState } from '../../sessions/materialized-path-registry.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
 import { runtimeHintValues } from '../../sessions/session-runtime.ts';
@@ -371,40 +364,4 @@ export async function teardownDaemonSessionForShutdown(params: {
   if (teardownSucceeded) await afterSuccessfulTeardown?.(session);
   sessionStore.retire(ref);
   return teardownSucceeded;
-}
-
-export type RuntimeContext = Readonly<{
-  run<T>(fn: () => T): T;
-  /** Adds state the composition contributed and binds it for the rest of the start. */
-  extend(handles: readonly RuntimeStateHandle[]): void;
-  dispose(): void;
-}>;
-
-/** The per-runtime state of every module that keeps some, in the order it is entered. */
-function createDaemonRuntimeStates(): RuntimeStateHandle[] {
-  return [
-    createRequestCancelRuntimeState(),
-    createProviderDeviceAdmissionRuntimeState(),
-    createInteractorResolutionRuntimeState(),
-    createArtifactTrackingRuntimeState(),
-    createResumableUploadRuntimeState(),
-    createMaterializedPathRuntimeState(),
-  ];
-}
-
-/** The context one daemon runtime enters: every module's per-runtime state, composed in order. */
-export function createRuntimeContext(): RuntimeContext {
-  const states = createDaemonRuntimeStates();
-  return {
-    run: (fn) => states.reduceRight((next, state) => () => state.run(next), fn)(),
-    extend: (handles) => {
-      for (const handle of handles) {
-        states.push(handle);
-        handle.enter();
-      }
-    },
-    dispose: () => {
-      for (const state of states) state.dispose();
-    },
-  };
 }

@@ -42,6 +42,8 @@ async function withDiagnosticsServer(
         path.join(sessionsDir, safeSessionName(ref.session)),
         ref.requestId,
       ),
+    env: process.env,
+    cwd: process.cwd(),
   });
   try {
     const port = await listenOnLoopback(server);

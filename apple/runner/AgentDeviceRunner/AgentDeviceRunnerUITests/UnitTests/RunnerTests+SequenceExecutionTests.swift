@@ -188,7 +188,7 @@ extension RunnerTests {
       app.terminate()
     }
     let label = app.staticTexts["Agent Device Runner"]
-    XCTAssertTrue(label.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(label.waitForFixtureExistence(timeout: appExistenceTimeout))
     let point = CGPoint(x: label.frame.midX, y: label.frame.midY)
     mainOwned.accessibilityHealth = .unavailable
     let command = try runnerCommandFixture(

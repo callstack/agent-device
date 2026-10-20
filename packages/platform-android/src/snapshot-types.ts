@@ -38,6 +38,7 @@ export type AndroidSnapshotBackendMetadata = {
   maxDepth?: number;
   maxNodes?: number;
   rootPresent?: boolean;
+  cacheInvalidated?: boolean;
   captureMode?: AndroidSnapshotCaptureMode;
   systemSurfaceOnly?: boolean;
   windowCount?: number;

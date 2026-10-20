@@ -1,0 +1,728 @@
+[
+  {
+    "name": "location-while-using",
+    "labels": ["Allow Once", "Allow While Using App", "Don't Allow"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "location-decline",
+    "labels": ["Allow Once", "Allow While Using App", "Don't Allow"],
+    "action": "dismiss",
+    "expected": 2
+  },
+  {
+    "name": "location-while-using-the-app",
+    "labels": ["Only this time", "While using the app", "Deny"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "rank-over-position",
+    "labels": ["OK", "Allow"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "rank-over-position-reversed",
+    "labels": ["Allow", "OK"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "done",
+    "labels": ["Cancel", "Done"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "open",
+    "labels": ["Keep Browsing", "Open"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "keep-browsing",
+    "labels": ["Keep Browsing", "Open"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "confirm-purchase",
+    "labels": ["Not now", "Confirm purchase"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "deny",
+    "labels": ["Deny", "Allow"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "skip",
+    "labels": ["Skip", "Continue"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "duplicate-accept",
+    "labels": ["OK", "OK", "Cancel"],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "duplicate-dismiss",
+    "labels": ["Cancel", "Cancel"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "same-rank-spelling",
+    "labels": ["Don’t Allow", "Don't Allow", "Allow"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "confirm-family-tie",
+    "labels": ["Confirm purchase", "Confirm order"],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "lower-rank-duplicates",
+    "labels": ["OK", "OK", "Allow"],
+    "action": "accept",
+    "expected": 2
+  },
+  {
+    "name": "decline-preference",
+    "labels": ["Skip", "Cancel"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "known-neutral",
+    "labels": ["Learn More", "Details"],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "known-neutral-dismiss",
+    "labels": ["Learn More", "Details"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "localized-dismiss",
+    "labels": ["Demander à l’app de ne pas suivre", "Autoriser le suivi"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "localized-accept",
+    "labels": ["Demander à l’app de ne pas suivre", "Autoriser le suivi"],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "att-accept",
+    "labels": ["Ask App Not to Track", "Allow"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "att-dismiss",
+    "labels": ["Ask App Not to Track", "Allow"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "att-decline-with-neutral",
+    "labels": ["Ask App Not to Track", "Learn More"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-refusal-0",
+    "labels": ["Keep my activity private", "Allow"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "dismiss-refusal-1",
+    "labels": ["Not this time", "Allow Tracking"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "dismiss-refusal-2",
+    "labels": ["More info", "Allow", "OK"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "dismiss-refusal-3",
+    "labels": ["Accept all", "OK"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "dismiss-refusal-4",
+    "labels": ["Agree to Terms", "OK"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "dismiss-refusal-5",
+    "labels": ["I accept", "OK"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "dismiss-refusal-6",
+    "labels": ["Accept terms", "Continue"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "dismiss-refusal-7",
+    "labels": ["Allow"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "dismiss-refusal-8",
+    "labels": ["Allow", "OK"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "dismiss-refusal-9",
+    "labels": ["Yes", "Continue", "Done"],
+    "action": "dismiss",
+    "expected": null
+  },
+  {
+    "name": "lone-tracking-decline",
+    "labels": ["Ask App Not to Track"],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "lone-cancel",
+    "labels": ["Cancel"],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "lone-unknown-accept",
+    "labels": ["Proceed"],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "empty",
+    "labels": [],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "case-and-whitespace",
+    "labels": ["  cancel\n", " ALLOW "],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "curly-apostrophe",
+    "labels": ["Don’t Allow", "Allow"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "popup-marker-single",
+    "labels": ["Close popover"],
+    "action": "dismiss",
+    "expected": null,
+    "xctestPopupMarkerExpected": 0,
+    "xctestPopupMarker": true
+  },
+  {
+    "name": "popup-marker-multiple",
+    "labels": ["Details", "Close popover"],
+    "action": "dismiss",
+    "expected": null,
+    "xctestPopupMarkerExpected": 1,
+    "xctestPopupMarker": true
+  },
+  {
+    "name": "popup-marker-never-accepts",
+    "labels": ["Close popover"],
+    "action": "accept",
+    "expected": null,
+    "xctestPopupMarkerExpected": null,
+    "xctestPopupMarker": true
+  },
+  {
+    "name": "accept-label-allow-all",
+    "labels": ["Cancel", "Allow all"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-always-allow",
+    "labels": ["Cancel", "Always allow"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-allow-all-the-time",
+    "labels": ["Cancel", "Allow all the time"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-allow-notifications",
+    "labels": ["Cancel", "Allow notifications"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-yes",
+    "labels": ["Cancel", "Yes"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-continue",
+    "labels": ["Cancel", "Continue"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-save",
+    "labels": ["Cancel", "Save"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-confirm",
+    "labels": ["Cancel", "Confirm"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-turn-on",
+    "labels": ["Cancel", "Turn on"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-open-settings",
+    "labels": ["Cancel", "Open Settings"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-allow-once",
+    "labels": ["Cancel", "Allow once"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-label-only-this-time",
+    "labels": ["Cancel", "Only this time"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-label-not-now",
+    "labels": ["Allow", "Not now"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-label-no",
+    "labels": ["Allow", "No"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-label-dismiss",
+    "labels": ["Allow", "Dismiss"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-label-close",
+    "labels": ["Allow", "Close"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-label-close-app",
+    "labels": ["Allow", "Close app"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-label-later",
+    "labels": ["Allow", "Later"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "confirm-prefix-established",
+    "labels": ["Cancel", "Confirmation"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "open-is-exact",
+    "labels": ["Cancel", "Open account"],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "done-is-exact",
+    "labels": ["Cancel", "Done later"],
+    "action": "accept",
+    "expected": null
+  },
+  {
+    "name": "accept-adjacent-rank-0",
+    "labels": ["Allow While Using App", "While using the app"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-0-reversed",
+    "labels": ["While using the app", "Allow While Using App"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-1",
+    "labels": ["While using the app", "Allow all"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-1-reversed",
+    "labels": ["Allow all", "While using the app"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-2",
+    "labels": ["Allow all", "Always allow"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-2-reversed",
+    "labels": ["Always allow", "Allow all"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-3",
+    "labels": ["Always allow", "Allow all the time"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-3-reversed",
+    "labels": ["Allow all the time", "Always allow"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-4",
+    "labels": ["Allow all the time", "Allow notifications"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-4-reversed",
+    "labels": ["Allow notifications", "Allow all the time"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-5",
+    "labels": ["Allow notifications", "Allow"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-5-reversed",
+    "labels": ["Allow", "Allow notifications"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-6",
+    "labels": ["Allow", "OK"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-6-reversed",
+    "labels": ["OK", "Allow"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-7",
+    "labels": ["OK", "Yes"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-7-reversed",
+    "labels": ["Yes", "OK"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-8",
+    "labels": ["Yes", "Continue"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-8-reversed",
+    "labels": ["Continue", "Yes"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-9",
+    "labels": ["Continue", "Save"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-9-reversed",
+    "labels": ["Save", "Continue"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-10",
+    "labels": ["Save", "Confirm"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-10-reversed",
+    "labels": ["Confirm", "Save"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-11",
+    "labels": ["Confirm", "Turn on"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-11-reversed",
+    "labels": ["Turn on", "Confirm"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-12",
+    "labels": ["Turn on", "Open Settings"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-12-reversed",
+    "labels": ["Open Settings", "Turn on"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-13",
+    "labels": ["Open Settings", "Done"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-13-reversed",
+    "labels": ["Done", "Open Settings"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-14",
+    "labels": ["Done", "Open"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-14-reversed",
+    "labels": ["Open", "Done"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-15",
+    "labels": ["Open", "Allow once"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-15-reversed",
+    "labels": ["Allow once", "Open"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "accept-adjacent-rank-16",
+    "labels": ["Allow once", "Only this time"],
+    "action": "accept",
+    "expected": 0
+  },
+  {
+    "name": "accept-adjacent-rank-16-reversed",
+    "labels": ["Only this time", "Allow once"],
+    "action": "accept",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-0",
+    "labels": ["Cancel", "Deny"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-0-reversed",
+    "labels": ["Deny", "Cancel"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-1",
+    "labels": ["Deny", "Don't Allow"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-1-reversed",
+    "labels": ["Don't Allow", "Deny"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-2",
+    "labels": ["Don't Allow", "Not now"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-2-reversed",
+    "labels": ["Not now", "Don't Allow"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-3",
+    "labels": ["Not now", "No"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-3-reversed",
+    "labels": ["No", "Not now"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-4",
+    "labels": ["No", "Dismiss"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-4-reversed",
+    "labels": ["Dismiss", "No"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-5",
+    "labels": ["Dismiss", "Close"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-5-reversed",
+    "labels": ["Close", "Dismiss"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-6",
+    "labels": ["Close", "Close app"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-6-reversed",
+    "labels": ["Close app", "Close"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-7",
+    "labels": ["Close app", "Later"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-7-reversed",
+    "labels": ["Later", "Close app"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-8",
+    "labels": ["Later", "Skip"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-8-reversed",
+    "labels": ["Skip", "Later"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-9",
+    "labels": ["Skip", "Ask App Not to Track"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-9-reversed",
+    "labels": ["Ask App Not to Track", "Skip"],
+    "action": "dismiss",
+    "expected": 1
+  },
+  {
+    "name": "dismiss-adjacent-rank-10",
+    "labels": ["Ask App Not to Track", "Keep Browsing"],
+    "action": "dismiss",
+    "expected": 0
+  },
+  {
+    "name": "dismiss-adjacent-rank-10-reversed",
+    "labels": ["Keep Browsing", "Ask App Not to Track"],
+    "action": "dismiss",
+    "expected": 1
+  }
+]

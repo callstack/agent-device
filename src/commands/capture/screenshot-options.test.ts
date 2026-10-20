@@ -151,3 +151,17 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     'screenshotNormalizeStatusBar',
   ]);
 });
+
+test('explicit screenshot stabilization survives SDK projection and script recording', () => {
+  const projected = screenshotFlagsFromOptions({ stabilize: true });
+  assert.deepEqual(screenshotOptionsFromFlags(projected), { stabilize: true });
+  const parts: string[] = [];
+  appendScreenshotScriptFlags(parts, projected);
+  assert.deepEqual(parts, ['--no-stabilize=false']);
+  const recorded: Partial<ScreenshotRequestFlags> = {};
+  assert.deepEqual(readScreenshotScriptFlag({ args: parts, index: 0, flags: recorded }), {
+    handled: true,
+    nextIndex: 0,
+  });
+  assert.deepEqual(screenshotOptionsFromFlags(recorded), { stabilize: true });
+});

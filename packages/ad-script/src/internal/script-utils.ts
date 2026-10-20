@@ -50,8 +50,11 @@ const SWIPE_NUMERIC_FLAG_MAP = new Map<string, 'count' | 'pauseMs'>([
   ['--count', 'count'],
   ['--pause-ms', 'pauseMs'],
 ]);
-const GESTURE_NUMERIC_FLAG_MAP = new Map<string, 'pointerCount'>([
+const GESTURE_NUMERIC_FLAG_MAP = new Map<string, 'pointerCount' | 'holdMs' | 'count' | 'pauseMs'>([
   ['--pointer-count', 'pointerCount'],
+  ['--hold-ms', 'holdMs'],
+  ['--count', 'count'],
+  ['--pause-ms', 'pauseMs'],
 ]);
 
 const TYPING_NUMERIC_FLAG_MAP = new Map<string, 'delayMs'>([['--delay-ms', 'delayMs']]);
@@ -68,6 +71,7 @@ const TYPING_NUMERIC_FLAG_MAP = new Map<string, 'delayMs'>([['--delay-ms', 'dela
  */
 const SCROLL_SCRIPT_FLAG_MAP = new Map<string, ScriptFlagEntry>([
   ['--until', { key: 'until', kind: 'string' }],
+  ['--max-passes', { key: 'maxPasses', kind: 'int' }],
 ]);
 
 /**
@@ -89,7 +93,7 @@ const WAIT_SCRIPT_FLAG_MAP = new Map<string, ScriptFlagEntry>([
 
 /** How one script flag token carries its value. */
 type ScriptFlagEntry = {
-  key: 'until' | 'snapshotRaw' | 'snapshotDepth' | 'snapshotScope';
+  key: 'until' | 'maxPasses' | 'snapshotRaw' | 'snapshotDepth' | 'snapshotScope';
   kind: 'boolean' | 'int' | 'string';
 };
 
@@ -288,6 +292,9 @@ export function appendScriptSeriesFlags(
     if (typeof flags.pointerCount === 'number') {
       parts.push('--pointer-count', String(flags.pointerCount));
     }
+    if (typeof flags.holdMs === 'number') parts.push('--hold-ms', String(flags.holdMs));
+    if (typeof flags.count === 'number') parts.push('--count', String(flags.count));
+    if (typeof flags.pauseMs === 'number') parts.push('--pause-ms', String(flags.pauseMs));
     return;
   }
   if (isTypingCommand(action.command) && typeof flags.delayMs === 'number') {
@@ -384,11 +391,11 @@ export function appendGenericActionScriptArgs(parts: string[], action: SessionAc
   if (action.command === 'fold' && action.flags?.keyframes !== undefined) {
     parts.push('--keyframes', formatScriptArg(action.flags.keyframes));
   }
-  // #3197: `scroll`'s stop condition is part of the step's meaning, so the writer
-  // emits it beside the parser that reads it back. Only `--until` is declared
-  // recorded, so only `--until` can arrive here on a recorded action.
   if (action.command === 'scroll' && typeof action.flags?.until === 'string') {
     parts.push('--until', formatScriptArg(action.flags.until));
+  }
+  if (action.command === 'scroll' && typeof action.flags?.maxPasses === 'number') {
+    parts.push('--max-passes', String(action.flags.maxPasses));
   }
   if (action.command === 'wait') {
     appendWaitSnapshotScriptFlags(parts, action.flags);

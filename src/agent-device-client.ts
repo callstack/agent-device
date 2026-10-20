@@ -16,6 +16,7 @@ import type {
   CaptureScreenshotResult,
   CaptureSnapshotOptions,
   CaptureSnapshotResult,
+  DaemonBinding,
   DaemonLifecycle,
   DragOptions,
   FlingOptions,
@@ -26,6 +27,7 @@ import type {
   SessionSaveScriptOptions,
   SessionSaveScriptResult,
   SwipeGestureOptions,
+  TapGestureOptions,
   TransformGestureOptions,
 } from '@agent-device/contracts/client';
 import type { AgentArtifactsResult } from '@agent-device/contracts/observability';
@@ -84,6 +86,9 @@ export function createAgentDeviceClient(
   const transport = deps.transport ?? createDaemonTransport(host);
   // A typo in a JSON or JS config must not fall through to the default and manage a daemon.
   readDaemonLifecycle(config.daemonLifecycle);
+  // A pin on one daemon instance is read once, here: every request of this client authenticates with
+  // it, so a value that never validated must never reach a request.
+  const daemonBinding = readDaemonBinding(config.daemonBinding);
   // The dev-server helpers take the client's host explicitly.
   const prepareMetroRuntime = (input: Parameters<typeof devServer.prepareMetroRuntime>[0]) =>
     devServer.prepareMetroRuntime(input, host);
@@ -144,6 +149,7 @@ export function createAgentDeviceClient(
           authToken: merged.daemonAuthToken,
           signal: merged.signal,
           daemonLifecycle: merged.daemonLifecycle,
+          ...(daemonBinding ? { daemonBinding } : {}),
         }),
     );
     if (!response.ok) {
@@ -162,7 +168,7 @@ export function createAgentDeviceClient(
     command: DaemonCommandName,
     options: InternalRequestOptions = {},
   ): Promise<T> => {
-    const request = await prepareDaemonCommandRequest(command, options);
+    const request = await prepareDaemonCommandRequest(command, options, host);
     return (await execute(
       request.command,
       request.positionals,
@@ -222,6 +228,9 @@ export function createAgentDeviceClient(
         return {
           device: normalizeDevice(data.device),
           availableCommands,
+          ...(asOptionalRecord(data.targetReadiness)?.press === 'bounded-geometry'
+            ? { targetReadiness: { press: 'bounded-geometry' as const } }
+            : {}),
         };
       },
       boot: async (options = {}) => await executeCommand<CommandResult<'boot'>>('boot', options),
@@ -463,6 +472,7 @@ export function createAgentDeviceClient(
         await executeCommand('gesture', centeredGestureInput('rotate', options)),
       transformGesture: async (options) =>
         await executeCommand('gesture', transformGestureInput(options)),
+      tapGesture: async (options) => await executeCommand('gesture', tapGestureInput(options)),
       get: async (options) => await executeCommand('get', options),
       is: async (options) => await executeCommand('is', options),
       find: async (options) => await executeCommand('find', options),
@@ -543,6 +553,12 @@ function transformGestureInput(
   return { ...common, kind: 'transform', origin: { x, y }, delta: { x: dx, y: dy } };
 }
 
+function tapGestureInput(
+  options: TapGestureOptions,
+): InternalRequestOptions & Record<string, unknown> {
+  return { ...options, kind: 'tap' };
+}
+
 function assertCompleteGestureCenter(
   x: number | undefined,
   y: number | undefined,
@@ -617,6 +633,40 @@ function readDaemonLifecycle(value: unknown): DaemonLifecycle | undefined {
   if (value === undefined || value === 'attach' || value === 'managed') return value;
   throw new AppError('INVALID_ARGS', "daemonLifecycle must be 'attach' or 'managed'.", {
     daemonLifecycle: value,
+  });
+}
+
+/**
+ * Validates a pin on one daemon instance where a client config is read, so a malformed pin cannot
+ * become a request that silently addresses a different instance.
+ *
+ * `processStartTime` is required rather than optional: a pin that names only a pid cannot tell a
+ * process lifetime from the process that recycled its number, which is the mistake the pin exists to
+ * refuse.
+ */
+function readDaemonBinding(value: unknown): DaemonBinding | undefined {
+  if (value === undefined) return undefined;
+  const record =
+    typeof value === 'object' && value !== null ? (value as Partial<DaemonBinding>) : undefined;
+  const token = record?.token;
+  if (typeof token !== 'string' || token.length === 0) throw daemonBindingFieldError('token');
+  const pid = record?.pid;
+  if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0) {
+    throw daemonBindingFieldError('pid');
+  }
+  const processStartTime = record?.processStartTime;
+  if (typeof processStartTime !== 'string' || processStartTime.trim().length === 0) {
+    throw daemonBindingFieldError('processStartTime');
+  }
+  return { token, pid, processStartTime };
+}
+
+function daemonBindingFieldError(field: keyof DaemonBinding): AppError {
+  return new AppError('INVALID_ARGS', `daemonBinding is missing or invalid: ${field}.`, {
+    // A pin is a bearer credential, and this detail is echoed by `--json` and by any diagnostics an
+    // embedder writes, so the refusal names the field that failed and never a value.
+    daemonBindingField: field,
+    hint: 'Use the `clientConfig.daemonBinding` a host returned; a pin built by hand needs the daemon token and the pid and process start time its record published.',
   });
 }
 

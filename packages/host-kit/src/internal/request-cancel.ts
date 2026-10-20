@@ -1,15 +1,14 @@
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { defineRuntimeSlots, type RuntimeStateHandle } from '../runtime-slots.ts';
+import { runtimeSlot } from '../runtime-slots.ts';
 
 type RequestCancelState = {
   canceledRequestIds: Set<string>;
   requestAbortControllers: Map<string, AbortController>;
 };
 
-const requestCancelRuntime = defineRuntimeSlots();
 const REQUEST_CANCEL_SLOT = Symbol('requestCancel');
 const requestCancelState = (): RequestCancelState =>
-  requestCancelRuntime.slot(
+  runtimeSlot(
     REQUEST_CANCEL_SLOT,
     (): RequestCancelState => ({
       canceledRequestIds: new Set<string>(),
@@ -21,9 +20,6 @@ const requestCancelState = (): RequestCancelState =>
   );
 const canceledRequestIds = () => requestCancelState().canceledRequestIds;
 const requestAbortControllers = () => requestCancelState().requestAbortControllers;
-
-export const createRequestCancelRuntimeState = (): RuntimeStateHandle =>
-  requestCancelRuntime.createHandle();
 
 export type RequestAbortRegistration = {
   requestId: string;

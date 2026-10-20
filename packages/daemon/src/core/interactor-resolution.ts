@@ -1,4 +1,4 @@
-import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -30,16 +30,11 @@ const NO_INTERACTOR_RESOLUTION: InteractorResolution = {
 
 type InteractorResolutionState = { resolution: InteractorResolution };
 
-const interactorResolutionRuntime = defineRuntimeSlots();
 const INTERACTOR_RESOLUTION_SLOT = Symbol('interactorResolution');
 const interactorResolutionState = (): InteractorResolutionState =>
-  interactorResolutionRuntime.slot(INTERACTOR_RESOLUTION_SLOT, (): InteractorResolutionState => ({
+  runtimeSlot(INTERACTOR_RESOLUTION_SLOT, (): InteractorResolutionState => ({
     resolution: NO_INTERACTOR_RESOLUTION,
   }));
-
-/** The resolution one daemon runtime owns; the runtime installs its composition's into it. */
-export const createInteractorResolutionRuntimeState = (): RuntimeStateHandle =>
-  interactorResolutionRuntime.createHandle();
 
 /**
  * Root composition's installation point, beside the provider-device admission that shares the

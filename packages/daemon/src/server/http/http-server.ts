@@ -75,8 +75,10 @@ export async function createDaemonHttpServer(options: {
   endSessionsForLease?: (leaseId: string) => Promise<void>;
   token?: string;
   retainArtifacts?: boolean;
-  env?: NodeJS.ProcessEnv;
-  cwd?: string;
+  /** The runtime host's environment: read for the auth hook and handed to the download archive. */
+  env: NodeJS.ProcessEnv;
+  /** The runtime host's working directory, the base for resolving the auth hook module. */
+  cwd: string;
   /**
    * Resolves a request diagnostics record path for the `/sessions/.../requests/...`
    * route (#1801). Omitted by embedded servers with no session store; the route
@@ -97,8 +99,8 @@ export async function createDaemonHttpServer(options: {
   const leaseBackends = LEASE_BACKENDS.filter(
     (backend) => backend !== 'macos-app' || process.platform === 'darwin',
   );
-  const environment = options.env ?? process.env;
-  const authHook = await loadHttpAuthHook(environment, options.cwd ?? process.cwd());
+  const environment = options.env;
+  const authHook = await loadHttpAuthHook(environment, options.cwd);
   const {
     handleRequest,
     token,
@@ -159,6 +161,7 @@ export async function createDaemonHttpServer(options: {
         req,
         res,
         retainArtifacts,
+        hostEnv: environment,
         authorize: async (request) =>
           await authorizeAuxiliaryHttpRequest({
             req: request.req,

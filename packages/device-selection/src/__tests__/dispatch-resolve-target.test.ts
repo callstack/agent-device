@@ -5,7 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 
 test('resolveTargetDevice requires platform when target selector is provided', async () => {
   await assert.rejects(
-    () => resolveTargetDevice({ target: 'tv' }),
+    () => resolveTargetDevice({ target: 'tv' }, { env: process.env }),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&

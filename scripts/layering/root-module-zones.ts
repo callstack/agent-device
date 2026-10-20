@@ -18,7 +18,7 @@
  * `src/daemon-client/` root — keep reading the path, not this declaration.
  */
 export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
-  '(root)': ['src/bin.ts', 'src/cli.ts', 'src/daemon.ts'],
+  '(root)': ['src/bin.ts', 'src/cli.ts', 'src/daemon.ts', 'src/host.ts'],
   // Imported by core's interactor resolution, so they sit at core's rank.
   core: ['src/platform-runtime-android-adb-host.ts', 'src/provider-device-runtime.ts'],
   // The in-process command runtime: the local artifact-adapter implementation and the assembly

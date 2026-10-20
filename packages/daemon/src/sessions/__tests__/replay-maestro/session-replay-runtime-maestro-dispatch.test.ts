@@ -5,8 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
-  assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
+  assertDispatchDisclosureDriversMatchRows,
+  createLiveTestHostEnvironment,
   dispatchDisclosureRowsOwnedBy,
   mkdtempForTestSync,
 } from '@agent-device/test-kit';
@@ -206,7 +207,7 @@ test('runReplayCommand reports snapshot diagnostics from per-action session samp
     scriptPath,
     ['snapshot', 'snapshot', 'snapshot', 'snapshot', 'snapshot', ''].join('\n'),
   );
-  const sessionStore = new SessionStore(path.join(root, 'state'));
+  const sessionStore = new SessionStore(path.join(root, 'state'), createLiveTestHostEnvironment());
   sessionStore.publish(
     's',
     makeIosSession('s', {
@@ -270,7 +271,7 @@ test('runReplayCommand reports snapshot diagnostics on replay failure', async ()
     scriptPath,
     ['snapshot', 'snapshot', 'snapshot', 'snapshot', 'click "Missing"', ''].join('\n'),
   );
-  const sessionStore = new SessionStore(path.join(root, 'state'));
+  const sessionStore = new SessionStore(path.join(root, 'state'), createLiveTestHostEnvironment());
   sessionStore.publish(
     's',
     makeIosSession('s', {

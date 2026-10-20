@@ -23,6 +23,8 @@ test('a stale RPC instance is refused after authentication and before command di
       handlerCalls += 1;
       return { ok: true, data: {} };
     },
+    env: process.env,
+    cwd: process.cwd(),
   });
   try {
     const port = await listenOnLoopback(server);

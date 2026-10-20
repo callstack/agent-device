@@ -186,6 +186,7 @@ export {
   pressAndroidTvRemote,
   scrollAndroid,
   setAndroidOrientation,
+  unlockAndroidOrientation,
 } from './input-actions.ts';
 export {
   prepareAndroidInstallArtifact,

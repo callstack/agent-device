@@ -131,10 +131,10 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
 
     let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(textField.waitForFixtureExistence(timeout: appExistenceTimeout))
     let tapCommand = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-disappearing-input","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
     )
@@ -223,6 +223,48 @@ extension RunnerTests {
     let response = executeTypeCommand(
       activeApp: app,
       command: try fillCommandFixture(commandId: "fill-replaced-input", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(textField.exists)
+    let nextScreenField = app.textFields["agent-device-auto-submit-next-screen-input"]
+    XCTAssertTrue(nextScreenField.exists)
+    XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
+  }
+
+  @MainActor
+  func testFillFailsWhenAppRemovesMaskedInputBeforeTextIsDelivered() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-masked-value",
+      "--agent-device-text-entry-disappear-after-input"
+    )
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-disappearing-masked-input", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(textField.exists)
+    XCTAssertEqual(app.textFields.count, 0)
+  }
+
+  @MainActor
+  func testFillFailsWhenAppReplacesMaskedInputBeforeTextIsDelivered() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-masked-value",
+      "--agent-device-text-entry-replace-after-input"
+    )
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-replaced-masked-input", text: "123456", at: textField)
     )
 
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
@@ -350,10 +392,10 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
 
     let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(textField.waitForFixtureExistence(timeout: appExistenceTimeout))
     let tapCommand = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-soft-keyboard-input","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
     )
@@ -422,11 +464,11 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
     let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(textField.waitForFixtureExistence(timeout: appExistenceTimeout))
     let togglePresses = app.staticTexts["agent-device-masked-toggle-presses"]
-    XCTAssertTrue(togglePresses.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(togglePresses.waitForFixtureExistence(timeout: appExistenceTimeout))
     XCTAssertEqual(togglePresses.label, "presses=0")
     try tapHardwareKeyboardInput(commandId: "tap-masked-input")
 
@@ -464,9 +506,9 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
     let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(textField.waitForFixtureExistence(timeout: appExistenceTimeout))
     XCTAssertFalse(textField.frame.isEmpty)
     return textField
   }
@@ -483,11 +525,11 @@ extension RunnerTests {
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
     }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
     let textField = arguments.contains("--agent-device-text-entry-unnamed-input")
       ? app.textFields.element(boundBy: 0)
       : app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(textField.waitForFixtureExistence(timeout: appExistenceTimeout))
     return textField
   }
 

@@ -39,6 +39,8 @@ test('HTTP request disconnected before response headers cancels the request', as
       markAbortObserved();
       return { ok: true, data: { canceled: signal.aborted } };
     },
+    env: process.env,
+    cwd: process.cwd(),
   });
 
   try {
@@ -82,6 +84,8 @@ test('concurrent HTTP requests reject a duplicate request ID without replacing i
       await firstReleased;
       return { ok: true, data: { survived: !firstSignal.aborted } };
     },
+    env: process.env,
+    cwd: process.cwd(),
   });
 
   try {
@@ -153,6 +157,8 @@ test('disconnecting one HTTP request leaves another request uncanceled', async (
       await survivorReleased;
       return { ok: true, data: { survived: true } };
     },
+    env: process.env,
+    cwd: process.cwd(),
   });
 
   try {

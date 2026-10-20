@@ -12,8 +12,11 @@ import {
   isCommandTimeoutError,
   runCmdSync,
 } from './host.ts';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
+  XCODE_SELECT_LINK_PATH,
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
 } from './apple-runner-platform.ts';
@@ -24,11 +27,23 @@ import {
 } from './runner-phase-budget.ts';
 
 /**
- * Ceiling on the wall clock the whole toolchain fingerprint may spend, across all three
- * probes and their retries, when the owning phase carries no shorter budget: one stalled
- * probe, its warm retry, and the two probes still to run (#2422).
+ * Ceiling on the wall clock the whole toolchain fingerprint may spend, across the cache-key probe,
+ * the three value probes, and their retries, when the owning phase carries no shorter budget: one
+ * stalled probe, its warm retry, and the two probes still to run (#2422). The cache-key probe takes
+ * at most {@link XCODE_SELECT_PROBE_TIMEOUT_MS} of it and half of what the phase has left, so a
+ * stalled `xcode-select` costs a value probe that headroom and nothing more.
  */
 const TOOLCHAIN_FINGERPRINT_BUDGET_MS = 45_000;
+
+/**
+ * Ceiling on one `xcode-select -p` attempt, which the cache key needs only when the host's selection
+ * link cannot be read. `xcode-select -p` answers in tens of milliseconds, so this is headroom rather
+ * than an expected cost, and it stays small enough that a stalled probe cannot take the cold-start
+ * ceiling away from the value probes whose entry it is deciding. A selection this process cannot
+ * resolve leaves the read with no dir to key on.
+ */
+const XCODE_SELECT_PROBE_TIMEOUT_MS = 2_000;
+
 const TOOLCHAIN_PROBE_MAX_BUFFER = 128 * 1024;
 const TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH = 200;
 const TOOLCHAIN_PROBE_HINT =
@@ -55,8 +70,8 @@ type ProbeResult<Value> =
 
 /**
  * The remaining-time and cancellation view the probes consult: one per fingerprint read,
- * so the three probes and their retries share a single budget. A phase with no deadline
- * still gets {@link TOOLCHAIN_FINGERPRINT_BUDGET_MS} as the ceiling.
+ * so the cache-key probe, the three value probes, and their retries share a single budget.
+ * A phase with no deadline still gets {@link TOOLCHAIN_FINGERPRINT_BUDGET_MS} as the ceiling.
  *
  * `spawnSync` cannot be interrupted once it has started, so cancellation is observed
  * between attempts; the per-attempt cap is what bounds how long that takes.
@@ -64,6 +79,13 @@ type ProbeResult<Value> =
 type ToolchainProbeClock = {
   /** Milliseconds the next attempt may block for; 0 once the budget is spent. */
   attemptTimeoutMs(): number;
+  /**
+   * Milliseconds the cache-key probe may block for. Deciding which entry to read is optional
+   * work that precedes the read which answers for it, so it may spend neither more than
+   * {@link XCODE_SELECT_PROBE_TIMEOUT_MS} nor more than half of what that read still needs.
+   * Zero once the budget is spent, which skips the optional probe entirely.
+   */
+  keyProbeTimeoutMs(): number;
   /** Throws the owning request's cancellation error once it has aborted. */
   throwIfCanceled(): void;
 };
@@ -79,6 +101,8 @@ function createToolchainProbeClock(budget: RunnerPhaseBudget | undefined): Toolc
   return {
     attemptTimeoutMs: () =>
       Math.min(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, Math.floor(deadline.remainingMs())),
+    keyProbeTimeoutMs: () =>
+      Math.min(XCODE_SELECT_PROBE_TIMEOUT_MS, Math.floor(deadline.remainingMs() / 2)),
     throwIfCanceled: () => {
       if (budget?.signal?.aborted) {
         throw createRequestCanceledError({ phase: 'apple_toolchain_probe' });
@@ -90,11 +114,13 @@ function createToolchainProbeClock(budget: RunnerPhaseBudget | undefined): Toolc
 // Lazy: createTtlMemo is a host capability, and module evaluation happens
 // before the composition root binds the host. Only a complete, parsed
 // fingerprint is ever memoized, so nothing unavailable can outlive the probe
-// that could not answer. The key carries a client-chosen DEVELOPER_DIR, so an
-// entry expires once no request has used it for TOOLCHAIN_FINGERPRINT_TTL_MS:
-// a dir no client uses any more must not stay for the daemon's lifetime. A hit
-// renews the entry, so a failure report can name the Xcode a decision read for
-// at least TOOLCHAIN_FINGERPRINT_TTL_MS after that read (the default start budget).
+// that could not answer. The key carries the developer dir the read answers for
+// and the identity of the bundle standing in it, so an entry is stale only until
+// its own key stops describing the host's selection, which is what let a daemon
+// serve the Xcode a host had left (#3300). A hit therefore renews the entry, as
+// it did before: an idle entry still goes away after
+// TOOLCHAIN_FINGERPRINT_TTL_MS, which also bounds how long a failure report
+// can name a selection no request is using any more.
 const TOOLCHAIN_FINGERPRINT_TTL_MS = 10 * 60_000;
 let lazyToolchainFingerprintCache: TtlMemo<string, RunnerToolchainFingerprint> | undefined;
 function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint> {
@@ -103,6 +129,48 @@ function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint
     scheduleExpiry: true,
   });
   return lazyToolchainFingerprintCache;
+}
+
+/**
+ * The halves of a key that answered, kept so a report reaches the same entry without resolving,
+ * stating, or spawning anything: a report has no budget to spend and no deadline to answer to.
+ */
+type RecordedSelection = {
+  developerDir: string;
+  bundleIdentity: string | undefined;
+};
+
+// One clock with the fingerprints it points at, and expiry scheduled for the same reason: nothing
+// renews a client dir whose reads stopped, so its record cannot outlive the entry it names.
+let lazyRecordedClients: TtlMemo<string, RecordedSelection> | undefined;
+function lazyRecordedClientSelections(): TtlMemo<string, RecordedSelection> | undefined {
+  lazyRecordedClients ??= createTtlMemo<string, RecordedSelection>({
+    ttlMs: TOOLCHAIN_FINGERPRINT_TTL_MS,
+    scheduleExpiry: true,
+  });
+  return lazyRecordedClients;
+}
+
+/**
+ * What the last default-selection read answered for, which is what a report names when the client
+ * chose no `DEVELOPER_DIR`. A read that threw or could not resolve its selection leaves it alone,
+ * and the entry behind it can expire, so a report that finds nothing names no Xcode.
+ */
+let recordedDefaultSelection: RecordedSelection | undefined;
+
+/**
+ * What each client-named selection answered for, under the exact name that client used. Kept per
+ * name rather than in one slot because a daemon serves clients with different request-scoped
+ * `DEVELOPER_DIR`s at once: one global record would let the last read erase what an earlier client
+ * needs to report on, even though its fingerprint is still cached. It is a memo and not a map, so a
+ * name drops out on the same clock as the entry it points at.
+ */
+function recordedClientSelection(named: string): RecordedSelection | undefined {
+  return lazyRecordedClientSelections()?.get(named);
+}
+
+function rememberRecordedClientSelection(named: string, answered: RecordedSelection): void {
+  lazyRecordedClientSelections()?.set(named, answered);
 }
 
 /**
@@ -116,35 +184,155 @@ export function requireRunnerToolchainFingerprint(
   // Before the cache, not just before the probes: a hit must not hide a cancellation.
   const clock = createToolchainProbeClock(budget);
   clock.throwIfCanceled();
-  const cacheKey = toolchainFingerprintCacheKey(sdkName);
+  const chosenDir = commandDeveloperDir();
+  // Both sources are resolved to the dir they really name, so a client naming a symlinked Xcode and
+  // a daemon reading the selection link land on one entry for one toolchain.
+  const resolvedDir =
+    chosenDir !== undefined
+      ? (resolveRealDeveloperDir(chosenDir) ?? chosenDir)
+      : resolveDefaultDeveloperDir(clock);
+  // A read that cannot tell which Xcode it answers for has no entry to read or write: a shared
+  // unknown key would let one host selection answer for the next, which is the fault here.
+  if (resolvedDir === undefined) return requireFreshRunnerToolchainFingerprint(sdkName, clock);
+  const bundleIdentity = readBundleIdentity(resolvedDir);
+  // The key's two filesystem reads cannot be interrupted, so an owner that aborted while they ran
+  // is answered here rather than by a memo hit: a hit must not hide a cancellation either.
+  clock.throwIfCanceled();
+  const cacheKey = toolchainFingerprintCacheKey(resolvedDir, bundleIdentity, sdkName);
+  const fingerprint = requireMemoizedRunnerToolchainFingerprint(cacheKey, sdkName, clock);
+  const answered = { developerDir: resolvedDir, bundleIdentity };
+  // A report finds its entry by the key this read built, whether the read stored it or hit it, so a
+  // report never has to resolve or stat anything itself.
+  if (chosenDir !== undefined) rememberRecordedClientSelection(chosenDir, answered);
+  else recordedDefaultSelection = answered;
+  return fingerprint;
+}
+
+/**
+ * A cheap identity for the toolchain bundle at `developerDir`, or undefined when it has none to
+ * offer. The dir alone cannot see an update that replaces the bundle in place — an installer or App
+ * Store update at `/Applications/Xcode.app` keeps the path — and a hit renews its entry, so a key
+ * blind to that would keep answering with the fingerprint the update replaced for as long as the
+ * daemon stays busy. The version file `xcodebuild -version` reads is the marker: replacing or
+ * rewriting the bundle moves its inode or mtime, which moves the key, and the entry the old key held
+ * expires once nothing renews it.
+ */
+function readBundleIdentity(developerDir: string): string | undefined {
+  try {
+    const versionFile = fs.statSync(path.join(developerDir, '..', 'version.plist'));
+    return `${versionFile.ino}:${Math.trunc(versionFile.mtimeMs)}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** This key's fingerprint, read from the memo when one answers for it and stored when it does not. */
+function requireMemoizedRunnerToolchainFingerprint(
+  cacheKey: string,
+  sdkName: string,
+  clock: ToolchainProbeClock,
+): RunnerToolchainFingerprint {
   const cached = toolchainFingerprintCache().get(cacheKey);
   if (cached) {
+    // A hit is an entry keyed on both this dir and the identity of the bundle standing in it, so the
+    // toolchain behind the key is still the one in place and the entry renews itself. Only an entry
+    // no request reads expires (#3300).
     toolchainFingerprintCache().set(cacheKey, cached);
     return cached;
   }
+  const fingerprint = requireFreshRunnerToolchainFingerprint(sdkName, clock);
+  toolchainFingerprintCache().set(cacheKey, fingerprint);
+  return fingerprint;
+}
+
+function toolchainFingerprintCacheKey(
+  developerDir: string,
+  bundleIdentity: string | undefined,
+  sdkName: string,
+): string {
+  return `${developerDir}\0${bundleIdentity ?? ''}\0${sdkName}`;
+}
+
+function requireFreshRunnerToolchainFingerprint(
+  sdkName: string,
+  clock: ToolchainProbeClock,
+): RunnerToolchainFingerprint {
   const fingerprint = readRunnerToolchainFingerprint(sdkName, clock);
   if (!fingerprint.ok) throw unavailableToolchainError(fingerprint.failures);
-  toolchainFingerprintCache().set(cacheKey, fingerprint.value);
   return fingerprint.value;
 }
 
 /**
- * A daemon serves clients that select different Xcodes through `DEVELOPER_DIR`, so a fingerprint
- * read under one developer dir answers only for that dir. An empty dir means xcode-select's.
+ * The dir the host's default selection points at, symlinks followed. The selection link is read
+ * first because the memo needs its key on every hit and not only on a miss, and spawning
+ * `xcode-select` costs a few milliseconds on a warm read. A link this process cannot read falls back
+ * to `xcode-select -p`, and a selection neither can name leaves the read with no key at all.
  */
-function toolchainFingerprintCacheKey(sdkName: string): string {
-  return `${commandDeveloperDir() ?? ''}\0${sdkName}`;
+function resolveDefaultDeveloperDir(clock: ToolchainProbeClock): string | undefined {
+  const selectedLink = resolveRealDeveloperDir(XCODE_SELECT_LINK_PATH);
+  if (selectedLink) return selectedLink;
+  const reported = probeSelectedDeveloperDir(clock);
+  if (reported === undefined) return undefined;
+  // A selection the host names but this process cannot follow is still that host's selection, so it
+  // keys on the name. Keying on nothing instead would let one host answer for the next.
+  return resolveRealDeveloperDir(reported) ?? reported;
+}
+
+/**
+ * The dir `candidate` really names, or undefined when nothing is there to name. `realpath` rather
+ * than the link's raw target because a tool like xcodes swaps the Xcode.app bundle behind a stable
+ * path: the raw target survives that swap, so a key built from it would keep answering for the Xcode
+ * the host replaced.
+ */
+function resolveRealDeveloperDir(candidate: string | undefined): string | undefined {
+  if (candidate === undefined) return undefined;
+  try {
+    return fs.realpathSync(candidate.trim()) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The dir `xcode-select` currently selects, or undefined when it will not say. Best effort: a read
+ * that cannot resolve its own entry spends what is left of its budget on the probes that carry the
+ * answer rather than on deciding which answer to keep.
+ */
+function probeSelectedDeveloperDir(clock: ToolchainProbeClock): string | undefined {
+  const timeoutMs = clock.keyProbeTimeoutMs();
+  if (timeoutMs <= 0) return undefined;
+  let selectedDir: string | undefined;
+  try {
+    const output = runCmdSync('xcode-select', ['-p'], {
+      allowFailure: true,
+      timeoutMs,
+      maxBuffer: TOOLCHAIN_PROBE_MAX_BUFFER,
+    });
+    selectedDir = output.exitCode === 0 ? output.stdout.trim() : undefined;
+  } catch {
+    selectedDir = undefined;
+  }
+  // Also covers a request that aborted while `spawnSync` blocked: that is the caller's error, not a
+  // host whose default selection cannot be read.
+  clock.throwIfCanceled();
+  return selectedDir || undefined;
 }
 
 /**
  * The selected Xcode's version as this process's runner cache decision memoized it, for a failure
  * report that names it; undefined when no decision has read the toolchain in the last
- * `TOOLCHAIN_FINGERPRINT_TTL_MS`. Never probes: a report must not wait on the toolchain it
- * describes.
+ * `TOOLCHAIN_FINGERPRINT_TTL_MS`. Reads nothing but the memo: a report has no budget to spend and
+ * must not wait on the toolchain it describes, so it reuses the key a real read already built.
  */
 export function memoizedRunnerXcodeVersion(device: DeviceInfo): string | undefined {
+  const chosenDir = commandDeveloperDir();
+  const answered =
+    chosenDir === undefined ? recordedDefaultSelection : recordedClientSelection(chosenDir);
+  if (answered === undefined) return undefined;
   return toolchainFingerprintCache().get(
     toolchainFingerprintCacheKey(
+      answered.developerDir,
+      answered.bundleIdentity,
       resolveRunnerSdkName(resolveRunnerPlatformName(device), device.kind),
     ),
   )?.xcodeVersion;
@@ -242,7 +430,7 @@ function runToolchainProbeCommand(
   }
 }
 
-/** The one guard site: cancellation and a spent budget both throw here, before any exec. */
+/** The guard for a value probe: cancellation and a spent budget both throw here, before any exec. */
 function attemptToolchainProbe(
   cmd: string,
   args: string[],

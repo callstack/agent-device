@@ -89,9 +89,6 @@ export async function createAndroidSettingsWorld(options?: {
   const apkPath = path.join(tempRoot, 'Demo.apk');
   const aabPath = path.join(tempRoot, 'Demo.aab');
   const logcatProcessPath = createScriptedLogcatExecutable(tempRoot);
-  const previousAppEventTemplate = process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE;
-  process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE =
-    'demo://agent-device/event?name={event}&payload={payload}&platform={platform}';
   fs.writeFileSync(apkPath, 'placeholder apk');
   fs.writeFileSync(aabPath, 'placeholder aab');
   const manifestApkPath = await createAndroidManifestApk(tempRoot, {
@@ -156,6 +153,10 @@ export async function createAndroidSettingsWorld(options?: {
     };
   }
   const daemon = await createProviderScenarioHarness({
+    env: {
+      AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE:
+        'demo://agent-device/event?name={event}&payload={payload}&platform={platform}',
+    },
     androidAdbProvider: () => adbProvider,
     deviceInventoryProvider: async (request) => {
       inventoryRequests.push({ ...request });
@@ -187,7 +188,6 @@ export async function createAndroidSettingsWorld(options?: {
     close: async () => {
       if (closed) return;
       closed = true;
-      restoreEnv('AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE', previousAppEventTemplate);
       hostAdbGuard.restore();
       for (const child of spawnedLogcat) {
         if (!child.killed && typeof child.exitCode !== 'number') child.kill('SIGKILL');

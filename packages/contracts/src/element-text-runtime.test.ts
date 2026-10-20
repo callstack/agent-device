@@ -95,3 +95,28 @@ test('an advertised read with no interactor implementation fails as a contract b
       /advertised readTextAtPoint/.test(error.message),
   );
 });
+
+test('a live text binding forwards the resolved target identity to its owner', async () => {
+  const target = {
+    identifier: 'window-state',
+    bundleId: 'com.example',
+    type: 'android.widget.TextView',
+  };
+  let received: unknown;
+  const runtime = bindElementTextRuntime({
+    device: { platform: 'android' } as DeviceInfo,
+    signal: new AbortController().signal,
+    resolveInteractor: async () =>
+      ({
+        readTextAtPoint: async (_point, options) => {
+          received = options?.target;
+          return 'portrait';
+        },
+      }) as Interactor,
+  });
+  assert.deepEqual(
+    await runtime.readTextAtPoint({ point: { x: 50, y: 50 }, options: { target } }),
+    { status: 'read', text: 'portrait' },
+  );
+  assert.equal(received, target);
+});

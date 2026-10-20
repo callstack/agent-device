@@ -1,0 +1,397 @@
+{
+  "baseCommit": "8a3931a9c4fd8188636b7f5a36d5e56b6b97b038",
+  "app": "dev.e2e.benchmark",
+  "device": "BC54AC11-CD86-4C10-8C4E-5101C773FFEB",
+  "os": "iOS 27.0",
+  "cliVersion": "0.21.25",
+  "sampleFormat": "*MsCsv fields contain comma-separated millisecond observations in execution order. Encoder/resizer groups exclude two warmups; 20 observations remain. Native command groups contain four rounds. Function totals are nested diagnostics and must not be added together.",
+  "nativeProfiles": [
+    {
+      "kind": "fill-empty",
+      "baseMsCsv": "2066.741,2050.742,2041.365,2040.759",
+      "baseFunctionTotals": {
+        "point-query": {
+          "msCsv": "264.767,269.812,263.913,265.903",
+          "callsPerCommand": 1
+        },
+        "resolve": {
+          "msCsv": "206.777,204.873,203.862,209.455",
+          "callsPerCommand": 8
+        },
+        "bind": {
+          "msCsv": "104.37,96.862,107.82400000000001,107.181",
+          "callsPerCommand": 3
+        },
+        "value-read": {
+          "msCsv": "71.103,71.235,70.99600000000001,72.998",
+          "callsPerCommand": 7
+        },
+        "observation": {
+          "msCsv": "71.483,71.462,69.968,73.764",
+          "callsPerCommand": 5
+        }
+      },
+      "headMsCsv": "2131.242,2077.609,2057.501,2059.508",
+      "headFunctionTotals": {
+        "point-query": {
+          "msCsv": "271.827,269.159,274.126,273.848",
+          "callsPerCommand": 1
+        },
+        "resolve": {
+          "msCsv": "227.535,220.37,203.823,211.507",
+          "callsPerCommand": [9, 8, 8, 8]
+        },
+        "bind": {
+          "msCsv": "108.609,109.63499999999999,90.857,97.62899999999999",
+          "callsPerCommand": 3
+        },
+        "value-read": {
+          "msCsv": "71.318,71.461,72.464,74.723",
+          "callsPerCommand": [8, 7, 7, 7]
+        },
+        "observation": {
+          "msCsv": "85.218,80.276,74.65599999999999,77.307",
+          "callsPerCommand": [6, 5, 5, 5]
+        }
+      }
+    },
+    {
+      "kind": "fill-replace",
+      "baseMsCsv": "3371.563,3276.471,3325.195,3350.314",
+      "headMsCsv": "3353.166,3418.703,3289.302,3330.925"
+    },
+    {
+      "kind": "selector-input",
+      "baseMsCsv": "5484.673,5324.559,5453.824,5515.205",
+      "headMsCsv": "672.401,664.799,669.686,658.997"
+    }
+  ],
+  "confirmedReadinessMs": {
+    "base": 4491.554,
+    "head": 27.198
+  },
+  "pngWorkerEncode": [
+    {
+      "version": "base",
+      "width": 402,
+      "height": 874,
+      "samplesMsCsv": "12.010000000000005,10.601500000000016,11.980374999999981,10.434458000000006,10.343000000000018,11.95666700000001,10.297207999999983,10.63945799999999,10.775040999999959,10.625124999999969,12.144124999999974,10.825207999999975,10.216999999999985,10.660040999999978,10.182749999999999,10.095041999999978,12.090582999999981,11.960125000000005,10.180834000000004,11.144583000000011",
+      "encodedBytes": [30267],
+      "allPixelsMatched": true
+    },
+    {
+      "version": "base",
+      "width": 1206,
+      "height": 2622,
+      "samplesMsCsv": "91.19058299999995,89.88745800000004,99.69170799999995,102.13941599999998,89.78066600000011,88.48374999999987,88.60300000000007,88.40029200000004,90.59820800000011,90.77549999999997,90.70720899999992,88.78683399999977,88.21283300000005,93.8455829999998,104.29904099999976,88.46179200000006,88.47429199999988,87.90254200000027,99.25795900000003,88.81541700000025",
+      "encodedBytes": [106219],
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "width": 402,
+      "height": 874,
+      "samplesMsCsv": "3.3733330000000024,4.1597500000000025,3.3055829999999844,4.075332999999972,3.2182909999999936,3.1429170000000113,3.9061659999999847,4.0330000000000155,3.5250000000000057,3.2576670000000263,3.1966670000000192,3.2964170000000195,3.2623749999999916,3.1562079999999924,3.8912920000000213,3.1228749999999934,3.0982079999999996,3.753582999999992,3.0603749999999934,3.7347090000000094",
+      "encodedBytes": [19859],
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "width": 1206,
+      "height": 2622,
+      "samplesMsCsv": "25.54454099999998,24.201542000000018,25.13499999999999,24.029540999999995,25.288792,23.65995799999996,23.975084000000038,23.992124999999987,25.50691699999993,24.100458000000003,23.89995799999997,24.252207999999996,24.073208000000022,23.700667000000067,24.256124999999997,24.16283300000009,24.099958000000015,24.756167000000005,23.721667000000025,24.15429199999994",
+      "encodedBytes": [67169],
+      "allPixelsMatched": true
+    }
+  ],
+  "pixelResampling": [
+    {
+      "version": "base",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 402,
+      "height": 874,
+      "samplesMsCsv": "10.645834000000008,10.754541000000017,10.719667000000015,10.73195899999999,11.701999999999998,10.671458999999999,10.754333000000003,10.690458000000007,10.712499999999977,11.648750000000007,10.836500000000001,10.872250000000008,10.825040999999999,10.874249999999961,10.855457999999999,10.839875000000006,10.808875,10.891209000000003,10.344708999999966,10.426750000000027",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "base",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 603,
+      "height": 1311,
+      "samplesMsCsv": "13.956041999999968,13.422500000000014,13.381541000000027,13.439999999999998,13.331249999999955,13.306167000000016,13.336792000000003,13.396374999999978,13.385499999999979,13.338415999999995,13.48849999999993,17.838082999999983,13.826374999999985,19.77283399999999,18.634500000000003,14.138666999999941,13.029457999999977,13.000667000000021,12.956166999999937,13.874957999999992",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "base",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 481,
+      "height": 1047,
+      "samplesMsCsv": "28.395457999999962,15.232790999999906,14.916166999999973,15.015374999999949,15.075917000000004,14.843375000000037,14.974959000000013,15.555374999999913,15.247041999999965,15.134915999999976,14.951625000000035,15.244875000000093,15.056375000000003,14.940500000000043,14.96550000000002,14.93500000000006,14.97787500000004,15.099166999999966,15.245541999999887,15.083208000000013",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 402,
+      "height": 874,
+      "samplesMsCsv": "8.181874999999991,8.226666999999992,8.267959000000019,8.244875000000008,8.217290999999989,8.237458000000004,8.208416,8.221708000000007,8.196499999999986,8.184708,8.16187499999998,8.293457999999987,7.954958000000005,8.101292,8.121792,8.195792000000012,8.171582999999998,8.162624999999991,8.298959000000025,8.246583999999984",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 603,
+      "height": 1311,
+      "samplesMsCsv": "10.862500000000011,10.82858299999998,10.756416999999999,10.824124999999981,11.766291000000024,10.885958000000016,11.056332999999995,10.960749999999962,11.162459000000013,14.450249999999983,10.898082999999986,16.793624999999963,16.267709000000025,11.791375000000016,10.841000000000008,10.741917,10.955749999999966,10.673875000000066,10.67658300000005,10.673999999999978",
+      "allPixelsMatched": true
+    },
+    {
+      "version": "head",
+      "sourceWidth": 1206,
+      "sourceHeight": 2622,
+      "width": 481,
+      "height": 1047,
+      "samplesMsCsv": "30.40816600000005,30.201791999999955,16.112209000000007,15.763042000000041,15.746167000000014,15.831542000000013,15.863833,16.56441700000005,15.898209000000065,15.916000000000054,15.898249999999962,15.900083999999993,15.798541,15.841374999999971,15.932042000000024,15.85895800000003,15.886666999999989,15.884457999999995,15.998917000000006,16.473499999999945",
+      "allPixelsMatched": true
+    }
+  ],
+  "checks": {
+    "native": {
+      "base": {
+        "passedTests": 1,
+        "failedTests": 1,
+        "skippedTests": 0,
+        "failure": "Confirmed readiness exceeded its window: 4491.554 ms versus 2000 ms. The upstream profiling scenario passed."
+      },
+      "head": {
+        "passedTests": 9,
+        "failedTests": 0,
+        "skippedTests": 0
+      },
+      "final": {
+        "passedTests": 22,
+        "failedTests": 0,
+        "skippedTests": 0
+      }
+    },
+    "pngFocusedTests": {
+      "passed": 26,
+      "failed": 0
+    },
+    "fractionalWeightMutation": {
+      "controlPassed": 3,
+      "mutantPassed": 2,
+      "mutantFailed": 1,
+      "reason": "Forcing whole-pixel weights on fractional geometry changed the independent expected RGBA averages."
+    },
+    "liveSourceCapture": [
+      {
+        "density": 1,
+        "width": 402,
+        "height": 874,
+        "bytes": 41182,
+        "facts": {
+          "displayRotation": "portrait"
+        },
+        "ok": true
+      },
+      {
+        "density": 1.25,
+        "width": 503,
+        "height": 1093,
+        "bytes": 66395,
+        "facts": {
+          "displayRotation": "portrait"
+        },
+        "ok": true
+      },
+      {
+        "density": 3,
+        "width": 1206,
+        "height": 2622,
+        "bytes": 186073,
+        "facts": {
+          "displayRotation": "portrait"
+        },
+        "ok": true
+      }
+    ],
+    "ordinaryCliSmoke": {
+      "rounds": 2,
+      "successfulOperations": 12,
+      "allFillsAndAppendsReadBack": true,
+      "nativeArtifact": "/private/tmp/agent-device-other-final-ios"
+    },
+    "maestro": {
+      "focusedFlow": {
+        "success": true,
+        "replayed": 4,
+        "setup": "Navigate to Login Form with ordinary CLI first; the flow asserts the input, taps it, types, and asserts its value.",
+        "dispatchEvidence": "maestro_tap_dispatch kind=selector, selectorKey=id, expectedPoint=(201,454)",
+        "flow": "appId: dev.e2e.benchmark\n---\n- assertVisible:\n    id: email-input\n- tapOn:\n    id: email-input\n- inputText: readiness@example.test\n- assertVisible: readiness@example.test\n"
+      },
+      "fullNavigationAttempt": {
+        "success": false,
+        "failedStep": 4,
+        "reason": "assertVisible email-input failed after home-row navigation reached Sticky Chrome Target; input readiness was not exercised. Cause not established; no baseline comparison.",
+        "flow": "appId: dev.e2e.benchmark\n---\n- launchApp:\n    clearState: false\n- assertVisible:\n    id: Login Form\n- tapOn:\n    id: Login Form\n- assertVisible:\n    id: email-input\n- tapOn:\n    id: email-input\n- inputText: readiness@example.test\n- assertVisible: readiness@example.test\n"
+      }
+    }
+  },
+  "reproduction": {
+    "setup": "Prepare separate baseCommit and candidate checkouts with pnpm install --frozen-lockfile && pnpm build. Build each iOS artifact with AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 and its own AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH. Apply instrumentationPatch and use profileTestsSwift as UnitTests/RunnerTests+TextEntryLatencyTests.swift for the manual native profile; adapt the readiness-helper hunk to its renamed function on the candidate. Run sequentially without competing builds/tests. The uninstrumented final selection is recorded separately.",
+    "nativeTests": "testConfirmedInputReadinessReturnsBeforeItsReadinessWindow; testProfileUpstreamForm",
+    "nativeFinalCommand": "#!/bin/sh\nset -eu\nxcodebuild test-without-building -xctestrun /private/tmp/agent-device-other-final-ios/Build/Products/AgentDeviceRunner_AgentDeviceRunnerUITests_iphonesimulator27.1-arm64.xctestrun -destination 'platform=iOS Simulator,id=BC54AC11-CD86-4C10-8C4E-5101C773FFEB' -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedFirstResponderTypeAdmitsOnlyTheBareSubmitKeyAfterAHiddenKeyboardTap -only-testing:AgentDeviceRunnerUITests/RunnerTests/testWarmupWaitsForPendingTextButNotAnUnreadableValue -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextValueReadOwnsTheUnreadableRule -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypePlanPeelsAWarmupCharacterAndChargesItsReadBack -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillFailsWhenAppRemovesInputBeforeTextIsDelivered -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillFailsWhenAppReplacesInputBeforeTextIsDelivered -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillSucceedsWhenAppReplacesInputAfterLastCharacter -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillSucceedsWhenAppRemovesInputAfterLastCharacter -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillWithAppWriteBackFailsWithoutRetyping -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillIntoMaskedTextFieldIsUnverifiedRatherThanAMismatch -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyUsesSynthesizedFirstResponderAfterHiddenKeyboardTap -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareSubmitKeyRefusesWhenPrivateSynthesisIsUnavailable -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedReplacementPacesAnAppOwnedFieldAtItsAcknowledgeWindow -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillThatClearsOnSubmitIsUnverifiedAndSubmitsOnce -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillIntoTemplateCurrencyFieldReportsUnconfirmedWithoutRetyping -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFillVerifiesAnUnidentifiedFieldThatMovesWhileTyping -only-testing:AgentDeviceRunnerUITests/RunnerTests/testConfirmedInputReadinessReturnsBeforeItsReadinessWindow -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSelectorTapOnInputThatLeavesTheTreeOnFocusRecordsNoFailure -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapOnInputThatLeavesTheTreeOnFocusReportsTapped -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateFillOnInputThatLeavesTheTreeOnFocusFailsTypedAndRecordsNothing -resultBundlePath /private/tmp/agent-device-other-final-tests.xcresult\n",
+    "profileTestsSwift": "import XCTest\n\nextension RunnerTests {\n#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)\n  @MainActor\n  func testConfirmedInputReadinessReturnsBeforeItsReadinessWindow() throws {\n    app.launchArguments = [\"--agent-device-text-entry-regression\"]\n    app.launch()\n    defer { invalidateCachedTarget(reason: \"unit_test_cleanup\"); app.terminate() }\n    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))\n    let field = app.textFields[\"agent-device-hardware-keyboard-input\"]\n    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))\n    field.tap()\n    XCTAssertTrue(keyboardFocusConfirmed(app: app, element: field))\n    let failures = currentXCTestFailureCount()\n    let startedAt = Date()\n    waitForTextEntryReadinessAfterTap(app: app, element: field)\n    let elapsed = Date().timeIntervalSince(startedAt)\n    NSLog(\"OTHER_PATHS_READINESS durationMs=%.3f\", elapsed * 1000)\n    XCTAssertFalse(didRecordXCTestFailure(since: failures))\n    XCTAssertTrue(keyboardFocusConfirmed(app: app, element: field))\n    XCTAssertLessThan(elapsed, TextEntryTiming.readinessTimeout)\n  }\n\n  @MainActor\n  func testProfileUpstreamForm() throws {\n    let benchmark = XCUIApplication(bundleIdentifier: \"dev.e2e.benchmark\")\n    benchmark.launch()\n    defer { invalidateCachedTarget(reason: \"unit_test_cleanup\"); benchmark.terminate() }\n    XCTAssertTrue(benchmark.waitForExistence(timeout: appExistenceTimeout))\n    let row = benchmark.descendants(matching: .any).matching(identifier: \"Login Form\").firstMatch\n    guard row.waitForExistence(timeout: appExistenceTimeout) else {\n      XCTFail(\"home row missing: \\(benchmark.debugDescription)\")\n      return\n    }\n    row.tap()\n    let field = benchmark.textFields[\"email-input\"]\n    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))\n    mainOwned.app = benchmark\n    mainOwned.bundleId = \"dev.e2e.benchmark\"\n    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: benchmark))\n    clearSnapshotXCTestChannelPenalty(reason: \"profile-baseline\")\n    func fill(_ text: String, kind: String, round: Int) throws {\n      let frame = field.frame\n      let command = try JSONDecoder().decode(Command.self, from: JSONSerialization.data(withJSONObject: [\n        \"command\": \"type\", \"commandId\": \"profile-\\(kind)-\\(round)\", \"text\": text,\n        \"textEntryMode\": \"replace\", \"x\": frame.midX, \"y\": frame.midY,\n      ]))\n      let startedAt = Date()\n      let response = try executeOnMainPrepared(command: command, activeApp: benchmark)\n      let elapsed = Date().timeIntervalSince(startedAt) * 1000\n      XCTAssertTrue(response.ok, String(describing: response.error))\n      XCTAssertEqual(field.value as? String, text.isEmpty ? \"Email\" : text)\n      NSLog(\"OTHER_PATHS_BENCH kind=%@ round=%d durationMs=%.3f\", kind, round, elapsed)\n    }\n    for round in 0..<4 {\n      try fill(\"\", kind: \"clear\", round: round)\n      try fill(\"user00@example.test\", kind: \"fill-empty\", round: round)\n      try fill(\"next00@example.test\", kind: \"fill-replace\", round: round)\n      let tap = try runnerCommandFixture(\n        #\"{\"command\":\"tap\",\"commandId\":\"profile-selector-input\",\"selectorKey\":\"id\",\"selectorValue\":\"email-input\",\"synthesized\":true}\"#\n      )\n      let startedAt = Date()\n      let tapped = try executeOnMainPrepared(command: tap, activeApp: benchmark)\n      let elapsed = Date().timeIntervalSince(startedAt) * 1000\n      XCTAssertTrue(tapped.ok, String(describing: tapped.error))\n      XCTAssertTrue(keyboardFocusConfirmed(app: benchmark, element: field))\n      XCTAssertEqual(field.value as? String, \"next00@example.test\")\n      NSLog(\"OTHER_PATHS_BENCH kind=selector-input round=%d durationMs=%.3f\", round, elapsed)\n    }\n  }\n#endif\n}\n",
+    "instrumentationPatch": "diff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift\nindex 02b936bda3..326dcd4a58 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntry.swift\n@@ -176,6 +176,8 @@ extension RunnerTests {\n     }\n \n     func withElement(_ nextElement: XCUIElement?) -> TextEntryTarget {\n+      let otherProfileStartedAt = Date()\n+      defer { NSLog(\"OTHER_PATHS_PROFILE phase=bind durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n       guard let nextElement else {\n         return self\n       }\n@@ -286,6 +288,8 @@ extension RunnerTests {\n   /// its bound identity, so every post, read-back, verification poll, and repair refuses an input\n   /// that took the bound one's place.\n   func resolveTextEntryElement(app: XCUIApplication, target: TextEntryTarget) -> XCUIElement? {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=resolve durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     guard let boundIdentity = target.boundIdentity else {\n       return resolveUnboundTextEntryElement(app: app, target: target)\n     }\n@@ -470,6 +474,8 @@ extension RunnerTests {\n     for element: (any XCUIElementAttributes)?,\n     treatingPlaceholderAsEmpty: Bool = false\n   ) -> TextValueRead {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=value-read durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     guard let element else {\n       return .unavailable\n     }\ndiff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryConfirmation.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryConfirmation.swift\nindex b86d46f752..712ea82418 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryConfirmation.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryConfirmation.swift\n@@ -126,6 +126,8 @@ extension RunnerTests {\n   /// Samples the element's readable value with its identity in one accessibility query; nil when\n   /// the element is gone or its value is unreadable (secure fields).\n   func textEntryObservation(for element: XCUIElement?) -> TextEntryObservation? {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=observation durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     guard let element,\n           let snapshot = try? element.snapshot(),\n           let value = editableTextValue(for: snapshot, treatingPlaceholderAsEmpty: true)\ndiff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryReadiness.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryReadiness.swift\nindex d87c3f7cdf..5c54446262 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryReadiness.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextEntryReadiness.swift\n@@ -111,6 +111,8 @@ extension RunnerTests {\n   }\n \n   private func waitForFocusedTextInput(app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=selector-readiness durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     let deadline = Date().addingTimeInterval(timeout)\n     while Date() < deadline {\n       if let focused = focusedTextInput(app: app) {\ndiff --git a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextInputProbe.swift b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextInputProbe.swift\nindex 8b8ff0acc7..c20b28c683 100644\n--- a/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextInputProbe.swift\n+++ b/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+TextInputProbe.swift\n@@ -157,6 +157,8 @@ extension RunnerTests {\n     point: CGPoint,\n     shouldStop: () -> Bool\n   ) -> [XCUIElement] {\n+    let otherProfileStartedAt = Date()\n+    defer { NSLog(\"OTHER_PATHS_PROFILE phase=point-query durationMs=%.3f\", Date().timeIntervalSince(otherProfileStartedAt) * 1000) }\n     var candidates: [XCUIElement] = []\n     for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {\n       if shouldStop() { break }\n",
+    "pngBenchmarkScript": "import fs from 'node:fs';\nimport assert from 'node:assert/strict';\nimport {pathToFileURL} from 'node:url';\nconst [repo,label]=process.argv.slice(2);\nconst {PNG}=await import(pathToFileURL(`${repo}/packages/capture-kit/src/png.ts`));\nconst {encodePngAsync,retainPngWorker,terminatePngWorker}=await import(pathToFileURL(`${repo}/packages/capture-kit/src/png-worker-client.ts`));\nconst failures=[];const release=retainPngWorker(r=>failures.push(r));\nconst outputs=[];\ntry{\n for(const file of [new URL('./baseline-0.png',import.meta.url).pathname,'/private/tmp/e2e-ios-bench/direct/screenshots/001-bench-0.png']){\n  const png=PNG.sync.read(fs.readFileSync(file)),samples=[];\n  for(let i=0;i<22;i++){\n   const started=performance.now();\n   const bytes=await encodePngAsync(png);\n   const ms=performance.now()-started;\n   const actual=PNG.sync.read(bytes);\n   assert.equal(actual.width,png.width);assert.equal(actual.height,png.height);assert.deepEqual(actual.data,png.data);\n   assert.deepEqual(failures,[],'worker unavailable');\n   if(i>=2)samples.push({ms,bytes:bytes.length});\n  }\n  outputs.push({source:file,width:png.width,height:png.height,verifiedPixels:true,samples});\n }\n fs.writeFileSync(new URL(`./png-${label}.json`,import.meta.url),JSON.stringify(outputs,null,2));\n for(const o of outputs){const values=o.samples.map(s=>s.ms).sort((a,b)=>a-b);console.log(label,o.width,o.height,(values[9]+values[10])/2)}\n}finally{await release();await terminatePngWorker()}\n",
+    "resizeBenchmarkScript": "import fs from 'node:fs';\nimport assert from 'node:assert/strict';\nimport {pathToFileURL} from 'node:url';\nconst [root,repo,label]=process.argv.slice(2);\nconst {PNG}=await import(pathToFileURL(`${root}/packages/capture-kit/src/png.ts`));\nconst {resizePngBox:reference}=await import(pathToFileURL(`${root}/packages/capture-kit/src/png-resize.ts`));\nconst {resizePngBox:resize}=await import(pathToFileURL(`${repo}/packages/capture-kit/src/png-resize.ts`));\nconst source=PNG.sync.read(fs.readFileSync('/private/tmp/e2e-ios-bench/direct/screenshots/001-bench-0.png'));\nconst results=[];\nfor(const [width,height] of [[402,874],[603,1311],[481,1047]]){\n const expected=reference(source,width,height),samples=[];\n for(let i=0;i<22;i++){\n  const start=performance.now();const actual=resize(source,width,height);const ms=performance.now()-start;\n  assert.deepEqual(actual.data,expected.data);assert.equal(actual.width,width);assert.equal(actual.height,height);\n  if(i>=2)samples.push(ms);\n }\n const sorted=[...samples].sort((a,b)=>a-b);console.log(label,width,height,(sorted[9]+sorted[10])/2);\n results.push({sourceWidth:source.width,sourceHeight:source.height,width,height,pixelsMatchBaseline:true,samplesMs:samples});\n}\nfs.writeFileSync(new URL(`./resize-${label}.json`,import.meta.url),JSON.stringify(results,null,2));\n",
+    "liveSourceCaptureScript": "import fs from 'node:fs';\nimport assert from 'node:assert/strict';\nimport zlib from 'node:zlib';\nimport {screenshotIos} from '../../packages/platform-apple/src/core/screenshot.ts';\nimport {PNG} from '../../packages/capture-kit/src/png.ts';\nimport {retainPngWorker,terminatePngWorker} from '../../packages/capture-kit/src/png-worker-client.ts';\nconst device={platform:'apple',id:'BC54AC11-CD86-4C10-8C4E-5101C773FFEB',name:'iPhone 17 Pro',kind:'simulator',booted:true};\nconst unavailable=[],release=retainPngWorker(reason=>unavailable.push(reason)),checks=[];\nfunction filters(bytes,width,height){\n const parts=[];\n for(let offset=8;offset+12<=bytes.length;){\n  const length=bytes.readUInt32BE(offset),type=bytes.toString('ascii',offset+4,offset+8);\n  if(type==='IDAT')parts.push(bytes.subarray(offset+8,offset+8+length));offset+=length+12;\n }\n const raw=zlib.inflateSync(Buffer.concat(parts));\n return Array.from({length:height},(_,row)=>raw[row*(width*4+1)]);\n}\ntry{\n for(const [density,width,height] of [[1,402,874],[1.25,503,1093],[3,1206,2622]]){\n  const file=new URL(`./live-png-${density}.png`,import.meta.url).pathname;\n  const facts=await screenshotIos(device,file,{pixelDensity:density,skipIosSimulatorBootCheck:true});\n  const bytes=fs.readFileSync(file),image=PNG.sync.read(bytes);\n  assert.equal(image.width,width);assert.equal(image.height,height);\n  if(density!==3){assert.equal(bytes[25],6);assert(filters(bytes,width,height).every(f=>f===0),'optimized encoder did not produce None-filter rows')}\n  assert.deepEqual(unavailable,[],'PNG worker unavailable');\n  checks.push({density,width,height,bytes:bytes.length,facts,ok:true});\n  console.log('live screenshot',density,width,height,'OK');\n }\n fs.writeFileSync(new URL('./live-png-check.json',import.meta.url),JSON.stringify(checks,null,2));\n}finally{await release();await terminatePngWorker()}\n"
+  },
+  "cliBaselineMsCsv": {
+    "fill-empty": "2300.424166999999,2194.0099999999984,2163.5229580000014,2391.3227499999994",
+    "press-input": "755.0877920000003,847.9926669999986,778.5891249999986,761.586583999997",
+    "fill-replace": "3458.5552499999994,3739.052834000002,3492.720208999999,3464.7624170000054",
+    "type-append": "1369.3470839999973,1408.7641669999975,1352.8812909999979,1360.7457500000019",
+    "snapshot": "256.92995900000096,324.56275000000096,242.77883300000394,258.778250000003",
+    "screenshot": "860.6055419999975,762.8202500000007,763.7697499999995,765.8112079999992"
+  },
+  "daemonBaselineMsCsv": {
+    "snapshot": "995,115,103,94,90,103,102,102,119,124,92,153,93,97,100,100,82,103,102,107,101,101",
+    "screenshot": "703,573,606,609",
+    "screenshotCapture": "428,416,433,429",
+    "screenshotDisplayProbe": "188,95,89,96"
+  },
+  "pixelResamplingDisposition": {
+    "retained": false,
+    "reason": "Approximately 2.5 ms integer gain, fractional slowdown, and cognitive complexity 24 above the gate threshold. Final source retains the original resampler and tests. Resampling samples and mutation evidence describe the isolated rejected candidate only."
+  },
+  "reviewFollowup": {
+    "comment": "https://github.com/callstack/agent-device/pull/3813#issuecomment-6267348410",
+    "sourceCommit": "806dfa9d71fbba4ca70fc640d8b2d99794f3f721",
+    "rebasedCommit": "739ccd617acfd3c4bf2d0306d4e27c260015b92c",
+    "nativeControl": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "mutation": {
+      "edit": "Warmup uses textValueRead(for: activeTarget.element) instead of resolving the bound input.",
+      "passed": 3,
+      "failed": 2,
+      "skipped": 0,
+      "detectedBy": "New masked-removal test and existing readable-removal test record stale-handle XCTest failures; replacement and stable masked cases remain passing."
+    },
+    "initialLaunchFailure": "Runner killed before test bootstrap; reset simulator and control passed. Initial cause remains unproven."
+  },
+  "ciFollowup": {
+    "failedRun": "https://github.com/callstack/agent-device/actions/runs/39261898948/job/118091424006",
+    "failedCommit": "c5cd6fc1698c67f6560d99efc6b3ae55abc45c0e",
+    "failure": "Nine eager-closure assertions failed because png-worker-client statically imported the existing encoder, adding one eager module to consumer closures.",
+    "fixCommit": "1acc564ff0e55c4ef5a86af57e60cca009b78c4a",
+    "fix": "Import encoder inside the async inline callback; worker path unchanged.",
+    "focusedChecks": {
+      "eagerClosurePassed": 851,
+      "pngEncodePassed": 16
+    },
+    "ciStatus": "Focused reproduction passes locally; new GitHub coverage/integration/native/device verdicts remain CI obligations."
+  },
+  "rebaseComparison": {
+    "beforeCommit": "806dfa9d71fbba4ca70fc640d8b2d99794f3f721",
+    "afterCommit": "1acc564ff0e55c4ef5a86af57e60cca009b78c4a",
+    "mainCommit": "b5f47e7542e274fc84a193c4e111e6c73ac3b1f3",
+    "mergedDaemonPrs": [3806, 3797],
+    "rebaseProof": "All five patches match in range-diff; apple and capture-kit contents match before/after rebase. The subsequent CI fix only makes the inline encoder import lazy.",
+    "nativeArtifact": "/private/tmp/agent-device-review-masked-ios",
+    "method": "Separate frozen-lockfile builds and source daemons. Device runs use the same T3 0.21.25 CLI, required host config/session flags, and explicit URL/token overrides to each isolated source HTTP daemon. CLI snapshots independently verify fill/append values. Four ordinary rounds and three two-step Maestro flow samples per revision. Raw/SDK runs execute A-B-A-B, each with ten warmups then 100 alternating samples. Final PNG runs execute sequentially, with two warmups then 20 samples; every decoded RGBA byte matches. Native sources are unchanged across rebase.",
+    "limitations": "Small device sample; host variation is visible and does not establish statistical equivalence or a new speedup. SDK overhead includes fresh process probes. Maestro numbers include assert-visible and tap, not just the native operation. Startup/stop are outside the timed rows.",
+    "deviceSamplesMsCsv": {
+      "before": {
+        "fill-empty": "3024.5131249999977,2382.011249999996,2423.5439169999954,2509.325250000009",
+        "press-input": "839.9828340000022,817.5408329999991,810.8409580000007,844.1944579999981",
+        "fill-replace": "3735.2797500000015,3671.842209000002,3785.246459000002,5270.658542000005",
+        "type-append": "1550.1773749999993,1571.9665840000016,1566.8867909999972,1760.8505420000001",
+        "snapshot": "318.9605420000007,320.7264159999977,326.85425000000396,594.5730410000106",
+        "screenshot": "1168.567084000002,751.7764590000006,769.4133750000037,1035.1441249999916"
+      },
+      "before-selector": {
+        "maestro-selector-tap": "1434.7125419999975,1413.0751659999987,1008.3666249999987"
+      },
+      "after": {
+        "fill-empty": "2529.267291,2420.7733329999974,2458.8585840000014,2437.8580839999995",
+        "press-input": "811.739207999999,815.7506659999999,827.5110419999983,816.4030420000054",
+        "fill-replace": "3689.930207999998,3745.427334,3684.5869170000005,3751.161832999991",
+        "type-append": "1628.9160420000007,1611.5967919999966,1532.6841669999994,1615.1943329999922",
+        "snapshot": "334.7584169999973,323.7129169999971,321.82362500000454,351.4795000000013",
+        "screenshot": "1081.101042000002,731.9602919999961,789.330833,746.3113339999982",
+        "maestro-selector-tap": "1228.5660409999982,1261.8139999999985,1258.534375000003"
+      }
+    },
+    "daemonRuns": [
+      {
+        "label": "before-isolated",
+        "sdkMsCsv": "5.9330830000000105,5.925292000000013,5.860541000000012,5.847082999999998,5.952417000000025,5.880292000000054,5.926458000000025,5.8261249999999905,5.729541999999981,5.780624999999986,5.648458000000005,5.817917000000023,5.570290999999997,6.353625000000022,5.823249999999973,6.019541999999944,5.524458000000038,5.547874999999976,5.621167000000014,5.6107920000000036,5.967166999999961,5.443874999999991,5.775958000000003,5.568624999999997,5.4529999999999745,5.642916000000014,5.517583000000002,5.618416000000025,5.404042000000004,6.0424580000000105,5.551541000000043,5.651875000000018,5.453708000000006,5.708167000000003,5.689375000000041,5.383833000000095,6.119040999999925,5.5642500000000155,5.474667000000068,5.6779169999999795,5.53287499999999,5.408124999999927,5.635125000000016,5.5141250000000355,5.551792000000091,5.441083000000049,5.442290999999955,5.501833999999917,5.348541999999952,5.459374999999909,5.4072909999999865,5.292791999999963,5.396749999999997,5.7395839999999225,5.423875000000066,5.467292000000043,5.434499999999957,6.61262499999998,7.801333,8.456082999999921,6.558457999999973,6.216792000000055,5.865832999999952,6.336915999999974,6.819291000000021,6.904375000000073,7.153958999999986,6.433957999999961,6.377375000000029,7.373333000000002,6.508083000000056,6.515375000000063,6.683125000000018,6.155917000000045,6.171166000000085,6.1083340000000135,7.127582999999959,10.33679200000006,7.102708000000007,6.868959000000018,6.018792000000076,16.267082999999957,5.947709000000032,5.5887500000000045,5.757124999999974,5.702290999999946,5.530708000000004,5.503791000000092,5.390041999999994,5.664582999999993,5.220042000000035,5.482916000000046,7.563499999999976,5.681166999999959,5.511708999999996,5.214542000000051,5.5065830000000915,6.456208000000061,5.572958999999969,5.330625000000055",
+        "rawMsCsv": "0.34575000000000955,0.46283399999998664,0.3300410000000511,0.32724999999999227,0.3217920000000163,0.3326250000000073,0.290916999999979,0.33304199999997763,0.35737499999999045,0.3436669999999822,0.2980000000000018,0.28258399999998574,0.3432080000000042,0.4777910000000247,0.39400000000000546,0.3118339999999762,0.30374999999997954,0.3470829999999978,0.33837500000004184,0.3368340000000103,0.3872920000000022,0.49479199999996126,0.3252499999999827,0.3369589999999789,0.5375839999999812,0.5862500000000068,0.32066599999996015,0.2888749999999618,0.2584160000000111,0.3377500000000282,0.3085409999999911,0.4689579999999296,0.2289580000000342,0.26116700000000037,0.28329200000007404,0.35066699999993034,0.2777089999999589,0.27395799999999326,0.32895799999994324,0.3527910000000247,0.2972499999999627,0.28274999999996453,0.29995899999994435,0.3006669999999758,0.3026249999999209,0.25445799999999963,0.37662499999999,0.30462499999998727,0.26595800000006875,0.2875420000000304,0.2932499999999436,0.26387499999998454,0.3020410000000311,0.35358399999995527,0.2571249999999736,0.34225000000003547,0.2592499999999518,0.44074999999998,0.3976669999999558,0.45166600000004564,0.33029099999998834,0.3446250000000646,0.2907920000000104,0.34912499999995816,0.38408400000002985,0.3546249999999418,0.40391699999997854,0.45458300000007057,0.6021250000000009,0.3349590000000262,0.37991699999997763,0.3644170000000031,0.33558400000003985,0.27804200000002766,0.3534579999999323,0.268291999999974,0.4030830000000378,0.3898750000000746,0.3066669999999476,0.29395800000008876,0.25212500000009186,0.2977080000000569,0.32845899999995254,0.33591599999999744,0.3079579999999851,0.35541699999998855,0.27854200000001583,0.28912500000001273,0.327666000000022,0.2646660000000338,0.2862089999999853,0.32541600000001836,0.3990840000000162,0.3300000000000409,0.3021250000000464,0.2904589999999416,0.36608300000000327,0.3612500000000409,0.29054199999995944,0.306459000000018",
+        "processProbeCount": 111
+      },
+      {
+        "label": "after-isolated",
+        "sdkMsCsv": "8.479375000000005,8.979874999999993,8.2834170000001,10.275416999999948,10.050875000000019,8.92329099999995,9.366916999999944,8.26258299999995,7.673666000000026,8.800583000000074,8.076332999999977,7.069499999999948,6.855458999999996,6.629125000000045,7.9289589999999635,8.079166999999984,7.828167000000008,7.302500000000009,8.828917000000047,8.06508400000007,7.573458000000073,8.102750000000015,7.326917000000094,8.365957999999978,8.475500000000011,7.999125000000049,7.745499999999993,7.618000000000052,7.481875000000059,7.6591660000000275,7.480791999999951,7.640875000000051,7.542208999999957,7.295499999999947,7.176666999999952,7.82283300000006,7.697250000000054,8.295791000000008,7.516499999999951,7.6814999999999145,7.21833300000003,7.274833999999942,7.251666,8.092207999999914,7.044334000000049,8.43545800000004,10.48741700000005,10.029292000000055,7.942375000000084,8.457583,7.550083000000086,7.332499999999982,7.956333000000086,7.544958999999949,8.377792,7.891875000000027,7.377165999999988,9.070166000000086,8.017832999999996,8.266958000000159,7.9759160000000975,8.88145899999995,9.250333999999839,9.04945900000007,7.804708000000119,8.832959000000074,7.523542000000134,9.437959000000092,9.142791999999872,10.47629199999983,10.364957999999888,9.960874999999987,8.162499999999909,7.54445799999985,7.590249999999969,7.6502499999999145,7.81679199999985,7.593792000000121,7.35608400000001,7.596250000000055,7.454874999999902,7.488708999999972,7.347334000000046,7.810249999999996,8.730125000000044,8.289624999999887,9.041791999999987,8.228583000000071,8.064082999999982,8.17941699999983,8.144000000000005,9.566666999999825,8.59329200000002,7.627500000000055,7.189415999999937,7.5273339999998825,8.433291999999938,7.040583000000197,7.368540999999823,9.882832999999891",
+        "rawMsCsv": "0.4673339999999371,0.476291999999944,0.5943750000000136,0.5508750000000191,0.5590419999999767,0.6738330000000587,0.45508399999994253,0.4007080000000087,0.43641700000000583,0.4703339999999798,0.48483299999998053,0.331957999999986,0.35800000000006094,0.445583000000056,0.4794170000000122,0.32216699999992215,0.6396660000000338,0.44620800000006966,0.3342089999999871,0.42791600000009566,0.36779200000000856,0.4777910000000247,0.44470799999999144,0.4491659999999911,0.6180000000000518,0.5445420000000922,0.34779100000002927,0.31787500000007185,0.41308300000002873,0.43945800000005875,0.45691599999997834,0.47337500000003274,0.44650000000001455,0.31883399999992434,0.4555410000000393,0.35512500000004366,0.41087500000003274,0.4237920000000486,0.4651250000000573,0.3136250000000018,0.46087499999998727,0.2530419999999367,0.5064579999999523,0.4120829999999387,0.4428329999999505,0.32695799999999053,0.2536250000000564,0.30275000000006,0.4672920000000431,0.38258300000006784,0.441208999999958,0.41049999999995634,0.4209160000000338,0.455791999999974,0.46708399999999983,0.36783300000001873,0.44879200000002584,0.5054169999999658,0.45908299999996416,0.4139589999999771,0.4625829999999951,0.37141700000006495,0.5729999999998654,0.4183330000000751,0.4599590000000262,0.4715000000001055,0.4257089999998698,0.6570419999998194,0.758542000000034,0.4375,0.8796250000000327,0.41345899999987523,0.32587499999999636,0.44812499999989086,0.6045000000001437,0.5438340000000608,0.39962500000001455,0.38362499999993815,0.4088329999999587,0.4353329999999005,0.3369169999998576,0.3569999999999709,0.443583000000217,0.4791660000000775,0.5390000000002146,0.3752079999999296,0.4194999999999709,0.4177910000000793,0.532416000000012,0.39087500000005093,0.5053330000000642,0.5598750000001473,0.41108299999996234,0.36220800000000963,0.3987080000001697,0.3676660000000993,0.3883339999999862,0.31733299999996234,0.4155839999998534,0.5983750000000327",
+        "processProbeCount": 111
+      },
+      {
+        "label": "before-repeat",
+        "sdkMsCsv": "9.63879200000008,87.53270799999996,11.87337500000001,10.596750000000043,10.324415999999928,11.79358400000001,11.680207999999993,9.726167000000032,12.782832999999982,11.92266600000005,11.931749999999965,12.876541999999972,11.21570799999995,11.825708000000077,14.665166999999997,9.760833000000048,11.678124999999909,11.224749999999972,10.696707999999944,10.814833999999905,10.138041000000044,11.102041999999983,13.953833000000031,10.284166000000027,10.215875000000096,10.17937500000005,11.781834000000003,11.017708000000084,13.181832999999983,11.49854199999993,11.979666000000066,11.41645799999992,10.838459000000057,12.671249999999986,10.81958300000008,11.132041000000072,11.852957999999944,11.435000000000173,10.620083000000022,11.313583999999992,12.94095799999991,12.009874999999965,10.819542000000183,12.350415999999996,14.978792000000112,21.23400000000015,27.160333000000037,18.12133300000005,12.145375000000058,13.697000000000116,12.8247080000001,11.469625000000178,10.21941599999991,12.487041999999974,9.693625000000111,12.279540999999881,13.016791000000012,12.423792000000049,10.122708999999986,12.001167000000123,12.584333000000015,12.685582999999951,10.708208000000013,12.821249999999964,10.629208000000062,13.544667000000118,10.51649999999995,14.622749999999996,12.748874999999998,11.363624999999956,13.376915999999937,96.39833299999987,13.083834000000024,13.656708000000208,9.574832999999899,11.261291999999912,11.324499999999944,12.469667000000072,12.16258300000004,11.542333000000099,10.841625000000022,13.885541999999987,11.090791000000081,13.284250000000156,12.56837500000006,12.167541000000028,15.681375000000116,9.389208000000053,9.716458000000102,12.488291000000117,12.127916999999798,13.306584000000157,11.286207999999988,14.400791000000027,12.649792000000161,11.164582999999993,9.25541700000008,11.77816699999994,13.180041999999958,10.389208000000053",
+        "rawMsCsv": "0.47337500000003274,0.9713339999999562,0.7649999999999864,0.9085410000000138,0.9986250000000609,0.8367499999999382,0.6771659999999429,1.0494170000000622,0.5779579999999669,0.639458999999988,0.6788750000000618,0.7550830000000133,0.5377500000000737,0.6820829999999205,0.8272499999999354,0.6150000000000091,1.1041249999999536,0.5811670000000504,0.9671670000000177,0.4960409999999911,0.5499579999999469,1.3399999999999181,0.5345839999999953,0.6916670000000522,0.6427919999999858,0.7374999999999545,0.7043340000000171,0.4862920000000486,0.708582999999976,0.9996249999999236,0.7920830000000478,0.9081669999999349,0.6159159999999702,0.5104999999999791,0.5106670000000122,0.627666999999974,0.5660000000000309,0.5622080000000551,0.5213330000001406,0.4513750000000982,0.9942909999999756,0.7574580000000424,0.8597919999999704,0.886209000000008,0.9916250000001128,3.31837500000006,6.993457999999919,1.0134590000000117,1.5169999999998254,1.054915999999821,0.6274590000000444,0.8088330000000497,0.7704999999998563,0.7762079999999969,1.005542000000105,1.012666999999965,0.6841669999998885,0.8859999999999673,0.974083999999948,0.5534170000000813,1.090249999999969,0.48366699999996854,0.7147499999998672,0.5027910000001157,0.6750840000001972,0.9933750000000146,0.6186659999998483,1.0387909999999465,0.6672920000000886,0.9756250000000364,0.502875000000131,0.875374999999849,0.7554589999999735,0.9425410000001193,1.1468329999997877,0.4160829999998441,0.6717090000001917,0.6150840000000244,0.48149999999986903,0.6950420000000577,1.0354580000000624,0.7474159999999301,0.6867090000000644,0.9166669999999613,0.6901249999998527,0.4939579999997932,0.4942080000000715,0.4332919999999376,1.984666000000061,0.6839580000000751,0.7772499999998672,0.63149999999996,0.5288339999999607,1.0858750000002146,0.8956250000001091,0.5806249999998272,0.9439159999999447,0.6056249999999181,0.6979160000000775,0.7072499999999309",
+        "processProbeCount": 111
+      },
+      {
+        "label": "after-repeat",
+        "sdkMsCsv": "8.400750000000016,8.472583999999983,8.101458000000036,7.6606669999999895,7.7504579999999805,8.012082999999961,8.863792000000046,10.069792000000007,8.10575,8.497375000000034,9.059708,10.830041999999992,11.169708000000014,8.164999999999964,11.281792000000053,8.02945800000009,9.202125000000024,8.970207999999957,10.225499999999897,9.595667000000049,7.5346250000000055,7.81412499999999,7.917417,8.289457999999968,9.400292000000036,9.583041999999978,8.867999999999938,8.158250000000066,8.024707999999919,8.066374999999994,10.299874999999929,10.476916000000074,9.412709000000063,8.87587499999995,8.345125000000053,8.26724999999999,8.129000000000019,8.157625000000053,8.355542000000014,8.75766699999997,8.088040999999976,8.734290999999985,8.451000000000022,9.130957999999964,9.78616599999998,9.373624999999947,8.744874999999979,8.93441699999994,11.18933299999992,8.395291000000043,8.889332999999965,10.06204200000002,8.13900000000001,7.897458000000029,7.86545799999999,7.660124999999994,7.524457999999981,8.042291999999975,7.5100419999999986,8.461875000000077,8.161292000000003,8.115082999999913,8.036749999999984,9.942749999999933,8.702750000000037,9.84787499999993,11.818125000000009,12.269416999999976,8.504625000000033,8.194250000000011,8.61483300000009,8.093332999999802,8.71183300000007,8.21404100000018,8.108584000000064,7.967541999999867,7.959875000000011,8.167749999999842,7.4724579999999605,8.935833000000002,8.333249999999907,8.114250000000084,8.167916999999989,7.566833999999972,8.211332999999968,9.237875000000031,7.6991669999999885,7.777207999999973,10.28716600000007,9.670666999999867,7.626333000000159,10.704917000000023,8.318915999999945,8.152708000000075,9.283582999999908,7.979374999999891,8.90237500000012,11.302707999999939,10.041334000000006,10.669957999999951",
+        "rawMsCsv": "0.5428329999999733,0.4249590000000012,0.41816699999998264,0.6581250000000409,0.39075000000002547,0.3091670000000022,0.5663749999999936,0.5335840000000189,0.4058329999999728,0.5805000000000291,0.9838330000000042,0.6049580000000105,0.4869589999999562,0.3719169999999963,0.7390000000000327,0.4303340000000162,0.4627500000000282,0.5240000000000009,0.4030410000000302,0.5951250000000528,0.508666000000062,0.3682090000000926,0.47020900000006804,0.38916699999992943,0.4855839999999034,1.2722089999999753,0.39783299999999144,0.3979580000000169,0.2903329999999187,0.5196669999999131,0.7434579999999187,0.8809579999999642,0.5148330000000669,0.41862500000002,0.428957999999966,0.4957919999999376,0.422458000000006,0.47633300000006784,0.3742499999999609,0.41374999999993634,0.5922500000000355,0.46354199999996126,0.5863339999999653,0.47358299999996234,0.42554200000006404,0.6666250000000673,0.40391599999998107,0.6985420000000886,0.3874160000000302,0.46099999999989905,0.5401249999999891,0.47108399999990525,0.41437499999995,0.38583299999993415,0.3901250000000118,0.39525000000003274,0.34645799999998417,0.6324160000000347,0.43650000000002365,0.28775000000007367,0.3734580000000278,0.6042919999999867,0.38991699999996854,0.4639590000000453,0.6704590000000508,0.257082999999966,0.31170799999995324,0.4300829999999678,0.4889580000000251,0.3761669999998958,0.46745800000007875,0.5680829999998878,0.572208000000046,0.2787500000001728,0.39608399999997346,0.37845900000002075,0.5136660000000575,0.4359999999999218,0.8350409999998192,0.4414170000000013,0.4060830000000806,0.4578329999999369,0.44191700000010314,0.30724999999983993,0.41391699999985576,0.4872920000000249,0.3798750000000837,0.31899999999996,0.3017500000000837,0.5082500000000891,0.4098340000000462,0.5994579999999132,0.40887500000008004,0.3388749999999163,0.28491699999995035,0.27800000000002,0.39258399999994253,0.2946669999998903,0.30566700000008495,0.6557090000001153",
+        "processProbeCount": 111
+      }
+    ],
+    "pngWorkerEncode": [
+      {
+        "label": "before",
+        "width": 402,
+        "height": 874,
+        "allPixelsMatched": true,
+        "samplesMsCsv": "3.6581659999999943,3.6094169999999934,3.415666999999999,3.483958000000001,3.710958000000005,3.8032090000000096,3.9359169999999892,3.892291,3.620584000000008,3.7288750000000164,3.6227499999999964,3.939542000000017,3.5367919999999913,3.4845420000000047,3.4392910000000256,3.429333000000014,3.354124999999982,3.559042000000005,3.407958000000008,3.3747499999999775"
+      },
+      {
+        "label": "before",
+        "width": 1206,
+        "height": 2622,
+        "allPixelsMatched": true,
+        "samplesMsCsv": "27.076374999999985,25.415707999999995,25.27108400000003,25.124500000000012,26.354375000000005,24.774249999999938,25.171249999999986,25.295749999999998,26.349790999999982,25.268542000000025,25.28491699999995,25.712041999999997,25.681166000000076,25.45724999999993,25.538874999999962,25.335500000000025,25.533916999999974,25.383499999999913,25.642417000000023,25.87529100000006"
+      },
+      {
+        "label": "after",
+        "width": 402,
+        "height": 874,
+        "allPixelsMatched": true,
+        "samplesMsCsv": "3.577625000000012,3.382417000000004,4.105208000000005,3.374541999999991,3.388750000000016,4.085958000000005,3.381541999999996,4.311874999999986,4.081583999999992,3.3232500000000016,3.59375,4.254750000000001,3.2607909999999833,4.090584000000007,3.1767499999999984,3.9638750000000016,3.9401249999999948,3.473792000000003,3.658208000000002,3.557959000000011"
+      },
+      {
+        "label": "after",
+        "width": 1206,
+        "height": 2622,
+        "allPixelsMatched": true,
+        "samplesMsCsv": "26.152999999999963,25.31520899999998,24.728917000000024,24.543457999999987,25.918582999999956,25.274666000000025,24.430500000000052,24.72316699999999,25.224959000000013,24.951999999999998,24.76262500000007,24.928416999999968,24.620542,25.021833000000015,25.33495800000003,24.79849999999999,24.847624999999994,24.80049999999983,25.044833000000153,24.70341600000006"
+      }
+    ],
+    "deviceBenchmarkScript": "import fs from 'node:fs';\nimport {spawnSync} from 'node:child_process';\nimport {pathToFileURL} from 'node:url';\nimport assert from 'node:assert/strict';\nconst [repo,label]=process.argv.slice(2);\nprocess.env.AGENT_DEVICE_DAEMON_SERVER_MODE='dual';\nconst stateDir=`/private/tmp/agent-device-rebase-device-${label}`;\nconst {createAgentDeviceClient}=await import(pathToFileURL(`${repo}/dist/src/index.js`));\nconst client=createAgentDeviceClient({stateDir,session:'t3-7620f94b8a1f0e7baf3debb3'});\nawait client.sessions.list();\nconst info=JSON.parse(fs.readFileSync(`${stateDir}/daemon.json`,'utf8'));\nassert(info.httpPort,'isolated source HTTP daemon required');\nconst flags=['--platform','ios','--udid','BC54AC11-CD86-4C10-8C4E-5101C773FFEB','--config','/Users/michal/.t3/userdata/device/hosts/25bf8e1a2393f1108d37029b.json','--session','t3-7620f94b8a1f0e7baf3debb3','--daemon-base-url',`http://127.0.0.1:${info.httpPort}`,'--daemon-auth-token',info.token,'--ios-xctestrun-file','/private/tmp/agent-device-review-masked-ios/Build/Products/AgentDeviceRunner_AgentDeviceRunnerUITests_iphonesimulator27.1-arm64.xctestrun','--ios-xctest-derived-data-path','/private/tmp/agent-device-review-masked-ios','--json'];\nconst results=[];\nfunction run(...args){\n const start=performance.now();const p=spawnSync('/Users/michal/.t3/userdata/device/bin/agent-device',[...args,...flags],{encoding:'utf8',timeout:120000});\n const ms=performance.now()-start;let result;try{result=JSON.parse(p.stdout)}catch{throw Error(`Invalid ${args[0]} JSON; exit ${p.status}`)}\n assert.equal(p.status,0,`${args[0]}: ${JSON.stringify(result.error)}`);assert.equal(result.success,true);return {ms,result};\n}\nconst nodes=()=>run('snapshot').result.data.nodes;\nfunction value(expected){assert.equal(nodes().find(n=>n.identifier==='email-input')?.value,expected)}\nfunction record(kind,fn,verify){const sample={kind,...fn(),ok:false};verify(sample);sample.ok=true;results.push(sample);fs.writeFileSync(new URL(`./rebase-device-${label}.json`,import.meta.url),JSON.stringify({repo,sourceSha:spawnSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).stdout.trim(),daemonPid:info.pid,stateDir,results},null,2));console.log(label,kind,sample.ms.toFixed(2),'OK')}\ntry{\n run('open','dev.e2e.benchmark','--relaunch');assert(nodes().some(n=>n.identifier==='Login Form'));run('press','id=\"Login Form\"');assert(nodes().some(n=>n.identifier==='email-input'));\n for(let i=0;i<Number(process.env.PROFILE_ROUNDS??4);i++){\n  run('fill','id=email-input','');const text=`user${String(i).padStart(2,'0')}@example.test`,next=`next${String(i).padStart(2,'0')}@example.test`;\n  record('fill-empty',()=>run('fill','id=email-input',text),()=>value(text));\n  record('press-input',()=>run('press','id=email-input'),()=>value(text));\n  record('fill-replace',()=>run('fill','id=email-input',next),()=>value(next));\n  record('type-append',()=>run('type','abcdefghij'),()=>value(next+'abcdefghij'));\n  record('snapshot',()=>run('snapshot'),s=>assert(s.result.data.nodes.some(n=>n.identifier==='email-input'&&n.value===next+'abcdefghij')));\n  const file=new URL(`./rebase-${label}-${i}.png`,import.meta.url).pathname;\n  record('screenshot',()=>run('screenshot',file),()=>assert(fs.statSync(file).size>0));\n }\n if(process.env.PROFILE_SELECTOR==='1'){\n  run('fill','id=email-input','selector@example.test');\n  for(let i=0;i<3;i++) record('maestro-selector-tap',()=>run('replay',new URL('./selector-tap.yaml',import.meta.url).pathname,'--maestro'),()=>value('selector@example.test'));\n }\n // The CLI must have driven this source daemon, not the daemon in the host config.\n assert(fs.readdirSync(`${stateDir}/sessions`).length>0,'source daemon has no session evidence');\n}finally{\n try{run('close','--shutdown')}finally{const stop=spawnSync(process.execPath,[`${repo}/bin/agent-device.mjs`,'daemon','stop','--state-dir',stateDir],{cwd:repo,encoding:'utf8',timeout:90000});fs.writeFileSync(new URL(`./rebase-stop-${label}.json`,import.meta.url),JSON.stringify({status:stop.status,stdout:stop.stdout,stderr:stop.stderr}));assert.equal(stop.status,0,'source daemon stop failed')}\n}\n",
+    "daemonBenchmarkScript": "import fs from 'node:fs';\nimport net from 'node:net';\nimport childProcess from 'node:child_process';\nimport {syncBuiltinESMExports} from 'node:module';\nconst probes=[];\nfor (const method of ['spawn','spawnSync']) {\n  const original=childProcess[method];\n  childProcess[method]=function(command,args,...rest) {\n    const start=performance.now();\n    const result=original.call(this,command,args,...rest);\n    const record=()=>probes.push({method,command,args:command==='ps'?args:undefined,ms:performance.now()-start});\n    if(method==='spawnSync')record();else result.once('close',record);\n    return result;\n  };\n}\nsyncBuiltinESMExports();\nconst [repo,label]=process.argv.slice(2);\nconst {pathToFileURL}=await import('node:url');\nconst {createAgentDeviceClient}=await import(pathToFileURL(`${repo}/dist/src/index.js`));\nconst stateDir=`/private/tmp/agent-device-rebase-raw-${label}`;\nconst client=createAgentDeviceClient({stateDir,session:'speed',debug:false});\nawait client.sessions.list();\nconst info=JSON.parse(fs.readFileSync(`${stateDir}/daemon.json`,'utf8'));\nconst result={sdk:[],raw:[],probes};\nfunction raw() {\n return new Promise((resolve,reject)=>{\n  let data='';\n  const socket=net.createConnection({host:'127.0.0.1',port:info.port},()=>socket.write(JSON.stringify({token:info.token,command:'session_list',positionals:[],session:'speed',meta:{requestId:crypto.randomUUID()}})+'\\n'));\n  socket.setTimeout(5000,()=>socket.destroy(Error('timeout')));\n  socket.on('data',chunk=>{data+=chunk;if(data.includes('\\n')){socket.destroy();const response=JSON.parse(data.split('\\n')[0]);response.ok?resolve(response):reject(Error(JSON.stringify(response)));}});\n  socket.on('error',reject);\n });\n}\nfor(let i=0;i<110;i++) {\n for(const [name,fn] of [['sdk',()=>client.sessions.list()],['raw',raw]]) {\n  const start=performance.now();await fn();if(i>=10)result[name].push(performance.now()-start);\n }\n}\nfs.writeFileSync(new URL(`./daemon-${label}.json`,import.meta.url),JSON.stringify(result,null,2));\nfor(const key of ['sdk','raw']) {const sorted=result[key].toSorted((a,b)=>a-b);console.log(key,{p50:(sorted[49]+sorted[50])/2,p95:sorted[94],min:sorted[0],max:sorted.at(-1)});}\nconsole.log('probe counts',Object.fromEntries([...new Set(probes.map(p=>p.command))].map(c=>[c,probes.filter(p=>p.command===c).length])));\n\nconst stopped=childProcess.spawnSync(process.execPath,[`${repo}/bin/agent-device.mjs`,'daemon','stop','--state-dir',stateDir],{cwd:repo,encoding:'utf8',timeout:90000});if(stopped.status!==0)throw Error('Own benchmark daemon stop failed');\n",
+    "selectorFlow": "appId: dev.e2e.benchmark\n---\n- assertVisible:\n    id: email-input\n- tapOn:\n    id: email-input\n",
+    "cleanup": "All three source device sessions closed with shutdown; source daemons stopped gracefully; both disposable comparison checkouts removed. Mutant build retired. Root SHA/status preserved through experiments.",
+    "excludedExploratoryRuns": "Earlier daemon/PNG timing batches and the PNG baseline rerun overlapping checkout cleanup are excluded. Only the serial final PNG pair and A-B-A-B daemon runs above support this follow-up."
+  }
+}

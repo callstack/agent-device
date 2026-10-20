@@ -258,7 +258,10 @@ function toDecodedPng(result: { width: number; height: number; data: Uint8Array 
 export async function encodePngAsync(png: PNG): Promise<Buffer> {
   const result = await runPngJob(
     { kind: 'encode', width: png.width, height: png.height, data: png.data },
-    () => ({ kind: 'encode', png: PNG.sync.write(png) }),
+    async () => {
+      const { encodePngPixels } = await import('./png-encode.ts');
+      return { kind: 'encode', png: encodePngPixels(png.data, png.width, png.height, 4) };
+    },
   );
   return toBuffer(result.png);
 }

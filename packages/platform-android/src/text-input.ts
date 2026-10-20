@@ -76,12 +76,22 @@ export async function fillAndroid(
   delayMs = 0,
   helper: AndroidHelperSessionOptions = {},
 ): Promise<FillUnconfirmedVerification | void> {
-  const beforeTarget = await readAndroidFillTargetBeforeMutation(device, x, y, helper);
+  const beforeCapture = await readAndroidFillTargetBeforeMutation(device, x, y, helper);
+  const beforeTarget = beforeCapture?.targetInput ?? null;
   const providerText = resolveAndroidTextInjector(device);
   if (providerText) {
     await providerText({ action: 'fill', target: { x, y }, text, delayMs });
     emitAndroidTextDiagnostic('fill', 'provider-native', text);
     const verification = await verifyAndroidFilledText(device, x, y, text, helper);
+    return completeAndroidFillVerification(text, beforeTarget, verification);
+  }
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  if (
+    delayMs === 0 &&
+    (await runAndroidAutomationHelper(device, 'input', { kind: 'fill', x, y, text }))
+  ) {
+    emitAndroidTextDiagnostic('fill', 'android-helper', text);
+    const verification = await verifyAndroidFilledText(device, x, y, text, helper, beforeCapture);
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
   let lastVerification: AndroidFillVerification | null = null;
@@ -530,7 +540,7 @@ function chunkAndroidInputText(text: string, chunkSize: number): string[] {
 
 function emitAndroidTextDiagnostic(
   action: AndroidTextInputAction,
-  backend: 'provider-native' | 'adb-shell' | 'test-ime',
+  backend: 'provider-native' | 'adb-shell' | 'test-ime' | 'android-helper',
   text: string,
 ): void {
   emitDiagnostic({

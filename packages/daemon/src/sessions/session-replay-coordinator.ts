@@ -62,8 +62,10 @@ export type ReplaySessionMutationStore = Readonly<{
 export function createReplayCoordinator(params: {
   sessionStore: ReplaySessionStore;
   mutationStore: ReplaySessionMutationStore;
+  /** The runtime host's working directory, the base a step's `--save-script` path resolves against. */
+  hostCwd: string;
 }): ReplayCoordinator {
-  const { sessionStore, mutationStore } = params;
+  const { sessionStore, mutationStore, hostCwd } = params;
   const current = (): Readonly<SessionState> | undefined => sessionStore.get();
 
   const resumeStamper: ReplayResumeStamper = {
@@ -90,13 +92,17 @@ export function createReplayCoordinator(params: {
 
     armStep(stepParams): void {
       mutationStore.update((session) => {
-        armRepairStep(session, {
-          saveScript: stepParams.saveScript,
-          force: stepParams.force,
-          sourcePath: stepParams.sourcePath,
-          healedSiblingPath: healedScriptSiblingPath(stepParams.sourcePath),
-          firstArm: stepParams.firstArm,
-        });
+        armRepairStep(
+          session,
+          {
+            saveScript: stepParams.saveScript,
+            force: stepParams.force,
+            sourcePath: stepParams.sourcePath,
+            healedSiblingPath: healedScriptSiblingPath(stepParams.sourcePath),
+            firstArm: stepParams.firstArm,
+          },
+          hostCwd,
+        );
       });
     },
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { ref, selector } from './selector-read-utils.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   createInteractionDevice,
   dragTargetSnapshot,
@@ -215,5 +215,69 @@ test('runtime multi-touch planning prefers backend viewport geometry without a s
       ? capturedPlan.viewport
       : undefined,
     { x: 0, y: 0, width: 300, height: 600 },
+  );
+});
+
+test('each tap plans one repetition against a fresh viewport', async () => {
+  const viewports: unknown[] = [];
+  let reads = 0;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    resolveGestureViewport: async () =>
+      ++reads === 1
+        ? { x: 0, y: 0, width: 400, height: 800 }
+        : { x: 0, y: 0, width: 800, height: 400 },
+    performGesture: async (_context, plan) => {
+      viewports.push(plan.viewport);
+    },
+  });
+  const result = await device.interactions.gesture({
+    gesture: {
+      intent: 'tap',
+      points: [
+        { x: 100, y: 200 },
+        { x: 160, y: 260 },
+      ],
+    },
+  });
+  await device.interactions.gesture({
+    gesture: {
+      intent: 'tap',
+      points: [
+        { x: 100, y: 200 },
+        { x: 160, y: 260 },
+      ],
+    },
+  });
+  assert.deepEqual(viewports, [
+    { x: 0, y: 0, width: 400, height: 800 },
+    { x: 0, y: 0, width: 800, height: 400 },
+  ]);
+  assert.equal(result.kind, 'tap');
+  assert.equal(result.pointerCount, 2);
+  assert.equal(result.message, 'Tapped 2 points');
+});
+
+test('a tap forwards its signal and propagates backend cancellation', async () => {
+  const controller = new AbortController();
+  const reason = createRequestCanceledError();
+  const device = createInteractionDevice(selectorSnapshot(), {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 400, height: 800 }),
+    performGesture: async (context) => {
+      controller.abort(reason);
+      context.signal?.throwIfAborted();
+    },
+  });
+  await assert.rejects(
+    device.interactions.gesture({
+      signal: controller.signal,
+      gesture: {
+        intent: 'tap',
+        points: [
+          { x: 100, y: 200 },
+          { x: 160, y: 260 },
+        ],
+      },
+    }),
+    (error: unknown) => error === reason,
   );
 });

@@ -96,6 +96,16 @@ async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<v
   fs.writeFileSync(
     source,
     `import type { AgentDevicePluginFactory } from 'agent-device/plugins';
+import { startAgentDevice, type AgentDeviceHost, type StartAgentDeviceOptions, type AgentDeviceClientConfig } from 'agent-device';
+
+export async function hostConsumer(host: NonNullable<StartAgentDeviceOptions['host']>) {
+  const options: StartAgentDeviceOptions = { stateDir: './state', host, plugins: [await example()] };
+  const running: AgentDeviceHost = await startAgentDevice(options);
+  const config: AgentDeviceClientConfig = running.clientConfig;
+  void config;
+  return await running.close();
+}
+
 
 type ExampleOptions = { credentials?: { username: string; accessKey: string } };
 
@@ -126,6 +136,8 @@ export default example;
       '--strict',
       '--target',
       'es2022',
+      '--lib',
+      'es2022,dom,esnext.disposable',
       '--module',
       'nodenext',
       '--moduleResolution',
@@ -292,6 +304,213 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       );
     }
     await typeCheckInstalledPluginContract(consumerRoot);
+    fs.writeFileSync(
+      path.join(consumerRoot, 'fixture-plugin.mjs'),
+      String.raw`
+export const disposed = [];
+export const setups = [];
+export function fixture(provider) {
+  return {
+    apiVersion: 2,
+    provider,
+    credentials: { variables: [] },
+    setup: (host) => {
+      setups.push([provider, host.env.HOST_MARKER]);
+      return {
+        runtime: {
+          provider,
+          leaseLifecycle: {},
+          ownsDevice: () => false,
+          getInteractor: () => undefined,
+          deviceInventoryProvider: () => ({ listDevices: async () => [] }),
+          shutdown: async () => {
+            disposed.push(provider + ':shutdown');
+          },
+        },
+        platformModule: {
+          owner: { kind: 'provider-runtime', provider, instance: provider },
+          loadRuntime: async () => ({}),
+        },
+        dispose: () => {
+          disposed.push(provider + ':dispose');
+        },
+      };
+    },
+  };
+}
+`,
+    );
+    const hosted = readJson(
+      await execFileText(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          String.raw`
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { createAgentDeviceClient } from 'agent-device';
+import { startAgentDevice } from 'agent-device';
+
+const exec = promisify(execFile);
+const cwd = process.cwd();
+const beforeEnv = { ...process.env };
+const listeners = ['SIGINT', 'SIGTERM', 'uncaughtException', 'unhandledRejection'];
+const beforeListeners = listeners.map((event) => process.listeners(event));
+import { fixture, disposed, setups } from './fixture-plugin.mjs';
+fs.mkdirSync(path.join(cwd, '.agent-device'), { recursive: true });
+fs.writeFileSync(path.join(cwd, '.agent-device/config.json'), '{broken plugin store');
+const supplied = {
+  cwd,
+  env: {
+    HOME: cwd,
+    PATH: process.env.PATH,
+    HOST_MARKER: 'A',
+    AGENT_DEVICE_DAEMON_BASE_URL: 'http://127.0.0.1:9',
+  },
+};
+const a = await startAgentDevice({
+  stateDir: 'host-a',
+  host: supplied,
+  plugins: [
+    fixture('fixture-a'),
+    fixture('limrun'),
+    null,
+    { ...fixture('wrong-version'), apiVersion: 1 },
+    {
+      ...fixture('broken'),
+      setup() {
+        throw new Error('fixture setup failure');
+      },
+    },
+  ],
+});
+const bCwd = path.join(cwd, 'b-cwd');
+fs.mkdirSync(bCwd);
+const b = await startAgentDevice({
+  stateDir: 'host-b',
+  host: { cwd: bCwd, env: { ...supplied.env, HOST_MARKER: 'B' } },
+  plugins: [fixture('fixture-b')],
+});
+try {
+  supplied.env.HOST_MARKER = 'mutated';
+  assert.deepEqual(await a.client.sessions.list(), []);
+  assert.deepEqual(await b.client.sessions.list(), []);
+  assert.equal(b.clientConfig.cwd, bCwd);
+  assert.deepEqual(setups, [
+    ['fixture-a', 'A'],
+    ['fixture-b', 'B'],
+  ]);
+  const inventory = JSON.parse(fs.readFileSync(path.join(a.clientConfig.stateDir, 'daemon.json'), 'utf8')).plugins;
+  assert.equal(inventory.find((p) => p.provider === 'fixture-a').state, 'active');
+  assert.equal(
+    inventory.filter((p) => p.provider === 'limrun' && p.source === 'embedder')[0].state,
+    'failed',
+  );
+  assert.equal(inventory.find((p) => p.provider === 'broken').state, 'failed');
+  assert.equal(inventory.find((p) => p.source === 'embedder' && p.provider === undefined).error.reason, 'invalid_plugin');
+  assert.equal(inventory.find((p) => p.provider === 'wrong-version').error.reason, 'incompatible_plugin');
+  assert.equal(process.cwd(), cwd);
+  assert.deepEqual({ ...process.env }, beforeEnv);
+  assert.deepEqual(
+    listeners.map((event) => process.listeners(event)),
+    beforeListeners,
+  );
+  await assert.rejects(startAgentDevice({ stateDir: a.clientConfig.stateDir, host: supplied, plugins: [fixture('rollback')] }), (error) => error.details?.reason === 'daemon_registration_refused' && error.details?.status === 'busy');
+  assert.deepEqual(disposed.splice(0), ['rollback:shutdown', 'rollback:dispose']);
+  const unprovenDir = path.join(cwd, 'unproven');
+  fs.mkdirSync(unprovenDir);
+  fs.writeFileSync(path.join(unprovenDir, 'daemon.lock'), 'legacy lock');
+  await assert.rejects(startAgentDevice({ stateDir: unprovenDir, host: supplied, plugins: [fixture('unproven')] }), (error) => error.details?.reason === 'daemon_registration_refused' && error.details?.status === 'unproven');
+  assert.equal(fs.readFileSync(path.join(unprovenDir, 'daemon.lock'), 'utf8'), 'legacy lock');
+  assert.deepEqual(disposed.splice(0), ['unproven:shutdown', 'unproven:dispose']);
+  const config = JSON.stringify(a.clientConfig);
+  const child = await exec(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      "import { createAgentDeviceClient } from 'agent-device'; console.log(JSON.stringify(await createAgentDeviceClient(" + config + ").sessions.list()));",
+    ],
+    { cwd },
+  );
+  assert.deepEqual(JSON.parse(child.stdout), []);
+  const cli = path.join(cwd, 'node_modules/agent-device/bin/agent-device.mjs');
+  await assert.rejects(
+    exec(
+      process.execPath,
+      [cli, 'daemon', 'stop', '--clean', '--state-dir', a.clientConfig.stateDir, '--json'],
+      { cwd },
+    ),
+    (error) => {
+      assert.equal(JSON.parse(error.stdout).error.details.reason, 'daemon-clean-not-detached');
+      return true;
+    },
+  );
+  assert.deepEqual(await a.client.sessions.list(), []);
+  const stopped = await exec(
+    process.execPath,
+    [cli, 'daemon', 'stop', '--state-dir', a.clientConfig.stateDir, '--json'],
+    { cwd },
+  );
+  assert.equal(JSON.parse(stopped.stdout).data.stopped, true);
+  const [first, second] = await Promise.all([a.close(), a.close()]);
+  assert.strictEqual(first, second);
+  assert.deepEqual(first.requests, { drained: 0, abandoned: 0 });
+  assert.deepEqual(disposed, ['fixture-a:shutdown', 'fixture-a:dispose']);
+  assert.deepEqual(await b.client.sessions.list(), []);
+  const replacement = await startAgentDevice({
+    stateDir: a.clientConfig.stateDir,
+    host: { cwd, env: supplied.env },
+  });
+  try {
+    await assert.rejects(
+      createAgentDeviceClient(a.clientConfig).sessions.list(),
+      (error) => error.details?.reason === 'daemon-binding-mismatch',
+    );
+    const wrongToken = createAgentDeviceClient({
+      ...replacement.clientConfig,
+      daemonBinding: { ...replacement.clientConfig.daemonBinding, token: 'wrong-token' },
+    });
+    await assert.rejects(
+      wrongToken.sessions.list(),
+      (error) => error.details?.reason === 'daemon-binding-mismatch',
+    );
+  } finally {
+    await replacement.close();
+  }
+  console.log(
+    JSON.stringify({
+      attachedFromChild: true,
+      cleanRefused: true,
+      externalStop: true,
+      siblingPreserved: true,
+      replacementRefused: true,
+      report: first,
+    }),
+  );
+} finally {
+  await a.close();
+  await b.close();
+}
+assert.deepEqual(disposed, [
+  'fixture-a:shutdown',
+  'fixture-a:dispose',
+  'fixture-b:shutdown',
+  'fixture-b:dispose',
+]);
+assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
+
+`,
+        ],
+        { cwd: consumerRoot },
+      ),
+    );
+    assert.equal(hosted.attachedFromChild, true);
+    assert.equal(hosted.replacementRefused, true);
     metroPort = await listenOnLoopback(metroServer);
     t.after(async () => {
       await closeLoopbackServer(metroServer);
@@ -403,6 +622,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
           subpathSmokeResults[subpath] = await subpathSmoke[subpath](mod);
         }
         const removedSubpaths = await Promise.all([
+          'agent-device/host',
           'agent-device/backend',
           'agent-device/commands',
           'agent-device/testing/conformance',
@@ -445,6 +665,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       'isAgentDeviceError',
       'isUnreadableCaptureContentError',
       'normalizeAgentDeviceError',
+      'startAgentDevice',
     ]);
     assert.equal(imports.rootClientSnapshot, 'function');
     assert.equal(imports.rootArtifactAdapter, 'function');

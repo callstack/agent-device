@@ -60,6 +60,26 @@ describe('gesture command projection', () => {
     expect(gestureDaemonWriters.gesture(input).input).toEqual(input);
   });
 
+  test('parses a tap with its series flags and writes it as typed daemon input', () => {
+    const input = gestureCliReaders.gesture(['tap', '80', '300', '200', '450'], {
+      ...NO_FLAGS,
+      holdMs: 40,
+      count: 3,
+      pauseMs: 100,
+    });
+    expect(input).toEqual({
+      kind: 'tap',
+      points: [
+        { x: 80, y: 300 },
+        { x: 200, y: 450 },
+      ],
+      holdMs: 40,
+      count: 3,
+      pauseMs: 100,
+    });
+    expect(gestureDaemonWriters.gesture(input).input).toEqual(input);
+  });
+
   test('rejects pointerCount on non-pan gestures', () => {
     expect(() =>
       gestureDaemonWriters.gesture({ kind: 'pinch', scale: 2, pointerCount: 2 }),

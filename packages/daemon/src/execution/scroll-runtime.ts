@@ -1,3 +1,4 @@
+import { sleep } from '@agent-device/host-kit/retry';
 import {
   assertExclusiveScrollDistanceInputs,
   assertScrollUntilCompatible,
@@ -125,6 +126,7 @@ export async function resolveBoundScrollRuntime(
   const stopCondition = {
     ...(target.edge === undefined ? {} : { edge: target.edge }),
     ...(until === undefined ? {} : { until }),
+    ...(params.context.maxPasses === undefined ? {} : { maxPasses: params.context.maxPasses }),
   };
   assertScrollUntilCompatible(stopCondition);
   const options = resolveScrollExecutionOptions({ amount, pixels, durationMs }, target.edge);
@@ -323,6 +325,7 @@ async function executeEdgeScroll(
   context: DaemonCommandContext,
 ): Promise<Record<string, unknown>> {
   const edgeResult = await runScrollEdgePasses({
+    signal: context.signal,
     edge,
     captureState: async (scope) => await captureEdgeState(runtime, edge, scope, context),
     scroll: async () => await scrollOnce(runtime, target, options, context),
@@ -332,6 +335,7 @@ async function executeEdgeScroll(
           (await runtime.operations.captureSnapshot(scrollCaptureInput(context, { scope })))
             .nodes ?? [],
         edge,
+        context.signal,
       );
     },
   });
@@ -351,6 +355,8 @@ async function executeUntilScroll(
     selector,
     direction: target.direction,
     platform: publicPlatformString(device),
+    passLimit: context.maxPasses,
+    signal: context.signal,
     capture: async () => await runtime.operations.captureSnapshot(scrollCaptureInput(context)),
     scroll: async () => await scrollOnce(runtime, target, options, context),
   });
@@ -383,6 +389,7 @@ async function captureEdgeState(
     edge,
     scope,
     captureNodes: async (snapshotScope) => {
+      context.signal?.throwIfAborted();
       lastCapture = await runtime.operations.captureSnapshot(
         scrollCaptureInput(context, { scope: snapshotScope }),
       );
@@ -416,16 +423,18 @@ const SCROLL_REST_POLL_MS = 120;
 async function pollForScrollRest(
   captureNodes: () => Promise<readonly (RawSnapshotNode | SnapshotNode)[]>,
   edge: ScrollEdge,
+  signal?: AbortSignal,
   timeoutMs = SCROLL_REST_TIMEOUT_MS,
   pollMs = SCROLL_REST_POLL_MS,
 ): Promise<void> {
   let previous: string | undefined;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    signal?.throwIfAborted();
     const fingerprint = await scrollSurfaceFingerprint(await captureNodes(), edge);
     if (fingerprint === previous) return;
     previous = fingerprint;
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    await sleep(pollMs, signal);
   }
 }
 

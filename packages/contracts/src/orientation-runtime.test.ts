@@ -15,6 +15,15 @@ test('builds the exact orientation operation fact catalog', () => {
   const orientation = { available: true } as const;
   expect(orientationRuntimeOperationFacts({ orientation })).toEqual({
     setOrientation: orientation,
+    unlockOrientation: {
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'orientation auto is only supported on ADB-backed Android.',
+    },
+  });
+  expect(orientationRuntimeOperationFacts({ orientation, unlock: orientation })).toEqual({
+    setOrientation: orientation,
+    unlockOrientation: orientation,
   });
 });
 

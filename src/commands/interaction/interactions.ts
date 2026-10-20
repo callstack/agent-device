@@ -105,6 +105,7 @@ export const interactionCliReaders = {
     pixels: flags.pixels,
     durationMs: flags.durationMs,
     until: flags.until,
+    maxPasses: flags.maxPasses,
   }),
   // The one observation-only reader in this file: `get` can be excluded from a
   // repair-armed heal by default, so it also takes the `--record` opt-in

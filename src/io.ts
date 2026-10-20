@@ -1,3 +1,4 @@
+import { captureHostEnvironment } from '@agent-device/host-kit/process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,7 +11,7 @@ import type {
 export function createLocalArtifactAdapter(
   options: LocalArtifactAdapterOptions = {},
 ): ArtifactAdapter {
-  const cwd = options.cwd ?? process.cwd();
+  const cwd = options.cwd ?? captureHostEnvironment(process).cwd;
   const tempDir = options.tempDir ?? os.tmpdir();
   const rootDir = options.rootDir ? resolveLocalPath(options.rootDir, cwd) : undefined;
 

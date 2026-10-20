@@ -12,6 +12,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-host';
 import { decodeAppLogProcessMarker } from '@agent-device/capture-kit';
 import type { DeviceIdentity } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import fs from 'node:fs';
 import path from 'node:path';
 import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
@@ -47,10 +48,12 @@ export type ManagedAppLogCommandLauncher = (
 
 export function createManagedAppLogProcesses(
   sessionsDir: string,
+  env: EnvMap,
   options: Readonly<{ launch?: ManagedAppLogCommandLauncher }> = {},
 ) {
   const root = path.resolve(sessionsDir);
-  const launch = options.launch ?? launchLocalAppLogCommand;
+  const launch =
+    options.launch ?? ((command, signal) => launchLocalAppLogCommand(command, env, signal));
   return Object.freeze({
     start: async (request: AppLogBackgroundProcessRequest, signal?: AbortSignal) =>
       await startAppLogProcess(root, request, launch, signal),
@@ -167,13 +170,14 @@ async function startAppLogProcess(
 
 function launchLocalAppLogCommand(
   command: AppLogProcessCommand,
+  env: EnvMap,
   signal?: AbortSignal,
 ): ManagedAppLogCommand {
   const request = localHostCommand(command);
   return runCmdBackground(request.executable, [...request.args], {
     allowFailure: request.allowFailure,
     cwd: request.cwd,
-    env: request.env ? { ...process.env, ...request.env } : undefined,
+    env: { ...env, ...request.env },
     captureOutput: false,
     signal,
   });

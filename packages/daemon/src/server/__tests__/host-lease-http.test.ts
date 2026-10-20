@@ -32,6 +32,8 @@ async function withServer(
     leaseRegistry: registry,
     endSessionsForLease,
     handleRequest: async () => ({ ok: true, data: {} }),
+    env: process.env,
+    cwd: process.cwd(),
   });
   try {
     const port = await listenOnLoopback(server);

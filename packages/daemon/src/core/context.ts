@@ -6,6 +6,7 @@ import {
   type ScreenshotRuntimeFlags,
 } from '@agent-device/contracts/capture';
 import { getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { resolveRunnerLogicalLeaseContext } from './lease-context.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 
@@ -32,6 +33,7 @@ export function contextFromFlags(
   const effectiveRequestId = requestId ?? getDiagnosticsMeta().requestId;
   return {
     requestId: effectiveRequestId,
+    signal: getRequestSignal(effectiveRequestId),
     appBundleId,
     runnerLeaseContext: resolveRunnerLogicalLeaseContext({ meta }),
     logPath,

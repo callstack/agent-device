@@ -11,7 +11,7 @@ import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { makeMacOsSession, repairPublication } from '../../__tests__/support/session-factories.ts';
 
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 
@@ -54,7 +54,10 @@ function makeFixture(prefix: string, sessionsDir?: string): SessionStoreFixture 
   const root = mkdtempForTestSync(prefix);
   return {
     root,
-    store: new SessionStore(sessionsDir ? path.join(root, sessionsDir) : root),
+    store: new SessionStore(
+      sessionsDir ? path.join(root, sessionsDir) : root,
+      createLiveTestHostEnvironment(),
+    ),
     session: makeSession('default'),
   };
 }
@@ -97,6 +100,7 @@ function assertScriptMatches(script: string, patterns: RegExp[]): void {
 test('defaultTracePath sanitizes session name', () => {
   const store = new SessionStore(
     path.join(mkdtempForTestSync('agent-device-tests'), 'agent-device-tests'),
+    createLiveTestHostEnvironment(),
   );
   const session = makeSession('session with spaces');
   const tracePath = store.defaultTracePath(session);
@@ -747,7 +751,7 @@ test('writeSessionLog never fabricates a target-v1 annotation for actions record
 
 test('writeRepairTombstone/readRepairTombstone round-trips owner + source path', () => {
   const root = mkdtempForTestSync('agent-device-tombstone-');
-  const store = new SessionStore(path.join(root, 'sessions'));
+  const store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
   const session = makeSession('default');
   session.scriptPublication = repairPublication('armed', {
     boundary: 0,
@@ -764,7 +768,7 @@ test('writeRepairTombstone/readRepairTombstone round-trips owner + source path',
 
 test('readRepairTombstone returns undefined once the tombstone has expired', () => {
   const root = mkdtempForTestSync('agent-device-tombstone-expiry-');
-  const store = new SessionStore(path.join(root, 'sessions'));
+  const store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
   const session = makeSession('default');
   // TTL 0 => expiresAt <= now => already stale.
   store.writeRepairTombstone(storeSessionForTest(store, session), 0);
@@ -773,7 +777,7 @@ test('readRepairTombstone returns undefined once the tombstone has expired', () 
 
 test('clearRepairTombstone removes a tombstone (a fresh replay --save-script clears the key)', () => {
   const root = mkdtempForTestSync('agent-device-tombstone-clear-');
-  const store = new SessionStore(path.join(root, 'sessions'));
+  const store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
   const session = makeSession('default');
   store.writeRepairTombstone(storeSessionForTest(store, session));
   assert.ok(store.readRepairTombstone('default'));
@@ -789,7 +793,7 @@ test('clearRepairTombstone removes a tombstone (a fresh replay --save-script cle
 
 test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit FAILS preserves the failure in a distinct tombstone, not a generic expiry', () => {
   const root = mkdtempForTestSync('agent-device-teardown-commit-fail-');
-  const store = new SessionStore(path.join(root, 'sessions'));
+  const store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
   const healedPath = path.join(root, 'flow.healed.ad');
   // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
   // default sibling path — teardown's auto-commit attempt must refuse to
@@ -837,7 +841,7 @@ test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit F
 
 test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, producing a self-contained, fresh-replayable healed .ad', () => {
   const root = mkdtempForTestSync('agent-device-teardown-autocommit-close-');
-  const store = new SessionStore(path.join(root, 'sessions'));
+  const store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
   const healedPath = path.join(root, 'flow.healed.ad');
 
   const session = makeSession('default');

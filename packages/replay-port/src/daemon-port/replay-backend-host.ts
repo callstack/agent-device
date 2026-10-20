@@ -21,10 +21,10 @@ export function createReplayBackendHost(): ReplayBackendHost {
     readScriptSourceFile: readReplayScriptSourceFile,
     scriptSourceRequiredMessage: REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,
     requestSignal: getRequestSignal,
-    resolveTargetDevice: async (flags, binding) =>
+    resolveTargetDevice: async (flags, binding, env) =>
       await resolveTargetDevice(
         flags,
-        buildMaestroReplayTargetDeviceResolutionOptions(binding.appTarget, binding.platform),
+        buildMaestroReplayTargetDeviceResolutionOptions(binding.appTarget, binding.platform, env),
       ),
     buildActionFailureResponse: buildReplayBackendActionFailureResponse,
   };

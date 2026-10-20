@@ -19,6 +19,13 @@ test('Provider-backed integration Android TV remote flow sends D-pad keyevents',
   const adbProvider: AndroidAdbProvider = {
     exec: async (args) => {
       adbCalls.push([...args]);
+      if (args.join(' ') === 'shell ime list -a -s') {
+        return {
+          stdout: 'com.callstack.agentdevice.imehelper/.TestInputMethodService\n',
+          stderr: '',
+          exitCode: 0,
+        };
+      }
       return { stdout: '', stderr: '', exitCode: 0 };
     },
   };
@@ -34,6 +41,7 @@ test('Provider-backed integration Android TV remote flow sends D-pad keyevents',
         app: 'com.android.settings',
         platform: 'android',
         serial: PROVIDER_SCENARIO_ANDROID_TV.id,
+        testIme: false,
       });
 
       await runProviderScenario(daemon, [

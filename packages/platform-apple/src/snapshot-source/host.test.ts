@@ -113,6 +113,7 @@ test('the detached bridge starts in the host directory, not the process director
     },
   );
 
-  await vi.waitFor(() => assert.equal(fs.existsSync(evidence), true));
-  assert.equal(fs.readFileSync(evidence, 'utf8'), `${fs.realpathSync(hostCwd)}\n`);
+  await vi.waitFor(() =>
+    assert.equal(fs.readFileSync(evidence, 'utf8'), `${fs.realpathSync(hostCwd)}\n`),
+  );
 });

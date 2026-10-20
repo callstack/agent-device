@@ -1,4 +1,5 @@
 import type { AppStateRuntimeResult } from './app-state-runtime.ts';
+import type { ElementTextTarget } from './element-text-target.ts';
 import type { BackMode } from './back-mode.ts';
 import type { IosSystemSurfaceProvenance } from './ios-system-surface.ts';
 import type { DeviceRotation } from './device-rotation.ts';
@@ -73,7 +74,11 @@ export type ScreenshotOptions = {
  * rendered the pixels in, so a landscape value pairs with a landscape image; it is absent when the
  * owner has no rotation reading it can stand behind for this capture.
  */
-export type ScreenshotCaptureFacts = Readonly<{ displayRotation?: DeviceRotation }>;
+export type ScreenshotCaptureFacts = Readonly<{
+  displayRotation?: DeviceRotation;
+  /** Actual physical iOS capture route, including any fallback from CoreDevice to XCTest. */
+  iosPhysicalCaptureBackend?: 'coredevice' | 'xctest';
+}>;
 
 export type ElementSelectorKey = 'id' | 'label' | 'text' | 'value';
 
@@ -375,7 +380,12 @@ export type Interactor = {
    */
   readTextAtPoint?(
     point: Point,
-    options?: { appBundleId?: string; surface?: SessionSurface; signal?: AbortSignal },
+    options?: {
+      appBundleId?: string;
+      surface?: SessionSurface;
+      signal?: AbortSignal;
+      target?: ElementTextTarget;
+    },
   ): Promise<string | undefined>;
   /**
    * Native text-presence reading, when the backend has one that does not require a tree capture.
@@ -398,6 +408,8 @@ export type Interactor = {
    */
   home?(): Promise<void>;
   setOrientation(orientation: DeviceRotation): Promise<{ orientation?: DeviceRotation } | void>;
+  /** Hands rotation back to the sensor; only an owner whose `setOrientation` locks it carries this. */
+  unlockOrientation?(): Promise<void>;
   performGesture?(plan: GesturePlan): Promise<Record<string, unknown> | void>;
   /**
    * Optional (parity with `home`): opens the recents surface, a control not every owner carries.
@@ -474,6 +486,8 @@ export type Interactor = {
  */
 export type AlertInteractorOptions = {
   timeoutMs?: number;
+  /** The daemon request's cancellation; owners whose transport can abort thread it into the legs. */
+  signal?: AbortSignal;
   appBundleId?: string;
   surface?: SessionSurface;
 };

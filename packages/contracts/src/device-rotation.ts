@@ -45,7 +45,8 @@ export function deviceRotationOrientation(rotation: DeviceRotation): 'PORTRAIT' 
   return DEVICE_ROTATION_SURFACE_INDEX[rotation] % 2 === 0 ? 'PORTRAIT' : 'LANDSCAPE';
 }
 
-export function parseDeviceRotation(input: string | undefined): DeviceRotation {
+/** The public entry for parsing one is `parseOrientationRequest`; this stays module-private. */
+function parseDeviceRotation(input: string | undefined): DeviceRotation {
   if (input === undefined) {
     throw new AppError(
       'INVALID_ARGS',
@@ -71,6 +72,14 @@ export function parseDeviceRotation(input: string | undefined): DeviceRotation {
         `Invalid rotation: ${input}. Use portrait|portrait-upside-down|landscape-left|landscape-right.`,
       );
   }
+}
+
+/** A rotation to lock the device in, or `auto` to hand rotation back to the sensor. */
+export const ORIENTATION_REQUESTS = [...DEVICE_ROTATIONS, 'auto'] as const;
+export type OrientationRequest = (typeof ORIENTATION_REQUESTS)[number];
+
+export function parseOrientationRequest(input: string | undefined): OrientationRequest {
+  return input?.trim().toLowerCase() === 'auto' ? 'auto' : parseDeviceRotation(input);
 }
 
 // ---- Hinge pose ------------------------------------------------------------------------------

@@ -43,6 +43,9 @@ export function createAndroidObservationAdapter(
     readAppState: async (device) => await readAppState(host, device),
     readBlockingDialog: async (device) => await readBlockingDialog(host, device),
     async readAppFocus(device, appBundleId, options = {}) {
+      const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+      const focus = await runAndroidAutomationHelper(device, 'focus');
+      if (focus?.focusedPackage === appBundleId && focus.windowType === '1') return true;
       const read = createDumpReader(host, device);
       if (options.requireNoBlockingDialog) {
         const observation = await readBlockingDialog(host, device, read);
@@ -110,6 +113,11 @@ async function readBlockingDialog(
   device: DeviceInfo,
   read: DumpReader = createDumpReader(host, device),
 ): Promise<AndroidBlockingDialogObservation> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  const focus = await runAndroidAutomationHelper(device, 'focus');
+  if (focus?.windowType === '1' && focus.focusedPackage && focus.focusedPackage !== 'android') {
+    return { status: 'clear' };
+  }
   for (const args of orderedDumps(device, 'blockingDialog')) {
     const parsed = readAndroidBlockingDialogFocus(await read(args));
     if (parsed.focus) return { status: 'dialog', focus: parsed.focus };

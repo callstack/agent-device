@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
@@ -418,3 +419,5 @@ test('clearRuntimeHintValues deletes iOS simulator React Native defaults', async
     );
   });
 });
+
+bindTestCommandHost();

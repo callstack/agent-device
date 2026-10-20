@@ -1,37 +1,57 @@
 import {
-  DAEMON_QUIESCE_COMMAND,
-  DAEMON_QUIESCE_REASONS,
+  DAEMON_LIFECYCLE_REASONS,
   DAEMON_SHUTTING_DOWN_REASON,
-  readDaemonQuiesceFence,
-  type DaemonQuiesceCensus,
-  type DaemonQuiesceFence,
+  readDaemonLifecycleMode,
+  readDaemonLifecycleFence,
+  type DaemonLifecycleCensus,
+  type DaemonLifecycleFence,
+  type DaemonLifecycleMode,
+  type DaemonRuntimeOwnership,
 } from '@agent-device/daemon-contracts/daemon-resolution';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { isUncommittedRepairSession } from '../../core/session-replay-transaction.ts';
 
-// Bounds the daemon's own lifetime when nothing is using it. Each
-// AGENT_DEVICE_STATE_DIR spawns a dedicated daemon that otherwise never exits
-// on its own, so short-lived sandboxes (deleted codex/claude worktrees, one-off
-// CLI invocations) leave orphaned daemon processes behind indefinitely -
-// observed accumulating (10+) in production. A stale daemon left running this
-// way also keeps holding its iOS runner lease, which blocks a fresh daemon for
-// the same device (see runner-lease.ts stale-lease takeover).
+// Whether this daemon may leave now, and when it will. Two things live here because they answer one
+// question from one census:
 //
-// The window mirrors the runner idle-stop default. Idle retained runners stop with their daemon:
-// their timer and listener observation cannot survive a handoff. Active eligible runners retain
-// the graceful-shutdown adoption policy.
+// - `createDaemonIdleReap` bounds the daemon's own lifetime when nothing is using it. Each
+//   AGENT_DEVICE_STATE_DIR spawns a dedicated daemon that otherwise never exits on its own, so
+//   short-lived sandboxes (deleted codex/claude worktrees, one-off CLI invocations) leave orphaned
+//   daemon processes behind indefinitely - observed accumulating (10+) in production. A stale daemon
+//   left running this way also keeps holding its iOS runner lease, which blocks a fresh daemon for the
+//   same device (see runner-lease.ts stale-lease takeover).
+//
+//   The window mirrors the runner idle-stop default. Idle retained runners stop with their daemon:
+//   their timer and listener observation cannot survive a handoff. Active eligible runners retain the
+//   graceful-shutdown adoption policy.
+//
+// - `createDaemonLifecycleAdmission` answers, in place of dispatch, the two requests that ask this
+//   daemon to leave: `daemon_quiesce` (stop if idle, for a daemon a client may replace) and
+//   `daemon_shutdown` (drain, for a runtime an embedder owns). Both decide from the same census the
+//   idle-reap rule reads, so a stop cannot be granted by one owner and refused by the other.
+//
+// TODO(#3757): the file is named for the older half. A rename to a lifecycle-named module is a
+// follow-up, so this PR does not spend a gate's rename tolerance on it.
+
 const DAEMON_IDLE_REAP_DEFAULT_MS = 5 * 60_000;
 
 // AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS overrides the window; 0 disables idle
 // reap and restores the pre-existing "runs until killed" behavior.
-export function resolveDaemonIdleReapMs(env: NodeJS.ProcessEnv = process.env): number {
+// A timer exit is something only a detached daemon does: a runtime whose host owns it is ended by
+// that host, and one whose owner cannot be proven is treated the same way, because nothing here can
+// show the window's owner is nobody.
+export function resolveDaemonIdleReapMs(
+  env: NodeJS.ProcessEnv,
+  ownership: DaemonRuntimeOwnership = 'detached',
+): number {
+  if (ownership !== 'detached') return 0;
   const raw = env.AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS?.trim();
   if (raw) {
     const parsed = Number(raw);
@@ -99,9 +119,16 @@ export function createDaemonIdleReap(params: {
    */
   hasRetainedLeases: () => boolean;
   onIdleReap: () => void;
-  env?: NodeJS.ProcessEnv;
+  env: NodeJS.ProcessEnv;
+  /**
+   * Who owns the process this timer runs in. A host that started the runtime in its own process owns
+   * its lifetime: an idle window tuned for a detached daemon nobody is watching would take the runtime
+   * out from under that owner, so an embedded runtime is never reaped on a timer. Defaults to a
+   * detached daemon.
+   */
+  ownership?: DaemonRuntimeOwnership;
 }): DaemonIdleReapController {
-  const idleMs = resolveDaemonIdleReapMs(params.env);
+  const idleMs = resolveDaemonIdleReapMs(params.env, params.ownership);
   let timer: NodeJS.Timeout | undefined;
 
   const isIdleNow = (): boolean =>
@@ -144,15 +171,25 @@ export function createDaemonIdleReap(params: {
 }
 
 /**
- * ADR 0006: a daemon leaves for a newer one only when it holds nothing, and it decides that
- * itself. A client that read "idle" and then signaled would race every other client of the state
- * directory; the daemon is the one place the answer and the closing of admission can be one step.
+ * The one seam that answers both ways a process asks this daemon to leave, in place of dispatch.
+ *
+ * ADR 0006: a daemon leaves for a newer one only when it holds nothing, and it decides that itself.
+ * A client that read "idle" and then signaled would race every other client of the state directory;
+ * the daemon is the one place the answer and the closing of admission can be one step.
+ *
+ * `quiesce` is that stop-if-idle verdict, and it is what a detached daemon answers: a host owns an
+ * embedded runtime and ends it itself, so a replacement asks the host instead of retiring it.
+ * `shutdown` is the explicit stop of an embedded runtime, where draining is the point: work in hand
+ * is canceled rather than refused, because the caller owns this process and asked for it to close.
+ *
+ * Both modes share the token check, the instance fence, the answer-before-dispatch rule, and the one
+ * `drain` the runtime owns, so a stop can never reach teardown by a route the host does not control.
  */
-export type DaemonQuiesce = Readonly<{
+export type DaemonLifecycleAdmission = Readonly<{
   /**
-   * Puts the quiesce request and the closed admission it leaves behind in front of `handler`: a
-   * quiesce request gets its verdict, and any other request gets the shutting-down refusal once a
-   * quiesce has closed admission.
+   * Puts the lifecycle request and the closed admission it leaves behind in front of `handler`: a
+   * lifecycle request gets its verdict, and any other request gets the shutting-down refusal once a
+   * lifecycle request has closed admission.
    */
   admit(handler: DaemonInvokeFn): DaemonInvokeFn;
 }>;
@@ -168,22 +205,27 @@ export function daemonShuttingDownResponse(): DaemonResponse {
   };
 }
 
-export function createDaemonQuiesce(params: {
+export function createDaemonLifecycleAdmission(params: {
   token: string;
-  identity: DaemonQuiesceFence;
+  identity: DaemonLifecycleFence;
   sessionStore: Pick<SessionStore, 'toArray'>;
   leaseRegistry: Pick<LeaseRegistry, 'listActiveLeases'>;
-  /** Requests being served, not counting the quiesce request itself. */
+  /** Requests being served, not counting the lifecycle request itself. */
   inFlightRequestCount: () => number;
   /** Whether the daemon has yet to build the drain path `drain` runs. */
   startingUp: () => boolean;
-  /** Starts the drain; called at most once, after the response is on its way. */
+  /** Starts the drain once, after sending the response. */
   drain: () => void;
-}): DaemonQuiesce {
+  /** Who owns this process, and so which of the two requests it may answer. */
+  ownership: () => DaemonRuntimeOwnership;
+}): DaemonLifecycleAdmission {
   let admitting = true;
-  const refuse = (error: AppError): DaemonResponse => ({ ok: false, error: normalizeError(error) });
+  const refuse = (error: AppError): DaemonResponse => ({
+    ok: false,
+    error: normalizeError(error),
+  });
 
-  const quiesce = (req: DaemonRequest): DaemonResponse => {
+  const leave = (req: DaemonRequest, mode: DaemonLifecycleMode): DaemonResponse => {
     if (typeof req.token !== 'string' || !timingSafeStringEqual(req.token, params.token)) {
       return refuse(new AppError('UNAUTHORIZED', 'Invalid daemon token.'));
     }
@@ -191,10 +233,10 @@ export function createDaemonQuiesce(params: {
     // host that owns the state directory may retire the daemon on it.
     if (req.internal?.publicNetworkOnly) {
       return refuse(
-        new AppError('UNAUTHORIZED', 'Daemon quiesce is not available to remote clients.'),
+        new AppError('UNAUTHORIZED', `Daemon ${mode} is not available to remote clients.`),
       );
     }
-    const fence = readDaemonQuiesceFence(req.input);
+    const fence = readDaemonLifecycleFence(req.input);
     // A pid alone can name a recycled process, so a daemon that cannot prove its start time
     // cannot be addressed at all.
     if (!fence || fence.pid !== params.identity.pid) return refuse(instanceMismatch());
@@ -202,25 +244,32 @@ export function createDaemonQuiesce(params: {
     if (fence.processStartTime !== params.identity.processStartTime) {
       return refuse(instanceMismatch());
     }
+    // Each mode belongs to one owner: a host ends an embedded runtime it started, and the process that
+    // started a detached daemon ends it by signalling its pid. Neither asks a stranger.
+    if (mode === 'shutdown' && params.ownership() !== 'embedded') return refuse(notEmbedded());
+    if (mode === 'quiesce' && params.ownership() === 'embedded') return refuse(ownerEmbedded());
     // Admission closes and the census is read in the same synchronous step, so no request can be
     // admitted between the two; a refusal reopens admission in that same step.
     if (!admitting) return { ok: true, data: { outcome: 'draining' } };
     admitting = false;
     const census = readCensus();
-    if (isHeld(census)) {
+    // A daemon that is still starting has no drain path yet, so it accepts nothing, and a quiesce
+    // that finds work in hand refuses too: replacing that daemon would end another client's session.
+    // A shutdown drains instead of refusing — the caller owns this process and asked for it to
+    // close, canceling its work included — but only once a drain path exists. The census says which
+    // of the two applied, so a caller knows whether to retry or to ask again later.
+    const held = mode === 'quiesce' ? isHeld(census) : census.startingUp;
+    if (held) {
       admitting = true;
-      return refuse(
-        new AppError('COMMAND_FAILED', 'Daemon is busy and was not asked to leave.', {
-          reason: DAEMON_QUIESCE_REASONS.busy,
-          ...census,
-        }),
-      );
+      return refuse(busy(census));
     }
-    setImmediate(params.drain);
+    setImmediate(() => params.drain());
+    // One ack shape for both modes, as quiesce's shipped one already is: the census belongs in a
+    // refusal that a caller must act on, and in the completion record, not in an agreement.
     return { ok: true, data: { outcome: 'draining' } };
   };
 
-  const readCensus = (): DaemonQuiesceCensus => {
+  const readCensus = (): DaemonLifecycleCensus => {
     const sessions = params.sessionStore.toArray();
     const repairSessions = sessions.filter(isUncommittedRepairSession).length;
     return {
@@ -234,13 +283,14 @@ export function createDaemonQuiesce(params: {
 
   return {
     admit: (handler) => async (req) => {
-      if (req.command === DAEMON_QUIESCE_COMMAND) return quiesce(req);
+      const mode = readDaemonLifecycleMode(req.command);
+      if (mode) return leave(req, mode);
       return admitting ? await handler(req) : daemonShuttingDownResponse();
     },
   };
 }
 
-function isHeld(census: DaemonQuiesceCensus): boolean {
+function isHeld(census: DaemonLifecycleCensus): boolean {
   return (
     census.startingUp ||
     census.inFlightRequests > 0 ||
@@ -250,8 +300,34 @@ function isHeld(census: DaemonQuiesceCensus): boolean {
   );
 }
 
-function instanceMismatch(): AppError {
-  return new AppError('COMMAND_FAILED', 'Quiesce request names a different daemon instance.', {
-    reason: DAEMON_QUIESCE_REASONS.instanceMismatch,
+function busy(census: DaemonLifecycleCensus): AppError {
+  // The refusal's shape is the one quiesce already shipped: the reason plus the census that explains
+  // it. A shutdown refuses for one of those counts (`startingUp`) and a stop reads that count rather
+  // than a second field naming the mode it already asked for.
+  return new AppError('COMMAND_FAILED', 'Daemon is busy and was not asked to leave.', {
+    reason: DAEMON_LIFECYCLE_REASONS.busy,
+    ...census,
   });
+}
+
+function instanceMismatch(): AppError {
+  return new AppError('COMMAND_FAILED', 'A lifecycle request names a different daemon instance.', {
+    reason: DAEMON_LIFECYCLE_REASONS.instanceMismatch,
+  });
+}
+
+function notEmbedded(): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'This daemon is not embedder-owned, so it does not accept a shutdown request.',
+    { reason: DAEMON_LIFECYCLE_REASONS.notEmbedded },
+  );
+}
+
+function ownerEmbedded(): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'A host process owns this daemon, so only that host can retire it.',
+    { reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded },
+  );
 }

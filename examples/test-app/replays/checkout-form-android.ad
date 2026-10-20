@@ -18,7 +18,7 @@ wait "Delivery" 5000
 scroll down 0.7
 click id="checkbox-agree"
 click id="submit-order"
-scroll up 0.6
+scroll up --until 'id="form-success"'
 wait "Order summary" 5000
 wait "Ada Lovelace chose pickup with cash payment." 5000
 close

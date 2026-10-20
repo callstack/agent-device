@@ -2,9 +2,9 @@
 
 ## Status
 
-Accepted (2026-09-01). The decision was replaced on 2026-10-10. The in-process Host allocator integration is withdrawn.
-Simlock closed [simlock#70](https://github.com/callstackincubator/simlock/issues/70) in favor of direct device leases by agents.
-agent-device follows that design.
+Accepted (2026-10-10).
+
+Decision history: on 2026-10-10 this replaced an earlier in-process allocator design. Simlock closed [simlock#70](https://github.com/callstackincubator/simlock/issues/70) in favor of direct device leases by agents, and agent-device follows that design. To recover the earlier design, read the git history before that date: #2284, #2308 and #2312.
 
 ## Rules at a glance
 
@@ -12,7 +12,7 @@ agent-device follows that design.
   Agents own renewal and release. agent-device does not call Simlock.
 - Simlock owns allocation, capacity, provisioning, readiness, expiry, and device deletion.
 - agent-device uses the ordinary local runtime, sessions, and process-owned device claims for a leased device.
-  It has no managed runtime owner, allocator client, allocation journal, managed binding fence, or Host lease mapping.
+  It has no managed runtime owner, allocator client, allocation journal, or managed binding fence.
 - For iOS, pass the grant's `SIMLOCK_IOS_DEVICE_SET` as `--ios-simulator-device-set` or the `iosSimulatorDeviceSet` config key.
   Discovery, `simctl`, and the XCTest runner resolve the leased simulator inside Simlock's set.
 - For Android, the grant's `ANDROID_ADB_SERVER_PORT` selects Simlock's adb server.
@@ -26,16 +26,7 @@ Its simulators reside in a device set that Xcode does not read, and its emulator
 A grant reports device access requirements in an `environment` object with `SIMLOCK_IOS_DEVICE_SET` and `ANDROID_ADB_SERVER_PORT`.
 `simlock lease --export-env` prints this object for `eval`.
 
-The first design proposed a Host inside agent-device with these responsibilities:
-
-- Allocate through Simlock's typed client.
-- Journal allocation requests.
-- Fence each command with confirmed lease authority.
-- Use a dedicated runtime owner for managed devices.
-
-agent-device shipped these foundations but never activated them.
-Simlock then selected direct device leases by agents.
-This design needs nothing from agent-device beyond the ability to address a device in Simlock's roots.
+Direct leases need nothing from agent-device beyond the ability to address a device in Simlock's roots.
 agent-device already supported simulator-set scope and adb's server-port environment.
 
 ## 2. Decision
@@ -76,13 +67,6 @@ agent-device does not verify that a device is leased.
   Therefore, the caller points that executor at Simlock's server.
   Per-call `AndroidAdbExecutorOptions.serverPort` takes effect only if the executor honors it.
 
-## 4. Withdrawn design
+## 4. Rejected alternative
 
-The replaced design required these components:
-
-- A durable allocation journal reconciled through Simlock after crashes.
-- Fenced lease admission with renewal across each command deadline and teardown.
-- A managed runtime owner that delegates to the local family.
-- Allocator-held device claims with an installation principal instead of a process principal.
-
-If an in-process allocator returns, recover that design from git history: the ADR text before 2026-10-10, #2284, #2308, and #2312.
+- **An allocator inside agent-device** would allocate devices through Simlock's typed client, keep a journal of allocation requests, and fence each command with confirmed lease authority. We rejected it because Simlock owns allocation and agents lease devices directly, so an internal allocator would duplicate Simlock's state.

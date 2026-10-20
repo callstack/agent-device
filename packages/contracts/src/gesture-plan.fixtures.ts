@@ -12,7 +12,7 @@ export const LANDSCAPE: Rect = { x: 0, y: 0, width: 844, height: 390 };
 export function requireTwoPointerPlan(
   plan: ReturnType<typeof buildGesturePlan>,
 ): MultiTouchGesturePlan {
-  assert.equal(plan.topology, 'two');
+  assert.equal(plan.topology, 'multi');
   return plan as MultiTouchGesturePlan;
 }
 
@@ -164,6 +164,15 @@ function gesturePayloadArbByKind(
       scale,
       degrees: fc.integer({ min: -720, max: 720 }),
       durationMs,
+    }),
+    tap: fc.record({
+      kind: fc.constant('tap' as const),
+      points: fc.uniqueArray(origin, {
+        minLength: 2,
+        maxLength: 5,
+        selector: (point) => `${point.x},${point.y}`,
+      }),
+      holdMs: fc.option(fc.integer({ min: 16, max: 2000 }), { nil: undefined }),
     }),
   };
 }

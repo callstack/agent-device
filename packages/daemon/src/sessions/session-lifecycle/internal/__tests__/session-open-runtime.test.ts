@@ -142,7 +142,7 @@ test('open applies stored runtime launchUrl and reports runtime hints', async ()
   expect(mockBindDeviceRuntime).toHaveBeenCalledTimes(1);
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     { platform: 'android' },
-    { appleSimulatorAppTarget: 'Demo' },
+    { appleSimulatorAppTarget: 'Demo', env: process.env },
   );
   expect(callOrder).toEqual(['runtime', 'dispatch:open', 'dispatch:open']);
   expect(runtimeApplyCalls).toEqual([

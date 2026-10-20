@@ -65,11 +65,17 @@ export async function captureAndroidSnapshotWithHelper(
   });
   let result: Awaited<ReturnType<AndroidSnapshotHelperCaptureOptions['adb']>>;
   try {
-    result = await options.adb(buildAndroidSnapshotHelperArgs(resolved), {
-      allowFailure: true,
-      timeoutMs: resolved.commandTimeoutMs,
-      signal: options.signal,
-    });
+    result = await options.adb(
+      buildAndroidSnapshotHelperArgs({
+        ...resolved,
+        ...(options.skipIdleWait ? { waitForIdleTimeoutMs: 0 } : {}),
+      }),
+      {
+        allowFailure: true,
+        timeoutMs: resolved.commandTimeoutMs,
+        signal: options.signal,
+      },
+    );
   } catch (error) {
     if (!options.signal?.aborted) throw error;
     await retireCanceledAndroidSnapshotHelperCapture({
@@ -370,6 +376,7 @@ function readHelperMetadata(finalResult: Record<string, string>): AndroidSnapsho
     maxDepth: readOptionalNumber(finalResult.maxDepth),
     maxNodes: readOptionalNumber(finalResult.maxNodes),
     rootPresent: readOptionalBoolean(finalResult.rootPresent),
+    cacheInvalidated: readOptionalBoolean(finalResult.cacheInvalidated),
     captureMode: readOptionalCaptureMode(finalResult.captureMode),
     windowCount: readOptionalNumber(finalResult.windowCount),
     missingRootWindowTypes: readInstrumentationResultIntegerList(

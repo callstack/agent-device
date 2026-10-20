@@ -1,0 +1,677 @@
+{
+  "date": "2026-10-19",
+  "runtimeCommit": "fc612424d16cbaa6418107cb2552157f33a6e410",
+  "adapterCommit": "5e1d8952f4b0fd0d6a12b084ed8151e71e7cd889",
+  "adapterRuntimeCommit": "59307b157079b0b1a665b82afd0aa6b3845c2e2c",
+  "parentCommit": "0d4b58c341bda7372d05e69a6bf58db6248e4f47",
+  "parentRuntimeCommit": "ddba75f5b474cb4cdac11b15f75292f2870396c7",
+  "referenceCommit": "2593e45025edc52b2c381e809b41cb63d5878e2b",
+  "apkSha256": "b163e985ebd8340bf10447cdf6826aea37e429ee8c4382f9179c863c8c0619b2",
+  "device": "Pixel_7_CI / emulator-5554 / Android 16 API 36",
+  "workers": 1,
+  "runnerRetries": 0,
+  "sameSelectedIds": true,
+  "sameRunnableIds": true,
+  "runnableTestIdsSha256": "6c06cc1d2590e3b6c451d26b0912f973cd6703a5c58a932ba3ee544d1b55e19d",
+  "runs": {
+    "parent": {
+      "id": "01a153a0-9100-7c37-8b9b-2d982bded990",
+      "startedAt": "2026-10-19T10:06:36.383Z",
+      "finishedAt": "2026-10-19T10:11:57.633Z",
+      "durationMs": 321250,
+      "summary": {
+        "discovered": 45,
+        "selected": 43,
+        "executed": 42,
+        "passed": 42,
+        "failed": 0,
+        "interrupted": 0,
+        "flaky": 0,
+        "skipped": 1
+      },
+      "fixtureRecoveryTestIds": []
+    },
+    "direct": {
+      "id": "01a153ac-2384-78f5-a765-32b352482a2e",
+      "startedAt": "2026-10-19T10:19:12.763Z",
+      "finishedAt": "2026-10-19T10:22:35.366Z",
+      "durationMs": 202603,
+      "summary": {
+        "discovered": 45,
+        "selected": 43,
+        "executed": 42,
+        "passed": 40,
+        "failed": 2,
+        "interrupted": 0,
+        "flaky": 0,
+        "skipped": 1
+      },
+      "fixtureRecoveryTestIds": [
+        "tests/flows-lists.e2e.ts::infinite%20scroll%20reaches%20the%20target%20item",
+        "tests/flows-lists.e2e.ts::gestures%3A%20long-press%2C%20then%20swipe%20left",
+        "tests/flows-lists.e2e.ts::sticky%20chrome%3A%20accept%20below%20the%20fold%2C%20then%20continue",
+        "tests/flows.e2e.ts::bottom%20tabs%20act%20inside%20the%20last%20tab"
+      ]
+    },
+    "candidate": {
+      "id": "01a153ff-a255-7377-b15c-175c0b6eac39",
+      "startedAt": "2026-10-19T11:50:26.329Z",
+      "finishedAt": "2026-10-19T11:54:59.451Z",
+      "durationMs": 273122,
+      "summary": {
+        "discovered": 45,
+        "selected": 43,
+        "executed": 42,
+        "passed": 42,
+        "failed": 0,
+        "interrupted": 0,
+        "flaky": 0,
+        "skipped": 1
+      },
+      "fixtureRecoveryTestIds": []
+    }
+  },
+  "sharedDirectPassingCases": {
+    "count": 40,
+    "totalsMs": {
+      "parent": 308199,
+      "direct": 199428,
+      "candidate": 264813
+    }
+  },
+  "cases": [
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20label%20query%20resolves%20a%20labeled%20text%20field",
+      "title": "a label query resolves a labeled text field",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 3444,
+      "directMs": 1687,
+      "candidateMs": 3266,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20labeled%20field%20answers%20name%2C%20display%20value%2C%20value%20reads%2C%20fill%2C%20and%20clear",
+      "title": "a labeled field answers name, display value, value reads, fill, and clear",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 7941,
+      "directMs": 1894,
+      "candidateMs": 7927,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20placeholder%20query%20and%20attribute%20reads%20find%20the%20field",
+      "title": "a placeholder query and attribute reads find the field",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 3040,
+      "directMs": 1534,
+      "candidateMs": 2953,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20secure%20field%20takes%20a%20fill%20and%20denies%20value%20reads",
+      "title": "a secure field takes a fill and denies value reads",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 4370,
+      "directMs": 1553,
+      "candidateMs": 4569,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::press%20sends%20a%20character%20and%20Enter%20through%20the%20soft%20keyboard",
+      "title": "press sends a character and Enter through the soft keyboard",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 5825,
+      "directMs": 1730,
+      "candidateMs": 6178,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20field%20autofocuses%20on%20mount%20and%20focus%28%29%20moves%20the%20focus",
+      "title": "a field autofocuses on mount and focus() moves the focus",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 9064,
+      "directMs": 1872,
+      "candidateMs": 4222,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::toBeFocused%20follows%20the%20focus",
+      "title": "toBeFocused follows the focus",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 8215,
+      "directMs": 2741,
+      "candidateMs": 4767,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20switch%20checks%2C%20unchecks%2C%20and%20reports%20its%20state",
+      "title": "a switch checks, unchecks, and reports its state",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 9006,
+      "directMs": 4075,
+      "candidateMs": 6292,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::checkbox%20and%20radio%20roles%20answer%20getByRole%2C%20and%20a%20checkbox%20toggles%20by%20tap",
+      "title": "checkbox and radio roles answer getByRole, and a checkbox toggles by tap",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 6137,
+      "directMs": 1886,
+      "candidateMs": 4143,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::checkbox%20and%20radio%20roles%20check%2C%20uncheck%2C%20and%20report%20their%20state",
+      "title": "checkbox and radio roles check, uncheck, and report their state",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 10877,
+      "directMs": 6367,
+      "candidateMs": 8400,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20tab%20role%20answers%20getByRole",
+      "title": "a tab role answers getByRole",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 2821,
+      "directMs": 1325,
+      "candidateMs": 2864,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20radio%20group%20reports%20the%20checked%20option",
+      "title": "a radio group reports the checked option",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 8240,
+      "directMs": 3923,
+      "candidateMs": 5934,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::buttons%20report%20disabled%2C%20enabled%2C%20and%20a%20state%20that%20arrives%20later",
+      "title": "buttons report disabled, enabled, and a state that arrives later",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 7459,
+      "directMs": 3194,
+      "candidateMs": 5084,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20display%3A%20none%20element%20is%20absent%20rather%20than%20hidden%2C%20its%20visible%20twin%20attached",
+      "title": "a display: none element is absent rather than hidden, its visible twin attached",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 5611,
+      "directMs": 2368,
+      "candidateMs": 4478,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20header%20answers%20its%20accessible%20name",
+      "title": "a header answers its accessible name",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 2873,
+      "directMs": 1298,
+      "candidateMs": 2814,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20tab%20row%20answers%20count%2C%20all%2C%20texts%2C%20filters%2C%20positions%2C%20and%20switching",
+      "title": "a tab row answers count, all, texts, filters, positions, and switching",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 4715,
+      "directMs": 1727,
+      "candidateMs": 4694,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20list%20answers%20counts%2C%20list-form%20text%2C%20reads%2C%20and%20boxes%20in%20order",
+      "title": "a list answers counts, list-form text, reads, and boxes in order",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 4636,
+      "directMs": 647,
+      "candidateMs": 3537,
+      "directStatus": "failed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20row%20contains%20its%20texts",
+      "title": "a row contains its texts",
+      "file": "tests/controls.e2e.ts",
+      "status": "skipped",
+      "parentMs": null,
+      "directMs": null,
+      "candidateMs": null,
+      "directStatus": "skipped"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20long%20press%20lands%20as%20one",
+      "title": "a long press lands as one",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 6488,
+      "directMs": 2343,
+      "candidateMs": 5508,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::a%20double%20tap%20lands%20inside%20the%20300%20ms%20window",
+      "title": "a double tap lands inside the 300 ms window",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 7411,
+      "directMs": 1730,
+      "candidateMs": 4796,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::pointer%20verbs%20land%20at%20the%20point%20asked%20for",
+      "title": "pointer verbs land at the point asked for",
+      "file": "tests/controls.e2e.ts",
+      "status": "skipped",
+      "parentMs": null,
+      "directMs": null,
+      "candidateMs": null,
+      "directStatus": "skipped"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::an%20ambiguous%20locator%20fails%20at%20once",
+      "title": "an ambiguous locator fails at once",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 4273,
+      "directMs": 1482,
+      "candidateMs": 4913,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::control%20inventory::screenshot%2C%20restart%2C%20and%20clearState%20reopen%20the%20app%20on%20its%20home%20list",
+      "title": "screenshot, restart, and clearState reopen the app on its home list",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 6570,
+      "directMs": 2483,
+      "candidateMs": 7129,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::refusals::verbs%20a%20device%20never%20declares%20are%20refused%20before%20the%20engine",
+      "title": "verbs a device never declares are refused before the engine",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 1,
+      "directMs": 3,
+      "candidateMs": 3,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::refusals::keys%20the%20soft%20keyboard%20cannot%20send%20are%20refused%20by%20the%20engine",
+      "title": "keys the soft keyboard cannot send are refused by the engine",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 165,
+      "directMs": 165,
+      "candidateMs": 1490,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/controls.e2e.ts::refusals::a%20missing%20locator%20fails%20as%20not%20found%20once%20its%20timeout%20passes",
+      "title": "a missing locator fails as not found once its timeout passes",
+      "file": "tests/controls.e2e.ts",
+      "status": "passed",
+      "parentMs": 1113,
+      "directMs": 1072,
+      "candidateMs": 1116,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows-lists.e2e.ts::infinite%20scroll%20reaches%20the%20target%20item",
+      "title": "infinite scroll reaches the target item",
+      "file": "tests/flows-lists.e2e.ts",
+      "status": "passed",
+      "parentMs": 14316,
+      "directMs": 22370,
+      "candidateMs": 14463,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows-lists.e2e.ts::product%20catalog%20adds%20exactly%20two%20of%20the%20right%20variant",
+      "title": "product catalog adds exactly two of the right variant",
+      "file": "tests/flows-lists.e2e.ts",
+      "status": "passed",
+      "parentMs": 8986,
+      "directMs": 1990,
+      "candidateMs": 4315,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows-lists.e2e.ts::gestures%3A%20long-press%2C%20then%20swipe%20left",
+      "title": "gestures: long-press, then swipe left",
+      "file": "tests/flows-lists.e2e.ts",
+      "status": "passed",
+      "parentMs": 7339,
+      "directMs": 13198,
+      "candidateMs": 7231,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows-lists.e2e.ts::gestures%3A%20double-tap%20completes%20the%20flow",
+      "title": "gestures: double-tap completes the flow",
+      "file": "tests/flows-lists.e2e.ts",
+      "status": "passed",
+      "parentMs": 8745,
+      "directMs": 3109,
+      "candidateMs": 8890,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows-lists.e2e.ts::sticky%20chrome%3A%20accept%20below%20the%20fold%2C%20then%20continue",
+      "title": "sticky chrome: accept below the fold, then continue",
+      "file": "tests/flows-lists.e2e.ts",
+      "status": "passed",
+      "parentMs": 10532,
+      "directMs": 13379,
+      "candidateMs": 6412,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows-lists.e2e.ts::async%20states%3A%20load%2C%20pull%20to%20refresh%2C%20claim%20through%20the%20toast",
+      "title": "async states: load, pull to refresh, claim through the toast",
+      "file": "tests/flows-lists.e2e.ts",
+      "status": "passed",
+      "parentMs": 10900,
+      "directMs": 7623,
+      "candidateMs": 10450,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows-lists.e2e.ts::huge%20virtualized%20list%20reaches%20row%20512",
+      "title": "huge virtualized list reaches row 512",
+      "file": "tests/flows-lists.e2e.ts",
+      "status": "passed",
+      "parentMs": 48378,
+      "directMs": 50821,
+      "candidateMs": 48668,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows-lists.e2e.ts::web%20view%20coupon%20form%20applies%20the%20code%20shown%20on%20the%20page",
+      "title": "web view coupon form applies the code shown on the page",
+      "file": "tests/flows-lists.e2e.ts",
+      "status": "skipped",
+      "parentMs": null,
+      "directMs": null,
+      "candidateMs": null,
+      "directStatus": "skipped"
+    },
+    {
+      "testId": "tests/flows.e2e.ts::text%20inputs%20unlock%20the%20submit%20button",
+      "title": "text inputs unlock the submit button",
+      "file": "tests/flows.e2e.ts",
+      "status": "passed",
+      "parentMs": 7074,
+      "directMs": 1987,
+      "candidateMs": 5285,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows.e2e.ts::filled%20text%20inputs%20report%20their%20values",
+      "title": "filled text inputs report their values",
+      "file": "tests/flows.e2e.ts",
+      "status": "passed",
+      "parentMs": 5929,
+      "directMs": 1569,
+      "candidateMs": 4636,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows.e2e.ts::modal%20flow%20confirms%20through%20the%20native%20alert",
+      "title": "modal flow confirms through the native alert",
+      "file": "tests/flows.e2e.ts",
+      "status": "passed",
+      "parentMs": 7922,
+      "directMs": 1767,
+      "candidateMs": 4293,
+      "directStatus": "failed"
+    },
+    {
+      "testId": "tests/flows.e2e.ts::bottom%20tabs%20act%20inside%20the%20last%20tab",
+      "title": "bottom tabs act inside the last tab",
+      "file": "tests/flows.e2e.ts",
+      "status": "passed",
+      "parentMs": 5767,
+      "directMs": 12224,
+      "candidateMs": 4164,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows.e2e.ts::error%20recovery%20retries%2C%20then%20confirms%20the%20delete",
+      "title": "error recovery retries, then confirms the delete",
+      "file": "tests/flows.e2e.ts",
+      "status": "passed",
+      "parentMs": 7811,
+      "directMs": 4528,
+      "candidateMs": 6420,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows.e2e.ts::choice%20controls%20place%20the%20exact%20order",
+      "title": "choice controls place the exact order",
+      "file": "tests/flows.e2e.ts",
+      "status": "passed",
+      "parentMs": 7833,
+      "directMs": 1760,
+      "candidateMs": 4145,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/flows.e2e.ts::debounced%20search%20selects%20the%20target%20once%20results%20arrive",
+      "title": "debounced search selects the target once results arrive",
+      "file": "tests/flows.e2e.ts",
+      "status": "passed",
+      "parentMs": 7670,
+      "directMs": 3032,
+      "candidateMs": 7599,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/login-form.e2e.ts::login%20form::rejects%20a%20malformed%20email",
+      "title": "rejects a malformed email",
+      "file": "tests/login-form.e2e.ts",
+      "status": "passed",
+      "parentMs": 7710,
+      "directMs": 2012,
+      "candidateMs": 6454,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/login-form.e2e.ts::login%20form::rejects%20an%20unknown%20account",
+      "title": "rejects an unknown account",
+      "file": "tests/login-form.e2e.ts",
+      "status": "passed",
+      "parentMs": 7800,
+      "directMs": 2082,
+      "candidateMs": 6378,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/login-form.e2e.ts::login%20form::signs%20in%20and%20logs%20out",
+      "title": "signs in and logs out",
+      "file": "tests/login-form.e2e.ts",
+      "status": "passed",
+      "parentMs": 11504,
+      "directMs": 6956,
+      "candidateMs": 11668,
+      "directStatus": "passed"
+    },
+    {
+      "testId": "tests/smoke.e2e.ts::home%20lists%20the%20scenarios%20and%20opens%20one",
+      "title": "home lists the scenarios and opens one",
+      "file": "tests/smoke.e2e.ts",
+      "status": "passed",
+      "parentMs": 4246,
+      "directMs": 2336,
+      "candidateMs": 4095,
+      "directStatus": "passed"
+    }
+  ],
+  "testApp": {
+    "fixtureCommit": "498f939840858eb545cd8f30cc7c542c27c24c6c",
+    "checkoutViewportCorrection": {
+      "originalFailure": "Order summary was above the viewport after fixed scroll up0.6",
+      "verification": "one additional scroll revealed form-success and exact submitted summary without resubmission",
+      "correction": "scroll up --until id=\"form-success\"; both original summary assertions retained"
+    },
+    "runtimeCommit": "fc612424d16cbaa6418107cb2552157f33a6e410",
+    "apkSha256": "4f332d39e76899b86e7006cda5d43ade6211733fe85ffe4552735e3e56c867b4",
+    "completedScenarios": [
+      "smoke:fixture-bootstrap",
+      "smoke:inventory",
+      "smoke:automation-system",
+      "smoke:maestro-clickable-first",
+      "smoke:form-input",
+      "smoke:keyboard-ime",
+      "smoke:capture-close",
+      "full:lifecycle-system",
+      "full:observability-artifacts",
+      "full:fixture-replays"
+    ],
+    "behaviorIds": [
+      "android-resource-id-selectors",
+      "cold-start-deep-link-navigation",
+      "helper-backed-gesture-recovery",
+      "home-recents-restoration",
+      "ime-owned-input-recovery",
+      "long-list-scroll-recovery",
+      "maestro-clickable-first-selection",
+      "orientation-fixture-state",
+      "push-broadcast-delivery",
+      "runtime-permission-recovery",
+      "safe-back-navigation",
+      "safe-keyboard-dismissal",
+      "system-ime-keyboard",
+      "test-ime-restoration",
+      "test-ime-unicode-input"
+    ],
+    "commands": [
+      "alert",
+      "app-switcher",
+      "apps",
+      "appstate",
+      "artifacts",
+      "back",
+      "batch",
+      "capabilities",
+      "click",
+      "close",
+      "devices",
+      "diff",
+      "doctor",
+      "events",
+      "fill",
+      "find",
+      "focus",
+      "gesture",
+      "get",
+      "home",
+      "install",
+      "is",
+      "keyboard",
+      "logs",
+      "longpress",
+      "open",
+      "orientation",
+      "perf",
+      "press",
+      "push",
+      "record",
+      "replay",
+      "screenshot",
+      "scroll",
+      "settings",
+      "snapshot",
+      "swipe",
+      "test",
+      "trace",
+      "type",
+      "wait"
+    ],
+    "timings": {
+      "runDurationMs": 145716,
+      "scenarios": [
+        {
+          "durationMs": 1143,
+          "id": "smoke:fixture-bootstrap"
+        },
+        {
+          "durationMs": 1166,
+          "id": "smoke:inventory"
+        },
+        {
+          "durationMs": 27145,
+          "id": "smoke:automation-system"
+        },
+        {
+          "durationMs": 3423,
+          "id": "smoke:maestro-clickable-first"
+        },
+        {
+          "durationMs": 4436,
+          "id": "smoke:form-input"
+        },
+        {
+          "durationMs": 3702,
+          "id": "smoke:keyboard-ime"
+        },
+        {
+          "durationMs": 2250,
+          "id": "smoke:capture-close"
+        },
+        {
+          "durationMs": 32341,
+          "id": "full:lifecycle-system"
+        },
+        {
+          "durationMs": 20964,
+          "id": "full:observability-artifacts"
+        },
+        {
+          "durationMs": 47603,
+          "id": "full:fixture-replays"
+        }
+      ]
+    }
+  },
+  "validation": {
+    "commit": "fc612424d16cbaa6418107cb2552157f33a6e410",
+    "exactCommit": true,
+    "checkoutChanged": false,
+    "relatedTestsPassed": 3910,
+    "regressionBase": {
+      "failed": 12,
+      "passed": 6,
+      "skipped": 36
+    },
+    "regressionHead": {
+      "passed": 18,
+      "skipped": 36
+    },
+    "adapterUnitTestsPassed": 352
+  }
+}

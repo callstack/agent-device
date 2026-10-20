@@ -59,6 +59,7 @@ export async function handleRuntimeCommand(params: {
     return await handlePortReverseCommand({
       req,
       session: sessionStore.get(sessionName),
+      env: sessionStore.host.env,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
       bindDevice: params.bindDevice,

@@ -42,7 +42,7 @@ extension RunnerTests {
     let plan = try JSONDecoder().decode(
       RunnerGesturePlan.self,
       from: Data(
-        #"{"topology":"two","intent":"pan","durationMs":32,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":80,"y":80}},{"offsetMs":16,"point":{"x":90,"y":85}},{"offsetMs":32,"point":{"x":100,"y":90}}]},{"pointerId":1,"samples":[{"offsetMs":0,"point":{"x":80,"y":120}},{"offsetMs":16,"point":{"x":90,"y":125}},{"offsetMs":32,"point":{"x":100,"y":130}}]}]}"#.utf8
+        #"{"topology":"multi","intent":"pan","durationMs":32,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":80,"y":80}},{"offsetMs":16,"point":{"x":90,"y":85}},{"offsetMs":32,"point":{"x":100,"y":90}}]},{"pointerId":1,"samples":[{"offsetMs":0,"point":{"x":80,"y":120}},{"offsetMs":16,"point":{"x":90,"y":125}},{"offsetMs":32,"point":{"x":100,"y":130}}]}]}"#.utf8
       )
     )
 
@@ -54,7 +54,7 @@ extension RunnerTests {
     let plan = try JSONDecoder().decode(
       RunnerGesturePlan.self,
       from: Data(
-        #"{"topology":"two","intent":"transform","durationMs":32,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":80,"y":80}},{"offsetMs":32,"point":{"x":100,"y":90}}]},{"pointerId":1,"samples":[{"offsetMs":0,"point":{"x":80,"y":120}},{"offsetMs":31,"point":{"x":100,"y":130}}]}]}"#.utf8
+        #"{"topology":"multi","intent":"transform","durationMs":32,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":80,"y":80}},{"offsetMs":32,"point":{"x":100,"y":90}}]},{"pointerId":1,"samples":[{"offsetMs":0,"point":{"x":80,"y":120}},{"offsetMs":31,"point":{"x":100,"y":130}}]}]}"#.utf8
       )
     )
 
@@ -62,6 +62,66 @@ extension RunnerTests {
       plannedGestureValidationError(plan),
       "planned pointer sample offsets must match and strictly increase"
     )
+  }
+
+  func testPlannedTapAcceptsTwoToFiveStationaryContacts() throws {
+    for count in [2, 5] {
+      let plan = try decodedMultiContactPlan(intent: "tap", starts: tapStarts(count))
+      XCTAssertNil(plannedGestureValidationError(plan), "\(count) contacts")
+      XCTAssertEqual(plannedGestureExecution(for: plan), .sampled)
+    }
+  }
+
+  func testPlannedTapRejectsOneOrSixContacts() throws {
+    for count in [1, 6] {
+      let plan = try decodedMultiContactPlan(intent: "tap", starts: tapStarts(count))
+      XCTAssertEqual(
+        plannedGestureValidationError(plan),
+        "planned gesture pointer count does not match topology",
+        "\(count) contacts"
+      )
+    }
+  }
+
+  func testPlannedTapRejectsMovingAndCoincidentContacts() throws {
+    let moving = try decodedMultiContactPlan(
+      intent: "tap", starts: tapStarts(3), lastPointerEndsAt: (x: 150, y: 150)
+    )
+    XCTAssertEqual(plannedGestureValidationError(moving), "planned tap contacts must not move")
+
+    let coincident = try decodedMultiContactPlan(
+      intent: "tap", starts: [(x: 40, y: 40), (x: 80, y: 40), (x: 40, y: 40)]
+    )
+    XCTAssertEqual(
+      plannedGestureValidationError(coincident),
+      "planned tap contacts must start on distinct points"
+    )
+  }
+
+  func testPlannedPinchStillRequiresExactlyTwoContacts() throws {
+    let plan = try decodedMultiContactPlan(intent: "pinch", starts: tapStarts(3))
+    XCTAssertEqual(
+      plannedGestureValidationError(plan),
+      "planned gesture pointer count does not match topology"
+    )
+  }
+
+  private func tapStarts(_ count: Int) -> [(x: Double, y: Double)] {
+    (0..<count).map { index in (x: 20 + Double(index) * 30, y: 100) }
+  }
+
+  /// Stationary contacts held for 50 ms; `lastPointerEndsAt` moves the last contact's final sample.
+  private func decodedMultiContactPlan(
+    intent: String,
+    starts: [(x: Double, y: Double)],
+    lastPointerEndsAt: (x: Double, y: Double)? = nil
+  ) throws -> RunnerGesturePlan {
+    let pointers = starts.enumerated().map { index, start -> String in
+      let end = index == starts.count - 1 ? lastPointerEndsAt ?? start : start
+      return #"{"pointerId":\#(index),"samples":[{"offsetMs":0,"point":{"x":\#(start.x),"y":\#(start.y)}},{"offsetMs":50,"point":{"x":\#(end.x),"y":\#(end.y)}}]}"#
+    }
+    let json = #"{"topology":"multi","intent":"\#(intent)","durationMs":50,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[\#(pointers.joined(separator: ","))]}"#
+    return try JSONDecoder().decode(RunnerGesturePlan.self, from: Data(json.utf8))
   }
 
   func testSinglePointerFlingUsesFastSwipeExecution() throws {

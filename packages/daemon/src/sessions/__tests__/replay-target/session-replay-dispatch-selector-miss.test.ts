@@ -22,6 +22,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import {
   bottomTabsRealCaptureFixture,
+  createLiveTestHostEnvironment,
   mkdtempForTestSync,
   recordArticleEvidence,
 } from '@agent-device/test-kit';
@@ -63,7 +64,10 @@ beforeEach(() => {
 });
 
 function setupSession(root: string): { sessionStore: SessionStore; sessionName: string } {
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,

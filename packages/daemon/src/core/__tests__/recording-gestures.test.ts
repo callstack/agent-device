@@ -443,3 +443,37 @@ test('edge swipe is classified as a back-swipe telemetry event', () => {
   assert.equal(event.edge, 'left');
   assert.equal(event.durationMs, 320);
 });
+
+test('a multi-finger tap records one touch overlay per contact', () => {
+  const session = makeSession();
+
+  recordTouchVisualizationEvent(
+    session,
+    'gesture',
+    ['tap', '80', '300', '200', '450'],
+    {
+      kind: 'tap',
+      from: { x: 140, y: 375 },
+      to: { x: 140, y: 375 },
+      durationMs: 40,
+      pointerCount: 2,
+      points: [
+        { x: 80, y: 300 },
+        { x: 200, y: 450 },
+      ],
+      holdMs: 40,
+      count: 1,
+      pauseMs: 0,
+      completed: 1,
+    },
+    {},
+    1_500,
+    1_540,
+  );
+
+  const frame = { referenceWidth: 402, referenceHeight: 874 };
+  assert.deepEqual(session.screenRecording?.handle.inspect().gestureEvents, [
+    { kind: 'tap', tMs: 500, x: 80, y: 300, ...frame, durationMs: 40 },
+    { kind: 'tap', tMs: 500, x: 200, y: 450, ...frame, durationMs: 40 },
+  ]);
+});

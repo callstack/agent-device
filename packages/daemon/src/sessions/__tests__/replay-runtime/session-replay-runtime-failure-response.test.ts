@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -35,7 +35,10 @@ beforeEach(() => {
 
 test('divergence cause and action strings pass through the central redactor at construction', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-redact-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['click "Save"']);
@@ -69,7 +72,10 @@ test('a fill divergence never serializes the typed text at any response level', 
   const sentinel = 'SuperSecretPassword-do-not-leak-12345';
   for (const level of ['digest', 'default', 'full'] as const) {
     const root = mkdtempForTestSync('agent-device-replay-fill-leak-');
-    const sessionStore = new SessionStore(path.join(root, 'sessions'));
+    const sessionStore = new SessionStore(
+      path.join(root, 'sessions'),
+      createLiveTestHostEnvironment(),
+    );
     const sessionName = 'default';
     sessionStore.publish(
       sessionName,
@@ -126,7 +132,10 @@ test('a fill divergence never serializes the typed text at any response level', 
 
 test('a capture-failed screen hint redacts a secret in the capture error', async () => {
   const root = mkdtempForTestSync('agent-device-replay-screen-redact-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -163,7 +172,10 @@ test('a capture-failed screen hint redacts a secret in the capture error', async
 test('an expanded ${VAR} value echoed by a selector error never reaches the public divergence', async () => {
   const sentinel = 'ExpandedVarSecret-98765-do-not-leak';
   const root = mkdtempForTestSync('agent-device-replay-var-leak-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -211,7 +223,10 @@ test('an expanded built-in AD_DEVICE_ID never reaches the public divergence', as
   const deviceId = 'BuiltInDeviceId-486b3d4c-8f92-4dc0-b5c6-unique';
   const sessionName = 'static-session-context';
   const root = mkdtempForTestSync('agent-device-replay-builtin-var-leak-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish(
     sessionName,
     makeIosSession(sessionName, { appBundleId: 'com.example.app' }),

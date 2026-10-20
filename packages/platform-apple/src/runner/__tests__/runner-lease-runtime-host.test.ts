@@ -2,7 +2,8 @@ import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from './tmp-dir.ts';
-import { createAppleRunnerRuntimeState } from '../../core/runner-owner-state.ts';
+import { createTestRuntimeStateHandle } from '@agent-device/test-kit';
+import { setAppleRunnerHostEnvironment } from '../../core/runner-owner-state.ts';
 import { currentRunnerLeaseOwnerToken, writeRunnerLease } from '../runner-lease.ts';
 
 // Each composed runtime reads its runner configuration from the host it was composed with, not
@@ -14,14 +15,20 @@ test("each runner runtime resolves its host's runner lease directory, not the pr
   const root = mkdtempForTestSync('apple-runner-lease-host-');
   const dirA = path.join(root, 'a');
   const dirB = path.join(root, 'b');
-  const runtimeA = createAppleRunnerRuntimeState({
-    env: { ...process.env, AGENT_DEVICE_IOS_RUNNER_LEASE_DIR: dirA },
-    cwd: process.cwd(),
-  });
-  const runtimeB = createAppleRunnerRuntimeState({
-    env: { ...process.env, AGENT_DEVICE_IOS_RUNNER_LEASE_DIR: dirB },
-    cwd: process.cwd(),
-  });
+  const runtimeA = createTestRuntimeStateHandle();
+  const runtimeB = createTestRuntimeStateHandle();
+  runtimeA.run(() =>
+    setAppleRunnerHostEnvironment({
+      env: { ...process.env, AGENT_DEVICE_IOS_RUNNER_LEASE_DIR: dirA },
+      cwd: process.cwd(),
+    }),
+  );
+  runtimeB.run(() =>
+    setAppleRunnerHostEnvironment({
+      env: { ...process.env, AGENT_DEVICE_IOS_RUNNER_LEASE_DIR: dirB },
+      cwd: process.cwd(),
+    }),
+  );
 
   runtimeA.run(() =>
     writeRunnerLease({

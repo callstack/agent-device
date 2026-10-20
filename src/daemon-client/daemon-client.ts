@@ -64,7 +64,7 @@ async function sendToDaemonOnHost(
   options: DaemonTransportOptions,
   host: HostEnvironment,
 ): Promise<DaemonResponse> {
-  const { resolveClientSettings, attachSessionAddressHints } =
+  const { resolveClientSettings, resolveTimeoutRecovery, attachSessionAddressHints } =
     await import('./daemon-client-lifecycle.ts');
   const { connectToDaemon } = await import('./daemon-client-attach.ts');
   const requestId = req.meta?.requestId ?? createRequestId();
@@ -82,6 +82,7 @@ async function sendToDaemonOnHost(
     options.authToken ?? flagAuthToken,
     host,
     options.daemonLifecycle,
+    options.daemonBinding,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
@@ -149,8 +150,7 @@ async function sendToDaemonOnHost(
               host,
               onProgress: options.onProgress,
               signal: options.signal,
-              timeoutRecovery:
-                settings.daemonLifecycle === 'attach' ? 'none' : 'retire-unresponsive',
+              timeoutRecovery: resolveTimeoutRecovery(settings),
             },
           ),
         { requestId, command: req.command },

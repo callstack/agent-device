@@ -18,6 +18,11 @@ final class AccessibilityNodeReads {
 
   private AccessibilityNodeReads() {}
 
+  static AccessibilityNodeInfo rootWithoutPrefetch(AccessibilityWindowInfo window) {
+    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        ? window.getRoot(0) : window.getRoot();
+  }
+
   static AccessibilityNodeInfo root(AccessibilityWindowInfo window) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       return window.getRoot(PREFETCH_STRATEGY);

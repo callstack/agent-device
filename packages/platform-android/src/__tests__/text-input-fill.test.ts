@@ -633,19 +633,31 @@ test('readAndroidTextAtPointInHierarchy reads the EditText under the requested p
   assert.equal(readAndroidTextAtPointInHierarchy(hierarchy, 100, 250), 'fallback@example.com');
 });
 
-test('fillAndroid runs the whole attempt on one warm daemon-session helper', async () => {
+test('fillAndroid confirms a moved clear through one warm helper', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const processes: FakeAndroidProcess[] = [];
-  let typed = '';
+  let typed = 'before';
   let captureCount = 0;
   const provider = createPersistentSnapshotHelperProvider({
     calls,
     spawnArgs,
     processes,
+    sessionInput: (input) => {
+      if (input.kind === 'fill') typed = input.text ?? '';
+    },
+    sessionSnapshotMetadata: () => ({ cacheInvalidated: 'true', missingRootWindowTypes: '' }),
     sessionXml: () => {
       captureCount += 1;
-      return androidInputXml({ text: typed });
+      const xml = phoneInputXml(typed);
+      return captureCount === 1
+        ? xml
+        : xml
+            .replace('[0,0][200,100]', '[400,0][600,100]')
+            .replace(
+              '</hierarchy>',
+              '<node package="com.example" class="android.widget.EditText" text="D" resource-id="decoy" focused="false" bounds="[0,0][200,100]"/></hierarchy>',
+            );
     },
   });
 
@@ -656,6 +668,7 @@ test('fillAndroid runs the whole attempt on one warm daemon-session helper', asy
       exec: async (args, options) => {
         if (isDeleteKey(args)) typed = '';
         if (isTextInput(args)) typed = args[3] ?? '';
+        if (args.includes('--show-versioncode')) return provider.exec(args, options);
         if (args[0] === 'shell' && args[1] !== 'am') return adbResult('');
         return await provider.exec(args, options);
       },
@@ -663,13 +676,14 @@ test('fillAndroid runs the whole attempt on one warm daemon-session helper', asy
     },
     { serial: ANDROID_EMULATOR.id },
     async () => {
-      await fillAndroid(ANDROID_EMULATOR, 10, 10, 'chips', 0, {
+      await fillAndroid(ANDROID_EMULATOR, 10, 10, '', 0, {
         helperSessionScope: 'daemon-session',
       });
     },
   );
 
   // One pre-action target read plus the two settling samples the text held for.
+  assert.equal(typed, '');
   assert.equal(captureCount, 3);
   assert.equal(spawnArgs.length, 1);
   assert.equal(calls.filter(isAndroidHelperForwardRemoval).length, 0);
@@ -835,5 +849,26 @@ test('fillAndroid with an empty text fails, not unconfirmed, when a provider fil
         },
       );
     },
+  );
+});
+
+test('a live text read keeps the resolved identity when its old point covers a sibling', () => {
+  const xml = `<hierarchy>
+    <node package="com.example" class="android.widget.TextView" resource-id="window-state" text="portrait" bounds="[200,0][300,100]" />
+    <node package="com.example" class="android.widget.TextView" resource-id="app-state" text="active" bounds="[0,0][100,100]" />
+  </hierarchy>`;
+  const target = {
+    identifier: 'window-state',
+    bundleId: 'com.example',
+    type: 'android.widget.TextView',
+  };
+  assert.equal(readAndroidTextAtPointInHierarchy(xml, 50, 50, target), 'portrait');
+  assert.equal(
+    readAndroidTextAtPointInHierarchy(xml, 50, 50, { ...target, bundleId: 'other.app' }),
+    null,
+  );
+  assert.equal(
+    readAndroidTextAtPointInHierarchy(xml.replace('app-state', 'window-state'), 50, 50, target),
+    'active',
   );
 });

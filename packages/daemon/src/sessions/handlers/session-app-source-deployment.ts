@@ -1,4 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type {
   AppDeploymentResult,
@@ -65,7 +66,12 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
   try {
     resolvedSource = resolveInstallSource(req);
     const retention = resolveRetention(req);
-    const device = await resolveInstallDevice(session, req.flags, params.platformServices);
+    const device = await resolveInstallDevice(
+      session,
+      req.flags,
+      sessionStore.host.env,
+      params.platformServices,
+    );
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);
     const unsupported =
       unavailableRuntimeOperationResponse('install_from_source', facts.operations.ensureReady) ??
@@ -136,6 +142,7 @@ export async function handleReleaseMaterializedPathsCommand(params: {
 async function resolveInstallDevice(
   session: SessionState | undefined,
   flags: DaemonRequest['flags'] | undefined,
+  env: EnvMap,
   platformServices: DaemonPlatformServices,
 ): Promise<SessionState['device']> {
   const requestedPlatform = normalizePlatform(flags?.platform);
@@ -157,7 +164,7 @@ async function resolveInstallDevice(
   if (session) {
     return session.device;
   }
-  return await resolveCommandDevice({ session, flags, platformServices });
+  return await resolveCommandDevice({ session, flags, env, platformServices });
 }
 
 function normalizePlatform(

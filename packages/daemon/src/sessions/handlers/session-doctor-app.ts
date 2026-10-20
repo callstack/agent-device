@@ -16,9 +16,10 @@ export async function appendAppChecks(
     session: SessionState | undefined;
     targetApp?: string;
     listInstalledApps?: DoctorAppInventory;
+    useColor: boolean;
   },
 ): Promise<void> {
-  const { device, targetApp, session, listInstalledApps } = params;
+  const { device, targetApp, session, listInstalledApps, useColor } = params;
   if (!targetApp) {
     return;
   }
@@ -28,31 +29,43 @@ export async function appendAppChecks(
       ? resolveUniqueInstalledAppMatch(targetApp, await listInstalledApps('all'))?.id
       : undefined;
     if (!resolved) {
-      appendDoctorCheck(checks, {
-        id: 'target-app',
-        status: 'info',
-        // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
-        summary: `Target app installation checks are not supported for ${publicPlatformString(device)}.`,
-        evidence: { requested: targetApp, platform: publicPlatformString(device) },
-      });
+      appendDoctorCheck(
+        checks,
+        {
+          id: 'target-app',
+          status: 'info',
+          // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
+          summary: `Target app installation checks are not supported for ${publicPlatformString(device)}.`,
+          evidence: { requested: targetApp, platform: publicPlatformString(device) },
+        },
+        useColor,
+      );
       return;
     }
-    appendDoctorCheck(checks, {
-      id: 'target-app',
-      status: 'pass',
-      summary: `Target app is launchable: ${resolved}`,
-      evidence: { requested: targetApp, resolved, sessionApp: session?.appBundleId },
-    });
+    appendDoctorCheck(
+      checks,
+      {
+        id: 'target-app',
+        status: 'pass',
+        summary: `Target app is launchable: ${resolved}`,
+        evidence: { requested: targetApp, resolved, sessionApp: session?.appBundleId },
+      },
+      useColor,
+    );
   } catch (error) {
     const normalized = normalizeError(error);
-    appendDoctorCheck(checks, {
-      id: 'target-app',
-      status: 'fail',
-      summary: `Target app check failed: ${normalized.message}`,
-      hint: normalized.hint ?? 'Install the app or pass an exact package/bundle id or app name.',
-      command: `agent-device apps --platform ${publicPlatformString(device)} --all`,
-      evidence: { code: normalized.code, message: normalized.message },
-    });
+    appendDoctorCheck(
+      checks,
+      {
+        id: 'target-app',
+        status: 'fail',
+        summary: `Target app check failed: ${normalized.message}`,
+        hint: normalized.hint ?? 'Install the app or pass an exact package/bundle id or app name.',
+        command: `agent-device apps --platform ${publicPlatformString(device)} --all`,
+        evidence: { code: normalized.code, message: normalized.message },
+      },
+      useColor,
+    );
   }
 }
 

@@ -1,0 +1,221 @@
+{
+  "date": "2026-10-19",
+  "baseCommit": "8b29f466fc2941eb24f9b3df8b60b3aef862d8cd",
+  "runtimeCommit": "86d42d43ea2a06cc4290fb1bef56b780765b7d1c",
+  "adapterCommit": "5e1d8952f4b0fd0d6a12b084ed8151e71e7cd889",
+  "device": "Pixel_7_CI / emulator-5554 / Android 16 API 36",
+  "workers": 1,
+  "runnerRetries": 0,
+  "benchmarkApkSha256": "b163e985ebd8340bf10447cdf6826aea37e429ee8c4382f9179c863c8c0619b2",
+  "testAppApkSha256": "4f332d39e76899b86e7006cda5d43ade6211733fe85ffe4552735e3e56c867b4",
+  "rejectedHostShortcut": {
+    "disposition": "Rejected. Covering button can receive click while field has correct empty value.",
+    "caseAbbaSeconds": [8.94, 6.194, 6.087, 8.866],
+    "clearAbbaMs": [1733, 451, 436, 1731],
+    "enterAbbaMs": [1617, 286, 285, 1603],
+    "focusedMeasuredOutcomes": {
+      "correct": 15,
+      "wrong-target": 3,
+      "mutation-after-error": 3
+    },
+    "focusedTimerOutcomes": {
+      "correct": 12,
+      "refusal": 9
+    },
+    "testAppTimerSeconds": 37.714,
+    "testAppMeasuredSeconds": 32.634,
+    "excludedRuns": [
+      "Initial overlapping-field setup failure",
+      "Preparation cohort with only one eligible shortcut action"
+    ]
+  },
+  "acceptedVerifierFix": {
+    "base": {
+      "trials": 6,
+      "outcomes": {
+        "correct": 2,
+        "mutation-after-error": 4
+      },
+      "movingClearMs": [1646, 1638, 1620, 1635],
+      "movingClearMedianMs": 1636.5
+    },
+    "final": {
+      "trials": 6,
+      "outcomes": {
+        "correct": 6
+      },
+      "movingClearMs": [311, 299, 334, 413],
+      "movingClearMedianMs": 322.5
+    },
+    "movingClearMedianSavedMs": 1314.0,
+    "negativeControl": {
+      "expectedFailure": true,
+      "value": "_",
+      "decoy": "D",
+      "clears": 1,
+      "edits": 0,
+      "clicks": 1,
+      "outcome": "wrong-target"
+    },
+    "originalRegression": {
+      "baseFailed": 1,
+      "basePassed": 4
+    },
+    "reviewRegression": {
+      "previousCandidateFailed": 4,
+      "previousCandidatePassed": 1,
+      "finalPassed": 5
+    },
+    "focusedTestsPassed": 40
+  },
+  "validation": {
+    "benchmarkHead": {
+      "runId": "01a1549f-a646-773d-bca2-44daffb097b7",
+      "durationSeconds": 309.967,
+      "summary": {
+        "discovered": 45,
+        "selected": 43,
+        "executed": 42,
+        "passed": 42,
+        "failed": 0,
+        "interrupted": 0,
+        "flaky": 0,
+        "skipped": 1
+      },
+      "fixtureRecoveries": 0,
+      "extraAttempts": 0
+    },
+    "benchmarkContemporaryBase": {
+      "runId": "01a154a5-caae-797d-8b39-578194786bfd",
+      "durationSeconds": 304.726,
+      "summary": {
+        "discovered": 45,
+        "selected": 43,
+        "executed": 42,
+        "passed": 42,
+        "failed": 0,
+        "interrupted": 0,
+        "flaky": 0,
+        "skipped": 1
+      },
+      "fixtureRecoveries": 0,
+      "extraAttempts": 0
+    },
+    "sameRunnableIds": true,
+    "testAppWorkflows": {
+      "runId": "01a154ab-32ef-710a-a5e8-0f5cc3d49eb4",
+      "durationSeconds": 46.556,
+      "summary": {
+        "discovered": 4,
+        "selected": 4,
+        "executed": 4,
+        "passed": 4,
+        "failed": 0,
+        "interrupted": 0,
+        "flaky": 0,
+        "skipped": 0
+      },
+      "fixtureRecoveries": 0,
+      "extraAttempts": 0
+    },
+    "testAppCoverage": {
+      "completedScenarios": [
+        "smoke:fixture-bootstrap",
+        "smoke:inventory",
+        "smoke:automation-system",
+        "smoke:maestro-clickable-first",
+        "smoke:form-input",
+        "smoke:keyboard-ime",
+        "smoke:capture-close",
+        "full:lifecycle-system",
+        "full:observability-artifacts",
+        "full:fixture-replays"
+      ],
+      "commandCount": 41,
+      "behaviorCount": 15,
+      "infrastructureReissues": 0,
+      "sessionClosed": true,
+      "durationMs": 149338,
+      "initialTouchMode": true,
+      "negativeVisibilityProbes": 8,
+      "unexpectedStepFailures": 0
+    },
+    "androidSnapshot": {
+      "backend": "android-helper",
+      "pixelDensity": 2.625,
+      "helperVersion": "0.21.29-dev",
+      "helperApiVersion": "2",
+      "helperTransport": "persistent-session",
+      "helperSessionReused": true,
+      "installReason": "current",
+      "waitForIdleTimeoutMs": 500,
+      "waitForIdleQuietMs": 100,
+      "timeoutMs": 2000,
+      "maxDepth": 128,
+      "maxNodes": 5000,
+      "rootPresent": true,
+      "cacheInvalidated": true,
+      "captureMode": "interactive-windows",
+      "windowCount": 2,
+      "missingRootWindowTypes": [],
+      "nodeCount": 138,
+      "helperTruncated": false,
+      "elapsedMs": 15
+    },
+    "independentReview": "No findings at runtimeCommit. Pre-action uniqueness finding fixed and red/green proven.",
+    "sameTestAppCoverageIdentitiesAsPrior": true,
+    "testAppSetup": {
+      "initialFailure": "Non-touch mode focused a lower control and scrolled the startup landmark offscreen before any fill.",
+      "interruptedReruns": 1,
+      "repair": "One real tap on a snapshot-confirmed fixture button; observed inTouchMode=true.",
+      "sourceOrTestEdits": false
+    },
+    "benchmarkOperationTotalsMs": {
+      "base": {
+        "fill": 14119,
+        "clear": 1731,
+        "tap": 83809,
+        "scrollUntilVisible": 66961
+      },
+      "head": {
+        "fill": 13911,
+        "clear": 1754,
+        "tap": 83802,
+        "scrollUntilVisible": 73162
+      }
+    }
+  },
+  "limits": [
+    "API 36 is the only live platform.",
+    "One head/base suite pair is not statistical evidence.",
+    "No whole-suite speedup or experimental-engine parity claim.",
+    "The retained point-input race is not fixed by the verifier."
+  ],
+  "archive": {
+    "filename": "android-edited-field-experiment-2026-10-19.tar.gz",
+    "sha256": "a8ac1266326861aaaf821344433e7b6c4c507caa0eb56d30d864e97498f68626",
+    "localOnly": true,
+    "removedOwnedWorktrees": 2,
+    "reviewedShaUnchanged": true,
+    "reviewedStatusUnchanged": true,
+    "ownedDaemonStatesStopped": 27,
+    "daemonStopFailures": 0
+  },
+  "postReview": {
+    "runtimeCommit": "14a2d7a28dfa0e509e02247323aa56b72c98e1fc",
+    "change": "Behavior-equivalent separation of identity corroboration from point scanning to satisfy complexity gate.",
+    "focusedTestsPassed": 40,
+    "fallowPassed": true,
+    "nativePublicSdkTrialsPassed": 6,
+    "nativeTrialCounters": "Each target clear=1, decoy unchanged, decoy edits=0, cover clicks=0.",
+    "independentReview": "No findings; predicates and ownership equivalent.",
+    "firstHarnessRun": "Six correct cases; duplicate final close returned SESSION_NOT_FOUND. Corrected harness rerun exited 0.",
+    "additionalOwnedDaemonStatesStopped": 1,
+    "fullBenchmarkAndTestAppEvidenceCommit": "86d42d43ea2a06cc4290fb1bef56b780765b7d1c",
+    "archive": {
+      "filename": "android-edited-field-post-review-2026-10-19.tar.gz",
+      "sha256": "ba0df22db185ea4d5134082866687a1a9317e26e94b4bcb815fbfe03f8dce28e",
+      "localOnly": true
+    }
+  }
+}

@@ -8,9 +8,10 @@ import type {
   OpenApplicationInput,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
-  mkdtempForTestSync,
   bindTestCommandHost,
+  createLiveTestHostEnvironment,
   createTestHostEnvironment,
+  mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -76,7 +77,7 @@ afterEach(() => {
 
 function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-open-relaunch-');
-  return new SessionStore(path.join(root, 'sessions'));
+  return new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 }
 
 function publishSession(

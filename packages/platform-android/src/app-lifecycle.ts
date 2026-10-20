@@ -222,6 +222,8 @@ async function startAndroidApp(
   if (options.url !== undefined) {
     return await openAndroidAppBoundDeepLink(device, app, options);
   }
+  const helperLaunch = await tryAndroidHelperLaunch(device, app, options);
+  if (helperLaunch) return helperLaunch;
   const resolved = await resolveAndroidApp(device, app);
   const launchCategory = resolveAndroidLauncherCategory(device);
   if (resolved.type === 'intent') {
@@ -238,6 +240,41 @@ async function startAndroidApp(
     );
   }
   return await openAndroidPackage(device, resolved.value, launchCategory, options);
+}
+
+async function tryAndroidHelperLaunch(
+  device: DeviceInfo,
+  app: string,
+  options: OpenAndroidAppOptions,
+): Promise<AndroidAdbExecutorResult | undefined> {
+  const packageName = app.trim();
+  if (
+    device.target === 'tv' ||
+    options.activity !== undefined ||
+    androidLaunchArgs(options).length > 0 ||
+    options.terminateRunningApp ||
+    !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/.test(packageName)
+  )
+    return undefined;
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  const result = await runAndroidAutomationHelper(device, 'app', {
+    kind: 'open',
+    packageName,
+  });
+  if (!result) return undefined;
+  if (
+    result.componentUnavailable === 'true' &&
+    !(await isAndroidPackageInstalled(device, packageName))
+  )
+    throw buildAndroidPackageNotInstalledError(packageName);
+  const stdout = Buffer.from(result.launchOutputBase64 ?? '', 'base64').toString('utf8');
+  if (!/^Status: ok\r?$/m.test(stdout)) {
+    throw new AppError('COMMAND_FAILED', 'Android helper could not launch the application', {
+      packageName,
+      stdout,
+    });
+  }
+  return { stdout, stderr: '', exitCode: 0 };
 }
 
 /** `am start -W` names the activity this launch resumed on its `Activity: <package>/<class>` line. */

@@ -55,9 +55,14 @@ type ConformedRuntimeBinding = Readonly<{
   /**
    * A plan route admits several declared cells in order; name the one this table refuses on and
    * the ones the plan admits before reaching it. A single-use route derives its one cell from the
-   * command registry instead.
+   * command registry instead. A route variant that shares another command's descriptor (its own
+   * key is not a registry name) names that command here.
    */
-  plan?: Readonly<{ refused: RuntimeOperation; admitted: readonly RuntimeOperation[] }>;
+  plan?: Readonly<{
+    refused: RuntimeOperation;
+    admitted: readonly RuntimeOperation[];
+    command?: string;
+  }>;
 }>;
 
 const available = Object.freeze({ available: true } as const);
@@ -129,11 +134,25 @@ export const conformedRuntimeBindings = {
       ),
   },
   orientation: {
+    plan: { refused: 'setOrientation', admitted: [] },
     resolve: async (device, bindings) =>
       refusable(
         await resolveBoundOrientationRuntime({
           device,
           positionals: ['landscape-left'],
+          ...bindings,
+        }),
+      ),
+  },
+  // The `auto` argument is its own admission cell (`unlockOrientation`) on the `orientation`
+  // descriptor, so it owes its own refusal row across every conformance device.
+  'orientation auto': {
+    plan: { refused: 'unlockOrientation', admitted: [], command: 'orientation' },
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundOrientationRuntime({
+          device,
+          positionals: ['auto'],
           ...bindings,
         }),
       ),
@@ -187,7 +206,7 @@ export type ConformedRuntimeCommand = keyof typeof conformedRuntimeBindings;
 export function refusedRuntimeOperation(command: ConformedRuntimeCommand): RuntimeOperation {
   const binding: ConformedRuntimeBinding = conformedRuntimeBindings[command];
   if (binding.plan) return binding.plan.refused;
-  const uses = commandRuntimeUseRequirements(command);
+  const uses = commandRuntimeUseRequirements(registryCommandOf(command));
   const required = uses?.length === 1 ? uses[0] : undefined;
   if (required?.length !== 1) {
     throw new Error(
@@ -195,6 +214,12 @@ export function refusedRuntimeOperation(command: ConformedRuntimeCommand): Runti
     );
   }
   return required[0] as RuntimeOperation;
+}
+
+/** The registry command one conformance key resolves to; a route variant names its own. */
+export function registryCommandOf(command: ConformedRuntimeCommand): string {
+  const binding: ConformedRuntimeBinding = conformedRuntimeBindings[command];
+  return binding.plan?.command ?? command;
 }
 
 export type UnavailableExactOwnerFactCase = Readonly<{

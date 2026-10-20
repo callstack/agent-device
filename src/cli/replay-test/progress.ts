@@ -130,7 +130,7 @@ function formatReplayTestLiveProgressLine(
 ): string {
   const title = event.title?.trim();
   const file = path.basename(event.file);
-  const useColor = supportsColor(process.stderr);
+  const useColor = supportsColor(process.env, process.stderr);
   const spinner = formatReplayTestProgressSpinner(spinnerFrame, { useColor });
   const shardSuffix = formatReplayTestProgressShardSuffix(event, { useColor });
   const stepSuffix = formatReplayTestLiveProgressStepSuffix(event, { useColor });
@@ -223,7 +223,7 @@ function replayTestProgressFailureContextLines(event: ReplayTestResult): string[
 }
 
 function formatReplayTestCaseSummaryLine(event: ReplayTestResult): string {
-  const useColor = supportsColor(process.stderr);
+  const useColor = supportsColor(process.env, process.stderr);
   const statusLabel = formatReplayTestProgressStatusLabel(event);
   const name = formatReplayTestProgressName(event);
   const shardSuffix = formatReplayTestProgressShardSuffix(event, { useColor });

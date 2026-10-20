@@ -5,7 +5,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { PlatformSelector } from '@agent-device/kernel/device';
-import type { DaemonInfo } from './daemon-client-metadata.ts';
+import { observedDaemonIdentityOf, type DaemonInfo } from './daemon-client-metadata.ts';
 
 // Recovery for a timed-out request is scoped to that request or to nothing. The daemon owns
 // request-scoped recovery (#3177): destroying the timed-out connection cancels exactly that
@@ -120,7 +120,7 @@ async function forceRetireDaemon(
     await import('@agent-device/daemon-contracts/daemon-registration-owner');
   return await stopAndRetireDaemon({
     paths: statePaths,
-    observed: { pid: info.pid, startTime: info.processStartTime ?? null },
+    observed: observedDaemonIdentityOf(info),
     mode: 'force',
   });
 }

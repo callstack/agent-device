@@ -19,6 +19,10 @@ vi.mock('./app-lifecycle.ts', async (importOriginal) => ({
   killAndroidApp: vi.fn(async () => {}),
 }));
 
+vi.mock('./automation-helper.ts', () => ({
+  runAndroidAutomationHelper: vi.fn(async () => undefined),
+}));
+
 const mockKillAndroidApp = vi.mocked(killAndroidApp);
 
 const device: DeviceInfo = {

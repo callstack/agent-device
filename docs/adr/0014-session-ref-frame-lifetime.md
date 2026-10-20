@@ -194,6 +194,8 @@ A ref-targeting mutation is admitted only when all of these conditions hold:
 
 The target is resolved against the authorized frame, never against a newer operational observation by positional coincidence.
 Android freshness captures may verify current identity or provide comparison evidence.
+On Android, an identifier that names exactly one same-local-identity node in both the authorized frame and the observation can carry fresh geometry across a positional reindex when both nodes name the same application package.
+This does not change the frame namespace or authorize a different identity.
 But they must not redefine which node an already-admitted `@eN` authorizes.
 
 Read-only ref consumers remain fail-open with a structured staleness warning only when the retained frame contains the evidence necessary to resolve that ref.

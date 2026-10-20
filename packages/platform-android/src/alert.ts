@@ -1,202 +1,83 @@
-import {
-  type AlertAction,
-  ALERT_ACTION_RETRY_MS,
-  ALERT_POLL_INTERVAL_MS,
-  DEFAULT_ALERT_TIMEOUT_MS,
-} from '@agent-device/contracts/alert-contract';
-import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { Deadline, pollUntilSettled } from '@agent-device/host-kit/retry';
-import { successText } from '@agent-device/kernel/success-text';
-
+import type {
+  TreeAlertDriver,
+  TreeAlertResult,
+  TreeAlertSeam,
+} from '@agent-device/capture-kit/alert-tree-driver';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { AlertAction } from '@agent-device/contracts/alert-contract';
 import {
   chooseAndroidAlertButton,
   findAndroidAlertCandidate,
+  type AndroidAlertButton,
   type AndroidAlertCandidate,
   type AndroidAlertInfo,
 } from './alert-detection.ts';
 import { backAndroid, pressAndroid } from './input-actions.ts';
 
+/**
+ * The Android alert legs: the shared tree-alert driver (`capture-kit`'s `runTreeAlertAction`,
+ * the one poll/confirm/same-alert/response owner every tree-based backend rides) plus this
+ * platform's own observation (`captureNodes` + the candidate reader) and acting policy (the
+ * id-derived grant rank over the shared label vocabulary, the neutral-button/Back fallback).
+ * The driver import is function-scoped: a static one would add a new eager module to the
+ * mechanics façade and break its merge-base closure budget (ADR-0019).
+ */
+
 type AndroidAlertOptions = {
   timeoutMs?: number;
-  captureNodes: () => Promise<RawSnapshotNode[]>;
+  /** The daemon request's cancellation; the driver hands it to every capture and press seam. */
+  signal?: AbortSignal;
+  captureNodes: (seam: TreeAlertSeam) => Promise<RawSnapshotNode[]>;
 };
 
-export type AndroidAlertResult =
-  | {
-      kind: 'alertStatus';
-      platform: 'android';
-      action: 'get';
-      alert: AndroidAlertInfo | null;
-      message?: string;
-    }
-  | {
-      kind: 'alertWait';
-      platform: 'android';
-      action: 'wait';
-      alert: AndroidAlertInfo;
-      waitedMs: number;
-      message?: string;
-    }
-  | {
-      kind: 'alertHandled';
-      platform: 'android';
-      action: 'accept' | 'dismiss';
-      handled: true;
-      alert: AndroidAlertInfo;
-      button: string;
-      coordinates?: { x: number; y: number };
-      message?: string;
-    };
+export type AndroidAlertResult = TreeAlertResult<AndroidAlertInfo, 'android'>;
 
 export async function handleAndroidAlert(
   device: DeviceInfo,
   action: AlertAction,
   options: AndroidAlertOptions,
 ): Promise<AndroidAlertResult> {
-  if (action === 'wait') {
-    return await waitForAndroidAlert(
-      options.captureNodes,
-      options.timeoutMs ?? DEFAULT_ALERT_TIMEOUT_MS,
-    );
-  }
-  if (action === 'get') {
-    const candidate = await readAndroidAlertCandidate(options.captureNodes);
-    return buildAndroidAlertStatusResponse(candidate?.alert ?? null);
-  }
-  return await handleAndroidAlertAction(device, action, options.captureNodes);
-}
-
-async function waitForAndroidAlert(
-  captureNodes: AndroidAlertOptions['captureNodes'],
-  timeoutMs: number,
-): Promise<AndroidAlertResult> {
-  const start = Date.now();
-  const candidate = await pollAndroidAlertCandidate(captureNodes, timeoutMs);
-  if (!candidate) {
-    throw new AppError('COMMAND_FAILED', 'alert wait timed out');
-  }
-  return {
-    kind: 'alertWait',
+  const driver: TreeAlertDriver<
+    RawSnapshotNode[],
+    AndroidAlertInfo,
+    AndroidAlertButton,
+    AndroidAlertCandidate,
+    'android'
+  > = {
     platform: 'android',
-    action: 'wait',
-    alert: candidate.alert,
-    waitedMs: Date.now() - start,
-    ...successText('Alert visible'),
+    timeoutMs: options.timeoutMs,
+    ...(options.signal ? { signal: options.signal } : {}),
+    capture: (seam) =>
+      withDiagnosticTimer('snapshot_capture', () => options.captureNodes(seam), {
+        backend: 'android',
+        purpose: 'alert',
+      }),
+    // Android's dump either names a candidate or names none; it has no capture state that can
+    // reach `undecided`.
+    findCandidate: (nodes) => {
+      const candidate = findAndroidAlertCandidate(nodes);
+      return candidate ? { kind: 'alert', candidate } : { kind: 'none' };
+    },
+    choose: (candidate, act) => {
+      const button = chooseAndroidAlertButton(candidate.buttons, act);
+      if (button) return { kind: 'press', button };
+      // No button states any leaving choice: dismissing an Android dialog is what the Back
+      // key means. The refusal message and typed reason come from the driver, not from here.
+      return act === 'dismiss' ? { kind: 'fallback', label: 'Back' } : null;
+    },
+    press: async (choice, seam) => {
+      // The adb executor kills the child on abort, so the press transport stops with the
+      // caller's cancellation; whether a canceled tap still reached the device is typed
+      // upstream. The budget never stops a press — a chosen press is the action itself.
+      if (choice.kind === 'press') {
+        await pressAndroid(device, choice.button.x, choice.button.y, { signal: seam.signal });
+        return;
+      }
+      await backAndroid(device, { signal: seam.signal });
+    },
   };
-}
-
-async function handleAndroidAlertAction(
-  device: DeviceInfo,
-  action: 'accept' | 'dismiss',
-  captureNodes: AndroidAlertOptions['captureNodes'],
-): Promise<AndroidAlertResult> {
-  const candidate = await pollAndroidAlertCandidate(captureNodes, ALERT_ACTION_RETRY_MS);
-  if (!candidate) {
-    throw new AppError('COMMAND_FAILED', 'alert not found', {
-      hint: 'If a sheet is visible in snapshot but alert reports no alert, it is likely app-owned UI. Use snapshot -i and press the visible label/ref.',
-    });
-  }
-
-  const button = chooseAndroidAlertButton(candidate.buttons, action);
-  if (button) {
-    await pressAndroid(device, button.x, button.y);
-    await confirmAndroidAlertDismissed(candidate.alert, action, captureNodes);
-    return buildAndroidAlertHandledResponse(action, candidate.alert, button.label, {
-      x: button.x,
-      y: button.y,
-    });
-  }
-
-  if (action === 'dismiss') {
-    await backAndroid(device);
-    await confirmAndroidAlertDismissed(candidate.alert, action, captureNodes);
-    return buildAndroidAlertHandledResponse(action, candidate.alert, 'Back');
-  }
-
-  throw new AppError('COMMAND_FAILED', 'alert accept found an alert but no accept button', {
-    alert: candidate.alert,
-    hint: 'Inspect alert get --json for visible buttons, then use press by visible label/ref if needed.',
-  });
-}
-
-/**
- * `alert accept|dismiss` means the dialog is gone, not that a button was pressed: the next
- * command reads the app, and a capture that lands while the dialog window is still up sees
- * only the dialog. A different alert taking its place counts as dismissed. Bounded by the
- * same budget the pre-press lookup uses; iOS's runner applies the same re-check.
- */
-async function confirmAndroidAlertDismissed(
-  dismissed: AndroidAlertInfo,
-  action: 'accept' | 'dismiss',
-  captureNodes: AndroidAlertOptions['captureNodes'],
-): Promise<void> {
-  const { settled } = await pollUntilSettled({
-    probe: () => readAndroidAlertCandidate(captureNodes),
-    settled: (current) => !current || !sameAndroidAlert(current.alert, dismissed),
-    deadline: Deadline.fromTimeoutMs(ALERT_ACTION_RETRY_MS),
-    intervalMs: ALERT_POLL_INTERVAL_MS,
-  });
-  if (settled) return;
-  throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
-    alert: dismissed,
-    hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
-  });
-}
-
-function sameAndroidAlert(left: AndroidAlertInfo, right: AndroidAlertInfo): boolean {
-  return left.title === right.title && left.buttons.join('\u0000') === right.buttons.join('\u0000');
-}
-
-async function pollAndroidAlertCandidate(
-  captureNodes: AndroidAlertOptions['captureNodes'],
-  timeoutMs: number,
-): Promise<AndroidAlertCandidate | null> {
-  const { value } = await pollUntilSettled({
-    probe: () => readAndroidAlertCandidate(captureNodes),
-    settled: (candidate) => candidate !== null,
-    deadline: Deadline.fromTimeoutMs(timeoutMs),
-    intervalMs: ALERT_POLL_INTERVAL_MS,
-  });
-  return value;
-}
-
-async function readAndroidAlertCandidate(
-  captureNodes: AndroidAlertOptions['captureNodes'],
-): Promise<AndroidAlertCandidate | null> {
-  const result = await withDiagnosticTimer('snapshot_capture', captureNodes, {
-    backend: 'android',
-    purpose: 'alert',
-  });
-  return findAndroidAlertCandidate(result);
-}
-
-function buildAndroidAlertStatusResponse(alert: AndroidAlertInfo | null): AndroidAlertResult {
-  return {
-    kind: 'alertStatus',
-    platform: 'android',
-    action: 'get',
-    alert,
-    ...(alert ? successText('Alert visible') : successText('No alert visible')),
-  };
-}
-
-function buildAndroidAlertHandledResponse(
-  action: 'accept' | 'dismiss',
-  alert: AndroidAlertInfo,
-  button: string,
-  coordinates?: { x: number; y: number },
-): AndroidAlertResult {
-  return {
-    kind: 'alertHandled',
-    platform: 'android',
-    action,
-    handled: true,
-    alert,
-    button,
-    ...(coordinates ? { coordinates } : {}),
-    ...successText(`Alert ${action}ed`),
-  };
+  const { runTreeAlertAction } = await import('@agent-device/capture-kit/alert-tree-driver');
+  return await runTreeAlertAction(action, driver);
 }

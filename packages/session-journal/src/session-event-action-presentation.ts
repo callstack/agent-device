@@ -1,5 +1,9 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import { DEVICE_ROTATIONS, FOLD_POSES, TELEPHONY_ACTIONS } from '@agent-device/contracts/device';
+import {
+  FOLD_POSES,
+  ORIENTATION_REQUESTS,
+  TELEPHONY_ACTIONS,
+} from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
@@ -89,7 +93,7 @@ export function buildStructuredActionDetails(action: SessionAction): Record<stri
     case PUBLIC_COMMANDS.back:
       return compactDetails({ mode: readEnum(result.mode, BACK_MODES) });
     case PUBLIC_COMMANDS.orientation:
-      return compactDetails({ orientation: readEnum(result.orientation, DEVICE_ROTATIONS) });
+      return compactDetails({ orientation: readEnum(result.orientation, ORIENTATION_REQUESTS) });
     case PUBLIC_COMMANDS.fold:
       return compactDetails({ pose: readEnum(result.pose, FOLD_POSES) });
     case PUBLIC_COMMANDS.telephony:
@@ -203,8 +207,9 @@ function buildTelephonyActionSummary(result: Record<string, unknown>): string {
 }
 
 function buildOrientationActionSummary(result: Record<string, unknown>): string {
-  const orientation = readEnum(result.orientation, DEVICE_ROTATIONS);
+  const orientation = readEnum(result.orientation, ORIENTATION_REQUESTS);
   if (!orientation) return 'Changed orientation';
+  if (orientation === 'auto') return 'Rotation follows the device sensor';
   // An unconfirmed rotation is not a rotation: the daemon keeps the requested
   // value for compatibility, so the recorded action must disclose it instead of
   // asserting that the device rotated.
@@ -262,7 +267,7 @@ function buildTvRemoteActionSummary(result: Record<string, unknown>): string {
 }
 
 function buildGestureActionSummary(result: Record<string, unknown>): string {
-  const kind = readEnum(result.kind, ['fling', 'pan', 'pinch', 'rotate', 'transform']);
+  const kind = readEnum(result.kind, ['fling', 'pan', 'pinch', 'rotate', 'transform', 'tap']);
   return kind ? `Ran ${kind} gesture` : 'Ran gesture';
 }
 
@@ -273,7 +278,7 @@ function buildSwipeActionSummary(result: Record<string, unknown>): string {
 
 function buildGestureActionDetails(result: Record<string, unknown>): Record<string, unknown> {
   return compactDetails({
-    kind: readEnum(result.kind, ['fling', 'pan', 'pinch', 'rotate', 'transform']),
+    kind: readEnum(result.kind, ['fling', 'pan', 'pinch', 'rotate', 'transform', 'tap']),
     durationMs: readSessionEventNumber(result.durationMs),
     pointerCount: readSessionEventNumber(result.pointerCount),
     x1: readSessionEventNumber(result.x1),
@@ -281,6 +286,7 @@ function buildGestureActionDetails(result: Record<string, unknown>): Record<stri
     x2: readSessionEventNumber(result.x2),
     y2: readSessionEventNumber(result.y2),
     count: readSessionEventNumber(result.count),
+    completed: readSessionEventNumber(result.completed),
     pauseMs: readSessionEventNumber(result.pauseMs),
     pattern: readEnum(result.pattern, ['one-way', 'ping-pong']),
     scale: readSessionEventNumber(result.scale),

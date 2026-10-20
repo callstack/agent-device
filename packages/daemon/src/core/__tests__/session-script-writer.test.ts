@@ -14,7 +14,9 @@ import {
 import { markRepairTransactionComplete } from '../session-replay-transaction.ts';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+
+const hostCwd = createLiveTestHostEnvironment().cwd;
 
 function action(overrides: Partial<SessionAction> = {}): SessionAction {
   return { ts: Date.now(), command: 'click', positionals: [], flags: {}, ...overrides };
@@ -34,7 +36,7 @@ function writeAndParse(
 
 test('write() slices session.actions from saveScriptBoundary onward, excluding pre-watermark actions', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-boundary-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   // Fix 2: a repair-armed write only publishes once explicitly finalized
   // (`close --save-script`) — COMPLETE here to isolate THIS test's own concern
   // (boundary slicing), covered separately below.
@@ -55,7 +57,7 @@ test('write() slices session.actions from saveScriptBoundary onward, excluding p
 
 test('write() with no boundary set (ordinary open/close --save-script) serializes the full history, unchanged', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-no-boundary-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default', {
     actions: [
       action({ command: 'open', positionals: ['Demo'] }),
@@ -71,7 +73,7 @@ test('write() with no boundary set (ordinary open/close --save-script) serialize
 
 test('write() round-trips wait absent positionals without adding an annotation', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-wait-absent-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default', {
     actions: [action({ command: 'wait', positionals: ['absent', 'label="Removed"', '2500'] })],
   });
@@ -86,14 +88,18 @@ test('write() round-trips wait absent positionals without adding an annotation',
 // recorder's declared-key filter AND the writer's line, then parse back as a flag.
 test('write() carries a recorded scroll --until through to the script and back', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-scroll-until-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default');
-  recordActionEntry(session, {
-    command: 'scroll',
-    positionals: ['down'],
-    flags: { until: 'label="Sign in"', settle: true },
-    result: { direction: 'down' },
-  });
+  recordActionEntry(
+    session,
+    {
+      command: 'scroll',
+      positionals: ['down'],
+      flags: { until: 'label="Sign in"', settle: true },
+      result: { direction: 'down' },
+    },
+    hostCwd,
+  );
 
   const { parsed } = writeAndParse(writer, session);
   expect(parsed.actions[0]?.command).toBe('scroll');
@@ -105,14 +111,18 @@ test('write() carries a recorded scroll --until through to the script and back',
 
 test('write() carries a recorded wait --raw through to the script and back', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-wait-raw-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default');
-  recordActionEntry(session, {
-    command: 'wait',
-    positionals: ['label="Sign in"', '2000'],
-    flags: { snapshotRaw: true },
-    result: {},
-  });
+  recordActionEntry(
+    session,
+    {
+      command: 'wait',
+      positionals: ['label="Sign in"', '2000'],
+      flags: { snapshotRaw: true },
+      result: {},
+    },
+    hostCwd,
+  );
 
   const { parsed } = writeAndParse(writer, session);
   expect(parsed.actions[0]?.positionals).toEqual(['label="Sign in"', '2000']);
@@ -123,7 +133,7 @@ test.each(['authored', 'explicit-record'] as const)(
   'healed output preserves a snapshot with %s publication intent',
   (intent) => {
     const root = mkdtempForTestSync('agent-device-script-writer-retained-snapshot-');
-    const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
     const session = makeRepairCompleteSession('default');
     const req = {
       token: 't',
@@ -139,12 +149,16 @@ test.each(['authored', 'explicit-record'] as const)(
           : { snapshotInteractiveOnly: true },
       ...(intent === 'authored' ? { internal: { replayPlanStep: true } } : {}),
     };
-    recordActionEntry(session, {
-      command: req.command,
-      positionals: req.positionals,
-      flags: req.flags,
-      interactiveObservation: isInteractiveObservation(req),
-    });
+    recordActionEntry(
+      session,
+      {
+        command: req.command,
+        positionals: req.positionals,
+        flags: req.flags,
+        interactiveObservation: isInteractiveObservation(req),
+      },
+      hostCwd,
+    );
     const { parsed } = writeAndParse(writer, session);
     expect(parsed.actions.map((entry) => entry.command)).toEqual(['snapshot']);
     expect(parsed.actions[0]?.flags.snapshotInteractiveOnly).toBe(true);
@@ -153,7 +167,7 @@ test.each(['authored', 'explicit-record'] as const)(
 
 test('a boundary-sliced script still strips diagnostic snapshot actions', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-snapshot-strip-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeRepairCompleteSession('default', {
     scriptPublication: repairPublication('complete', { boundary: 1 }),
     actions: [
@@ -177,7 +191,7 @@ test('a boundary-sliced script still strips diagnostic snapshot actions', () => 
 
 test('a recorded ref that resolved to a selectorChain writes a clean selector line, never the bare ref', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-resolved-ref-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeRepairCompleteSession('default', {
     actions: [
       action({
@@ -196,7 +210,7 @@ test('a recorded ref that resolved to a selectorChain writes a clean selector li
 
 test('a recorded ref that never resolved to a selectorChain throws instead of emitting a bare @ref', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-bare-ref-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeRepairCompleteSession('default', {
     actions: [action({ command: 'press', positionals: ['@e7'] })],
   });
@@ -218,7 +232,7 @@ test('a recorded drag refuses either unresolved ref endpoint', () => {
     ['drag', 'id="drag-source"', '@e3'],
   ]) {
     const root = mkdtempForTestSync('agent-device-script-writer-drag-ref-');
-    const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
     const session = makeRepairCompleteSession('default', {
       actions: [action({ command: 'gesture', positionals })],
     });
@@ -233,7 +247,7 @@ test('a recorded drag refuses either unresolved ref endpoint', () => {
 
 test('a recorded drag writes and parses one targets-v1 annotation for both endpoints', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-drag-evidence-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const evidence = {
     role: 'view',
     ancestry: [],
@@ -264,7 +278,7 @@ test('a recorded drag writes and parses one targets-v1 annotation for both endpo
 
 test('a bare-@ref fill action also fails loud, not just click-like commands', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-bare-ref-fill-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeRepairCompleteSession('default', {
     actions: [action({ command: 'fill', positionals: ['@e9', 'hello'] })],
   });
@@ -276,7 +290,7 @@ test('a bare-@ref fill action also fails loud, not just click-like commands', ()
 
 test('a bare @ref later in the same session (after a resolved earlier action) still fails loud, writing nothing', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-partial-write-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeRepairCompleteSession('default', {
     actions: [
       action({ command: 'open', positionals: ['Demo'] }),
@@ -297,7 +311,7 @@ test('a bare @ref later in the same session (after a resolved earlier action) st
 
 test('an ordinary (non-repair-armed) recording keeps the existing bare-ref fallback, never throws', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-ordinary-bare-ref-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   // Ordinary recording (no repair boundary): this session was armed by plain
   // `open`/`close --save-script`, never by `replay --save-script` — R4 does
   // not apply.
@@ -320,7 +334,7 @@ test('an ordinary (non-repair-armed) recording keeps the existing bare-ref fallb
 // (a) publishing to an ABSENT target succeeds.
 test('write() publishes cleanly when the target does not exist yet', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-absent-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
 
   const session = makeRepairCompleteSession('default', {
@@ -341,7 +355,7 @@ test('write() publishes cleanly when the target does not exist yet', () => {
 // bytes unchanged.
 test('write() refuses to clobber an existing COMPLETE DEFAULT .healed.ad', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-clobber-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
   // A prior, unreviewed, COMPLETE healed script already sits at the default
@@ -369,7 +383,7 @@ test('write() refuses to clobber an existing COMPLETE DEFAULT .healed.ad', () =>
 
 test('write() now refuses to clobber a stale PARTIAL (non-sentinel) .healed.ad at the default path too (behavior change: no more auto-overwrite)', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-clobber-partial-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
   // A partial left over from a diverged-and-abandoned repair (pre-Fix-2 bug,
@@ -396,7 +410,7 @@ test('write() now refuses to clobber a stale PARTIAL (non-sentinel) .healed.ad a
 
 test('write(session, { force: true }) overwrites an existing COMPLETE target atomically', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-force-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
   fs.writeFileSync(
@@ -421,7 +435,7 @@ test('write(session, { force: true }) overwrites an existing COMPLETE target ato
 
 test('write(session, { force: true }) overwrites an existing target for ORDINARY (non-repair) recording too', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-force-ordinary-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'existing.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, 'context platform=ios device="x"\nclick id="old"\n');
@@ -440,7 +454,7 @@ test('write(session, { force: true }) overwrites an existing target for ORDINARY
 
 test('write(session) without { force: true } still refuses, even when a prior write in the same test used force', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-force-default-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'existing.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, 'context platform=ios device="x"\nclick id="old"\n');
@@ -463,7 +477,7 @@ test('write(session) without { force: true } still refuses, even when a prior wr
 // sees `EEXIST` and is refused.
 test('two writers racing on the SAME ABSENT target: exactly one linkSync wins, the other is refused (no lock involved)', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-race-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
 
@@ -521,7 +535,7 @@ test('two writers racing on the SAME ABSENT target: exactly one linkSync wins, t
 // sitting there.
 test('write() refuses to clobber an existing COMPLETE artifact at an EXPLICIT --save-script=<path> target too', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-explicit-complete-clobber-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const explicitOut = path.join(root, 'flows', 'promoted.ad');
   fs.mkdirSync(path.dirname(explicitOut), { recursive: true });
   fs.writeFileSync(
@@ -549,7 +563,7 @@ test('write() refuses to clobber an existing COMPLETE artifact at an EXPLICIT --
 // (a non-sentinel/partial file was freely overwritable at an explicit path).
 test('write() now refuses an explicit --save-script=<path> pointing at an existing (non-sentinel) file too', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-explicit-out-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'explicit.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, 'context platform=ios device="x"\nclick id="old"\n');
@@ -579,7 +593,7 @@ test('write() now refuses an explicit --save-script=<path> pointing at an existi
 // sessions were exercised above.
 test('an ordinary (non-repair) recording now refuses an existing target too (behavior change: no more rename-replace overwrite)', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-ordinary-clobber-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'existing.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, 'context platform=ios device="x"\nclick id="old"\n');
@@ -607,7 +621,7 @@ test('an ordinary (non-repair) recording now refuses an existing target too (beh
 // the refusal is scoped to an EXISTING target, not a blanket block.
 test('an ordinary (non-repair) recording still publishes cleanly when its target does not exist yet', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-ordinary-absent-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'fresh.ad');
 
   // Ordinary recording, not a repair.
@@ -627,7 +641,7 @@ test('an ordinary (non-repair) recording still publishes cleanly when its target
 
 test('close --save-script=<explicit path> re-points a defaulted-healed repair, and a write to that (absent) explicit path succeeds', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-close-explicit-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const defaultedHealed = path.join(root, 'flows', 'login.healed.ad');
   const explicitOut = path.join(root, 'flows', 'promoted.ad');
 
@@ -641,11 +655,15 @@ test('close --save-script=<explicit path> re-points a defaulted-healed repair, a
   // used to wrongly refuse the explicit target). Refusal is now uniform
   // regardless of how the path was chosen, but a redirected session must
   // still publish cleanly to its own (absent) explicit target.
-  recordActionEntry(session, {
-    command: 'close',
-    positionals: [],
-    flags: { saveScript: explicitOut },
-  });
+  recordActionEntry(
+    session,
+    {
+      command: 'close',
+      positionals: [],
+      flags: { saveScript: explicitOut },
+    },
+    hostCwd,
+  );
   expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(explicitOut);
   // `recordActionEntry` is the low-level action recorder `close`'s handler
   // calls on its way to setting the finalize signal (Fix 2) — set here to
@@ -666,7 +684,7 @@ test('close --save-script=<explicit path> re-points a defaulted-healed repair, a
 
 test('C2 abort-before-complete: a repair-armed but NOT-complete write discards — no file, no prefix', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-incomplete-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   // ARMED but never COMPLETE: the plan never ran to its last executable step
   // (a `close`/`close --save-script` reached after a divergence, a daemon
   // teardown, or an idle-reap of an in-flight repair).
@@ -683,7 +701,7 @@ test('C2 abort-before-complete: a repair-armed but NOT-complete write discards �
 
 test('C2 commit-when-complete: a repair-armed COMPLETE write publishes and marks the session COMMITTED', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-complete-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'flow.healed.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   const session = makeRepairCompleteSession('default', {
@@ -699,7 +717,7 @@ test('C2 commit-when-complete: a repair-armed COMPLETE write publishes and marks
 
 test('C2 idempotent post-commit: a second write on a COMMITTED session no-ops (no re-publish, no error)', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-idempotent-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'flow.healed.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   const session = makeRepairCompleteSession('default', {
@@ -723,7 +741,7 @@ test('C2 idempotent post-commit: a second write on a COMMITTED session no-ops (n
 
 test('write() still emits an ordinary (non-repair) recording on close without --save-script, unaffected by the commit gate', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-ordinary-unfinalized-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   // An ordinary `open --save-script` recording, not a repair — the Fix 2 gate
   // only applies to repair-armed sessions.
   const session = makeAuthoringSession('default', {
@@ -736,7 +754,7 @@ test('write() still emits an ordinary (non-repair) recording on close without --
 
 test('write() never appends the completeness sentinel to an ordinary (non-repair) recording', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-no-sentinel-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default', {
     actions: [action({ command: 'click', positionals: ['id="save"'] })],
   });
@@ -747,7 +765,7 @@ test('write() never appends the completeness sentinel to an ordinary (non-repair
 
 test('write() publishes atomically: no stray temp file survives a successful repair write', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-atomic-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'atomic.healed.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   const session = makeRepairCompleteSession('default', {
@@ -773,7 +791,7 @@ test('write() publishes atomically: no stray temp file survives a successful rep
 // promote a trailing junk positional into a duration, which would silently change the hold time.
 test('a resolved longpress keeps its recorded duration when rewriting the selector', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-longpress-duration-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default', {
     actions: [
       action({
@@ -792,7 +810,7 @@ test('a resolved longpress keeps its recorded duration when rewriting the select
 
 test('a resolved longpress without a duration positional writes the selector alone', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-longpress-noduration-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default', {
     actions: [
       action({
@@ -810,7 +828,7 @@ test('a resolved longpress without a duration positional writes the selector alo
 test('a resolved longpress drops a blank or non-numeric trailing positional instead of writing it as a duration', () => {
   for (const junk of ['   ', 'abc']) {
     const root = mkdtempForTestSync('agent-device-script-writer-longpress-junk-');
-    const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
     const session = makeAuthoringSession('default', {
       actions: [
         action({
@@ -829,7 +847,7 @@ test('a resolved longpress drops a blank or non-numeric trailing positional inst
 test('#1533: write() publishes nothing for an aborted authoring lifecycle that is still recording', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-authoring-aborted-');
   const sessionsDir = path.join(root, 'sessions');
-  const writer = new SessionScriptWriter(sessionsDir);
+  const writer = new SessionScriptWriter(sessionsDir, hostCwd);
   // The production shape after `open --save-script` -> `open --save-script`:
   // the second open aborted the lifecycle AND cleared recording, then its own
   // recorded action's `--save-script` ingress set the boolean back to true.
@@ -844,7 +862,7 @@ test('#1533: write() publishes nothing for an aborted authoring lifecycle that i
 
 test('#1533: the abort is terminal per-target too — an explicit --save-script path is not written either', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-authoring-aborted-explicit-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const outPath = path.join(root, 'flows', 'aborted.ad');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   const session = makeAuthoringSession('default', {
@@ -858,7 +876,7 @@ test('#1533: the abort is terminal per-target too — an explicit --save-script 
 
 test('#1533: an ARMED authoring recording is untouched by the abort gate', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-authoring-armed-');
-  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
   const session = makeAuthoringSession('default', {
     scriptPublication: authoringPublication('armed'),
     actions: [action({ command: 'click', positionals: ['id="save"'] })],
@@ -876,19 +894,23 @@ test.each([
   'ordinary authoring retains only authored snapshots with record=$record and replayPlanStep=$replayPlanStep',
   ({ record, replayPlanStep }) => {
     const root = mkdtempForTestSync('agent-device-script-writer-authoring-snapshot-');
-    const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'), hostCwd);
     const session = makeAuthoringSession('default', {
       actions: [action({ command: 'open', positionals: ['Demo'] })],
     });
-    recordActionEntry(session, {
-      command: 'snapshot',
-      positionals: [],
-      flags: {
-        record,
-        snapshotInteractiveOnly: true,
+    recordActionEntry(
+      session,
+      {
+        command: 'snapshot',
+        positionals: [],
+        flags: {
+          record,
+          snapshotInteractiveOnly: true,
+        },
+        interactiveObservation: !replayPlanStep,
       },
-      interactiveObservation: !replayPlanStep,
-    });
+      hostCwd,
+    );
 
     const { parsed } = writeAndParse(writer, session);
     expect(parsed.actions.map((entry) => entry.command)).toEqual(

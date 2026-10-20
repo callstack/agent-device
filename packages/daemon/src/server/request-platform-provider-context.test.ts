@@ -25,6 +25,7 @@ test('request provider context follows an explicit device selector for an existi
           flags: { platform: 'ios', device: 'iPhone 17' },
         },
         existingSession: makeIosSession('default'),
+        env: process.env,
       }),
   );
 
@@ -41,6 +42,7 @@ test('request provider context skips sharded test orchestration requests', async
       await resolvePlatformProviderRequestContext({
         req: { ...request('test'), flags: { platform: 'ios', shardAll: 2 } },
         existingSession: undefined,
+        env: process.env,
       }),
   );
 
@@ -54,6 +56,7 @@ test('request provider context follows an explicit sessionless web selector', as
       await resolvePlatformProviderRequestContext({
         req: { ...request('snapshot'), flags: { platform: 'web' } },
         existingSession: undefined,
+        env: process.env,
       }),
   );
 
@@ -65,6 +68,7 @@ test('request provider context preserves an explicitly empty request id', async 
   const context = await resolvePlatformProviderRequestContext({
     req: { ...request('snapshot'), meta: { requestId: '' } },
     existingSession: makeIosSession('ios-session'),
+    env: process.env,
   });
 
   assert.equal(context?.requestId, '');

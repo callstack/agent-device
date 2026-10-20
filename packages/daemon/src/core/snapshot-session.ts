@@ -20,7 +20,8 @@ export async function resolveSessionDevice(
     const { requireNamedSessionHoldsDevice } = await import('./explicit-session-resolution.ts');
     requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session });
   }
-  const device = session?.device ?? (await resolveTargetDevice(req.flags ?? {}));
+  const device =
+    session?.device ?? (await resolveTargetDevice(req.flags ?? {}, { env: sessionStore.host.env }));
   return { ref, session, device };
 }
 

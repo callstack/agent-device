@@ -1,5 +1,5 @@
 import { test, expect, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 /**
  * #1555 structural-quality review ("topology fix... its subject now lives
@@ -51,7 +51,10 @@ import {
 
 test('--keep-session suppresses a close that is terminal among executable actions', async () => {
   const root = mkdtempForTestSync('agent-device-replay-keep-marker-tail-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'close', 'replay "./nested-flow.ad"']);
@@ -77,7 +80,10 @@ test('--keep-session suppresses a close that is terminal among executable action
 
 test('--keep-session fails explicitly when the completed replay has no live session', async () => {
   const root = mkdtempForTestSync('agent-device-replay-keep-postcondition-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Log out"']);
@@ -104,7 +110,10 @@ test('--keep-session fails explicitly when the completed replay has no live sess
 
 test('--keep-session suppresses only the authored terminal close and reports the surviving session', async () => {
   const root = mkdtempForTestSync('agent-device-replay-keep-session-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"', 'close']);
@@ -131,7 +140,10 @@ test('--keep-session suppresses only the authored terminal close and reports the
 
 test('--keep-session preserves an interior close instead of broad command filtering', async () => {
   const root = mkdtempForTestSync('agent-device-replay-keep-interior-close-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'close', 'open "Next"']);
@@ -154,7 +166,10 @@ test('--keep-session preserves an interior close instead of broad command filter
 
 test('--keep-session is a no-op for an already close-less script', async () => {
   const root = mkdtempForTestSync('agent-device-replay-keep-close-less-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
@@ -176,7 +191,10 @@ test('--keep-session is a no-op for an already close-less script', async () => {
 
 test('--keep-session rejects Maestro YAML before engine dispatch', async () => {
   const root = mkdtempForTestSync('agent-device-replay-keep-maestro-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = path.join(root, 'flow.yaml');

@@ -181,15 +181,15 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
           input.session,
         );
       }
+      const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
+      const host = captureHostEnvironment(process);
       const supportedProperties = withMcpConfigSchema(name, metadata.inputSchema).properties;
-      const resolvedInput = resolveMcpConfigDefaults(name, input, supportedProperties);
+      const resolvedInput = resolveMcpConfigDefaults(name, input, supportedProperties, host);
       const config = readMcpToolConfig(resolvedInput);
       const commandInput = stripMcpConfigFields(resolvedInput);
       const pinnedInput = refPins.pinInput(name, commandInput, config.client.stateDir);
       // One host per tool call: the client's ensuring transport and the output formatter resolve
       // the daemon and the styling from the same host the executor captured (#3794).
-      const { captureHostEnvironment } = await import('@agent-device/host-kit/process');
-      const host = captureHostEnvironment(process);
       const client = await createClient(deps, config.client, host);
       try {
         const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);

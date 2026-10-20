@@ -60,15 +60,21 @@ test(ANDROID_ARTIFACTS_CONTRACT_EVIDENCE.testName, async () => {
 
   try {
     assert.deepEqual(
-      (await listDownloadableArtifacts()).map((artifact) => artifact.filename),
+      (await listDownloadableArtifacts(undefined, process.env)).map(
+        (artifact) => artifact.filename,
+      ),
       ['public.txt'],
     );
     assert.deepEqual(
-      (await listDownloadableArtifacts('tenant-a')).map((artifact) => artifact.filename),
+      (await listDownloadableArtifacts('tenant-a', process.env)).map(
+        (artifact) => artifact.filename,
+      ),
       ['public.txt', 'tenant-a.txt'],
     );
     assert.deepEqual(
-      (await listDownloadableArtifacts('tenant-b')).map((artifact) => artifact.filename),
+      (await listDownloadableArtifacts('tenant-b', process.env)).map(
+        (artifact) => artifact.filename,
+      ),
       ['public.txt', 'tenant-b.txt'],
     );
   } finally {
@@ -105,7 +111,7 @@ test('downloadable artifact inventory skips directory artifacts that fail to arc
         if (cmd !== 'tar') return undefined;
         throw new Error('tar unavailable');
       },
-      async () => await listDownloadableArtifacts(),
+      async () => await listDownloadableArtifacts(undefined, process.env),
     );
     assert.deepEqual(
       artifacts.map((artifact) => artifact.filename),
@@ -134,6 +140,8 @@ test('daemon artifact inventory exposes directory artifacts as tar.gz downloads'
   const server = await createDaemonHttpServer({
     token: 'daemon-secret',
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    env: process.env,
+    cwd: process.cwd(),
   });
 
   try {
@@ -197,6 +205,8 @@ test('daemon artifact inventory lists artifacts and downloads consume them', asy
   const server = await createDaemonHttpServer({
     token: 'daemon-secret',
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    env: process.env,
+    cwd: process.cwd(),
   });
 
   try {
@@ -254,6 +264,8 @@ test('daemon artifact downloads can keep the source file while consuming the inv
   const server = await createDaemonHttpServer({
     token: 'daemon-secret',
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    env: process.env,
+    cwd: process.cwd(),
   });
 
   try {
@@ -303,6 +315,8 @@ test('daemon artifact downloads can be forced retained by server option', async 
     token: 'daemon-secret',
     retainArtifacts: true,
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    env: process.env,
+    cwd: process.cwd(),
   });
 
   try {
@@ -361,7 +375,7 @@ test('downloadable artifact inventory reports a screenshot display rotation only
   });
 
   try {
-    const inventory = await listDownloadableArtifacts();
+    const inventory = await listDownloadableArtifacts(undefined, process.env);
     const rotated = inventory.find((entry) => entry.id === rotatedId);
     const plain = inventory.find((entry) => entry.id === plainId);
     assert.equal(rotated?.displayRotation, 'landscape-right');

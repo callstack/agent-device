@@ -1,3 +1,4 @@
+import type { ScreenshotCaptureFacts } from '@agent-device/contracts/screenshot-runtime';
 import {
   SCREENSHOT_CROP_REASONS,
   type ScreenshotCropReason,
@@ -19,6 +20,8 @@ type CropTarget =
   | 'android-device'
   | 'macos-app-window'
   | 'ios-physical'
+  | 'ios-physical-xctest'
+  | 'ipados-physical'
   | 'macos-helper'
   | 'web'
   | 'linux'
@@ -46,7 +49,9 @@ export const SCREENSHOT_CROP_TARGET_CELLS: readonly CropTargetCell[] = [
   { target: 'android-emulator', status: 'accepted' },
   { target: 'android-device', status: 'rejected', rejectionReason: PENDING },
   { target: 'macos-app-window', status: 'rejected', rejectionReason: PENDING },
-  { target: 'ios-physical', status: 'rejected', rejectionReason: PENDING },
+  { target: 'ios-physical', status: 'accepted' },
+  { target: 'ios-physical-xctest', status: 'rejected', rejectionReason: PENDING },
+  { target: 'ipados-physical', status: 'rejected', rejectionReason: PENDING },
   { target: 'macos-helper', status: 'rejected', rejectionReason: PENDING },
   { target: 'web', status: 'rejected', rejectionReason: PENDING },
   { target: 'linux', status: 'rejected', rejectionReason: PENDING },
@@ -83,8 +88,12 @@ function classifyAppleCropTarget(
   const appleOs = resolveDeviceAppleOs(device);
   switch (appleOs) {
     case 'ios':
+      if (device.kind !== 'device') return 'ios-simulator';
+      return device.iosPhysicalDeviceBackend === 'xctest' ? 'ios-physical-xctest' : 'ios-physical';
     case 'ipados':
-      return device.kind === 'device' ? 'ios-physical' : 'ios-simulator';
+      // Only a physical iPhone has crop evidence. An iPad's largest viewport root can be the app
+      // window rather than the screen, so its physical capture frame is not yet checked.
+      return device.kind === 'device' ? 'ipados-physical' : 'ios-simulator';
     case 'tvos':
       return 'tvos';
     case 'macos':
@@ -145,5 +154,18 @@ export function assertScreenshotCropPolicy(params: {
   const cell = SCREENSHOT_CROP_TARGET_CELLS.find((candidate) => candidate.target === target);
   if (!cell || cell.status === 'rejected') {
     throw cropRefusal(target, cell?.status === 'rejected' ? cell.rejectionReason : undefined);
+  }
+}
+
+/** Physical iPhone crop evidence applies to the image producer, not just the selected backend. */
+export function assertScreenshotCropCapture(
+  device: DeviceInfo,
+  facts: ScreenshotCaptureFacts,
+): void {
+  if (
+    classifyScreenshotCropTarget(device, undefined) === 'ios-physical' &&
+    facts.iosPhysicalCaptureBackend !== 'coredevice'
+  ) {
+    throw cropRefusal('ios-physical-non-coredevice-capture', PENDING);
   }
 }

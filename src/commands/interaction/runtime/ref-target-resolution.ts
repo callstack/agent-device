@@ -171,6 +171,7 @@ async function resolveSnapshotForRef(
   // element. The caller re-observes (snapshot) or uses a selector.
   if (outcome.kind !== 'resolved') throw refMissRefusal(outcome, target.ref);
   return reconcileFreshObservation({
+    platform: runtime.backend.platform,
     session,
     frameTree,
     target,
@@ -190,6 +191,7 @@ async function resolveSnapshotForRef(
  * authorized frame node so a positional coincidence cannot retarget the action.
  */
 function reconcileFreshObservation(params: {
+  platform: string;
   session: CommandSessionRecord;
   frameTree: SnapshotState;
   target: Extract<InteractionTarget, { kind: 'ref' }>;
@@ -204,6 +206,8 @@ function reconcileFreshObservation(params: {
   if (observation === frameTree) {
     return { snapshot: frameTree, resolved: authorized, adoptedFrom: 'observation' };
   }
+  const identified = reconcileAndroidIdentifiedObservation({ ...params, observation });
+  if (identified) return identified;
   const observed = tryResolveRefNode(observation.nodes, target.ref, { fallbackLabel });
   if (
     observed.kind === 'resolved' &&
@@ -215,6 +219,41 @@ function reconcileFreshObservation(params: {
     return { snapshot: observation, resolved: observed.resolved, adoptedFrom: 'observation' };
   }
   return { snapshot: frameTree, resolved: authorized, adoptedFrom: 'authorized-frame' };
+}
+
+function reconcileAndroidIdentifiedObservation(params: {
+  platform: string;
+  frameTree: SnapshotState;
+  observation: SnapshotState;
+  authorized: ResolvedRefNode;
+}): RefObservationReconciliation | undefined {
+  const { platform, frameTree, observation, authorized } = params;
+  if (platform !== 'android' || !authorized.node.identifier || !authorized.node.bundleId)
+    return undefined;
+  if (
+    surfaceScopedNodes(frameTree).surfaceBundleId !==
+    surfaceScopedNodes(observation).surfaceBundleId
+  )
+    return undefined;
+  const identity = readNodeLocalIdentity(authorized.node);
+  const matches = (node: SnapshotNode) =>
+    localIdentitiesEqual(identity, readNodeLocalIdentity(node));
+  if (frameTree.nodes.filter(matches).length !== 1) return undefined;
+  const candidates = observation.nodes.filter(
+    (node) => hasSnapshotRef(node) && node.bundleId === authorized.node.bundleId && matches(node),
+  );
+  const node = candidates[0];
+  if (candidates.length !== 1 || !node || !hasSnapshotRef(node))
+    return { snapshot: frameTree, resolved: authorized, adoptedFrom: 'authorized-frame' };
+  return {
+    snapshot: observation,
+    resolved: buildRefResolution(
+      authorized.ref,
+      node,
+      authorized.resolution.kind === 'label-fallback' ? 'label-fallback' : 'exact',
+    ),
+    adoptedFrom: 'observation',
+  };
 }
 
 /** The runtime-ref resolver: `exact` for a resolved `@ref`, `label-fallback` for trailing-label recovery. */

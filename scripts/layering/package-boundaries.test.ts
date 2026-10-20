@@ -473,6 +473,7 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   assert.deepEqual([...captureKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/capture-kit',
+    '@agent-device/capture-kit/alert-tree-driver',
     '@agent-device/capture-kit/android-replacement-surface-occlusion',
     '@agent-device/capture-kit/app-log-durable-resource',
     '@agent-device/capture-kit/app-log-files',

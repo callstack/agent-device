@@ -387,3 +387,51 @@ test('diff snapshot command accepts snapshot flags', () => {
   assert.equal(parsed.flags.snapshotScope, 'Counter');
   assert.equal(parsed.flags.snapshotRaw, true);
 });
+
+test('parseArgs reads the tap series flags on gesture tap', () => {
+  const tap = parseArgs(
+    [
+      'gesture',
+      'tap',
+      '80',
+      '300',
+      '200',
+      '450',
+      '--hold-ms',
+      '40',
+      '--count',
+      '3',
+      '--pause-ms',
+      '100',
+    ],
+    { strictFlags: true },
+  );
+  assert.deepEqual(tap.positionals, ['tap', '80', '300', '200', '450']);
+  assert.equal(tap.flags.holdMs, 40);
+  assert.equal(tap.flags.count, 3);
+  assert.equal(tap.flags.pauseMs, 100);
+});
+
+test('parseArgs refuses a gesture option the chosen kind never reads', () => {
+  const cases: Array<[string[], string]> = [
+    [['gesture', 'pinch', '1.5', '--count', '2'], 'gesture pinch does not read --count'],
+    [
+      ['gesture', 'pan', '200', '420', '0', '-80', '--hold-ms', '40'],
+      'gesture pan does not read --hold-ms',
+    ],
+    [
+      ['gesture', 'tap', '80', '300', '200', '450', '--pointer-count', '2'],
+      'gesture tap does not read --pointer-count',
+    ],
+  ];
+  for (const [argv, message] of cases) {
+    assert.throws(
+      () => parseArgs(argv, { strictFlags: true }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message.startsWith(message),
+      `expected ${argv.join(' ')} to be refused`,
+    );
+  }
+});

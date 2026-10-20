@@ -13,6 +13,8 @@ test('a plan served entirely by simctl and the AX bridge needs no runner', () =>
       'captureScreenshot',
       'closeApplication',
       'finalizeApplicationClose',
+      // Every Apple leaf refuses this at admission, so its plan never reaches a runner.
+      'unlockOrientation',
     ]),
   ).toBe('none');
 });

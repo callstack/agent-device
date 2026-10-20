@@ -29,7 +29,7 @@ const primed = new Map<string, PrimedStore>();
 
 /** Loads the store's plugins into the connection registry this process reads capabilities from. */
 export async function primePluginConnections(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv,
   builtinProviders: readonly string[] = [],
 ): Promise<void> {
   if (primed.has(resolveUserConfigPath(env))) return;
@@ -49,19 +49,19 @@ export async function primePluginConnections(
 /** The primed connection of a store plugin, or undefined before priming or for an unknown provider. */
 export function primedPluginConnection(
   provider: string,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv,
 ): RegisteredConnection | undefined {
   return primed.get(resolveUserConfigPath(env))?.connections.get(provider);
 }
 
 /** The store plugins that failed to load, as the primed registry saw them. */
-export function pluginLoadFailures(env: NodeJS.ProcessEnv = process.env): readonly FailedPlugin[] {
+export function pluginLoadFailures(env: NodeJS.ProcessEnv): readonly FailedPlugin[] {
   return primed.get(resolveUserConfigPath(env))?.failures ?? [];
 }
 
 export function pluginConnectionCapabilities(
   provider: string | undefined,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv,
 ): ConnectionProviderCapabilities | undefined {
   if (provider === undefined) return undefined;
   const store = primed.get(resolveUserConfigPath(env));
@@ -70,7 +70,7 @@ export function pluginConnectionCapabilities(
     ?.agentDevicePlugin.connection;
 }
 
-export function pluginConnectionNames(env: NodeJS.ProcessEnv = process.env): string[] {
+export function pluginConnectionNames(env: NodeJS.ProcessEnv): string[] {
   const store = primed.get(resolveUserConfigPath(env));
   if (store) return [...store.connections.keys()];
   return legacyStoreManifests(env)

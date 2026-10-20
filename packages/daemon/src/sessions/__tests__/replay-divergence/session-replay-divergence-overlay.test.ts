@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
 import {
   ANDROID_IME_CAPTURE_RAW_NODES,
@@ -47,7 +47,10 @@ beforeEach(() => resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInterac
 // dedicated realistic-tree test below.
 test('buildReplayFailureDivergence: a system-overlay window survives into screen.refs while status/nav chrome is filtered (#1264)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-overlay-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -160,7 +163,10 @@ function appSwampWithTrailingOverlay(appBundleId: string) {
 
 test('buildReplayFailureDivergence: a fully-captured overlay dismiss-target enumerating LAST still lands within the screen.refs cap (#1264 cap burial)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-burial-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
   sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));
@@ -256,7 +262,10 @@ function overlayMassCoveringApp(appBundleId: string) {
 
 test('buildReplayFailureDivergence: when a system overlay mass-covers the app, the overlay dismiss-target surfaces in screen.refs and refs is non-empty (#1264 occlusion)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-occlusion-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
   sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));
@@ -331,7 +340,10 @@ function bareScrimMassCoveringApp(appBundleId: string) {
 
 test('buildReplayFailureDivergence: a mass-covered app with no actionable overlay node still returns non-empty screen.refs (#1264 occlusion fallback)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-scrim-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
   sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));
@@ -381,7 +393,10 @@ test('buildReplayFailureDivergence: a mass-covered app with no actionable overla
 // the frame scope equals the emitted screen ref set (covered refs included).
 test('buildReplayFailureDivergence: the partial ref frame authorizes exactly the emitted screen.refs, including mass-covered fallback refs (#1257 + #1264)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-divergence-frame-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
   sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));

@@ -1,3 +1,4 @@
+import type { HostEnvironment, EnvMap } from '@agent-device/kernel/source-value';
 import path from 'node:path';
 import { colorize, supportsColor } from './color.ts';
 import { readSnapshotWarnings } from './snapshot.ts';
@@ -8,13 +9,13 @@ type SnapshotDiffLine = {
   text?: string;
 };
 
-export function formatSnapshotDiffText(data: Record<string, unknown>): string {
+export function formatSnapshotDiffText(data: Record<string, unknown>, env: EnvMap): string {
   const baselineInitialized = data.baselineInitialized === true;
   const summaryRaw = (data.summary ?? {}) as Record<string, unknown>;
   const additions = toNumber(summaryRaw.additions);
   const removals = toNumber(summaryRaw.removals);
   const unchanged = toNumber(summaryRaw.unchanged);
-  const useColor = supportsColor();
+  const useColor = supportsColor(env);
   const notices = readSnapshotWarnings(data);
   const noticesBlock = notices.length > 0 ? `${notices.join('\n')}\n` : '';
   if (baselineInitialized) {
@@ -46,14 +47,17 @@ export function formatSnapshotDiffText(data: Record<string, unknown>): string {
   return `${noticesBlock}${body}${summary}\n`;
 }
 
-export function formatScreenshotDiffText(data: ScreenshotDiffResult): string {
-  const useColor = supportsColor();
+export function formatScreenshotDiffText(
+  data: ScreenshotDiffResult,
+  host: HostEnvironment,
+): string {
+  const useColor = supportsColor(host.env);
   const match = data.match === true;
   const dimensionMismatch = data.dimensionMismatch;
 
   const lines: string[] = [];
   lines.push(...formatScreenshotDiffStatusLines(data, useColor));
-  lines.push(...formatScreenshotDiffArtifactLines(data, match, useColor));
+  lines.push(...formatScreenshotDiffArtifactLines(data, match, useColor, host.cwd));
 
   if (!match && !dimensionMismatch) {
     lines.push(...formatScreenshotDiffPixelCountLines(data, useColor));
@@ -92,17 +96,18 @@ function formatScreenshotDiffArtifactLines(
   data: ScreenshotDiffResult,
   match: boolean,
   useColor: boolean,
+  cwd: string,
 ): string[] {
   if (match) return [];
   const lines: string[] = [];
   if (data.diffPath) {
-    const relativePath = toRelativePath(data.diffPath);
+    const relativePath = toRelativePath(data.diffPath, cwd);
     const label = useColor ? colorize('Diff image:', 'dim') : 'Diff image:';
     const displayPath = useColor ? colorize(relativePath, 'green') : relativePath;
     lines.push(`  ${label} ${displayPath}`);
   }
   if (data.currentOverlayPath) {
-    const relativePath = toRelativePath(data.currentOverlayPath);
+    const relativePath = toRelativePath(data.currentOverlayPath, cwd);
     const label = useColor ? colorize('Current overlay:', 'dim') : 'Current overlay:';
     const displayPath = useColor ? colorize(relativePath, 'green') : relativePath;
     const refCount = toNumber(data.currentOverlayRefCount);
@@ -156,8 +161,7 @@ function formatScreenshotDiffRegionEntryLines(region: ScreenshotDiffRegion): str
   return lines;
 }
 
-function toRelativePath(filePath: string): string {
-  const cwd = process.cwd();
+function toRelativePath(filePath: string, cwd: string): string {
   const relativePath = path.relative(cwd, filePath);
   if (relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))) {
     return relativePath === '' ? '.' : `.${path.sep}${relativePath}`;

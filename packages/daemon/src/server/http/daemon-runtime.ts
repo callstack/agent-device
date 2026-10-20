@@ -12,6 +12,7 @@ import {
   DAEMON_CAPABILITIES,
   resolveDaemonPaths,
   resolveDaemonServerMode,
+  type DaemonRuntimeOwnership,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
 import {
@@ -41,12 +42,11 @@ import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecy
 import { runtimeHintValues } from '../../sessions/session-runtime.ts';
 import {
   closeDaemonServers,
-  createRuntimeContext,
   teardownDaemonSessionForShutdown,
-  type RuntimeContext,
   type WritableOutput,
   createPluginClose,
   createStartupRollback,
+  describeUnfinishedShutdownWork,
   settleWithinBudget,
   type ShutdownReport,
   type StartupRollback,
@@ -55,7 +55,7 @@ import type { DaemonInvokeFn } from '../../core/daemon-request.ts';
 import type { SessionRef } from '../../core/session-state.ts';
 import {
   createDaemonIdleReap,
-  createDaemonQuiesce,
+  createDaemonLifecycleAdmission,
   daemonShuttingDownResponse,
 } from '../../sessions/server/daemon-idle-reap.ts';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
@@ -69,13 +69,18 @@ import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { withCommandHost } from '@agent-device/host-kit/command';
 import { cancelAllRequests } from '@agent-device/host-kit/request';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import {
+  createRuntimeStateHandle,
+  type RuntimeStateHandle,
+} from '@agent-device/host-kit/runtime-slots';
 import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   readCurrentOwnerIdentity,
   reapOwnedProcessRecordsAtStartup,
   type OwnedProcessRecordStore,
+  type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
 import {
@@ -87,6 +92,7 @@ import {
 import {
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
+  type DaemonRegistrationOwner,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
   recordDaemonStartupMarker,
@@ -131,8 +137,6 @@ const DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS = 5_000;
  * same factory, so the production assembly is the one every runtime test boots.
  */
 export type DaemonRuntimeDeps = Readonly<{
-  /** State the composition's platform modules keep per daemon runtime (the Apple runner's). */
-  runtimeStates: readonly RuntimeStateHandle[];
   ownedProcessRecords: OwnedProcessRecordStore;
   hostDiagnostics: HostDiagnostics;
   ownerLifecycle: PlatformOwnerLifecycle;
@@ -218,9 +222,20 @@ export type DaemonRuntimeOptions = {
   composeDeps: ComposeDaemonRuntimeDeps;
   /** Shutdown time budgets, for hosts and tests that need other than the defaults. */
   shutdownBudgets?: { requestDrainMs?: number; pluginMs?: number; ownerMs?: number };
+  /**
+   * Who owns this process. A host that started this runtime in its own process passes `embedded`: the
+   * record says so, no idle timer ends the runtime, and it answers a shutdown request instead of a
+   * quiesce. Defaults to a detached daemon. `unknown` is not offered: it is what a reader answers for a
+   * record it cannot place, and a runtime always knows which of these two it is.
+   */
+  ownership?: DaemonRuntimeOwnership;
+  /** The daemon code an embedder loaded; its process entry belongs to the host application. */
+  codeIdentity?: { origin: DaemonCodeOrigin; codeSignature?: string };
 };
 
 export type DaemonRuntimeController = {
+  /** The runtime process lifetime used in its registration and lifecycle protocol. */
+  identity: Readonly<OwnerIdentity>;
   httpPort?: number;
   socketPort?: number;
   /**
@@ -244,17 +259,30 @@ export function daemonStartupExitCode(error: unknown): number {
   return typeof exitCode === 'number' ? exitCode : 1;
 }
 
+/**
+ * Starts one daemon runtime: the single entered runtime-state store, the command host, then the
+ * composition and servers built inside both. Every read of per-runtime state (requests, close,
+ * timers the startup spawns) runs within this handle, so two runtimes in one process never share
+ * it and no module exposes a store of its own (#3794).
+ */
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions,
 ): Promise<DaemonRuntimeController> {
-  const runtimeContext = createRuntimeContext();
-  return await runtimeContext.run(
+  const runtimeOptions = {
+    ...options,
+    codeIdentity: options.codeIdentity ?? {
+      origin: resolveDaemonCodeOrigin(),
+      codeSignature: resolveDaemonCodeSignature(),
+    },
+  };
+  const runtimeState = createRuntimeStateHandle();
+  return await runtimeState.run(
     async () =>
       await withCommandHost({ host: options.host, requestEnv: undefined }, async () => {
         const rollback = createStartupRollback();
-        rollback.onRollback(() => runtimeContext.dispose());
+        rollback.onRollback(() => runtimeState.dispose());
         try {
-          return await startDaemonRuntimeOnHost(options, rollback, runtimeContext);
+          return await startDaemonRuntimeOnHost(runtimeOptions, rollback, runtimeState);
         } catch (error) {
           await rollback.run();
           throw error;
@@ -264,9 +292,11 @@ export async function startDaemonRuntime(
 }
 
 async function startDaemonRuntimeOnHost(
-  options: DaemonRuntimeOptions,
+  options: DaemonRuntimeOptions & {
+    codeIdentity: NonNullable<DaemonRuntimeOptions['codeIdentity']>;
+  },
   rollback: StartupRollback,
-  runtimeContext: RuntimeContext,
+  runtimeState: RuntimeStateHandle,
 ): Promise<DaemonRuntimeController> {
   const { host } = options;
   const { env } = host;
@@ -293,7 +323,7 @@ async function startDaemonRuntimeOnHost(
     ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
     : undefined;
 
-  const sessionStore = new SessionStore(sessionsDir);
+  const sessionStore = new SessionStore(sessionsDir, host);
   const deps = await options.composeDeps({
     host,
     baseDir,
@@ -306,7 +336,6 @@ async function startDaemonRuntimeOnHost(
     }),
     openWebSessionNames: () => openWebSessionNames(sessionStore),
   });
-  runtimeContext.extend(deps.runtimeStates);
   const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const audioProbeAdmissionLedger = createAudioProbeAdmissionLedger();
   const perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger();
@@ -314,8 +343,7 @@ async function startDaemonRuntimeOnHost(
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
   const daemonIdentity = readCurrentOwnerIdentity();
-  const daemonCodeOrigin = resolveDaemonCodeOrigin();
-  const daemonCodeSignature = resolveDaemonCodeSignature();
+  const { codeIdentity } = options;
   const requestDrainTimeoutMs =
     options.shutdownBudgets?.requestDrainMs ?? DAEMON_REQUEST_DRAIN_TIMEOUT_MS;
   // The registry is the one plugin cleanup owner: closing it shuts each runtime down, then disposes
@@ -511,6 +539,9 @@ async function startDaemonRuntimeOnHost(
   // well after this closure captures it.
   let shuttingDown = false;
   const inFlightRequests = new Set<ReturnType<DaemonInvokeFn>>();
+  // Who owns this process decides what it publishes and which lifecycle request it answers. A host
+  // that starts the runtime passes `embedded`; the daemon executable leaves it detached.
+  const ownership = options.ownership ?? 'detached';
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => inFlightRequests.size,
@@ -519,6 +550,7 @@ async function startDaemonRuntimeOnHost(
       void close();
     },
     env,
+    ownership,
   });
 
   rollback.onRollback(() => {
@@ -527,11 +559,11 @@ async function startDaemonRuntimeOnHost(
     leaseSessionEnd.cancel();
   });
 
-  // The quiesce request is answered before dispatch and never joins `inFlightRequests`, so the
-  // count it reads needs no allowance for it. The servers listen and `daemon.json` is published
-  // before `shutdown` exists, and a daemon answers `draining` only once it has a drain path to run.
+  // Both lifecycle requests are answered before dispatch and never join `inFlightRequests`, so the
+  // count they read needs no allowance for them. The servers listen and `daemon.json` is published
+  // before `close` exists, and a daemon answers `draining` only once it has a drain path to run.
   let startingUp = true;
-  const quiesce = createDaemonQuiesce({
+  const lifecycleAdmission = createDaemonLifecycleAdmission({
     token,
     identity: { pid: daemonIdentity.pid, processStartTime: daemonIdentity.startTime },
     sessionStore,
@@ -541,12 +573,13 @@ async function startDaemonRuntimeOnHost(
     drain: () => {
       void close();
     },
+    ownership: () => ownership,
   });
 
-  const handleRequest: DaemonInvokeFn = quiesce.admit(async (req) => {
+  const handleRequest: DaemonInvokeFn = lifecycleAdmission.admit(async (req) => {
     if (shuttingDown) return daemonShuttingDownResponse();
     idleReap.cancel();
-    const dispatch = runtimeContext.run(() => dispatchRequest(req));
+    const dispatch = runtimeState.run(() => dispatchRequest(req));
     inFlightRequests.add(dispatch);
     try {
       return await dispatch;
@@ -567,11 +600,12 @@ async function startDaemonRuntimeOnHost(
       httpPort,
       token,
       version,
-      codeOrigin: daemonCodeOrigin,
-      codeSignature: daemonCodeSignature,
+      codeOrigin: codeIdentity.origin,
+      codeSignature: codeIdentity.codeSignature,
       policyDigest: daemonPolicy?.digest,
       capabilities: DAEMON_CAPABILITIES,
       plugins: deps.pluginInventory,
+      ownership,
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
@@ -590,7 +624,12 @@ async function startDaemonRuntimeOnHost(
     await deps.ownerLifecycle.clearDaemonLockConfiguration();
   });
   rollback.onRollback(async () => {
-    await finishDaemonRegistration({ registration, infoPath, logPath });
+    await finishDaemonRegistration({
+      registration,
+      infoPath,
+      logPath,
+      close: { retainRegistration: false, unfinished: ['Daemon startup rolled back.'] },
+    });
   });
   const startupPhasesPath = resolveDaemonStartupPhasesPath(baseDir, process.pid);
   const recordStartupPhase = (phase: Parameters<typeof recordDaemonStartupMarker>[1]): void =>
@@ -737,13 +776,10 @@ async function startDaemonRuntimeOnHost(
     }).catch(() => {});
   });
 
-  let registrationFinished = false;
-  let lockConfigurationCleared = false;
-  // Work that ignored cancellation may still be running, so this process keeps the registration
-  // and lock it holds: releasing them would let a second daemon drive the same devices.
   let abandonedRequests = 0;
-  let platformOwnersPending = false;
+  let platformOwnersPending = true;
   const hasUnfinishedWork = () => abandonedRequests > 0 || platformOwnersPending;
+  let shutdownOutcome: Parameters<DaemonRegistrationOwner['finish']>[0];
   const drainInFlightRequests = async (): Promise<ShutdownReport['requests']> => {
     const total = inFlightRequests.size;
     if (total === 0) return { drained: 0, abandoned: 0 };
@@ -765,6 +801,7 @@ async function startDaemonRuntimeOnHost(
     }
     return { drained: total - abandonedRequests, abandoned: abandonedRequests };
   };
+
   const closeSteps = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
@@ -772,12 +809,10 @@ async function startDaemonRuntimeOnHost(
     clearInterval(leaseExpirySweep);
     shuttingDown = true;
     stopMetadataLossWatch();
-    if (closeOptions.cause) {
-      await emitFatalDiagnostic(closeOptions.cause);
-    }
     // Cancellation and the listener close run together: a connection held by a request that ignores
     // cancellation is force-closed at the same budget the drain gives it.
     const serversClosed = closeDaemonServers(servers, requestDrainTimeoutMs);
+    if (closeOptions.cause) await emitFatalDiagnostic(closeOptions.cause);
     const requests = await drainInFlightRequests();
     await serversClosed;
     await leaseSessionEnd.drain();
@@ -826,7 +861,6 @@ async function startDaemonRuntimeOnHost(
       },
     });
     expiredProviderLeaseReleaser.shutdown();
-    platformOwnersPending = true;
     const ownerClose = await settleWithinBudget(
       () => deviceRuntimeGateway.shutdown(),
       options.shutdownBudgets?.ownerMs ?? DAEMON_PLATFORM_OWNER_SHUTDOWN_TIMEOUT_MS,
@@ -842,24 +876,8 @@ async function startDaemonRuntimeOnHost(
       });
     }
     const stoppedRunners = await applicationLifecycle.finalizeDaemonShutdown();
-    // Best effort: stop the PNG worker so an in-flight job cannot delay exit.
-    await Promise.race([
-      releasePngWorker().catch(() => {}),
-      sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
-    ]);
-    if (!hasUnfinishedWork()) {
-      registrationFinished = true;
-      await finishDaemonRegistration({
-        registration,
-        infoPath,
-        logPath,
-        outcome: { providerReleases: providerReleaseDrain, claims: shutdownClaimLedger.claims },
-      });
-      lockConfigurationCleared = true;
-      await deps.ownerLifecycle.clearDaemonLockConfiguration();
-    }
     const unknownLeaseIds = new Set(providerReleaseDrain.unknown.map((lease) => lease.leaseId));
-    return {
+    const report: ShutdownReport = {
       providerReleases: {
         completed: providerReleaseDrain.released.map((lease) => lease.leaseId),
         pending: providerReleaseDrain.pending
@@ -873,25 +891,46 @@ async function startDaemonRuntimeOnHost(
       sessions,
       plugins,
     };
+    shutdownOutcome = {
+      providerReleases: providerReleaseDrain,
+      claims: shutdownClaimLedger.claims,
+    };
+    return report;
   };
 
-  // A step that rejects must not strand what the later steps release: the PNG worker hold, the
-  // provider runtimes, the registration and lock, and the runtime's own state.
   const closeOnHost = async (closeOptions: { cause?: unknown }): Promise<ShutdownReport> => {
+    let report: ShutdownReport | undefined;
     try {
-      return await closeSteps(closeOptions);
+      report = await closeSteps(closeOptions);
+      return report;
     } finally {
       await Promise.allSettled([
-        releasePngWorker(),
-        pluginClose.close(),
-        registrationFinished || hasUnfinishedWork()
-          ? undefined
-          : finishDaemonRegistration({ registration, infoPath, logPath }),
-        lockConfigurationCleared || hasUnfinishedWork()
-          ? undefined
-          : deps.ownerLifecycle.clearDaemonLockConfiguration(),
+        Promise.race([
+          Promise.resolve().then(releasePngWorker),
+          sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
+        ]),
+        Promise.resolve().then(() => pluginClose.close()),
       ]);
-      if (!hasUnfinishedWork()) runtimeContext.dispose();
+      await Promise.allSettled([
+        finishDaemonRegistration({
+          registration,
+          infoPath,
+          logPath,
+          outcome: shutdownOutcome,
+          close: {
+            retainRegistration: hasUnfinishedWork(),
+            unfinished: report
+              ? describeUnfinishedShutdownWork(report)
+              : ['Daemon shutdown: a close step failed, so the runtime did not finish leaving.'],
+          },
+        }),
+      ]);
+      if (!hasUnfinishedWork()) {
+        try {
+          await deps.ownerLifecycle.clearDaemonLockConfiguration();
+        } catch {}
+        runtimeState.dispose();
+      }
     }
   };
 
@@ -907,7 +946,7 @@ async function startDaemonRuntimeOnHost(
   closed.catch(() => {});
   const close = (closeOptions: { cause?: unknown } = {}): Promise<ShutdownReport> => {
     if (!closing) {
-      closing = runtimeContext.run(() =>
+      closing = runtimeState.run(() =>
         withCommandHost(
           { host, requestEnv: undefined },
           async () => await closeOnHost(closeOptions),
@@ -924,8 +963,9 @@ async function startDaemonRuntimeOnHost(
     httpPort,
     close,
     closed,
-    run: runtimeContext.run,
+    run: runtimeState.run,
     socketPort,
     token,
+    identity: Object.freeze({ ...daemonIdentity }),
   };
 }

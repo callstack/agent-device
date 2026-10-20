@@ -1,10 +1,5 @@
 import XCTest
 
-// Text-entry target acquisition: choosing the element a `type`/`fill` will address and getting
-// focus onto it — the one-shot tap witness, the post-tap stabilization, and the
-// `focusTextInputForTextEntry` entry point the command layer calls. Whether that target is ready
-// is RunnerTests+TextEntryReadiness.swift's question, and this file asks it rather than answering
-// it.
 extension RunnerTests {
   /// Books the tap as the address for the next bare `type`. `element` is a text input the caller
   /// classified BEFORE dispatching, or nil when the tap hit nothing worth typing into; that is the whole
@@ -71,7 +66,6 @@ extension RunnerTests {
 #if os(tvOS)
     return TextEntryStabilization(element: target, focusConfirmed: true)
 #else
-    let latest = target
     let keyboardVisibleAtEntry = keyboardVisibleBeforeTap ?? isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(TextEntryTiming.focusTimeout)
     while Date() < deadline {
@@ -81,11 +75,16 @@ extension RunnerTests {
       // focusedTextInput is intentionally nil on iOS; treat the keyboard transitioning to
       // visible after our tap as the focus-moved signal. Don't fast-path when it was already up.
       if keyboardBecameVisible(app: app, wasVisibleAtEntry: keyboardVisibleAtEntry) {
-        return TextEntryStabilization(element: latest, focusConfirmed: true)
+        return TextEntryStabilization(element: target, focusConfirmed: true)
       }
+#if os(iOS)
+      if let target, keyboardFocusConfirmed(app: app, element: target) {
+        return TextEntryStabilization(element: target, focusConfirmed: true)
+      }
+#endif
       sleepFor(TextEntryTiming.pollInterval)
     }
-    return TextEntryStabilization(element: latest, focusConfirmed: false)
+    return TextEntryStabilization(element: target, focusConfirmed: false)
 #endif
   }
 
@@ -151,10 +150,9 @@ extension RunnerTests {
       refreshPoint: requestedPoint,
       prefersFocusedElement: false
     )
-    let concreteTargetReady = keyboardVisibleBeforeTap && readyTarget.element != nil
-    let element = stabilized.focusConfirmed || concreteTargetReady
-      ? (stabilized.element ?? target)
-      : (waitForTextEntryReadiness(app: app, target: readyTarget) ?? stabilized.element ?? target)
+    let element = stabilized.focusConfirmed
+      ? readyTarget.element
+      : (waitForTextEntryReadiness(app: app, target: readyTarget) ?? readyTarget.element)
     return TextEntryTarget(
       element: element,
       refreshPoint: textEntryRefreshPoint(for: element, fallbackTo: requestedPoint),
@@ -186,10 +184,4 @@ extension RunnerTests {
     }
     return CGPoint(x: frame.midX, y: frame.midY)
   }
-
-  /// A focus-moved signal for iOS text entry, where `focusedTextInput` is intentionally nil.
-  /// The software keyboard TRANSITIONING from hidden (at entry) to visible means the field we
-  /// just tapped gained first-responder. If the keyboard was ALREADY up (e.g. back-to-back
-  /// fills into different fields), its visibility is not evidence focus moved to the new field,
-  /// so callers must keep waiting rather than typing into the previously-focused field.
 }

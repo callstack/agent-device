@@ -4,7 +4,7 @@ import { handleReactNativeCommands } from '../react-native.ts';
 import { captureSnapshot } from '../../../core/snapshot-capture.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { SessionState } from '../../../core/session-state.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   getRuntimeBindings,
   mockTapPoint,
@@ -861,7 +861,7 @@ test('react-native dismiss-overlay ignores app copy that only mentions RN overla
 
 function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-rn-handler-');
-  return new SessionStore(path.join(root, 'sessions'));
+  return new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 }
 
 function makeSession(name: string, platform: 'ios' | 'android' = 'ios'): SessionState {

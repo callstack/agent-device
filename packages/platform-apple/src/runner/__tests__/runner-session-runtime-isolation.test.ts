@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { beforeEach, test, vi } from 'vitest';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
-import { createAppleRunnerRuntimeState } from '../../core/runner-owner-state.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { registerRunnerPrepProcess } from '../runner-artifact.ts';
 import { stopAllIosRunnerSessions } from '../runner-session.ts';
 import { openRunnerStartAdmission, runnerPrepProcessChildren } from '../runner-xctestrun.ts';
-import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
+import { setAppleRunnerHostEnvironment } from '../../core/runner-owner-state.ts';
+import {
+  createLiveTestHostEnvironment,
+  createTestRuntimeStateHandle,
+} from '@agent-device/test-kit';
 
 const mockSignalProcessGroupBestEffort = vi.fn();
 const mockRunAppleToolCommand = vi.fn();
@@ -30,8 +33,10 @@ function prepChild(pid: number): ExecBackgroundResult['child'] {
 }
 
 test("stopping every runner of one runtime leaves another runtime's prep build and admission alone", async () => {
-  const runtimeA = createAppleRunnerRuntimeState(createLiveTestHostEnvironment());
-  const runtimeB = createAppleRunnerRuntimeState(createLiveTestHostEnvironment());
+  const runtimeA = createTestRuntimeStateHandle();
+  const runtimeB = createTestRuntimeStateHandle();
+  runtimeA.run(() => setAppleRunnerHostEnvironment(createLiveTestHostEnvironment()));
+  runtimeB.run(() => setAppleRunnerHostEnvironment(createLiveTestHostEnvironment()));
   const deviceId = 'runner-runtime-isolation-sim';
   const buildA = prepChild(6101);
   const buildB = prepChild(6102);

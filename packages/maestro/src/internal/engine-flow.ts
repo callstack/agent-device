@@ -98,12 +98,10 @@ export async function readIncludedProgram(
 function includePathKey(
   command: MaestroRunFlowCommand,
   parentSource: string | undefined,
+  baseDir: string,
 ): string | undefined {
   if (command.include.kind !== 'file') return undefined;
-  return path.resolve(
-    parentSource ? path.dirname(parentSource) : process.cwd(),
-    command.include.path,
-  );
+  return path.resolve(parentSource ? path.dirname(parentSource) : baseDir, command.include.path);
 }
 
 export function sourcePathKey(source: string | undefined): string | undefined {
@@ -113,8 +111,9 @@ export function sourcePathKey(source: string | undefined): string | undefined {
 export function assertIncludePathAvailable(
   command: MaestroRunFlowCommand,
   activePaths: ReadonlySet<string>,
+  baseDir: string,
 ): string | undefined {
-  const requestedPath = includePathKey(command, command.source.path);
+  const requestedPath = includePathKey(command, command.source.path, baseDir);
   if (requestedPath && activePaths.has(requestedPath)) {
     throw new AppError('INVALID_ARGS', `Maestro runFlow cycle detected at ${requestedPath}.`);
   }

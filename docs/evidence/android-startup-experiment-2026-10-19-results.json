@@ -1,0 +1,361 @@
+{
+  "reviewedRuntimeSha": "d01199dcbe3e7e62a216d3ce4d071ff8b4a60ca1",
+  "adapterSha": "5e1d8952f4b0fd0d6a12b084ed8151e71e7cd889",
+  "referenceSha": "2593e45025edc52b2c381e809b41cb63d5878e2b",
+  "device": "Pixel_7_CI / emulator-5554 / API 36",
+  "workers": 1,
+  "runnerRetries": 0,
+  "candidateStatus": "rejected: late overlays can activate a decoy",
+  "fullBenchmark": {
+    "startedAt": "2026-10-19T12:36:55.564Z",
+    "finishedAt": "2026-10-19T12:40:45.236Z",
+    "elapsedSeconds": 229.672,
+    "summary": {
+      "discovered": 45,
+      "selected": 43,
+      "executed": 42,
+      "passed": 42,
+      "failed": 0,
+      "interrupted": 0,
+      "flaky": 0,
+      "skipped": 1
+    },
+    "fixtureRecoveryCalls": 0,
+    "sameSelectedIdentitiesAsPublishedBaseline": true
+  },
+  "ourApp": {
+    "timer": {
+      "startedAt": "2026-10-19T12:52:05.563Z",
+      "finishedAt": "2026-10-19T12:52:27.012Z",
+      "elapsedSeconds": 21.449,
+      "summary": {
+        "discovered": 3,
+        "selected": 3,
+        "executed": 3,
+        "passed": 3,
+        "failed": 0,
+        "interrupted": 0,
+        "flaky": 0,
+        "skipped": 0
+      },
+      "fixtureRecoveryCalls": 0
+    },
+    "measured": {
+      "startedAt": "2026-10-19T12:52:28.776Z",
+      "finishedAt": "2026-10-19T12:52:46.985Z",
+      "elapsedSeconds": 18.209,
+      "summary": {
+        "discovered": 3,
+        "selected": 3,
+        "executed": 3,
+        "passed": 3,
+        "failed": 0,
+        "interrupted": 0,
+        "flaky": 0,
+        "skipped": 0
+      },
+      "fixtureRecoveryCalls": 0
+    }
+  },
+  "cohorts": [
+    {
+      "name": "readiness-oracle-timer",
+      "trials": 39,
+      "outcomes": {
+        "activation": 30,
+        "refusal-unconfirmed": 9
+      },
+      "activationMedianMs": 1619.5
+    },
+    {
+      "name": "readiness-oracle-measured",
+      "trials": 39,
+      "outcomes": {
+        "activation": 27,
+        "refusal-unconfirmed": 12
+      },
+      "activationMedianMs": 626
+    },
+    {
+      "name": "readiness-oracle-zero",
+      "trials": 39,
+      "outcomes": {
+        "activation": 13,
+        "decoy-hit": 17,
+        "silent-miss": 6,
+        "refusal-unconfirmed": 3
+      },
+      "activationMedianMs": 394
+    },
+    {
+      "name": "readiness-oracle-direct",
+      "trials": 39,
+      "outcomes": {
+        "activation": 20,
+        "silent-miss": 7,
+        "decoy-hit": 9,
+        "refusal-unconfirmed": 3
+      },
+      "activationMedianMs": 660.0
+    },
+    {
+      "name": "readiness-overlay-sweep",
+      "trials": 50,
+      "outcomes": {
+        "refusal-unconfirmed": 27,
+        "decoy-hit": 4,
+        "activation": 19
+      },
+      "activationMedianMs": 512
+    },
+    {
+      "name": "readiness-input-observe",
+      "trials": 15,
+      "outcomes": {
+        "activation": 8,
+        "refusal-unconfirmed": 6,
+        "decoy-hit": 1
+      },
+      "activationMedianMs": 523.5
+    },
+    {
+      "name": "readiness-input-observe-spinner",
+      "trials": 9,
+      "outcomes": {
+        "refusal-unconfirmed": 4,
+        "activation": 5
+      },
+      "activationMedianMs": 609
+    },
+    {
+      "name": "readiness-timer-late-control",
+      "trials": 30,
+      "outcomes": {
+        "refusal-unconfirmed": 12,
+        "decoy-hit": 3,
+        "activation": 15
+      },
+      "activationMedianMs": 1613
+    },
+    {
+      "name": "readiness-negative-controls",
+      "trials": 4,
+      "outcomes": {
+        "silent-miss": 1,
+        "decoy-hit": 1,
+        "duplicate-activation": 1,
+        "stale-activity": 1
+      }
+    },
+    {
+      "name": "readiness-input-app-trace",
+      "trials": 15,
+      "outcomes": {
+        "refusal-unconfirmed": 4,
+        "activation": 9,
+        "decoy-hit": 2
+      },
+      "activationMedianMs": 540
+    },
+    {
+      "name": "readiness-input-bypass-down",
+      "trials": 15,
+      "outcomes": {
+        "activation": 10,
+        "refusal-unconfirmed": 3,
+        "decoy-hit": 2
+      },
+      "activationMedianMs": 538.5
+    }
+  ],
+  "wrongTargetTimelines": {
+    "readiness-input-observe": [
+      {
+        "trial": "measured-overlay-500-4-1792414705780",
+        "delayMs": 500,
+        "firstTargetReadUptimeMs": 1558263408,
+        "lastTargetReadBeforeClickUptimeMs": 1558263903,
+        "decoyClickUptimeMs": 1558263966,
+        "nativeInput": [
+          "begin action=0 at=1558263929 x=219.0 y=1034.0",
+          "end action=0 at=1558263946 waitedMs=17",
+          "begin action=1 at=1558263946 x=219.0 y=1034.0",
+          "end action=1 at=1558263961 waitedMs=15"
+        ],
+        "appEvents": []
+      }
+    ],
+    "readiness-timer-late-control": [
+      {
+        "trial": "timer-overlay-1550-0-1792414946579",
+        "delayMs": 1550,
+        "firstTargetReadUptimeMs": 1558504252,
+        "lastTargetReadBeforeClickUptimeMs": 1558505783,
+        "decoyClickUptimeMs": 1558505836,
+        "nativeInput": [
+          "begin action=0 at=1558505805 x=219.0 y=1034.0",
+          "end action=0 at=1558505820 waitedMs=15",
+          "begin action=1 at=1558505820 x=219.0 y=1034.0",
+          "end action=1 at=1558505830 waitedMs=10"
+        ],
+        "appEvents": []
+      },
+      {
+        "trial": "timer-overlay-1550-1-1792414980639",
+        "delayMs": 1550,
+        "firstTargetReadUptimeMs": 1558538400,
+        "lastTargetReadBeforeClickUptimeMs": 1558539921,
+        "decoyClickUptimeMs": 1558539990,
+        "nativeInput": [
+          "begin action=0 at=1558539942 x=219.0 y=1034.0",
+          "end action=0 at=1558539970 waitedMs=28",
+          "begin action=1 at=1558539970 x=219.0 y=1034.0",
+          "end action=1 at=1558539982 waitedMs=12"
+        ],
+        "appEvents": []
+      },
+      {
+        "trial": "timer-overlay-1550-2-1792415014076",
+        "delayMs": 1550,
+        "firstTargetReadUptimeMs": 1558571670,
+        "lastTargetReadBeforeClickUptimeMs": 1558573198,
+        "decoyClickUptimeMs": 1558573247,
+        "nativeInput": [
+          "begin action=0 at=1558573217 x=219.0 y=1034.0",
+          "end action=0 at=1558573231 waitedMs=14",
+          "begin action=1 at=1558573231 x=219.0 y=1034.0",
+          "end action=1 at=1558573242 waitedMs=11"
+        ],
+        "appEvents": []
+      }
+    ],
+    "readiness-input-app-trace": [
+      {
+        "trial": "measured-overlay-550-1-1792415108112",
+        "delayMs": 550,
+        "firstTargetReadUptimeMs": 1558665754,
+        "lastTargetReadBeforeClickUptimeMs": 1558666275,
+        "decoyClickUptimeMs": 1558666334,
+        "nativeInput": [
+          "begin action=0 at=1558666291 x=219.0 y=1034.0",
+          "end action=0 at=1558666313 waitedMs=22",
+          "begin action=1 at=1558666313 x=219.0 y=1034.0",
+          "end action=1 at=1558666325 waitedMs=12"
+        ],
+        "appEvents": [
+          "disturb trial=measured-overlay-550-1-1792415108112 mode=overlay at=1558666304",
+          "receipt kind=Blocking_sheet trial=measured-overlay-550-1-1792415108112 action=0 at=1558666312 eventAt=1558666291 downAt=1558666291 rect=Rect(74, 950 - 363, 1118)",
+          "receipt kind=Blocking_sheet trial=measured-overlay-550-1-1792415108112 action=1 at=1558666314 eventAt=1558666313 downAt=1558666291 rect=Rect(74, 950 - 363, 1118)"
+        ]
+      },
+      {
+        "trial": "measured-overlay-500-3-1792415119698",
+        "delayMs": 500,
+        "firstTargetReadUptimeMs": 1558677630,
+        "lastTargetReadBeforeClickUptimeMs": 1558678091,
+        "decoyClickUptimeMs": 1558678165,
+        "nativeInput": [
+          "begin action=0 at=1558678123 x=219.0 y=1034.0",
+          "end action=0 at=1558678146 waitedMs=23",
+          "begin action=1 at=1558678146 x=219.0 y=1034.0",
+          "end action=1 at=1558678162 waitedMs=16"
+        ],
+        "appEvents": [
+          "disturb trial=measured-overlay-500-3-1792415119698 mode=overlay at=1558678131",
+          "receipt kind=Blocking_sheet trial=measured-overlay-500-3-1792415119698 action=0 at=1558678146 eventAt=1558678123 downAt=1558678123 rect=Rect(74, 950 - 363, 1118)",
+          "receipt kind=Blocking_sheet trial=measured-overlay-500-3-1792415119698 action=1 at=1558678147 eventAt=1558678146 downAt=1558678123 rect=Rect(74, 950 - 363, 1118)"
+        ]
+      }
+    ],
+    "readiness-input-bypass-down": [
+      {
+        "trial": "measured-overlay-550-3-1792415207912",
+        "delayMs": 550,
+        "firstTargetReadUptimeMs": 1558765530,
+        "lastTargetReadBeforeClickUptimeMs": 1558766067,
+        "decoyClickUptimeMs": 1558766151,
+        "nativeInput": [
+          "begin action=0 at=1558766107 x=219.0 y=1034.0",
+          "end action=0 at=1558766132 waitedMs=25",
+          "begin action=1 at=1558766132 x=219.0 y=1034.0",
+          "end action=1 at=1558766142 waitedMs=10"
+        ],
+        "appEvents": [
+          "disturb trial=measured-overlay-550-3-1792415207912 mode=overlay at=1558766081",
+          "receipt kind=Blocking_sheet trial=measured-overlay-550-3-1792415207912 action=0 at=1558766130 eventAt=1558766107 downAt=1558766107 rect=Rect(74, 950 - 363, 1118)",
+          "receipt kind=Blocking_sheet trial=measured-overlay-550-3-1792415207912 action=1 at=1558766133 eventAt=1558766132 downAt=1558766107 rect=Rect(74, 950 - 363, 1118)"
+        ]
+      },
+      {
+        "trial": "measured-overlay-450-4-1792415210386",
+        "delayMs": 450,
+        "firstTargetReadUptimeMs": 1558768149,
+        "lastTargetReadBeforeClickUptimeMs": 1558768584,
+        "decoyClickUptimeMs": 1558768634,
+        "nativeInput": [
+          "begin action=0 at=1558768601 x=219.0 y=1034.0",
+          "end action=0 at=1558768614 waitedMs=13",
+          "begin action=1 at=1558768614 x=219.0 y=1034.0",
+          "end action=1 at=1558768634 waitedMs=20"
+        ],
+        "appEvents": [
+          "disturb trial=measured-overlay-450-4-1792415210386 mode=overlay at=1558768599",
+          "receipt kind=Blocking_sheet trial=measured-overlay-450-4-1792415210386 action=0 at=1558768612 eventAt=1558768601 downAt=1558768601 rect=Rect(74, 950 - 363, 1118)",
+          "receipt kind=Blocking_sheet trial=measured-overlay-450-4-1792415210386 action=1 at=1558768615 eventAt=1558768614 downAt=1558768601 rect=Rect(74, 950 - 363, 1118)"
+        ]
+      }
+    ]
+  },
+  "observedInjectionWaitMs": {
+    "DOWN": {
+      "n": 9,
+      "min": 7,
+      "median": 12,
+      "max": 21
+    },
+    "UP": {
+      "n": 9,
+      "min": 8,
+      "median": 14,
+      "max": 16
+    }
+  },
+  "publishedBaselineElapsedSeconds": 273.122,
+  "candidateReductionSeconds": 43.45,
+  "candidateReductionPercent": 15.9,
+  "bypassDownPath": {
+    "threeArgumentEvents": 12,
+    "fallbackEvents": 0,
+    "DOWNWaitMs": {
+      "n": 12,
+      "min": 6,
+      "median": 15.5,
+      "max": 25
+    },
+    "UPWaitMs": {
+      "n": 12,
+      "min": 10,
+      "median": 13,
+      "max": 20
+    },
+    "promoted": false
+  },
+  "oracleInterpretation": "Refusals with zero handler activations are separate from successful activations. Cohorts use deliberately selected timing offsets and are not estimates of production failure rates.",
+  "limitations": [
+    "One local API 36 emulator; no statistical or CI claim.",
+    "No older API or window-transition certification for the bypass, which already failed its falsification fixture.",
+    "Benchmark and three test-app workflows passed the measured candidate; timed overlays falsified safety.",
+    "Public-only Opus reviews were design/source challenges, not approval of the complete unpublished patch."
+  ],
+  "artifact": {
+    "name": "android-startup-experiment-2026-10-19.tar.gz",
+    "sha256": "9d7a7cda4f2c465069ad640efb90182127ae60d5c86f492355bb5eefecc7decd",
+    "checksummedFiles": 259
+  },
+  "cleanup": {
+    "ownedDaemonStatesStopped": 22,
+    "disposableWorktreesRemoved": 2,
+    "reviewedShaBeforeEvidenceEdits": "d01199dcbe3e7e62a216d3ce4d071ff8b4a60ca1",
+    "reviewedStatusBeforeEvidenceEdits": "clean"
+  }
+}

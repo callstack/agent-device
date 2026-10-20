@@ -1,4 +1,5 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
 import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
@@ -31,6 +32,7 @@ export function requireSessionOrExplicitSelector(
 export async function resolveCommandDevice(params: {
   session: SessionState | undefined;
   flags: DaemonRequest['flags'] | undefined;
+  env: EnvMap;
   androidAvdSelection?: 'running-only' | 'include-stopped';
   platformServices: DaemonPlatformServices;
 }): Promise<DeviceInfo> {
@@ -38,15 +40,21 @@ export async function resolveCommandDevice(params: {
   const device =
     shouldUseExplicitIdentity || !params.session
       ? await resolveTargetDevice(params.flags ?? {}, {
+          env: params.env,
           androidAvdSelection: params.androidAvdSelection,
         })
-      : await refreshSessionDeviceIfNeeded(params.session.device, params.platformServices);
+      : await refreshSessionDeviceIfNeeded(
+          params.session.device,
+          params.platformServices,
+          params.env,
+        );
   return device;
 }
 
 export async function refreshSessionDeviceIfNeeded(
   device: DeviceInfo,
   platformServices: DaemonPlatformServices,
+  env: EnvMap,
 ): Promise<DeviceInfo> {
   if (isActiveProviderDevice(device)) {
     return device;
@@ -71,19 +79,22 @@ export async function refreshSessionDeviceIfNeeded(
     ...(device.simulatorSetPath ? { iosSimulatorDeviceSet: device.simulatorSetPath } : {}),
   };
   try {
-    return await resolveTargetDevice(exactSelector);
+    return await resolveTargetDevice(exactSelector, { env });
   } catch (error) {
     if (!(error instanceof AppError) || error.code !== 'DEVICE_NOT_FOUND') {
       throw error;
     }
   }
 
-  return await resolveTargetDevice({
-    platform: 'ios',
-    target: device.target,
-    device: device.name,
-    ...(device.simulatorSetPath ? { iosSimulatorDeviceSet: device.simulatorSetPath } : {}),
-  });
+  return await resolveTargetDevice(
+    {
+      platform: 'ios',
+      target: device.target,
+      device: device.name,
+      ...(device.simulatorSetPath ? { iosSimulatorDeviceSet: device.simulatorSetPath } : {}),
+    },
+    { env },
+  );
 }
 
 export function selectorTargetsSessionDevice(

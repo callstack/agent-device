@@ -6,6 +6,7 @@ import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { invokeReplayAction } from '@agent-device/replay-port/session-replay-action-runtime';
 import { replayDaemonDependencies } from '../../handlers/session-replay-command.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 const REPLAY_REQUEST: DaemonRequest = {
   token: 'token',
@@ -42,12 +43,16 @@ test.each(['', '   '])(
       resolvedSessionScope: undefined,
       dependencies: replayDaemonDependencies,
       invoke: async (request) => {
-        recordActionEntry(session, {
-          command: request.command,
-          positionals: request.positionals ?? [],
-          flags: request.flags ?? {},
-          result: { text: request.positionals?.at(-1) },
-        });
+        recordActionEntry(
+          session,
+          {
+            command: request.command,
+            positionals: request.positionals ?? [],
+            flags: request.flags ?? {},
+            result: { text: request.positionals?.at(-1) },
+          },
+          createLiveTestHostEnvironment().cwd,
+        );
         return { ok: true, data: {} };
       },
     });
@@ -171,4 +176,35 @@ test('a scroll step carries its parsed --until flag onto the dispatch', async ()
   expect(response.ok).toBe(true);
   expect(dispatched?.positionals).toEqual(['down']);
   expect(dispatched?.flags?.until).toBe('label="Checkout"');
+});
+
+test('a gesture line whose kind came from a variable still refuses a flag the kind does not read', async () => {
+  const action: SessionAction = {
+    ts: 0,
+    command: 'gesture',
+    positionals: ['${KIND}', '1.5'],
+    flags: { count: 3 },
+  };
+  let dispatched = false;
+  const response = await invokeReplayAction({
+    req: REPLAY_REQUEST,
+    sessionName: 'default',
+    action,
+    resolved: { ...action, positionals: ['pinch', '1.5'] },
+    filePath: 'flow.ad',
+    line: 1,
+    step: 1,
+    resolvedSessionScope: undefined,
+    dependencies: replayDaemonDependencies,
+    invoke: async () => {
+      dispatched = true;
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(dispatched).toBe(false);
+  expect(response.ok).toBe(false);
+  expect(response.ok ? undefined : response.error.message).toContain(
+    'gesture pinch does not read --count (after variable substitution).',
+  );
 });

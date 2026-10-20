@@ -20,6 +20,7 @@ test('port reverse rejects a missing resolved lease before runtime admission', a
       flags: { platform: 'android', leaseProvider: 'limrun', devicePort: 8097 },
     },
     session: undefined,
+    env: process.env,
     inspectFacts,
     bindDevice,
   });
@@ -49,6 +50,7 @@ test('sessionless port reverse requires an explicit device selector', async () =
       },
     },
     session: undefined,
+    env: process.env,
     inspectFacts,
     bindDevice,
   });

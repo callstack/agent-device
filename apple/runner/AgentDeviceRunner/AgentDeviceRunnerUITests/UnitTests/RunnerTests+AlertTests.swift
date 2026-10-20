@@ -87,7 +87,7 @@ extension RunnerTests {
   private func launchCrowdedScreen(extraArguments: [String]) {
     app.launchArguments = ["--agent-device-crowded-screen"] + extraArguments
     app.launch()
-    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.staticTexts["agent-device-crowded-row-499"].waitForFixtureExistence(timeout: appExistenceTimeout))
   }
 
   @MainActor

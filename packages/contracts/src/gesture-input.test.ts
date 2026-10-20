@@ -109,3 +109,60 @@ test('drag requires two non-empty targets and validates each timing phase', () =
     { code: 'INVALID_ARGS', message: 'gesture drag total duration must be at most 10000' },
   );
 });
+
+const TAP_POINTS = [
+  { x: 100, y: 200 },
+  { x: 160, y: 200 },
+];
+
+test('tap reads its points, hold, count and pause', () => {
+  assert.deepEqual(
+    readGesturePayload({ kind: 'tap', points: TAP_POINTS, holdMs: 40, count: 3, pauseMs: 100 }),
+    { kind: 'tap', points: TAP_POINTS, holdMs: 40, count: 3, pauseMs: 100 },
+  );
+});
+
+test('tap refuses a hold below the planner floor, which press would accept', () => {
+  assert.throws(() => readGesturePayload({ kind: 'tap', points: TAP_POINTS, holdMs: 15 }), {
+    code: 'INVALID_ARGS',
+    message: 'Expected holdMs to be at least 16.',
+  });
+  assert.equal(readGesturePayload({ kind: 'tap', points: TAP_POINTS, holdMs: 16 }).kind, 'tap');
+});
+
+test('tap refuses a series that cannot finish inside the request budget', () => {
+  // 100 × (50 + 500) + 99 × 50 = 59 950 ms fits; one more repetition does not.
+  assert.equal(
+    readGesturePayload({ kind: 'tap', points: TAP_POINTS, count: 100, pauseMs: 50 }).kind,
+    'tap',
+  );
+  assert.throws(
+    () => readGesturePayload({ kind: 'tap', points: TAP_POINTS, count: 101, pauseMs: 50 }),
+    { code: 'INVALID_ARGS', message: 'gesture tap series must fit within 60000ms.' },
+  );
+});
+
+test('tap refuses pan-only and duration inputs', () => {
+  assert.throws(() => readGesturePayload({ kind: 'tap', points: TAP_POINTS, pointerCount: 2 }), {
+    code: 'INVALID_ARGS',
+    message: 'pointerCount is supported only for gesture pan',
+  });
+  assert.throws(() => readGesturePayload({ kind: 'tap', points: TAP_POINTS, durationMs: 100 }), {
+    code: 'INVALID_ARGS',
+    message: 'gesture tap does not accept durationMs; use holdMs',
+  });
+});
+
+test('tap-only inputs are refused on other gesture kinds', () => {
+  for (const [field, value] of [
+    ['points', TAP_POINTS],
+    ['holdMs', 50],
+    ['count', 2],
+    ['pauseMs', 10],
+  ] as const) {
+    assert.throws(() => readGesturePayload({ kind: 'pinch', scale: 1.5, [field]: value }), {
+      code: 'INVALID_ARGS',
+      message: `${field} is supported only for gesture tap`,
+    });
+  }
+});

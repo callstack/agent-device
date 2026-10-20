@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
+import type { SnapshotFreshnessAttemptShape } from '@agent-device/capture-kit/snapshot-freshness';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   clearAndroidSnapshotFreshness,
   getActiveAndroidSnapshotFreshness,
   markAndroidSnapshotFreshness,
+  captureAndroidFreshnessRecoveredAttempt,
 } from '../session-snapshot-freshness.ts';
 import { makeSession } from './post-gesture-stabilization-fixtures.ts';
 
@@ -65,3 +67,43 @@ test('clear removes an active freshness window', () => {
   clearAndroidSnapshotFreshness(session);
   assert.equal(session.androidSnapshotFreshness, undefined);
 });
+
+test.each(['complete', 'truncated', 'missing-root', 'unknown-cache'] as const)(
+  'freshness trusts only complete cache-invalidated acquisitions: %s',
+  async (mode) => {
+    vi.useFakeTimers();
+    const session = makeSession('android');
+    session.snapshot = makeSnapshotState(labeledNodes(40), { comparisonSafe: true });
+    markAndroidSnapshotFreshness(session, 'press');
+    let captures = 0;
+    const result = captureAndroidFreshnessRecoveredAttempt(
+      {
+        session,
+        interactiveOnly: false,
+        capture: async () => {
+          captures++;
+          return {
+            snapshot: session.snapshot!,
+            annotations: {
+              androidSnapshot: {
+                backend: 'android-helper' as const,
+                rootPresent: true,
+                cacheInvalidated: mode !== 'unknown-cache',
+                helperTruncated: mode === 'truncated',
+                missingRootWindowTypes: mode === 'missing-root' ? [1] : [],
+              },
+            },
+          };
+        },
+      },
+      session.androidSnapshotFreshness!,
+    );
+    await vi.runAllTimersAsync();
+    const capture: SnapshotFreshnessAttemptShape = await result;
+    assert.equal(captures, mode === 'complete' ? 1 : 4);
+    assert.equal(
+      capture.annotations.freshness?.staleAfterRetries,
+      mode === 'complete' ? undefined : true,
+    );
+  },
+);

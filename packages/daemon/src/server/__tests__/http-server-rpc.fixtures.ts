@@ -72,8 +72,17 @@ export async function postRpcRaw(
 export async function startRpcServer(
   token: string,
   handleRequest: (request: DaemonRequest) => Promise<DaemonResponse>,
-  options: Omit<Parameters<typeof createDaemonHttpServer>[0], 'handleRequest' | 'token'> = {},
+  options: Omit<
+    Parameters<typeof createDaemonHttpServer>[0],
+    'handleRequest' | 'token' | 'env' | 'cwd'
+  > = {},
 ): Promise<{ port: number; server: Server }> {
-  const server = await createDaemonHttpServer({ token, handleRequest, ...options });
+  const server = await createDaemonHttpServer({
+    token,
+    handleRequest,
+    env: process.env,
+    cwd: process.cwd(),
+    ...options,
+  });
   return { port: (await listenOnLoopback(server)) as number, server };
 }

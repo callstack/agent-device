@@ -128,3 +128,21 @@ async function withTempScreenshot(
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 }
+
+test('Android screenshots capture immediately by default and stabilize only when requested', async () => {
+  await withTempScreenshot('screenshot-default-latency-', async (outPath) => {
+    await screenshotAndroid(device, outPath);
+    assert.equal(mockSleep.mock.calls.length, 0);
+    assert.equal(
+      mockRunCmd.mock.calls.some(([, args]) => args.includes('broadcast')),
+      false,
+    );
+    assert.deepEqual(await fs.readFile(outPath), VALID_PNG);
+    await screenshotAndroid(device, outPath, { normalizeStatusBar: true });
+    assert.deepEqual(mockSleep.mock.calls, [[1000]]);
+    assert.equal(
+      mockRunCmd.mock.calls.some(([, args]) => args.includes('broadcast')),
+      true,
+    );
+  });
+});

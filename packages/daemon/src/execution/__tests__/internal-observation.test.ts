@@ -12,7 +12,7 @@ import {
 } from '../../core/ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import { SessionStore } from '../../core/session-store.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 function snapshot(ref: string, label = ref): SnapshotState {
   return {
@@ -36,7 +36,10 @@ function scenario() {
     mkdtempForTestSync('agent-device-internal-observation'),
     `agent-device-internal-observation-${crypto.randomUUID()}`,
   );
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
   const prior = snapshot('e1', 'Previously published');

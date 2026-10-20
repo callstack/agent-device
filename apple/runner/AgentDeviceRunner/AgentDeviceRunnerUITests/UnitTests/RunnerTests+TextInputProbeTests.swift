@@ -10,7 +10,7 @@ extension RunnerTests {
       app.terminate()
     }
     let field = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     let point = CGPoint(x: field.frame.midX, y: field.frame.midY)
     let completed = expectation(description: "optional probe completed inside runner wait")
     DispatchQueue.main.async {
@@ -61,7 +61,7 @@ extension RunnerTests {
       app.terminate()
     }
     let field = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     let frame = field.frame
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
@@ -93,7 +93,7 @@ extension RunnerTests {
       app.terminate()
     }
     let field = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     let point = CGPoint(x: field.frame.midX, y: field.frame.midY)
     let expected = XCTIssue(type: .assertionFailure, compactDescription: "Required query failure must escape optional containment")
     let options = XCTExpectedFailure.Options()
@@ -120,7 +120,7 @@ extension RunnerTests {
       app.terminate()
     }
     let field = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     let frame = field.frame
     textInputProbeIssueForTesting = XCTIssue(type: .assertionFailure, compactDescription: "Failed to get matching snapshot: kAXErrorIllegalArgument")
     let outcome = probeTextInputs(app: app, point: CGPoint(x: frame.midX, y: frame.midY))
@@ -140,7 +140,7 @@ extension RunnerTests {
       app.terminate()
     }
     let target = app.staticTexts["Agent Device Runner"]
-    XCTAssertTrue(target.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(target.waitForFixtureExistence(timeout: appExistenceTimeout))
     let frame = target.frame
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"

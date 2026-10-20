@@ -97,12 +97,13 @@ function applyOrdinaryScriptRecordingOpenOutcome(params: {
   existingSession: SessionState | undefined;
   saveScriptRequested: boolean;
   responseData: Record<string, unknown>;
+  hostCwd: string;
 }): void {
-  const { session, existingSession, saveScriptRequested, responseData } = params;
+  const { session, existingSession, saveScriptRequested, responseData, hostCwd } = params;
   if (!existingSession && saveScriptRequested) {
     // The recorded `open` action's flag ingress applies the explicit path/force right after
     // this arm (`applyRecordedSaveScriptFlags`), exactly as the field writers used to split it.
-    armAuthoringOnOpen(session, {});
+    armAuthoringOnOpen(session, {}, hostCwd);
     return;
   }
   if (!isAuthoringArmedSession(existingSession)) return;
@@ -385,6 +386,7 @@ export async function completeOpenCommand(params: {
     existingSession: existingRef ? nextSession : undefined,
     saveScriptRequested: Boolean(req.flags?.saveScript),
     responseData: openResult,
+    hostCwd: sessionStore.host.cwd,
   });
   sessionStore.recordAction(nextRef, {
     command: 'open',

@@ -45,7 +45,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
@@ -88,7 +88,7 @@ async function runReplayFixture(params: {
   fs.writeFileSync(scriptPath, params.script);
   const calls: CapturedInvocation[] = [];
   const invoke = createFixtureInvoke({ calls, delegate: params.invoke, isMaestro });
-  const sessionStore = new SessionStore(path.join(root, 'state'));
+  const sessionStore = new SessionStore(path.join(root, 'state'), createLiveTestHostEnvironment());
   seedReplayFixtureSession(sessionStore, params.sessionPlatform);
   const scriptSource = isMaestro
     ? await maestroScriptSourceBundleFor(scriptPath)

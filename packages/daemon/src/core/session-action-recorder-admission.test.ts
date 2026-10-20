@@ -4,15 +4,20 @@ import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-re
 import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
 import { makeIosSession } from '../__tests__/support/session-factories.ts';
 import { recordActionEntry } from './session-action-recorder.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 test('recorder sanitization follows the declaration: an undeclared key is dropped, a planted declaration is recorded', async () => {
   assert.equal(declarationFor('overlayRefs').recorded, false);
-  const shipped = recordActionEntry(makeIosSession('default'), {
-    command: 'screenshot',
-    positionals: [],
-    flags: { overlayRefs: true, fps: 5 },
-    result: {},
-  });
+  const shipped = recordActionEntry(
+    makeIosSession('default'),
+    {
+      command: 'screenshot',
+      positionals: [],
+      flags: { overlayRefs: true, fps: 5 },
+      result: {},
+    },
+    createLiveTestHostEnvironment().cwd,
+  );
   assert.equal(shipped?.flags.overlayRefs, undefined, 'overlayRefs is undeclared for recording');
   assert.equal(shipped?.flags.fps, 5, 'fps is declared for recording');
 
@@ -21,12 +26,16 @@ test('recorder sanitization follows the declaration: an undeclared key is droppe
   const planted = declarationForIn(registry, 'overlayRefs');
   Object.assign(planted, { recorded: true });
   const { recordActionEntry: recordPlanted } = await import('./session-action-recorder.ts');
-  const recorded = recordPlanted(makeIosSession('default'), {
-    command: 'screenshot',
-    positionals: [],
-    flags: { overlayRefs: true },
-    result: {},
-  });
+  const recorded = recordPlanted(
+    makeIosSession('default'),
+    {
+      command: 'screenshot',
+      positionals: [],
+      flags: { overlayRefs: true },
+      result: {},
+    },
+    createLiveTestHostEnvironment().cwd,
+  );
   assert.equal(recorded?.flags.overlayRefs, true, 'a planted declaration is copied');
 });
 

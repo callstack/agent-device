@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
-  mkdtempForTestSync,
   bindTestCommandHost,
+  createLiveTestHostEnvironment,
   createTestHostEnvironment,
+  mkdtempForTestSync,
 } from '@agent-device/test-kit';
 import { trackUploadedArtifact } from '../../../resources/artifact-tracking.ts';
 import type {
@@ -37,6 +38,7 @@ bindTestCommandHost();
 function makeStore(): SessionStore {
   return new SessionStore(
     path.join(mkdtempForTestSync('agent-device-session-app-deploy-'), 'sessions'),
+    createLiveTestHostEnvironment(),
   );
 }
 

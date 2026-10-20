@@ -1,6 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { ReplayCommand, ReplayCoordinator } from '@agent-device/replay-port/command-types';
 import type {
   ReplayDispatchRequest,
@@ -90,6 +91,8 @@ export type PreparedReplayPlan = {
 
 export function prepareReplayPlan(params: {
   req: DaemonWireRequest;
+  /** The command's runtime host; variable sources read environment and cwd from it. */
+  host: HostEnvironment;
   sessionName: string;
   sessionStore: ReplaySessionStore;
   tracePath: string | undefined;
@@ -100,8 +103,17 @@ export function prepareReplayPlan(params: {
   /** Dispatch options the command carries; every plan step inherits them. */
   dispatch: ReplayDispatchOptions | undefined;
 }): { ok: true; value: PreparedReplayPlan } | { ok: false; response: DaemonResponse } {
-  const { req, sessionName, sessionStore, tracePath, resolved, script, coordinator, dispatch } =
-    params;
+  const {
+    req,
+    host,
+    sessionName,
+    sessionStore,
+    tracePath,
+    resolved,
+    script,
+    coordinator,
+    dispatch,
+  } = params;
   const backendRejection = validateReplayBackendFlag(req);
   if (backendRejection) return { ok: false, response: backendRejection };
 
@@ -128,6 +140,7 @@ export function prepareReplayPlan(params: {
       entryIndex: entryIndexResult.value,
       varSources: buildPreparedReplayVarSources({
         req,
+        host,
         replayReq,
         sessionName,
         resolved,
@@ -215,27 +228,29 @@ function applyReplayMetadata(
  * The `${VAR}` scope's raw INPUTS — builtins (this request's session/
  * platform/target/device/artifacts-dir), the script's own `env` header, the
  * shell's `AD_VAR_*` entries, and `-e KEY=VALUE` CLI entries — read here,
- * once, from the request/process. `runAdReplay` is the one place these are
+ * once, from the request and its command's runtime host. `runAdReplay` is the one place these are
  * merged into an actual scope and used to resolve an action (#1555 review
  * P1); this function stops at collecting the plain data.
  */
 function buildPreparedReplayVarSources(params: {
   req: DaemonWireRequest;
+  host: HostEnvironment;
   replayReq: ReplayDispatchRequest;
   sessionName: string;
   resolved: string;
   metadata: AdReplayManifest['metadata'];
 }): AdReplayVarSources {
-  const { req, replayReq, sessionName, resolved, metadata } = params;
+  const { req, host, replayReq, sessionName, resolved, metadata } = params;
   return {
     builtins: buildReplayBuiltinVars({
       req: replayReq,
       sessionName,
       metadata,
       resolvedPath: resolved,
+      hostCwd: host.cwd,
     }),
     fileEnv: metadata.env,
-    shellEnv: collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
+    shellEnv: collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv, host.env)),
     cliEnv: parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
   };
 }

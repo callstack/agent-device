@@ -43,7 +43,8 @@ export {
   deviceRotationSurfaceDegrees,
   foldPoseForHingeAngle,
   isDeviceRotation,
-  parseDeviceRotation,
+  ORIENTATION_REQUESTS,
+  parseOrientationRequest,
   parseFoldPose,
 } from '../device-rotation.ts';
 export {
@@ -56,6 +57,7 @@ export {
 } from '../telephony-input.ts';
 export type {
   DeviceRotation,
+  OrientationRequest,
   FoldPose,
   FoldKeyframe,
   FoldScreenCoordinateSpace,

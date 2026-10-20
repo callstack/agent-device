@@ -252,7 +252,7 @@ extension RunnerTests {
       app.terminate()
     }
     let field = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     let frame = field.frame
     let text = "ada@example"
     let command = try JSONDecoder().decode(Command.self, from: JSONSerialization.data(withJSONObject: [
@@ -292,7 +292,7 @@ extension RunnerTests {
       app.terminate()
     }
     let field = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
     let frame = field.frame
     let command = try JSONDecoder().decode(Command.self, from: JSONSerialization.data(withJSONObject: [
       "command": "type", "textEntryMode": "replace", "text": "hello\n",
@@ -380,7 +380,7 @@ extension RunnerTests {
       app.terminate()
     }
     let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(textField.waitForFixtureExistence(timeout: appExistenceTimeout))
     let frame = textField.frame
     let command = try JSONDecoder().decode(
       Command.self,

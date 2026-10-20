@@ -10,17 +10,22 @@ import {
   DEFAULT_DRAG_DESTINATION_HOLD_MS,
   DEFAULT_DRAG_MOVE_MS,
   DEFAULT_DRAG_SOURCE_HOLD_MS,
+  DEFAULT_TAP_HOLD_MS,
   GESTURE_DURATION_MAX_MS,
   GESTURE_DURATION_MIN_MS,
+  GESTURE_MAX_CONTACTS,
+  GESTURE_TAP_MIN_CONTACTS,
 } from './gesture-plan-types.ts';
 import type {
   GesturePlan,
   GestureExecutionProfile,
   GestureSemanticInput,
-  MultiTouchGesturePlan,
   PointerTrajectory,
   SinglePointerGesturePlan,
   SinglePointerTrajectory,
+  TapGesturePlan,
+  TapPointerId,
+  TwoContactGesturePlan,
 } from './gesture-plan-types.ts';
 
 export const GESTURE_SAMPLE_INTERVAL_MS = 16;
@@ -122,6 +127,8 @@ export function buildGesturePlan(
         profile,
       );
     }
+    case 'tap':
+      return buildTapPlan(input, frame);
   }
 }
 
@@ -305,7 +312,7 @@ function buildSinglePointerPlan(
 
 function buildTransformPlan(
   motion: {
-    intent: MultiTouchGesturePlan['intent'];
+    intent: TwoContactGesturePlan['intent'];
     origin: Point;
     delta: Point;
     scale: number;
@@ -314,7 +321,7 @@ function buildTransformPlan(
   },
   viewport: Rect,
   profile: GesturePlatformProfile,
-): MultiTouchGesturePlan {
+): TwoContactGesturePlan {
   const start = finitePoint(motion.origin, `gesture ${motion.intent} origin`);
   const delta = finitePoint(motion.delta, `gesture ${motion.intent} delta`);
   const end = addPoints(start, delta);
@@ -352,7 +359,7 @@ function buildTransformPlan(
   };
 
   return {
-    topology: 'two',
+    topology: 'multi',
     intent: motion.intent,
     durationMs: motion.durationMs,
     viewport,
@@ -361,7 +368,7 @@ function buildTransformPlan(
 }
 
 function transformPointAt(options: {
-  intent: MultiTouchGesturePlan['intent'];
+  intent: TwoContactGesturePlan['intent'];
   start: Point;
   end: Point;
   initialRadius: number;
@@ -385,14 +392,59 @@ function transformPointAt(options: {
 }
 
 function initialAngleForIntent(
-  intent: MultiTouchGesturePlan['intent'],
+  intent: TwoContactGesturePlan['intent'],
   profile: GesturePlatformProfile,
 ): number {
   return intent === 'pinch' ? profile.pinchAxisDegrees : GESTURE_INITIAL_ANGLE_DEGREES;
 }
 
-function initialSpanRatioForIntent(intent: MultiTouchGesturePlan['intent']): number {
+function initialSpanRatioForIntent(intent: TwoContactGesturePlan['intent']): number {
   return intent === 'pinch' ? GESTURE_PINCH_INITIAL_SPAN_RATIO : GESTURE_INITIAL_SPAN_RATIO;
+}
+
+function buildTapPlan(
+  input: Extract<GestureSemanticInput, { intent: 'tap' }>,
+  viewport: Rect,
+): TapGesturePlan {
+  const durationMs = normalizeDuration(input.holdMs, DEFAULT_TAP_HOLD_MS, 'gesture tap holdMs');
+  const points = tapContactPoints(input.points);
+  const pointers = points.map((point, index): PointerTrajectory<TapPointerId> => {
+    const samples = [
+      { offsetMs: 0, point },
+      { offsetMs: durationMs, point },
+    ];
+    assertSamplesInViewport(samples, viewport, { intent: 'tap', pointerId: index });
+    return { pointerId: index as TapPointerId, samples };
+  });
+  return {
+    topology: 'multi',
+    intent: 'tap',
+    durationMs,
+    viewport,
+    pointers: pointers as unknown as TapGesturePlan['pointers'],
+  };
+}
+
+function tapContactPoints(points: readonly Point[]): Point[] {
+  if (points.length < GESTURE_TAP_MIN_CONTACTS || points.length > GESTURE_MAX_CONTACTS) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `gesture tap requires ${GESTURE_TAP_MIN_CONTACTS} to ${GESTURE_MAX_CONTACTS} points`,
+      { pointCount: points.length, hint: 'Use press for a single contact.' },
+    );
+  }
+  const finite = points.map((point, index) => finitePoint(point, `gesture tap point ${index + 1}`));
+  finite.forEach((point, index) => {
+    const earlier = finite.findIndex((other) => other.x === point.x && other.y === point.y);
+    if (earlier !== index) {
+      throw new AppError('INVALID_ARGS', 'gesture tap points must be distinct', {
+        reason: 'GESTURE_TAP_DUPLICATE_POINT',
+        point,
+        hint: 'Give each contact its own coordinates.',
+      });
+    }
+  });
+  return finite;
 }
 
 /** The floor of three frames is what lets transport lowering claim a denser-than-endpoints path. */

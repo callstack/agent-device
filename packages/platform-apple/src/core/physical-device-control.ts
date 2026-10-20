@@ -1,3 +1,4 @@
+import type { ScreenshotCaptureFacts } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { AppError } from '@agent-device/kernel/errors';
@@ -61,7 +62,7 @@ export type IosPhysicalDeviceControl = IosPhysicalDeviceRunnerControl & {
     device: DeviceInfo,
     outPath: string,
     options: IosPhysicalDeviceScreenshotOptions,
-  ): Promise<void>;
+  ): Promise<ScreenshotCaptureFacts>;
   copyRunnerFile(
     device: DeviceInfo,
     remotePath: string,

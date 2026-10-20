@@ -4,6 +4,8 @@ import type { ScrollDirection } from './scroll-gesture.ts';
 import type { Rect } from '@agent-device/kernel/snapshot';
 
 export const SCROLL_DURATION_MAX_MS = 10_000;
+export const SCROLL_UNTIL_MAX_PASSES = 200;
+export const DEFAULT_SCROLL_UNTIL_PASSES = 12;
 export const DEFAULT_MOBILE_SCROLL_DURATION_MS = 300;
 export const DEFAULT_IOS_SCROLL_DURATION_MS = 400;
 export const DEFAULT_IOS_SCROLL_AMOUNT = 0.65;
@@ -83,8 +85,28 @@ export function assertExclusiveScrollDistanceInputs(
  * than resolved by precedence, so neither stop condition can silently win.
  */
 export function assertScrollUntilCompatible(
-  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string }>,
+  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string; maxPasses?: number }>,
 ): void {
+  if (input.maxPasses !== undefined) {
+    if (input.until === undefined) {
+      throw new AppError('INVALID_ARGS', 'scroll maxPasses requires until', {
+        reason: 'scroll_max_passes_requires_until',
+      });
+    }
+    if (
+      !Number.isInteger(input.maxPasses) ||
+      input.maxPasses < 1 ||
+      input.maxPasses > SCROLL_UNTIL_MAX_PASSES
+    ) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `scroll maxPasses must be an integer from 1 to ${SCROLL_UNTIL_MAX_PASSES}`,
+        {
+          reason: 'scroll_max_passes_invalid',
+        },
+      );
+    }
+  }
   if (input.until === undefined || input.edge === undefined) return;
   throw new AppError(
     'INVALID_ARGS',

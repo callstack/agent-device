@@ -26,6 +26,7 @@
     "src",
     "test",
     "scripts/help-conformance-command-validator.ts",
+    "scripts/clean-daemon.ts",
     "scripts/coverage-crap/**/*.ts",
     "scripts/coverage-changed/**/*.ts",
     "scripts/vitest-coverage-run-stamp-reporter.ts",

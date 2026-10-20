@@ -27,6 +27,7 @@ import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtim
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  createLiveTestHostEnvironment,
   mkdtempForTestSync,
   unavailableApplicationLifecycleOperationFacts,
 } from '@agent-device/test-kit';
@@ -48,6 +49,7 @@ type SourceRuntimeOptions = Readonly<{
 function makeStore(): SessionStore {
   return new SessionStore(
     path.join(mkdtempForTestSync('agent-device-install-source-'), 'sessions'),
+    createLiveTestHostEnvironment(),
   );
 }
 
@@ -460,6 +462,7 @@ function sourceRuntimeFacts(
       readTextAtPoint: unavailable,
       back: unavailable,
       setOrientation: unavailable,
+      unlockOrientation: unavailable,
       tvRemote: unavailable,
       ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
       ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),

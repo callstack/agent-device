@@ -1,5 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { resolveDeclaredScriptPlatform } from '@agent-device/ad-script';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 import { appleSimulatorAppTargetForOpenTarget } from '@agent-device/device-selection/open-target';
 import { isDeepLinkTarget, type CommandFlags } from '@agent-device/contracts/command';
@@ -43,9 +44,10 @@ export function readScriptReplaySelection(actions: SessionAction[]): {
 export function buildMaestroReplayTargetDeviceResolutionOptions(
   appTarget: string | undefined,
   platform: CommandFlags['platform'] | undefined,
+  env: EnvMap,
 ): ResolveTargetDeviceOptions {
-  if (platform !== 'ios') return {};
-  return appTargetResolutionOptions(appTarget) ?? {};
+  if (platform !== 'ios') return { env };
+  return appTargetResolutionOptions(appTarget, env) ?? { env };
 }
 
 /** Applies a platform configured before the first open to replay dispatch. */
@@ -66,7 +68,8 @@ function isStaticAppTarget(value: string | undefined): value is string {
 
 export function appTargetResolutionOptions(
   openTarget: string | undefined,
+  env: EnvMap,
 ): ResolveTargetDeviceOptions | undefined {
   const appTarget = appleSimulatorAppTargetForOpenTarget(openTarget);
-  return appTarget ? { appleSimulatorAppTarget: appTarget } : undefined;
+  return appTarget ? { appleSimulatorAppTarget: appTarget, env } : undefined;
 }

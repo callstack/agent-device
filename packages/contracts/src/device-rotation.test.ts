@@ -3,29 +3,29 @@ import {
   DEVICE_ROTATIONS,
   deviceRotationFromSurfaceIndex,
   isDeviceRotation,
-  parseDeviceRotation,
+  parseOrientationRequest,
 } from './device-rotation.ts';
 
-describe('parseDeviceRotation', () => {
+describe('parseOrientationRequest', () => {
   test('accepts the canonical orientation names', () => {
-    expect(parseDeviceRotation('portrait')).toBe('portrait');
-    expect(parseDeviceRotation('portrait-upside-down')).toBe('portrait-upside-down');
-    expect(parseDeviceRotation('landscape-left')).toBe('landscape-left');
-    expect(parseDeviceRotation('landscape-right')).toBe('landscape-right');
+    expect(parseOrientationRequest('portrait')).toBe('portrait');
+    expect(parseOrientationRequest('portrait-upside-down')).toBe('portrait-upside-down');
+    expect(parseOrientationRequest('landscape-left')).toBe('landscape-left');
+    expect(parseOrientationRequest('landscape-right')).toBe('landscape-right');
   });
 
   test('accepts the documented short aliases', () => {
-    expect(parseDeviceRotation('upside-down')).toBe('portrait-upside-down');
-    expect(parseDeviceRotation('left')).toBe('landscape-left');
-    expect(parseDeviceRotation('right')).toBe('landscape-right');
+    expect(parseOrientationRequest('upside-down')).toBe('portrait-upside-down');
+    expect(parseOrientationRequest('left')).toBe('landscape-left');
+    expect(parseOrientationRequest('right')).toBe('landscape-right');
   });
 
   test('is case-insensitive and trims surrounding whitespace', () => {
-    expect(parseDeviceRotation('  Landscape-LEFT ')).toBe('landscape-left');
+    expect(parseOrientationRequest('  Landscape-LEFT ')).toBe('landscape-left');
   });
 
   test('throws a helpful error when the orientation is missing', () => {
-    expect(() => parseDeviceRotation(undefined)).toThrow(
+    expect(() => parseOrientationRequest(undefined)).toThrow(
       expect.objectContaining({
         code: 'INVALID_ARGS',
         message: expect.stringContaining('orientation requires an orientation argument'),
@@ -34,12 +34,18 @@ describe('parseDeviceRotation', () => {
   });
 
   test('throws on an unrecognized orientation and echoes the bad input', () => {
-    expect(() => parseDeviceRotation('sideways')).toThrow(
+    expect(() => parseOrientationRequest('sideways')).toThrow(
       expect.objectContaining({
         code: 'INVALID_ARGS',
         message: expect.stringContaining('Invalid rotation: sideways'),
       }),
     );
+  });
+
+  test('adds auto to the rotations and keeps it out of DeviceRotation', () => {
+    expect(parseOrientationRequest(' AUTO ')).toBe('auto');
+    expect(DEVICE_ROTATIONS).not.toContain('auto');
+    expect(isDeviceRotation('auto')).toBe(false);
   });
 });
 

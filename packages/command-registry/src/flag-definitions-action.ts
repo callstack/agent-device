@@ -1,5 +1,6 @@
 import { RESPONSE_LEVELS } from '@agent-device/kernel/contracts';
 import { RECORDING_SCOPE_VALUES } from '@agent-device/contracts/recording';
+import type { SCROLL_UNTIL_MAX_PASSES } from '@agent-device/contracts/scroll-command';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
@@ -20,7 +21,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     max: 200,
     usageLabel: '--count <n>',
-    usageDescription: 'Repeat count for press/swipe series',
+    usageDescription: 'Repeat count for press, swipe and gesture tap series',
     projectConfig: true,
     recorded: true,
   },
@@ -136,7 +137,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     max: 10_000,
     usageLabel: '--hold-ms <ms>',
-    usageDescription: 'Press hold duration for each iteration',
+    usageDescription: 'Press or gesture tap hold duration for each iteration',
     projectConfig: true,
     recorded: true,
   },
@@ -173,6 +174,17 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     // an off-screen target has to replay as the same hunt; recorded as a bare
     // `scroll down` it degrades to a fixed gesture that passes on one viewport
     // and fails on another.
+    recorded: true,
+  },
+  {
+    key: 'maxPasses',
+    names: ['--max-passes'],
+    type: 'int',
+    min: 1,
+    max: 200 satisfies typeof SCROLL_UNTIL_MAX_PASSES,
+    usageLabel: '--max-passes <n>',
+    usageDescription: 'Scroll --until: maximum gestures',
+    projectConfig: false,
     recorded: true,
   },
   {
@@ -256,7 +268,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     max: 10_000,
     usageLabel: '--pause-ms <ms>',
-    usageDescription: 'Delay between swipe iterations',
+    usageDescription: 'Delay between swipe or gesture tap iterations',
     projectConfig: true,
     recorded: true,
   },

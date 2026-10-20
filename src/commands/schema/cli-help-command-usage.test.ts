@@ -25,11 +25,15 @@ test('usageForCommand documents screenshot web aliases and stabilization flags',
   assert.match(help, /--fullscreen, --full, -f/);
   assert.match(help, /entire page/i);
   assert.match(help, /--no-stabilize/);
-  assert.match(help, /low-latency Android capture loops/);
+  assert.match(help, /Android captures immediately by default/);
   assert.match(help, /--normalize-status-bar/);
-  assert.match(help, /deterministic iOS simulator chrome/);
+  assert.match(help, /deterministic iOS simulator or Android chrome/);
   assert.match(help, /--crop-on <selector-expression>/);
   assert.match(help, /crop the capture to the frame of the selector/);
+  assert.match(
+    help,
+    /currently iOS simulators, Android emulators, and CoreDevice physical iPhones/,
+  );
 });
 
 test('usageForCommand documents screenshot diff normalization', async () => {
@@ -412,7 +416,7 @@ test('orientation command usage is documented', async () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(
     help,
-    /orientation <portrait\|portrait-upside-down\|landscape-left\|landscape-right>/,
+    /orientation <portrait\|portrait-upside-down\|landscape-left\|landscape-right\|auto>/,
   );
   assert.match(help, /Set device orientation on iOS and Android/);
 });

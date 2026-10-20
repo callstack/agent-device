@@ -1,6 +1,7 @@
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { CommandFlags } from './command-flags.ts';
 import type { DaemonWireRequest } from './daemon-wire-request.ts';
@@ -119,6 +120,8 @@ export type ReplayBackendSession = Readonly<{
 /** One replay run as a backend sees it: the prepared request, its session, and the dispatch port. */
 export type ReplayBackendCommand = Readonly<{
   request: DaemonWireRequest;
+  /** The daemon's host facts (env and working directory); a backend never reads the process itself. */
+  host: HostEnvironment;
   /**
    * True when the request reached the daemon over its public HTTP surface only: flow scripts are
    * then untrusted and `runScript` HTTP calls may not reach private addresses. Absent means a
@@ -233,6 +236,8 @@ export type ReplayBackendHost = Readonly<{
     req: DaemonWireRequest;
     sessionName: string;
     resolvedPath: string;
+    /** The command's host working directory, which relative flow paths resolve against. */
+    hostCwd: string;
   }): Record<string, string>;
   /** Reads one file out of the request's script source bundle; throws when it was not sent. */
   readScriptSourceFile(bundle: ReplayScriptSourceBundle, resolvedPath: string): string;
@@ -246,6 +251,7 @@ export type ReplayBackendHost = Readonly<{
   resolveTargetDevice(
     flags: CommandFlags,
     binding: ReplayBackendDeviceBinding,
+    env: EnvMap,
   ): Promise<DeviceInfo>;
   /** The abort signal of the in-flight daemon request. */
   requestSignal(requestId: string | undefined): AbortSignal | undefined;

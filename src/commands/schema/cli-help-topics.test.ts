@@ -13,7 +13,10 @@ test('commands topic includes concise command catalog entries', async () => {
   assert.match(usageText, /clipboard read \| clipboard write <text>/);
   assert.match(usageText, /keyboard \[action\]/);
   assert.match(usageText, /trigger-app-event\s{2,}Invoke an app-defined automation event/);
-  assert.match(usageText, /gesture <pan\|fling\|swipe\|pinch\|rotate\|transform\|drag> \.\.\./);
+  assert.match(
+    usageText,
+    /gesture <pan\|fling\|swipe\|pinch\|rotate\|transform\|tap\|drag> \.\.\./,
+  );
   assert.doesNotMatch(
     usageText,
     /install-from-source <url> \| install-from-source --github-actions-artifact/,
@@ -329,7 +332,7 @@ test('usageForCommand resolves gestures help topic', async () => {
   assert.match(help, /press <x> <y> --count <n> --jitter-px <n> for tap series/);
   assert.match(
     help,
-    /iOS simulator transform\/pinch\/rotate use private XCTest synthesis for a continuous two-finger/,
+    /iOS transform\/pinch\/rotate use private XCTest synthesis for a continuous two-finger/,
   );
   assert.match(help, /Android transform injects a geometric two-finger path/);
   assert.match(help, /verify semantic app state or coarse per-component effects/);
@@ -514,7 +517,7 @@ test('usageForCommand resolves ios-system-ui help topic', async () => {
   assert.match(help, /discover them from the current snapshot/);
   assert.match(
     help,
-    /verified on iOS simulator; physical-iPhone SpringBoard support is not yet verified/,
+    /This workflow is verified on iOS simulator\. On a physical iPhone, opening SpringBoard, snapshot -i, and selector presses on visible home-screen icons are verified; the widget add\/edit\/remove steps are not yet verified on a physical iPhone/,
   );
   assert.match(help, /Do not hard-code Edit\/Done\/Add Widget or other SpringBoard label text/);
   assert.match(help, /Reopen the app bundle under test/);

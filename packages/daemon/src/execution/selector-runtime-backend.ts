@@ -127,7 +127,9 @@ async function resolveSelectorRuntimeDevice(
     });
   }
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
-  const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
+  const device =
+    session?.device ??
+    (await resolveTargetDevice(params.req.flags ?? {}, { env: params.sessionStore.host.env }));
   return { ok: true, ref, session, device };
 }
 

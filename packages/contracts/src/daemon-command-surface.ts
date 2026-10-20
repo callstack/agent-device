@@ -14,6 +14,7 @@ import type { ReplayTargetGuardDenotation } from './replay.ts';
 import type { TargetAnnotationV1 } from './target-annotation.ts';
 import type {
   DragGestureInput,
+  GestureContactCount,
   GestureIntent,
   GestureSemanticInput,
 } from './gesture-plan-types.ts';
@@ -247,7 +248,7 @@ export type DaemonGestureOptions = CommandContext &
 export type DaemonCoordinateGestureResult = Readonly<{
   kind: GestureIntent;
   durationMs: number;
-  pointerCount: 1 | 2;
+  pointerCount: GestureContactCount;
   from: Point;
   to: Point;
   backendResult?: Record<string, unknown>;

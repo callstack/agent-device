@@ -4,6 +4,7 @@ import type * as HostFile from '@agent-device/host-kit/file';
 import type * as HostProcess from '@agent-device/host-kit/process';
 import type * as HostRequest from '@agent-device/host-kit/request';
 import type * as HostRetry from '@agent-device/host-kit/retry';
+import type * as HostRuntimeSlots from '@agent-device/host-kit/runtime-slots';
 import type * as HostVersion from '@agent-device/host-kit/version';
 import type * as KernelDeviceShell from '@agent-device/kernel/device-shell';
 import type * as KernelKeyedLock from '@agent-device/kernel/keyed-lock';
@@ -102,8 +103,11 @@ export type AppleRunnerHost = Pick<
     resolveIosPhysicalDeviceControl: (device: DeviceInfo) => IosPhysicalDeviceRunnerControl;
     /** Daemon-owned lease owner state directory. */
     leaseOwnerStateDir: typeof AppleRunnerOwnerState.getRunnerLeaseOwnerStateDir;
-    /** One registry the daemon runtime owns (sessions, locks, ledgers), created on first use. */
-    runnerRuntimeSlot: typeof AppleRunnerOwnerState.runnerRuntimeSlot;
+    /**
+     * One registry the current runtime owns (sessions, locks, ledgers), created on first use.
+     * Fronts host-kit's one runtime slot store, so the runner declares keys and never a store.
+     */
+    runnerRuntimeSlot: typeof HostRuntimeSlots.runtimeSlot;
     /**
      * Daemon-owned device-claim arbitration probe: true only while the embedding process holds
      * the host-global local device claim for exactly this device (matched by canonical

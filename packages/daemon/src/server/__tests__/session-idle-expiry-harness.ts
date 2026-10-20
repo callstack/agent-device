@@ -1,4 +1,9 @@
-import { deviceClaimFilePath, IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  IOS_SIMULATOR,
+  createLiveTestHostEnvironment,
+  deviceClaimFilePath,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import { assert } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -100,7 +105,13 @@ export function createIdleExpiryHarness(): Readonly<{
   return {
     makeFixture: (prefix) => {
       const root = mkdtempForTestSync(prefix);
-      return { sessionStore: new SessionStore(path.join(root, 'sessions')), claims: claimStores() };
+      return {
+        sessionStore: new SessionStore(
+          path.join(root, 'sessions'),
+          createLiveTestHostEnvironment(),
+        ),
+        claims: claimStores(),
+      };
     },
     idleClaimedSession: (store, name = 'default') => {
       const session = makeIosSession(name, {

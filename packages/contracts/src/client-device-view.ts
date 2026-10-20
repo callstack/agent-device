@@ -51,6 +51,7 @@ export type AgentDeviceDevice = {
 export type AgentDeviceCapabilitiesResult = {
   device: AgentDeviceDevice;
   availableCommands: string[];
+  targetReadiness?: { press: 'bounded-geometry' };
 };
 
 export type AgentDeviceSessionDevice = {

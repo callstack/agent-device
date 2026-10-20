@@ -4,12 +4,15 @@ import {
   backAndroid,
   homeAndroid,
   longPressAndroid,
+  pressAndroid,
   pressAndroidEnter,
   pressAndroidTvRemote,
   probeAndroidDisplayRotation,
   scrollAndroid,
   setAndroidOrientation,
+  unlockAndroidOrientation,
 } from '../input-actions.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
@@ -432,6 +435,41 @@ test('pressAndroidEnter presses the ENTER keyevent', async () => {
   );
 });
 
+test('pressAndroid surfaces a failed tap as a typed dispatch error, not a false success', async () => {
+  // The device route raises the failed `adb shell input tap` as its own AppError; the input
+  // seam must hand that through with dispatch evidence, never as a tap that happened.
+  await withFakeAdb(
+    (args) =>
+      args[1] === 'input'
+        ? { stdout: '', stderr: 'INJECT_EVENTS security exception', exitCode: 1 }
+        : undefined,
+    async ({ device }) => {
+      await assert.rejects(pressAndroid(device, 100, 200), (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.dispatched, 'unknown');
+        assert.equal(error.details?.exitCode, 1);
+        return true;
+      });
+    },
+  );
+});
+
+test('pressAndroid dispatches no failure suppression even when one is smuggled past the type', async () => {
+  // The option type is the interface; an untyped caller cannot widen it back. The tap still
+  // fails typed: `allowFailure` never reaches the transport.
+  await withFakeAdb(
+    (args) =>
+      args[1] === 'input' ? { stdout: '', stderr: 'adb: device offline', exitCode: 1 } : undefined,
+    async ({ device }) => {
+      await assert.rejects(
+        pressAndroid(device, 100, 200, { allowFailure: true } as { signal?: AbortSignal }),
+        (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+      );
+    },
+  );
+});
+
 // The orientation settle polls at its own interval; the clock is the assertion, not the wait.
 vi.mock('@agent-device/host-kit/retry', () => ({ sleep: async () => {} }));
 
@@ -542,6 +580,15 @@ test('setAndroidOrientation leaves a display that reports no rotation to the set
       ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0'],
       ['shell', 'settings', 'put', 'system', 'user_rotation', '0'],
       DISPLAY_READ,
+    ]);
+  });
+});
+
+test('unlockAndroidOrientation turns auto-rotate on and neither writes user_rotation nor polls', async () => {
+  await withFakeAdb(displayReporting(['1']), async ({ calls, device }) => {
+    await unlockAndroidOrientation(device);
+    assert.deepEqual(calls, [
+      ['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '1'],
     ]);
   });
 });

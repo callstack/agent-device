@@ -2,7 +2,7 @@ import { test, expect, vi, afterEach } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
-import { IOS_SIMULATOR } from '@agent-device/test-kit';
+import { IOS_SIMULATOR, createLiveTestHostEnvironment } from '@agent-device/test-kit';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
@@ -132,7 +132,7 @@ test('a refusal offers the flag only to a caller that did not arrive carrying it
 });
 
 test('only a fresh open with a budget and a resolved device gets a wait', () => {
-  const sessionStore = new SessionStore('/tmp/ad-wait-none');
+  const sessionStore = new SessionStore('/tmp/ad-wait-none', createLiveTestHostEnvironment());
   const budget = openRequest({ waitMs: 5_000 });
 
   expect(

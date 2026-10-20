@@ -48,7 +48,7 @@ export async function measureRealScopeMaxOverlap(concurrency: number): Promise<n
   const device = DEVICE_POOL[0];
   assert.ok(device, 'DEVICE_POOL must not be empty');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'torture-real-scope-'));
-  const sessionStore = new SessionStore(dir);
+  const sessionStore = new SessionStore(dir, createTestHostEnvironment());
   const leaseRegistry = new LeaseRegistry();
 
   let active = 0;

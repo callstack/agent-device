@@ -2,7 +2,7 @@ import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import {
@@ -38,7 +38,10 @@ beforeEach(() => {
 test('replay executes selector reads before reporting a covered-target divergence', async () => {
   const root = mkdtempForTestSync('agent-device-replay-selector-routes-');
   const sessionName = 'default';
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, [
     'open "Demo"',

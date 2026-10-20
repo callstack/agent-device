@@ -1,4 +1,4 @@
-import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -50,10 +50,9 @@ type ArtifactTrackingState = {
   uploads: Map<string, UploadEntry>;
 };
 
-const artifactTrackingRuntime = defineRuntimeSlots();
 const ARTIFACT_TRACKING_SLOT = Symbol('artifactTracking');
 const artifactTracking = (): ArtifactTrackingState =>
-  artifactTrackingRuntime.slot(
+  runtimeSlot(
     ARTIFACT_TRACKING_SLOT,
     (): ArtifactTrackingState => ({ artifacts: new Map(), uploads: new Map() }),
     (state) => {
@@ -70,10 +69,6 @@ const artifactTracking = (): ArtifactTrackingState =>
   );
 const pendingArtifacts = () => artifactTracking().artifacts;
 const pendingUploads = () => artifactTracking().uploads;
-
-/** The artifacts and uploads one daemon runtime tracks; disposing it stops their expiry timers. */
-export const createArtifactTrackingRuntimeState = (): RuntimeStateHandle =>
-  artifactTrackingRuntime.createHandle();
 
 /** What a finished request registers for each artifact it hands back to the client. */
 export type DownloadableArtifactRegistration = {
@@ -117,10 +112,11 @@ export function trackDownloadableArtifact(
 
 export async function prepareDownloadableArtifact(
   artifactId: string,
-  tenantId?: string,
+  tenantId: string | undefined,
+  hostEnv: NodeJS.ProcessEnv,
 ): Promise<PreparedDownloadableArtifact> {
   const { entry, stat } = readDownloadableArtifactEntry(artifactId, tenantId);
-  const payload = await prepareArtifactPayload(artifactId, entry, stat);
+  const payload = await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
   if (!payload) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -131,7 +127,8 @@ export async function prepareDownloadableArtifact(
 }
 
 export async function listDownloadableArtifacts(
-  tenantId?: string,
+  tenantId: string | undefined,
+  hostEnv: NodeJS.ProcessEnv,
 ): Promise<DaemonArtifactInventoryEntry[]> {
   const artifacts: DaemonArtifactInventoryEntry[] = [];
   for (const [id, entry] of pendingArtifacts()) {
@@ -143,7 +140,7 @@ export async function listDownloadableArtifacts(
       cleanupDownloadableArtifact(id);
       continue;
     }
-    const payload = await prepareArtifactPayloadForInventory(id, entry, stat);
+    const payload = await prepareArtifactPayloadForInventory(id, entry, stat, hostEnv);
     if (!payload) continue;
     artifacts.push({
       id,
@@ -163,9 +160,10 @@ async function prepareArtifactPayloadForInventory(
   artifactId: string,
   entry: ArtifactEntry,
   stat: fs.Stats,
+  hostEnv: NodeJS.ProcessEnv,
 ): Promise<PreparedDownloadableArtifact | null> {
   try {
-    return await prepareArtifactPayload(artifactId, entry, stat);
+    return await prepareArtifactPayload(artifactId, entry, stat, hostEnv);
   } catch {
     // Inventory is best-effort; direct downloads still surface artifact-specific errors.
     return null;
@@ -196,6 +194,7 @@ async function prepareArtifactPayload(
   artifactId: string,
   entry: ArtifactEntry,
   stat: fs.Stats,
+  hostEnv: NodeJS.ProcessEnv,
 ): Promise<PreparedDownloadableArtifact | null> {
   if (stat.isFile()) {
     return {
@@ -207,7 +206,7 @@ async function prepareArtifactPayload(
   }
   if (!stat.isDirectory()) return null;
 
-  const directoryArchive = await ensureDirectoryArchive(artifactId, entry);
+  const directoryArchive = await ensureDirectoryArchive(artifactId, entry, hostEnv);
   return {
     artifactPath: directoryArchive.archivePath,
     fileName: directoryArchive.fileName,
@@ -219,6 +218,7 @@ async function prepareArtifactPayload(
 async function ensureDirectoryArchive(
   artifactId: string,
   entry: ArtifactEntry,
+  hostEnv: NodeJS.ProcessEnv,
 ): Promise<DirectoryArchive> {
   if (entry.directoryArchive && fs.existsSync(entry.directoryArchive.archivePath)) {
     return entry.directoryArchive;
@@ -227,7 +227,7 @@ async function ensureDirectoryArchive(
     return await entry.directoryArchivePromise;
   }
 
-  const archivePromise = createDirectoryArchive(artifactId, entry);
+  const archivePromise = createDirectoryArchive(artifactId, entry, hostEnv);
   entry.directoryArchivePromise = archivePromise;
   try {
     return await archivePromise;
@@ -241,6 +241,7 @@ async function ensureDirectoryArchive(
 async function createDirectoryArchive(
   artifactId: string,
   entry: ArtifactEntry,
+  hostEnv: NodeJS.ProcessEnv,
 ): Promise<DirectoryArchive> {
   cleanupDirectoryArchive(entry);
 
@@ -266,7 +267,7 @@ async function createDirectoryArchive(
       ],
       {
         env: {
-          ...process.env,
+          ...hostEnv,
           COPYFILE_DISABLE: '1',
         },
       },

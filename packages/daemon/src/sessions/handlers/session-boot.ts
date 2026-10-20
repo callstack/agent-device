@@ -55,6 +55,7 @@ async function resolveBootTargetDevice(
     const device = await resolveCommandDevice({
       session,
       flags,
+      env: sessionStore.host.env,
       androidAvdSelection: 'include-stopped',
       platformServices,
     });

@@ -102,7 +102,10 @@ export function readReplayCliEnvEntries(raw: unknown): string[] {
     : [];
 }
 
-export function readReplayShellEnvSource(raw: unknown): NodeJS.ProcessEnv {
+export function readReplayShellEnvSource(
+  raw: unknown,
+  fallbackEnv: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const result: NodeJS.ProcessEnv = {};
     for (const [key, value] of Object.entries(raw)) {
@@ -110,7 +113,7 @@ export function readReplayShellEnvSource(raw: unknown): NodeJS.ProcessEnv {
     }
     return result;
   }
-  return process.env;
+  return fallbackEnv;
 }
 
 // `${NAME}` / `${NAME:-fallback}` / `\${` interpolation, as a single-pass

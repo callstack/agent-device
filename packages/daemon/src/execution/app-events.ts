@@ -42,10 +42,11 @@ export function parseTriggerAppEventArgs(positionals: string[]): {
 export function resolveAppEventUrl(
   device: AppEventDevice,
   eventName: string,
-  payload?: AppEventPayload,
+  payload: AppEventPayload | undefined,
+  env: NodeJS.ProcessEnv,
 ): string {
   const platform = publicPlatformString(device);
-  const template = readAppEventUrlTemplate(device);
+  const template = readAppEventUrlTemplate(device, env);
   if (!template) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
@@ -98,13 +99,16 @@ function parseTriggerEventPayload(
   }
 }
 
-function readAppEventUrlTemplate(device: AppEventDevice): string | undefined {
+function readAppEventUrlTemplate(
+  device: AppEventDevice,
+  env: NodeJS.ProcessEnv,
+): string | undefined {
   const platformSpecific = isIosFamily(device)
-    ? process.env.AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE
+    ? env.AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE
     : isMacOs(device)
-      ? process.env.AGENT_DEVICE_MACOS_APP_EVENT_URL_TEMPLATE
-      : process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE;
-  const candidate = platformSpecific ?? process.env.AGENT_DEVICE_APP_EVENT_URL_TEMPLATE;
+      ? env.AGENT_DEVICE_MACOS_APP_EVENT_URL_TEMPLATE
+      : env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE;
+  const candidate = platformSpecific ?? env.AGENT_DEVICE_APP_EVENT_URL_TEMPLATE;
   const trimmed = candidate?.trim();
   return trimmed ? trimmed : undefined;
 }

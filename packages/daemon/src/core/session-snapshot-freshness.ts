@@ -93,7 +93,15 @@ export async function captureAndroidFreshnessRecoveredAttempt<
     capture: params.capture,
     classify: (attempt) =>
       androidFreshnessReason(
-        { snapshot: attempt.snapshot, rawNodeCount: attempt.annotations.analysis?.rawNodeCount },
+        {
+          snapshot: attempt.snapshot,
+          rawNodeCount: attempt.annotations.analysis?.rawNodeCount,
+          cacheInvalidated:
+            attempt.annotations.androidSnapshot?.cacheInvalidated === true &&
+            attempt.annotations.androidSnapshot.rootPresent === true &&
+            attempt.annotations.androidSnapshot.helperTruncated === false &&
+            attempt.annotations.androidSnapshot.missingRootWindowTypes?.length === 0,
+        },
         freshness,
         { interactiveOnly: params.interactiveOnly, mode: params.androidFreshnessMode },
       ),

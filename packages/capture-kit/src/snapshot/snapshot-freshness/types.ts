@@ -34,4 +34,6 @@ export type SnapshotFreshnessMode = 'default' | 'ref-refresh';
 export type SnapshotFreshnessAttempt = {
   snapshot: SnapshotState;
   rawNodeCount: number | undefined;
+  /** The producer proved a complete traversal after invalidating the platform node cache. */
+  cacheInvalidated?: boolean;
 };

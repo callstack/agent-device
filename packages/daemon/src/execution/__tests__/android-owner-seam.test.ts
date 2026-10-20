@@ -9,6 +9,7 @@ import {
 import { detectAndroidEscapeSurface } from '../android-foreground-surface.ts';
 import { resolveDirectTouchReferenceFrameSafely } from '../interaction/internal/interaction-touch-reference-frame.ts';
 import { SessionStore } from '../../core/session-store.ts';
+import { createLiveTestHostEnvironment } from '@agent-device/test-kit';
 
 test('provider-owned Android sessions bypass local observation and recovery', async () => {
   const session = makeAndroidSession('provider-owned-android', {
@@ -62,7 +63,10 @@ test('provider-owned Android sessions bypass local observation and recovery', as
       },
     ],
   };
-  const sessionStore = new SessionStore('/tmp/provider-owned-android');
+  const sessionStore = new SessionStore(
+    '/tmp/provider-owned-android',
+    createLiveTestHostEnvironment(),
+  );
   const ref = sessionStore.publish(session.name, session);
   await expect(
     resolveDirectTouchReferenceFrameSafely({

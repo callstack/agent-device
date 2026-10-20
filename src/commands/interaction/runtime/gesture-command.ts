@@ -1,6 +1,7 @@
 import type { CommandContext } from '@agent-device/contracts/runtime-contract';
 import type {
   GestureCommandInput,
+  GestureContactCount,
   GestureIntent,
   GestureSemanticInput,
 } from '@agent-device/contracts/gesture-plan-types';
@@ -31,7 +32,7 @@ export type GestureCommandOptions = CoordinateGestureCommandOptions | DragComman
 export type CoordinateGestureCommandResult = {
   kind: GestureIntent;
   durationMs: number;
-  pointerCount: 1 | 2;
+  pointerCount: GestureContactCount;
   from: Point;
   to: Point;
 } & BackendResultEnvelope;
@@ -46,19 +47,20 @@ const coordinateGestureCommand: RuntimeCommand<
     throw new AppError('UNSUPPORTED_OPERATION', 'gesture is not supported by this backend');
   }
   await assertSupportedInteractionSurface(runtime, options, options.gesture.intent);
-  const viewport = await resolveGestureViewport(runtime, options);
-  const plan = buildGesturePlan(options.gesture, viewport, runtime.backend.platform);
-  const backendResult = await runtime.backend.performGesture(
-    toBackendContext(runtime, options),
-    plan,
+  const performGesture = runtime.backend.performGesture;
+  const plan = buildGesturePlan(
+    options.gesture,
+    await resolveGestureViewport(runtime, options),
+    runtime.backend.platform,
   );
+  const backendResult = await performGesture(toBackendContext(runtime, options), plan);
   const formattedBackendResult = toBackendResult(backendResult);
   const from = centroidAt(plan.pointers, 0);
   const to = centroidAt(plan.pointers, -1);
   return {
     kind: options.gesture.intent,
     durationMs: plan.durationMs,
-    pointerCount: plan.topology === 'single' ? 1 : 2,
+    pointerCount: plan.pointers.length as GestureContactCount,
     from,
     to,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
@@ -107,5 +109,7 @@ function gestureMessage(input: GestureSemanticInput, from: Point, to: Point): st
       return `Rotated gesture ${input.degrees} degrees`;
     case 'transform':
       return `Requested transform gesture by (${input.delta.x}, ${input.delta.y}), scale ${input.scale}, rotate ${input.degrees} degrees`;
+    case 'tap':
+      return `Tapped ${input.points.length} points`;
   }
 }

@@ -19,7 +19,7 @@ import {
   scriptTargetPath,
   scriptTargetForce,
 } from '../../../core/session-script-publication-state.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 const TARGET_EVIDENCE: TargetAnnotationV1 = {
   id: 'continue',
@@ -47,7 +47,7 @@ let store: SessionStore;
 
 beforeEach(() => {
   root = mkdtempForTestSync('agent-device-active-publication-');
-  store = new SessionStore(path.join(root, 'sessions'));
+  store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 });
 
 function armedSession(overrides: Partial<SessionState> = {}): SessionState {

@@ -32,6 +32,7 @@ export function replayCommandForTest(params: ReplayCommandTestInput): ReplayComm
   const { req, sessionName, logPath, sessionStore, invoke, tracePath, onStep } = params;
   return {
     ...splitReplayCommandRequest(req),
+    host: sessionStore.host,
     session: createReplaySession(sessionName, logPath, sessionStore),
     invoke: replayInvokeOverDispatch(invoke, req),
     dependencies: replayDaemonDependencies,

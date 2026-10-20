@@ -1,7 +1,8 @@
 import { parentPort } from 'node:worker_threads';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { cropPngBytes } from './png-crop-bytes.ts';
-import { decodePng, PNG } from './png.ts';
+import { decodePng } from './png.ts';
+import { encodePngPixels } from './png-encode.ts';
 import { computeScreenshotDiffPixels } from './screenshot-diff-pixels.ts';
 import { computePngRgbDifference } from './png-rgb-difference.ts';
 import {
@@ -31,9 +32,10 @@ async function runJob(request: PngWorkerRequest): Promise<PngWorkerJobResult> {
       return { kind: 'decode-image', width: image.width, height: image.height, data: image.data };
     }
     case 'encode': {
-      const png = new PNG({ width: request.width, height: request.height });
-      png.data = toBuffer(request.data);
-      return { kind: 'encode', png: PNG.sync.write(png) };
+      return {
+        kind: 'encode',
+        png: encodePngPixels(request.data, request.width, request.height, 4),
+      };
     }
     case 'crop': {
       return {

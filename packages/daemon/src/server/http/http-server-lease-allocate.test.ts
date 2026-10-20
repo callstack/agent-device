@@ -23,6 +23,8 @@ test('Provider-backed integration daemon HTTP lease allocate forwards provider a
       observedRequests.push(req);
       return { ok: true, data: { command: req.command } };
     },
+    env: process.env,
+    cwd: process.cwd(),
   });
 
   try {

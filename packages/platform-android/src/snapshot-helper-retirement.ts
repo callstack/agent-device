@@ -1,4 +1,4 @@
-import { helperRuntimeSlot } from './adb-host.ts';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { shellFragment } from '@agent-device/kernel/device-shell';
@@ -40,7 +40,7 @@ type PendingRetirement = {
 
 const pendingRetirementsSlot = Symbol('androidPendingRetirements');
 const pendingRetirements = (): Map<string, PendingRetirement> =>
-  helperRuntimeSlot(pendingRetirementsSlot, () => new Map<string, PendingRetirement>());
+  runtimeSlot(pendingRetirementsSlot, () => new Map<string, PendingRetirement>());
 
 export function getAndroidSnapshotHelperSessionDeviceKey(
   device: Pick<DeviceInfo, 'platform' | 'id'>,

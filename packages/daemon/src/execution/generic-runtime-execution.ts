@@ -31,6 +31,8 @@ export async function resolveGenericRuntimeExecution(
     session: SessionState;
     context: DaemonCommandContext;
     createCommandSurface: CreateDaemonCommandSurface;
+    /** The runtime host's working directory: the fallback base for a client-typed output path. */
+    hostCwd: string;
   }> &
     ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution> {

@@ -16,8 +16,12 @@ import {
 import {
   resolveDaemonPaths,
   type DaemonPaths,
+  type ObservedDaemonIdentity,
 } from '@agent-device/daemon-contracts/daemon-resolution';
-import { readRegisteredDaemonOwnership } from '@agent-device/daemon-contracts/daemon-registration';
+import {
+  readDaemonStopIdentity,
+  readRegisteredDaemonOwnership,
+} from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
@@ -44,7 +48,26 @@ const fields = {
   codeOrigin: 'checkout' as const,
   codeSignature: 'signature',
 };
-const ownIdentity = readCurrentOwnerIdentity();
+const ownIdentity = observedOf(readCurrentOwnerIdentity());
+
+/**
+ * Every record this file publishes describes a detached daemon: these rows write the file directly and
+ * state no owner, which is exactly what a record predating the ownership field states.
+ */
+function observedOf<T extends { pid: number; startTime: string | null }>(
+  identity: T,
+): ObservedDaemonIdentity {
+  return { ...identity, ownership: 'detached' as const };
+}
+
+/** The same observation a stop routes on: the record this file published, read once. */
+function readStopObserved(infoPath: string): ObservedDaemonIdentity {
+  const record = readDaemonStopIdentity(infoPath);
+  if (!record.identity || record.ownership !== 'detached') {
+    throw new Error(`the fixture published a ${record.ownership} record`);
+  }
+  return observedOf(record.identity);
+}
 const report = {
   providerReleases: { released: [], pending: [] },
   claims: { released: [], orphaned: [], superseded: [], unattributable: [] },
@@ -314,11 +337,11 @@ test('unlink disappearance is settled, other failures remain primary even when r
   assert.match(fs.readFileSync(second.paths.logPath, 'utf8'), /daemon_registration_release_failed/);
 });
 
-const deadIdentity = { pid: 999_999_999, startTime: 'dead-start' };
+const deadIdentity = observedOf({ pid: 999_999_999, startTime: 'dead-start' });
 for (const scenario of [
   {
     name: 'missing-start',
-    observed: { pid: process.pid, startTime: null },
+    observed: observedOf({ pid: process.pid, startTime: null }),
     published: ownIdentity,
     retired: false,
   },
@@ -362,13 +385,17 @@ test('abandoned recovery never signals a live owner and absence is inspected und
   });
 });
 
+// A host owns an embedded runtime and ends it with its own close, so retiring that record from outside
+// would take the state directory out from under a process that is still serving. The rows that prove it
+// are in daemon-registration-embedded-owner.test.ts, next to the owner rule they exercise.
+
 test('retirement preserves a winner holding the startup lock instead of stopping or unlinking it', async () => {
   const { paths, owner } = await acquire();
   owner.publish({ ...fields, token: 'winning-token' });
   const before = fs.readFileSync(paths.infoPath, 'utf8');
   const result = await stopAndRetireDaemon({
     paths,
-    observed: { pid: 999_999_999, startTime: 'dead-start' },
+    observed: observedOf({ pid: 999_999_999, startTime: 'dead-start' }),
     mode: 'force',
     lockTimeoutMs: 0,
   });
@@ -384,7 +411,7 @@ test('retirement preserves a winner holding the startup lock instead of stopping
 
 test('metadata failure remains primary and normalized through a secondary release failure', async () => {
   const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-retirement-failures-'));
-  const observed = { pid: 999_999_999, startTime: 'dead-start' };
+  const observed = observedOf({ pid: 999_999_999, startTime: 'dead-start' });
   replaceInfo(paths, observed.pid, observed.startTime);
   const primary = Object.assign(new Error('metadata failure'), { code: 'EIO' });
   const originalUnlink = fs.unlinkSync;
@@ -408,7 +435,7 @@ test('metadata failure remains primary and normalized through a secondary releas
 
 test('release failure reports partial retirement rather than success', async () => {
   const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-retirement-partial-'));
-  const observed = { pid: 999_999_999, startTime: 'dead-start' };
+  const observed = observedOf({ pid: 999_999_999, startTime: 'dead-start' });
   replaceInfo(paths, observed.pid, observed.startTime);
   const original = fs.rmdirSync;
   vi.spyOn(fs, 'rmdirSync').mockImplementation((target, options) => {
@@ -469,7 +496,7 @@ test('private retirement closes startup admission, joins the actual child and ne
     assert.equal((await contender.exited).exitCode, DAEMON_STARTUP_EXIT_CODES.busy);
     const input = {
       paths,
-      observed: { pid: launch.pid, startTime: launch.startTime },
+      observed: observedOf({ pid: launch.pid, startTime: launch.startTime }),
       mode: 'graceful' as const,
       ownedStateDir,
     };
@@ -515,7 +542,7 @@ test('private retirement retains the directory while an earlier actual startup c
     await waitForFixtureFile(paths.infoPath);
     const result = await stopAndRetireDaemon({
       paths,
-      observed: { pid: second.pid, startTime: second.startTime ?? null },
+      observed: observedOf({ pid: second.pid, startTime: second.startTime ?? null }),
       mode: 'graceful',
       ownedStateDir,
       startupJoinTimeoutMs: 0,
@@ -581,7 +608,7 @@ for (const [failure, reason, expectedSignals] of privateStartupFailures) {
         });
       const pending = stopAndRetireDaemon({
         paths,
-        observed: { pid: launch.pid, startTime: launch.startTime ?? null },
+        observed: observedOf({ pid: launch.pid, startTime: launch.startTime ?? null }),
         mode: 'graceful',
         ownedStateDir,
         startupJoinTimeoutMs: 500,
@@ -657,7 +684,7 @@ test('private startup completion stays bounded without published birth proof and
     const signals = vi.spyOn(process, 'kill');
     const pending = stopAndRetireDaemon({
       paths,
-      observed: { pid: launch.pid, startTime: null },
+      observed: observedOf({ pid: launch.pid, startTime: null }),
       mode: 'force',
       ownedStateDir,
       startupJoinTimeoutMs: 0,
@@ -719,7 +746,7 @@ for (const contents of [
       await waitForFixtureFile(paths.infoPath);
       const result = await stopAndRetireDaemon({
         paths,
-        observed: { pid: launch.pid, startTime: launch.startTime ?? null },
+        observed: observedOf({ pid: launch.pid, startTime: launch.startTime ?? null }),
         mode: 'graceful',
         ownedStateDir,
       });
@@ -887,7 +914,14 @@ for (const mode of ['graceful', 'forced'] as const) {
     const child = spawnRegisteredDaemonFixture(paths, fields, undefined);
     try {
       await waitForFixtureFile(paths.infoPath);
-      const result = await stopDaemon({ paths, graceTimeoutMs: 30, killTimeoutMs: 1_000 });
+      const result = await stopDaemon({
+        paths,
+        // The row routes the stop the way the CLI does: one read of the record the fixture published,
+        // and its lifetime and owner handed to the funnel unchanged.
+        observed: readStopObserved(paths.infoPath),
+        graceTimeoutMs: 30,
+        killTimeoutMs: 1_000,
+      });
       assert.equal(result.stopped, true);
       assert.equal(result.mode, mode);
       assert.equal(result.cleanupConfidence, mode === 'forced' ? 'unknown' : 'known');

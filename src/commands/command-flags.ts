@@ -90,6 +90,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     jitterPx: options.jitterPx,
     pixels: options.pixels,
     until: options.until,
+    maxPasses: options.maxPasses,
     doubleTap: options.doubleTap,
     verify: options.verify,
     settle: options.settle,

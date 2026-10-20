@@ -74,8 +74,8 @@
     "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "packages/daemon/src/server/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
-    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
-    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:24f071c082af80f2c50fb4f390bd8949f0f2c91e0bb58e67518b6cdcf6108aff",
+    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:9f51e86c19cd4f5d8097f1c5ce38dc1daa795b803a6afc89d16cd556371ea037",
+    "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readArtifactId": "sha256:3472ee52d951fdf7ef00ee500298602c68f0e1e3b8c44ff51b09981efabf348c",
     "packages/daemon/src/server/downloadable-artifact-http.ts#readRequestPathname": "sha256:6b3a49c72365cf7da4552abef59862c073461f746025e28d409048815dd586f2",
     "packages/daemon/src/server/downloadable-artifact-http.ts#resolveDownloadableArtifactHttpRoute": "sha256:9fcdc9619e8d378e8f04ef7b3584863af446e855702ddce83a16ec194a6d98af",
@@ -256,8 +256,13 @@
     },
     {
       "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactDownload",
-      "digest": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
-      "rationale": "The mid-stream error branch moved verbatim into the shared `failStreamedHttpResponse` (listed): same status codes before headers, same destroy after. Response framing on the success path is untouched."
+      "digest": "sha256:9f51e86c19cd4f5d8097f1c5ce38dc1daa795b803a6afc89d16cd556371ea037",
+      "rationale": "#3753 threads the daemon runtime's host environment into the directory-archive spawn instead of the module reading process.env. Request parsing, authorization, response framing, headers, and cleanup are unchanged; no peer-visible field moves."
+    },
+    {
+      "declaration": "packages/daemon/src/server/downloadable-artifact-http.ts#handleArtifactInventory",
+      "digest": "sha256:651806eabbd78d51d4bb21dab0b8a28847fb6087941f73dee735c24d9c2a79fa",
+      "rationale": "#3753 threads the daemon runtime's host environment into the same archive spawn from the inventory route. The JSON body it writes and the error path are unchanged; no peer-visible field moves."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#normalizeError",

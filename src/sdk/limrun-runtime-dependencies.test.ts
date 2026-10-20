@@ -63,7 +63,7 @@ test('Limrun construction defers operation and opposite-platform helper modules'
   await runtime.shutdown();
 
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const dependencies = createLimrunRuntimeDependencies();
+  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const device = {
     platform: 'android' as const,
     id: 'limrun:android:lease-a',
@@ -113,7 +113,7 @@ test('Limrun construction defers operation and opposite-platform helper modules'
 
 test('Limrun appstate forwards an in-flight abort through the provider ADB executor', async () => {
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const dependencies = createLimrunRuntimeDependencies();
+  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const device = {
     platform: 'android' as const,
     id: 'limrun:android:lease-abort',
@@ -151,7 +151,7 @@ test('host.runAdb carries addressing apart from payload and routes through the h
     serializeAndroidAdbInvocation,
     withAndroidHostAdbTransport,
   } = await import('@agent-device/platform-android/mechanics');
-  const dependencies = createLimrunRuntimeDependencies();
+  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const seen: Array<{
     args: string[];
     payload: readonly string[];
@@ -194,7 +194,7 @@ test('adbError names the failed command with the platform serializer', async () 
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
   const { androidAdbInvocation, androidAdbSerialTarget } =
     await import('@agent-device/platform-android/mechanics');
-  const dependencies = createLimrunRuntimeDependencies();
+  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
 
   const failure = await dependencies.android.adbError(
     'Limrun Android ADB command failed',
@@ -220,7 +220,7 @@ test('the adb invocation adapters address through the platform builders', async 
     androidAdbSerialTarget,
     serializeAndroidAdbInvocation,
   } = await import('@agent-device/platform-android/mechanics');
-  const dependencies = createLimrunRuntimeDependencies();
+  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
 
   const device = dependencies.android.deviceAdbInvocation('127.0.0.1:62001', [
     'shell',
@@ -249,7 +249,7 @@ test('the adb invocation adapters address through the platform builders', async 
 
 test('Limrun iOS settings evaluate the Apple simctl plan module on the first setting', async () => {
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const dependencies = createLimrunRuntimeDependencies();
+  const dependencies = createLimrunRuntimeDependencies({ env: process.env, cwd: process.cwd() });
   const runSimctl = vi.fn(async (_args: string[]) => ({ stdout: '', stderr: '' }));
   const grantPhotos = {
     runSimctl,

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { makeIosSession } from '../__tests__/support/session-factories.ts';
-import { mkdtempForTest } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTest } from '@agent-device/test-kit';
 import { SessionStore } from '../core/session-store.ts';
 import { dispatchSnapshotViaRuntime } from '../sessions/snapshot-runtime.ts';
 import type { DownloadableArtifactRegistration } from '../resources/artifact-tracking.ts';
@@ -25,7 +25,10 @@ const SPARSE: SnapshotQualityVerdict = {
 
 async function scenario() {
   const root = await mkdtempForTest('agent-device-sparse-fallback-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,

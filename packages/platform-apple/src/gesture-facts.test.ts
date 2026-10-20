@@ -39,7 +39,7 @@ test.each([
     appleDevice({ kind: 'device', iosPhysicalDeviceBackend: 'coredevice' }),
     true,
     true,
-    false,
+    true,
     true,
     true,
     true,
@@ -64,14 +64,8 @@ test.each([
   },
 );
 
-test('carries the retired multi-touch hints verbatim on every Apple leaf that refused', async () => {
+test('carries the retired multi-touch hints on every Apple leaf that refused', async () => {
   const runtime = createApplePlatformRuntime(platformRuntimeHostFixture());
-  const physical = await runtime.inspectFacts(appleDevice({ kind: 'device' }));
-  expect(physical.operations.performMultiTouchGesturePlan).toEqual({
-    available: false,
-    reason: 'unsupported-device-kind',
-    hint: 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.',
-  });
   const macos = await runtime.inspectFacts(leaves.macos);
   expect(macos.operations.performMultiTouchGesturePlan).toMatchObject({
     available: false,
@@ -107,5 +101,8 @@ test('binds only the gesture tiers the leaf admitted', async () => {
   expect(simulator.operations.scrollDirection).toBeTypeOf('function');
   const physical = await bind(appleDevice({ kind: 'device' }));
   expect(physical.operations.performGesturePlan).toBeTypeOf('function');
-  expect(physical.operations.performMultiTouchGesturePlan).toBeUndefined();
+  expect(physical.operations.performMultiTouchGesturePlan).toBeTypeOf('function');
+  const macos = await bind(leaves.macos);
+  expect(macos.operations.performGesturePlan).toBeTypeOf('function');
+  expect(macos.operations.performMultiTouchGesturePlan).toBeUndefined();
 });

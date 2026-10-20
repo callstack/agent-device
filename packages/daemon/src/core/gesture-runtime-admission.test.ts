@@ -20,26 +20,10 @@ const refusalCases = [
     fact: {
       available: false,
       reason: 'unsupported-platform-leaf',
-      hint: 'Android TV has no touch input — this gesture is supported on Android phones, tablets, and the iOS simulator only.',
+      hint: 'Android TV has no touch input — this gesture is supported on Android phones, tablets, iOS, and iPadOS.',
     },
     hint: /Android TV has no touch input/,
-  },
-  {
-    name: 'physical iOS',
-    device: {
-      platform: 'apple',
-      appleOs: 'ios',
-      id: 'iphone-device',
-      name: 'iPhone',
-      kind: 'device',
-      target: 'mobile',
-    },
-    fact: {
-      available: false,
-      reason: 'unsupported-device-kind',
-      hint: 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.',
-    },
-    hint: /physical iOS devices/,
+    message: 'gesture pinch is not supported on Android TV',
   },
   {
     name: 'tvOS',
@@ -57,12 +41,50 @@ const refusalCases = [
       hint: 'tvOS does not support multi-touch gesture plans.',
     },
     hint: /tvOS/,
+    message: 'gesture pinch is not supported on tvOS',
+  },
+  {
+    // The Apple owner admits physical iOS; a provider without the XCTest runner can still refuse.
+    name: 'provider-refused physical iOS',
+    device: {
+      platform: 'apple',
+      appleOs: 'ios',
+      id: 'ios-device',
+      name: 'iPhone',
+      kind: 'device',
+      target: 'mobile',
+    },
+    fact: {
+      available: false,
+      reason: 'unsupported-provider-mode',
+      hint: 'Two-finger gesture synthesis is not available on iOS devices reached through a WebDriver provider.',
+    },
+    hint: /WebDriver provider/,
+    message: 'gesture pinch is not supported on iOS',
+  },
+  {
+    name: 'provider-refused iPadOS',
+    device: {
+      platform: 'apple',
+      appleOs: 'ipados',
+      id: 'ipad-device',
+      name: 'iPad',
+      kind: 'device',
+      target: 'mobile',
+    },
+    fact: {
+      available: false,
+      reason: 'unsupported-provider-mode',
+      hint: 'Two-finger gesture synthesis is not available on iOS devices reached through a WebDriver provider.',
+    },
+    hint: /WebDriver provider/,
+    message: 'gesture pinch is not supported on iPadOS',
   },
 ] as const;
 
 test.each(refusalCases)(
   '$name preserves multi-touch admission details without binding',
-  async ({ device, fact, hint }) => {
+  async ({ device, fact, hint, message }) => {
     const target = device as DeviceInfo;
     const owner = localRuntimeOwner(target.platform);
     const base = createUnavailableRuntimeFactsForTest(target, owner);
@@ -89,6 +111,7 @@ test.each(refusalCases)(
     expect(resolved.ok).toBe(false);
     if (!resolved.ok) {
       expect(resolved.response.error.code).toBe('UNSUPPORTED_OPERATION');
+      expect(resolved.response.error.message).toBe(message);
       expect(resolved.response.error.hint).toMatch(hint);
     }
     expect(inspectFacts).toHaveBeenCalledOnce();

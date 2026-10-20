@@ -35,6 +35,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import {
   orientationRuntimeUse,
+  orientationUnlockRuntimeUse,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { deviceShape } from '@agent-device/kernel/device';
@@ -93,16 +94,21 @@ function orientationExecutionParams(
 function runtimeHarness(
   fact: RuntimeOperationFact = available,
   setOrientation = vi.fn<() => Promise<SetOrientationResult | void>>(async () => undefined),
+  unlockFact: RuntimeOperationFact = unavailable,
+  unlockOrientation = vi.fn<() => Promise<void>>(async () => undefined),
 ) {
   const facts: RuntimeFacts<PlatformRuntimeOperations> = {
     device: { ...deviceShape(testDevice), providerMode: 'local' },
-    operations: { setOrientation: fact } as RuntimeFacts<PlatformRuntimeOperations>['operations'],
+    operations: {
+      setOrientation: fact,
+      unlockOrientation: unlockFact,
+    } as RuntimeFacts<PlatformRuntimeOperations>['operations'],
   };
   const binding = {
     device: testDevice,
     owner: localRuntimeOwner('android'),
     facts,
-    operations: { setOrientation },
+    operations: { setOrientation, unlockOrientation },
     [Symbol.asyncDispose]: async () => {},
   } satisfies DeviceBinding<PlatformRuntimeOperations>;
   const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => facts);
@@ -115,13 +121,64 @@ function runtimeHarness(
     bind,
     shutdown: async () => {},
   };
-  return { setOrientation, inspectFacts, bindDevice, bind, gateway };
+  return { setOrientation, unlockOrientation, inspectFacts, bindDevice, bind, gateway };
 }
 
 test('parses the requested rotation exactly as the retired leaf did, including its aliases', () => {
   expect(readRequestedOrientation(['landscape-left'])).toBe('landscape-left');
   expect(readRequestedOrientation(['left'])).toBe('landscape-left');
+  expect(readRequestedOrientation(['auto'])).toBe('auto');
   expect(() => readRequestedOrientation(['sideways'])).toThrow();
+});
+
+test('auto admits the unlock use alone and reports the sensor mode without a rotation', async () => {
+  const facts = orientationRuntimeOperationFacts({ orientation: unavailable, unlock: available });
+  const harness = runtimeHarness(facts.setOrientation, undefined, facts.unlockOrientation);
+
+  const resolved = await resolveBoundOrientationRuntime({
+    platformServices: daemonPlatformServicesFixture(),
+    device: testDevice,
+    positionals: ['auto'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  expect(harness.bindDevice).toHaveBeenCalledWith(testDevice, orientationUnlockRuntimeUse);
+  expect(await resolved.execute(orientationExecutionParams(['auto']))).toEqual({
+    action: 'orientation',
+    orientation: 'auto',
+    message: 'Rotation follows the device sensor',
+  });
+  expect(harness.unlockOrientation).toHaveBeenCalledTimes(1);
+  expect(harness.setOrientation).not.toHaveBeenCalled();
+});
+
+test('auto is refused before binding on an owner that rotates but declares no unlock', async () => {
+  const facts = orientationRuntimeOperationFacts({ orientation: available });
+  const harness = runtimeHarness(facts.setOrientation, undefined, facts.unlockOrientation);
+
+  const resolved = await resolveBoundOrientationRuntime({
+    platformServices: daemonPlatformServicesFixture(),
+    device: testDevice,
+    positionals: ['auto'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(resolved.ok).toBe(false);
+  if (resolved.ok) return;
+  expect(resolved.response).toEqual({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'orientation auto is not supported on this device',
+      details: { reason: 'unsupported-platform-leaf' },
+      hint: 'orientation auto is only supported on ADB-backed Android.',
+    },
+  });
+  expect(harness.bindDevice).not.toHaveBeenCalled();
 });
 
 test('resolves one admitted binding and reports the owner-observed rotation', async () => {

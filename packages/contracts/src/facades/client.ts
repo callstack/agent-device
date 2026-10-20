@@ -37,6 +37,7 @@ export type {
   DaemonConnection,
   DaemonIdentity,
   DaemonLifecycle,
+  DaemonBinding,
   DeviceCommandBaseOptions,
   EnsureDaemonOptions,
 } from '../client-connection.ts';
@@ -66,6 +67,7 @@ export type {
   SettleCommandOptions,
   SwipeGestureOptions,
   SwipeOptions,
+  TapGestureOptions,
   TransformGestureOptions,
   TypeTextOptions,
 } from '../client-gesture.ts';

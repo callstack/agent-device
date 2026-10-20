@@ -76,9 +76,8 @@ describe('the real tree', () => {
     const { declared, host, pr, nightly, dark } = counts(report);
     // Not pinned to today's exact numbers; the invariants are the shape. The host lane
     // (macOS) and the nightly (iOS) both skip only the entry point, so together with the
-    // simulator-only guard they cover everything else; the PR lane runs iOS-only methods
-    // and shared methods with platform-dependent bodies. The entry point is the only method
-    // outside every lane.
+    // simulator-only guard they cover everything else. The PR lane runs shared methods
+    // with platform-dependent bodies. Only the server entry point stays outside every lane.
     expect(host).toBeGreaterThan(0);
     expect(nightly).toBeGreaterThan(pr);
     expect(pr).toBeGreaterThan(0);
@@ -87,6 +86,7 @@ describe('the real tree', () => {
     expect(reachedAnywhere.size).toBe(declared - 1);
     expect(reachedAnywhere.has(ENTRY_POINT)).toBe(false);
     for (const id of report.reach.pr) expect(report.reach.nightly.has(id)).toBe(true);
+    expect([...report.reach.pr].sort()).toEqual([...report.sharedPlatformBranchIds].sort());
     expect(iosPrTestIdentifiers(report.declaredTests, report.sharedPlatformBranchIds)).toEqual([
       ...report.reach.pr,
     ]);
@@ -126,6 +126,7 @@ describe('the real tree', () => {
     for (const test of simulatorOnly) {
       expect(report.reach.host.has(test.identifier)).toBe(false);
       expect(report.reach.nightly.has(test.identifier)).toBe(true);
+      expect(report.reach.pr.has(test.identifier)).toBe(false);
     }
   });
 
@@ -245,12 +246,12 @@ describe('a planted typo', () => {
     },
   );
 
-  test('adding or removing an iOS-only method changes the PR selection automatically', () => {
+  test('an iOS-only addition enters nightly automatically without expanding the PR lane', () => {
     const iosMethod = '#if os(iOS)\nextension RunnerTests {\n  func testIosOnly() {}\n}\n#endif\n';
     const id = `${TARGET}/RunnerTests/testIosOnly`;
-    expect(
-      buildReport(TARGET, source(`${ENTRY_SOURCE}${iosMethod}`), laneWorkflows()).reach.pr.has(id),
-    ).toBe(true);
+    const report = buildReport(TARGET, source(`${ENTRY_SOURCE}${iosMethod}`), laneWorkflows());
+    expect(report.reach.nightly.has(id)).toBe(true);
+    expect(report.reach.pr.has(id)).toBe(false);
     expect(buildReport(TARGET, source(ENTRY_SOURCE), laneWorkflows()).reach.pr.has(id)).toBe(false);
   });
 
@@ -351,7 +352,7 @@ describe('a planted guard', () => {
     const id = `${TARGET}/RunnerTests/testLaunchesApp`;
     expect(report.reach.host.has(id)).toBe(false);
     expect(report.reach.nightly.has(id)).toBe(true);
-    expect(report.reach.pr.has(id)).toBe(true);
+    expect(report.reach.pr.has(id)).toBe(false);
     expect(reportFailures(report)).toEqual([]);
   });
 
@@ -490,7 +491,7 @@ describe('the summary line', () => {
     const { declared, host, pr, nightly, dark } = counts(report);
     const summary = formatSummary(report);
     expect(summary).toContain(`${declared} declared`);
-    expect(summary).toContain(`reaches ${host}, PR iOS-specific lane`);
+    expect(summary).toContain(`reaches ${host}, PR iOS branch lane`);
     expect(summary).toContain(`selects ${pr}, nightly`);
     expect(summary).toContain(`reaches ${nightly};`);
     expect(summary).toContain(`${dark} reachable by no lane`);

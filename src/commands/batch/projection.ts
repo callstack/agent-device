@@ -1,3 +1,4 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
@@ -27,15 +28,24 @@ type PrepareDaemonCommandRequest = (
   command: string,
   input: CommandInput,
   stepNumber: number,
+  host: HostEnvironment,
+) => Promise<DaemonCommandRequest>;
+
+type PrepareBatchStep = (
+  command: string,
+  input: CommandInput,
+  stepNumber: number,
 ) => Promise<DaemonCommandRequest>;
 
 export function createBatchDaemonWriter(
   prepareDaemonCommandRequest: PrepareDaemonCommandRequest,
 ): AsyncDaemonWriter {
-  return async (input) =>
+  return async (input, host) =>
     request(PUBLIC_COMMANDS.batch, [], {
       ...input,
-      batchSteps: await readBatchDaemonSteps(input.steps, prepareDaemonCommandRequest),
+      batchSteps: await readBatchDaemonSteps(input.steps, (command, input, stepNumber) =>
+        prepareDaemonCommandRequest(command, input, stepNumber, host),
+      ),
       batchOnError: input.onError,
       batchMaxSteps: input.maxSteps,
     });
@@ -43,7 +53,7 @@ export function createBatchDaemonWriter(
 
 async function readBatchDaemonSteps(
   steps: unknown,
-  prepareDaemonCommandRequest: PrepareDaemonCommandRequest,
+  prepareDaemonCommandRequest: PrepareBatchStep,
 ): Promise<DaemonBatchStep[]> {
   if (!Array.isArray(steps) || steps.length === 0) {
     throw new AppError('INVALID_ARGS', 'batch requires a non-empty steps array.');
@@ -60,7 +70,7 @@ async function readBatchDaemonSteps(
 async function readBatchDaemonStep(
   step: unknown,
   stepNumber: number,
-  prepareDaemonCommandRequest: PrepareDaemonCommandRequest,
+  prepareDaemonCommandRequest: PrepareBatchStep,
 ): Promise<DaemonBatchStep> {
   const record = readBatchStepRecord(step, stepNumber);
   const command = readBatchStepCommand(record, stepNumber);

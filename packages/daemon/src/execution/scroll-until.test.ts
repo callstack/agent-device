@@ -3,11 +3,8 @@ import { test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
-import {
-  SCROLL_UNTIL_PASS_LIMIT,
-  formatScrollUntilMessage,
-  runScrollUntilVisible,
-} from './scroll-until.ts';
+import { DEFAULT_SCROLL_UNTIL_PASSES } from '@agent-device/contracts/scroll-command';
+import { formatScrollUntilMessage, runScrollUntilVisible } from './scroll-until.ts';
 
 /** The provenance every `SnapshotResult` carries; the fields under test are the rest. */
 function capture(fields: Partial<SnapshotResult>): SnapshotResult {
@@ -246,7 +243,7 @@ test('the default budget is the shared constant', async () => {
         scroll: async () => ({}),
       }),
     (error: unknown) =>
-      error instanceof AppError && error.details?.passes === SCROLL_UNTIL_PASS_LIMIT,
+      error instanceof AppError && error.details?.passes === DEFAULT_SCROLL_UNTIL_PASSES,
   );
 });
 

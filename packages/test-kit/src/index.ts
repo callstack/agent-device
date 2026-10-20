@@ -120,6 +120,7 @@ export {
   unavailableApplicationLifecycleOperationFacts,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from './runtime-operation-facts.ts';
+export { createTestRuntimeStateHandle, type TestRuntimeStateHandle } from './runtime-state.ts';
 export { buildNodes } from './snapshot-builders.ts';
 export {
   bottomTabsRealCaptureFixture,

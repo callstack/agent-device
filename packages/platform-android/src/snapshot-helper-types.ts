@@ -78,6 +78,7 @@ export type AndroidSnapshotHelperCaptureOptions = {
   maxDepth?: number;
   maxNodes?: number;
   emitChunks?: boolean;
+  skipIdleWait?: boolean;
 };
 
 export type AndroidSnapshotHelperMetadata = {
@@ -89,6 +90,8 @@ export type AndroidSnapshotHelperMetadata = {
   maxDepth?: number;
   maxNodes?: number;
   rootPresent?: boolean;
+  /** This capture cleared the platform accessibility node cache through UiAutomation.clearCache(). */
+  cacheInvalidated?: boolean;
   captureMode?: AndroidSnapshotCaptureMode;
   windowCount?: number;
   /**

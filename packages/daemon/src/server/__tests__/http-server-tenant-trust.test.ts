@@ -51,6 +51,8 @@ async function withRpcServer(
       observedRequests.push(req);
       return { ok: true, data: { meta: req.meta } };
     },
+    env: process.env,
+    cwd: process.cwd(),
   });
   try {
     const port = await listenOnLoopback(server);
@@ -94,6 +96,8 @@ async function withDiagnosticsHookServer(
         path.join(sessionsDir, safeSessionName(ref.session)),
         ref.requestId,
       ),
+    env: process.env,
+    cwd: process.cwd(),
   });
   try {
     const port = await listenOnLoopback(server);
@@ -483,6 +487,8 @@ test('aux route (upload): a hook configured but silent on tenant refuses a clien
   const server = await createDaemonHttpServer({
     token: DAEMON_TOKEN,
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    env: process.env,
+    cwd: process.cwd(),
   });
   try {
     const port = await listenOnLoopback(server);

@@ -8,7 +8,7 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 import { markRepairTransactionComplete } from '../../../core/session-replay-transaction.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -75,7 +75,10 @@ const SAVE_ANNOTATION =
 
 test('a healed script survives repair + fresh-session replay: self-contained open, every selector step annotated, no bare @ref', async () => {
   const root = mkdtempForTestSync('agent-device-replay-repair-accept-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -155,7 +158,10 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   // (separate SessionStore, separate state dir — never reuses the repair
   // session). ---
   const freshRoot = mkdtempForTestSync('agent-device-replay-repair-fresh-');
-  const freshSessionStore = new SessionStore(path.join(freshRoot, 'sessions'));
+  const freshSessionStore = new SessionStore(
+    path.join(freshRoot, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const freshSessionName = 'fresh';
   const invokedFresh: DaemonRequest[] = [];
   const freshReplay = await runReplayForTest({

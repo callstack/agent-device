@@ -41,9 +41,9 @@ extension RunnerTests {
   func focusSynthesizedReplacementField(extraLaunchArguments: [String] = []) throws -> XCUIElement {
     app.launchArguments = ["--agent-device-text-entry-regression"] + extraLaunchArguments
     app.launch()
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
     let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(textField.waitForFixtureExistence(timeout: appExistenceTimeout))
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
     mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
@@ -150,7 +150,7 @@ extension RunnerTests {
       ] + (prefilled ? ["--agent-device-text-entry-prefilled"] : []))
       defer { tearDownSynthesizedReplacementField() }
       let togglePresses = app.staticTexts["agent-device-masked-toggle-presses"]
-      XCTAssertTrue(togglePresses.waitForExistence(timeout: appExistenceTimeout))
+      XCTAssertTrue(togglePresses.waitForFixtureExistence(timeout: appExistenceTimeout))
       XCTAssertEqual(
         textField.value as? String,
         prefilled ? String(repeating: "\u{2022}", count: 6) : "",
@@ -259,11 +259,11 @@ extension RunnerTests {
   func launchFieldThatMovesOnFocus() throws -> (field: XCUIElement, neighbour: XCUIElement) {
     app.launchArguments = ["--agent-device-text-entry-regression", "--agent-device-text-entry-moves-on-focus"]
     app.launch()
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
     let field = app.textFields["agent-device-hardware-keyboard-input"]
     let neighbour = app.textFields["agent-device-text-entry-neighbour"]
-    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
-    XCTAssertTrue(neighbour.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(neighbour.waitForFixtureExistence(timeout: appExistenceTimeout))
     mainOwned.app = app
     mainOwned.bundleId = "com.callstack.agentdevice.runner"
     mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))

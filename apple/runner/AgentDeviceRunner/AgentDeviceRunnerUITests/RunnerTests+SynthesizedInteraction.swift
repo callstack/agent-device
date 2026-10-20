@@ -461,12 +461,13 @@ extension RunnerTests {
   }
 
   func plannedGestureValidationError(_ plan: RunnerGesturePlan) -> String? {
-    guard plan.topology == "single" || plan.topology == "two" else {
-      return "planned gesture topology must be single or two"
+    guard plan.topology == "single" || plan.topology == "multi" else {
+      return "planned gesture topology must be single or multi"
     }
+    let isTap = plan.topology == "multi" && plan.intent == "tap"
     let supportedIntent = plan.topology == "single"
       ? plan.intent == "fling" || plan.intent == "pan"
-      : plan.intent == "pan" || plan.intent == "pinch" || plan.intent == "rotate"
+      : isTap || plan.intent == "pan" || plan.intent == "pinch" || plan.intent == "rotate"
         || plan.intent == "transform"
     guard supportedIntent else { return "planned gesture has unsupported intent for its topology" }
     if plan.topology == "single" {
@@ -485,8 +486,12 @@ extension RunnerTests {
     else {
       return "planned gesture viewport must be finite and positive"
     }
-    let expectedPointerCount = plan.topology == "single" ? 1 : 2
-    guard plan.pointers.count == expectedPointerCount else {
+    let pointerCountMatches = plan.topology == "single"
+      ? plan.pointers.count == 1
+      : isTap
+        ? (2...runnerGestureMaxContacts).contains(plan.pointers.count)
+        : plan.pointers.count == 2
+    guard pointerCountMatches else {
       return "planned gesture pointer count does not match topology"
     }
     for (index, pointer) in plan.pointers.enumerated() where pointer.pointerId != index {
@@ -523,13 +528,34 @@ extension RunnerTests {
         return "planned pointer paths must start at 0 and end at durationMs"
       }
     }
-    if plan.topology == "two" {
+    if isTap {
+      return plannedTapValidationError(plan)
+    }
+    if plan.topology == "multi" {
       guard let firstStart = firstSamples.first?.point,
         let secondStart = plan.pointers[1].samples.first?.point,
         hypot(firstStart.x - secondStart.x, firstStart.y - secondStart.y) > 0
       else {
         return "planned pointer paths require a positive initial span"
       }
+    }
+    return nil
+  }
+
+  /// Tap contacts stay where they land, and two contacts on one point would merge into one touch.
+  private func plannedTapValidationError(_ plan: RunnerGesturePlan) -> String? {
+    var starts: [(x: Double, y: Double)] = []
+    for pointer in plan.pointers {
+      guard let start = pointer.samples.first?.point else {
+        return "planned pointer paths require at least two samples"
+      }
+      for sample in pointer.samples where sample.point.x != start.x || sample.point.y != start.y {
+        return "planned tap contacts must not move"
+      }
+      if starts.contains(where: { $0.x == start.x && $0.y == start.y }) {
+        return "planned tap contacts must start on distinct points"
+      }
+      starts.append((x: start.x, y: start.y))
     }
     return nil
   }
@@ -582,17 +608,17 @@ extension RunnerTests {
     return .performed
 #elseif os(tvOS)
     return .unsupported(
-      message: "two-finger gestures are not supported on tvOS",
+      message: "multi-touch gestures are not supported on tvOS",
       hint: "tvOS has no touch input; use remote-driven navigation."
     )
 #elseif os(visionOS)
     return .unsupported(
-      message: "two-finger touch gestures are not supported on visionOS",
+      message: "multi-touch gestures are not supported on visionOS",
       hint: "The current XCTest synthesizer supports iOS and iPadOS touch simulators only."
     )
 #else
     return .unsupported(
-      message: "two-finger gestures are not supported on macOS",
+      message: "multi-touch gestures are not supported on macOS",
       hint: "macOS automation has no multi-touch input; run on an iOS simulator."
     )
 #endif

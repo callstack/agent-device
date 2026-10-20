@@ -7,7 +7,7 @@ import { SessionStore } from '../../../core/session-store.ts';
 import { replayCommandForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 
 // A replay error raised before any step runs carries no `failure`, so the route
@@ -19,7 +19,10 @@ test('a typed Maestro replay error keeps its recovery hint', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-hint-');
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, `${stringify({ appId: 'com.example.app' })}---\n${stringify([])}`);
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish('default', makeIosSession('default'));
 
   const req = {

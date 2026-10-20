@@ -18,6 +18,7 @@ import {
   bootTargetUse,
   captureSnapshotUse,
   resolveDeviceReadinessRuntimePlan,
+  resolveGestureRuntimePlan,
   resolveSettingsRuntimePlan,
   resolveSnapshotRuntimePlan,
   settingReadUse,
@@ -156,4 +157,16 @@ test('every readable setting is answered by the read use', () => {
   for (const setting of READABLE_SETTINGS) {
     assert.equal(resolveSettingsRuntimePlan([setting]).use, settingReadUse);
   }
+});
+
+test('a multi-finger tap needs the multi-touch tier; a one-finger pan does not', () => {
+  const points = [
+    { x: 10, y: 20 },
+    { x: 30, y: 40 },
+  ];
+  assert.equal(resolveGestureRuntimePlan({ intent: 'tap', points }).tier, 'multi-touch');
+  assert.equal(
+    resolveGestureRuntimePlan({ intent: 'pan', origin: points[0]!, delta: points[1]! }).tier,
+    'plan',
+  );
 });

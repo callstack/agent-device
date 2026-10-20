@@ -368,7 +368,7 @@ export async function performGestureApple(
   runnerOpts: RunnerOpts,
   plan: GesturePlan,
 ): Promise<Record<string, unknown>> {
-  if (plan.topology === 'two') assertAppleMultiTouchSupported(device, plan.intent);
+  if (plan.topology !== 'single') assertAppleMultiTouchSupported(device, plan.intent);
   if (plan.topology === 'single' && isMacOs(device)) {
     const { start: first, end: last } = singlePointerPlanEndpoints(plan);
     return await runAppleRunnerCommand(

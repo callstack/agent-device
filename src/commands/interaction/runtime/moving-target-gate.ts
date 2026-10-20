@@ -28,7 +28,7 @@ import type { ResolveInteractionTargetParams } from './interaction-resolution-re
  * photograph of a surface that may still be rearranging itself, and the ADB-backed Android helper is
  * measured reporting frames in flight — so an interaction issued right after an action that moved
  * the UI can resolve a point the target has already left and report success on the vacancy. The exposure is the runtime path's own capture-to-dispatch
- * distance, so the gate is backend-neutral.
+ * distance. Android requires a bounded quiet interval; other platforms retain the full observation window.
  *
  * Two judgements decide when it is real: {@link movingTargetGateDecision} asks whether this position
  * is still owed a second observation, and kernel's `areCapturedRectsAtSamePosition` asks whether the
@@ -38,7 +38,9 @@ import type { ResolveInteractionTargetParams } from './interaction-resolution-re
  * anchored on the mutation's END, so the gate waits out only what is LEFT of it — which is also why
  * the refusal's hint names `--settle` as the caller-opted superset.
  *
- * This is the seam that spends the window, in front of the dispatch and behind every pre-dispatch
+ * Android uses the window as a deadline and returns after a measured 100 ms quiet position.
+ * Other backends retain the end-of-window recheck.
+ * This seam runs in front of the dispatch and behind every pre-dispatch
  * guard that already judged the target (occlusion, off-screen, keyboard), so it re-decides none of
  * them: it takes the second and third observations, and dispatches the requested interaction at the
  * position two of them agree on.
@@ -69,11 +71,15 @@ export async function guardResolvedTargetAgainstMotion(
   if (params.expectedResolvedTarget || params.preresolvedTarget) return resolved;
   const gate = await readMovingTargetGate(runtime, options, resolved.node, resolved.preAction);
   if (!gate) return resolved;
-  return await resolveAtRestTarget(runtime, options, params, resolved, gate);
+  return runtime.backend.platform === 'android'
+    ? await resolveAndroidAtRestTarget(runtime, options, params, resolved, gate)
+    : await resolveAtRestTarget(runtime, options, params, resolved, gate);
 }
 
 /** How long after a mutation its target positions stay owed a second observation. */
 export const MOVING_TARGET_GATE_WINDOW_MS = 500;
+const ANDROID_MOVING_TARGET_WINDOW_MS = 1_500;
+const ANDROID_TARGET_QUIET_MS = 100;
 
 /**
  * How far apart the two observations must be for agreeing to mean "at rest". Below one capture
@@ -104,14 +110,16 @@ export function movingTargetGateDecision(params: {
   /** Whether the action's own pre-action tree already shows the resolved node at this rect. */
   targetShownAtRest: boolean;
   nowMs: number;
+  windowMs?: number;
 }): MovingTargetGateDecision {
   if (params.baselineFinishedAtMs === undefined) return { kind: 'idle' };
   const ageMs = params.nowMs - params.baselineFinishedAtMs;
-  if (ageMs >= MOVING_TARGET_GATE_WINDOW_MS) return { kind: 'not-recent' };
+  const windowMs = params.windowMs ?? MOVING_TARGET_GATE_WINDOW_MS;
+  if (ageMs >= windowMs) return { kind: 'not-recent' };
   if (params.targetShownAtRest) return { kind: 'stationary' };
   return {
     kind: 'recheck',
-    waitMs: Math.max(MOVING_TARGET_GATE_WINDOW_MS - ageMs, MOVING_TARGET_GATE_SAMPLE_GAP_MS),
+    waitMs: Math.max(windowMs - ageMs, MOVING_TARGET_GATE_SAMPLE_GAP_MS),
   };
 }
 
@@ -135,6 +143,9 @@ async function readMovingTargetGate(
     baselineFinishedAtMs: baseline.finishedAt,
     targetShownAtRest: baselineShowsTargetAtRest(baseline, resolvedNode, resolvedSurface),
     nowMs: now(runtime),
+    ...(runtime.backend.platform === 'android'
+      ? { windowMs: ANDROID_MOVING_TARGET_WINDOW_MS }
+      : {}),
   });
   return decision.kind === 'recheck' ? decision : undefined;
 }
@@ -210,6 +221,31 @@ async function resolveAtRestTarget(
   if (second.measured && areCapturedRectsAtSamePosition(first.rect, second.rect))
     return second.resolved;
   throw motionRefusal(resolved, second.rect, now(runtime) - waitedFrom);
+}
+
+async function resolveAndroidAtRestTarget(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext & { target: InteractionTarget },
+  params: ResolveInteractionTargetParams,
+  resolved: Exclude<ResolvedInteractionTarget, { kind: 'point' }>,
+  gate: MovingTargetRecheck,
+): Promise<ResolvedInteractionTarget> {
+  const startedAt = now(runtime);
+  const deadline = startedAt + Math.max(gate.waitMs, ANDROID_TARGET_QUIET_MS);
+  let previous = await reObserveTarget(runtime, options, params);
+  if (!previous.measured) throw motionRefusal(resolved, undefined, now(runtime) - startedAt);
+  let quietSince = now(runtime);
+  let observations = 0;
+  while (observations < 2 || now(runtime) < deadline) {
+    await sleep(runtime, MOVING_TARGET_GATE_SAMPLE_GAP_MS);
+    const next = onSameSurface(previous, await reObserveTarget(runtime, options, params));
+    observations++;
+    if (!next.measured) throw motionRefusal(resolved, undefined, now(runtime) - startedAt);
+    if (!areCapturedRectsAtSamePosition(previous.rect, next.rect)) quietSince = now(runtime);
+    if (now(runtime) - quietSince >= ANDROID_TARGET_QUIET_MS) return next.resolved;
+    previous = next;
+  }
+  throw motionRefusal(resolved, previous.rect, now(runtime) - startedAt);
 }
 
 /**

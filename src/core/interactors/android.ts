@@ -23,6 +23,7 @@ import {
   scrollAndroid,
   screenshotAndroid,
   setAndroidOrientation,
+  unlockAndroidOrientation,
   readAndroidSetting,
   setAndroidSetting,
   snapshotAndroid,
@@ -55,8 +56,15 @@ export function createAndroidInteractor(
   const helperSessionScope = androidHelperSessionScope(runnerContext?.appBundleId);
   const alertOptions = (timeoutMs?: number) => ({
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
-    captureNodes: async () => {
-      const capture = await snapshotAndroid(device, { includeHiddenContentHints: false });
+    ...(runnerContext?.signal ? { signal: runnerContext.signal } : {}),
+    captureNodes: async (seam: { signal: AbortSignal }) => {
+      const capture = await snapshotAndroid(device, {
+        includeHiddenContentHints: false,
+        signal: seam.signal,
+        // App-backed sessions keep the snapshot helper warm; a command-scoped probe would
+        // force-stop and cold-restart it inside the window that bounds the probe.
+        helperSessionScope,
+      });
       return buildSnapshotState(androidSnapshotPublicationInput(capture), undefined).nodes;
     },
   });
@@ -83,11 +91,11 @@ export function createAndroidInteractor(
     performGesture: (plan) => executeAndroidTouchPlan(device, plan),
     gestureViewport: () => readAndroidGestureViewport(device, { helperSessionScope }),
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
-    // uiautomator reads the node covering a point; `undefined` means nothing covers it.
     readTextAtPoint: async (point, options) => {
       const { readAndroidTextAtPoint } = await import('@agent-device/platform-android/mechanics');
       const read = await readAndroidTextAtPoint(device, point.x, point.y, {
         helperSessionScope: androidHelperSessionScope(options?.appBundleId),
+        target: options?.target,
       });
       return read ?? undefined;
     },
@@ -114,6 +122,7 @@ export function createAndroidInteractor(
     back: (_mode) => backAndroid(device),
     home: () => homeAndroid(device),
     setOrientation: (orientation) => setAndroidOrientation(device, orientation),
+    unlockOrientation: () => unlockAndroidOrientation(device),
     appSwitcher: () => appSwitcherAndroid(device),
     tvRemote: (button, durationMs) => pressAndroidTvRemote(device, button, durationMs),
     keyboardStatus: async () => ({ kind: 'ime-probe', ...(await getAndroidKeyboardState(device)) }),

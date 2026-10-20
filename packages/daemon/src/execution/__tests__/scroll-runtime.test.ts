@@ -14,7 +14,13 @@ import {
   resolveScrollRuntimePlan,
   type ScrollRuntimePlan,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type { DaemonCommandContext } from '../../core/context.ts';
+import { contextFromFlags, type DaemonCommandContext } from '../../core/context.ts';
+import {
+  clearRequestAbortRegistration,
+  clearRequestCanceled,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 import { resolveBoundScrollRuntime } from '../scroll-runtime.ts';
 import type {
   BindDeviceRuntime,
@@ -568,6 +574,123 @@ test('bound scroll rejects --until on an edge direction before any device work',
       ),
     /cannot take --until/,
   );
+});
+
+test('bound scroll --until honors a larger explicit pass budget', async () => {
+  let scrolls = 0;
+  const result = await runScroll(
+    ['down'],
+    { until: 'label=Email', maxPasses: 14 },
+    {
+      captureSnapshot: async () => ({
+        nodes: [
+          ...untilNodes(scrolls >= 13 ? 300 : 2400, true),
+          {
+            index: 3,
+            depth: 1,
+            parentIndex: 1,
+            type: 'Text',
+            label: `Page ${scrolls}`,
+            rect: { x: 0, y: 100, width: 200, height: 40 },
+          },
+        ],
+      }),
+      scroll: async () => {
+        scrolls += 1;
+        return { pixels: 480 };
+      },
+    },
+  );
+  assert.equal(result.passes, 13);
+  assert.equal(scrolls, 13);
+});
+
+test('bound scroll --until stops at a smaller explicit pass budget', async () => {
+  let scrolls = 0;
+  await assert.rejects(
+    () =>
+      runScroll(
+        ['down'],
+        { until: 'label=Email', maxPasses: 2 },
+        {
+          captureSnapshot: async () => ({ nodes: [...untilNodes(2400 - scrolls * 100, true)] }),
+          scroll: async () => {
+            scrolls += 1;
+            return {};
+          },
+        },
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.details?.reason === 'scroll_until_pass_limit' &&
+      error.details?.passes === 2,
+  );
+  assert.equal(scrolls, 2);
+});
+
+test.each(['capture', 'scroll'] as const)(
+  'bound scroll --until stops after cancellation during %s',
+  async (phase) => {
+    const requestId = `scroll-until-canceled-${phase}`;
+    const registration = registerRequestAbort(requestId);
+    const context = contextFromFlags(
+      '/tmp/scroll-cancellation.log',
+      { until: 'label=Email', maxPasses: 200 },
+      undefined,
+      undefined,
+      requestId,
+    );
+    try {
+      let captures = 0;
+      let scrolls = 0;
+      await assert.rejects(
+        () =>
+          runScroll(['down'], context, {
+            captureSnapshot: async () => {
+              captures += 1;
+              if (phase === 'capture') markRequestCanceled(requestId);
+              return { nodes: untilNodes(2400 - scrolls * 100, true) };
+            },
+            scroll: async () => {
+              scrolls += 1;
+              markRequestCanceled(requestId);
+              return {};
+            },
+          }),
+        (error: unknown) =>
+          error instanceof AppError && error.details?.reason === 'request_canceled',
+      );
+      assert.equal(captures, 1);
+      assert.equal(scrolls, phase === 'capture' ? 0 : 1);
+    } finally {
+      clearRequestAbortRegistration(registration);
+      clearRequestCanceled(requestId);
+    }
+  },
+);
+
+test.each([
+  { until: undefined, maxPasses: 2 },
+  { until: 'label=Email', maxPasses: 0 },
+  { until: 'label=Email', maxPasses: 201 },
+  { until: 'label=Email', maxPasses: 1.5 },
+])('bound scroll rejects invalid pass budgets before device work: %j', async (flags) => {
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      runScroll(['down'], flags, {
+        captureSnapshot: async () => {
+          calls += 1;
+          return { nodes: untilNodes(300, true) };
+        },
+        scroll: async () => {
+          calls += 1;
+          return {};
+        },
+      }),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+  assert.equal(calls, 0);
 });
 
 test('bound scroll --until is refused at admission when the owner declares no capture', async () => {

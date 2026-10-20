@@ -1,4 +1,4 @@
-import { helperRuntimeSlot } from './adb-host.ts';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
 
 /**
@@ -11,7 +11,7 @@ const FEATURE_PROBE_TIMEOUT_MS = 2_000;
 
 const deviceExitStatusForwardingSlot = Symbol('androidDeviceExitStatusForwarding');
 const deviceExitStatusForwarding = (): Map<string, boolean> =>
-  helperRuntimeSlot(deviceExitStatusForwardingSlot, () => new Map<string, boolean>());
+  runtimeSlot(deviceExitStatusForwardingSlot, () => new Map<string, boolean>());
 
 /**
  * Whether the exit status of a host `adb shell` child is the DEVICE command's exit status.

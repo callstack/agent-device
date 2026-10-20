@@ -30,19 +30,46 @@ import { androidAdbResultError, discloseAdbInputDispatch } from './adb-failure.t
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
-export async function pressAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
+/**
+ * What a caller may steer on a dispatched input command: cancellation only. The wider executor
+ * options stay out on purpose — `allowFailure` would let a dispatch claim success over a failed
+ * adb command, which no input dispatch may do.
+ */
+export type AndroidInputDispatchOptions = Readonly<{ signal?: AbortSignal }>;
+
+export async function pressAndroid(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  options?: AndroidInputDispatchOptions,
+): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   try {
-    await runAndroidShell(device, ['input', 'tap', x, y]);
+    if (
+      !options?.signal &&
+      (await runAndroidAutomationHelper(device, 'input', { kind: 'tap', x, y }))
+    )
+      return;
+    // Picked field by field so no runtime caller can smuggle `allowFailure: true` past the type.
+    await runAndroidShell(device, ['input', 'tap', x, y], {
+      allowFailure: false,
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
   } catch (error) {
     throw discloseAdbInputDispatch(error);
   }
 }
 
 /** Two `input tap` sends; a failure of the second follows a tap that already landed. */
-export async function doubleTapAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
-  await pressAndroid(device, x, y);
+export async function doubleTapAndroid(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  options?: AndroidInputDispatchOptions,
+): Promise<void> {
+  await pressAndroid(device, x, y, options);
   try {
-    await pressAndroid(device, x, y);
+    await pressAndroid(device, x, y, options);
   } catch (error) {
     throw discloseDispatchAfterSteps(error, 1);
   }
@@ -58,15 +85,32 @@ export async function pressAndroidTvRemote(
   await runAndroidShell(device, ['input', ...keyeventArgs, keyevent]);
 }
 
-export async function backAndroid(device: DeviceInfo): Promise<void> {
-  await runAndroidShell(device, ['input', 'keyevent', '4']);
+export async function backAndroid(
+  device: DeviceInfo,
+  options?: AndroidInputDispatchOptions,
+): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  if (
+    !options?.signal &&
+    (await runAndroidAutomationHelper(device, 'input', { kind: 'key', keyCode: 4 }))
+  )
+    return;
+  await runAndroidShell(
+    device,
+    ['input', 'keyevent', '4'],
+    options?.signal ? { signal: options.signal } : undefined,
+  );
 }
 
 export async function homeAndroid(device: DeviceInfo): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  if (await runAndroidAutomationHelper(device, 'input', { kind: 'key', keyCode: 3 })) return;
   await runAndroidShell(device, ['input', 'keyevent', '3']);
 }
 
 export async function pressAndroidEnter(device: DeviceInfo): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  if (await runAndroidAutomationHelper(device, 'input', { kind: 'key', keyCode: 66 })) return;
   await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
 }
 
@@ -78,6 +122,11 @@ export async function setAndroidOrientation(
   await runAndroidShell(device, ['settings', 'put', 'system', 'accelerometer_rotation', '0']);
   await runAndroidShell(device, ['settings', 'put', 'system', 'user_rotation', userRotation]);
   await settleAndroidOrientation(device, orientation, userRotation);
+}
+
+/** No display settle: the sensor picks the next rotation, so there is no target to wait for. */
+export async function unlockAndroidOrientation(device: DeviceInfo): Promise<void> {
+  await runAndroidShell(device, ['settings', 'put', 'system', 'accelerometer_rotation', '1']);
 }
 
 const ORIENTATION_SETTLE_TIMEOUT_MS = 15_000;
@@ -183,6 +232,8 @@ export async function probeAndroidDisplayRotation(
 }
 
 export async function appSwitcherAndroid(device: DeviceInfo): Promise<void> {
+  const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  if (await runAndroidAutomationHelper(device, 'input', { kind: 'key', keyCode: 187 })) return;
   await runAndroidShell(device, ['input', 'keyevent', '187']);
 }
 

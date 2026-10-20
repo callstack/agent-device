@@ -8,7 +8,11 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import { SessionStore } from '../../../../core/session-store.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
-import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  createLiveTestHostEnvironment,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
 
@@ -43,6 +47,7 @@ const ANDROID_DEVICE: DeviceInfo = {
 test('an app-only kill close with no stored session carries mode kill to the platform close', async () => {
   const sessionStore = new SessionStore(
     path.join(mkdtempForTestSync('agent-device-session-close-without-session-'), 'sessions'),
+    createLiveTestHostEnvironment(),
   );
   mockResolveTargetDevice.mockResolvedValue(ANDROID_DEVICE);
   const seenInputs: CloseApplicationInput[] = [];

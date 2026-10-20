@@ -20,12 +20,61 @@ export type SwipePayload = {
   pattern?: 'one-way' | 'ping-pong';
 };
 
+type GestureFlagKey = 'pointerCount' | 'holdMs' | 'count' | 'pauseMs';
+
+const GESTURE_FLAG_NAMES: Record<GestureFlagKey, string> = {
+  pointerCount: '--pointer-count',
+  holdMs: '--hold-ms',
+  count: '--count',
+  pauseMs: '--pause-ms',
+};
+
+/**
+ * Which flag-carried inputs each gesture kind reads. The CLI parser refuses the rest through
+ * `flagsByAction`, and the `.ad` preflight refuses them here, so a script cannot carry a flag the
+ * CLI would reject and have it silently dropped.
+ */
+export const GESTURE_FLAGS_BY_KIND = {
+  pan: ['pointerCount'],
+  tap: ['holdMs', 'count', 'pauseMs'],
+  fling: [],
+  swipe: [],
+  pinch: [],
+  rotate: [],
+  transform: [],
+  drag: [],
+} as const satisfies Record<(typeof GESTURE_KINDS)[number], readonly GestureFlagKey[]>;
+
+/** The `.ad` refusal for a gesture line that carries a flag its kind does not read. */
+export function describeReplayGestureFlagError(
+  command: string,
+  positionals: readonly string[],
+  flags: Partial<Record<GestureFlagKey, unknown>>,
+  source: string,
+): string | undefined {
+  if (command !== 'gesture') return undefined;
+  const kind = positionals[0];
+  if (kind === undefined || !Object.hasOwn(GESTURE_FLAGS_BY_KIND, kind)) return undefined;
+  const reads: readonly GestureFlagKey[] =
+    GESTURE_FLAGS_BY_KIND[kind as keyof typeof GESTURE_FLAGS_BY_KIND];
+  const unread = (Object.keys(GESTURE_FLAG_NAMES) as GestureFlagKey[]).filter(
+    (key) => flags[key] !== undefined && !reads.includes(key),
+  );
+  if (unread.length === 0) return undefined;
+  const names = unread.map((key) => GESTURE_FLAG_NAMES[key]).join(', ');
+  return `gesture ${kind} does not read ${names} (${source}).`;
+}
+
 /** Derived from the canonical kinds, so a new gesture kind cannot skip the arity table. */
 type GestureSyntaxKey = 'swipe' | `gesture ${(typeof GESTURE_KINDS)[number]}`;
 
 type PublicGestureSyntax = {
   /** Highest accepted positional count, flags excluded. */
   max: number;
+  /** Lowest accepted positional count, when a syntax has no optional tail below it. */
+  min?: number;
+  /** Positionals come in x/y pairs, so an odd count is refused. */
+  pairs?: true;
   usage: string;
   /**
    * The trailing positional this syntax used to accept and no longer does. One
@@ -86,6 +135,12 @@ const PUBLIC_GESTURE_SYNTAX: Record<GestureSyntaxKey, PublicGestureSyntax> = {
     max: 7,
     usage: 'gesture transform accepts at most 7 arguments: x y dx dy scale degrees [durationMs]',
   },
+  'gesture tap': {
+    min: 4,
+    max: 10,
+    pairs: true,
+    usage: 'gesture tap accepts 4 to 10 arguments: x1 y1 x2 y2 [x3 y3 [x4 y4 [x5 y5]]]',
+  },
   'gesture drag': {
     max: 5,
     usage:
@@ -122,6 +177,12 @@ function describeGestureArityError(
   args: readonly string[],
 ): GestureArityError | undefined {
   const syntax = PUBLIC_GESTURE_SYNTAX[key];
+  if (
+    (syntax.min !== undefined && args.length < syntax.min) ||
+    (syntax.pairs && args.length % 2 !== 0)
+  ) {
+    return { usage: syntax.usage };
+  }
   if (args.length <= syntax.max) return undefined;
   const retired = syntax.retired;
   if (!retired || args.length !== syntax.max + 1 || !isRetiredSlotArgument(args[syntax.max])) {
@@ -202,12 +263,21 @@ function readOriginDelta(args: readonly string[]): { origin: Point; delta: Point
   };
 }
 
+/** The flag-carried gesture inputs, which the CLI and `.ad` replay read alongside positionals. */
+export type GesturePositionalFlags = {
+  pointerCount?: number;
+  holdMs?: number;
+  count?: number;
+  pauseMs?: number;
+};
+
 /** The explicit parser for the public CLI and `.ad` gesture syntax. */
 // fallow-ignore-next-line complexity
 export function gesturePayloadFromPositionals(
   positionals: readonly string[],
-  pointerCount?: number,
+  flags: GesturePositionalFlags = {},
 ): GesturePayload {
+  const { pointerCount } = flags;
   const kind = positionals[0];
   const args = positionals.slice(1);
   switch (kind) {
@@ -264,6 +334,16 @@ export function gesturePayloadFromPositionals(
         scale: Number(args[4]),
         degrees: Number(args[5]),
         durationMs: optionalPositionNumber(args[6]),
+      });
+    }
+    case 'tap': {
+      assertGestureArity('gesture tap', args);
+      return readGesturePayload({
+        kind,
+        points: readPositionalPoints(args),
+        holdMs: flags.holdMs,
+        count: flags.count,
+        pauseMs: flags.pauseMs,
       });
     }
     case 'drag': {
@@ -324,6 +404,9 @@ export function gesturePayloadToPositionals(input: GesturePayload): string[] {
         input.degrees,
         input.durationMs,
       ]);
+    case 'tap':
+      // Hold, count and pause travel as recorded flags, so the line keeps only the contacts.
+      return [input.kind, ...input.points.flatMap((point) => [String(point.x), String(point.y)])];
     case 'drag':
       // Materialize the independent timing slots. Omitting an interior value
       // would shift every following positional and silently change replay.
@@ -396,6 +479,14 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
           durationMs: input.durationMs,
         },
       };
+    case 'tap':
+      return {
+        gesture: {
+          intent: 'tap',
+          points: input.points,
+          holdMs: input.holdMs,
+        },
+      };
     case 'drag':
       throw new AppError(
         'INVALID_ARGS',
@@ -424,6 +515,14 @@ export function normalizePublicSwipeMotion(input: {
   return {
     gesture: { intent: 'fling', from: input.from, to: input.to },
   };
+}
+
+function readPositionalPoints(args: readonly string[]): Point[] {
+  const points: Point[] = [];
+  for (let index = 0; index + 1 < args.length; index += 2) {
+    points.push({ x: Number(args[index]), y: Number(args[index + 1]) });
+  }
+  return points;
 }
 
 function optionalPositionNumber(value: string | undefined): number | undefined {

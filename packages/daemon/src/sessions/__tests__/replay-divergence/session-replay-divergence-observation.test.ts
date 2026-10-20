@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
@@ -48,7 +48,10 @@ test('captureDivergenceObservation retryLaunchRace: the 12s deadline bounds retr
   vi.useFakeTimers();
   try {
     const root = mkdtempForTestSync('agent-device-replay-divergence-deadline-');
-    const sessionStore = new SessionStore(path.join(root, 'sessions'));
+    const sessionStore = new SessionStore(
+      path.join(root, 'sessions'),
+      createLiveTestHostEnvironment(),
+    );
     const sessionName = 'default';
     sessionStore.publish(
       sessionName,
@@ -94,7 +97,7 @@ test.each(['rebuild', 'retire'] as const)(
   'divergence capture binds observation authority before awaiting the native capture: %s',
   async (change) => {
     const root = mkdtempForTestSync('agent-device-divergence-lifetime-');
-    const store = new SessionStore(path.join(root, 'sessions'));
+    const store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
     const session = makeIosSession('default', { appBundleId: 'com.example.app' });
     const ref = store.publish('cwd:worktree:default', session);
     const replay = replayDivergenceForTest(store, ref.address);
@@ -142,7 +145,7 @@ test.each(['rebuild', 'retire'] as const)(
   'capture retries retain their original lifetime through backoff: %s',
   async (change) => {
     const root = mkdtempForTestSync('agent-device-divergence-retry-lifetime-');
-    const store = new SessionStore(path.join(root, 'sessions'));
+    const store = new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
     const session = makeIosSession('default', { appBundleId: 'com.example.app' });
     const ref = store.publish('cwd:worktree:default', session);
     const replay = replayDivergenceForTest(store, ref.address);

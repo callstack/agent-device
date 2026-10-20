@@ -117,14 +117,13 @@ export async function screenshotIos(
     return await captureSimulatorScreenshotWithFallback(device, outPath, options);
   }
 
-  await resolveIosPhysicalDeviceControl(device).captureScreenshot(device, outPath, {
+  return await resolveIosPhysicalDeviceControl(device).captureScreenshot(device, outPath, {
     appBundleId: options.appBundleId,
     fullscreen: options.fullscreen,
     runnerOptions: options.runnerOptions,
     runRunnerCommand: runAppleRunnerCommand,
     env: options.env,
   });
-  return {};
 }
 
 export async function captureSimulatorScreenshotWithFallback(

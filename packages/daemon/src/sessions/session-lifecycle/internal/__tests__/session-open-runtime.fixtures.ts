@@ -3,7 +3,7 @@ import path from 'node:path';
 import { SessionStore } from '../../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 export const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({
   ok: true,
@@ -12,7 +12,7 @@ export const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> =
 
 export function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-session-open-runtime-');
-  return new SessionStore(path.join(root, 'sessions'));
+  return new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 }
 
 export function makeSession(name: string, device: SessionState['device']): SessionState {

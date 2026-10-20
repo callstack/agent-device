@@ -5,7 +5,7 @@ import type { BackMode } from './back-mode.ts';
 import type { SelectorSnapshotCommandOptions } from './client-capture.ts';
 import type { DeviceCommandBaseOptions } from './client-connection.ts';
 import type { SettleCommandOptions } from './client-gesture.ts';
-import type { DeviceRotation, SetFoldPoseInput } from './device-rotation.ts';
+import type { OrientationRequest, SetFoldPoseInput } from './device-rotation.ts';
 import type { TelephonyEventInput } from './telephony-input.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 
@@ -88,7 +88,8 @@ export type BackCommandOptions = DeviceCommandBaseOptions & {
 export type HomeCommandOptions = DeviceCommandBaseOptions;
 
 export type OrientationCommandOptions = DeviceCommandBaseOptions & {
-  orientation: DeviceRotation;
+  /** A fixed rotation, or `auto` to hand rotation back to the sensor (ADB-backed Android only). */
+  orientation: OrientationRequest;
 };
 
 export type FoldCommandOptions = DeviceCommandBaseOptions & SetFoldPoseInput;

@@ -1,5 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
@@ -25,9 +26,10 @@ import type {
  */
 export function buildReplayTestShardTargetResolver(
   flags: CommandFlags | undefined,
+  env: EnvMap,
 ): ReplayTestResolveShardTargets {
   return async (shardCount) => {
-    const devices = await resolveReplayTestShardDevices(flags, shardCount);
+    const devices = await resolveReplayTestShardDevices(flags, shardCount, env);
     return devices.map(toReplayTestShardTarget);
   };
 }
@@ -75,9 +77,10 @@ export function buildReplayTestShardFlags(
 async function resolveReplayTestShardDevices(
   flags: CommandFlags | undefined,
   shardCount: number,
+  env: EnvMap,
 ): Promise<DeviceInfo[]> {
   const explicitSelectors = explicitShardDeviceSelectors(flags);
-  const inventory = await listDeviceInventory(buildReplayTestShardInventoryRequest(flags));
+  const inventory = await listDeviceInventory(buildReplayTestShardInventoryRequest(flags, env));
   const devices = selectReplayTestShardDevices(inventory, explicitSelectors, flags);
 
   if (devices.length < shardCount) {
@@ -91,11 +94,9 @@ async function resolveReplayTestShardDevices(
 
 function buildReplayTestShardInventoryRequest(
   flags: CommandFlags | undefined,
+  env: EnvMap,
 ): DeviceInventoryRequest {
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(
-    flags?.androidDeviceAllowlist,
-    process.env,
-  );
+  const androidSerialAllowlist = resolveAndroidSerialAllowlist(flags?.androidDeviceAllowlist, env);
   return {
     platform: flags?.platform,
     target: flags?.target,
@@ -103,7 +104,7 @@ function buildReplayTestShardInventoryRequest(
       requestedSetPath: flags?.iosSimulatorDeviceSet,
       platform: flags?.platform,
       target: flags?.target,
-      env: process.env,
+      env,
     }),
     androidSerialAllowlist: androidSerialAllowlist
       ? Array.from(androidSerialAllowlist).sort()

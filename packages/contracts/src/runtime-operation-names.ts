@@ -89,6 +89,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'tvRemote',
   'typeText',
   'uninstallApp',
+  'unlockOrientation',
   'writeClipboard',
 ] as const;
 

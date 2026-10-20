@@ -3,7 +3,8 @@ import Foundation
 /// Which of an alert's buttons an `accept` or `dismiss` activates, decided on the button labels
 /// alone, so the rule is checkable without a screen.
 ///
-/// `dismiss` activates only a label `isDismissButton` recognizes. An unknown decline cannot be
+/// Earlier label preferences win; equal-rank buttons refuse rather than use their order.
+/// `dismiss` activates only a recognized decline label. An unknown decline cannot be
 /// identified from labels or button position: iOS localizes prompts unevenly, so one prompt can
 /// pair a localized decline with a still-English affirmative, and a positional guess would tap
 /// that affirmative and record an authorization (#3627). An unrecognized decline is therefore
@@ -14,49 +15,29 @@ import Foundation
 /// `dismiss` take the last actionable element of that window. A consent prompt can never carry
 /// that marker.
 enum RunnerAlertButtonChoice {
+  private static let acceptPreferences = [
+    "^allow while using (?:the )?app$", "^while using the app$", "^allow all$",
+    "^always allow$", "^allow all the time$", "^allow notifications$", "^allow$",
+    "^ok$", "^yes$", "^continue$", "^save$", "^confirm", "^turn on$",
+    "^open settings$", "^done$", "^open$", "^allow once$", "^only this time$"
+  ]
+  private static let dismissPreferences = [
+    "^cancel$", "^deny$", "^don.?t allow$", "^not now$", "^no$", "^dismiss$",
+    "^close$", "^close app$", "^later$", "^skip$", "^ask app not to track$", "^keep browsing$"
+  ]
+
   static func buttonIndex(for labels: [String], action: String, popupMarkerSurface: Bool = false) -> Int? {
-    if action == "accept" {
-      if let accept = labels.firstIndex(where: { isAcceptButton($0) }) {
-        return accept
-      }
-      // A lone button is the only way out of the prompt, so accept takes it unless it declines.
-      return labels.count == 1 && !isDismissButton(labels[0]) ? 0 : nil
+    let preferences = action == "accept" ? acceptPreferences : dismissPreferences
+    for pattern in preferences {
+      let matchingIndices = labels.indices.filter { matches(labels[$0], pattern: pattern) }
+      if matchingIndices.count > 1 { return nil }
+      if let index = matchingIndices.first { return index }
     }
-    if let decline = labels.firstIndex(where: { isDismissButton($0) }) {
-      return decline
-    }
-    return popupMarkerSurface ? labels.indices.last : nil
+    return action != "accept" && popupMarkerSurface ? labels.indices.last : nil
   }
 
-  static func isAcceptButton(_ label: String) -> Bool {
-    let normalized = normalize(label)
-    return [
-      "ok",
-      "allow",
-      "yes",
-      "continue",
-      "done",
-      "open",
-      "open settings"
-    ].contains(normalized) || normalized.hasPrefix("confirm")
-  }
-
-  static func isDismissButton(_ label: String) -> Bool {
-    [
-      "cancel",
-      "close",
-      "dismiss",
-      "don't allow",
-      "don’t allow",
-      "not now",
-      "no",
-      "keep browsing",
-      "later",
-      "ask app not to track"
-    ].contains(normalize(label))
-  }
-
-  private static func normalize(_ label: String) -> String {
-    label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  private static func matches(_ label: String, pattern: String) -> Bool {
+    label.trimmingCharacters(in: .whitespacesAndNewlines)
+      .range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
   }
 }

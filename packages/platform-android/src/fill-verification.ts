@@ -12,9 +12,12 @@ import {
 } from './fill-diagnostics.ts';
 import { getAndroidKeyboardState } from './device-input-state.ts';
 import { isAndroidInputMethodOwnedNode } from '@agent-device/contracts/android-input-ownership';
-import { captureAndroidUiHierarchyXml } from './snapshot.ts';
+import { captureAndroidUiHierarchy, captureAndroidUiHierarchyXml } from './snapshot.ts';
+import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
+import { ANDROID_WINDOW_TYPE_INPUT_METHOD } from './ui-hierarchy-node.ts';
+import type { ElementTextTarget } from '@agent-device/contracts/element-text-runtime';
 import type {
   FillUnconfirmedVerification,
   FillVerificationTarget,
@@ -37,8 +40,15 @@ type AndroidTextAtPointScan = {
   anyAtPoint: AndroidFillVerificationCandidate | null;
 };
 
+type AndroidFillTargetCapture = {
+  targetInput: AndroidFillVerificationNode | null;
+  uniqueIdentity: boolean;
+};
+
 type AndroidFillVerificationContext = {
+  captureMetadata?: AndroidSnapshotBackendMetadata;
   activeInputMethodPackage?: string | null;
+  inputMethodPackages?: ReadonlySet<string>;
 };
 
 /**
@@ -56,13 +66,37 @@ export async function verifyAndroidFilledText(
   y: number,
   expected: string,
   helper: AndroidHelperSessionOptions = {},
+  beforeCapture?: AndroidFillTargetCapture | null,
 ): Promise<AndroidFillVerification> {
-  const context = await readAndroidFillVerificationContext(device);
+  const deadline = Deadline.fromTimeoutMs(FILL_VERIFICATION_DEADLINE_MS);
+  let initialCapture: Awaited<ReturnType<typeof captureAndroidUiHierarchy>> | undefined =
+    await captureAndroidUiHierarchy(device, {
+      ...helper,
+      skipIdleWait: true,
+    });
+  const context = await readAndroidFillVerificationContext(device, initialCapture.xml);
   const { value } = await pollUntilSettled({
-    probe: () => inspectAndroidFilledText(device, x, y, expected, context, helper),
+    probe: async () => {
+      if (initialCapture) {
+        const capture = initialCapture;
+        initialCapture = undefined;
+        return verifyAndroidFilledTextInHierarchy(
+          capture.xml,
+          x,
+          y,
+          expected,
+          {
+            ...context,
+            captureMetadata: capture.metadata,
+          },
+          beforeCapture,
+        );
+      }
+      return await inspectAndroidFilledText(device, x, y, expected, context, helper, beforeCapture);
+    },
     settled: (verification, previous) =>
       verification.reason === 'ime_capture' || (verification.ok && previous?.ok === true),
-    deadline: Deadline.fromTimeoutMs(FILL_VERIFICATION_DEADLINE_MS),
+    deadline,
     intervalMs: FILL_VERIFICATION_SAMPLE_INTERVAL_MS,
   });
   return value;
@@ -72,12 +106,13 @@ export async function readAndroidTextAtPoint(
   device: DeviceInfo,
   x: number,
   y: number,
-  helper: AndroidHelperSessionOptions = {},
+  helper: AndroidHelperSessionOptions & { target?: ElementTextTarget } = {},
 ): Promise<string | null> {
   return readAndroidTextAtPointInHierarchy(
     await captureAndroidUiHierarchyXml(device, helper),
     x,
     y,
+    helper.target,
   );
 }
 
@@ -86,14 +121,16 @@ async function readAndroidFillTargetAtPoint(
   x: number,
   y: number,
   helper: AndroidHelperSessionOptions,
-): Promise<AndroidFillVerificationNode | null> {
-  const context = await readAndroidFillVerificationContext(device);
-  return inspectAndroidTextAtPointInHierarchy(
-    await captureAndroidUiHierarchyXml(device, helper),
-    x,
-    y,
-    context,
-  ).targetInput;
+): Promise<AndroidFillTargetCapture> {
+  const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
+  const context = await readAndroidFillVerificationContext(device, capture.xml);
+  const targetInput = inspectAndroidTextAtPointInHierarchy(capture.xml, x, y, context).targetInput;
+  return {
+    targetInput,
+    uniqueIdentity:
+      completeFreshAndroidFillCapture(capture.metadata) &&
+      uniqueAndroidFillTarget([...androidUiNodes(capture.xml)], targetInput),
+  };
 }
 
 export async function readAndroidFillTargetBeforeMutation(
@@ -101,7 +138,7 @@ export async function readAndroidFillTargetBeforeMutation(
   x: number,
   y: number,
   helper: AndroidHelperSessionOptions = {},
-): Promise<AndroidFillVerification['targetInput']> {
+): Promise<AndroidFillTargetCapture | null> {
   try {
     return await readAndroidFillTargetAtPoint(device, x, y, helper);
   } catch (error) {
@@ -191,8 +228,19 @@ export function verifyAndroidFilledTextInHierarchy(
   y: number,
   expected: string,
   context: AndroidFillVerificationContext = {},
+  beforeCapture?: AndroidFillTargetCapture | null,
 ): AndroidFillVerification {
-  const inspection = inspectAndroidTextAtPointInHierarchy(xml, x, y, context);
+  const inspection = inspectAndroidTextAtPointInHierarchy(
+    xml,
+    x,
+    y,
+    context,
+    expected === '' &&
+      beforeCapture?.uniqueIdentity &&
+      completeFreshAndroidFillCapture(context.captureMetadata)
+      ? beforeCapture.targetInput
+      : undefined,
+  );
   if (isAndroidImeCapture(inspection)) {
     return {
       ok: false,
@@ -213,10 +261,33 @@ export function readAndroidTextAtPointInHierarchy(
   xml: string,
   x: number,
   y: number,
+  target?: ElementTextTarget,
 ): string | null {
+  if (target?.identifier) {
+    const matches = [...androidUiNodes(xml)].filter(
+      (node) =>
+        node.resourceId === target.identifier &&
+        (!target.bundleId || node.packageName === target.bundleId) &&
+        (!target.type || node.className === target.type),
+    );
+    const candidates = matches.flatMap((node) => {
+      const candidate = androidFillCandidateFromNode(node, {});
+      return candidate ? [candidate] : [];
+    });
+    if (matches.length === 1 && candidates.length === 1) return candidates[0]!.text;
+    const atPoint = candidates.filter((candidate) => containsPoint(candidate.rect, x, y));
+    if (atPoint.length === 1) return atPoint[0]!.text;
+  }
   // Reads are point-targeted: a focused sibling may be a different app field or an IME
   // composing surface, so it must not override the node that contains the requested point.
-  return inspectAndroidTextAtPointInHierarchy(xml, x, y).targetInput?.text ?? null;
+  const pointTarget = inspectAndroidTextAtPointInHierarchy(xml, x, y).targetInput;
+  if (
+    !pointTarget ||
+    (target?.bundleId && pointTarget.packageName !== target.bundleId) ||
+    (target?.type && pointTarget.className !== target.type)
+  )
+    return null;
+  return pointTarget.text;
 }
 
 export function androidFillFailureMessage(verification: AndroidFillVerification | null): string {
@@ -248,15 +319,41 @@ async function inspectAndroidFilledText(
   expected: string,
   context: AndroidFillVerificationContext,
   helper: AndroidHelperSessionOptions,
+  beforeCapture?: AndroidFillTargetCapture | null,
 ): Promise<AndroidFillVerification> {
   // Each delay samples the live hierarchy again — settling is what the samples observe, so they
   // share the helper session but never a capture.
+  const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
   return verifyAndroidFilledTextInHierarchy(
-    await captureAndroidUiHierarchyXml(device, helper),
+    capture.xml,
     x,
     y,
     expected,
-    context,
+    { ...context, captureMetadata: capture.metadata },
+    beforeCapture,
+  );
+}
+
+function completeFreshAndroidFillCapture(metadata?: AndroidSnapshotBackendMetadata): boolean {
+  return (
+    metadata?.rootPresent === true &&
+    metadata.cacheInvalidated === true &&
+    metadata.helperTruncated === false &&
+    metadata.systemSurfaceOnly !== true &&
+    metadata.missingRootWindowTypes?.length === 0
+  );
+}
+
+function uniqueAndroidFillTarget(
+  nodes: readonly AndroidUiNodeMetadata[],
+  target: AndroidFillVerificationNode | null,
+): boolean {
+  return (
+    !!target?.resourceId &&
+    !!target.packageName &&
+    nodes.filter(
+      (node) => node.resourceId === target.resourceId && node.packageName === target.packageName,
+    ).length === 1
   );
 }
 
@@ -265,6 +362,7 @@ function inspectAndroidTextAtPointInHierarchy(
   x: number,
   y: number,
   context: AndroidFillVerificationContext = {},
+  beforeTarget?: AndroidFillVerificationNode | null,
 ): AndroidTextAtPointInspection {
   const scan: AndroidTextAtPointScan = {
     focusedEdit: null,
@@ -272,12 +370,46 @@ function inspectAndroidTextAtPointInHierarchy(
     anyAtPoint: null,
   };
 
-  for (const node of androidUiNodes(xml)) {
-    const candidate = androidFillCandidateFromNode(node, context);
-    if (candidate) updateAndroidTextAtPointScan(scan, candidate, x, y);
+  const nodes = [...androidUiNodes(xml)];
+  const observedContext = androidFillWindowContext(nodes) ?? context;
+  const candidates = nodes
+    .map((node) => androidFillCandidateFromNode(node, observedContext))
+    .filter((candidate) => candidate !== null);
+  for (const candidate of candidates) {
+    updateAndroidTextAtPointScan(scan, candidate, x, y);
   }
+  const field = identifiedEmptyAndroidFillTarget(nodes, candidates, beforeTarget);
+  return field ? { targetInput: field, actualInput: field } : androidTextAtPointInspection(scan);
+}
 
-  return androidTextAtPointInspection(scan);
+function identifiedEmptyAndroidFillTarget(
+  nodes: readonly AndroidUiNodeMetadata[],
+  candidates: readonly AndroidFillVerificationCandidate[],
+  beforeTarget?: AndroidFillVerificationNode | null,
+): AndroidFillVerificationCandidate | null {
+  if (
+    !beforeTarget ||
+    isSensitiveFillDiagnosticNode(beforeTarget) ||
+    beforeTarget.inputMethodOwned ||
+    !uniqueAndroidFillTarget(nodes, beforeTarget)
+  ) {
+    return null;
+  }
+  const field = candidates.find(
+    (candidate) => candidate.editText && sameAndroidFillTarget(beforeTarget, candidate),
+  );
+  const focusedEdits = candidates.filter((candidate) => candidate.editText && candidate.focused);
+  if (
+    field &&
+    focusedEdits.length === 1 &&
+    field.focused &&
+    field.className === beforeTarget.className &&
+    !field.inputMethodOwned &&
+    !isSensitiveFillDiagnosticNode(field) &&
+    observedAndroidValue(field) === ''
+  )
+    return field;
+  return null;
 }
 
 function isAndroidImeCapture(inspection: AndroidTextAtPointInspection): boolean {
@@ -397,11 +529,13 @@ function androidFillCandidateFromNode(
     rect: node.rect,
     focused: node.focused ?? false,
     password: node.password === true,
-    inputMethodOwned: isAndroidInputMethodOwnedNode({
-      packageName: node.packageName,
-      resourceId: node.resourceId,
-      activeInputMethodPackage: context.activeInputMethodPackage,
-    }),
+    inputMethodOwned:
+      context.inputMethodPackages?.has(node.packageName ?? '') === true ||
+      isAndroidInputMethodOwnedNode({
+        packageName: node.packageName,
+        resourceId: node.resourceId,
+        activeInputMethodPackage: context.activeInputMethodPackage,
+      }),
     area,
     editText: isEditTextClass(node.className ?? ''),
     hintShowing: node.hintShowing === true,
@@ -411,7 +545,10 @@ function androidFillCandidateFromNode(
 
 async function readAndroidFillVerificationContext(
   device: DeviceInfo,
+  xml: string,
 ): Promise<AndroidFillVerificationContext> {
+  const context = androidFillWindowContext([...androidUiNodes(xml)]);
+  if (context) return context;
   try {
     const state = await getAndroidKeyboardState(device);
     return { activeInputMethodPackage: state.inputMethodPackage };
@@ -425,6 +562,19 @@ async function readAndroidFillVerificationContext(
     });
     return {};
   }
+}
+
+function androidFillWindowContext(
+  nodes: readonly AndroidUiNodeMetadata[],
+): AndroidFillVerificationContext | undefined {
+  if (!nodes.some((node) => node.windowType !== undefined)) return undefined;
+  return {
+    inputMethodPackages: new Set(
+      nodes
+        .filter((node) => node.windowType === ANDROID_WINDOW_TYPE_INPUT_METHOD)
+        .flatMap((node) => (node.packageName ? [node.packageName] : [])),
+    ),
+  };
 }
 
 function updateAndroidTextAtPointScan(

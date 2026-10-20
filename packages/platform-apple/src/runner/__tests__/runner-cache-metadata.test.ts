@@ -23,8 +23,12 @@ import { memoizedRunnerXcodeVersion } from '../runner-toolchain-probe.ts';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../apple-runner-platform.ts';
 import {
   appleToolchainProbeResult,
+  blockForWholeTimeout,
+  installToolchainProbeClock,
+  selectedDeveloperDirResult,
   STUBBED_APPLE_TOOLCHAIN,
   stubAppleToolchainProbes,
+  valueProbeCommands,
 } from './apple-toolchain-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { xcodebuildLogWithBuildArguments } from './runner-build-log.fixtures.ts';
@@ -272,7 +276,7 @@ describe('toolchain probe budget', () => {
   beforeEach(resetAllProcessMemosForTests);
 
   test('a cold-start probe recovers on retry, and the stall it survived is charged to the budget', () => {
-    const clock = installFakeToolchainClock();
+    const clock = installToolchainProbeClock();
     const xcodebuildTimeouts: number[] = [];
     runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
       if (command !== 'xcodebuild') return appleToolchainProbeResult(command, args);
@@ -292,9 +296,10 @@ describe('toolchain probe budget', () => {
   });
 
   test('an owning phase with 4 s left gets one 4 s attempt and no retry', () => {
-    const clock = installFakeToolchainClock();
+    const clock = installToolchainProbeClock();
     const phaseBudget = createRunnerPhaseBudget(4_000, undefined);
     runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
+      if (command === 'xcode-select') return appleToolchainProbeResult(command, args);
       throw blockForWholeTimeout(clock, command, args, options);
     });
     runCmdSync.mockClear();
@@ -303,14 +308,14 @@ describe('toolchain probe budget', () => {
       () => resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR, undefined, phaseBudget),
       (error: unknown) => expectRunnerPhaseBudgetExhausted(error),
     );
-    assert.equal(runCmdSync.mock.calls.length, 1);
+    assert.equal(valueProbeCommands(runCmdSync.mock.calls).length, 1);
     // The one attempt was capped by the phase, not by the 30 s per-call ceiling.
-    assert.equal(runCmdSync.mock.calls[0]?.[2]?.timeoutMs, 4_000);
+    assert.equal(runCmdSync.mock.calls.at(-1)?.[2]?.timeoutMs, 4_000);
     assert.equal(clock.nowMs, 4_000);
   });
 
   test('a probe that failed on its own and merely says "timed out" in its message is not retried', () => {
-    installFakeToolchainClock();
+    installToolchainProbeClock();
     runCmdSync.mockImplementation((command: string, args: string[]) => {
       if (command !== 'xcodebuild') return appleToolchainProbeResult(command, args);
       // No `timeoutMs` detail: this is the tool reporting its own failure, not
@@ -439,7 +444,7 @@ describe('toolchain probe budget', () => {
   ];
 
   test.each(CANCELLATION_CASES)('cancellation matrix: $label', (testCase) => {
-    const clock = installFakeToolchainClock();
+    const clock = installToolchainProbeClock();
     const request = new AbortController();
     if (testCase.fingerprintCache === 'warm') {
       runCmdSync.mockImplementation(appleToolchainProbeResult);
@@ -449,6 +454,9 @@ describe('toolchain probe budget', () => {
 
     let execs = 0;
     runCmdSync.mockImplementation((command: string, args: string[], options: ExecOptions) => {
+      // The cache-key resolution picks which entry the read belongs to; it is never one of the
+      // three probes this matrix interrupts.
+      if (command === 'xcode-select') return appleToolchainProbeResult(command, args);
       execs += 1;
       if (!failsOnExec(testCase, execs)) return appleToolchainProbeResult(command, args);
       if (testCase.aborts === 'while-it-blocks') request.abort();
@@ -511,44 +519,6 @@ function expectRunnerPhaseBudgetExhausted(error: unknown): boolean {
   assert.equal(error.details?.retriable, true);
   expect(error.message).toContain('budget ran out');
   return true;
-}
-
-/**
- * A clock the probes' own budget reads, advanced only by
- * {@link blockForWholeTimeout}. Without it a mock that throws immediately
- * proves nothing about a deadline: no time passes, so every budget looks
- * untouched however many attempts run.
- */
-function installFakeToolchainClock(): { nowMs: number } {
-  const clock = { nowMs: 0 };
-  appleRunnerTestHost.update({
-    deadlineFromTimeoutMs: (timeoutMs: number) => {
-      const startedAtMs = clock.nowMs;
-      const expiresAtMs = startedAtMs + Math.max(0, timeoutMs);
-      return {
-        remainingMs: () => Math.max(0, expiresAtMs - clock.nowMs),
-        elapsedMs: () => Math.max(0, clock.nowMs - startedAtMs),
-        isExpired: () => expiresAtMs - clock.nowMs <= 0,
-      };
-    },
-  });
-  return clock;
-}
-
-/** A probe that blocked for its whole timeout and was then killed, as the exec layer reports it. */
-function blockForWholeTimeout(
-  clock: { nowMs: number },
-  command: string,
-  args: string[],
-  options: ExecOptions,
-): AppError {
-  const timeoutMs = options.timeoutMs ?? 0;
-  clock.nowMs += timeoutMs;
-  return new AppError('COMMAND_FAILED', `${command} timed out after ${timeoutMs}ms`, {
-    cmd: command,
-    args,
-    timeoutMs,
-  });
 }
 
 test('a failing probe reports its exit status rather than a fabricated SDK version', () => {
@@ -652,16 +622,14 @@ test('a malformed xcodebuild answer is not memoized: the next request re-probes 
   assert.deepEqual(unavailableProbes(), [
     { probe: 'xcodebuild -version', reason: 'unparsable_output' },
   ]);
-  const probeCallsWhileMalformed = runCmdSync.mock.calls.length;
 
   runCmdSync.mockImplementation(appleToolchainProbeResult);
+  runCmdSync.mockClear();
   const metadata = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
 
   assert.equal(metadata.xcodeVersion, '26.2');
   assert.equal(metadata.xcodeBuildVersion, '17C52');
-  expect(runCmdSync.mock.calls.slice(probeCallsWhileMalformed).map(([command]) => command)).toEqual(
-    ['xcodebuild', 'xcrun', 'xcrun'],
-  );
+  expect(valueProbeCommands(runCmdSync.mock.calls)).toEqual(['xcodebuild', 'xcrun', 'xcrun']);
 });
 
 test('only a complete, parsed toolchain fingerprint is memoized', () => {
@@ -681,15 +649,11 @@ test('only a complete, parsed toolchain fingerprint is memoized', () => {
   runCmdSync.mockClear();
   const first = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
   // The healthy xcodebuild answer from the failed round was not kept either: all three re-run.
-  expect(runCmdSync.mock.calls.map(([command]) => command)).toEqual([
-    'xcodebuild',
-    'xcrun',
-    'xcrun',
-  ]);
+  expect(valueProbeCommands(runCmdSync.mock.calls)).toEqual(['xcodebuild', 'xcrun', 'xcrun']);
 
   runCmdSync.mockClear();
   const second = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
-  expect(runCmdSync).not.toHaveBeenCalled();
+  expect(valueProbeCommands(runCmdSync.mock.calls)).toEqual([]);
   assert.deepEqual(
     [second.xcodeVersion, second.xcodeBuildVersion, second.sdkVersion, second.sdkBuildVersion],
     [first.xcodeVersion, first.xcodeBuildVersion, first.sdkVersion, first.sdkBuildVersion],
@@ -793,10 +757,42 @@ test('a toolchain read under one DEVELOPER_DIR does not answer for another, so i
     resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR).xcodeBuildVersion,
     STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion,
   );
-  expect(runCmdSync).not.toHaveBeenCalled();
+  expect(valueProbeCommands(runCmdSync.mock.calls)).toEqual([]);
 });
 
-test('a toolchain fingerprint expires once no request uses it; each use renews it', () => {
+test('a default selection the host moved does not answer from the fingerprint it left behind', () => {
+  // Same consequence as the DEVELOPER_DIR case above, reached through `xcode-select` instead:
+  // `sudo xcode-select -s` changes what a read without a client dir is answering for (#3300).
+  withoutRunnerDerivedPathEnv();
+  let selectedDir = '/Applications/Xcode-A.app/Contents/Developer';
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
+    command === 'xcode-select'
+      ? selectedDeveloperDirResult(selectedDir)
+      : command === 'xcodebuild' && selectedDir === '/Applications/Xcode-B.app/Contents/Developer'
+        ? { exitCode: 0, stdout: 'Xcode 27.0\nBuild version 18A100\n', stderr: '' }
+        : appleToolchainProbeResult(command, args),
+  );
+
+  const onA = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  selectedDir = '/Applications/Xcode-B.app/Contents/Developer';
+  runCmdSync.mockClear();
+  const onB = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  expect(runCmdSync.mock.calls.map(([command]) => command)).toEqual([
+    'xcode-select',
+    'xcodebuild',
+    'xcrun',
+    'xcrun',
+  ]);
+  assert.equal(onA.xcodeBuildVersion, STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+  assert.equal(onB.xcodeBuildVersion, '18A100');
+  // The derived path is what a retained runner is reused by, so a differing one makes it stale.
+  assert.notEqual(
+    resolveRunnerDerivedPath(IOS_SIMULATOR, onA),
+    resolveRunnerDerivedPath(IOS_SIMULATOR, onB),
+  );
+});
+
+test('a toolchain fingerprint is renewed by each hit and expires once nothing uses it', () => {
   vi.useFakeTimers();
   try {
     appleRunnerTestHost.update({
@@ -804,15 +800,17 @@ test('a toolchain fingerprint expires once no request uses it; each use renews i
     });
     resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
     runCmdSync.mockClear();
-    // Used every 9 minutes, it outlives a 10-minute window without another probe.
-    vi.advanceTimersByTime(9 * 60_000);
-    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+    // A hit is an entry keyed on the resolved dir AND the identity of the bundle standing in it, so
+    // the toolchain behind that key is still the one in place and the entry renews itself (#3300
+    // asked to keep this). A bundle replaced in place moves the identity, not just the dir; see
+    // `a bundle replaced in place at the same path moves the key`. What an idle entry cannot
+    // outlast is the TTL, measured from the hit that last renewed it.
     vi.advanceTimersByTime(9 * 60_000);
     resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
     expect(runCmdSync).not.toHaveBeenCalled();
     expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
 
-    vi.advanceTimersByTime(10 * 60_000);
+    vi.advanceTimersByTime(10 * 60_001);
     expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBeUndefined();
     resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
     expect(runCmdSync.mock.calls.map(([command]) => command)).toEqual([

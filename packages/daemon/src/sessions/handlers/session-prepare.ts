@@ -1,3 +1,4 @@
+import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { prepareAppleRunnerRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
@@ -61,17 +62,30 @@ export async function handlePrepareCommand(params: {
 
   // Device selection is side-effect free enough for facts admission. The bound lifecycle owns
   // readiness, keeping provider-first facts as the sole support authority.
-  const device = await resolveCommandDevice({
-    session,
-    flags,
-    platformServices: params.platformServices,
-  });
-  const admission = await admitPrepareRuntime({
-    device,
-    inspectFacts: params.inspectFacts,
-    platformServices: params.platformServices,
-    bindDevice: params.bindDevice,
-  });
+  const device = await withDiagnosticTimer(
+    'prepare_resolve_device',
+    () =>
+      resolveCommandDevice({
+        session,
+        flags,
+        env: sessionStore.host.env,
+        platformServices: params.platformServices,
+      }),
+    undefined,
+    'start',
+  );
+  const admission = await withDiagnosticTimer(
+    'prepare_admit_runtime',
+    () =>
+      admitPrepareRuntime({
+        device,
+        inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
+        bindDevice: params.bindDevice,
+      }),
+    undefined,
+    'start',
+  );
   if (admission.type === 'response') return admission.response;
 
   const startedAtMs = Date.now();

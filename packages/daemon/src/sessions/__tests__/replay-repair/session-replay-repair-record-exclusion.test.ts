@@ -21,9 +21,10 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 import {
-  mkdtempForTestSync,
   bindTestCommandHost,
+  createLiveTestHostEnvironment,
   createTestHostEnvironment,
+  mkdtempForTestSync,
 } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
@@ -139,7 +140,10 @@ const SAVE_ANNOTATION =
 
 function setup(prefix: string) {
   const root = mkdtempForTestSync(prefix);
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,

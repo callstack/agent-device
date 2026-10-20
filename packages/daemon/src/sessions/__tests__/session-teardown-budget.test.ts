@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/platform-web';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeAndroidSession } from '../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import {
@@ -16,7 +16,10 @@ import {
 
 test('daemon session teardown budget extends for an active durable recording', () => {
   const root = mkdtempForTestSync('agent-device-shutdown-recording-budget-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const session = makeRecordingSession({
     name: 'budget-session',
     sessionStore,

@@ -27,6 +27,7 @@ export type CloudWebDriverOperation =
   | 'pinch'
   | 'rotateGesture'
   | 'transformGesture'
+  | 'tapGesture'
   | 'logs'
   | 'record'
   | 'artifacts'
@@ -116,6 +117,7 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
   pinch: unsupported,
   rotateGesture: unsupported,
   transformGesture: unsupported,
+  tapGesture: unsupported,
   logs: unsupported,
   record: unsupported,
   artifacts: unsupported,

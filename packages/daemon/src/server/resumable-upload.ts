@@ -1,4 +1,4 @@
-import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -26,10 +26,9 @@ type ResumableUploadState = {
   byKey: Map<string, string>;
 };
 
-const resumableUploadRuntime = defineRuntimeSlots();
 const RESUMABLE_UPLOAD_SLOT = Symbol('resumableUploads');
 const resumableUploads = (): ResumableUploadState =>
-  resumableUploadRuntime.slot(
+  runtimeSlot(
     RESUMABLE_UPLOAD_SLOT,
     (): ResumableUploadState => ({ byId: new Map(), byKey: new Map() }),
     (state) => {
@@ -45,10 +44,6 @@ const resumableUploads = (): ResumableUploadState =>
   );
 const RESUMABLE_UPLOADS_BY_ID = () => resumableUploads().byId;
 const RESUMABLE_UPLOADS_BY_KEY = () => resumableUploads().byKey;
-
-/** The resumable uploads one daemon runtime holds; disposing it stops their expiry timers. */
-export const createResumableUploadRuntimeState = (): RuntimeStateHandle =>
-  resumableUploadRuntime.createHandle();
 
 export type BeginResumableUploadOptions = {
   baseUrl: string;

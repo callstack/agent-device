@@ -5,7 +5,7 @@ import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
  * Neutral intent for one orientation change. `rotation` is already parsed by the caller
- * (`parseDeviceRotation`); the operation names no command, request, session, or CLI flag.
+ * (`parseOrientationRequest`); the operation names no command, request, session, or CLI flag.
  */
 export type SetOrientationInput = Readonly<{
   rotation: DeviceRotation;
@@ -22,16 +22,28 @@ export type SetOrientationResult = Readonly<{ orientation?: DeviceRotation }>;
 
 export type OrientationRuntimeOperations = Readonly<{
   setOrientation(input: SetOrientationInput): Promise<SetOrientationResult | void>;
+  unlockOrientation(input: Omit<SetOrientationInput, 'rotation'>): Promise<void>;
 }>;
 
 export type OrientationRuntimeOperationFacts = Readonly<{
   setOrientation: RuntimeOperationFact;
+  unlockOrientation: RuntimeOperationFact;
 }>;
 
+const unlockUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'orientation auto is only supported on ADB-backed Android.',
+} as const);
+
+/** An owner that leaves `unlock` undeclared refuses `orientation auto`. */
 export function orientationRuntimeOperationFacts(
-  input: Readonly<{ orientation: RuntimeOperationFact }>,
+  input: Readonly<{ orientation: RuntimeOperationFact; unlock?: RuntimeOperationFact }>,
 ): OrientationRuntimeOperationFacts {
-  return Object.freeze({ setOrientation: input.orientation });
+  return Object.freeze({
+    setOrientation: input.orientation,
+    unlockOrientation: input.unlock ?? unlockUnavailable,
+  });
 }
 
 /**
@@ -42,7 +54,7 @@ export function orientationRuntimeOperationFacts(
 export function bindOrientation(
   signal: AbortSignal,
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
-): OrientationRuntimeOperations {
+): Pick<OrientationRuntimeOperations, 'setOrientation'> {
   return Object.freeze({
     setOrientation: async (input: SetOrientationInput) => {
       signal.throwIfAborted();
@@ -52,6 +64,26 @@ export function bindOrientation(
         signal,
       });
       return await interactor.setOrientation(input.rotation);
+    },
+  });
+}
+
+export function bindOrientationUnlock(
+  signal: AbortSignal,
+  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
+): Pick<OrientationRuntimeOperations, 'unlockOrientation'> {
+  return Object.freeze({
+    unlockOrientation: async (input: Omit<SetOrientationInput, 'rotation'>) => {
+      signal.throwIfAborted();
+      const interactor = await resolveInteractor({
+        ...input.execution,
+        appBundleId: input.options?.appBundleId,
+        signal,
+      });
+      const { requireInteractorMethod } = await import('./interactor-operation-binding.ts');
+      await requireInteractorMethod(interactor.unlockOrientation, 'orientation auto').call(
+        interactor,
+      );
     },
   });
 }

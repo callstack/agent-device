@@ -1,3 +1,4 @@
+import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   type ApplicationLifecycleRuntimeOperations,
   type AppleRunnerSessionPrewarmOptions,
@@ -458,14 +459,31 @@ async function prepareAppleRunner(
   // One budget covers the boot and the runner: a cold Simulator's boot spends part of it, and
   // the runner preparation gets what is left rather than the full budget again.
   const deadlineAtMs = Date.now() + input.timeoutMs;
-  const readied = await ensureAppleReady(host, device, signal, { deadlineAtMs });
-  const timeoutMs = Math.max(1, deadlineAtMs - Date.now());
-  const prepared = await host.appleApplications.prepareRunner(
-    readied,
-    { ...input, timeoutMs },
-    signal,
+  const traceStarted = performance.now();
+  return await withDiagnosticTimer(
+    'prepare_apple_runner',
+    async () => {
+      const readied = await ensureAppleReady(host, device, signal, { deadlineAtMs });
+      const timeoutMs = Math.max(1, deadlineAtMs - Date.now());
+      emitDiagnostic({
+        phase: 'prepare_apple_runner',
+        durationMs: performance.now() - traceStarted,
+        data: {
+          event: 'runner_start',
+          timeoutMs: input.timeoutMs,
+          remainingMs: deadlineAtMs - Date.now(),
+        },
+      });
+      const prepared = await host.appleApplications.prepareRunner(
+        readied,
+        { ...input, timeoutMs },
+        signal,
+      );
+      return { readied, prepared };
+    },
+    () => ({ timeoutMs: input.timeoutMs, remainingMs: deadlineAtMs - Date.now() }),
+    'readiness_start',
   );
-  return { readied, prepared };
 }
 
 type RunnerPrewarm = Readonly<{

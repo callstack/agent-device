@@ -27,7 +27,11 @@ export async function executeMaestroProgram(
   port: MaestroRuntimePort,
   options: MaestroEngineOptions = {},
 ): Promise<MaestroEngineResult> {
-  return await executeMaestroPlan(await compileMaestroReplayPlan(program, options), port, options);
+  return await executeMaestroPlan(
+    await compileMaestroReplayPlan(program, { ...options, baseDir: process.cwd() }),
+    port,
+    options,
+  );
 }
 
 export function createMaestroRuntimePort(operations: MaestroRuntimeOperations): MaestroRuntimePort {

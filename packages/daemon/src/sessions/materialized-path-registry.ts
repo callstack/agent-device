@@ -1,4 +1,4 @@
-import { defineRuntimeSlots, type RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import crypto from 'node:crypto';
 import { rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -35,10 +35,9 @@ export type RetainedMaterializedPaths = {
   expiresAt: string;
 };
 
-const retainedPathsRuntime = defineRuntimeSlots();
 const RETAINED_PATHS_SLOT = Symbol('materializedPaths');
 const retainedPaths = (): Map<string, RetainedEntry> =>
-  retainedPathsRuntime.slot(
+  runtimeSlot(
     RETAINED_PATHS_SLOT,
     () => new Map<string, RetainedEntry>(),
     (entries) => {
@@ -52,10 +51,6 @@ const retainedPaths = (): Map<string, RetainedEntry> =>
       }
     },
   );
-
-/** The materialized paths one daemon runtime retains; disposing it stops their expiry timers. */
-export const createMaterializedPathRuntimeState = (): RuntimeStateHandle =>
-  retainedPathsRuntime.createHandle();
 
 export async function retainMaterializedPaths(params: {
   installablePath: string;

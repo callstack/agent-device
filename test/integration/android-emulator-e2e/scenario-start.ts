@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { assertWaitText } from './live-assertions.ts';
 import { type LiveContext, runStep } from './live-harness.ts';
 
@@ -23,5 +24,7 @@ export async function prepareAndroidEmulatorScenario(
     ...(start.ime === 'system' ? ['--no-test-ime'] : []),
     start.url,
   ]);
+  const preflight = await runStep(context, 'preflight Android snapshot helper', ['snapshot', '-i']);
+  assert.equal(preflight.json?.data?.androidSnapshot?.backend, 'android-helper');
   await assertWaitText(context, start.landmark);
 }

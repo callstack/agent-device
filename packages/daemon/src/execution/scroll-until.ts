@@ -1,5 +1,9 @@
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
+import {
+  DEFAULT_SCROLL_UNTIL_PASSES,
+  SCROLL_UNTIL_MAX_PASSES,
+} from '@agent-device/contracts/scroll-command';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
@@ -28,14 +32,6 @@ import {
  */
 
 /**
- * How many gestures one `scroll --until` may spend before it gives up. A pass costs a capture plus
- * a gesture, so this is the request's whole cost ceiling, not a retry budget: 12 passes at the
- * honored 0.8-viewport maximum cover roughly ten screens, which is past the point where a list is
- * better reached by `scroll bottom` or a search field.
- */
-export const SCROLL_UNTIL_PASS_LIMIT = 12;
-
-/**
  * Scrolls until the selector matches a node that is on screen.
  *
  * Each pass reads the tree once and that read answers three questions in order: is the capture
@@ -51,6 +47,7 @@ export async function runScrollUntilVisible<TResult>(params: {
   selector: string;
   direction: ScrollDirection;
   platform: Platform | PublicPlatform;
+  signal?: AbortSignal;
   passLimit?: number;
   capture: () => Promise<SnapshotResult>;
   scroll: () => Promise<TResult>;
@@ -60,6 +57,7 @@ export async function runScrollUntilVisible<TResult>(params: {
   let scrolled = false;
   try {
     const { passes, result } = await runScrollPasses({
+      signal: params.signal,
       observe: capture,
       refuse: (captured) => {
         const refusal = scrollCaptureRefusal(captured);
@@ -73,7 +71,7 @@ export async function runScrollUntilVisible<TResult>(params: {
         }
         return false;
       },
-      passLimit: params.passLimit ?? SCROLL_UNTIL_PASS_LIMIT,
+      passLimit: params.passLimit ?? DEFAULT_SCROLL_UNTIL_PASSES,
       passLimitError: (passes) =>
         scrollUntilNotFoundError(direction, selector, 'pass-limit', passes),
       // Vertical only: a stuck container revisits the same one or two signatures. A horizontal
@@ -195,7 +193,7 @@ function scrollUntilNotFoundError(
       selector,
       direction,
       passes,
-      hint: `Raise the step with an amount (scroll ${direction} 0.8 --until <selector>), or run snapshot -i to confirm the selector matches something on this screen.`,
+      hint: `Allow more gestures with --max-passes <n> (up to ${SCROLL_UNTIL_MAX_PASSES}), raise the step with an amount (scroll ${direction} 0.8 --until <selector>), or run snapshot -i to inspect the current screen.`,
     },
   );
 }

@@ -341,6 +341,10 @@ struct RunnerGesturePoint: Codable {
   let y: Double
 }
 
+/// The most simultaneous contacts a gesture plan carries. Mirrors `GESTURE_MAX_CONTACTS` in
+/// packages/contracts/src/gesture-plan-types.ts; a contracts test pins the two together.
+let runnerGestureMaxContacts = 5
+
 /// One allowlisted coordinate gesture step inside a fused `sequence` command.
 /// `kind` is decoded as a raw String (not an enum) so the runner can return a clear
 /// INVALID_ARGS for an unknown kind instead of a generic decode failure.

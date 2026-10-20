@@ -143,7 +143,7 @@ function renderWarningsSection(
 
 function formatReplayTestSummaryLine(data: ReplaySuiteResult, flakyCount: number): string {
   const durationMs = typeof data.durationMs === 'number' ? data.durationMs : undefined;
-  const useColor = supportsColor();
+  const useColor = supportsColor(process.env);
   const passed = formatReplaySummaryPassed(data.passed, { useColor });
   const total = formatReplaySummaryTotal(data.total, { useColor });
   const failedSuffix = data.failed > 0 ? `, ${data.failed} failed` : '';
@@ -169,7 +169,7 @@ function formatReplayDuration(durationMs: number, options: { useColor?: boolean 
 }
 
 function replayFlakyStatusIcon(): string {
-  const useColor = supportsColor();
+  const useColor = supportsColor(process.env);
   return useColor ? colorize('✓', 'yellow') : '✓';
 }
 

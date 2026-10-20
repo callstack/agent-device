@@ -7,7 +7,7 @@ import { SessionStore } from '../../../core/session-store.ts';
 import { replayCommandForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 
 // The Maestro replay route resolves the store key upstream and then validates the session's
@@ -19,7 +19,10 @@ test('a typed Maestro selector conflict names the session store key, not "defaul
   const root = mkdtempForTestSync('agent-device-maestro-address-');
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, `${stringify({ appId: 'com.example.app' })}---\n${stringify([])}`);
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const session = makeIosSession('default');
   session.sessionScope = { kind: 'cwd', id: '8bea844ab16aa9b3' };
   sessionStore.publish(SCOPED_ADDRESS, session);

@@ -176,7 +176,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
   // replay attempt executes exactly the text the caller read for that file.
   let sourceBundles: readonly ReplayScriptSourceBundle[];
   try {
-    suiteRequest = toReplayTestSuiteRequest(req, sessionName);
+    suiteRequest = toReplayTestSuiteRequest(req, sessionName, command.host.cwd);
     sourceBundles = requireReplayTestScriptSources(req);
   } catch (error) {
     const appErr = asAppError(error);
@@ -283,7 +283,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
       );
     },
     discoverSources: await buildReplayTestSourceDiscovery(sourceBundles, req.flags?.replayBackend),
-    resolveShardTargets: buildReplayTestShardTargetResolver(req.flags),
+    resolveShardTargets: buildReplayTestShardTargetResolver(req.flags, command.host.env),
     cleanupSession,
   });
   return outcome.status === 'completed'
@@ -393,6 +393,7 @@ function requireReplayTestScriptSources(
 function toReplayTestSuiteRequest(
   req: DaemonWireRequest,
   sessionName: string,
+  hostCwd: string,
 ): ReplayTestSuiteRequest {
   const flags = req.flags ?? {};
   const cwd = req.meta?.cwd;
@@ -404,9 +405,7 @@ function toReplayTestSuiteRequest(
     requestId: req.meta?.requestId,
     platformFilter: flags.platform,
     artifactsDir:
-      artifactsDir === undefined
-        ? undefined
-        : expandSessionPath(artifactsDir, cwd ?? process.cwd()),
+      artifactsDir === undefined ? undefined : expandSessionPath(artifactsDir, cwd ?? hostCwd),
     failFast: flags.failFast === true,
     retries: numberFlag(flags.retries),
     timeoutMs: numberFlag(flags.timeoutMs),
@@ -426,15 +425,16 @@ function nestedReplayCommand(
   },
 ): Pick<
   ReplayCommand,
-  'request' | 'publicNetworkOnly' | 'resolvedSessionScope' | 'dispatch' | 'dependencies'
+  'request' | 'host' | 'publicNetworkOnly' | 'resolvedSessionScope' | 'dispatch' | 'dependencies'
 > {
-  const { publicNetworkOnly, resolvedSessionScope, dispatch, dependencies } = command;
+  const { host, publicNetworkOnly, resolvedSessionScope, dispatch, dependencies } = command;
   const nestedDispatch =
     dispatch || attempt.openLifecycle
       ? { ...dispatch, ...(attempt.openLifecycle ? { openLifecycle: attempt.openLifecycle } : {}) }
       : undefined;
   return {
     request: attempt.request,
+    host,
     ...(publicNetworkOnly ? { publicNetworkOnly } : {}),
     ...(resolvedSessionScope ? { resolvedSessionScope } : {}),
     ...(nestedDispatch ? { dispatch: nestedDispatch } : {}),

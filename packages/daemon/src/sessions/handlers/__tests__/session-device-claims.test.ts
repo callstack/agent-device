@@ -6,10 +6,11 @@ import { afterEach, test, vi } from 'vitest';
 import * as hostProcess from '@agent-device/host-kit/process';
 import {
   MACOS_DEVICE,
+  bindTestCommandHost,
+  createLiveTestHostEnvironment,
+  createTestHostEnvironment,
   mkdtempForTestSync,
   pinOwnProcessStartTime,
-  bindTestCommandHost,
-  createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
@@ -123,7 +124,10 @@ function setup(): { store: SessionStore; stateDir: string } {
   const stateDir = mkdtempForTestSync('agent-device-session-device-claim-');
   const claimsDir = path.join(stateDir, 'claims');
   process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
-  return { store: new SessionStore(path.join(stateDir, 'sessions')), stateDir };
+  return {
+    store: new SessionStore(path.join(stateDir, 'sessions'), createLiveTestHostEnvironment()),
+    stateDir,
+  };
 }
 
 const android: DeviceInfo = {

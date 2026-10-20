@@ -3,8 +3,19 @@ import { interactionCliReaders, interactionDaemonWriters } from './interactions.
 import { selectorCliReaders } from './selectors.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
+import { parseArgs } from '../../cli/parser/args.ts';
 
 const BASE_FLAGS: CliFlags = { json: false, help: false, version: false };
+
+test('scroll carries the CLI long-search budget to the daemon', () => {
+  const parsed = parseArgs(['scroll', 'down', '--until', 'id="row-512"', '--max-passes', '90'], {
+    strictFlags: true,
+  });
+  const input = interactionCliReaders.scroll(parsed.positionals, parsed.flags);
+  const request = interactionDaemonWriters.scroll(input);
+  expect(request.options.until).toBe('id="row-512"');
+  expect(request.options.maxPasses).toBe(90);
+});
 
 test('swipe writes only typed daemon input', () => {
   const request = interactionDaemonWriters.swipe({

@@ -42,6 +42,27 @@ export type DaemonIdentity = {
   processStartTime?: string;
 };
 
+/**
+ * The one daemon instance a client is pinned to: its credentials and its process lifetime together.
+ *
+ * A pin is checked against the registered daemon before a request is dispatched, and the pinned
+ * token is what authenticates the request — never a token discovered on the way. So a state
+ * directory whose daemon was replaced fails with `details.reason: 'daemon-binding-mismatch'` instead
+ * of sending a caller's work to a different instance, and a replacement that lands between that
+ * check and the write is refused by the new instance's own token check. A pinned client never
+ * starts, replaces, retires, or redirects a daemon.
+ *
+ * The token is a bearer capability for that instance: treat the object that carries it as a
+ * credential, and keep it inside the host that owns the daemon.
+ */
+export type DaemonBinding = {
+  /** The instance's daemon token, as its `daemon.json` published it. */
+  token: string;
+  pid: number;
+  /** The instance's process start time; a pid alone cannot tell a lifetime from its successor. */
+  processStartTime: string;
+};
+
 export type EnsureDaemonOptions = {
   /** The state directory the daemon owns; defaults to `AGENT_DEVICE_STATE_DIR`, then the user default. */
   stateDir?: string;
@@ -70,6 +91,8 @@ export type AgentDeviceDaemonTransportContext = {
   authToken?: string;
   /** How this request treats the local daemon; `managed` when omitted. */
   daemonLifecycle?: DaemonLifecycle;
+  /** See {@link DaemonBinding}. A client built with one sends this same pin on every request. */
+  daemonBinding?: DaemonBinding;
   /**
    * Cancels this one in-flight request. A built-in transport that sees an abort destroys the
    * request's connection, which makes the daemon mark the request canceled; the promise rejects
@@ -88,6 +111,12 @@ export type AgentDeviceClientConfig = RemoteConnectionProfileFields &
   CloudProviderProfileFields & {
     /** See `DaemonLifecycle`. */
     daemonLifecycle?: DaemonLifecycle;
+    /**
+     * Pins this client to one daemon instance: every request addresses that instance, authenticates
+     * with its token, and refuses a state directory whose daemon is any other instance. See
+     * {@link DaemonBinding}.
+     */
+    daemonBinding?: DaemonBinding;
     session?: string;
     lockPolicy?: DaemonLockPolicy;
     lockPlatform?: PlatformSelector;

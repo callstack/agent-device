@@ -1,3 +1,5 @@
+import type { HostEnvironment } from '@agent-device/kernel/source-value';
+import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import { AppError } from '@agent-device/kernel/errors';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import '../platform-runtime-android-adb-host.ts';
@@ -10,14 +12,17 @@ import {
   androidAdbSerialTarget,
   runAndroidHostAdb,
 } from '@agent-device/platform-android/mechanics';
-import { execFailureDetails, runCmd } from '@agent-device/host-kit/command';
+import { execFailureDetails, runCmd, withCommandHost } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
 
-export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
+export function createLimrunRuntimeDependencies(host: HostEnvironment): LimrunRuntimeDependencies {
+  const runOnHost = <T>(task: () => Promise<T>) =>
+    withCommandHost({ host, requestEnv: undefined }, task);
   return {
     clientVersion: readVersion(),
     android: {
-      createInteractor: (device, adb) => createAndroidInteractor(device, adb),
+      createInteractor: (device, adb) =>
+        withMethodScope(createAndroidInteractor(device, adb), runOnHost),
       createPortReverse: async (adb, options) => {
         const { createAndroidPortReverseManager } =
           await import('@agent-device/platform-android/mechanics');
@@ -86,39 +91,48 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
         );
       },
     },
-    host: {
-      runAdb: async (invocation, options) => await runAndroidHostAdb(invocation, options),
-      downloadFile: async (options) => {
-        const { downloadLimrunFile } = await import('./limrun-download-file.ts');
-        await downloadLimrunFile(options);
-      },
-      archiveDirectory: async ({ sourceDirectory, entryName, archivePath }) => {
-        const args = ['-qr', archivePath, entryName];
-        const result = await runCmd('zip', args, {
-          cwd: sourceDirectory,
-          timeoutMs: 120_000,
-        });
-        if (result.exitCode !== 0) {
-          throw new AppError('COMMAND_FAILED', 'Failed to package iOS .app for Limrun install', {
-            command: ['zip', ...args].join(' '),
-            ...execFailureDetails(result),
+    host: withMethodScope<LimrunRuntimeDependencies['host']>(
+      {
+        runAdb: async (invocation, options) => await runAndroidHostAdb(invocation, options),
+        downloadFile: async (options) => {
+          const { downloadLimrunFile } = await import('./limrun-download-file.ts');
+          await downloadLimrunFile(options);
+        },
+        archiveDirectory: async ({ sourceDirectory, entryName, archivePath }) => {
+          const args = ['-qr', archivePath, entryName];
+          const result = await runCmd('zip', args, {
+            cwd: sourceDirectory,
+            timeoutMs: 120_000,
           });
-        }
+          if (result.exitCode !== 0) {
+            throw new AppError('COMMAND_FAILED', 'Failed to package iOS .app for Limrun install', {
+              command: ['zip', ...args].join(' '),
+              ...execFailureDetails(result),
+            });
+          }
+        },
       },
-    },
-    ios: {
-      applySimctlSetting: async (request) => {
-        const { applySimctlSetting } = await import('@agent-device/platform-apple/simctl-settings');
-        return await applySimctlSetting(request);
+      runOnHost,
+    ),
+    ios: withMethodScope<LimrunRuntimeDependencies['ios']>(
+      {
+        applySimctlSetting: async (request) => {
+          const { applySimctlSetting } =
+            await import('@agent-device/platform-apple/simctl-settings');
+          return await applySimctlSetting(request);
+        },
+        resolveAppAlias: async (app) => {
+          const { resolveIosAppAlias } =
+            await import('@agent-device/platform-apple/app-resolution');
+          return resolveIosAppAlias(app);
+        },
+        readBundleAppName: async (appPath) => {
+          const { readIosBundleInfo } =
+            await import('@agent-device/platform-apple/install-artifact');
+          return (await readIosBundleInfo(appPath)).appName;
+        },
       },
-      resolveAppAlias: async (app) => {
-        const { resolveIosAppAlias } = await import('@agent-device/platform-apple/app-resolution');
-        return resolveIosAppAlias(app);
-      },
-      readBundleAppName: async (appPath) => {
-        const { readIosBundleInfo } = await import('@agent-device/platform-apple/install-artifact');
-        return (await readIosBundleInfo(appPath)).appName;
-      },
-    },
+      runOnHost,
+    ),
   };
 }

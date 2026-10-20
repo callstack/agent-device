@@ -139,6 +139,7 @@ import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechani
 import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
 import { checkDaemonPlatformRuntimeInventory } from './daemon-platform-runtime-inventory.ts';
 import { checkDaemonClientEntry } from './daemon-client-entry.ts';
+import { processGlobalsViolations } from './process-globals-policy.ts';
 import { checkDaemonProcessReach } from './daemon-process-reach.ts';
 import {
   checkPackageExportSurface,
@@ -453,7 +454,8 @@ function report(
         `concrete platform imports in every executable and type-only form; ` +
         `no production daemon file reaches the root platform-runtime family or a hub that ` +
         `does (R76); the daemon process reaches no caller-side replay source module over ` +
-        `static or dynamic edges (R82); ` +
+        `static or dynamic edges (R82); process globals stay at declared entries and ` +
+        `command-host reads stay at command-execution/spawn boundaries (R86); ` +
         `${packageExportSurfaceSummary(ratchets.testOnlyExports, reference.testOnlyExports)}; ` +
         `${testColocationSummary(ratchets.unmatchedTests, reference.unmatchedTests)}; and ` +
         `the handler-owned SessionState/SessionStore ` +
@@ -539,6 +541,7 @@ export const LAYERING_RULE_IDS = [
   'provider-snapshot-presentation-ownership',
   'snapshot-assembly-presentation-neutrality',
   'daemon-platform-runtime-inventory',
+  'process-globals',
   'daemon-process-reach',
   'daemon-client-entry',
   'session-authority-overlay',
@@ -607,6 +610,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     snapshotAssemblyPresentationViolations(context.sources, context.edges),
   'daemon-platform-runtime-inventory': (context) =>
     checkDaemonPlatformRuntimeInventory(context.edges),
+  'process-globals': (context) => processGlobalsViolations(context.allTypeScriptSources),
   'daemon-process-reach': (context) => checkDaemonProcessReach(context.sourceFiles, context.edges),
   'daemon-client-entry': (context) => checkDaemonClientEntry(context.sourceFiles, context.edges),
   'session-authority-overlay': (context) =>

@@ -8,7 +8,11 @@ import { platformResourceCleanupFixture } from '../../../__tests__/support/platf
 import { SessionStore } from '../../../core/session-store.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
-import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  createLiveTestHostEnvironment,
+  createTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import {
   unavailableBindDevice,
@@ -48,7 +52,10 @@ function engineTrustFlags(): boolean[] {
 async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
   const root = mkdtempForTestSync('agent-device-maestro-remote-wire-');
   const flowPath = writeFlow(root, 'flow.yaml');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   sessionStore.publish('default', makeIosSession('default'));
 
   const req = {
@@ -97,7 +104,10 @@ async function runWithTestNetworkFlag(publicNetworkOnly: boolean | undefined) {
   const root = mkdtempForTestSync('agent-device-maestro-remote-test-');
   const firstPath = writeFlow(root, '01-flow.yaml');
   const secondPath = writeFlow(root, '02-flow.yaml');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
 
   const req = {
     token: 'test-token',
@@ -123,6 +133,7 @@ async function runWithTestNetworkFlag(publicNetworkOnly: boolean | undefined) {
   // Drive the real `replay test` handler and suite scheduler so the handler mapping and the
   // per-case forwarding of `publicNetworkOnly` are both on the asserted engine path.
   const response = await handleReplayTestCommand({
+    host: createTestHostEnvironment(),
     req,
     sessionName: 'default',
     logPath: path.join(root, 'daemon.log'),

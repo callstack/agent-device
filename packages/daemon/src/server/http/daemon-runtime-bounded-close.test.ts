@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import { expect, test, vi } from 'vitest';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import type { RuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
+import { runtimeSlot } from '@agent-device/host-kit/runtime-slots';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
@@ -178,22 +178,27 @@ test('unfinished platform owner shutdown is bounded, reports pending and retains
   });
   const clearLock = vi.fn(async () => {});
   const pluginShutdown = vi.fn(async () => []);
+  // The slot lives on the runtime's one entered store, so its disposer runs exactly when that
+  // store is disposed (#3794): it stands in for the per-runtime state the close must not drop
+  // while work is unfinished.
   const disposeState = vi.fn();
-  const state: RuntimeStateHandle = { run: (fn) => fn(), enter: () => {}, dispose: disposeState };
+  const heldSlot = Symbol('bounded-close-held-state');
   const runtime = await startDaemonRuntime({
     host: hostFor(stateDir),
     ...silent,
     shutdownBudgets: { ownerMs: 20 },
-    composeDeps: daemonRuntimeDepsFixture({
-      deviceRuntimeGateway: {
-        ...lifecycleDeviceRuntimeGateway,
-        applicationLifecycle: applicationLifecycleResourceFixture(),
-        shutdown: () => ownerClosed,
-      },
-      ownerLifecycle: platformOwnerLifecycleFixture({ clearDaemonLockConfiguration: clearLock }),
-      shutdownProviderRuntimes: pluginShutdown,
-      runtimeStates: [state],
-    }),
+    composeDeps: async (input) => {
+      runtimeSlot(heldSlot, () => ({}), disposeState);
+      return await daemonRuntimeDepsFixture({
+        deviceRuntimeGateway: {
+          ...lifecycleDeviceRuntimeGateway,
+          applicationLifecycle: applicationLifecycleResourceFixture(),
+          shutdown: () => ownerClosed,
+        },
+        ownerLifecycle: platformOwnerLifecycleFixture({ clearDaemonLockConfiguration: clearLock }),
+        shutdownProviderRuntimes: pluginShutdown,
+      })(input);
+    },
   });
   const closing = runtime.close();
   try {
@@ -214,4 +219,26 @@ test('unfinished platform owner shutdown is bounded, reports pending and retains
     finishOwner();
     await closing;
   }
+});
+
+test('a clean close disposes the state composition declared in the entered handle', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-bounded-close-clean-');
+  const disposeState = vi.fn();
+  const heldSlot = Symbol('bounded-close-clean-state');
+  const runtime = await startDaemonRuntime({
+    host: hostFor(stateDir),
+    ...silent,
+    composeDeps: async (input) => {
+      // The slot is declared through the store the runtime entered, so it only exists when
+      // composition runs inside the handle. The disposer running once at close proves both
+      // halves: composition entered the handle, and the close disposed that state.
+      runtimeSlot(heldSlot, () => ({}), disposeState);
+      return await daemonRuntimeDepsFixture({})(input);
+    },
+  });
+
+  const report = await runtime.close();
+
+  expect(report.platformOwners).toBe('closed');
+  expect(disposeState).toHaveBeenCalledOnce();
 });

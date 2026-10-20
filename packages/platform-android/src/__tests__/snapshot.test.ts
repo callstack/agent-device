@@ -112,11 +112,11 @@ afterEach(async () => {
   await resetAndroidSnapshotHelperSessions();
 });
 
-test('screenshotAndroid waits for transient UI to settle before capture', async () => {
+test('screenshotAndroid waits for transient UI when stabilization is requested', async () => {
   const events: string[] = [];
   await withTempScreenshot('screenshot-settle-', async (outPath) => {
     mockScreenshotEvents(events);
-    await screenshotAndroid(device, outPath);
+    await screenshotAndroid(device, outPath, { stabilize: true });
 
     // Demo mode is one setting and two broadcasts, all before the settle.
     assert.deepEqual(events, ['enable', 'enable', 'enable', 'settle:1000', 'capture', 'disable']);

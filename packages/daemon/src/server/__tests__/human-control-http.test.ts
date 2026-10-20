@@ -66,6 +66,8 @@ for (const transport of ['tenant RPC', 'host PUT'] as const) {
       token: 'test-token',
       leaseRegistry: registry,
       handleRequest,
+      env: process.env,
+      cwd: process.cwd(),
     });
     server.on('request', (_req, res) => {
       res.once('close', () => {
@@ -128,6 +130,8 @@ test('host administration and tenant RPC use the same lease registry with distin
     token: 'test-token',
     leaseRegistry: registry,
     handleRequest,
+    env: process.env,
+    cwd: process.cwd(),
   });
   try {
     const port = await listenOnLoopback(server);

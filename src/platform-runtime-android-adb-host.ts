@@ -4,6 +4,7 @@ import { assertDeviceShellArgv } from '@agent-device/kernel/device-shell';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   coerceExecResult,
+  commandHostEnvironment,
   execFailureDetails,
   runCmd,
   runCmdBackground,
@@ -27,8 +28,6 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 
-const environment = process.env;
-
 /**
  * The adb process boundary: a `shell`/`exec-out` command reaches the device's `sh` verbatim, so the
  * command must have been minted by the device-shell funnel. Checked on the command, not the lowered
@@ -39,7 +38,9 @@ function requireQuotedDeviceShellCommand(command: readonly string[]): void {
 }
 
 bindAndroidAdbHost({
-  environment,
+  get environment() {
+    return commandHostEnvironment().env;
+  },
   files: {
     access: async (candidate) => await access(candidate),
     ensureDirectory: async (directory) => {
@@ -93,7 +94,7 @@ bindAndroidAdbHost({
   },
   execAdb: async (invocation, options) => {
     requireQuotedDeviceShellCommand(invocation.command);
-    const lowered = lowerAndroidAdbInvocation(invocation, options, environment);
+    const lowered = lowerAndroidAdbInvocation(invocation, options, commandHostEnvironment().env);
     return await runCmd('adb', lowered.args, {
       ...lowered.options,
       // adb's fork-server is a grandchild: without its own process group a deadline can only
@@ -103,7 +104,7 @@ bindAndroidAdbHost({
   },
   spawnAdb: (invocation, options) => {
     requireQuotedDeviceShellCommand(invocation.command);
-    const lowered = lowerAndroidAdbInvocation(invocation, options, environment);
+    const lowered = lowerAndroidAdbInvocation(invocation, options, commandHostEnvironment().env);
     const background = runCmdBackground('adb', lowered.args, {
       ...lowered.options,
       allowFailure: true,

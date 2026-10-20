@@ -1,6 +1,6 @@
 import { isSessionRecording } from '../../../core/session-script-publication-capability.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -41,7 +41,10 @@ beforeEach(() => {
 });
 test('a successful replay prints one line with the step count and wall time', async () => {
   const root = mkdtempForTestSync('agent-device-replay-success-message-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
@@ -70,7 +73,10 @@ test('a successful replay prints one line with the step count and wall time', as
 
 test('a close-less replay reports sessionActive: true (real producer, session still in the store)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-session-active-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
@@ -91,7 +97,10 @@ test('a close-less replay reports sessionActive: true (real producer, session st
 
 test('a replay whose terminal close removes the session reports sessionActive: false', async () => {
   const root = mkdtempForTestSync('agent-device-replay-session-closed-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'close']);
@@ -118,7 +127,10 @@ test('a replay whose terminal close removes the session reports sessionActive: f
 
 test('Maestro YAML uses the typed engine while .ad remains generic', async () => {
   const root = mkdtempForTestSync('agent-device-typed-maestro-route-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const yamlPath = path.join(root, 'flow.yaml');
@@ -167,7 +179,10 @@ test('Maestro YAML uses the typed engine while .ad remains generic', async () =>
 
 test('bare Maestro YAML requires explicit --maestro routing', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-explicit-route-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const yamlPath = path.join(root, 'flow.yaml');
@@ -192,7 +207,10 @@ test('bare Maestro YAML requires explicit --maestro routing', async () => {
 
 test('ADR 0016 / #1384: a Maestro replay reports sessionActive: true (real producer, no fake HTTP)', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-session-active-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const yamlPath = path.join(root, 'flow.yaml');
@@ -217,7 +235,10 @@ test('ADR 0016 / #1384: a Maestro replay reports sessionActive: true (real produ
 
 test('typed Maestro nested commands receive the runtime hints bound into the plan', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-runtime-envelope-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const session = makeIosSession(sessionName);
   sessionStore.publish(sessionName, {
@@ -267,7 +288,10 @@ test('typed Maestro nested commands receive the runtime hints bound into the pla
 
 test('typed Maestro writes source-aware redacted step timing traces', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-step-trace-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const yamlPath = path.join(root, 'flow.yaml');
@@ -327,7 +351,10 @@ test('typed Maestro writes source-aware redacted step timing traces', async () =
 
 test('replay trace failures do not change action semantics', async () => {
   const root = mkdtempForTestSync('agent-device-replay-trace-failure-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const yamlPath = path.join(root, 'flow.yaml');
@@ -350,7 +377,10 @@ test('replay trace failures do not change action semantics', async () => {
 
 test('generic replay traces redact typed text', async () => {
   const root = mkdtempForTestSync('agent-device-replay-trace-redaction-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const secret = 'highly-sensitive-value';
@@ -376,7 +406,10 @@ test('generic replay traces redact typed text', async () => {
 
 test('Maestro YAML rejects .ad repair recording before executing any command', async () => {
   const root = mkdtempForTestSync('agent-device-typed-maestro-save-script-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const yamlPath = path.join(root, 'flow.yaml');
@@ -404,7 +437,10 @@ test('Maestro YAML rejects .ad repair recording before executing any command', a
 
 test('Maestro YAML cannot append commands to an active .ad repair session', async () => {
   const root = mkdtempForTestSync('agent-device-typed-maestro-active-repair-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   const session = makeRepairArmedSession(sessionName);
   sessionStore.publish(sessionName, session);
@@ -431,7 +467,10 @@ test('Maestro YAML cannot append commands to an active .ad repair session', asyn
 });
 test('replay rejects legacy JSON payload files', async () => {
   const root = mkdtempForTestSync('agent-device-replay-json-rejected-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = path.join(root, 'replay.json');
@@ -464,7 +503,10 @@ test('replay rejects legacy JSON payload files', async () => {
 // before `inspectAdReplay` runs.
 test('replay rejects an unknown --replay-backend value before any step dispatch (#1555 P1)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-unknown-backend-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
@@ -493,7 +535,10 @@ test('replay rejects an unknown --replay-backend value before any step dispatch 
 // the restored check does not overreject the accepted value.
 test('replay still dispatches a plain .ad script with replayBackend: "maestro"', async () => {
   const root = mkdtempForTestSync('agent-device-replay-ad-maestro-backend-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
@@ -515,7 +560,10 @@ test('replay still dispatches a plain .ad script with replayBackend: "maestro"',
 
 test('replay rejects malformed .ad lines with unclosed quotes', async () => {
   const root = mkdtempForTestSync('agent-device-replay-invalid-ad-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, [String.raw`click "id=\"broken\"`]);
@@ -538,7 +586,10 @@ test('replay rejects malformed .ad lines with unclosed quotes', async () => {
 
 test('--update never rewrites the .ad file, even when a re-resolvable suggestion exists', async () => {
   const root = mkdtempForTestSync('agent-device-replay-update-no-write-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(
     sessionName,
@@ -591,7 +642,10 @@ test('--update never rewrites the .ad file, even when a re-resolvable suggestion
 
 test('a successful --update replay reports healed: 0 (heal is retired, not just quiet)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-update-healed-zero-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
@@ -612,7 +666,10 @@ test('a successful --update replay reports healed: 0 (heal is retired, not just 
 
 test('--update no longer refuses env directives (the guard existed only for rewrite safety)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-update-env-ok-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['env NAME=World', 'open "Demo"']);
@@ -630,7 +687,10 @@ test('--update no longer refuses env directives (the guard existed only for rewr
 
 test('--update no longer refuses ${VAR} interpolation (the guard existed only for rewrite safety)', async () => {
   const root = mkdtempForTestSync('agent-device-replay-update-interp-ok-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const sessionName = 'default';
   sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['click label="${NAME}"']);

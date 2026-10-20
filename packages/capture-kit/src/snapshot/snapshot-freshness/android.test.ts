@@ -153,3 +153,38 @@ test('isLikelySnapshotStuckOnPreviousRoute ignores missing baselines and tiny tr
   const tiny = makeSnapshotState(labeledNodes(5)).nodes;
   assert.equal(isLikelySnapshotStuckOnPreviousRoute(buildSnapshotSignatures(tiny), tiny), false);
 });
+
+test.each(['unchanged', 'selected', 'checked', 'focused', 'enabled'] as const)(
+  'a cache-invalidated capture trusts a complete same-screen %s state after a press',
+  (state) => {
+    const baseline = makeSnapshotState(labeledNodes(40));
+    const current = makeSnapshotState(labeledNodes(40));
+    if (state !== 'unchanged') current.nodes[1]![state] = true;
+    assert.equal(
+      androidFreshnessReason(
+        { snapshot: current, rawNodeCount: 40, cacheInvalidated: true },
+        freshnessWindow({
+          action: 'press',
+          baselineCount: 40,
+          baselineSignatures: buildSnapshotSignatures(baseline.nodes),
+          routeComparable: true,
+        }),
+        { interactiveOnly: false },
+      ),
+      null,
+    );
+  },
+);
+
+test('cache invalidation does not excuse an empty or content-poor capture', () => {
+  for (const interactiveOnly of [true, false]) {
+    assert.equal(
+      androidFreshnessReason(
+        { snapshot: makeSnapshotState([]), rawNodeCount: 40, cacheInvalidated: true },
+        freshnessWindow({ baselineCount: 40 }),
+        { interactiveOnly },
+      ),
+      interactiveOnly ? 'empty-interactive' : 'sharp-drop',
+    );
+  }
+});

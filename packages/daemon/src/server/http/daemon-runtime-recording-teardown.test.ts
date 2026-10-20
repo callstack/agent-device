@@ -2,7 +2,7 @@ import path from 'node:path';
 import { teardownDaemonSessionForShutdown } from './server-shutdown.ts';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import { makeRecordingSession } from '../../__tests__/support/session-teardown.fixtures.ts';
@@ -15,7 +15,10 @@ afterEach(() => {
 test('daemon shutdown awaits durable recording finalization inside its extended budget', async () => {
   vi.useFakeTimers();
   const root = mkdtempForTestSync('agent-device-shutdown-recording-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const completion: ScreenRecordingCompletion = {
     backend: 'simctl recordVideo',
     outPath: path.join(root, 'recording.mp4'),
@@ -51,7 +54,10 @@ test('daemon shutdown awaits durable recording finalization inside its extended 
 
 test('daemon shutdown resolves durable recording resources through the effective session key', async () => {
   const root = mkdtempForTestSync('agent-device-shutdown-effective-session-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const effectiveSessionName = 'cwd:0123456789abcdef:default';
   const session = makeRecordingSession({
     name: effectiveSessionName,

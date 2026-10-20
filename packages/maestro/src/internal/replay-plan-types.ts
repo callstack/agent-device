@@ -46,6 +46,8 @@ export type MaestroReplayPlanOptions = {
   readonly env?: Readonly<Record<string, string>>;
   /** Lowest-precedence defaults, normally replay built-ins. */
   readonly defaults?: Readonly<Record<string, string | number | boolean>>;
+  /** Directory an include with no parent source file resolves against — the loader's base. */
+  readonly baseDir: string;
   readonly platform?: MaestroPlatform;
   readonly target?: string;
   readonly runtimeHints?: Readonly<SessionRuntimeHints>;

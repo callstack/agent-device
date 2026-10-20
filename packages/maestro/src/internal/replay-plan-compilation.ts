@@ -7,7 +7,7 @@ import { stripUndefined } from './shared.ts';
 
 export async function compileMaestroReplayPlan(
   program: MaestroProgram,
-  options: MaestroReplayPlanOptions = {},
+  options: MaestroReplayPlanOptions,
 ): Promise<MaestroReplayPlan> {
   const { steps, staticallyExecutedControls, staticallySkippedControls } =
     await compileMaestroReplayPlanSteps(program, options);

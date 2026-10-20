@@ -30,7 +30,11 @@ import {
   appCaptureComparisonKey,
   systemSurfaceCaptureComparisonKey,
 } from '../../../core/__tests__/ios-comparison-key-fixture.ts';
-import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  IOS_SIMULATOR,
+  createLiveTestHostEnvironment,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
 import {
   getRuntimeBindings,
   mockTapPoint,
@@ -798,9 +802,10 @@ test('corroborated runtime taps retain target evidence through save and replay',
   ]);
   expect(recordedAction?.targetEvidence).toBeDefined();
 
-  const written = new SessionScriptWriter(path.join(root, 'sessions')).write(
-    sessionStore.get(sessionName)!,
-  );
+  const written = new SessionScriptWriter(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment().cwd,
+  ).write(sessionStore.get(sessionName)!);
   expect(written.written).toBe(true);
   if (!written.written) return;
   const savedScript = fs.readFileSync(written.path, 'utf8');

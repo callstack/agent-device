@@ -73,67 +73,15 @@ extension RunnerTests {
   }
 
   extension RunnerTests {
-    /// #2995: resolving a window must read the window it books and nothing behind it. Reads are
-    /// counted rather than matched by identity because which window `XCUIApplication.windows` reports
-    /// first is XCTest's to choose; the property is that the first answer is the last read.
     @MainActor
-    func testRunnerWindowResolutionStopsReadingAtTheWindowItChose() throws {
-      let outcome = try resolveRunnerWindowAgainstTwoWindows(
-        answering: [RunnerWindowFrameReads.usableFrame]
-      )
-      XCTAssertNotNil(outcome.resolved.window, "an app with two usable windows resolves one of them")
-      XCTAssertEqual(outcome.reads, 1, "a window behind the chosen one was read")
-    }
-
-    /// The closest negative, so the single read above cannot pass because the resolver never looked at
-    /// a second window at all: when the first candidate reports no frame, the second one must be asked.
-    @MainActor
-    func testRunnerWindowResolutionKeepsLookingPastAWindowWithNoFrame() throws {
-      let outcome = try resolveRunnerWindowAgainstTwoWindows(
-        answering: [.zero, RunnerWindowFrameReads.usableFrame]
-      )
-      XCTAssertNotNil(
-        outcome.resolved.window,
-        "the second window qualifies, so the resolver owes a window rather than app.frame"
-      )
-      XCTAssertEqual(outcome.reads, 2, "a refused first window costs the second window its read")
-    }
-
-    /// The other half of stopping early: when no candidate qualifies, the walk must still have asked
-    /// every one of them, and it must refuse a window rather than book a zero rectangle to normalize
-    /// against.
-    @MainActor
-    func testRunnerWindowResolutionRefusesAWindowWhenEveryCandidateMeasuresZero() throws {
-      let outcome = try resolveRunnerWindowAgainstTwoWindows(answering: [.zero])
-      XCTAssertNil(outcome.resolved.window, "no candidate qualifies, so no window is booked against")
-      XCTAssertEqual(
-        outcome.reads,
-        3,
-        "the walk gives up only after asking both windows, and the fallback's own app.frame read is the third"
-      )
-      // `XCUIApplication` declares no `frame` of its own, so the third read is the same swizzled
-      // `XCUIElement` getter and the fallback frame is the probe's answer. A real app frame here would
-      // mean the fallback reads geometry the probe never saw.
-      XCTAssertEqual(
-        outcome.resolved.frame,
-        .zero,
-        "the app.frame fallback goes through the same read as a window's"
-      )
-    }
-
-    /// Launches the two-window fixture, installs the frame probe answering `frames` in read order
-    /// (repeating its last answer), and resolves once.
-    @MainActor
-    private func resolveRunnerWindowAgainstTwoWindows(
-      answering frames: [CGRect]
-    ) throws -> (resolved: (window: XCUIElement?, frame: CGRect), reads: Int) {
+    func testRunnerWindowResolutionReadsOnlyThroughTheFirstUsableWindow() throws {
       app.launchArguments = ["--agent-device-second-window"]
       app.launch()
       defer {
         invalidateCachedTarget(reason: "unit_test_cleanup")
         app.terminate()
       }
-      XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+      XCTAssertTrue(app.waitForFixtureExistence(timeout: appExistenceTimeout))
       XCTAssertEqual(
         app.windows.allElementsBoundByIndex.filter(\.exists).count,
         2,
@@ -148,14 +96,28 @@ extension RunnerTests {
         )
       else {
         XCTFail("unable to install the window frame probe")
-        return ((nil, .zero), 0)
+        return
       }
-      RunnerWindowFrameReads.begin(answering: frames)
       let originalImplementation = method_getImplementation(frameMethod)
       method_setImplementation(frameMethod, method_getImplementation(probeMethod))
       defer { method_setImplementation(frameMethod, originalImplementation) }
 
-      return (resolveRunnerWindow(app: app), RunnerWindowFrameReads.recorded())
+      let cases: [(name: String, frames: [CGRect], hasWindow: Bool, reads: Int)] = [
+        ("first usable window", [RunnerWindowFrameReads.usableFrame], true, 1),
+        ("empty first window", [.zero, RunnerWindowFrameReads.usableFrame], true, 2),
+        ("all windows empty", [.zero], false, 3)
+      ]
+      for testCase in cases {
+        RunnerWindowFrameReads.begin(answering: testCase.frames)
+        let resolved = resolveRunnerWindow(app: app)
+        XCTAssertEqual(resolved.window != nil, testCase.hasWindow, testCase.name)
+        XCTAssertEqual(RunnerWindowFrameReads.recorded(), testCase.reads, testCase.name)
+        XCTAssertEqual(
+          resolved.frame,
+          testCase.hasWindow ? RunnerWindowFrameReads.usableFrame : .zero,
+          testCase.name
+        )
+      }
     }
   }
 #endif

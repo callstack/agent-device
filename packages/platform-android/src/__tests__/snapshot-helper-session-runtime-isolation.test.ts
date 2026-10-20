@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createAndroidHelperRuntimeState } from '../adb-host.ts';
+import { createRuntimeStateHandle } from '@agent-device/host-kit/runtime-slots';
 import { recoverAndroidSnapshotHelperRetirement } from '../snapshot-helper-retirement.ts';
 import {
   resetAndroidSnapshotHelperSessions,
@@ -19,7 +19,7 @@ function runtimeOnDevice(deviceKey: string, options: Partial<SessionProviderOpti
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, spawnArgs, ...options });
-  const state = createAndroidHelperRuntimeState();
+  const state = createRuntimeStateHandle();
   return {
     calls,
     spawnArgs,

@@ -5,7 +5,7 @@ import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kern
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { markDeferredInteractionOutcome } from '../../core/deferred-interaction-outcome.ts';
 import { makeAndroidSession, makeIosSession } from '../../__tests__/support/session-factories.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../core/session-store.ts';
 import { handleSnapshotCommands } from './snapshot.ts';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
@@ -147,7 +147,10 @@ test('a snapshot after a scroll that moved nothing warns and stamps the no-effec
 function scenario(params: { storedRepair?: boolean; android?: boolean }) {
   const root = mkdtempForTestSync('agent-device-snapshot-target-activation');
   const sessionName = 'default';
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionStore = new SessionStore(
+    path.join(root, 'sessions'),
+    createLiveTestHostEnvironment(),
+  );
   const session = params.android
     ? makeAndroidSession(sessionName)
     : makeIosSession(sessionName, { appBundleId: 'com.example.app' });

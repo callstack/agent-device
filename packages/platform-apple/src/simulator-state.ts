@@ -1,3 +1,4 @@
+import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleToolHost } from '@agent-device/contracts/platform-runtime-host';
 import { readSimctlDeviceState, scopeSimctlArgsForDevice } from './core/simctl.ts';
@@ -8,15 +9,22 @@ export async function getSimulatorState(
   signal: AbortSignal,
   timeoutMs: number,
 ): Promise<string | null> {
-  const result = await appleTools.run(
-    {
-      tool: 'simctl',
-      args: scopeSimctlArgsForDevice(device, ['list', 'devices', '-j']),
-      allowFailure: true,
-      timeoutMs,
+  return await withDiagnosticTimer(
+    'simulator_state',
+    async () => {
+      const result = await appleTools.run(
+        {
+          tool: 'simctl',
+          args: scopeSimctlArgsForDevice(device, ['list', 'devices', '-j']),
+          allowFailure: true,
+          timeoutMs,
+        },
+        signal,
+      );
+      if (result.exitCode !== 0) return null;
+      return readSimctlDeviceState(result.stdout, device.id);
     },
-    signal,
+    { timeoutMs },
+    'start',
   );
-  if (result.exitCode !== 0) return null;
-  return readSimctlDeviceState(result.stdout, device.id);
 }

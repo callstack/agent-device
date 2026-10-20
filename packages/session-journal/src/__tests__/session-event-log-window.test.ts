@@ -27,11 +27,16 @@ afterEach(() => {
 
 async function appendEvents(eventLogPath: string, from: number, to: number): Promise<void> {
   for (let index = from; index < to; index += 1) {
-    appendSessionEvent(eventLogPath, 'default', {
-      kind: 'request.started',
-      command: 'snapshot',
-      summary: `event ${index}`,
-    });
+    appendSessionEvent(
+      eventLogPath,
+      'default',
+      {
+        kind: 'request.started',
+        command: 'snapshot',
+        summary: `event ${index}`,
+      },
+      process.env,
+    );
   }
   await flushSessionEventLogWrites(eventLogPath);
 }
@@ -66,7 +71,7 @@ test('rotation caps events.ndjson while cursors stay absolute across the retaine
   // One entry is ~110 bytes; a 1 KB cap rotates every 9-10 entries, so 40
   // entries force several rotations and at least one dropped generation.
   process.env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES = '1024';
-  assert.equal(resolveSessionEventLogMaxBytes(), 1024);
+  assert.equal(resolveSessionEventLogMaxBytes(process.env), 1024);
 
   await appendEvents(eventLogPath, 0, 40);
 
@@ -225,7 +230,7 @@ test('the default cap leaves an ordinary session log unrotated, and a non-intege
   const eventLogPath = resolveSessionEventLogPath(dir);
   // "5MB" must not be read as 5 bytes, which would rotate on every entry.
   process.env.AGENT_DEVICE_EVENT_LOG_MAX_BYTES = '5MB';
-  assert.equal(resolveSessionEventLogMaxBytes(), 5 * 1024 * 1024);
+  assert.equal(resolveSessionEventLogMaxBytes(process.env), 5 * 1024 * 1024);
 
   await appendEvents(eventLogPath, 0, 3);
 

@@ -1,6 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { recordingQualityInputToExportQuality } from '@agent-device/contracts/recording';
-import { describeReplayGestureArityError } from '@agent-device/contracts/gesture-normalization';
+import {
+  describeReplayGestureArityError,
+  describeReplayGestureFlagError,
+} from '@agent-device/contracts/gesture-normalization';
 import {
   RETIRED_SCREENSHOT_MAX_SIZE,
   readScreenshotScriptFlag,
@@ -130,6 +133,13 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
       `line ${index + 1}`,
     );
     if (gestureArityError) throw new AppError('INVALID_ARGS', gestureArityError);
+    const gestureFlagError = describeReplayGestureFlagError(
+      parsed.command,
+      parsed.positionals ?? [],
+      parsed.flags ?? {},
+      `line ${index + 1}`,
+    );
+    if (gestureFlagError) throw new AppError('INVALID_ARGS', gestureFlagError);
     if (pending) {
       if (pending.kind === 'single') parsed.targetEvidence = pending.evidence;
       else parsed.targetEvidences = pending.evidence;

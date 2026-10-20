@@ -90,6 +90,8 @@ export function androidFreshnessReason(
     return !hasMeaningfulSnapshotContent(attempt.snapshot) ? 'sharp-drop' : null;
   }
 
+  if (attempt.cacheInvalidated === true) return null;
+
   return window.routeComparable &&
     isNavigationSensitiveAction(window.action) &&
     isLikelySnapshotStuckOnPreviousRoute(window.baselineSignatures, attempt.snapshot.nodes)

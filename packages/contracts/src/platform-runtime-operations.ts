@@ -114,6 +114,11 @@ export const typeTextRuntimeUse = defineUse({ required: ['typeText'] });
 export const backRuntimeUse = defineUse({ required: ['back'] });
 export const homeRuntimeUse = defineUse({ required: ['home'] });
 export const orientationRuntimeUse = defineUse({ required: ['setOrientation'] });
+export const orientationUnlockRuntimeUse = defineUse({ required: ['unlockOrientation'] });
+export const orientationRuntimePlanUses = Object.freeze([
+  orientationRuntimeUse,
+  orientationUnlockRuntimeUse,
+] as const);
 export const foldRuntimeUse = defineUse({ required: ['setFoldPose'] });
 export const telephonyRuntimeUse = defineUse({ required: ['sendTelephonyEvent'] });
 export const tvRemoteRuntimeUse = defineUse({ required: ['tvRemote'] });
@@ -332,10 +337,15 @@ export type GestureRuntimePlan = {
 }[GestureRuntimeTier];
 
 /** Selects the one owner-fact-backed gesture plan a normalized gesture input needs. */
-/** Two contacts are what pinch, rotate, transform, and an explicit two-pointer pan all need. */
+/** Pinch, rotate, transform, an explicit two-pointer pan, and a multi-finger tap hold several contacts. */
 function isMultiTouchGesture(input: GestureSemanticInput): boolean {
   if (input.intent === 'pan') return ('pointerCount' in input ? input.pointerCount : 1) === 2;
-  return input.intent === 'pinch' || input.intent === 'rotate' || input.intent === 'transform';
+  return (
+    input.intent === 'pinch' ||
+    input.intent === 'rotate' ||
+    input.intent === 'transform' ||
+    input.intent === 'tap'
+  );
 }
 
 /** Selects the one tier a gesture input needs, so its handler binds exactly once (ADR 0019 §9). */

@@ -31,6 +31,7 @@ import {
 } from '../../../core/gesture-runtime.ts';
 import { isActiveProviderDevice } from '../../../core/provider-device-admission.ts';
 import { sleep } from '@agent-device/host-kit/retry';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
@@ -110,7 +111,16 @@ async function runGestureInteraction(
   if (!bound.ok) return { refused: bound.response };
   const runtime = await createGestureRuntime(params, bound.gestures);
   const context = { session: params.sessionName, requestId: params.req.meta?.requestId };
-  const result = await runPreparedGesture(runtime, context, gesture, params.req.internal);
+  const result =
+    input.kind === 'tap'
+      ? await runGestureRepetitions(
+          runtime,
+          params,
+          input.count ?? 1,
+          input.pauseMs ?? 0,
+          () => gesture,
+        )
+      : await runPreparedGesture(runtime, context, gesture, params.req.internal);
   return buildGestureOutcome(input, gesture, result, params.req.flags);
 }
 
@@ -142,11 +152,23 @@ function buildGestureOutcome(
   const recording = result.kind === 'drag' ? result.recording : undefined;
   const sourceTarget = recording?.sourceTarget;
   const destinationTarget = recording?.destinationTarget;
+  const responseResult =
+    input.kind === 'tap' && (input.count ?? 1) > 1
+      ? { ...result, message: `Tapped ${input.points.length} points ${input.count} times` }
+      : result;
   return {
     positionals: dragRecordingPositionals(input, recording),
     flags: gestureReplayFlags(input, flags),
-    responseData: gestureResponseData(result, {
+    responseData: gestureResponseData(responseResult, {
       executionProfile: resolveExecutionProfile(gesture),
+      ...(input.kind === 'tap'
+        ? {
+            points: input.points,
+            holdMs: result.durationMs,
+            count: input.count ?? 1,
+            pauseMs: input.pauseMs ?? 0,
+          }
+        : {}),
     }),
     ...(input.kind === 'pinch'
       ? { recordingResultExtra: { scale: input.scale } }
@@ -187,7 +209,13 @@ export async function dispatchSwipeViaRuntime(
     const pauseMs = input.pauseMs ?? 0;
     const pattern = input.pattern ?? 'one-way';
     const runtime = await createGestureRuntime(params, bound.gestures);
-    const result = await runSwipeRepetitions(runtime, params, input, count, pauseMs, pattern);
+    const result = await runGestureRepetitions(
+      runtime,
+      params,
+      count,
+      pauseMs,
+      (index) => normalizePublicSwipeMotion(swipeMotionAtIndex(input, pattern, index)).gesture,
+    );
     return {
       positionals: swipeReplayPositionals(input),
       flags: params.req.flags,
@@ -243,6 +271,7 @@ async function dispatchGestureInteraction(
         });
     const outcome = await run(session, readiness);
     if (isRefusal(outcome)) return outcome.refused;
+    getRequestSignal(params.req.meta?.requestId)?.throwIfAborted();
     if (!providerDevice) {
       await ensureAndroidBlockingSystemDialogReady({
         session,
@@ -257,6 +286,7 @@ async function dispatchGestureInteraction(
         typeof responseData.warning === 'string' ? `${responseData.warning} ` : '';
       responseData.warning = `${existingWarning}${readiness.warning}`;
     }
+    getRequestSignal(params.req.meta?.requestId)?.throwIfAborted();
     return finalizeTouchInteraction({
       ref: params.sessionRef!,
       sessionStore: params.sessionStore,
@@ -399,25 +429,26 @@ function swipeReplayPositionals(input: SwipePayload): string[] {
   return [String(input.from.x), String(input.from.y), String(input.to.x), String(input.to.y)];
 }
 
-async function runSwipeRepetitions(
+async function runGestureRepetitions(
   runtime: GestureRuntime,
   params: InteractionRouteInput,
-  input: SwipePayload,
   count: number,
   pauseMs: number,
-  pattern: 'one-way' | 'ping-pong',
-) {
-  let result: Awaited<ReturnType<typeof runtime.interactions.gesture>> | undefined;
+  gestureAtIndex: (index: number) => GestureCommandInput,
+): Promise<GestureRuntimeResult> {
+  const signal = getRequestSignal(params.req.meta?.requestId);
+  let result: GestureRuntimeResult | undefined;
   for (let index = 0; index < count; index += 1) {
-    const normalized = normalizePublicSwipeMotion(swipeMotionAtIndex(input, pattern, index));
-    result = await runtime.interactions.gesture({
-      session: params.sessionName,
-      requestId: params.req.meta?.requestId,
-      gesture: normalized.gesture,
-    });
-    if (pauseMs > 0 && index + 1 < count) await sleep(pauseMs);
+    signal?.throwIfAborted();
+    result = await runPreparedGesture(
+      runtime,
+      { session: params.sessionName, requestId: params.req.meta?.requestId },
+      gestureAtIndex(index),
+      params.req.internal,
+    );
+    if (pauseMs > 0 && index + 1 < count) await sleep(pauseMs, signal);
   }
-  if (!result) throw new Error('Swipe orchestration did not execute a gesture.');
+  if (!result) throw new Error('Gesture orchestration did not execute a gesture.');
   return result;
 }
 
@@ -431,10 +462,19 @@ function swipeMotionAtIndex(
   return { ...input, from: input.to, to: input.from };
 }
 
+/** The flag-carried gesture inputs a `.ad` line needs, whichever surface the request came from. */
 function gestureReplayFlags(
   input: GesturePayload,
   flags: InteractionRouteInput['req']['flags'],
 ): InteractionRouteInput['req']['flags'] {
+  if (input.kind === 'tap') {
+    return {
+      ...flags,
+      ...(input.holdMs === undefined ? {} : { holdMs: input.holdMs }),
+      ...(input.count === undefined ? {} : { count: input.count }),
+      ...(input.pauseMs === undefined ? {} : { pauseMs: input.pauseMs }),
+    };
+  }
   if (input.kind !== 'pan' || input.pointerCount === undefined) return flags;
   return { ...flags, pointerCount: input.pointerCount };
 }

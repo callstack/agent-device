@@ -164,7 +164,7 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     type: 'boolean',
     usageLabel: '--no-stabilize',
     usageDescription:
-      'Screenshot: skip Android demo-mode/status-bar stabilization and settle delay for low-latency capture loops',
+      'Screenshot: capture immediately without Android status-bar stabilization (the default)',
     projectConfig: true,
     recorded: true,
   },
@@ -174,7 +174,7 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     type: 'boolean',
     usageLabel: '--normalize-status-bar',
     usageDescription:
-      'Screenshot: on iOS simulators temporarily normalize status-bar chrome for deterministic screenshot diffs',
+      'Screenshot: temporarily normalize iOS simulator or ADB-backed Android status-bar chrome for deterministic screenshot diffs; ADB-backed Android waits for transient UI to fade',
     projectConfig: true,
     recorded: true,
   },
@@ -270,7 +270,8 @@ export function screenshotOptionsFromFlags(
     pixelDensity: flags?.screenshotPixelDensity,
     fullscreen: flags?.screenshotFullscreen,
     scale: flags?.screenshotScale,
-    stabilize: flags?.screenshotNoStabilize ? false : undefined,
+    stabilize:
+      flags?.screenshotNoStabilize === undefined ? undefined : !flags.screenshotNoStabilize,
     normalizeStatusBar: flags?.screenshotNormalizeStatusBar,
   });
 }
@@ -285,7 +286,8 @@ export function screenshotFlagsFromOptions(
     screenshotFullscreen: options.screenshotFullscreen ?? options.fullscreen,
     screenshotScale: options.screenshotScale,
     screenshotNoStabilize:
-      options.screenshotNoStabilize ?? (options.stabilize === false ? true : undefined),
+      options.screenshotNoStabilize ??
+      (options.stabilize === undefined ? undefined : !options.stabilize),
     screenshotNormalizeStatusBar:
       options.screenshotNormalizeStatusBar ?? options.normalizeStatusBar,
   });
@@ -327,6 +329,7 @@ export function appendScreenshotScriptFlags(
     parts.push('--scale', String(flags.screenshotScale));
   }
   if (flags?.screenshotNoStabilize) parts.push('--no-stabilize');
+  if (flags?.screenshotNoStabilize === false) parts.push('--no-stabilize=false');
   if (flags?.screenshotNormalizeStatusBar) parts.push('--normalize-status-bar');
 }
 
@@ -357,6 +360,10 @@ function readScreenshotBooleanScriptFlag(
   flags: Partial<ScreenshotRequestFlags>,
   index: number,
 ): { handled: true; nextIndex: number } | undefined {
+  if (token === '--no-stabilize=false') {
+    flags.screenshotNoStabilize = false;
+    return { handled: true, nextIndex: index };
+  }
   const definition = SCREENSHOT_SCRIPT_BOOLEAN_FLAGS.find((entry) =>
     entry.tokens.some((candidate) => candidate === token),
   );

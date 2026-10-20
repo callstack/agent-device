@@ -13,7 +13,7 @@ import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,
 } from '@agent-device/replay-port/replay-dispatch-envelope';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { createLiveTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
 import {
   unavailableBindDevice,
@@ -67,7 +67,7 @@ function createRecordVideoFixture(): RecordVideoFixture {
   return {
     root,
     replayPath,
-    sessionStore: new SessionStore(path.join(root, 'sessions')),
+    sessionStore: new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment()),
     nestedRequests: [],
     events: [],
   };
@@ -281,6 +281,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
 
   const responsePromise = runReplayTestCommand({
     ...splitReplayCommandRequest(request),
+    host: sessionStore.host,
     session: createReplaySession('default', path.join(root, 'daemon.log'), sessionStore),
     createSession: (sessionName, logPath) =>
       createReplaySession(sessionName, logPath, sessionStore),

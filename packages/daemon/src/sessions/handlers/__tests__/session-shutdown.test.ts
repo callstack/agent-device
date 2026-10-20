@@ -143,7 +143,7 @@ test('shutdown turns off selected Android emulator', async () => {
   expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
   expect(mockResolveTargetDevice).toHaveBeenCalledWith(
     { platform: 'android', device: 'Pixel_9_Pro_XL' },
-    { androidAvdSelection: 'include-stopped' },
+    { androidAvdSelection: 'include-stopped', env: process.env },
   );
   expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
   expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();

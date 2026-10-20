@@ -262,9 +262,7 @@ describe('composed device inventory gateway', () => {
     const selection = await withDeviceInventoryContext({ ...gateways, requestScope: scope }, () =>
       resolveTargetDeviceSelection(
         { platform: 'ios' },
-        {
-          appleSimulatorAppTarget: 'com.example.demo',
-        },
+        { env: process.env, appleSimulatorAppTarget: 'com.example.demo' },
       ),
     );
 

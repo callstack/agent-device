@@ -103,7 +103,22 @@ export type DaemonTerminationResult =
     }>
   | Readonly<{
       status: 'retained';
-      reason: 'missing-start-time' | 'identity-unverified' | 'signal-failed' | 'exit-timeout';
+      reason:
+        | 'missing-start-time'
+        | 'identity-unverified'
+        /**
+         * A host owns this runtime and ends it. Callers that judge a registration answer this instead of
+         * calling {@link stopDaemonProcess} at all (`stopAndRetireDaemon`); this function signals
+         * whatever verified identity it is handed and never decides ownership itself.
+         */
+        | 'embedded-owner'
+        /**
+         * The record states an owner this build cannot read, so nothing proves this pid is a daemon of
+         * its own, and signalling it is refused. The other half of the same rule as `embedded-owner`.
+         */
+        | 'owner-unproven'
+        | 'signal-failed'
+        | 'exit-timeout';
       signal?: NodeJS.Signals;
     }>;
 

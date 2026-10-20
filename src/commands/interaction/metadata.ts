@@ -7,10 +7,21 @@ import {
   type PinchGesturePayload,
   type RotateGesturePayload,
   type SwipeGesturePayload,
+  type TapGesturePayload,
   type TransformGesturePayload,
   readGesturePayload,
 } from '@agent-device/contracts/gesture-input';
-import { SCROLL_DURATION_MAX_MS } from '@agent-device/contracts/scroll-command';
+import {
+  GESTURE_DURATION_MAX_MS,
+  GESTURE_DURATION_MIN_MS,
+  GESTURE_MAX_CONTACTS,
+  GESTURE_TAP_MIN_CONTACTS,
+} from '@agent-device/contracts/gesture-plan-types';
+import {
+  DEFAULT_SCROLL_UNTIL_PASSES,
+  SCROLL_DURATION_MAX_MS,
+  SCROLL_UNTIL_MAX_PASSES,
+} from '@agent-device/contracts/scroll-command';
 import { IS_PREDICATES } from '@agent-device/contracts/is-predicate';
 import {
   SCROLL_DIRECTIONS,
@@ -29,6 +40,7 @@ import {
   interactionTargetField,
   numberField,
   operatorField,
+  pointArrayField,
   pointField,
   repeatedFields,
   requiredField,
@@ -74,7 +86,7 @@ const interactionCommandDescriptions = {
   is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, exists, absent, editable, selected, focused, or text. `absent` passes only when one readable, complete, settled, unscoped, full-depth accessibility capture has zero matches. Use wait when the condition may appear asynchronously.',
   find: 'Find by text/label/value/role/id and run action. The role locator matches snapshot kind vocabulary (button, text, text-field, switch, ...); pre-reconciliation leaf spellings (statictext, edittext, textview) stay accepted on the nodes that carried them during a deprecation window.',
   gesture:
-    'Perform a structured pan, fling, swipe, pinch, rotate, transform, or drag gesture. Select the gesture kind, then provide only the inputs that apply to that kind.',
+    'Perform a structured pan, fling, swipe, pinch, rotate, transform, tap, or drag gesture. Select the gesture kind, then provide only the inputs that apply to that kind. A tap touches 2 to 5 points at once; repeat it with count and pauseMs.',
 } as const;
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;
@@ -156,6 +168,13 @@ const scrollFields = {
   until: stringField(
     'Repeat scroll passes until this selector is visible on screen, then stop. Not valid with the top/bottom edge directions, which carry their own stop condition.',
   ),
+  maxPasses: integerField(
+    `Maximum scroll gestures for an until search (default ${DEFAULT_SCROLL_UNTIL_PASSES}). Requires until.`,
+    {
+      min: 1,
+      max: SCROLL_UNTIL_MAX_PASSES,
+    },
+  ),
   durationMs: integerField('Scroll duration in milliseconds when the backend supports pacing.', {
     min: 0,
     max: SCROLL_DURATION_MAX_MS,
@@ -218,6 +237,22 @@ const gestureFields = {
   degrees: numberField('Rotation in degrees.'),
   durationMs: integerField('Pan/transform duration.', { min: 16, max: 10_000 }),
   pointerCount: integerField('Pan touch pointer count (1 or 2).', { min: 1, max: 2 }),
+  points: pointArrayField('Tap contact points, held together for holdMs.', {
+    min: GESTURE_TAP_MIN_CONTACTS,
+    max: GESTURE_MAX_CONTACTS,
+  }),
+  holdMs: integerField('Tap contact hold duration.', {
+    min: GESTURE_DURATION_MIN_MS,
+    max: GESTURE_DURATION_MAX_MS,
+  }),
+  count: integerField('Tap repetitions; the same contacts run this many times.', {
+    min: 1,
+    max: SWIPE_REPETITION_MAX,
+  }),
+  pauseMs: integerField('Delay between tap repetitions, added to each repetition’s own time.', {
+    min: 0,
+    max: SWIPE_PAUSE_MAX_MS,
+  }),
   source: stringField('Drag source @ref or selector.'),
   destination: stringField('Drag destination @ref or selector.'),
   sourceHoldMs: integerField('Drag activation hold duration.', { min: 1, max: 10_000 }),
@@ -241,6 +276,7 @@ export type SwipeGestureInput = CommonCommandInput & SwipeGesturePayload;
 export type PinchInput = CommonCommandInput & PinchGesturePayload;
 export type RotateInput = CommonCommandInput & RotateGesturePayload;
 export type TransformInput = CommonCommandInput & TransformGesturePayload;
+export type TapInput = CommonCommandInput & TapGesturePayload;
 export type DragInput = CommonCommandInput & DragGesturePayload;
 
 export type GestureInput =
@@ -250,6 +286,7 @@ export type GestureInput =
   | PinchInput
   | RotateInput
   | TransformInput
+  | TapInput
   | DragInput;
 
 export const interactionCommandMetadata = [

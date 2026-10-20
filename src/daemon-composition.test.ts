@@ -10,7 +10,8 @@ import {
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
-import { helperRuntimeSlot } from '@agent-device/platform-android/adb-host';
+import { createRuntimeStateHandle, runtimeSlot } from '@agent-device/host-kit/runtime-slots';
+import { resolveRunnerAppBundleId } from '@agent-device/platform-apple/runner/operations';
 import { setActiveProviderDeviceRuntimes } from './provider-device-runtime.ts';
 
 const ports = vi.hoisted(() => ({
@@ -126,13 +127,20 @@ test('a composition that succeeds leaves the plugins open for the daemon to clos
   expect(ports.shutdownProviders).toHaveBeenCalledOnce();
 });
 
-test('a composed daemon registers the Apple runner and Android helper state, one set per composition', async () => {
+test('each composition binds its own runtime state into the entered handle, not a returned one', async () => {
   const compose = async (name: string) => {
     const baseDir = mkdtempForTestSync(`agent-device-daemon-composition-states-${name}-`);
-    return await createDaemonRuntimeDeps({
-      host: createTestHostEnvironment({
-        env: { ...process.env, AGENT_DEVICE_STATE_DIR: baseDir },
-      }),
+    const host = createTestHostEnvironment({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: baseDir,
+        // The runner's first-choice configuration key: the per-runtime read below must see this
+        // runtime's value even when the process env (spread above) carries a different one.
+        AGENT_DEVICE_IOS_BUNDLE_ID: `com.test.runtime.${name}`,
+      },
+    });
+    const deps = await createDaemonRuntimeDeps({
+      host,
       baseDir,
       sessionsDir: `${baseDir}/sessions`,
       assertShutdownAllowed: undefined,
@@ -142,21 +150,28 @@ test('a composed daemon registers the Apple runner and Android helper state, one
       },
       openWebSessionNames: () => [],
     });
+    return { deps, host };
   };
-  const first = await compose('first');
-  const second = await compose('second');
   const slotKey = Symbol('composition-test');
 
-  // Apple's runner state and Android's helper state.
-  expect(first.runtimeStates).toHaveLength(2);
-  expect(second.runtimeStates).toHaveLength(2);
-  // The Android handle scopes the slots the helper modules read.
-  const [, firstAndroid] = first.runtimeStates;
-  const [, secondAndroid] = second.runtimeStates;
-  const inFirst = firstAndroid!.run(() => helperRuntimeSlot(slotKey, () => ({})));
-  const inSecond = secondAndroid!.run(() => helperRuntimeSlot(slotKey, () => ({})));
+  // One entered store per runtime (#3794): the daemon enters the handle, then composes into it,
+  // so each composition's writes — the Apple runner host, and any slot a platform module declares
+  // — land in that runtime's state and nowhere else. The host binding is read back through the
+  // runner's own configuration read (`resolveRunnerAppBundleId` takes its env from the bound
+  // host), the same path production resource cleanup uses.
+  const first = createRuntimeStateHandle();
+  const second = createRuntimeStateHandle();
+  const firstRun = await first.run(() => compose('first'));
+  const secondRun = await second.run(() => compose('second'));
+  expect(firstRun.deps).toBeTypeOf('object');
+  expect(secondRun.deps).toBeTypeOf('object');
+
+  const inFirst = first.run(() => runtimeSlot(slotKey, () => ({})));
+  const inSecond = second.run(() => runtimeSlot(slotKey, () => ({})));
   expect(inFirst).not.toBe(inSecond);
-  expect(firstAndroid!.run(() => helperRuntimeSlot(slotKey, () => ({})))).toBe(inFirst);
+  expect(first.run(() => runtimeSlot(slotKey, () => ({})))).toBe(inFirst);
+  expect(first.run(() => resolveRunnerAppBundleId())).toBe('com.test.runtime.first');
+  expect(second.run(() => resolveRunnerAppBundleId())).toBe('com.test.runtime.second');
 });
 
 test('the composed daemon route configures interactors from its host, not from the process (#3794)', async () => {

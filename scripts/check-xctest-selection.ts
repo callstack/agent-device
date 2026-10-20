@@ -8,7 +8,7 @@
 //   - host    smoke-macos/action.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
 //             `-skip-testing:` — the pure runner-decision tests, whose guard is
 //             `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` alone.
-//   - pr      smoke-ios-run/action.yml, iOS Simulator: tests with iOS-specific Swift bodies, when selected.
+//   - pr      smoke-ios-run/action.yml, iOS Simulator: shared tests with platform-dependent Swift bodies, when selected.
 //   - nightly xctest-nightly.yml, iOS Simulator, scheduled: the whole bundle as compiled for
 //             iOS, minus `-skip-testing:` — includes the simulator-only tests, whose guard is
 //             `… && os(iOS)` (they launch the host app, route through SpringBoard, or assert an
@@ -58,8 +58,8 @@ export type Lane = {
   readonly id: LaneId;
   readonly workflow: string;
   readonly platform: Platform;
-  /** `whole`: everything compiled minus `-skip-testing:`; `ios-specific`: derived from guards. */
-  readonly selection: 'whole' | 'ios-specific';
+  /** `whole`: everything compiled minus `-skip-testing:`; `platform-branch`: derived from guards. */
+  readonly selection: 'whole' | 'platform-branch';
   /** The job-summary heading the lane's reporter prints. */
   readonly title: string;
 };
@@ -76,8 +76,8 @@ export const LANES: readonly Lane[] = [
     id: 'pr',
     workflow: PR_XCTEST_SOURCE_FILE,
     platform: 'iOS',
-    selection: 'ios-specific',
-    title: 'iOS-specific runner PR XCTest lane',
+    selection: 'platform-branch',
+    title: 'iOS runner platform branch checks',
   },
   {
     id: 'nightly',
@@ -193,7 +193,7 @@ function laneReach(
   flagged: readonly FlaggedTest[],
   sharedPlatformBranchIds: readonly string[],
 ): Set<string> {
-  if (entry.selection === 'ios-specific')
+  if (entry.selection === 'platform-branch')
     return new Set(iosPrTestIdentifiers(declaredTests, sharedPlatformBranchIds));
   const skipped = identifiers(flagged, entry.workflow, 'skip-testing');
   return new Set(
@@ -213,7 +213,8 @@ export function iosPrTestIdentifiers(
     .filter(
       (test) =>
         test.platforms.includes('iOS') &&
-        (!test.platforms.includes('macOS') || branchSensitive.has(test.identifier)),
+        test.platforms.includes('macOS') &&
+        branchSensitive.has(test.identifier),
     )
     .map((test) => test.identifier)
     .filter((id) => !id.endsWith(`/${ENTRY_POINT_METHOD}`))
@@ -307,7 +308,7 @@ function prWorkflowWiringFailures(text: string | null): string[] {
     .join('\n');
   const failures: string[] = [];
   if (!active.includes('scripts/check-xctest-selection.ts --ios-pr-tests')) {
-    failures.push('PR workflow does not invoke the generated iOS-specific XCTest selector.');
+    failures.push('PR workflow does not invoke the generated iOS branch XCTest selector.');
   }
   if (!active.includes('-only-testing:$test_id') || !active.includes('"${IOS_PR_TEST_ARGS[@]}"')) {
     failures.push('PR workflow does not pass each generated XCTest identifier to xcodebuild.');
@@ -448,7 +449,7 @@ export function reportFailures(report: SelectionReport): string[] {
       `${report.dark.length} declared XCTest method(s) are reachable by no lane:`,
       ...report.dark.map((identifier) => `  - ${identifier}`),
       'The host lane runs everything the macOS build compiles, the nightly everything the iOS',
-      'build compiles, and the PR lane selects iOS-specific methods; a method outside all three — usually',
+      'build compiles, and the PR lane selects shared iOS branch methods; a method outside all three — usually',
       'a guard naming a platform no lane runs — is dark from the day it is written. Widen the',
       'guard or delete it.',
     );
@@ -469,7 +470,7 @@ export function formatSummary(report: SelectionReport): string {
   const { declared, host, pr, nightly, dark } = counts(report);
   return (
     `xctest selection: ${declared} declared ${report.target} methods — host lane ` +
-    `(${HOST_XCTEST_SOURCE_FILE}, macOS, every PR) reaches ${host}, PR iOS-specific lane (${PR_XCTEST_SOURCE_FILE}, ` +
+    `(${HOST_XCTEST_SOURCE_FILE}, macOS, every PR) reaches ${host}, PR iOS branch lane (${PR_XCTEST_SOURCE_FILE}, ` +
     `iOS Simulator, selected PRs and main) selects ${pr}, nightly (${NIGHTLY_WORKFLOW_FILE}, iOS Simulator) ` +
     `reaches ${nightly}; ${dark} reachable by no lane; ${ENTRY_POINT_METHOD} skipped everywhere.\n`
   );
@@ -492,7 +493,7 @@ function main(): number {
   if (process.argv.slice(2).includes('--ios-pr-tests')) {
     const failures = reportFailures(report);
     if (report.reach.pr.size === 0)
-      failures.push('The PR lane selected no iOS-specific XCTest methods.');
+      failures.push('The PR lane selected no shared iOS branch XCTest methods.');
     if (failures.length > 0) {
       process.stderr.write(`${failures.join('\n')}\n`);
       return 1;

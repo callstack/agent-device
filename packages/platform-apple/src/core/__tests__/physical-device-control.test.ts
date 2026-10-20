@@ -95,7 +95,7 @@ test('default interactor screenshots stay in-band without invoking devicectl', a
   const outPath = path.join(await mkdtempForTest('agent-device-xctest-screenshot-'), 'screen.png');
   const toolCalls: string[][] = [];
   try {
-    await withAppleToolProvider(
+    const facts = await withAppleToolProvider(
       createLocalAppleToolProvider({
         runCommand: async (_cmd, args) => {
           toolCalls.push(args);
@@ -120,6 +120,7 @@ test('default interactor screenshots stay in-band without invoking devicectl', a
         ),
     );
 
+    assert.deepEqual(facts, { iosPhysicalCaptureBackend: 'xctest' });
     assert.equal(await fs.readFile(outPath, 'utf8'), 'png-bytes');
     assert.equal(
       toolCalls.some((args) => args[0] === 'devicectl'),
@@ -136,3 +137,41 @@ test('CoreDevice-only app inventory fails with targeted XCTest guidance', async 
     /App inventory is unavailable on this XCTest-backed physical iOS device/,
   );
 });
+
+for (const fallback of [false, true]) {
+  test(`physical interactor reports the actual screenshot backend after fallback=${fallback}`, async () => {
+    const outPath = path.join(await mkdtempForTest('agent-device-capture-backend-'), 'screen.png');
+    let runnerCalls = 0;
+    const facts = await withAppleToolProvider(
+      createLocalAppleToolProvider({
+        runCommand: async (_cmd, args) => {
+          assert.deepEqual(args.slice(0, 4), ['devicectl', 'device', 'capture', 'screenshot']);
+          if (fallback)
+            return { exitCode: 1, stdout: '', stderr: "error: Unknown option '--device'" };
+          await fs.writeFile(outPath, 'coredevice-png');
+          return { exitCode: 0, stdout: '', stderr: '' };
+        },
+      }),
+      async () =>
+        await withAppleRunnerProvider(
+          async () => {
+            runnerCalls += 1;
+            return { imageBase64: Buffer.from('runner-png').toString('base64') };
+          },
+          { deviceId: IOS_DEVICE.id },
+          async () =>
+            await createAppleInteractor(
+              IOS_DEVICE,
+              {},
+              {
+                env: process.env,
+                cwd: process.cwd(),
+              },
+            ).screenshot(outPath),
+        ),
+    );
+    assert.deepEqual(facts, { iosPhysicalCaptureBackend: fallback ? 'xctest' : 'coredevice' });
+    assert.equal(runnerCalls, fallback ? 1 : 0);
+    assert.equal(await fs.readFile(outPath, 'utf8'), fallback ? 'runner-png' : 'coredevice-png');
+  });
+}

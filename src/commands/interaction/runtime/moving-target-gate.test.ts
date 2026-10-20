@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { AppError } from '@agent-device/kernel/errors';
 import { test } from 'vitest';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
@@ -45,6 +46,7 @@ function slideTree(x: number, over?: { label?: string; surfaceBundleId?: string 
         depth: 1,
         parentIndex: 0,
         type: 'Button',
+        bundleId: 'com.example.app',
         label: over?.label ?? 'Slide target',
         rect: { x, y: BUTTON_Y, width: 120, height: 50 },
         hittable: true,
@@ -200,7 +202,7 @@ test('the @ref path takes its own observations, because its resolution spends no
   });
 
   assert.deepEqual(await device.press('ref'), [centerOf(RESTING_X)]);
-  assert.equal(device.captures(), 2, 'both re-observations, none for the first resolution');
+  assert.equal(device.captures(), 3, 'fresh observations span the target quiet window');
 });
 
 test('a raw-coordinate press has no resolved element to re-observe', async () => {
@@ -370,11 +372,7 @@ test('a target newly arrived on a different surface is re-observed, not certifie
   });
 
   assert.deepEqual(await device.press('selector'), [centerOf(RESTING_X)]);
-  assert.equal(
-    device.captures(),
-    3,
-    'resolution plus both re-observations, not the screening alone',
-  );
+  assert.equal(device.captures(), 4, 'resolution plus observations across the quiet window');
 });
 
 test('a replacement that took the ref at the frame coordinates is refused, not agreed', async () => {
@@ -434,11 +432,7 @@ test('the refused selector press publishes a wait that survives the shell', asyn
   const device = createGuardedDevice({
     stored: slideTree(MID_FLIGHT_X, { label }),
     // Still moving at the end of the window: the two re-observations disagree.
-    trees: [
-      slideTree(MID_FLIGHT_X, { label }),
-      slideTree(MID_FLIGHT_X + 40, { label }),
-      slideTree(MID_FLIGHT_X + 80, { label }),
-    ],
+    trees: Array.from({ length: 40 }, (_, index) => slideTree(120 + (index % 2) * 40, { label })),
     baselineAgeMs: 100,
     baselineTree: slideTree(-400, { label }),
   });
@@ -559,4 +553,83 @@ test('a clock skew ahead of the mutation does not produce a negative wait', () =
 
   assert.ok(decision.kind === 'recheck');
   assert.ok(decision.waitMs >= MOVING_TARGET_GATE_SAMPLE_GAP_MS);
+});
+
+test('Android admits the same uniquely identified target after another node reindexes its observation', async () => {
+  const frame = slideTree(MID_FLIGHT_X);
+  frame.nodes[1]!.identifier = 'stable-target';
+  const fresh = slideTree(RESTING_X);
+  fresh.nodes[1]!.identifier = 'stable-target';
+  fresh.nodes[1]!.index = 2;
+  fresh.nodes[1]!.ref = 'e3';
+  fresh.nodes.splice(1, 0, {
+    ref: 'e2',
+    index: 1,
+    type: 'Text',
+    label: 'New status',
+    parentIndex: 0,
+    depth: 1,
+  });
+  const device = createGuardedDevice({
+    stored: frame,
+    refFrame: frame,
+    trees: [fresh],
+    ...DISTURBING_HISTORY,
+  });
+  assert.deepEqual(await device.press('ref'), [centerOf(RESTING_X)]);
+});
+
+test('Android refuses to certify an identity duplicated in the new observation', async () => {
+  const frame = slideTree(MID_FLIGHT_X);
+  frame.nodes[1]!.identifier = 'stable-target';
+  const fresh = slideTree(RESTING_X);
+  fresh.nodes[1]!.identifier = 'stable-target';
+  fresh.nodes.push({
+    ...fresh.nodes[1]!,
+    index: 2,
+    ref: 'e3',
+    rect: { x: 160, y: BUTTON_Y, width: 120, height: 50 },
+  });
+  const device = createGuardedDevice({
+    stored: frame,
+    refFrame: frame,
+    trees: [fresh],
+    ...DISTURBING_HISTORY,
+  });
+  await assert.rejects(
+    () => device.press('ref'),
+    (error: unknown) => {
+      assert.equal(
+        (error as AppError).details?.reason,
+        INTERACTION_ERROR_REASONS.targetStillMoving,
+      );
+      return true;
+    },
+  );
+  assert.deepEqual(device.taps(), []);
+});
+
+test('Android refuses to adopt matching identity from another application', async () => {
+  const frame = slideTree(MID_FLIGHT_X);
+  frame.nodes[1]!.identifier = 'stable-target';
+  const fresh = slideTree(RESTING_X);
+  fresh.nodes[1]!.identifier = 'stable-target';
+  fresh.nodes[1]!.bundleId = 'com.example.other';
+  const device = createGuardedDevice({
+    stored: frame,
+    refFrame: frame,
+    trees: [fresh],
+    ...DISTURBING_HISTORY,
+  });
+  await assert.rejects(
+    () => device.press('ref'),
+    (error: unknown) => {
+      assert.equal(
+        (error as AppError).details?.reason,
+        INTERACTION_ERROR_REASONS.targetStillMoving,
+      );
+      return true;
+    },
+  );
+  assert.deepEqual(device.taps(), []);
 });

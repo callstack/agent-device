@@ -52,7 +52,7 @@ const FIRST_SCREEN_RULES: Record<string, readonly string[]> = {
   ],
   gestures: [
     'longpress accepts coordinates, @refs, or selectors; prefer @ref/selector, coordinates only as a fallback',
-    'iOS simulator transform/pinch/rotate use private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output',
+    'iOS transform/pinch/rotate use private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output',
     'Rare iOS accessibility gap: a row shown disabled/hittable:false where press reports success but no UI change, or a collapsed composite control with no child refs -- run snapshot -i --json, compute the target center from rects, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.',
   ],
   tv: [

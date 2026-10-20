@@ -1,6 +1,13 @@
 import type { SetOrientationInput } from '@agent-device/contracts/orientation-runtime';
-import { parseDeviceRotation, type DeviceRotation } from '@agent-device/contracts/device';
-import { orientationRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  parseOrientationRequest,
+  type DeviceRotation,
+  type OrientationRequest,
+} from '@agent-device/contracts/device';
+import {
+  orientationRuntimeUse,
+  orientationUnlockRuntimeUse,
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '@agent-device/kernel/success-text';
@@ -12,21 +19,24 @@ import {
 } from '../core/runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
 
-/** `orientation <rotation>`, on the same parse the retired leaf used. */
-export function readRequestedOrientation(positionals: readonly string[]): DeviceRotation {
-  return parseDeviceRotation(positionals[0]);
+/** `orientation <rotation|auto>`, on the same rotation parse the retired leaf used. */
+export function readRequestedOrientation(positionals: readonly string[]): OrientationRequest {
+  return parseOrientationRequest(positionals[0]);
 }
 
 /** The neutral intent one orientation change carries, projected from a resolved command context. */
+function orientationIntent(context: DaemonCommandContext): Omit<SetOrientationInput, 'rotation'> {
+  return {
+    ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
+    execution: runtimeExecutionFromContext(context),
+  };
+}
+
 function setOrientationInput(
   rotation: DeviceRotation,
   context: DaemonCommandContext,
 ): SetOrientationInput {
-  return {
-    rotation,
-    ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
-    execution: runtimeExecutionFromContext(context),
-  };
+  return { rotation, ...orientationIntent(context) };
 }
 
 /**
@@ -41,6 +51,26 @@ export async function resolveBoundOrientationRuntime(
   } & RuntimeAdmissionBindings,
 ): Promise<ResolvedGenericExecution> {
   const rotation = readRequestedOrientation(params.positionals);
+  if (rotation === 'auto') {
+    return await resolveBoundGenericRuntime(
+      {
+        command: 'orientation auto',
+        device: params.device,
+        use: orientationUnlockRuntimeUse,
+        inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
+        bindDevice: params.bindDevice,
+      },
+      async (runtime, context) => {
+        await runtime.operations.unlockOrientation(orientationIntent(context));
+        return {
+          action: 'orientation',
+          orientation: 'auto',
+          ...successText('Rotation follows the device sensor'),
+        };
+      },
+    );
+  }
   return await resolveBoundGenericRuntime(
     {
       command: 'orientation',

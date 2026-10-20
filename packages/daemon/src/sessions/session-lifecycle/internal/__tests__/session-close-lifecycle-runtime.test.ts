@@ -25,9 +25,10 @@ import {
   dispatchApplicationLifecycleEffect,
 } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import {
-  mkdtempForTestSync,
   bindTestCommandHost,
+  createLiveTestHostEnvironment,
   createTestHostEnvironment,
+  mkdtempForTestSync,
 } from '@agent-device/test-kit';
 
 bindTestCommandHost();
@@ -37,7 +38,7 @@ const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok
 
 function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-session-close-lifecycle-runtime-');
-  return new SessionStore(path.join(root, 'sessions'));
+  return new SessionStore(path.join(root, 'sessions'), createLiveTestHostEnvironment());
 }
 
 function makeSession(name: string, device: SessionState['device']): SessionState {

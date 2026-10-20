@@ -166,7 +166,11 @@ async function compileRunFlowBody(
   state: BuildState,
 ): Promise<MaestroReplayPlanStep[]> {
   const resolvedCommand = resolveRunFlowInclude(command, state.context);
-  const requestedPath = assertIncludePathAvailable(resolvedCommand, state.activeIncludePaths);
+  const requestedPath = assertIncludePathAvailable(
+    resolvedCommand,
+    state.activeIncludePaths,
+    state.options.baseDir,
+  );
   const program = await readIncludedProgram(resolvedCommand, state.options);
   checkpointMaestroCancellation(state.options.signal);
   const includedPaths = registerIncludedProgramPaths(
