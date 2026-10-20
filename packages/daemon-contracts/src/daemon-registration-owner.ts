@@ -511,7 +511,11 @@ async function proveExitWithoutSignaling(
   observed: OwnerIdentity,
   reason: 'identity-unverified' | 'embedded-owner' | 'owner-unproven' = 'identity-unverified',
 ): Promise<DaemonTerminationResult> {
-  if (!observed.startTime?.trim()) return { status: 'retained', reason: 'missing-start-time' };
+  if (!observed.startTime?.trim())
+    return {
+      status: 'retained',
+      reason: reason === 'identity-unverified' ? 'missing-start-time' : reason,
+    };
   const identity = { pid: observed.pid, startTime: observed.startTime };
   return (await waitForDaemonExit(identity, { timeoutMs: 0 })).exited
     ? { status: 'exited', identity, mode: 'already-exited' }

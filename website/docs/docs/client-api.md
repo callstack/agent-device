@@ -92,7 +92,7 @@ if ('cloudArtifacts' in result) {
 
 A client talks to one local daemon per state directory. `daemonLifecycle` says who owns that daemon.
 
-Close an embedded runtime in its host process with the handle returned by `startAgentDevice()`. `agent-device daemon stop --state-dir <path>` refuses with `error.details.reason: 'daemon-owner-embedded'` and a hint naming the host PID. It sends no request or signal. If the host has exited, call `ensureDaemon({ stateDir })` to recover its abandoned registration. A record with unrecognized ownership is also refused, with `daemon-owner-unrecognized`. Without `--clean`, an unreadable `daemon.json` fails with `daemon-record-unreadable`.
+Close an embedded runtime in its host process with the handle returned by `startAgentDevice()`. `agent-device daemon stop --state-dir <path>` refuses a live runtime with `error.details.reason: 'daemon-owner-embedded'` and a hint naming the host PID. It sends no request or signal. If the recorded host lifetime has provably exited, `daemon stop` retires its abandoned registration. A record with live unrecognized ownership is also refused, with `daemon-owner-unrecognized`. Without `--clean`, an unreadable `daemon.json` fails with `daemon-record-unreadable`.
 
 A `'managed'` client reuses a matching embedded runtime. Takeover, drain, and timeout recovery refuse a live embedded or unrecognized owner without a signal. A provably exited owner is retired so you can reuse the state directory.
 
@@ -148,7 +148,7 @@ await host.close();
 
 `stateDir` is required. If another daemon owns it, startup refuses with `daemon_registration_refused`; choose a separate directory or close its owner first. Pass imported plugin objects in `plugins`. They register after the built-ins without reading the plugin store, so `plugin add` does not change a running host. Plugin failures appear in `agent-device daemon status --state-dir <path>`. `close()` reports unfinished teardown. Repeated calls share one close and never exit your process.
 
-The runtime stays alive until you call `close()` in its host process; idle reaping is disabled. `daemon stop` refuses embedded runtimes with `daemon-owner-embedded`. `daemon stop --clean` is refused because cleanup must stay within this runtime. If the shutdown report lists abandoned requests or unfinished cleanup, inspect those outcomes before reusing the state directory: the runtime may retain its registration to protect work still in progress.
+The runtime stays alive until you call `close()` in its host process; idle reaping is disabled. `daemon stop` refuses live embedded runtimes with `daemon-owner-embedded`. `daemon stop --clean` is refused because cleanup must stay within this runtime. If the shutdown report lists abandoned requests or unfinished cleanup, inspect those outcomes before reusing the state directory: the runtime may retain its registration to protect work still in progress.
 
 `host.clientConfig` is serializable JSON: pass it to another process or worker and build an attach client from it. The client must pass normal version and code compatibility checks, then match the pinned instance. An incompatible or replacement daemon is refused:
 

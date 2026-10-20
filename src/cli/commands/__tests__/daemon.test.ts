@@ -385,7 +385,7 @@ test('daemon status names a record whose owner it cannot recognize', async () =>
   expect(render()).toContain('pid 321, owner-not-recognized');
 });
 
-test('daemon stop routes a host-owned record through the one router and never the signal path', async () => {
+test('daemon stop passes host ownership to shared retirement without detached cleanup', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-command-embedded-');
   fs.writeFileSync(
     `${stateDir}/daemon.json`,
@@ -393,6 +393,7 @@ test('daemon stop routes a host-owned record through the one router and never th
     { mode: 0o600 },
   );
 
+  mocks.stopDaemon.mockRejectedValueOnce({ details: { reason: 'daemon-owner-embedded' } });
   try {
     await expect(
       daemonCommand({
@@ -403,8 +404,10 @@ test('daemon stop routes a host-owned record through the one router and never th
       }),
     ).rejects.toMatchObject({ details: { reason: 'daemon-owner-embedded' } });
 
-    // The embedded route owns this record end to end: no detached retirement, no cleanup, no output.
-    expect(mocks.stopDaemon).not.toHaveBeenCalled();
+    expect(mocks.stopDaemon).toHaveBeenCalledWith({
+      paths: expect.objectContaining({ baseDir: stateDir }),
+      observed: { pid: 555, startTime: 'start-time', ownership: 'embedded' },
+    });
     expect(mocks.cleanupDaemonOwner).not.toHaveBeenCalled();
     expect(mocks.writeCommandOutput).not.toHaveBeenCalled();
     expect(fs.readFileSync(`${stateDir}/daemon.json`, 'utf8')).toContain('"embedded"');

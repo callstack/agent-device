@@ -1,6 +1,7 @@
 import type { DaemonIdentity } from '@agent-device/contracts/client';
 import {
   DAEMON_LIFECYCLE_REASONS,
+  embeddedCloseHint,
   DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
   type DaemonLifecycleCensus,
   type DaemonPaths,
@@ -195,8 +196,4 @@ export function daemonNotRetirableError(params: {
       hint: embeddedCloseHint(info?.pid),
     },
   );
-}
-
-function embeddedCloseHint(pid: number | undefined): string {
-  return `${pid === undefined ? 'The runtime is owned by its host process.' : `The runtime is owned by host process ${pid}.`} Close it there with the handle returned by startAgentDevice(). If the host has exited, call ensureDaemon() for this state directory to recover its abandoned registration.`;
 }

@@ -1,5 +1,7 @@
 import fs from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync, createTestHostEnvironment } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -9,11 +11,18 @@ import * as transport from './daemon-client/daemon-client-transport.ts';
 
 afterEach(() => vi.restoreAllMocks());
 
-test.each(['embedded', 'future-owner'])(
-  'stop refuses %s ownership before any request or signal, even without transport or birth proof',
-  async (ownership) => {
+test.each([
+  ['embedded', false],
+  ['embedded', true],
+  ['future-owner', false],
+  ['future-owner', true],
+] as const)(
+  'stop refuses live %s ownership without transport (start time recorded: %s)',
+  async (ownership, withStartTime) => {
     const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-stop-owner-'));
-    const record = JSON.stringify({ pid: process.pid, ownership });
+    const processStartTime = withStartTime ? readProcessStartTime(process.pid) : undefined;
+    if (withStartTime) expect(processStartTime).toBeTruthy();
+    const record = JSON.stringify({ pid: process.pid, ownership, processStartTime });
     fs.writeFileSync(paths.infoPath, record);
     const send = vi.spyOn(transport, 'sendRequest');
     const signals = vi.spyOn(process, 'kill');
@@ -26,11 +35,11 @@ test.each(['embedded', 'future-owner'])(
       code: 'COMMAND_FAILED',
       details: {
         reason: ownership === 'embedded' ? 'daemon-owner-embedded' : 'daemon-owner-unrecognized',
-        daemon: { pid: process.pid },
+        pid: process.pid,
       },
     });
     expect(send).not.toHaveBeenCalled();
-    expect(signals).not.toHaveBeenCalled();
+    expect(signals.mock.calls.filter(([, signal]) => signal !== 0)).toEqual([]);
     expect(fs.readFileSync(paths.infoPath, 'utf8')).toBe(record);
   },
 );
@@ -47,12 +56,12 @@ test('stop refuses an unreadable record without a request or signal', async () =
     }),
   ).rejects.toMatchObject({ details: { reason: 'daemon-record-unreadable' } });
   expect(send).not.toHaveBeenCalled();
-  expect(signals).not.toHaveBeenCalled();
+  expect(signals.mock.calls.filter(([, signal]) => signal !== 0)).toEqual([]);
   expect(fs.readFileSync(paths.infoPath, 'utf8')).toBe('{not json');
 });
 
 test.each(['embedded', 'future-owner'])(
-  'stop refuses %s ownership without a PID',
+  'stop has no process to retire for %s ownership without a PID',
   async (ownership) => {
     const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-stop-no-pid-'));
     const record = JSON.stringify({ ownership });
@@ -64,42 +73,61 @@ test.each(['embedded', 'future-owner'])(
         paths,
         host: createTestHostEnvironment(),
       }),
-    ).rejects.toMatchObject({
-      details: {
-        reason: ownership === 'embedded' ? 'daemon-owner-embedded' : 'daemon-owner-unrecognized',
-        hint:
-          ownership === 'embedded'
-            ? 'The runtime is owned by its host process. Close it there with the handle returned by startAgentDevice(). If the host has exited, call ensureDaemon() for this state directory to recover its abandoned registration.'
-            : expect.stringContaining('check what owns this registration'),
-      },
-    });
+    ).resolves.toMatchObject({ stopped: false, mode: 'not-running' });
     expect(send).not.toHaveBeenCalled();
     expect(signals).not.toHaveBeenCalled();
     expect(fs.readFileSync(paths.infoPath, 'utf8')).toBe(record);
   },
 );
 
-test('stop refuses an embedded registration even after its host exits', async () => {
-  const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-stop-exited-host-'));
-  const host = spawnSync(process.execPath, ['-e', '']);
-  expect(host.status).toBe(0);
-  const record = JSON.stringify({ pid: host.pid, ownership: 'embedded' });
-  fs.writeFileSync(paths.infoPath, record);
-  const send = vi.spyOn(transport, 'sendRequest');
-  const signals = vi.spyOn(process, 'kill');
-  await expect(
-    stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), {
-      paths,
-      host: createTestHostEnvironment(),
-    }),
-  ).rejects.toMatchObject({
-    details: {
-      reason: 'daemon-owner-embedded',
-      daemon: { pid: host.pid },
-      hint: expect.stringContaining('call ensureDaemon() for this state directory'),
-    },
-  });
-  expect(send).not.toHaveBeenCalled();
-  expect(signals).not.toHaveBeenCalled();
-  expect(fs.readFileSync(paths.infoPath, 'utf8')).toBe(record);
-});
+test.each([
+  ['embedded', true],
+  ['embedded', false],
+  ['future-owner', true],
+  ['future-owner', false],
+] as const)(
+  'stop requires lifetime proof to retire an exited %s host (start time recorded: %s)',
+  async (ownership, withStartTime) => {
+    const paths = resolveDaemonPaths(mkdtempForTestSync('agent-device-stop-exited-host-'));
+    const host = spawn(process.execPath, ['-e', "process.stdin.resume(); console.log('ready')"], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    try {
+      await once(host.stdout!, 'data');
+      const processStartTime = readProcessStartTime(host.pid!);
+      expect(processStartTime).toBeTruthy();
+      fs.writeFileSync(
+        paths.infoPath,
+        JSON.stringify({
+          pid: host.pid,
+          processStartTime: withStartTime ? processStartTime : undefined,
+          ownership,
+        }),
+      );
+      const exited = once(host, 'exit');
+      host.stdin!.end();
+      await exited;
+      const send = vi.spyOn(transport, 'sendRequest');
+      const signals = vi.spyOn(process, 'kill');
+      const stopped = stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), {
+        paths,
+        host: createTestHostEnvironment(),
+      });
+      if (withStartTime) {
+        await expect(stopped).resolves.toMatchObject({ stopped: false, mode: 'not-running' });
+      } else {
+        await expect(stopped).rejects.toMatchObject({
+          details: {
+            reason:
+              ownership === 'embedded' ? 'daemon-owner-embedded' : 'daemon-owner-unrecognized',
+          },
+        });
+      }
+      expect(send).not.toHaveBeenCalled();
+      expect(signals.mock.calls.filter(([, signal]) => signal !== 0)).toEqual([]);
+      expect(fs.existsSync(paths.infoPath)).toBe(!withStartTime);
+    } finally {
+      if (host.exitCode === null) host.kill();
+    }
+  },
+);

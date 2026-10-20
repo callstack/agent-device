@@ -265,6 +265,7 @@ test('a host without a state directory is refused, never a daemon in an inherite
     expect(refusal, JSON.stringify(stateDir)).toMatchObject({
       code: 'INVALID_ARGS',
       details: {
+        reason: 'host_state_dir_required',
         hint: 'Pass an explicit stateDir to startAgentDevice({ stateDir }).',
       },
     });
@@ -320,7 +321,7 @@ test('an outside stop refuses and the host keeps serving until its owner closes 
     ).rejects.toMatchObject({
       details: {
         reason: 'daemon-owner-embedded',
-        hint: `The runtime is owned by host process ${process.pid}. Close it there with the handle returned by startAgentDevice(). If the host has exited, call ensureDaemon() for this state directory to recover its abandoned registration.`,
+        hint: `The runtime is owned by host process ${process.pid}. Close it there with the handle returned by startAgentDevice(). If the host has exited, use daemon stop or ensureDaemon() for this state directory to recover its abandoned registration.`,
       },
     });
     expect(hostSignals(signals)).toEqual([]);

@@ -3,6 +3,7 @@ import type { DaemonRetirementResult } from './daemon-registration-owner.ts';
 
 import {
   DAEMON_LIFECYCLE_REASONS,
+  embeddedCloseHint,
   DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
   type DaemonPaths,
   type ObservedDaemonIdentity,
@@ -47,8 +48,8 @@ export type DaemonStopResult = {
 /**
  * Retires the daemon whose lifetime the caller read, and shapes that retirement as a stop result.
  *
- * The public stop router refuses embedded and unknown registrations before this path.
- * Direct callers still supply ownership to retirement, which refuses to signal a non-detached owner.
+ * Retirement refuses to signal embedded and unknown owners, and retires their records only
+ * when the observed host lifetime has provably exited.
  */
 export async function stopDaemon(params: {
   paths: DaemonPaths;
@@ -106,11 +107,12 @@ export async function stopDaemon(params: {
  */
 function ownerRefusal(
   reason: 'embedded-owner' | 'owner-unproven',
+  pid: number,
 ): Readonly<{ reason: string; hint: string }> {
   return reason === 'embedded-owner'
     ? {
         reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
-        hint: 'Nothing was signaled. Close the host that started this runtime, or repair its record after the process has exited.',
+        hint: embeddedCloseHint(pid),
       }
     : {
         reason: DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
@@ -129,7 +131,7 @@ function daemonRetirementError(
   const refusal =
     retirement.status === 'retained' &&
     (retirement.reason === 'embedded-owner' || retirement.reason === 'owner-unproven')
-      ? ownerRefusal(retirement.reason)
+      ? ownerRefusal(retirement.reason, info.pid)
       : undefined;
   return new AppError(
     'COMMAND_FAILED',

@@ -209,7 +209,6 @@ export type DaemonStopIdentity = Readonly<{
   /** `absent`: no record. `unreadable`: a record whose contents cannot be used, unreadable or malformed. */
   ownership: DaemonOwnership | 'absent' | 'unreadable';
   identity: OwnerIdentity | null;
-  record: DaemonRecord | null;
 }>;
 
 /**
@@ -223,9 +222,8 @@ export function readDaemonStopIdentity(infoPath: string): DaemonStopIdentity {
     return {
       ownership: reading.status === 'absent' ? 'absent' : 'unreadable',
       identity: null,
-      record: null,
     };
-  return { ownership: reading.ownership, identity: reading.identity, record: reading.record };
+  return { ownership: reading.ownership, identity: reading.identity };
 }
 
 /**

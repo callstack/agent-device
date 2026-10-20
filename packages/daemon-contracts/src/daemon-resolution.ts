@@ -293,3 +293,8 @@ export function readDaemonLifecycleCensus(details: unknown): DaemonLifecycleCens
     leases: leases as number,
   };
 }
+
+/** Directs embedded runtime callers to the host that owns close. */
+export function embeddedCloseHint(pid: number | undefined): string {
+  return `${pid === undefined ? 'The runtime is owned by its host process.' : `The runtime is owned by host process ${pid}.`} Close it there with the handle returned by startAgentDevice(). If the host has exited, use daemon stop or ensureDaemon() for this state directory to recover its abandoned registration.`;
+}
