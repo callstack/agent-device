@@ -25,6 +25,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
   private static final long GESTURE_UI_AUTOMATION_CONNECT_TIMEOUT_MS = 8_000;
   private static final int CHUNK_SIZE = 2 * 1024;
   private static final long DEFAULT_TIMEOUT_MS = 8_000;
+  private static final long SHORT_IDLE_TIMEOUT_MS = 100;
   private static final long ROOT_CAPTURE_STABILIZATION_TIMEOUT_MS = 500;
   private static final int DEFAULT_MAX_DEPTH = 128;
   private static final int DEFAULT_MAX_NODES = 5_000;
@@ -181,7 +182,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
       putBaseMetadata(
           ready, waitForIdleTimeoutMs, waitForIdleQuietMs, timeoutMs, maxDepth, maxNodes);
       ready.putString("sessionReady", "true");
-      ready.putString("sessionCommands", "input,screenshot,focus,snapshot-immediate"
+      ready.putString("sessionCommands", "input,screenshot,focus,snapshot-immediate,snapshot-short-idle"
           + (android.os.Build.VERSION.SDK_INT >= 31 ? ",app" : ""));
       ready.putString("sessionPort", Integer.toString(sessionPort));
       sendStatus(2, ready);
@@ -223,7 +224,8 @@ public final class SnapshotInstrumentation extends Instrumentation {
                 getConnectedUiAutomationUnchecked());
             continue;
           }
-          if (!"snapshot".equals(action) && !"snapshot-immediate".equals(action)) {
+          if (!"snapshot".equals(action) && !"snapshot-immediate".equals(action)
+              && !"snapshot-short-idle".equals(action)) {
             SessionResponseWriter.writeSessionError(
                 socket.getOutputStream(),
                 requestId,
@@ -235,7 +237,9 @@ public final class SnapshotInstrumentation extends Instrumentation {
               socket.getOutputStream(),
               requestId,
               waitForIdleQuietMs,
-              "snapshot-immediate".equals(action) ? 0 : waitForIdleTimeoutMs,
+              "snapshot-immediate".equals(action) ? 0
+                  : "snapshot-short-idle".equals(action) ? Math.min(waitForIdleTimeoutMs, SHORT_IDLE_TIMEOUT_MS)
+                  : waitForIdleTimeoutMs,
               timeoutMs,
               maxDepth,
               maxNodes);

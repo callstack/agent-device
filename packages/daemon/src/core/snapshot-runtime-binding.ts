@@ -31,6 +31,9 @@ import {
   type AdmittedRuntimePlan,
 } from './session-runtime-admission.ts';
 import { resolveSnapshotScope } from './snapshot-capture.ts';
+import { isOutdatedObservation } from './ref-frame.ts';
+import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
+import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import { resolveSessionDevice } from './snapshot-session.ts';
 import {
   selectElementTextOperation,
@@ -137,12 +140,34 @@ export async function admitAndBindSnapshotCapture(
   );
   return Object.freeze({
     ok: true,
-    capture: async (input: CaptureSnapshotInput) => await bound.captureSnapshot(input),
+    capture: async (input: CaptureSnapshotInput) => {
+      const shortIdleWait =
+        (command === 'snapshot' || command === 'diff') &&
+        canUseShortAndroidSnapshotIdleWait(session);
+      return await bound.captureSnapshot(
+        shortIdleWait
+          ? { ...input, options: { ...input.options, androidIdleWait: 'short' } }
+          : input,
+      );
+    },
     ...(bound.readTextAtPoint ? { readTextAtPoint: bound.readTextAtPoint } : {}),
     ...(bound.findText ? { findText: bound.findText } : {}),
     ...(bound.focusPoint ? { focusPoint: bound.focusPoint } : {}),
     ...(bound.typeText ? { typeText: bound.typeText } : {}),
   });
+}
+
+const ANDROID_SNAPSHOT_IDLE_GAP_MS = 500;
+
+function canUseShortAndroidSnapshotIdleWait(session: SessionState | undefined): boolean {
+  return (
+    session?.device.platform === 'android' &&
+    session.snapshot !== undefined &&
+    !isOutdatedObservation(session.snapshot) &&
+    Date.now() - session.snapshot.createdAt >= ANDROID_SNAPSHOT_IDLE_GAP_MS &&
+    !getActiveAndroidSnapshotFreshness(session) &&
+    !isPostGestureStabilizationPending(session)
+  );
 }
 
 /** Resolves one plan, inspects its owner facts once, then returns one bound capture closure. */

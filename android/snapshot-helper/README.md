@@ -98,6 +98,7 @@ closes that connection; the process stays alive for the next connection:
 
 - `snapshot <requestId>` — capture and return an XML snapshot, same semantics as the default mode
 - `snapshot-immediate <requestId>` — capture fresh XML without an idle wait when the caller owns settling
+- `snapshot-short-idle <requestId>` — capture with at most a 100 ms idle wait, capped by the session's configured timeout
 - `input <requestId> <payloadBase64>` — inject a tap, key, or point-targeted text replacement
 - `focus <requestId>` — read the focused window type and root package after clearing the accessibility cache
 - `screenshot <requestId>` — return a PNG in the `payloadBase64` header
@@ -107,6 +108,12 @@ closes that connection; the process stays alive for the next connection:
 - `quit <requestId>` — acknowledge and stop the session
 
 The ready record advertises optional operations in `sessionCommands`. A host must check support before sending them. Text replacement retains a focus tap; the host owns post-write verification. Input failures must not be resent because a mutation may already have reached the app.
+
+The daemon uses the shorter wait for Android `snapshot` and `diff` only when the latest stored
+tree is at least 500 ms old, no later operation has retired it, and no freshness recovery or
+post-gesture stabilization is pending. Other captures keep their configured wait. Each capture
+still reads a fresh tree. An asynchronous app transition can appear in progress; use an explicit
+landmark wait when the next command requires a destination screen.
 
 `viewport` and `gesture` responses are headers-only (no body): `kind`, `injectedEvents`,
 `elapsedMs` for `gesture`, and `x`, `y`, `width`, `height` for `viewport`. `snapshot` responses carry

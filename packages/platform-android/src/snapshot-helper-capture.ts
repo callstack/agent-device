@@ -14,6 +14,7 @@ import {
 } from './instrumentation-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
+  ANDROID_SNAPSHOT_HELPER_SHORT_IDLE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_OVERHEAD_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
@@ -68,7 +69,11 @@ export async function captureAndroidSnapshotWithHelper(
     result = await options.adb(
       buildAndroidSnapshotHelperArgs({
         ...resolved,
-        ...(options.skipIdleWait ? { waitForIdleTimeoutMs: 0 } : {}),
+        waitForIdleTimeoutMs: options.skipIdleWait
+          ? 0
+          : options.shortIdleWait
+            ? Math.min(resolved.waitForIdleTimeoutMs, ANDROID_SNAPSHOT_HELPER_SHORT_IDLE_TIMEOUT_MS)
+            : resolved.waitForIdleTimeoutMs,
       }),
       {
         allowFailure: true,
