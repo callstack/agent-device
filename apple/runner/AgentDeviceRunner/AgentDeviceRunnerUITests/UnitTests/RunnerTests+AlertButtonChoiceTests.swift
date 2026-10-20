@@ -38,10 +38,6 @@ extension RunnerTests {
     }
   }
 
-  func testAlertAcceptTreatsOpenAsAffirmative() {
-    XCTAssertTrue(RunnerAlertButtonChoice.isAcceptButton("Open"))
-  }
-
   func testAlertDismissPicksTheTrackingPromptDeclineLabel() {
     // The App Tracking Transparency prompt, as iOS words it in English (#3627).
     XCTAssertEqual(

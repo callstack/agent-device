@@ -36,10 +36,6 @@ enum RunnerAlertButtonChoice {
     return action != "accept" && popupMarkerSurface ? labels.indices.last : nil
   }
 
-  static func isAcceptButton(_ label: String) -> Bool {
-    acceptPreferences.contains { matches(label, pattern: $0) }
-  }
-
   private static func matches(_ label: String, pattern: String) -> Bool {
     label.trimmingCharacters(in: .whitespacesAndNewlines)
       .range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil

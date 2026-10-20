@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
 import { classifyAlertButtonRole, selectRankedAlertButtonByRole } from './alert-contract.ts';
 
 type Button = { label: string; role: ReturnType<typeof classifyAlertButtonRole> };
@@ -103,5 +104,31 @@ describe('selectRankedAlertButtonByRole', () => {
       { label: 'Always allow', role: 'accept', id: 'no/rank' },
     ];
     expect(selectRankedAlertButtonByRole(buttons, 'accept', rankById)).toBeNull();
+  });
+});
+
+// Selection over admitted buttons only: capture's two-button minimum is outside this table.
+type AlertChoiceCase = {
+  name: string;
+  labels: string[];
+  action: 'accept' | 'dismiss';
+  expected: number | null;
+  xctestPopupMarkerExpected?: number | null;
+};
+const alertChoiceCases = JSON.parse(
+  fs.readFileSync(
+    new URL('../../../contracts/fixtures/ios-alert-button-choice.json', import.meta.url),
+    'utf8',
+  ),
+) as AlertChoiceCase[];
+
+describe('selectRankedAlertButtonByRole shared Apple label choices', () => {
+  it.each(alertChoiceCases)('$name', ({ labels, action, expected }) => {
+    const buttons = labels.map((label) => ({
+      label,
+      role: classifyAlertButtonRole(label),
+    }));
+    const chosen = selectRankedAlertButtonByRole(buttons, action);
+    expect(chosen === null ? null : buttons.indexOf(chosen)).toBe(expected);
   });
 });
