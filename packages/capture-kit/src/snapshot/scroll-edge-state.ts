@@ -168,6 +168,7 @@ function pushScrollSurfaceSignature(
  * gesture so an already-satisfied stop costs no scroll.
  */
 export async function runScrollPasses<TObservation, TResult>(params: {
+  signal?: AbortSignal;
   observe: () => Promise<TObservation>;
   refuse: (observation: TObservation) => AppError | undefined;
   /** True ends the loop with this pass count; a terminal outcome of its own throws instead. */
@@ -191,10 +192,14 @@ export async function runScrollPasses<TObservation, TResult>(params: {
   let result: TResult | undefined;
   const recentSignatures: string[] = [];
   while (true) {
+    params.signal?.throwIfAborted();
     const observation = await observe();
+    params.signal?.throwIfAborted();
     const refusal = refuse(observation);
     if (refusal) throw refusal;
-    if (await shouldStop(observation, passes)) return { passes, result };
+    const stopped = await shouldStop(observation, passes);
+    params.signal?.throwIfAborted();
+    if (stopped) return { passes, result };
     if (passes >= passLimit) throw params.passLimitError(passes);
     pushScrollSurfaceSignature(
       recentSignatures,
@@ -202,13 +207,16 @@ export async function runScrollPasses<TObservation, TResult>(params: {
       SCROLL_EDGE_STUCK_WINDOW,
     );
     if (scrollSurfaceIsStuck(recentSignatures)) throw params.noProgressError(passes);
+    params.signal?.throwIfAborted();
     result = await scroll();
     passes += 1;
+    params.signal?.throwIfAborted();
     await settleAfterPass?.();
   }
 }
 
 export async function runScrollEdgePasses<TResult>(params: {
+  signal?: AbortSignal;
   edge: ScrollEdge;
   captureState: (scope?: string) => Promise<ScrollEdgeObservation>;
   scroll: () => Promise<TResult>;
@@ -225,6 +233,7 @@ export async function runScrollEdgePasses<TResult>(params: {
     if (!discovered) {
       discovered = true;
       if (!isScrollEdgeRefused(observation) && observation.scope) {
+        params.signal?.throwIfAborted();
         observation = await captureState(observation.scope);
       }
     }
@@ -232,6 +241,7 @@ export async function runScrollEdgePasses<TResult>(params: {
     return observation;
   };
   return await runScrollPasses({
+    signal: params.signal,
     observe,
     refuse: (observation) =>
       isScrollEdgeRefused(observation)

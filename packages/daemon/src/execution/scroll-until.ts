@@ -47,6 +47,7 @@ export async function runScrollUntilVisible<TResult>(params: {
   selector: string;
   direction: ScrollDirection;
   platform: Platform | PublicPlatform;
+  signal?: AbortSignal;
   passLimit?: number;
   capture: () => Promise<SnapshotResult>;
   scroll: () => Promise<TResult>;
@@ -56,6 +57,7 @@ export async function runScrollUntilVisible<TResult>(params: {
   let scrolled = false;
   try {
     const { passes, result } = await runScrollPasses({
+      signal: params.signal,
       observe: capture,
       refuse: (captured) => {
         const refusal = scrollCaptureRefusal(captured);

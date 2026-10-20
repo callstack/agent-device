@@ -89,7 +89,7 @@ export function assertScrollUntilCompatible(
 ): void {
   if (input.maxPasses !== undefined) {
     if (input.until === undefined) {
-      throw new AppError('INVALID_ARGS', 'scroll --max-passes requires --until', {
+      throw new AppError('INVALID_ARGS', 'scroll maxPasses requires until', {
         reason: 'scroll_max_passes_requires_until',
       });
     }
