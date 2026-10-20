@@ -1,5 +1,4 @@
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
-import { HARDWARE_KEY_USAGE } from '@agent-device/contracts/tv-remote';
 import { getReplayBackendDeclaration } from '@agent-device/replay-port/replay-backend-declarations';
 import { normalizeCliCommandAlias } from '@agent-device/command-registry/cli-command-aliases';
 import { helpBody } from '@agent-device/command-registry/command-text';
@@ -259,16 +258,17 @@ Vega OS:
   Snapshot, screenshot, selectors, install, touch/text/gesture, logs, and performance commands remain unsupported until their Vega backends are implemented.
 
 Buttons:
-  tv-remote press up|down|left|right|select|menu|home|back
-  tv-remote longpress select
-  tv-remote press select --duration-ms 500
+  tv-remote [press|longpress] <button> [--duration-ms <ms>]
+  All TV backends: up, down, left, right, select, menu, home, back.
+  Android TV also accepts volume-up, volume-down, mute, power, sleep, wake, media-play-pause, media-next, media-previous, media-rewind, media-fast-forward, channel-up, channel-down, last-channel, guide, info, captions, tv-input, color-red, color-green, color-yellow, and color-blue.
+  android-keycode:<n> sends a raw Android TV keycode from 1 to 2147483647. tvOS and Vega OS refuse these additional buttons. Phones and WebDriver sessions refuse tv-remote. Power and sleep can turn the screen off; success confirms dispatch without waiting for an app or screen change.
   ok, center, and enter are input aliases for select; command output still reports button: "select".
   longpress is CLI sugar for --duration-ms 500. --duration-ms overrides that preset.
   --duration-ms holds a tvOS or Vega OS remote button for that exact duration. On Android TV, any positive duration maps to the ADB longpress form because Android input keyevent has no exact hold duration.
   Vega OS uses the exact hold duration through inputd-cli in the VVD.
 
 Android TV:
-  Android TV uses ADB keyevents behind agent-device tv-remote. hardware-key ${HARDWARE_KEY_USAGE} uses ADB keyevents or Appium mobile: pressKey on Android. Keep command plans on agent-device; do not switch to raw adb keyevent.
+  Android TV uses ADB keyevents behind agent-device tv-remote. Keep command plans on agent-device; do not switch to raw adb keyevent.
   Use --target tv when a host has both phone/tablet and TV emulators/devices.
 
 tvOS:

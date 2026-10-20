@@ -351,29 +351,6 @@ test.each(Object.entries(leaves))(
 );
 
 test.each(Object.entries(leaves))(
-  'refuses the hardware-key fact for the %s leaf',
-  async (_name, device) => {
-    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
-      device,
-      intent: { kind: 'ordinary' },
-      scope: {
-        signal: new AbortController().signal,
-        diagnostics: { emit: () => {} },
-        progress: { report: () => {} },
-      },
-    });
-    // The runner presses only the home and Action Button controls, so no Apple leaf admits a
-    // volume, power, or media key: the hardwareKey cell states that refusal.
-    expect(binding.facts.operations.hardwareKey).toEqual({
-      available: false,
-      reason: 'unsupported-platform-leaf',
-      hint: 'hardware-key is supported on Android (ADB or Appium).',
-    });
-    expect(binding.operations.hardwareKey).toBeUndefined();
-  },
-);
-
-test.each(Object.entries(leaves))(
   'classifies the fold fact for the %s leaf',
   async (_name, device) => {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({

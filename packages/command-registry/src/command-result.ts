@@ -15,7 +15,6 @@ import type {
   AppSwitcherCommandResult,
   BackCommandResult,
   FoldCommandResult,
-  HardwareKeyCommandResult,
   HomeCommandResult,
   OrientationCommandResult,
   TvRemoteCommandResult,
@@ -73,7 +72,6 @@ export interface CommandResultMap {
   fill: FillCommandResponseData;
   find: FindCommandResponseData;
   fold: FoldCommandResult;
-  'hardware-key': HardwareKeyCommandResult;
   home: HomeCommandResult;
   hover: HoverCommandResponseData;
   keyboard: KeyboardCommandResult;

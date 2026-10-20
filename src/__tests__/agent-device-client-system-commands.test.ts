@@ -63,12 +63,6 @@ const SYSTEM_COMMAND_CALLS: readonly {
     command: 'tv-remote',
     positionals: ['select'],
   },
-  {
-    method: 'hardwareKey',
-    invoke: async (client) => await client.command.hardwareKey({ key: 'volume-up' }),
-    command: 'hardware-key',
-    positionals: ['volume-up'],
-  },
 ];
 
 for (const call of SYSTEM_COMMAND_CALLS) {

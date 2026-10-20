@@ -41,7 +41,6 @@ export const RUNTIME_OPERATION_NAMES = [
   'findText',
   'focusPoint',
   'gestureViewport',
-  'hardwareKey',
   'home',
   'hoverPoint',
   'hoverRef',

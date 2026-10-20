@@ -500,7 +500,6 @@ test('boot rejects --headless outside Android directly', async () => {
         back: { available: false, reason: 'owner-capability-missing' },
         orientation: { available: false, reason: 'owner-capability-missing' },
         tvRemote: { available: false, reason: 'owner-capability-missing' },
-        hardwareKey: { available: false, reason: 'owner-capability-missing' },
         keyboard: { available: false, reason: 'owner-capability-missing' },
         clipboard: { available: false, reason: 'owner-capability-missing' },
         systemButton: { available: false, reason: 'owner-capability-missing' },

@@ -120,7 +120,6 @@ export type {
   ClipboardCommandOptions,
   FoldCommandOptions,
   DoctorCommandOptions,
-  HardwareKeyCommandOptions,
   HomeCommandOptions,
   KeyboardCommandOptions,
   OrientationCommandOptions,

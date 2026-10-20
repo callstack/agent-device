@@ -47,10 +47,7 @@ import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboar
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
-import {
-  tvRemoteRuntimeOperationFacts,
-  hardwareKeyRuntimeOperationFacts,
-} from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidSetting } from './settings.ts';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
@@ -93,9 +90,9 @@ const keyboardKindUnavailable = unavailableFact(
 );
 const hoverUnavailable = unavailableFact('unsupported-platform-leaf');
 /**
- * `home`, `app-switcher`, and the hardware keys are the system controls `input keyevent` can
- * press. Any other (the iPhone Action Button today) is hardware with no Android key event behind
- * it, so there is no adb path to admit even on the kinds every other Android cell admits.
+ * `home` and `app-switcher` are the system buttons `input keyevent` can press. Any other (the
+ * iPhone Action Button today) is hardware with no Android key event behind it, so there is no adb
+ * path to admit even on the kinds every other Android cell admits.
  */
 const systemButtonUnavailable = unavailableFact(
   'unsupported-platform-leaf',
@@ -345,7 +342,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
         // `home` and `app-switcher` are one `input keyevent` each, admitted wherever the retired
-        // `ANDROID_ALL` bucket admitted `home`.
+        // `ANDROID_ALL` bucket admitted them.
         ...systemButtonRuntimeOperationFacts({
           unsupported: systemButtonUnavailable,
           home: androidTouchFact(device),
@@ -385,9 +382,6 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...orientationRuntimeOperationFacts({ orientation: androidTouchFact(device) }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: androidTvRemoteFact(device) }),
-        // Every hardware key is one `input keyevent`, admitted wherever the retired
-        // `ANDROID_ALL` bucket admitted `home`.
-        ...hardwareKeyRuntimeOperationFacts({ hardwareKey: androidTouchFact(device) }),
         // The only owner with a live IME status read; dismiss/enter share every other
         // interaction cell's kind gate (parity with the retired `keyboard` bucket).
         ...keyboardRuntimeOperationFacts({

@@ -56,6 +56,7 @@ export async function resolveBoundTvRemoteRuntime(
   return await resolveBoundGenericRuntime(
     {
       command: 'tv-remote',
+      subject: button,
       device: params.device,
       use: tvRemoteRuntimeUse,
       inspectFacts: params.inspectFacts,

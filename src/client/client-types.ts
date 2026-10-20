@@ -31,12 +31,20 @@ export type {
 
 // Contracts/kernel types re-exported into the PUBLISHED surface: `agent-device-client.ts` picks
 // these up via `export type *`, and that is their only job — every internal consumer imports
-// them from the declaring module instead.
+// them from the declaring module instead. Fallow therefore sees no consumer, which is exactly
+// right and exactly not actionable: deleting them would remove names from the package's public
+// types. Suppressed per name rather than baselined so the reason travels with the code.
+// fallow-ignore-next-line unused-type
 export type { TargetShutdownResult } from '@agent-device/contracts/device';
+// fallow-ignore-next-line unused-type
 export type { MetroBridgeScope } from '@agent-device/contracts/remote';
+// fallow-ignore-next-line unused-type
 export type { AppsFilter } from '@agent-device/contracts/device';
+// fallow-ignore-next-line unused-type
 export type { AlertAction } from '@agent-device/contracts/alert-contract';
+// fallow-ignore-next-line unused-type
 export type { AppleOS } from '@agent-device/kernel/device';
+// fallow-ignore-next-line unused-type
 export type { JsonObject } from '@agent-device/contracts/client';
 export type { BatchRunResult } from '@agent-device/command-registry/batch';
 
@@ -61,7 +69,6 @@ import type {
   AppPushOptions,
   ActionButtonCommandOptions,
   FoldCommandOptions,
-  HardwareKeyCommandOptions,
   AppStateCommandOptions,
   AppSwitcherCommandOptions,
   AppTriggerEventOptions,
@@ -166,7 +173,6 @@ export type AgentDeviceCommandClient = {
   actionButton: (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>;
   tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;
   telephony: (options: TelephonyCommandOptions) => Promise<CommandResult<'telephony'>>;
-  hardwareKey: (options: HardwareKeyCommandOptions) => Promise<CommandResult<'hardware-key'>>;
   wait: (options: WaitCommandOptions) => Promise<CommandResult<'wait'>>;
   alert: (options?: AlertCommandOptions) => Promise<CommandRequestResult>;
   appState: (options?: AppStateCommandOptions) => Promise<CommandResult<'appstate'>>;

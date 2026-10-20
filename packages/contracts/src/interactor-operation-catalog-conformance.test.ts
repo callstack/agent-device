@@ -28,7 +28,6 @@ const EXPECTATIONS: {
   home: { method: 'home', input: {} },
   setOrientation: { method: 'setOrientation', input: { rotation: 'portrait' } },
   tvRemote: { method: 'tvRemote', input: { button: 'select' } },
-  hardwareKey: { method: 'hardwareKey', input: { key: 'volume-up' } },
   keyboardStatus: { method: 'keyboardStatus', input: {} },
   keyboardDismiss: { method: 'keyboardDismiss', input: {} },
   keyboardEnter: { method: 'keyboardEnter', input: {} },

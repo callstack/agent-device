@@ -21,11 +21,9 @@ import {
 } from '@agent-device/contracts/device';
 import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
-  HARDWARE_KEYS,
-  HARDWARE_KEY_USAGE,
+  type TvRemoteButton,
   TV_REMOTE_BUTTONS,
   TV_REMOTE_BUTTON_USAGE,
-  parseHardwareKey,
   parseTvRemoteButton,
   tvRemoteDurationMode,
 } from '@agent-device/contracts/tv-remote';
@@ -57,7 +55,7 @@ import {
   objectSchema,
   stringSchema,
 } from '../command-input.ts';
-import { compactRecord, optionalString as optionalInputString } from '../input-readers.ts';
+import { compactRecord } from '../input-readers.ts';
 import {
   defineCommandFacet,
   defineCommandFamilyFromFacets,
@@ -82,10 +80,13 @@ const CLIPBOARD_COMMAND_NAME = 'clipboard';
 const TV_REMOTE_COMMAND_NAME = 'tv-remote';
 const TELEPHONY_COMMAND_NAME = 'telephony';
 const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
-const HARDWARE_KEY_COMMAND_NAME = 'hardware-key';
 
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
 const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss', 'enter', 'return'] as const;
+
+const tvRemoteButtonSchema = stringSchema(
+  `TV remote button: ${TV_REMOTE_BUTTONS.join(', ')}. Android TV also accepts android-keycode:<n> with n from 1 to 2147483647.`,
+);
 
 /**
  * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into
@@ -151,7 +152,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   'tv-remote': objectSchema(
     {
       action: constSchema('tv-remote'),
-      button: enumSchema(TV_REMOTE_BUTTONS),
+      button: tvRemoteButtonSchema,
       durationMs: numberSchema(),
       message: stringSchema(),
     },
@@ -180,14 +181,6 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
       ),
     ],
   },
-  'hardware-key': objectSchema(
-    {
-      action: constSchema('hardware-key'),
-      key: stringSchema('The key name, or android-keycode:N for a raw Android keycode N.'),
-      message: stringSchema(),
-    },
-    ['action', 'key', 'message'],
-  ),
   // packages/contracts/src/clipboard.ts — discriminated union on `action`.
   clipboard: {
     type: 'object',
@@ -264,7 +257,6 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   | 'action-button'
   | 'tv-remote'
   | 'telephony'
-  | 'hardware-key'
   | 'clipboard'
   | 'appstate'
   | 'keyboard'
@@ -316,9 +308,7 @@ const clipboardCommandDescription =
 const actionButtonCommandDescription =
   'Press the iPhone or iPad Action Button once. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the app keeps the state the press found. What the system does with the press is not observed by this command: Simulators run no Shortcuts or App Intents, so delivery to an assigned Shortcut is verifiable only on a physical iPhone.';
 const tvRemoteCommandDescription =
-  'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
-const hardwareKeyCommandDescription =
-  'Press one hardware key once: a named key such as volume-up, or a raw Android keycode as android-keycode:N. power toggles the screen; sleep and wake turn it off or on. The key goes to the system and the foreground media session, and nothing is re-observed afterwards. Supported on Android through ADB key events (local or Limrun) or Appium mobile: pressKey.';
+  'Press or long-press a TV remote button on Android TV, tvOS, or Vega OS. Android TV also supports volume, power, media, channel, guide, captions, input, color keys, and android-keycode:N. tvOS and Vega OS support up, down, left, right, select, menu, home, and back. Phones and WebDriver sessions are unsupported. The aliases ok, center, and enter map to select.';
 
 const telephonyCommandDescription =
   'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
@@ -402,7 +392,11 @@ const tvRemoteCommandMetadata = defineFieldCommandMetadata(
   TV_REMOTE_COMMAND_NAME,
   tvRemoteCommandDescription,
   {
-    button: requiredField(enumField(TV_REMOTE_BUTTONS)),
+    button: requiredField(
+      customField<TvRemoteButton>(tvRemoteButtonSchema, (record, key) =>
+        parseTvRemoteButton(typeof record[key] === 'string' ? record[key] : undefined),
+      ),
+    ),
     durationMs: integerField(
       `Press duration in milliseconds. tvOS and Vega OS use the exact hold duration; Android TV maps any positive value to an ADB longpress (${tvRemoteDurationMode('android')}).`,
       {
@@ -450,24 +444,6 @@ const telephonyCommandMetadata = {
   },
 };
 
-const hardwareKeyCommandMetadata = defineFieldCommandMetadata(
-  HARDWARE_KEY_COMMAND_NAME,
-  hardwareKeyCommandDescription,
-  {
-    key: requiredField(
-      customField(
-        stringSchema(
-          `Key to press: ${HARDWARE_KEYS.join(', ')}, or android-keycode:N for a vendor remote button no name covers.`,
-        ),
-        (record, key) => {
-          const value = optionalInputString(record, key);
-          return value === undefined ? undefined : parseHardwareKey(value);
-        },
-      ),
-    ),
-  },
-);
-
 const backCliSchema = {
   usageOverride: 'back [--in-app|--system] [--settle]',
   usageFlags: [],
@@ -511,12 +487,6 @@ const telephonyCliSchema = {
   allowsExtraPositionals: true,
 } as const satisfies CommandSchemaOverride;
 
-const hardwareKeyCliSchema = {
-  usageOverride: `hardware-key ${HARDWARE_KEY_USAGE}`,
-  listUsageOverride: 'hardware-key <key>',
-  positionalArgs: ['key'],
-} as const satisfies CommandSchemaOverride;
-
 export const backCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
   mode: flags.backMode,
@@ -555,11 +525,6 @@ export const telephonyCliReader: CliReader = (positionals, flags) => ({
   ...parseTelephonyPositionals(positionals),
 });
 
-export const hardwareKeyCliReader: CliReader = (positionals, flags) => ({
-  ...commonInputFromFlags(flags),
-  key: readHardwareKeyPositional(positionals),
-});
-
 export const backDaemonWriter: DaemonWriter = (input) =>
   request(BACK_COMMAND_NAME, [], {
     ...input,
@@ -593,10 +558,6 @@ export const tvRemoteDaemonWriter: DaemonWriter = direct(TV_REMOTE_COMMAND_NAME,
 export const telephonyDaemonWriter: DaemonWriter = direct(TELEPHONY_COMMAND_NAME, (input) =>
   telephonyPositionals(parseTelephonyEventInput(input)),
 );
-
-export const hardwareKeyDaemonWriter: DaemonWriter = direct(HARDWARE_KEY_COMMAND_NAME, (input) => [
-  requiredDaemonString(input.key, 'hardware-key requires key'),
-]);
 
 const appStateCommandFacet = defineParameterlessCommandFacet({
   name: APPSTATE_COMMAND_NAME,
@@ -709,8 +670,9 @@ const actionButtonCommandFacet = defineParameterlessCommandFacet({
 const tvRemoteCommandFacet = defineCommandFacet({
   name: TV_REMOTE_COMMAND_NAME,
   text: {
-    summary: 'Press a TV remote/D-pad button',
-    cliDetail: 'longpress holds for 500ms by default; --duration-ms overrides the preset.',
+    summary: 'Press a TV remote navigation, media, or hardware button',
+    cliDetail:
+      'longpress selects the 500ms preset; --duration-ms overrides it. Android TV uses the system long-press duration.',
   },
   metadata: tvRemoteCommandMetadata,
   run: (client, input) => client.command.tvRemote(input),
@@ -735,20 +697,6 @@ const telephonyCommandFacet = defineCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters.telephony,
 });
 
-const hardwareKeyCommandFacet = defineCommandFacet({
-  name: HARDWARE_KEY_COMMAND_NAME,
-  text: {
-    summary: 'Press a volume, power, media, or TV hardware key',
-    cliDetail: 'Android only: ADB key events (local or Limrun) or Appium mobile: pressKey.',
-  },
-  metadata: hardwareKeyCommandMetadata,
-  run: (client, input) => client.command.hardwareKey(input),
-  cliSchema: hardwareKeyCliSchema,
-  cliReader: hardwareKeyCliReader,
-  daemonWriter: hardwareKeyDaemonWriter,
-  cliOutputFormatter: systemCliOutputFormatters['hardware-key'],
-});
-
 export const systemCommandFamily = defineCommandFamilyFromFacets({
   name: 'system',
   commands: [
@@ -763,7 +711,6 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     clipboardCommandFacet,
     tvRemoteCommandFacet,
     telephonyCommandFacet,
-    hardwareKeyCommandFacet,
   ],
 });
 
@@ -818,16 +765,6 @@ function readTvRemoteInput(
     button: parseTvRemoteButton(args[0]),
     durationMs: effectiveDurationMs,
   });
-}
-
-function readHardwareKeyPositional(positionals: string[]) {
-  if (positionals.length !== 1) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `hardware-key requires exactly one key: ${HARDWARE_KEY_USAGE}.`,
-    );
-  }
-  return parseHardwareKey(positionals[0]);
 }
 
 function readKeyboardAction(

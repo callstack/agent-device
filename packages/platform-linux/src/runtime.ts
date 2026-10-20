@@ -201,7 +201,6 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
     back: backKindUnavailable,
     orientation: linuxPlatformLeafUnavailable,
     tvRemote: linuxPlatformLeafUnavailable,
-    hardwareKey: linuxPlatformLeafUnavailable,
     clipboard: clipboardKindUnavailable,
     // `home` is the one system button with a desktop cell, declared below; the Linux interactor's
     // own `appSwitcher` throws unsupported, and no Linux leaf has hardware buttons.

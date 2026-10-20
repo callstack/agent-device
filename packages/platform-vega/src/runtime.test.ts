@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
 import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -164,6 +165,17 @@ test.each([
     for (const operation of ['back', 'home', 'tvRemote'] as const) {
       expect(binding.facts.operations[operation].available).toBe(supported);
       expect(binding.operations[operation]).toBeTypeOf(supported ? 'function' : 'undefined');
+    }
+    if (supported) {
+      expect(runtimeSubjectFact(binding.facts.operations.tvRemote, 'select')).toEqual({
+        available: true,
+      });
+      for (const button of ['volume-up', 'android-keycode:300']) {
+        expect(runtimeSubjectFact(binding.facts.operations.tvRemote, button)).toMatchObject({
+          available: false,
+          reason: 'unsupported-platform-leaf',
+        });
+      }
     }
     expect(binding.facts.operations.setOrientation).toMatchObject({
       available: false,

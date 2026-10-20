@@ -220,8 +220,6 @@ function expectLinuxNavigationAndKeyboardFacts(
     'appSwitcher',
     // The Action Button is iPhone/iPad hardware; the Linux desktop has no equivalent control.
     'actionButton',
-    // Volume, power, and media keys go through the Android key-event channel only.
-    'hardwareKey',
     // Nor does it have a foldable hinge to pose.
     'setFoldPose',
     // Nor a modem to simulate a call or text message on.

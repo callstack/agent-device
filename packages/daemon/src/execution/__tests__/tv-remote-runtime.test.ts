@@ -254,3 +254,37 @@ test('request router joins tv-remote admission to execution and ref invalidation
   expect(harness.bind).toHaveBeenCalledTimes(1);
   expect(harness.tvRemote).toHaveBeenCalledTimes(1);
 });
+
+test.each(['volume-up', 'android-keycode:300'])(
+  'refuses unsupported button %s before binding a runtime that supports navigation',
+  async (button) => {
+    const harness = runtimeHarness({
+      available: true,
+      subjects: { up: available },
+      unlisted: {
+        available: false,
+        reason: 'unsupported-platform-leaf',
+        hint: 'Navigation buttons only.',
+      },
+    });
+    const resolved = await resolveBoundTvRemoteRuntime({
+      platformServices: daemonPlatformServicesFixture(),
+      device: vegaVvd,
+      positionals: [button],
+      inspectFacts: harness.inspectFacts,
+      bindDevice: harness.bindDevice,
+    });
+    expect(resolved).toMatchObject({
+      ok: false,
+      response: {
+        error: {
+          code: 'UNSUPPORTED_OPERATION',
+          details: { reason: 'unsupported-platform-leaf' },
+          hint: 'Navigation buttons only.',
+        },
+      },
+    });
+    expect(harness.bindDevice).not.toHaveBeenCalled();
+    expect(harness.tvRemote).not.toHaveBeenCalled();
+  },
+);

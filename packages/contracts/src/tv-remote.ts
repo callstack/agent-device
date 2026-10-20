@@ -5,8 +5,8 @@ type TvRemoteDurationMode = 'exact' | 'longpress';
 type TvRemoteButtonDefinition = {
   aliases: readonly string[];
   androidKeyevent: string;
-  appleRemoteButton: string;
-  vegaKey: string;
+  appleRemoteButton?: string;
+  vegaKey?: string;
 };
 
 const TV_REMOTE_DURATION_MODE = {
@@ -64,46 +64,109 @@ const TV_REMOTE_BUTTON_DEFINITIONS = {
     appleRemoteButton: 'menu',
     vegaKey: 'KEY_BACK',
   },
+  'volume-up': { aliases: [], androidKeyevent: '24' },
+  'volume-down': { aliases: [], androidKeyevent: '25' },
+  mute: { aliases: [], androidKeyevent: '164' },
+  power: { aliases: [], androidKeyevent: '26' },
+  sleep: { aliases: [], androidKeyevent: '223' },
+  wake: { aliases: [], androidKeyevent: '224' },
+  'media-play-pause': { aliases: [], androidKeyevent: '85' },
+  'media-next': { aliases: [], androidKeyevent: '87' },
+  'media-previous': { aliases: [], androidKeyevent: '88' },
+  'media-rewind': { aliases: [], androidKeyevent: '89' },
+  'media-fast-forward': { aliases: [], androidKeyevent: '90' },
+  'channel-up': { aliases: [], androidKeyevent: '166' },
+  'channel-down': { aliases: [], androidKeyevent: '167' },
+  'last-channel': { aliases: [], androidKeyevent: '229' },
+  guide: { aliases: [], androidKeyevent: '172' },
+  info: { aliases: [], androidKeyevent: '165' },
+  captions: { aliases: [], androidKeyevent: '175' },
+  'tv-input': { aliases: [], androidKeyevent: '178' },
+  'color-red': { aliases: [], androidKeyevent: '183' },
+  'color-green': { aliases: [], androidKeyevent: '184' },
+  'color-yellow': { aliases: [], androidKeyevent: '185' },
+  'color-blue': { aliases: [], androidKeyevent: '186' },
 } as const satisfies Record<string, TvRemoteButtonDefinition>;
 
 export const TV_REMOTE_BUTTONS = Object.keys(
   TV_REMOTE_BUTTON_DEFINITIONS,
 ) as (keyof typeof TV_REMOTE_BUTTON_DEFINITIONS)[];
 
-export const TV_REMOTE_BUTTON_USAGE = `<${TV_REMOTE_BUTTONS.join('|')}>`;
+const ANDROID_KEYCODE_PREFIX = 'android-keycode:';
+const MAX_ANDROID_KEYCODE = 2_147_483_647;
 
-export type TvRemoteButton = (typeof TV_REMOTE_BUTTONS)[number];
+export const TV_REMOTE_BUTTON_USAGE = `<${TV_REMOTE_BUTTONS.join('|')}|android-keycode:<n>>`;
 
-export type AppleTvRemoteButton =
-  (typeof TV_REMOTE_BUTTON_DEFINITIONS)[TvRemoteButton]['appleRemoteButton'];
+type NamedTvRemoteButton = (typeof TV_REMOTE_BUTTONS)[number];
 
-export type VegaTvRemoteKey = (typeof TV_REMOTE_BUTTON_DEFINITIONS)[TvRemoteButton]['vegaKey'];
+export type TvRemoteButton = NamedTvRemoteButton | `android-keycode:${number}`;
+
+export type AppleTvRemoteButton = Extract<
+  (typeof TV_REMOTE_BUTTON_DEFINITIONS)[NamedTvRemoteButton],
+  { appleRemoteButton: string }
+>['appleRemoteButton'];
+
+export type VegaTvRemoteKey = Extract<
+  (typeof TV_REMOTE_BUTTON_DEFINITIONS)[NamedTvRemoteButton],
+  { vegaKey: string }
+>['vegaKey'];
 
 export function parseTvRemoteButton(value: string | undefined): TvRemoteButton {
   const normalized = value?.toLowerCase();
-  if (isTvRemoteButton(normalized)) return normalized;
+  if (isNamedTvRemoteButton(normalized) || isAndroidKeycode(normalized)) return normalized;
   const canonical = normalized ? TV_REMOTE_BUTTON_ALIAS_MAP.get(normalized) : undefined;
   if (canonical) return canonical;
   throw new AppError(
     'INVALID_ARGS',
-    `tv-remote button must be one of: ${TV_REMOTE_BUTTONS.join(', ')}.`,
+    `tv-remote button must be one of: ${TV_REMOTE_BUTTONS.join(', ')}, or android-keycode:<n> with n from 1 to ${MAX_ANDROID_KEYCODE}.`,
   );
 }
 
-function isTvRemoteButton(value: unknown): value is TvRemoteButton {
-  return typeof value === 'string' && TV_REMOTE_BUTTONS.includes(value as TvRemoteButton);
+function isNamedTvRemoteButton(value: unknown): value is NamedTvRemoteButton {
+  return typeof value === 'string' && Object.hasOwn(TV_REMOTE_BUTTON_DEFINITIONS, value);
+}
+
+function isAndroidKeycode(value: unknown): value is `android-keycode:${number}` {
+  if (typeof value !== 'string' || !value.startsWith(ANDROID_KEYCODE_PREFIX)) return false;
+  const digits = value.slice(ANDROID_KEYCODE_PREFIX.length);
+  return /^[1-9]\d{0,9}$/.test(digits) && Number(digits) <= MAX_ANDROID_KEYCODE;
+}
+
+export function tvRemoteButtonsForPlatform(platform: 'apple' | 'vega'): readonly TvRemoteButton[] {
+  const key = platform === 'apple' ? 'appleRemoteButton' : 'vegaKey';
+  return TV_REMOTE_BUTTONS.filter((button) => key in TV_REMOTE_BUTTON_DEFINITIONS[button]);
 }
 
 export function toAppleTvRemoteButton(button: TvRemoteButton): AppleTvRemoteButton {
-  return TV_REMOTE_BUTTON_DEFINITIONS[button].appleRemoteButton;
+  const definition = isNamedTvRemoteButton(button)
+    ? TV_REMOTE_BUTTON_DEFINITIONS[button]
+    : undefined;
+  if (definition && 'appleRemoteButton' in definition) return definition.appleRemoteButton;
+  throw unsupportedTvRemoteButton(button, 'tvOS');
 }
 
 export function toAndroidTvRemoteKeyevent(button: TvRemoteButton): string {
-  return TV_REMOTE_BUTTON_DEFINITIONS[button].androidKeyevent;
+  return isNamedTvRemoteButton(button)
+    ? TV_REMOTE_BUTTON_DEFINITIONS[button].androidKeyevent
+    : button.slice(ANDROID_KEYCODE_PREFIX.length);
 }
 
 export function toVegaTvRemoteKey(button: TvRemoteButton): VegaTvRemoteKey {
-  return TV_REMOTE_BUTTON_DEFINITIONS[button].vegaKey;
+  const definition = isNamedTvRemoteButton(button)
+    ? TV_REMOTE_BUTTON_DEFINITIONS[button]
+    : undefined;
+  if (definition && 'vegaKey' in definition) return definition.vegaKey;
+  throw unsupportedTvRemoteButton(button, 'Vega OS');
+}
+
+function unsupportedTvRemoteButton(button: TvRemoteButton, platform: string): AppError {
+  return new AppError(
+    'UNSUPPORTED_OPERATION',
+    `TV remote button ${button} is not supported on ${platform}.`,
+    {
+      reason: 'unsupported-platform-leaf',
+    },
+  );
 }
 
 export function tvRemoteDurationMode(
@@ -112,85 +175,8 @@ export function tvRemoteDurationMode(
   return TV_REMOTE_DURATION_MODE[platform];
 }
 
-const TV_REMOTE_BUTTON_ALIAS_MAP = new Map<string, TvRemoteButton>(
+const TV_REMOTE_BUTTON_ALIAS_MAP = new Map<string, NamedTvRemoteButton>(
   TV_REMOTE_BUTTONS.flatMap((button) =>
     TV_REMOTE_BUTTON_DEFINITIONS[button].aliases.map((alias) => [alias, button] as const),
   ),
 );
-
-/**
- * Volume, power, media, and TV keys: named presses that, like the TV remote buttons, each map
- * to one platform key event. Only Android sends them; no other owner carries a key-event channel.
- */
-const HARDWARE_KEY_DEFINITIONS = {
-  'volume-up': { androidKeycode: 24 },
-  'volume-down': { androidKeycode: 25 },
-  mute: { androidKeycode: 164 },
-  power: { androidKeycode: 26 },
-  sleep: { androidKeycode: 223 },
-  wake: { androidKeycode: 224 },
-  'media-play-pause': { androidKeycode: 85 },
-  'media-next': { androidKeycode: 87 },
-  'media-previous': { androidKeycode: 88 },
-  'media-rewind': { androidKeycode: 89 },
-  'media-fast-forward': { androidKeycode: 90 },
-  'channel-up': { androidKeycode: 166 },
-  'channel-down': { androidKeycode: 167 },
-  'last-channel': { androidKeycode: 229 },
-  guide: { androidKeycode: 172 },
-  info: { androidKeycode: 165 },
-  captions: { androidKeycode: 175 },
-  'tv-input': { androidKeycode: 178 },
-  'color-red': { androidKeycode: 183 },
-  'color-green': { androidKeycode: 184 },
-  'color-yellow': { androidKeycode: 185 },
-  'color-blue': { androidKeycode: 186 },
-} as const satisfies Record<string, { androidKeycode: number }>;
-
-export const HARDWARE_KEYS = Object.keys(
-  HARDWARE_KEY_DEFINITIONS,
-) as (keyof typeof HARDWARE_KEY_DEFINITIONS)[];
-
-const ANDROID_KEYCODE_PREFIX = 'android-keycode:';
-
-/** A Java `int`, the type of an Android `KeyEvent` keycode. */
-const MAX_ANDROID_KEYCODE = 2_147_483_647;
-
-export const HARDWARE_KEY_USAGE = `<${HARDWARE_KEYS.join('|')}|${ANDROID_KEYCODE_PREFIX}<n>>`;
-
-export type HardwareKey = (typeof HARDWARE_KEYS)[number];
-
-/**
- * A named key, or a raw Android keycode for a vendor remote button that no name covers, such as
- * an operator-specific channel or app key.
- */
-export type HardwareKeyToken = HardwareKey | `${typeof ANDROID_KEYCODE_PREFIX}${number}`;
-
-export function parseHardwareKey(value: string | undefined): HardwareKeyToken {
-  const normalized = value?.toLowerCase();
-  if (isHardwareKeyToken(normalized)) return normalized;
-  throw new AppError(
-    'INVALID_ARGS',
-    `hardware-key key must be one of: ${HARDWARE_KEYS.join(', ')}, or ${ANDROID_KEYCODE_PREFIX}<n> with n from 1 to ${MAX_ANDROID_KEYCODE}.`,
-  );
-}
-
-export function isHardwareKeyToken(value: unknown): value is HardwareKeyToken {
-  if (typeof value !== 'string') return false;
-  if (isHardwareKey(value)) return true;
-  const digits = value.startsWith(ANDROID_KEYCODE_PREFIX)
-    ? value.slice(ANDROID_KEYCODE_PREFIX.length)
-    : '';
-  return /^[1-9]\d{0,9}$/.test(digits) && Number(digits) <= MAX_ANDROID_KEYCODE;
-}
-
-function isHardwareKey(value: string): value is HardwareKey {
-  return Object.hasOwn(HARDWARE_KEY_DEFINITIONS, value);
-}
-
-/** The `KeyEvent` keycode `adb shell input keyevent` sends for the key. */
-export function toAndroidHardwareKeycode(key: HardwareKeyToken): number {
-  return isHardwareKey(key)
-    ? HARDWARE_KEY_DEFINITIONS[key].androidKeycode
-    : Number(key.slice(ANDROID_KEYCODE_PREFIX.length));
-}

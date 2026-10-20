@@ -20,7 +20,6 @@ export type CloudWebDriverOperation =
   | 'orientation'
   | 'appSwitcher'
   | 'tvRemote'
-  | 'hardwareKey'
   | 'clipboard.read'
   | 'clipboard.write'
   | 'settings'
@@ -60,21 +59,6 @@ export type CloudWebDriverCapabilityOverrides = Partial<
 
 const supported: CloudWebDriverOperationCapability = { support: 'supported' };
 const unsupported: CloudWebDriverOperationCapability = { support: 'unsupported' };
-
-/**
- * Android presses a KeyEvent through `mobile: pressKey`, the route the keyboard Enter press
- * already uses. XCUITest exposes no key press, so the iOS leg refuses.
- */
-const HARDWARE_KEY_CAPABILITY_BY_PLATFORM: Record<
-  CloudWebDriverPlatform,
-  CloudWebDriverOperationCapability
-> = {
-  android: {
-    support: 'partial',
-    note: 'Android presses a KeyEvent through `mobile: pressKey`, the same route the keyboard Enter press uses.',
-  },
-  ios: unsupported,
-};
 
 const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
   lease: supported,
@@ -119,8 +103,6 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
     note: 'Uses provider/Appium mobile pressButton support where available.',
   },
   tvRemote: unsupported,
-  // Overridden per platform by `createCloudWebDriverCapabilities`; XCUITest exposes no key press.
-  hardwareKey: unsupported,
   'clipboard.read': {
     support: 'partial',
     note: 'Uses provider/Appium clipboard extension support where available.',
@@ -154,10 +136,7 @@ export function createCloudWebDriverCapabilities(options: {
     platform: options.platform,
     snapshotBackend: options.platform === 'ios' ? 'xctest' : 'android',
     snapshotSource: 'appium-page-source',
-    operations: applyCapabilityOverrides(BASE_WEBDRIVER_CAPABILITIES, {
-      hardwareKey: HARDWARE_KEY_CAPABILITY_BY_PLATFORM[options.platform],
-      ...options.overrides,
-    }),
+    operations: applyCapabilityOverrides(BASE_WEBDRIVER_CAPABILITIES, options.overrides),
   };
 }
 

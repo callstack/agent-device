@@ -25,10 +25,7 @@ import type { BackRuntimeOperations } from './back-runtime.ts';
 import type { OrientationRuntimeOperations } from './orientation-runtime.ts';
 import type { FoldRuntimeOperations } from './fold-runtime.ts';
 import type { TelephonyRuntimeOperations } from './telephony-runtime.ts';
-import type {
-  TvRemoteRuntimeOperations,
-  HardwareKeyRuntimeOperations,
-} from './tv-remote-runtime.ts';
+import type { TvRemoteRuntimeOperations } from './tv-remote-runtime.ts';
 import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type { ClipboardRuntimeOperations } from './clipboard-runtime.ts';
 import type { SystemButtonRuntimeOperations } from './system-button-runtime.ts';
@@ -84,7 +81,6 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   FoldRuntimeOperations &
   TelephonyRuntimeOperations &
   TvRemoteRuntimeOperations &
-  HardwareKeyRuntimeOperations &
   KeyboardRuntimeOperations &
   ClipboardRuntimeOperations &
   SystemButtonRuntimeOperations &
@@ -121,7 +117,6 @@ export const orientationRuntimeUse = defineUse({ required: ['setOrientation'] })
 export const foldRuntimeUse = defineUse({ required: ['setFoldPose'] });
 export const telephonyRuntimeUse = defineUse({ required: ['sendTelephonyEvent'] });
 export const tvRemoteRuntimeUse = defineUse({ required: ['tvRemote'] });
-export const hardwareKeyRuntimeUse = defineUse({ required: ['hardwareKey'] });
 export const keyboardStatusUse = defineUse({ required: ['keyboardStatus'] });
 export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });
 export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });

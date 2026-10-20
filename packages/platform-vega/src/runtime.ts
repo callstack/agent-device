@@ -20,6 +20,7 @@ import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/p
 import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteButtonsForPlatform } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
@@ -200,7 +201,6 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
     back: backUnavailable,
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
-    hardwareKey: systemButtonUnavailable,
     clipboard: clipboardUnavailable,
     systemButton: systemButtonUnavailable,
     fold: foldUnavailable,
@@ -241,6 +241,14 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
       }),
       ...tvRemoteRuntimeOperationFacts({
         tvRemote: supported ? lifecycleAvailable : tvRemoteUnavailable,
+        buttonSupport: {
+          supported: tvRemoteButtonsForPlatform('vega'),
+          unsupported: {
+            available: false,
+            reason: 'unsupported-platform-leaf',
+            hint: 'This TV remote button is not supported on Vega OS.',
+          },
+        },
       }),
       // Two gesture tiers keep the retired closures' own wording instead of this owner's generic
       // one; the rest had no retired closure and now refuse at admission rather than inside the

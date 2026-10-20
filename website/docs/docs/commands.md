@@ -55,9 +55,6 @@ agent-device orientation portrait
 agent-device orientation landscape-left
 agent-device app-switcher
 agent-device action-button
-agent-device hardware-key volume-down
-agent-device hardware-key media-play-pause
-agent-device hardware-key android-keycode:300
 agent-device fold closed
 agent-device fold half-open
 agent-device fold open
@@ -121,14 +118,6 @@ Back, orientation, and hardware buttons:
 - `orientation portrait|portrait-upside-down|landscape-left|landscape-right` works on iOS and Android mobile targets only.
 - `action-button` presses the iPhone or iPad Action Button once. It takes no arguments, no hold duration, and no `--settle`, and it doesn't activate the session app or drive Camera Control. Other platforms refuse it, and a model without the button (an iPhone SE, most iPad simulators) fails with `UNSUPPORTED_OPERATION`.
 - `action-button` reports that the press was dispatched, not what it triggered. Simulators run no Shortcuts or App Intents, so verify the outcome on a physical iPhone. Expect a press to take about five seconds on a Simulator.
-- `hardware-key <key>` presses one volume, power, media, or TV key:
-  - Volume: `volume-up`, `volume-down`, `mute`.
-  - Power: `power` toggles the screen; `sleep` and `wake` turn it off or on.
-  - Media: `media-play-pause`, `media-next`, `media-previous`, `media-rewind`, `media-fast-forward`.
-  - TV remote: `channel-up`, `channel-down`, `last-channel`, `guide`, `info`, `captions`, `tv-input`, `color-red`, `color-green`, `color-yellow`, `color-blue`.
-- Use `hardware-key` to check volume and mute handling, standby and wake during playback, and media and channel keys, on a phone or an Android TV target.
-- For a vendor remote button that no name covers, pass its Android keycode as `android-keycode:<n>`, for example `hardware-key android-keycode:300`. `n` is an integer from 1 to 2147483647; agent-device sends it as is and does not check what the device maps it to.
-- `hardware-key` works on Android emulators and devices over ADB (`input keyevent`), including Limrun Android sessions and Android sessions on the Appium (WebDriver) backend, which presses the keycode through `mobile: pressKey`. iOS, tvOS, macOS, web, Linux, Vega OS, HarmonyOS, and Limrun iOS report `UNSUPPORTED_OPERATION`. The key goes to the system and the foreground media session, and nothing is re-observed afterwards, so take a snapshot or screenshot to check the effect.
 
 Fold a foldable device:
 
@@ -297,6 +286,9 @@ agent-device tv-remote press down --platform android --target tv
 agent-device tv-remote press select --platform android --target tv
 agent-device tv-remote longpress select --platform android --target tv
 agent-device tv-remote press select --duration-ms 900 --platform android --target tv
+agent-device tv-remote volume-down --platform android --target tv
+agent-device tv-remote media-play-pause --platform android --target tv
+agent-device tv-remote android-keycode:300 --platform android --target tv
 agent-device screenshot tv-focus.png --overlay-refs --platform android --target tv
 agent-device open Settings --platform ios --target tv
 agent-device screenshot apple-tv.png --platform ios --target tv
@@ -311,9 +303,13 @@ vega virtual-device stop
 
 - TV targets include Apple TV and Android TV simulators, emulators, and connected devices. Vega OS support is limited to the Vega Virtual Device (VVD).
 - TV targets are focus-first: move focus with `tv-remote` before selecting a control. Don't use raw `adb shell input keyevent` in command plans.
-- Android TV: app launch and app listing use `LEANBACK_LAUNCHER` activities. `tv-remote` sends ADB keyevents; `longpress <button>` is a 500ms hold, and any positive `--duration-ms` uses Android's longpress keyevent, which has no exact hold time.
+- `tv-remote` is TV-only. Android phones, iPhones, and WebDriver (Appium) sessions refuse it with `UNSUPPORTED_OPERATION`.
+- All three TV backends support `up`, `down`, `left`, `right`, `select`, `menu`, `home`, and `back`. Android TV also accepts `volume-up`, `volume-down`, `mute`, `power`, `sleep`, `wake`, `media-play-pause`, `media-next`, `media-previous`, `media-rewind`, `media-fast-forward`, `channel-up`, `channel-down`, `last-channel`, `guide`, `info`, `captions`, `tv-input`, `color-red`, `color-green`, `color-yellow`, and `color-blue`. tvOS and Vega OS refuse the additional buttons before dispatch.
+- For an Android TV remote button without a name, use `android-keycode:<n>` with a decimal code from 1 to 2147483647. Other TV backends refuse raw Android codes. An unknown name or invalid code fails with `INVALID_ARGS`.
+- `power` and `sleep` can turn the screen off. A successful response confirms that the button was sent; it does not verify playback, volume, or display state, and it does not wait for the app to settle.
+- Android TV: app launch and app listing use `LEANBACK_LAUNCHER` activities. `tv-remote` sends ADB keyevents; `longpress <button>` selects the long-press preset, and any positive `--duration-ms` uses Android's longpress keyevent, which has no exact hold time.
 - tvOS supports the same runner-driven commands as iOS (`snapshot`, `wait`, `press`, `fill`, `get`, `scroll`, `back`, `home`, `app-switcher`, `record`, and selector flows). `back` is the Siri Remote Menu button, `home` is Home, and the app switcher is a double Home press; `--duration-ms` is an exact hold. Helpers that are simulator-only on iOS, such as `settings` and `push`, are simulator-only on tvOS too. tvOS refuses multi-touch gestures such as `gesture pinch`.
-- Vega OS: use `--platform vega --target tv` with Vega component IDs such as `com.example.app.main`, and `--serial VirtualDevice` to select the VVD explicitly. Commands go through the SDK-matched Vega CLI and VDA. The VVD supports app open/close, `back`, `home`, and every shared `tv-remote` button, with exact holds.
+- Vega OS: use `--platform vega --target tv` with Vega component IDs such as `com.example.app.main`, and `--serial VirtualDevice` to select the VVD explicitly. Commands go through the SDK-matched Vega CLI and VDA. The VVD supports app open/close, `back`, `home`, and the eight navigation buttons listed above, with exact holds.
 - Vega OS doesn't support physical Fire TV, app inventory, snapshot, screenshot, selectors, install, touch/text/gesture, logs, or performance; those report unsupported. Use the VVD display as visual truth.
 - On Android TV and tvOS, use `screenshot --overlay-refs` for visual focus evidence, especially when focus metadata is missing or transient.
 

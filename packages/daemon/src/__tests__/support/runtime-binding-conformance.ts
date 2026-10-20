@@ -34,7 +34,6 @@ import {
 } from '../../execution/system-button-runtime.ts';
 import { resolveBoundTelephonyRuntime } from '../../execution/telephony-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from '../../execution/tv-remote-runtime.ts';
-import { resolveBoundHardwareKeyRuntime } from '../../execution/hardware-key-runtime.ts';
 import { resolveBoundTypeTextRuntime } from '../../execution/type-text-runtime.ts';
 import { resolveBoundViewportRuntime } from '../../execution/viewport-runtime.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
@@ -142,12 +141,6 @@ export const conformedRuntimeBindings = {
   'tv-remote': {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundTvRemoteRuntime({ device, positionals: ['down'], ...bindings })),
-  },
-  'hardware-key': {
-    resolve: async (device, bindings) =>
-      refusable(
-        await resolveBoundHardwareKeyRuntime({ device, positionals: ['volume-up'], ...bindings }),
-      ),
   },
   type: {
     resolve: (device, bindings) => resolveBoundTypeTextRuntime({ device, ...bindings }),

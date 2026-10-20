@@ -8,7 +8,6 @@ import {
   limrunAlertOperationFacts,
   limrunSettingsOperationFacts,
   limrunSystemButtonOperationFacts,
-  limrunHardwareKeyOperationFacts,
   limrunClipboardOperationFacts,
   limrunInteractionOperationFacts,
   limrunNavigationOperationFacts,
@@ -89,19 +88,6 @@ test('home is admitted on both legs, app-switcher only on Android, the action bu
   expect(stale.home).toEqual(liveSessionUnavailable);
   expect(stale.appSwitcher).toEqual(liveSessionUnavailable);
   expect(stale.actionButton).toEqual(liveSessionUnavailable);
-});
-
-test('hardware keys ride the Android key-event channel, and each other leg refuses', () => {
-  expect(limrunHardwareKeyOperationFacts(androidMobileDevice).hardwareKey).toEqual({
-    available: true,
-  });
-  expect(limrunHardwareKeyOperationFacts(iosDevice).hardwareKey).toMatchObject({
-    available: false,
-    reason: 'unsupported-provider-mode',
-  });
-  expect(
-    limrunHardwareKeyOperationFacts(androidMobileDevice, liveSessionUnavailable).hardwareKey,
-  ).toEqual(liveSessionUnavailable);
 });
 
 // R57: app-event delivery is the one system leaf BOTH direct-session legs serve, because each

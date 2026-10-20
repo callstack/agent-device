@@ -29,10 +29,7 @@ import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
-import {
-  tvRemoteRuntimeOperationFacts,
-  hardwareKeyRuntimeOperationFacts,
-} from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
   type DeviceBinding,
   type RuntimeFacts,
@@ -216,16 +213,6 @@ const appSwitcherUnavailable = unavailableFact(
 const systemButtonUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'No WebDriver backend presses this system button.',
-);
-/**
- * States why this runtime cannot reach a key press at all: no interactor to drive, or a device
- * shape it does not serve. A declared-capability refusal reads differently — `declaredCapabilityCell`
- * builds a provider-specific message from the capability note — and the iOS cross-platform refusal
- * keeps the pointer hint in the Apple runtime.
- */
-const hardwareKeyUnavailable = unavailableFact(
-  'unsupported-provider-mode',
-  'This provider runtime exposes no hardware-key channel (mobile: pressKey).',
 );
 
 /** No WebDriver `mobile:` script poses a foldable hinge; the refusal is unconditional like the Action Button's. */
@@ -523,7 +510,6 @@ function webDriverFacts(
     back: backUnavailable,
     orientation: orientationUnavailable,
     tvRemote: tvRemoteUnavailable,
-    hardwareKey: hardwareKeyUnavailable,
     keyboard: keyboardUnavailable,
     clipboard: clipboardUnavailable,
     systemButton: systemButtonUnavailable,
@@ -637,11 +623,6 @@ function webDriverFacts(
         unsupported: systemButtonUnavailable,
         home: declared('home', homeUnavailable),
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
-      }),
-      // The same `mobile: pressKey` route the keyboard Enter press uses, so the declared
-      // capability is the gate; the capability map is per-platform and iOS refuses there.
-      ...hardwareKeyRuntimeOperationFacts({
-        hardwareKey: declared('hardwareKey', hardwareKeyUnavailable),
       }),
       setFoldPose: foldUnavailable,
       sendTelephonyEvent: telephonyUnavailable,

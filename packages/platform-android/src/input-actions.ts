@@ -20,12 +20,7 @@ import {
   clipScrollViewportAboveKeyboard,
   scrollKeyboardOccludesSurfaceError,
 } from '@agent-device/contracts/scroll-gesture';
-import {
-  type HardwareKeyToken,
-  type TvRemoteButton,
-  toAndroidHardwareKeycode,
-  toAndroidTvRemoteKeyevent,
-} from '@agent-device/contracts/tv-remote';
+import { type TvRemoteButton, toAndroidTvRemoteKeyevent } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
@@ -88,13 +83,6 @@ export async function pressAndroidTvRemote(
   const keyevent = toAndroidTvRemoteKeyevent(button);
   const keyeventArgs = durationMs && durationMs > 0 ? ['keyevent', '--longpress'] : ['keyevent'];
   await runAndroidShell(device, ['input', ...keyeventArgs, keyevent]);
-}
-
-export async function pressAndroidHardwareKey(
-  device: DeviceInfo,
-  key: HardwareKeyToken,
-): Promise<void> {
-  await runAndroidShell(device, ['input', 'keyevent', toAndroidHardwareKeycode(key)]);
 }
 
 export async function backAndroid(

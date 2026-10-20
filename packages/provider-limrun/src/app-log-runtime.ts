@@ -115,7 +115,6 @@ export function createLimrunPlatformRuntimeOwner(
             back: liveSessionUnavailable,
             orientation: liveSessionUnavailable,
             tvRemote: liveSessionUnavailable,
-            hardwareKey: liveSessionUnavailable,
             keyboard: liveSessionUnavailable,
             clipboard: liveSessionUnavailable,
             systemButton: liveSessionUnavailable,

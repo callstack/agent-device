@@ -5,10 +5,8 @@ import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orient
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
-import {
-  tvRemoteRuntimeOperationFacts,
-  hardwareKeyRuntimeOperationFacts,
-} from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteButtonsForPlatform } from '@agent-device/contracts/tv-remote';
 import {
   hasAppleActionButton,
   isTvOsDevice,
@@ -134,16 +132,11 @@ function appleKeyboardEnterFact(device: DeviceInfo): RuntimeOperationFact {
   return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
 }
 
+/** Every system button this owner knows is named below; the family denial covers none today. */
 const systemButtonUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'No Apple leaf carries this system button.',
-} as const);
-/** The runner presses no volume, power, or media key, so no Apple leaf admits one. */
-const hardwareKeyUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'hardware-key is supported on Android (ADB or Appium).',
 } as const);
 const actionButtonKindUnavailable = Object.freeze({
   available: false,
@@ -181,8 +174,17 @@ export function appleNavigationFacts(device: DeviceInfo) {
       actionButton: appleActionButtonFact(device),
     }),
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
-    ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),
-    ...hardwareKeyRuntimeOperationFacts({ hardwareKey: hardwareKeyUnavailable }),
+    ...tvRemoteRuntimeOperationFacts({
+      tvRemote: appleTvRemoteFact(device),
+      buttonSupport: {
+        supported: tvRemoteButtonsForPlatform('apple'),
+        unsupported: {
+          available: false,
+          reason: 'unsupported-platform-leaf',
+          hint: 'This TV remote button is not supported on tvOS.',
+        },
+      },
+    }),
     ...keyboardRuntimeOperationFacts({
       unsupported: keyboardCellUnavailable,
       status: appleKeyboardStatusFact(device),

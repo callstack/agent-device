@@ -22,10 +22,7 @@ import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
 import { backRuntimeOperationFacts } from './back-runtime.ts';
 import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
-import {
-  tvRemoteRuntimeOperationFacts,
-  hardwareKeyRuntimeOperationFacts,
-} from './tv-remote-runtime.ts';
+import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { systemButtonRuntimeOperationFacts } from './system-button-runtime.ts';
@@ -63,7 +60,6 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   fold: RuntimeOperationUnavailability;
   telephony: RuntimeOperationUnavailability;
   tvRemote: RuntimeOperationUnavailability;
-  hardwareKey: RuntimeOperationUnavailability;
   keyboard: RuntimeOperationUnavailability;
   clipboard: RuntimeOperationUnavailability;
   systemButton: RuntimeOperationUnavailability;
@@ -121,7 +117,6 @@ const UNAVAILABLE_CELLS = {
   fold: true,
   telephony: true,
   tvRemote: true,
-  hardwareKey: true,
   keyboard: true,
   clipboard: true,
   systemButton: true,
@@ -248,7 +243,6 @@ export function createUnavailablePlatformRuntimeFacts(
       setFoldPose: frozen.fold,
       sendTelephonyEvent: frozen.telephony,
       ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
-      ...hardwareKeyRuntimeOperationFacts({ hardwareKey: frozen.hardwareKey }),
       ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
       ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...systemButtonRuntimeOperationFacts({ unsupported: frozen.systemButton }),

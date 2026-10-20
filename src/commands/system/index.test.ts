@@ -5,7 +5,6 @@ import type {
   AppSwitcherCommandOptions,
   BackCommandOptions,
   FoldCommandOptions,
-  HardwareKeyCommandOptions,
   HomeCommandOptions,
   OrientationCommandOptions,
   TelephonyCommandOptions,
@@ -22,8 +21,6 @@ import {
   clipboardDaemonWriter,
   foldCliReader,
   foldDaemonWriter,
-  hardwareKeyCliReader,
-  hardwareKeyDaemonWriter,
   keyboardCliReader,
   keyboardDaemonWriter,
   orientationCliReader,
@@ -71,9 +68,6 @@ describe('system command interface', () => {
     >();
     expectTypeOf<AgentDeviceCommandClient['tvRemote']>().toEqualTypeOf<
       (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>
-    >();
-    expectTypeOf<AgentDeviceCommandClient['hardwareKey']>().toEqualTypeOf<
-      (options: HardwareKeyCommandOptions) => Promise<CommandResult<'hardware-key'>>
     >();
   });
 
@@ -352,6 +346,11 @@ describe('system command interface', () => {
     expect(tvRemoteCliReader(['press', 'select'], flags())).toMatchObject({
       button: 'select',
     });
+    expect(tvRemoteCliReader(['volume-down'], flags())).toMatchObject({ button: 'volume-down' });
+    expect(
+      tvRemoteDaemonWriter({ button: 'android-keycode:300' } as Record<string, unknown>)
+        .positionals,
+    ).toEqual(['android-keycode:300']);
     expect(tvRemoteCliReader(['ok'], flags())).toMatchObject({ button: 'select' });
     expect(tvRemoteCliReader(['center'], flags())).toMatchObject({ button: 'select' });
     expect(tvRemoteCliReader(['enter'], flags())).toMatchObject({ button: 'select' });
@@ -385,33 +384,6 @@ describe('system command interface', () => {
       'tv-remote requires exactly one button',
     );
     expectInvalidArgs(() => tvRemoteCliReader(['blue'], flags()), 'button must be one of');
-  });
-
-  test('hardware-key reader parses one key and the writer forwards it', () => {
-    expect(hardwareKeyCliReader(['volume-down'], flags())).toMatchObject({ key: 'volume-down' });
-    expect(hardwareKeyCliReader(['Media-Next'], flags())).toMatchObject({ key: 'media-next' });
-    expect(hardwareKeyCliReader(['android-keycode:300'], flags())).toMatchObject({
-      key: 'android-keycode:300',
-    });
-    expect(hardwareKeyDaemonWriter({ key: 'wake' } as Record<string, unknown>).positionals).toEqual(
-      ['wake'],
-    );
-  });
-
-  test('hardware-key reader rejects a missing, extra, or unknown key', () => {
-    expectInvalidArgs(
-      () => hardwareKeyCliReader([], flags()),
-      'hardware-key requires exactly one key',
-    );
-    expectInvalidArgs(
-      () => hardwareKeyCliReader(['mute', 'power'], flags()),
-      'hardware-key requires exactly one key',
-    );
-    expectInvalidArgs(() => hardwareKeyCliReader(['camera'], flags()), 'key must be one of');
-    expectInvalidArgs(
-      () => hardwareKeyCliReader(['android-keycode:0'], flags()),
-      'key must be one of',
-    );
   });
 });
 

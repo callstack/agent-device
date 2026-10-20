@@ -30,10 +30,7 @@ import {
   bindProviderSnapshotInteractor,
   type SnapshotRuntimePresenter,
 } from '@agent-device/contracts/snapshot-runtime';
-import {
-  tvRemoteRuntimeOperationFacts,
-  hardwareKeyRuntimeOperationFacts,
-} from '@agent-device/contracts/tv-remote-runtime';
+import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
   bindProviderTypeTextInteractor,
   typeTextRuntimeOperationFacts,
@@ -134,7 +131,7 @@ const appSwitcherUnavailableIos = unavailableFact(
   'unsupported-provider-mode',
   'Limrun iOS direct sessions do not expose app switcher yet.',
 );
-/** No Limrun session exposes the action button; `appSwitcher` and `hardwareKey` split by leg. */
+/** No Limrun session exposes the action button; only `appSwitcher` still splits by leg. */
 const systemButtonUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'No Limrun session exposes this system button.',
@@ -289,9 +286,9 @@ export function limrunAlertOperationFacts(
 }
 
 /**
- * The Android leg rides the local family's own interactor factory for `home` and `appSwitcher`,
- * the same `input keyevent` channel. The iOS direct session presses `home` through Limrun's button
- * actions and refuses the rest. No Limrun session exposes the action button.
+ * The Android leg rides the local family's own interactor factory for `home` and `appSwitcher`.
+ * The iOS direct session presses `home` through Limrun's button actions and refuses
+ * `appSwitcher`. No Limrun session exposes the action button.
  */
 export function limrunSystemButtonOperationFacts(
   device: DeviceInfo,
@@ -312,24 +309,6 @@ export function limrunSystemButtonOperationFacts(
     home: available,
     appSwitcher: appSwitcherUnavailableIos,
   });
-}
-
-/**
- * `hardwareKey` rides the same `input keyevent` channel as `home` on the Android leg, so every
- * Android session admits it. The iOS direct session's button actions carry no volume, power, or
- * media key, and a live session binds no interactor at all.
- */
-export function limrunHardwareKeyOperationFacts(
-  device: DeviceInfo,
-  liveSessionUnavailable?: RuntimeOperationUnavailability,
-) {
-  if (liveSessionUnavailable) {
-    return hardwareKeyRuntimeOperationFacts({ hardwareKey: liveSessionUnavailable });
-  }
-  if (device.platform === 'android') {
-    return hardwareKeyRuntimeOperationFacts({ hardwareKey: available });
-  }
-  return hardwareKeyRuntimeOperationFacts({ hardwareKey: systemButtonUnavailable });
 }
 
 /**

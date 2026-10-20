@@ -65,7 +65,6 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   back: unavailable,
   setOrientation: unavailable,
   tvRemote: unavailable,
-  hardwareKey: unavailable,
   ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
   ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
   ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),

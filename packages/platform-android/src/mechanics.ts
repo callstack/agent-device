@@ -183,7 +183,6 @@ export {
   longPressAndroid,
   pressAndroid,
   pressAndroidEnter,
-  pressAndroidHardwareKey,
   pressAndroidTvRemote,
   scrollAndroid,
   setAndroidOrientation,
