@@ -163,7 +163,7 @@ export function daemonBusyError(
 }
 
 /** Refuses stop or replacement when the record cannot prove a detached owner. */
-export function daemonRecordOwnerUnrecognizedError(params: {
+function daemonRecordOwnerUnrecognizedError(params: {
   info: DaemonIdentity | null;
   stateDir: string;
 }): AppError {

@@ -153,7 +153,7 @@ function daemonRetirementError(
   );
 }
 
-export function daemonNotRunningStopResult(): DaemonStopResult {
+function daemonNotRunningStopResult(): DaemonStopResult {
   return {
     stopped: false,
     mode: 'not-running',
