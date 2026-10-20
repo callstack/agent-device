@@ -1,8 +1,4 @@
-import type {
-  SnapshotQualityNote,
-  SnapshotQualityState,
-  SnapshotQualityVerdict,
-} from '@agent-device/kernel/snapshot';
+import type { SnapshotQualityState, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { SNAPSHOT_QUALITY_BACKEND_CAPABILITIES } from './snapshot-quality-backend-capabilities.ts';
 
 /**
@@ -107,30 +103,4 @@ export function preferredSnapshotBackendForVerdict(
   verdict: SnapshotQualityVerdict | undefined,
 ): 'private-ax' | undefined {
   return verdict?.backend === 'private-ax' ? 'private-ax' : undefined;
-}
-
-export function readSnapshotQualityNotes(value: unknown): SnapshotQualityNote[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const notes: SnapshotQualityNote[] = [];
-  for (const entry of value.slice(0, 1)) {
-    if (!entry || typeof entry !== 'object') continue;
-    const raw = entry as Record<string, unknown>;
-    if (raw.code !== 'regular-geometry-clipped') continue;
-    if (
-      typeof raw.clippedNodeCount !== 'number' ||
-      !Number.isSafeInteger(raw.clippedNodeCount) ||
-      raw.clippedNodeCount < 0 ||
-      typeof raw.droppedNodeCount !== 'number' ||
-      !Number.isSafeInteger(raw.droppedNodeCount) ||
-      raw.droppedNodeCount < 0 ||
-      raw.clippedNodeCount + raw.droppedNodeCount === 0
-    )
-      continue;
-    notes.push({
-      code: raw.code,
-      clippedNodeCount: raw.clippedNodeCount,
-      droppedNodeCount: raw.droppedNodeCount,
-    });
-  }
-  return notes.length > 0 ? notes : undefined;
 }

@@ -28,11 +28,16 @@ extension RunnerTests {
     XCTAssertEqual(payload.nodes?[1].hittable, true)
     XCTAssertEqual(payload.nodes?[2].hittable, false)
     XCTAssertEqual(payload.nodes?[3].parentIndex, 0)
-    XCTAssertEqual(payload.snapshotQuality?.state, .healthy)
-    XCTAssertEqual(payload.snapshotQuality?.notes?.first?.code, .regularGeometryClipped)
-    XCTAssertEqual(payload.snapshotQuality?.notes?.first?.clippedNodeCount, 2)
-    XCTAssertEqual(payload.snapshotQuality?.notes?.first?.droppedNodeCount, 1)
+    XCTAssertNil(payload.snapshotQuality)
+    XCTAssertEqual(payload.snapshotQualityNotes?.first?.code, .regularGeometryClipped)
+    XCTAssertEqual(payload.snapshotQualityNotes?.first?.clippedNodeCount, 2)
+    XCTAssertEqual(payload.snapshotQualityNotes?.first?.droppedNodeCount, 1)
     XCTAssertEqual(payload.truncated, false)
+    let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any])
+    XCTAssertNil(wire["snapshotQuality"])
+    let notes = try XCTUnwrap(wire["snapshotQualityNotes"] as? [[String: Any]])
+    XCTAssertEqual(notes.first?["clippedNodeCount"] as? Int, 2)
+    XCTAssertEqual(notes.first?["droppedNodeCount"] as? Int, 1)
 
     let raw = try Self.blockingSystemModalPayload(
       nodes: nodes,
@@ -41,7 +46,19 @@ extension RunnerTests {
     XCTAssertEqual(raw.nodes?.count, 5)
     XCTAssertEqual(raw.nodes?[1].rect, nodes[1].rect)
     XCTAssertEqual(raw.nodes?[3].rect, nodes[3].rect)
-    XCTAssertNil(raw.snapshotQuality?.notes)
+    XCTAssertNil(raw.snapshotQuality)
+    XCTAssertNil(raw.snapshotQualityNotes)
+  }
+
+  func testOrdinaryBlockingModalDoesNotInventQuality() throws {
+    let payload = try Self.blockingSystemModalPayload(nodes: [
+      Self.modalGeometryNode(0, type: "Alert", y: 0, height: 240),
+      Self.modalGeometryNode(1, type: "Button", y: 100, height: 44),
+    ])
+    let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: Any])
+    XCTAssertNil(wire["snapshotQuality"])
+    XCTAssertNil(wire["snapshotQualityNotes"])
+    XCTAssertEqual(payload.nodes?.count, 2)
   }
 
   private static func modalGeometryNode(_ index: Int, type: String, y: Double, height: Double) -> RawAXNode {

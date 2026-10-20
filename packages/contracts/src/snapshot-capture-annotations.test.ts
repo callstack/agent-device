@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { SNAPSHOT_QUALITY_STATES } from '@agent-device/kernel/snapshot';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
-import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
+import {
+  readSerializedSnapshotCaptureAnnotations,
+  readSnapshotQualityNotes,
+} from './snapshot-capture-annotations.ts';
 
 test('the annotations filter and the shared warnings parser agree on adversarial arrays', () => {
   for (const warnings of [
@@ -85,5 +88,36 @@ test('an undeclared backend drops the serialized verdict', () => {
       snapshotQuality: { state: 'sparse', backend },
     });
     assert.equal(annotations.snapshotQuality, undefined, JSON.stringify(backend));
+  }
+});
+
+test('geometry clipping notes validate independently of capture verdicts', () => {
+  const note = { code: 'regular-geometry-clipped', clippedNodeCount: 2, droppedNodeCount: 1 };
+  assert.deepEqual(readSnapshotQualityNotes([note]), [note]);
+  for (const notes of [
+    [{ ...note, code: 'unknown' }],
+    [{ ...note, clippedNodeCount: -1 }],
+    [{ ...note, droppedNodeCount: 0.5 }],
+    [{ ...note, clippedNodeCount: 0, droppedNodeCount: 0 }],
+    [{ ...note, clippedNodeCount: Infinity }],
+  ]) {
+    assert.equal(readSnapshotQualityNotes(notes), undefined);
+  }
+  assert.deepEqual(readSnapshotQualityNotes([note, note]), [note]);
+});
+
+test('serialized clipping notes are bounded and independent of verdicts', () => {
+  const note = { code: 'regular-geometry-clipped', clippedNodeCount: 1, droppedNodeCount: 2 };
+  const annotations = readSerializedSnapshotCaptureAnnotations({
+    snapshotQualityNotes: [note, note],
+  });
+  assert.deepEqual(annotations.snapshotQualityNotes, [note]);
+  assert.equal(annotations.snapshotQuality, undefined);
+  for (const value of [[{ ...note, clippedNodeCount: -1 }], [null], ['bad'], []]) {
+    assert.equal(
+      readSerializedSnapshotCaptureAnnotations({ snapshotQualityNotes: value })
+        .snapshotQualityNotes,
+      undefined,
+    );
   }
 });

@@ -97,16 +97,7 @@ extension RunnerTests {
       nodes: result.nodes,
       truncated: false,
       qualityPayload: result.qualityNodes.map { SnapshotQualityPayload(nodes: $0, truncated: false) },
-      snapshotQuality: SnapshotQuality(
-        state: .healthy,
-        backend: SnapshotBackendKind.recursiveTree.rawValue,
-        reason: nil,
-        reasonCode: nil,
-        effectiveDepth: nil,
-        collapsedLeafIndexes: nil,
-        customActions: nil,
-        notes: result.qualityNotes.isEmpty ? nil : result.qualityNotes
-      ),
+      snapshotQualityNotes: result.qualityNotes.isEmpty ? nil : result.qualityNotes,
       presentedSurface: .presented
     )
   }

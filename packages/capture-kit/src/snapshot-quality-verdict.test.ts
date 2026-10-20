@@ -7,7 +7,6 @@ import {
   isSparseSnapshotQualityVerdict,
   preferredSnapshotBackendForVerdict,
   readSnapshotQualityVerdict,
-  readSnapshotQualityNotes,
 } from './snapshot-quality-verdict.ts';
 
 test('readSnapshotQualityVerdict accepts a well-formed verdict', () => {
@@ -156,22 +155,4 @@ test('the contracts re-read calls a verdict a verdict on every payload', () => {
       JSON.stringify(payload),
     );
   }
-});
-
-test('geometry clipping notes validate independently of capture verdicts', () => {
-  const note = { code: 'regular-geometry-clipped', clippedNodeCount: 2, droppedNodeCount: 1 };
-  const verdict = readSnapshotQualityVerdict({ state: 'healthy', backend: 'tree', notes: [note] });
-  assert.equal(verdict?.state, 'healthy');
-  assert.deepEqual(readSnapshotQualityNotes([note]), [note]);
-  assert.equal(verdict?.reasonCode, undefined);
-  for (const notes of [
-    [{ ...note, code: 'unknown' }],
-    [{ ...note, clippedNodeCount: -1 }],
-    [{ ...note, droppedNodeCount: 0.5 }],
-    [{ ...note, clippedNodeCount: 0, droppedNodeCount: 0 }],
-    [{ ...note, clippedNodeCount: Infinity }],
-  ]) {
-    assert.equal(readSnapshotQualityNotes(notes), undefined);
-  }
-  assert.deepEqual(readSnapshotQualityNotes([note, note]), [note]);
 });

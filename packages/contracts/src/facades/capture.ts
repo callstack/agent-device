@@ -28,6 +28,7 @@ export type {
 export {
   publicSnapshotCaptureAnnotations,
   readSerializedSnapshotCaptureAnnotations,
+  readSnapshotQualityNotes,
   readSnapshotObservation,
   snapshotCaptureAnnotationsFrom,
 } from '../snapshot-capture-annotations.ts';

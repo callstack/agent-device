@@ -16,7 +16,6 @@ import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality
 import {
   isSparseSnapshotQualityVerdict,
   readSnapshotQualityVerdict,
-  readSnapshotQualityNotes,
 } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import {
   createIosSnapshotRequest,
@@ -45,7 +44,7 @@ import {
 } from '@agent-device/contracts/ios-system-surface';
 import { emitDiagnostic } from './host.ts';
 import { TARGET_ACTIVATION_WIRE_KEY, readTargetActivationFact } from './target-activation.ts';
-import { readSnapshotObservation } from '@agent-device/contracts/capture';
+import { readSnapshotObservation, readSnapshotQualityNotes } from '@agent-device/contracts/capture';
 
 export type AppleRunnerSnapshotResult = Readonly<{
   nodes?: RawSnapshotNode[];
@@ -91,9 +90,7 @@ export function readAppleSnapshotResult(
     nodes: nodes?.map(interpret),
     truncated: typeof result.truncated === 'boolean' ? result.truncated : undefined,
     quality: readSnapshotQualityVerdict(result.snapshotQuality),
-    qualityNotes: readSnapshotQualityNotes(
-      isRecord(result.snapshotQuality) ? result.snapshotQuality.notes : undefined,
-    ),
+    qualityNotes: readSnapshotQualityNotes(result.snapshotQualityNotes),
     qualityPayload: qualityPayload
       ? { ...qualityPayload, nodes: qualityPayload.nodes.map(interpret) }
       : qualityPayload,

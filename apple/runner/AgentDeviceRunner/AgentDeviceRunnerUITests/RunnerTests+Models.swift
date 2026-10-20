@@ -440,6 +440,7 @@ struct DataPayload: Codable {
   var truncated: Bool?
   var qualityPayload: SnapshotQualityPayload? = nil
   var snapshotQuality: SnapshotQuality?
+  var snapshotQualityNotes: [SnapshotQualityNote]? = nil
   /// Set when the capture describes an in-place system surface, not the app itself (#2438).
   var systemSurface: SystemSurfaceProvenancePayload?
   /// Whether this capture read a modal presentation over the app's own content (#3565). The runner's

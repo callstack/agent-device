@@ -99,9 +99,7 @@ export function readSerializedSnapshotCaptureAnnotations(
     ? data.warnings.filter((entry): entry is string => typeof entry === 'string')
     : undefined;
   const quality = readPublishedSnapshotQualityVerdict(data.snapshotQuality);
-  const qualityNotes = Array.isArray(data.snapshotQualityNotes)
-    ? (data.snapshotQualityNotes as SnapshotQualityNote[])
-    : undefined;
+  const qualityNotes = readSnapshotQualityNotes(data.snapshotQualityNotes);
   const targetActivation = readTargetActivation(data.targetActivation);
   const observation = readSnapshotObservation(data.observation);
   return publicSnapshotCaptureAnnotations({
@@ -167,4 +165,30 @@ function readObject(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+export function readSnapshotQualityNotes(value: unknown): SnapshotQualityNote[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const notes: SnapshotQualityNote[] = [];
+  for (const entry of value.slice(0, 1)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const raw = entry as Record<string, unknown>;
+    if (raw.code !== 'regular-geometry-clipped') continue;
+    if (
+      typeof raw.clippedNodeCount !== 'number' ||
+      !Number.isSafeInteger(raw.clippedNodeCount) ||
+      raw.clippedNodeCount < 0 ||
+      typeof raw.droppedNodeCount !== 'number' ||
+      !Number.isSafeInteger(raw.droppedNodeCount) ||
+      raw.droppedNodeCount < 0 ||
+      raw.clippedNodeCount + raw.droppedNodeCount === 0
+    )
+      continue;
+    notes.push({
+      code: raw.code,
+      clippedNodeCount: raw.clippedNodeCount,
+      droppedNodeCount: raw.droppedNodeCount,
+    });
+  }
+  return notes.length > 0 ? notes : undefined;
 }

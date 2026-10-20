@@ -509,7 +509,7 @@ test('a clipped system alert passes host validation and retains its typed qualit
         },
       ],
       truncated: false,
-      snapshotQuality: { state: 'healthy', backend: 'tree', notes: [note] },
+      snapshotQualityNotes: [note],
     },
     IOS_SIMULATOR,
   );
@@ -519,5 +519,23 @@ test('a clipped system alert passes host validation and retains its typed qualit
     true,
   );
   assert.deepEqual(read.qualityNotes, [note]);
-  assert.equal(read.quality?.state, 'healthy');
+  assert.equal(read.quality, undefined);
+});
+
+test('runner wire keeps real verdicts independent of clipping notes', () => {
+  const quality = { state: 'recovered', backend: 'queries', reasonCode: 'ax-rejected' };
+  const note = { code: 'regular-geometry-clipped', clippedNodeCount: 1, droppedNodeCount: 2 };
+  const read = readAppleSnapshotResult(
+    { snapshotQuality: quality, snapshotQualityNotes: [note] },
+    IOS_SIMULATOR,
+  );
+  assert.equal(read.quality?.state, 'recovered');
+  assert.equal(read.quality?.backend, 'queries');
+  assert.equal(read.quality?.reasonCode, 'ax-rejected');
+  assert.deepEqual(read.qualityNotes, [note]);
+  assert.equal(readAppleSnapshotResult({ nodes: [] }, IOS_SIMULATOR).quality, undefined);
+  assert.equal(
+    readAppleSnapshotResult({ snapshotQuality: quality }, IOS_SIMULATOR).qualityNotes,
+    undefined,
+  );
 });

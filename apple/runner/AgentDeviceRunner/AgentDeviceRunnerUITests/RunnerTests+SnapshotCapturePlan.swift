@@ -20,7 +20,7 @@ enum SnapshotQualityState: String, Codable, CaseIterable {
   case sparse
 }
 
-/// Structured quality verdict shipped with every iOS snapshot payload.
+/// Structured quality verdict from an iOS capture plan.
 struct SnapshotQuality: Codable {
   let state: SnapshotQualityState
   /// Backend that produced the returned payload: tree | queries | private-ax.
@@ -39,7 +39,6 @@ struct SnapshotQuality: Codable {
   let customActions: SnapshotCustomActionCoverage?
   /// Response-level timing for the accepted backend attempt, never repeated per node.
   var timing: SnapshotCaptureTiming? = nil
-  var notes: [SnapshotQualityNote]? = nil
 }
 
 enum SnapshotXCTestChannelPlanState: Equatable {
@@ -758,8 +757,7 @@ extension RunnerTests {
       effectiveDepth: capture.effectiveDepth,
       collapsedLeafIndexes: Self.collapsedLeafIndexes(payload.nodes ?? []),
       customActions: capture.customActions,
-      timing: capture.timing,
-      notes: capture.qualityNotes.isEmpty ? nil : capture.qualityNotes
+      timing: capture.timing
     )
     return DataPayload(
       message: payload.message,
@@ -774,6 +772,7 @@ extension RunnerTests {
         return SnapshotQualityPayload(nodes: nodes, truncated: quality.truncated == true)
       },
       snapshotQuality: quality,
+      snapshotQualityNotes: capture.qualityNotes.isEmpty ? nil : capture.qualityNotes,
       presentedSurface: capture.presentedSurface,
       keyboard: capture.keyboardBand,
       runnerFatal: payload.runnerFatal,

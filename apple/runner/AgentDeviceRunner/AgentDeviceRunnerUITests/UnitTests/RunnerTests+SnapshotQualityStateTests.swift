@@ -1,12 +1,15 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
   private struct StampedWireVerdict: Decodable {
     struct Quality: Decodable {
       let state: String
+      let backend: String
     }
     let snapshotQuality: Quality
+    let snapshotQualityNotes: [SnapshotQualityNote]
   }
 
   private func loadSnapshotQualityStatesFixture() throws -> [String] {
@@ -42,7 +45,8 @@ extension RunnerTests {
   func testStampedVerdictEncodesTheCaseRawValue() throws {
     let capture = SnapshotBackendCapture(
       payload: DataPayload(nodes: [], truncated: false),
-      effectiveDepth: nil
+      effectiveDepth: nil,
+      qualityNotes: [try JSONDecoder().decode(SnapshotQualityNote.self, from: Data(#"{"code":"regular-geometry-clipped","clippedNodeCount":1,"droppedNodeCount":2}"#.utf8))]
     )
     for state in SnapshotQualityState.allCases {
       let payload = stampedSnapshotPayload(
@@ -56,6 +60,9 @@ extension RunnerTests {
         from: JSONEncoder().encode(payload)
       )
       XCTAssertEqual(wire.snapshotQuality.state, state.rawValue)
+      XCTAssertEqual(wire.snapshotQuality.backend, "tree")
+      XCTAssertEqual(wire.snapshotQualityNotes.first?.clippedNodeCount, 1)
+      XCTAssertEqual(wire.snapshotQualityNotes.first?.droppedNodeCount, 2)
     }
   }
 
