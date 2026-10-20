@@ -285,6 +285,8 @@ test('captures through only the active exact WebDriver interactor', async () => 
     'keyboardEnter',
     'keyboardDismiss',
     'keyboardStatus',
+    // Android declares `mobile: pressKey`, so the hardware-key leg rides the same gate.
+    'hardwareKey',
   ] as const) {
     expect(binding.facts.operations[operation]).toEqual({ available: true });
     expect(binding.operations[operation]).toBeTypeOf('function');
@@ -358,6 +360,8 @@ test.each([
   expect(facts.operations.writeClipboard.available).toBe(state.isSessionActive());
   expect(facts.operations.appSwitcher.available).toBe(state.isSessionActive());
   expect(facts.operations.triggerAppEvent.available).toBe(state.isSessionActive());
+  // Android declares the key press, so an active session's hardware-key cell rides reachability.
+  expect(facts.operations.hardwareKey.available).toBe(state.isSessionActive());
   for (const operation of [
     'tvRemote',
     'setSetting',

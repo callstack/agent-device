@@ -16,6 +16,10 @@ import {
   buildScrollGesturePlan,
 } from '@agent-device/contracts/scroll-gesture';
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
+import {
+  type HardwareKeyToken,
+  toAndroidHardwareKeycode,
+} from '@agent-device/contracts/hardware-key';
 import type { SettingOptions } from '@agent-device/contracts/settings';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
@@ -422,6 +426,18 @@ class WebDriverInteractor implements Interactor {
 
   async tvRemote(_button: TvRemoteButton, _durationMs?: number): Promise<void> {
     this.unsupported('tvRemote');
+  }
+
+  /**
+   * Android sends the key through `mobile: pressKey`, the same route the keyboard Enter press
+   * uses, so a named key and a raw `android-keycode:<n>` both arrive already resolved to a
+   * keycode. XCUITest exposes no key press, so the iOS leg refuses through the capability map.
+   */
+  async hardwareKey(key: HardwareKeyToken): Promise<void> {
+    this.requireSupport('hardwareKey');
+    await this.client.executeScript('mobile: pressKey', [
+      { keycode: toAndroidHardwareKeycode(key) },
+    ]);
   }
 
   /** Android only: the Appium keyboard probe is the IME probe this result shape names. */

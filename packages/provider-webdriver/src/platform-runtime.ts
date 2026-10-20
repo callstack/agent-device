@@ -215,9 +215,10 @@ const systemButtonUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'No WebDriver backend presses this system button.',
 );
+/** Android sends keys through `mobile: pressKey`; XCUITest has no such route and iOS refuses here. */
 const hardwareKeyUnavailable = unavailableFact(
   'unsupported-provider-mode',
-  'WebDriver provider runtimes do not expose hardware-key yet.',
+  'This WebDriver provider runtime exposes no hardware-key channel.',
 );
 
 /** No WebDriver `mobile:` script poses a foldable hinge; the refusal is unconditional like the Action Button's. */
@@ -630,7 +631,11 @@ function webDriverFacts(
         home: declared('home', homeUnavailable),
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
       }),
-      ...hardwareKeyRuntimeOperationFacts({ hardwareKey: hardwareKeyUnavailable }),
+      // The same `mobile: pressKey` route the keyboard Enter press uses, so the declared
+      // capability is the gate; the capability map is per-platform and iOS refuses there.
+      ...hardwareKeyRuntimeOperationFacts({
+        hardwareKey: declared('hardwareKey', hardwareKeyUnavailable),
+      }),
       setFoldPose: foldUnavailable,
       sendTelephonyEvent: telephonyUnavailable,
       // The deep link opens through the same reachable interactor `open` every lifecycle command
