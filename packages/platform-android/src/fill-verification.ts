@@ -160,7 +160,14 @@ export function completeAndroidFillVerification(
   const unconfirmed = verification
     ? buildAndroidFillUnconfirmedVerification(expected, beforeTarget, verification)
     : null;
-  if (unconfirmed) return unconfirmed;
+  if (unconfirmed) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_fill_verification_unconfirmed',
+      data: { target: unconfirmed.target },
+    });
+    return unconfirmed;
+  }
   throw discloseDispatch(
     new AppError(
       'COMMAND_FAILED',
@@ -208,11 +215,6 @@ export function buildAndroidFillUnconfirmedVerification(
     return null;
   }
   const target = toFillVerificationTarget(beforeTarget);
-  emitDiagnostic({
-    level: 'warn',
-    phase: 'android_fill_verification_unconfirmed',
-    data: { target },
-  });
   return {
     verification: 'unconfirmed',
     requested,

@@ -124,7 +124,7 @@ export async function fillAndroid(
         return completeAndroidFillVerification(text, beforeTarget, verification);
       }
       const unconfirmed = buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification);
-      if (unconfirmed) return unconfirmed;
+      if (unconfirmed) return completeAndroidFillVerification(text, beforeTarget, verification);
     }
   } catch (error) {
     throw discloseDispatchAfterSteps(error, dispatchedSteps);
