@@ -97,7 +97,7 @@ function request(command: string, overrides: Partial<DaemonRequest> = {}): Daemo
 
 beforeEach(() => {
   gestureRuntimeSpies.scrollDirection.mockReset();
-  gestureRuntimeSpies.scrollDirection.mockResolvedValue({});
+  gestureRuntimeSpies.scrollDirection.mockResolvedValue({ report: {} });
 });
 
 test('(a) default identity: responseLevel absent === default === no meta, byte-identical', async () => {
@@ -144,7 +144,7 @@ test('(e) digest on a command with no registered view is byte-identical to defau
   const { handler } = makeHandler();
   // `scroll` has no registered view. It no longer reaches the mocked `dispatchCommand` (R53 put
   // it on a bound runtime), so the representative payload comes from the bound operation instead.
-  gestureRuntimeSpies.scrollDirection.mockResolvedValue({ ...REPRESENTATIVE_PAYLOAD });
+  gestureRuntimeSpies.scrollDirection.mockResolvedValue({ report: { ...REPRESENTATIVE_PAYLOAD } });
   const scrollRequest: Partial<DaemonRequest> = { positionals: ['down'], meta: {} };
   const digest = await handler(
     request('scroll', { ...scrollRequest, meta: { responseLevel: 'digest' } }),

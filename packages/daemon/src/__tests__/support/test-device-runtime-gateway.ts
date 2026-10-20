@@ -177,7 +177,9 @@ export const gestureRuntimeSpies = {
   performMultiTouchGesturePlan: vi.fn(async (_input: GesturePlanInput) => ({})),
   performTargetAuthoredDrag: vi.fn(async (_input: GesturePlanInput) => ({})),
   gestureViewport: vi.fn(async () => ({ x: 0, y: 0, width: 390, height: 844 })),
-  scrollDirection: vi.fn(async (_input: ScrollDirectionInput) => ({})),
+  scrollDirection: vi.fn(async (_input: ScrollDirectionInput) => ({
+    report: {} as Record<string, unknown>,
+  })),
 };
 
 /** The unavailable gateway plus an admitted gesture/scroll surface. */

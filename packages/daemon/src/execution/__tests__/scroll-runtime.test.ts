@@ -1,3 +1,4 @@
+import { decodeScrollDirectionResult } from '@agent-device/contracts/scroll-runtime';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { expect, expectTypeOf, test } from 'vitest';
 import assert from 'node:assert/strict';
@@ -66,7 +67,7 @@ function bindings(options: {
         facts,
         operations: {
           scrollDirection: async (input: { direction: string; options: unknown }) =>
-            await options.scroll(input.direction, input.options),
+            decodeScrollDirectionResult(await options.scroll(input.direction, input.options)),
           ...(options.captureSnapshot ? { captureSnapshot: options.captureSnapshot } : {}),
         },
       }) as unknown as BoundDeviceRuntime<never>) as unknown as BindDeviceRuntime,

@@ -198,7 +198,7 @@ test('generic Android gesture commands continue when recording dialog inspection
   // The owner's own result is what the readiness warning has to merge with, so the bound
   // operation carries it now that the dispatcher no longer executes this command.
   gestureRuntimeSpies.scrollDirection.mockResolvedValueOnce({
-    warning: 'The platform response already carried a warning.',
+    report: { warning: 'The platform response already carried a warning.' },
   });
 
   const sessionStore = makeSessionStore('agent-device-router-android-modal-');

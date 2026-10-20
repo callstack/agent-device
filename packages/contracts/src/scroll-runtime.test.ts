@@ -39,7 +39,7 @@ test('a local binding scrolls the owner in the requested direction', async () =>
       target: { appBundleId: 'com.example.app' },
       execution: { logPath: '/tmp/daemon.log', requestId: 'scroll-1' },
     }),
-  ).resolves.toEqual({ pixels: 240 });
+  ).resolves.toEqual({ report: { pixels: 240 }, pixels: 240 });
 
   expect(resolveInteractor).toHaveBeenCalledWith(device, {
     logPath: '/tmp/daemon.log',

@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { Point } from '@agent-device/kernel/snapshot';
 import {
   localInteractorSource,
   providerInteractorSource,
@@ -30,8 +31,39 @@ export type ScrollDirectionInput = Readonly<{
  * so edge repetition stays caller-side policy rather than a second operation.
  */
 export type ScrollRuntimeOperations = Readonly<{
-  scrollDirection(input: ScrollDirectionInput): Promise<Record<string, unknown> | void>;
+  scrollDirection(input: ScrollDirectionInput): Promise<ScrollDirectionResult>;
 }>;
+
+/** Validated movement evidence beside the owner's unchanged public response fields. */
+export type ScrollDirectionResult = Readonly<{
+  report: Record<string, unknown>;
+  pixels?: number;
+  midpoint?: Point;
+}>;
+
+export function decodeScrollDirectionResult(
+  result: Record<string, unknown> | void,
+): ScrollDirectionResult {
+  const report = result ?? {};
+  const pixels = readFiniteNumber(report.pixels);
+  const x1 = readFiniteNumber(report.x1);
+  const y1 = readFiniteNumber(report.y1);
+  const x2 = readFiniteNumber(report.x2);
+  const y2 = readFiniteNumber(report.y2);
+  const midpoint =
+    x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined
+      ? undefined
+      : { x: x1 / 2 + x2 / 2, y: y1 / 2 + y2 / 2 };
+  return {
+    report,
+    ...(pixels === undefined ? {} : { pixels }),
+    ...(midpoint === undefined ? {} : { midpoint }),
+  };
+}
+
+function readFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
 
 export type ScrollRuntimeOperationFacts = Readonly<{
   scrollDirection: RuntimeOperationFact;
@@ -60,7 +92,7 @@ function bindScrollDirection(
         appBundleId: input.target?.appBundleId,
         signal,
       });
-      return await interactor.scroll(input.direction, input.options);
+      return decodeScrollDirectionResult(await interactor.scroll(input.direction, input.options));
     },
   });
 }

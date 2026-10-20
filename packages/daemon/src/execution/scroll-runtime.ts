@@ -2,9 +2,6 @@ import { sleep } from '@agent-device/host-kit/retry';
 import {
   assertExclusiveScrollDistanceInputs,
   assertScrollUntilCompatible,
-  honoredScrollDurationMs,
-  honoredScrollSwipeMidpoint,
-  honoredScrollPixels,
   normalizeScrollDurationMs,
   resolveScrollExecutionOptions,
   type ResolvedScrollExecutionOptions,
@@ -17,7 +14,10 @@ import {
   type ScrollRuntimePlan,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
-import type { ScrollDirectionInput } from '@agent-device/contracts/scroll-runtime';
+import type {
+  ScrollDirectionInput,
+  ScrollDirectionResult,
+} from '@agent-device/contracts/scroll-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
@@ -52,7 +52,6 @@ import {
   reportScrollMovementNotApplicable,
   reportScrollMovementUnobserved,
   type ScrollMovementPlan,
-  type ScrollSwipeEvidence,
 } from './scroll-movement.ts';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
 import type { CaptureSnapshotInput } from '@agent-device/contracts/snapshot-runtime';
@@ -239,7 +238,7 @@ async function executeDirectionScroll(
   context: DaemonCommandContext,
   movementPlan: ScrollMovementPlan,
 ): Promise<Record<string, unknown>> {
-  const interactionResult = (await scrollOnce(runtime, target, options, context)) ?? {};
+  const interactionResult = await scrollOnce(runtime, target, options, context);
   const movement = await directionalMovementClaim(
     runtime,
     target.direction,
@@ -261,7 +260,7 @@ async function directionalMovementClaim(
   direction: ScrollDirection,
   context: DaemonCommandContext,
   movementPlan: ScrollMovementPlan,
-  interactionResult: Record<string, unknown>,
+  interactionResult: ScrollDirectionResult,
 ): Promise<ScrollMovementObservation | undefined> {
   if (movementPlan.kind === 'declined') {
     reportScrollMovementNotApplicable(direction, movementPlan.reason);
@@ -276,13 +275,13 @@ async function directionalMovementClaim(
     // The read was owed and the evidence was not there. The answer says so rather than resting the
     // distance on a tree that predates something this command cannot see.
     return reportScrollMovementUnobserved(direction, movementPlan.reason, {
-      swipe: swipeEvidence(interactionResult),
+      swipe: interactionResult,
     });
   }
   return await observeScrollMovement({
     direction,
     baseline: movementPlan.baseline,
-    swipe: swipeEvidence(interactionResult),
+    swipe: interactionResult,
     capture: async () => await capture(scrollCaptureInput(context)),
   });
 }
@@ -303,16 +302,6 @@ function scrollCaptureInput(
       ...scoped,
     },
     execution: runtimeExecutionFromContext(context),
-  };
-}
-
-/** What the leaf reported about the gesture it ran: where it ran, and how far it got. */
-function swipeEvidence(result: Record<string, unknown>): ScrollSwipeEvidence {
-  const midpoint = honoredScrollSwipeMidpoint(result);
-  const pixels = honoredScrollPixels(result);
-  return {
-    ...(midpoint === undefined ? {} : { midpoint }),
-    ...(pixels === undefined ? {} : { pixels }),
   };
 }
 
@@ -339,7 +328,7 @@ async function executeEdgeScroll(
       );
     },
   });
-  return scrollResult(target, options, edgeResult.passes, edgeResult.result ?? {});
+  return scrollResult(target, options, edgeResult.passes, edgeResult.result ?? { report: {} });
 }
 
 /** Repeats the pass until the selector is on screen; every failure shape is owned by the loop. */
@@ -367,7 +356,7 @@ async function executeUntilScroll(
       passes: untilResult.passes,
       ...(options.amount !== undefined ? { amount: options.amount } : {}),
       ...(options.pixels !== undefined ? { pixels: options.pixels } : {}),
-      ...(untilResult.result ?? {}),
+      ...untilResult.result?.report,
     },
     formatScrollUntilMessage(target.direction, selector, untilResult.passes),
   );
@@ -406,7 +395,7 @@ async function scrollOnce(
   target: ScrollTarget,
   options: ResolvedScrollExecutionOptions,
   context: DaemonCommandContext,
-): Promise<Record<string, unknown> | void> {
+): Promise<ScrollDirectionResult> {
   return await runtime.operations.scrollDirection(scrollInput(target.direction, options, context));
 }
 
@@ -443,19 +432,17 @@ function scrollResult(
   target: ScrollTarget,
   options: ScrollCommandOptions,
   completedPasses: number,
-  interactionResult: Record<string, unknown>,
+  interactionResult: ScrollDirectionResult,
   movement?: ScrollMovementObservation,
 ): Record<string, unknown> {
-  const durationMs = honoredScrollDurationMs(interactionResult);
-  const honoredPixels = honoredScrollPixels(interactionResult);
+  const honoredPixels = interactionResult.pixels;
   return withSuccessText(
     {
       direction: target.direction,
       ...(target.edge ? { edge: target.edge, passes: completedPasses } : {}),
       ...(options.amount !== undefined ? { amount: options.amount } : {}),
       ...(options.pixels !== undefined ? { pixels: options.pixels } : {}),
-      ...(durationMs !== undefined ? { durationMs } : {}),
-      ...interactionResult,
+      ...interactionResult.report,
       // The observation is this command's own claim about its effect, so it is the one field the
       // owner answers with rather than echoes from the platform leaf.
       ...(movement === undefined ? {} : { movement }),

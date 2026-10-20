@@ -130,7 +130,7 @@ beforeEach(() => {
   routeOperationSpies.typeText.mockImplementation(async () => undefined);
   routeOperationSpies.finalizeApplicationClose.mockImplementation(async () => undefined);
   gestureRuntimeSpies.scrollDirection.mockReset();
-  gestureRuntimeSpies.scrollDirection.mockResolvedValue({});
+  gestureRuntimeSpies.scrollDirection.mockResolvedValue({ report: {} });
   gestureRuntimeSpies.captureSnapshot.mockReset();
   gestureRuntimeSpies.captureSnapshot.mockResolvedValue({
     backend: 'xctest',
@@ -218,8 +218,8 @@ async function scrollRefusedOnThirdPass(flags: DaemonRequest['flags'], positiona
     } as never;
   });
   gestureRuntimeSpies.scrollDirection
-    .mockResolvedValueOnce({})
-    .mockResolvedValueOnce({})
+    .mockResolvedValueOnce({ report: {} })
+    .mockResolvedValueOnce({ report: {} })
     .mockRejectedValueOnce(RUNNER_BUSY());
   const failure = await route(makeSession(SESSION), {
     command: 'scroll',

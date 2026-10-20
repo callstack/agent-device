@@ -92,7 +92,7 @@ export function screenshotRuntimeFixture(
   // and it now reaches the platform through a bound operation like the screenshot beside it.
   const scrollDirection = vi.fn(async () => {
     await options.onScroll?.();
-    return {};
+    return { report: {} };
   });
 
   // The unavailable gateway is the exhaustive fact catalog; only the capture cells are overridden.

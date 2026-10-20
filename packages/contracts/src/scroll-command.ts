@@ -134,42 +134,6 @@ export function normalizeScrollDurationMs(
   return durationMs;
 }
 
-/** The travel the planner produced, which saturates below a large requested amount. */
-export function honoredScrollPixels(
-  result: Record<string, unknown> | undefined,
-): number | undefined {
-  return typeof result?.pixels === 'number' ? result.pixels : undefined;
-}
-
-export function honoredScrollDurationMs(
-  result: Record<string, unknown> | undefined,
-): number | undefined {
-  return typeof result?.durationMs === 'number' ? result.durationMs : undefined;
-}
-
-/**
- * Where the leaf's swipe ran, as the midpoint of the coordinates it reported — the same absolute space
- * its snapshots use, which is what lets a container rect say whether the gesture landed inside it.
- * An owner that reports no coordinates is answered `undefined` rather than guessed at: a tvOS scroll
- * is a remote keypress, so there is no midpoint to name.
- */
-export function honoredScrollSwipeMidpoint(
-  result: Record<string, unknown> | undefined,
-): { x: number; y: number } | undefined {
-  const x1 = readReportedCoordinate(result?.x1);
-  const y1 = readReportedCoordinate(result?.y1);
-  const x2 = readReportedCoordinate(result?.x2);
-  const y2 = readReportedCoordinate(result?.y2);
-  if (x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) {
-    return undefined;
-  }
-  return { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
-}
-
-function readReportedCoordinate(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
 /**
  * `scroll` — the generic-route result built by `buildDispatchedScrollResult`
  * (src/core/dispatch-scroll.ts): the resolved direction, the edge-pass

@@ -82,7 +82,7 @@ function baseRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
 beforeEach(() => {
   gestureRuntimeSpies.scrollDirection.mockReset();
   gestureRuntimeSpies.scrollDirection.mockImplementation(async () => ({
-    ...REPRESENTATIVE_PAYLOAD,
+    report: { ...REPRESENTATIVE_PAYLOAD },
   }));
 });
 
@@ -147,7 +147,7 @@ test('(c) runnerRoundTrips counts real iOS-runner round-trip diagnostics in scop
     emitDiagnostic({ phase: 'ios_runner_command_send' }); // real round-trip
     emitDiagnostic({ level: 'debug', phase: 'ios_runner_readiness_preflight_skipped' }); // NOT
     emitDiagnostic({ phase: 'some_other_phase' }); // NOT
-    return { ...REPRESENTATIVE_PAYLOAD };
+    return { report: { ...REPRESENTATIVE_PAYLOAD } };
   });
 
   const resp = await handler(baseRequest({ meta: { includeCost: true } }));
@@ -173,9 +173,9 @@ test('(c2) nodeCount reports the node-tree size whenever data carries a nodes ar
     ],
     truncated: false,
   };
-  gestureRuntimeSpies.scrollDirection.mockImplementation(async () =>
-    structuredClone(nodeTreePayload),
-  );
+  gestureRuntimeSpies.scrollDirection.mockImplementation(async () => ({
+    report: structuredClone(nodeTreePayload),
+  }));
 
   const respFlagOff = await handler(baseRequest());
   const respFlagOn = await handler(baseRequest({ meta: { includeCost: true } }));
