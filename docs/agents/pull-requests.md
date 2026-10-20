@@ -13,7 +13,6 @@ Apply authorization already given. Merging and releasing need separate authoriza
 
 Follow [validation](testing.md).
 Record the `check:affected --run --head` receipt in the PR body. A serialized gate stage can validate the pushed head instead.
-Before you report publication, record that result.
 For unresolved failures, follow the blocked-validation table.
 An authorized incomplete draft can record a blocker. A blocker is not a pass.
 Push once per review round. Each push restarts CI. Drafts skip device lanes.
