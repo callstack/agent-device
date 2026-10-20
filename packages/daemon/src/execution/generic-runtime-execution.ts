@@ -12,7 +12,6 @@ import { isSystemButtonCommand, resolveBoundSystemButtonRuntime } from './system
 import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
 import { resolveBoundFoldRuntime } from './fold-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
-import { resolveBoundHardwareKeyRuntime } from './hardware-key-runtime.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 /**
@@ -127,7 +126,9 @@ export async function resolveGenericRuntimeExecution(
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
-    case 'hardware-key':
+    case 'hardware-key': {
+      // Deferred to keep the daemon's eager closure within scripts/__tests__/eager-closure-budgets.ts.
+      const { resolveBoundHardwareKeyRuntime } = await import('./hardware-key-runtime.ts');
       return await resolveBoundHardwareKeyRuntime({
         device: params.session.device,
         positionals,
@@ -135,6 +136,7 @@ export async function resolveGenericRuntimeExecution(
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
+    }
     default:
       return {
         ok: false,
