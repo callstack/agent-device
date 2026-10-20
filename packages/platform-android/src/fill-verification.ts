@@ -51,6 +51,20 @@ type AndroidFillVerificationContext = {
   inputMethodPackages?: ReadonlySet<string>;
 };
 
+type AndroidFillObservation = {
+  nodes: readonly AndroidUiNodeMetadata[];
+  windowContext?: AndroidFillVerificationContext;
+  metadata?: AndroidSnapshotBackendMetadata;
+};
+
+function parseAndroidFillObservation(
+  xml: string,
+  metadata?: AndroidSnapshotBackendMetadata,
+): AndroidFillObservation {
+  const nodes = [...androidUiNodes(xml)];
+  return { nodes, windowContext: androidFillWindowContext(nodes), metadata };
+}
+
 /**
  * The sampling rule that verifies a fill: a hierarchy sample every 150 ms until the typed text has
  * held for two consecutive samples or the deadline has passed, and the sample taken at the deadline
@@ -69,26 +83,23 @@ export async function verifyAndroidFilledText(
   beforeCapture?: AndroidFillTargetCapture | null,
 ): Promise<AndroidFillVerification> {
   const deadline = Deadline.fromTimeoutMs(FILL_VERIFICATION_DEADLINE_MS);
-  let initialCapture: Awaited<ReturnType<typeof captureAndroidUiHierarchy>> | undefined =
-    await captureAndroidUiHierarchy(device, {
-      ...helper,
-      skipIdleWait: true,
-    });
-  const context = await readAndroidFillVerificationContext(device, initialCapture.xml);
+  const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
+  let initialObservation: AndroidFillObservation | undefined = parseAndroidFillObservation(
+    capture.xml,
+    capture.metadata,
+  );
+  const context = await readAndroidFillVerificationContext(device, initialObservation);
   const { value } = await pollUntilSettled({
     probe: async () => {
-      if (initialCapture) {
-        const capture = initialCapture;
-        initialCapture = undefined;
-        return verifyAndroidFilledTextInHierarchy(
-          capture.xml,
+      if (initialObservation) {
+        const observation = initialObservation;
+        initialObservation = undefined;
+        return verifyAndroidFilledTextInObservation(
+          observation,
           x,
           y,
           expected,
-          {
-            ...context,
-            captureMetadata: capture.metadata,
-          },
+          context,
           beforeCapture,
         );
       }
@@ -123,13 +134,14 @@ async function readAndroidFillTargetAtPoint(
   helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillTargetCapture> {
   const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
-  const context = await readAndroidFillVerificationContext(device, capture.xml);
-  const targetInput = inspectAndroidTextAtPointInHierarchy(capture.xml, x, y, context).targetInput;
+  const observation = parseAndroidFillObservation(capture.xml, capture.metadata);
+  const context = await readAndroidFillVerificationContext(device, observation);
+  const targetInput = inspectAndroidTextAtPoint(observation, x, y, context).targetInput;
   return {
     targetInput,
     uniqueIdentity:
       completeFreshAndroidFillCapture(capture.metadata) &&
-      uniqueAndroidFillTarget([...androidUiNodes(capture.xml)], targetInput),
+      uniqueAndroidFillTarget(observation.nodes, targetInput),
   };
 }
 
@@ -232,14 +244,32 @@ export function verifyAndroidFilledTextInHierarchy(
   context: AndroidFillVerificationContext = {},
   beforeCapture?: AndroidFillTargetCapture | null,
 ): AndroidFillVerification {
-  const inspection = inspectAndroidTextAtPointInHierarchy(
-    xml,
+  return verifyAndroidFilledTextInObservation(
+    parseAndroidFillObservation(xml, context.captureMetadata),
+    x,
+    y,
+    expected,
+    context,
+    beforeCapture,
+  );
+}
+
+function verifyAndroidFilledTextInObservation(
+  observation: AndroidFillObservation,
+  x: number,
+  y: number,
+  expected: string,
+  context: AndroidFillVerificationContext,
+  beforeCapture?: AndroidFillTargetCapture | null,
+): AndroidFillVerification {
+  const inspection = inspectAndroidTextAtPoint(
+    observation,
     x,
     y,
     context,
     expected === '' &&
       beforeCapture?.uniqueIdentity &&
-      completeFreshAndroidFillCapture(context.captureMetadata)
+      completeFreshAndroidFillCapture(observation.metadata)
       ? beforeCapture.targetInput
       : undefined,
   );
@@ -265,8 +295,9 @@ export function readAndroidTextAtPointInHierarchy(
   y: number,
   target?: ElementTextTarget,
 ): string | null {
+  const observation = parseAndroidFillObservation(xml);
   if (target?.identifier) {
-    const matches = [...androidUiNodes(xml)].filter(
+    const matches = observation.nodes.filter(
       (node) =>
         node.resourceId === target.identifier &&
         (!target.bundleId || node.packageName === target.bundleId) &&
@@ -282,7 +313,7 @@ export function readAndroidTextAtPointInHierarchy(
   }
   // Reads are point-targeted: a focused sibling may be a different app field or an IME
   // composing surface, so it must not override the node that contains the requested point.
-  const pointTarget = inspectAndroidTextAtPointInHierarchy(xml, x, y).targetInput;
+  const pointTarget = inspectAndroidTextAtPoint(observation, x, y).targetInput;
   if (
     !pointTarget ||
     (target?.bundleId && pointTarget.packageName !== target.bundleId) ||
@@ -326,12 +357,12 @@ async function inspectAndroidFilledText(
   // Each delay samples the live hierarchy again — settling is what the samples observe, so they
   // share the helper session but never a capture.
   const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
-  return verifyAndroidFilledTextInHierarchy(
-    capture.xml,
+  return verifyAndroidFilledTextInObservation(
+    parseAndroidFillObservation(capture.xml, capture.metadata),
     x,
     y,
     expected,
-    { ...context, captureMetadata: capture.metadata },
+    context,
     beforeCapture,
   );
 }
@@ -359,8 +390,8 @@ function uniqueAndroidFillTarget(
   );
 }
 
-function inspectAndroidTextAtPointInHierarchy(
-  xml: string,
+function inspectAndroidTextAtPoint(
+  observation: AndroidFillObservation,
   x: number,
   y: number,
   context: AndroidFillVerificationContext = {},
@@ -372,8 +403,8 @@ function inspectAndroidTextAtPointInHierarchy(
     anyAtPoint: null,
   };
 
-  const nodes = [...androidUiNodes(xml)];
-  const observedContext = androidFillWindowContext(nodes) ?? context;
+  const { nodes } = observation;
+  const observedContext = observation.windowContext ?? context;
   const candidates = nodes
     .map((node) => androidFillCandidateFromNode(node, observedContext))
     .filter((candidate) => candidate !== null);
@@ -547,9 +578,9 @@ function androidFillCandidateFromNode(
 
 async function readAndroidFillVerificationContext(
   device: DeviceInfo,
-  xml: string,
+  observation: AndroidFillObservation,
 ): Promise<AndroidFillVerificationContext> {
-  const context = androidFillWindowContext([...androidUiNodes(xml)]);
+  const context = observation.windowContext;
   if (context) return context;
   try {
     const state = await getAndroidKeyboardState(device);
