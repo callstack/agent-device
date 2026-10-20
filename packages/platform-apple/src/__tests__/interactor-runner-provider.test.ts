@@ -432,6 +432,43 @@ test('snapshot accepts only structured healthy empty scope results', async () =>
   });
 });
 
+test('scoped modal capture admits complete unscoped evidence without inventing a verdict', async () => {
+  const note = { code: 'regular-geometry-clipped', clippedNodeCount: 1, droppedNodeCount: 1 };
+  const qualityPayload = {
+    nodes: [
+      { index: 0, type: 'Alert', label: 'Tracking', rect: { x: 0, y: 0, width: 320, height: 240 } },
+    ],
+    truncated: false,
+  };
+  const capture = (wire: Record<string, unknown>) =>
+    createAppleInteractor(IOS_SIMULATOR, {}, createLiveTestHostEnvironment(), {
+      hasLiveSession: () => true,
+      runCommand: async () => wire,
+    });
+  const wire = {
+    nodes: [],
+    presentedSurface: 'presented',
+    qualityPayload,
+    snapshotQualityNotes: [note],
+  };
+  const scoped = presentedSnapshot(await capture(wire).snapshot({ scope: 'missing' }));
+  assert.deepEqual(scoped.nodes, []);
+  assert.equal(scoped.quality, undefined);
+  assert.deepEqual(scoped.qualityNotes, [note]);
+  for (const rejected of [
+    { ...wire, qualityPayload: undefined },
+    { ...wire, qualityPayload: { ...qualityPayload, nodes: [] } },
+    { ...wire, qualityPayload: { ...qualityPayload, truncated: true } },
+    { ...wire, snapshotQuality: { state: 'sparse', backend: 'tree' } },
+    { ...wire, presentedSurface: undefined },
+  ]) {
+    await assert.rejects(capture(rejected).snapshot({ scope: 'missing' }), {
+      code: 'COMMAND_FAILED',
+    });
+  }
+  await assert.rejects(capture(wire).snapshot(), { code: 'COMMAND_FAILED' });
+});
+
 // #1634 P2: the backend pin must actually reach the wire — the daemon test
 // stops at the dispatch context and the Swift test starts at the parsed
 // command, so this is the assertion that fails if the interactor stops

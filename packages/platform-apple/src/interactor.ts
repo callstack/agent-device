@@ -26,7 +26,7 @@ import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { withMethodScope } from '@agent-device/kernel/scoped-provider';
-import type { Point, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type { Point } from '@agent-device/kernel/snapshot';
 import type {
   Interactor,
   RunnerCallOptions,
@@ -327,7 +327,7 @@ function assertReportedRunnerSnapshotNodes(
   result: AppleRunnerSnapshotResult,
 ) {
   if ((result.nodes?.length ?? 0) > 0) return;
-  if (acceptsEmptyScopedSnapshot(options, result.quality)) return;
+  if (acceptsEmptyScopedSnapshot(options, result)) return;
   if (device.kind !== 'simulator') return;
   throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
 }
@@ -361,12 +361,14 @@ function presentRunnerSnapshotForDevice(
 
 function acceptsEmptyScopedSnapshot(
   options: SnapshotOptions | undefined,
-  quality: SnapshotQualityVerdict | undefined,
+  result: AppleRunnerSnapshotResult,
 ): boolean {
+  if (normalizeSnapshotScope(options?.scope) === null) return false;
+  if (result.quality) return result.quality.state !== 'sparse';
   return (
-    normalizeSnapshotScope(options?.scope) !== null &&
-    quality !== undefined &&
-    quality.state !== 'sparse'
+    result.presentedSurface === 'presented' &&
+    result.qualityPayload?.truncated === false &&
+    result.qualityPayload.nodes.length > 0
   );
 }
 
