@@ -23,6 +23,7 @@ import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
 import { backRuntimeOperationFacts } from './back-runtime.ts';
 import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
+import { hardwareKeyRuntimeOperationFacts } from './hardware-key-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
 import { systemButtonRuntimeOperationFacts } from './system-button-runtime.ts';
@@ -245,10 +246,7 @@ export function createUnavailablePlatformRuntimeFacts(
       setFoldPose: frozen.fold,
       sendTelephonyEvent: frozen.telephony,
       ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
-      // Stated directly rather than through `hardwareKeyRuntimeOperationFacts`, so this hub does
-      // not evaluate the hardware-key binder for owners that carry no key-event channel
-      // (eager-closure budgets).
-      hardwareKey: frozen.hardwareKey,
+      ...hardwareKeyRuntimeOperationFacts({ hardwareKey: frozen.hardwareKey }),
       ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
       ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
       ...systemButtonRuntimeOperationFacts({ unsupported: frozen.systemButton }),
