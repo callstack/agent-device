@@ -46,3 +46,20 @@ export function resolveUserConfigPath(env: EnvMap): string {
     throw new AppError('INVALID_ARGS', 'AGENT_DEVICE_HOME must be absolute or ~/...');
   return path.join(home, 'config.json');
 }
+
+export function resolveDeviceClaimRoot(env: EnvMap): string {
+  const override = env.AGENT_DEVICE_CLAIMS_DIR?.trim();
+  if (!override) return path.join(os.homedir(), '.agent-device', 'device-claims');
+  // The store is shared by every daemon on the host, so a directory that depends on where one of
+  // them happened to start is not a place they can agree on.
+  if (!path.isAbsolute(override)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `AGENT_DEVICE_CLAIMS_DIR must be an absolute path: ${override}`,
+      {
+        reason: 'relative_claims_dir',
+      },
+    );
+  }
+  return path.resolve(override);
+}

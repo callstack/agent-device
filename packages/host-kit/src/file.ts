@@ -14,6 +14,7 @@ export {
 export {
   expandUserHomePath,
   resolveUserConfigPath,
+  resolveDeviceClaimRoot,
   resolveUserPath,
 } from './internal/path-resolution.ts';
 export {

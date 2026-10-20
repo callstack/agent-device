@@ -9,7 +9,6 @@ import {
   ensureHostDirectory,
   hostFileExistsSync,
   hostHomeDirectory,
-  resolveDeviceClaimRoot,
   readHostBinaryFile,
   readHostDirectory,
   readHostTextFile,
@@ -637,9 +636,10 @@ async function withMacOsScreenCaptureLock<T>(
   options: { env: Readonly<EnvMap>; signal?: AbortSignal },
   task: () => Promise<T>,
 ): Promise<T> {
+  const { acquireProcessLock, withProcessLock, resolveDeviceClaimRoot } =
+    await import('@agent-device/host-kit/file');
   const lockRoot = resolveDeviceClaimRoot(options.env);
   await ensureHostDirectory(lockRoot);
-  const { acquireProcessLock, withProcessLock } = await import('@agent-device/host-kit/file');
   return await withProcessLock({
     acquire: async () => {
       const owner = readCurrentOwnerIdentity();
