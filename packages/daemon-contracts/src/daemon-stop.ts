@@ -105,9 +105,9 @@ export async function stopDaemon(params: {
  * those two retained reasons become a stop's own reason: a caller that may not signal this process
  * hears the owner's rule, not a retirement that could not be confirmed.
  */
-function ownerRefusal(
+export function ownerRefusal(
   reason: 'embedded-owner' | 'owner-unproven',
-  pid: number,
+  pid: number | undefined,
 ): Readonly<{ reason: string; hint: string }> {
   return reason === 'embedded-owner'
     ? {

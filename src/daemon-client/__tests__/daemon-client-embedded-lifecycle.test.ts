@@ -170,6 +170,27 @@ for (const [ownership, reason, hint] of [
     }
   });
 
+test('takeover refuses an embedded registration without a recorded host start time', async () => {
+  const { paths } = stateDirAndPaths();
+  await registerDaemon(paths, { httpPort: 1, ownership: 'embedded' });
+  const record = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8'));
+  delete record.processStartTime;
+  fs.writeFileSync(paths.infoPath, JSON.stringify(record));
+  const info = readDaemonInfo(paths.infoPath);
+  assert.ok(info);
+  assert.equal(info.processStartTime, undefined);
+  const before = fs.readFileSync(paths.infoPath, 'utf8');
+  const killSpy = vi.spyOn(process, 'kill');
+
+  const refusal = await refusalFrom(startup.retireDaemonForTakeover(info, paths));
+
+  assert.equal(refusal.details?.reason, DAEMON_LIFECYCLE_REASONS.ownerEmbedded);
+  assert.match(String(refusal.details?.hint), /owned by host process \d+\. Close it there/);
+  assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), before);
+  assert.deepEqual(signalsSent(killSpy), []);
+  assert.equal(spawn.mock.calls.length, 0);
+});
+
 test('the same record with no host owner is still the takeover this client performs', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   // One field differs from the row above, and it changes everything: a detached contender of the wrong
