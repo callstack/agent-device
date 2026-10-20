@@ -7,11 +7,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { createExecTraceContext, type ExecSettlementReason } from './exec-trace.ts';
-import {
-  parseBooleanLiteral,
-  type EnvMap,
-  type HostEnvironment,
-} from '@agent-device/kernel/source-value';
+import type { EnvMap, HostEnvironment } from '@agent-device/kernel/source-value';
 
 export type ExecResult = {
   stdout: string;
@@ -209,10 +205,8 @@ function runSpawnedCommand(
   const executable = normalizeExecutableCommand(cmd);
   const execTrace = createExecTraceContext(
     cmd,
-    args,
     normalizeTimeoutMs(options.timeoutMs),
-    parseBooleanLiteral(commandHostScope.getStore()?.host.env.AGENT_DEVICE_EXEC_TRACE ?? '') ===
-      true,
+    commandHostScope.getStore()?.host.env,
   );
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
@@ -503,13 +497,7 @@ export function runCmdBackground(
   options: ExecBackgroundOptions = {},
 ): ExecBackgroundResult {
   const executable = normalizeExecutableCommand(cmd);
-  const execTrace = createExecTraceContext(
-    cmd,
-    args,
-    undefined,
-    parseBooleanLiteral(commandHostScope.getStore()?.host.env.AGENT_DEVICE_EXEC_TRACE ?? '') ===
-      true,
-  );
+  const execTrace = createExecTraceContext(cmd, undefined, commandHostScope.getStore()?.host.env);
   const child = spawn(executable, args, {
     cwd: options.cwd,
     env: resolveSpawnEnv(options.env),
@@ -578,12 +566,22 @@ export function runCmdBackground(
       killProcessTree: () => killProcessTree(child, options),
       settle,
     });
-    const abort = watchCommandAbort(options, settlement.requestKill);
+    const abort = watchCommandAbort(options, () => {
+      execTrace.emit('abort');
+      settlement.requestKill();
+    });
     child.on('error', (err) => {
+      execTrace.emit('error');
       if (finish('error')) reject(spawnRejectionError(abort, executable, cmd, args, err));
     });
-    child.once('exit', settlement.recordExit);
-    child.once('close', settle);
+    child.once('exit', (code, signal) => {
+      execTrace.emit('exit', { exitCode: code, signal });
+      settlement.recordExit(code);
+    });
+    child.once('close', (code, signal) => {
+      execTrace.emit('close', { exitCode: code, signal });
+      settle(code);
+    });
   });
 
   return { child, wait };

@@ -38,6 +38,7 @@ type DiagnosticsScopeOptions = {
 
 type DiagnosticsScope = DiagnosticsScopeOptions & {
   diagnosticId: string;
+  flushedLogPath?: string;
   events: DiagnosticEvent[];
   liveWrittenEventCount: number;
   // Running per-phase emit tally. Unlike `events`, this is NOT cleared by
@@ -173,26 +174,32 @@ export function emitDiagnostic(event: DiagnosticEventInput): void {
 export async function withDiagnosticTimer<T>(
   phase: string,
   fn: () => Promise<T> | T,
-  data?: Record<string, unknown>,
+  data?: Record<string, unknown> | (() => Record<string, unknown>),
+  startEvent?: string,
 ): Promise<T> {
-  const start = Date.now();
+  const now = startEvent ? () => performance.now() : () => Date.now();
+  const start = now();
+  const eventData = () => (typeof data === 'function' ? data() : data);
+  if (startEvent) emitDiagnostic({ phase, data: { ...eventData(), event: startEvent } });
   try {
     const result = await fn();
     emitDiagnostic({
       level: 'info',
       phase,
-      durationMs: Date.now() - start,
-      data,
+      durationMs: now() - start,
+      data: startEvent ? { ...eventData(), event: 'settled' } : eventData(),
     });
     return result;
   } catch (error) {
     emitDiagnostic({
       level: 'error',
       phase,
-      durationMs: Date.now() - start,
+      durationMs: now() - start,
       data: {
-        ...(data ?? {}),
-        error: error instanceof Error ? error.message : String(error),
+        ...eventData(),
+        ...(startEvent
+          ? { event: 'settled' }
+          : { error: error instanceof Error ? error.message : String(error) }),
       },
     });
     throw error;
@@ -220,7 +227,8 @@ export function flushDiagnosticsToSessionFile(
   const values = sortedScopeSensitiveValues(scope);
 
   try {
-    if (scope.logPath) {
+    const logPath = scope.logPath ?? scope.flushedLogPath;
+    if (logPath) {
       const pendingEvents = scope.events.slice(scope.liveWrittenEventCount);
       if (pendingEvents.length > 0) {
         // Data payloads are fully redacted once at emit time; this flush pass
@@ -232,12 +240,12 @@ export function flushDiagnosticsToSessionFile(
         const lines = pendingEvents.map((entry) =>
           JSON.stringify(replaceSensitiveValues(entry, values)),
         );
-        appendDiagnosticLine(scope, scope.logPath, `${lines.join('\n')}\n`);
+        appendDiagnosticLine(scope, logPath, `${lines.join('\n')}\n`);
       }
       const logRecord = scope.logRecord;
       scope.events = [];
       scope.liveWrittenEventCount = 0;
-      return { path: scope.logPath, ...(logRecord ? { ref: logRecord } : {}) };
+      return { path: logPath, ...(logRecord ? { ref: logRecord } : {}) };
     }
 
     const sessionDir = sanitizePathPart(scope.session ?? 'default');
@@ -251,6 +259,7 @@ export function flushDiagnosticsToSessionFile(
       JSON.stringify(replaceSensitiveValues(entry, values)),
     );
     fs.writeFileSync(filePath, `${lines.join('\n')}\n`);
+    scope.flushedLogPath = filePath;
     scope.events = [];
     return { path: filePath };
   } catch {

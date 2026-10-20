@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { parseBooleanLiteral, type EnvMap } from '@agent-device/kernel/source-value';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -33,10 +34,10 @@ type ExecLifecycleData = {
 
 export function createExecTraceContext(
   cmd: string,
-  args: readonly string[],
   timeoutMs: number | undefined,
-  envTraceEnabled: boolean,
+  hostEnv: EnvMap | undefined,
 ): { emit(event: ExecLifecycleEvent, data?: ExecLifecycleData): void } {
+  const envTraceEnabled = parseBooleanLiteral(hostEnv?.AGENT_DEVICE_EXEC_TRACE ?? '') === true;
   const meta = getDiagnosticsMeta();
   if (!meta.debug && !envTraceEnabled) return { emit: () => {} };
   if (envTraceEnabled && !meta.flushOnSuccess) updateDiagnosticsScope({ flushOnSuccess: true });
@@ -45,24 +46,18 @@ export function createExecTraceContext(
   let pid: number | undefined;
   let settlementEmitted = false;
   const command = path.basename(cmd);
-  const simctlArgs = args[1] === '--set' ? args.slice(3) : args.slice(1);
-  const operation =
-    command === 'xcrun' &&
-    args[0] === 'simctl' &&
-    simctlArgs.length === 3 &&
-    simctlArgs.join(' ') === 'list devices -j'
-      ? 'simctl_list_devices'
-      : undefined;
   const emit = (event: ExecLifecycleEvent, data: ExecLifecycleData = {}): void => {
     pid = data.pid ?? pid;
     emitDiagnostic({
       level: 'debug',
       phase: 'exec_command',
       durationMs: performance.now() - started,
-      data: { execId, command, operation, event, pid, timeoutMs, ...data },
+      data: { execId, command, event, pid, timeoutMs, ...data },
     });
     if (event === 'settled') settlementEmitted = true;
-    if (event === 'close' && settlementEmitted && envTraceEnabled) flushDiagnosticsToSessionFile();
+    if (envTraceEnabled && (event === 'settled' || (event === 'close' && settlementEmitted))) {
+      flushDiagnosticsToSessionFile();
+    }
   };
   emit('spawn_start');
   return { emit };

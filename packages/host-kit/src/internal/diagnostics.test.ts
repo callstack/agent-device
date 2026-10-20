@@ -7,6 +7,7 @@ import {
   flushDiagnosticsToSessionFile,
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
+  withDiagnosticTimer,
 } from './diagnostics.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
@@ -174,3 +175,44 @@ test('a later diagnostics scope recreates a removed log directory', async () => 
     mkdirSpy.mockRestore();
   }
 });
+
+for (const startEvent of [undefined, 'start']) {
+  for (const failureKind of ['none', 'throw', 'reject']) {
+    const fails = failureKind !== 'none';
+    test(`diagnostic timer preserves result/error and event contract (start=${startEvent}, failure=${failureKind})`, async () => {
+      const logPath = path.join(mkdtempForTestSync('diagnostic-timer-'), 'request.ndjson');
+      const failure = new Error('fixture phase failure');
+      const result = { prepared: true };
+      await withDiagnosticsScope({ logPath, flushOnSuccess: true }, async () => {
+        const timed = withDiagnosticTimer(
+          'fixture_phase',
+          () => {
+            if (failureKind === 'throw') throw failure;
+            if (failureKind === 'reject') return Promise.reject(failure);
+            return Promise.resolve(result);
+          },
+          { timeoutMs: 100 },
+          startEvent,
+        );
+        if (fails) await assert.rejects(timed, (error: unknown) => error === failure);
+        else assert.equal(await timed, result);
+        flushDiagnosticsToSessionFile();
+      });
+      const rows = fs
+        .readFileSync(logPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      assert.deepEqual(
+        rows.map((row) => [row.phase, row.level, row.data.event]),
+        [
+          ...(startEvent ? [['fixture_phase', 'info', 'start']] : []),
+          ['fixture_phase', fails ? 'error' : 'info', startEvent ? 'settled' : undefined],
+        ],
+      );
+      assert.equal(rows.at(-1).data.timeoutMs, 100);
+      assert.ok(rows.at(-1).durationMs >= 0);
+      assert.equal(rows.at(-1).data.error, fails && !startEvent ? failure.message : undefined);
+    });
+  }
+}

@@ -183,40 +183,143 @@ test('background tracing is opt-in and retains a successful completion', async (
     },
     true,
   );
-  expect(rows.map((row) => row.data.event)).toEqual(['spawn_start', 'spawn', 'settled']);
+  expect(rows.map((row) => row.data.event)).toEqual([
+    'spawn_start',
+    'spawn',
+    'exit',
+    'close',
+    'settled',
+  ]);
+  expect(new Set(rows.map((row) => row.data.execId)).size).toBe(1);
   expect(JSON.stringify(rows)).not.toContain('private-argument');
 });
 
-test('environment-only trace persists close after the request finalization flush', async () => {
-  vi.useFakeTimers();
-  const fixture = processFixture();
-  const logPath = path.join(mkdtempForTestSync('exec-late-close-'), 'request.ndjson');
-  await withCommandHost(
-    { host: { env: { AGENT_DEVICE_EXEC_TRACE: '1' }, cwd: process.cwd() }, requestEnv: undefined },
-    () =>
-      withDiagnosticsScope({ requestId: 'late-close', logPath }, async () => {
-        const result = runCmd('xcrun', ['simctl', 'list', 'devices', '-j'], { timeoutMs: 100 });
-        const rejection = expect(result).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+for (const fixedLogPath of [true, false]) {
+  test(`environment-only late close appends to the finalized record (fixedLogPath=${fixedLogPath})`, async () => {
+    vi.useFakeTimers();
+    const fixture = processFixture();
+    const home = mkdtempForTestSync('exec-late-close-');
+    vi.stubEnv('HOME', home);
+    const logPath = fixedLogPath ? path.join(home, 'request.ndjson') : undefined;
+    try {
+      await withCommandHost(
+        {
+          host: { env: { AGENT_DEVICE_EXEC_TRACE: '1' }, cwd: process.cwd() },
+          requestEnv: undefined,
+        },
+        () =>
+          withDiagnosticsScope({ requestId: 'late-close', logPath }, async () => {
+            const result = runCmd('xcrun', ['simctl', 'list', 'devices', '-j'], { timeoutMs: 100 });
+            const rejection = expect(result).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+            fixture.child.emit('spawn');
+            fixture.exit(0);
+            await vi.advanceTimersByTimeAsync(100);
+            await rejection;
+            const record = flushDiagnosticsToSessionFile({ force: true });
+            const filesBefore = fs
+              .readdirSync(home, { recursive: true })
+              .filter((file) => String(file).endsWith('.ndjson'));
+            await vi.advanceTimersByTimeAsync(1);
+            fixture.child.emit('close', 0, null);
+            const filesAfter = fs
+              .readdirSync(home, { recursive: true })
+              .filter((file) => String(file).endsWith('.ndjson'));
+            expect(filesAfter).toEqual(filesBefore);
+            const rows = fs
+              .readFileSync(record?.path ?? path.join(home, String(filesBefore[0])), 'utf8')
+              .trim()
+              .split('\n')
+              .map((line) => JSON.parse(line) as Row);
+            expect(rows.map((row) => row.data.event)).toEqual([
+              'spawn_start',
+              'spawn',
+              'exit',
+              'deadline',
+              'settled',
+              'close',
+            ]);
+            expect(new Set(rows.map((row) => row.data.execId)).size).toBe(1);
+          }),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+}
+
+for (const exitBeforeAbort of [false, true]) {
+  test(`background abort records observed order and settles without close (exitBeforeAbort=${exitBeforeAbort})`, async () => {
+    const fixture = processFixture();
+    const controller = new AbortController();
+    const rows = await capture(
+      false,
+      async () => {
+        const { wait } = runCmdBackground('/usr/bin/tool', [], { signal: controller.signal });
+        const rejected = expect(wait).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
         fixture.child.emit('spawn');
-        fixture.exit(0);
-        await vi.advanceTimersByTimeAsync(100);
-        await rejection;
-        flushDiagnosticsToSessionFile();
+        if (exitBeforeAbort) fixture.exit(0);
+        controller.abort();
+        if (!exitBeforeAbort) fixture.exit(0);
+        await rejected;
         fixture.child.emit('close', 0, null);
-        const rows = fs
-          .readFileSync(logPath, 'utf8')
-          .trim()
-          .split('\n')
-          .map((line) => JSON.parse(line) as Row);
-        expect(rows.map((row) => row.data.event)).toEqual([
-          'spawn_start',
-          'spawn',
-          'exit',
-          'deadline',
-          'settled',
-          'close',
-        ]);
-        expect(new Set(rows.map((row) => row.data.execId)).size).toBe(1);
-      }),
-  );
-});
+      },
+      true,
+    );
+    expect(rows.map((row) => row.data.event)).toEqual([
+      'spawn_start',
+      'spawn',
+      ...(exitBeforeAbort ? ['exit', 'abort'] : ['abort', 'exit']),
+      'settled',
+      'close',
+    ]);
+    expect(rows.at(-2)?.data.reason).toBe('abort');
+    expect(new Set(rows.map((row) => row.data.execId)).size).toBe(1);
+    expect(fixture.kill).toHaveBeenCalledTimes(exitBeforeAbort ? 0 : 1);
+  });
+}
+
+for (const spawnError of [false, true]) {
+  test(`background completion after scope finalization persists before a late wait (spawnError=${spawnError})`, async () => {
+    const fixture = processFixture();
+    const logPath = path.join(mkdtempForTestSync('exec-background-late-'), 'request.ndjson');
+    let complete!: () => void;
+    const failure = Object.assign(new Error('fixture spawn failure'), { code: 'ENOENT' });
+    const { wait, completed } = await withCommandHost(
+      {
+        host: { env: { AGENT_DEVICE_EXEC_TRACE: '1' }, cwd: process.cwd() },
+        requestEnv: undefined,
+      },
+      () =>
+        withDiagnosticsScope({ logPath }, () => {
+          const { wait } = runCmdBackground('/usr/bin/tool', []);
+          const observedWait = wait.then(
+            (result) => result,
+            (error: unknown) => error,
+          );
+          if (!spawnError) fixture.child.emit('spawn');
+          flushDiagnosticsToSessionFile();
+          const completed = new Promise<void>((resolve) => {
+            complete = resolve;
+          }).then(() => {
+            if (spawnError) fixture.child.emit('error', failure);
+            else fixture.exit(0);
+            fixture.child.emit('close', spawnError ? -2 : 0, null);
+          });
+          return { wait: observedWait, completed };
+        }),
+    );
+    complete();
+    await completed;
+    const rows = fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Row);
+    expect(rows.map((row) => row.data.event)).toEqual([
+      'spawn_start',
+      ...(spawnError ? ['error', 'settled', 'close'] : ['spawn', 'exit', 'close', 'settled']),
+    ]);
+    expect(new Set(rows.map((row) => row.data.execId)).size).toBe(1);
+    expect(await wait).toMatchObject(spawnError ? { code: 'TOOL_MISSING' } : { exitCode: 0 });
+  });
+}
