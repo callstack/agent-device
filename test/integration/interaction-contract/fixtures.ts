@@ -202,6 +202,31 @@ export function fullyTiledParentSnapshot(): SnapshotState {
   ]);
 }
 
+// A node the capture reports with no extent: the page-1 icons iOS leaves in
+// the tree carry a 0x0 rect and are not hittable. A target with no usable
+// centre must be refused before any dispatch, not tapped at its origin.
+export function zeroAreaTargetSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      label: 'Example',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Clock',
+      rect: { x: 0, y: 0, width: 0, height: 0 },
+      hittable: false,
+    },
+  ]);
+}
+
 // A visible list cell that iOS reports as non-hittable (#1037 shape): the
 // interaction must proceed but be annotated.
 export function nonHittableCellSnapshot(): SnapshotState {

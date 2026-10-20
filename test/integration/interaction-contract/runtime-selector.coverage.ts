@@ -26,6 +26,7 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
   errorTaxonomy: [
     'runtime-selector errorTaxonomy: no-match failure carries the shared code and hint',
     'runtime-selector errorTaxonomy: a daemon selector miss discloses dispatched no',
+    'runtime-selector errorTaxonomy: a selector target with no usable centre refuses with target_bounds_invalid before dispatch',
   ],
   resolutionDisclosure: [
     'runtime-selector resolutionDisclosure: a unique match discloses the unique runtime shape',

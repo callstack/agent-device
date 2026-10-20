@@ -115,6 +115,79 @@ test('keeps the exact center when there are no competing interactive descendants
   });
 });
 
+test('refuses a target with no touchable area', () => {
+  const areaLessTargets: Rect[] = [
+    { x: 0, y: 0, width: 0, height: 0 },
+    { x: 12, y: 40, width: 0, height: 30 },
+    { x: 12, y: 40, width: 30, height: 0 },
+  ];
+
+  for (const rect of areaLessTargets) {
+    const nodes = makeSnapshotState([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        label: 'Clock',
+        rect,
+        hittable: false,
+      },
+    ]).nodes;
+
+    assert.deepEqual(
+      resolveInteractionTouchPoint(nodes, nodes[0]!),
+      { kind: 'invalid' },
+      `a target with no area has no point to touch, so ${JSON.stringify(rect)} must not resolve`,
+    );
+  }
+});
+
+test('refuses the CGRectInfinite sentinel, whose centre is the origin', () => {
+  // `CGRectInfinite` spelled in the four doubles Apple spells it with: every component and every
+  // extent of it is finite, so only the kernel's value guard refuses it.
+  const sentinel: Rect = {
+    x: -Number.MAX_VALUE / 2,
+    y: -Number.MAX_VALUE / 2,
+    width: Number.MAX_VALUE,
+    height: Number.MAX_VALUE,
+  };
+  const nodes = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'Clock',
+      rect: sentinel,
+      hittable: false,
+    },
+  ]).nodes;
+
+  assert.deepEqual(
+    resolveInteractionTouchPoint(nodes, nodes[0]!),
+    { kind: 'invalid' },
+    'the failed-read sentinel centres on the origin, so it must not resolve to a point to touch',
+  );
+});
+
+test('keeps a one-pixel target resolvable to its center', () => {
+  const nodes = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'Clock',
+      rect: { x: 20, y: 30, width: 1, height: 1 },
+      hittable: true,
+    },
+  ]).nodes;
+
+  assert.deepEqual(resolveInteractionTouchPoint(nodes, nodes[0]!), {
+    kind: 'resolved',
+    point: { x: 21, y: 31 },
+    strategy: 'center',
+  });
+});
+
 test('keeps a parent-owned center in a thin row when a child is safely off to the side', () => {
   const nodes = makeSnapshotState([
     {

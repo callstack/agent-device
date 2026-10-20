@@ -252,13 +252,16 @@ The fixture trees are the real shapes that found this week's bugs, and the suite
 
 - Closed drawer (all candidates off-screen) → `offscreen_selector`/`offscreen_ref`.
 - Stale or unknown `@ref` (errorTaxonomy) → `ref_not_found` beside the stale-ref hint.
-- A listed `@ref` whose node has no usable centre (missing, non-finite, or negative bounds), or a selector target without one → `target_bounds_invalid`.
+- A listed `@ref` or a selector target whose node carries a zero extent (errorTaxonomy) → `target_bounds_invalid`.
 - A listed `@ref` with no label to wait on or to scope by → `ref_unlabeled`.
 - Drawer item + visible twin (ambiguous on/off-screen) → the visible candidate wins.
 - Edge-grazing container (0.07 px viewport overlap, center off-screen) → still refused.
 - Covered node → occlusion refusal.
 - Non-hittable target ± `--verify` → hint present / suppressed by evidence.
 - Stripped-root tree (no Application/Window) → safe-default visibility.
+
+The `target_bounds_invalid` refusal is the kernel's bounds guard, `isPositiveFiniteRect`: a node with no rect, a non-finite component, a box whose own right or bottom edge overflows, a zero or negative extent, and the `CGRectInfinite` sentinel all refuse.
+That is the guard's rule rather than this list's inventory: the contract suite keeps the zero extent, and the selectors unit suite and the command-level suite prove the sentinel beside it.
 
 Path forcing is explicit and test-only: `AGENT_DEVICE_FORCE_INTERACTION_PATH=runtime|direct|native-ref`.
 Thus, cases stay stable when path-selection heuristics change.
@@ -379,6 +382,15 @@ Also, the structural rule never reached the read door.
   Thus, the screen that dispatch had resolved read as an identity mismatch on the first replay of the step.
   Verification names the collapsed control too.
   That control is the node that dispatch acted on, and the node that the recorded identity carries.
+
+### 2026-10-20 amendment: a target with no usable bounds is refused before dispatch
+
+The touch-point layer had no area rule of its own.
+`normalizeRect` refuses a negative width or height, so a zero-area rect passed through it — and so did the `CGRectInfinite` sentinel a failed read carries.
+Both resolved to a point, the sentinel to the origin, so the layer dispatched a tap there and the command reported success.
+The layer now calls the kernel's `isPositiveFiniteRect`, and a target the guard refuses gets the typed reason `target_bounds_invalid` with no tap dispatched.
+The reason a value guard is the rule: a failed read that crossed the wire leaves every component and every extent finite, so only a value guard refuses it (#2891).
+The guard is value-exact, so a huge but finite box whose centre is the origin still resolves; the Swift twin refuses the same values, and a wider rule belongs to the kernel.
 
 ### Synthesized iOS gesture policy
 

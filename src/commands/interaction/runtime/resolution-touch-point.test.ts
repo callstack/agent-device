@@ -53,6 +53,107 @@ function postSnapshot() {
   ]);
 }
 
+test('runtime press refuses a zero-area selector target and dispatches no tap', async () => {
+  const calls: Point[] = [];
+  const device = createInteractionDevice(
+    makeSnapshotState([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+        hittable: true,
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Clock',
+        rect: { x: 0, y: 0, width: 0, height: 0 },
+        hittable: false,
+      },
+    ]),
+    {
+      tap: async (_context, point) => {
+        calls.push(point);
+        return { ok: true };
+      },
+    },
+  );
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label="Clock"'), { session: 'default' }),
+    (error: unknown) => {
+      assert.deepEqual(
+        (error as { details?: Record<string, unknown> }).details,
+        {
+          reason: 'target_bounds_invalid',
+          selector: 'label="Clock"',
+          dispatched: 'no',
+        },
+        'the refusal names the typed reason, and discloses that no tap was dispatched',
+      );
+      return true;
+    },
+  );
+  assert.deepEqual(calls, [], 'a target with no area must not be tapped at its origin');
+});
+
+test('runtime press refuses a sentinel-bounds selector target and dispatches no tap', async () => {
+  const calls: Point[] = [];
+  const device = createInteractionDevice(
+    makeSnapshotState([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+        hittable: true,
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Clock',
+        // `CGRectInfinite` spelled in the four doubles Apple spells it with: a failed read that
+        // crossed a wire, whose centre is the origin.
+        rect: {
+          x: -Number.MAX_VALUE / 2,
+          y: -Number.MAX_VALUE / 2,
+          width: Number.MAX_VALUE,
+          height: Number.MAX_VALUE,
+        },
+        hittable: false,
+      },
+    ]),
+    {
+      tap: async (_context, point) => {
+        calls.push(point);
+        return { ok: true };
+      },
+    },
+  );
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label="Clock"'), { session: 'default' }),
+    (error: unknown) => {
+      assert.deepEqual(
+        (error as { details?: Record<string, unknown> }).details,
+        {
+          reason: 'target_bounds_invalid',
+          selector: 'label="Clock"',
+          dispatched: 'no',
+        },
+        'the refusal names the typed reason, and discloses that no tap was dispatched',
+      );
+      return true;
+    },
+  );
+  assert.deepEqual(calls, [], 'a target with no usable centre must not be tapped at the origin');
+});
+
 test('runtime ref and selector paths dispatch the same parent-owned post point', async () => {
   const refCalls: Point[] = [];
   const selectorCalls: Point[] = [];

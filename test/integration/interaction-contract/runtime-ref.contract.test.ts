@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
 import type { Point } from '@agent-device/kernel/snapshot';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { ref } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
@@ -18,6 +19,7 @@ import {
   RUNNER_CONTINUE_NODES,
   settledWelcomeSnapshot,
   viewportOnlySnapshot,
+  zeroAreaTargetSnapshot,
 } from './fixtures.ts';
 import { createContractClock, createContractDevice } from './runtime-harness.ts';
 import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
@@ -65,6 +67,33 @@ test(scenario('parentOwnedTouchPoint'), async () => {
     },
   );
   assert.deepEqual(taps, []);
+});
+
+// The zero-area target refuses through the shared error taxonomy: the code, the message and the
+// reason all come from the shared vocabulary, and the refusal dispatches no tap. The fixture has no
+// descendants, so this is not a parent-owned case.
+test(scenarioNames(RUNTIME_REF_COVERAGE, 'errorTaxonomy')[1]!, async () => {
+  const taps: Point[] = [];
+  const device = createContractDevice(zeroAreaTargetSnapshot(), {
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.press(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+      assert.match(error.message, /has no usable bounds/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetBoundsInvalid);
+      assert.equal(details?.ref, 'e2');
+      assert.equal(details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.deepEqual(taps, [], 'a ref target with no usable bounds must not be tapped at its origin');
 });
 
 test(scenario('keyboardOcclusion'), async () => {

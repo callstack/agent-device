@@ -4,7 +4,7 @@ import {
   type Rect,
   type SnapshotNode,
 } from '@agent-device/kernel/snapshot';
-import { containsPoint } from '@agent-device/kernel/rect';
+import { containsPoint, isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
   areRectsApproximatelyEqual,
   normalizeRect,
@@ -34,8 +34,12 @@ export function resolveInteractionTouchPoint(
   options: { bounds?: readonly Rect[] } = {},
 ): InteractionTouchPointResolution {
   const targetRect = normalizeRect(node.rect);
-  const center = resolveRectCenter(targetRect ?? undefined);
-  if (!targetRect || !center) return { kind: 'invalid' };
+  // The kernel's guard names the boxes that cannot be measured or landed on: a component that is
+  // not a finite number, a box whose own right or bottom edge overflows the number range, a zero
+  // or negative extent, and the `CGRectInfinite` sentinel a failed read carries.
+  if (!targetRect || !isPositiveFiniteRect(targetRect)) return { kind: 'invalid' };
+  const center = resolveRectCenter(targetRect);
+  if (!center) return { kind: 'invalid' };
 
   const competitors = collectInteractiveDescendantRects(nodes, node, targetRect);
   if (competitors.length === 0) {
