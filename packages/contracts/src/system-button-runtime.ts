@@ -61,19 +61,6 @@ export function systemButtonRuntimeOperationFacts(
   return Object.freeze(facts);
 }
 
-async function resolvePressInteractor(
-  input: SystemButtonInput,
-  signal: AbortSignal,
-  resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
-): Promise<Interactor> {
-  signal.throwIfAborted();
-  return await resolveInteractor({
-    ...input.execution,
-    appBundleId: input.options?.appBundleId,
-    signal,
-  });
-}
-
 /**
  * Captures one selected owner's interactor authority for the lifetime of a request binding and
  * presses one button through it. `Interactor` members for hardware only some owners carry are
@@ -86,7 +73,12 @@ export function bindSystemButton<Button extends SystemButton>(
   resolveInteractor: (runner: RunnerContext) => Promise<Interactor>,
 ): Readonly<Pick<SystemButtonRuntimeOperations, Button>> {
   const press = async (input: SystemButtonInput): Promise<void> => {
-    const interactor = await resolvePressInteractor(input, signal, resolveInteractor);
+    signal.throwIfAborted();
+    const interactor = await resolveInteractor({
+      ...input.execution,
+      appBundleId: input.options?.appBundleId,
+      signal,
+    });
     await requireInteractorMethod(interactor[button], SYSTEM_BUTTON_LABELS[button]).call(
       interactor,
     );

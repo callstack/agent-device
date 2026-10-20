@@ -318,7 +318,7 @@ const actionButtonCommandDescription =
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 const hardwareKeyCommandDescription =
-  'Press one hardware key once: a named key such as volume-up, or a raw Android keycode as android-keycode:N. power toggles the screen; sleep and wake turn it off or on. The key goes to the system and the foreground media session, and nothing is re-observed afterwards. Supported on Android only.';
+  'Press one hardware key once: a named key such as volume-up, or a raw Android keycode as android-keycode:N. power toggles the screen; sleep and wake turn it off or on. The key goes to the system and the foreground media session, and nothing is re-observed afterwards. Supported on Android through ADB key events (local or Limrun) or Appium mobile: pressKey.';
 
 const telephonyCommandDescription =
   'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
@@ -739,7 +739,7 @@ const hardwareKeyCommandFacet = defineCommandFacet({
   name: HARDWARE_KEY_COMMAND_NAME,
   text: {
     summary: 'Press a volume, power, media, or TV hardware key',
-    cliDetail: 'Android only (ADB key events, local or Limrun).',
+    cliDetail: 'Android only: ADB key events (local or Limrun) or Appium mobile: pressKey.',
   },
   metadata: hardwareKeyCommandMetadata,
   run: (client, input) => client.command.hardwareKey(input),

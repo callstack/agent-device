@@ -143,7 +143,7 @@ const systemButtonUnavailable = Object.freeze({
 const hardwareKeyUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
-  hint: 'hardware-key is supported on Android through ADB key events.',
+  hint: 'hardware-key is supported on Android (ADB or Appium).',
 } as const);
 const actionButtonKindUnavailable = Object.freeze({
   available: false,

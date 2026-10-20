@@ -367,7 +367,7 @@ test.each(Object.entries(leaves))(
     expect(binding.facts.operations.hardwareKey).toEqual({
       available: false,
       reason: 'unsupported-platform-leaf',
-      hint: 'hardware-key is supported on Android through ADB key events.',
+      hint: 'hardware-key is supported on Android (ADB or Appium).',
     });
     expect(binding.operations.hardwareKey).toBeUndefined();
   },

@@ -268,7 +268,7 @@ Buttons:
   Vega OS uses the exact hold duration through inputd-cli in the VVD.
 
 Android TV:
-  Android TV uses ADB keyevents behind agent-device tv-remote and hardware-key ${HARDWARE_KEY_USAGE}. Keep command plans on agent-device; do not switch to raw adb keyevent.
+  Android TV uses ADB keyevents behind agent-device tv-remote. hardware-key ${HARDWARE_KEY_USAGE} uses ADB keyevents or Appium mobile: pressKey on Android. Keep command plans on agent-device; do not switch to raw adb keyevent.
   Use --target tv when a host has both phone/tablet and TV emulators/devices.
 
 tvOS:

@@ -220,7 +220,7 @@ const systemButtonUnavailable = unavailableFact(
 /** Android sends keys through `mobile: pressKey`; XCUITest has no such route and iOS refuses here. */
 const hardwareKeyUnavailable = unavailableFact(
   'unsupported-provider-mode',
-  'This WebDriver provider runtime exposes no hardware-key channel.',
+  'hardware-key is supported on Android (ADB or Appium).',
 );
 
 /** No WebDriver `mobile:` script poses a foldable hinge; the refusal is unconditional like the Action Button's. */
