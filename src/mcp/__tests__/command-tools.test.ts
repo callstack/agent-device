@@ -432,18 +432,6 @@ test('MCP clipboard outputSchema advertises action union branches', () => {
   assert.deepEqual(clipboardActions, ['read', 'write']);
 });
 
-test('MCP tv remote outputSchema advertises button values', () => {
-  const tools = listCommandTools();
-
-  const tvRemote = tools.find((tool) => tool.name === 'tv-remote');
-  assert.ok(tvRemote);
-  assert.ok(tvRemote.outputSchema);
-  assert.deepEqual(
-    (tvRemote.outputSchema.properties?.button as { enum?: unknown[] } | undefined)?.enum,
-    ['up', 'down', 'left', 'right', 'select', 'menu', 'home', 'back'],
-  );
-});
-
 test('MCP newly typed outputSchemas advertise public contract keys', () => {
   const tools = listCommandTools();
 

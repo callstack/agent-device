@@ -127,7 +127,6 @@ const UNDESCRIBED_TOOL_INPUTS = new Set([
   'test.update',
   'trace.action',
   'trace.path',
-  'tv-remote.button',
   'wait.depth',
   'wait.durationMs',
   'wait.absent',

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { listCommandTools } from '../command-tools.ts';
 import {
   COMMAND_OWNER_FILES,
   ownerFilesForCommand,
@@ -176,8 +177,50 @@ const NAVIGATION_DISPATCH_SHAPES: Readonly<
     properties: {
       action: { type: 'string', const: 'tv-remote' },
       button: {
-        type: 'string',
-        enum: ['up', 'down', 'left', 'right', 'select', 'menu', 'home', 'back'],
+        description:
+          'TV remote button. Android TV also accepts android-keycode:<n> with n from 1 to 2147483647.',
+        oneOf: [
+          {
+            type: 'string',
+            enum: [
+              'up',
+              'down',
+              'left',
+              'right',
+              'select',
+              'menu',
+              'home',
+              'back',
+              'volume-up',
+              'volume-down',
+              'mute',
+              'power',
+              'sleep',
+              'wake',
+              'media-play-pause',
+              'media-next',
+              'media-previous',
+              'media-rewind',
+              'media-fast-forward',
+              'channel-up',
+              'channel-down',
+              'last-channel',
+              'guide',
+              'info',
+              'captions',
+              'tv-input',
+              'color-red',
+              'color-green',
+              'color-yellow',
+              'color-blue',
+            ],
+          },
+          {
+            type: 'string',
+            pattern:
+              '^android-keycode:(?:[1-9][0-9]{0,8}|1[0-9]{9}|20[0-9]{8}|21[0-3][0-9]{7}|214[0-6][0-9]{6}|2147[0-3][0-9]{5}|21474[0-7][0-9]{4}|214748[0-2][0-9]{3}|2147483[0-5][0-9]{2}|21474836[0-3][0-9]|214748364[0-7])(?![\\s\\S])',
+          },
+        ],
       },
       durationMs: { type: 'number' },
       message: { type: 'string' },
@@ -207,5 +250,34 @@ test('MCP navigation output schemas advertise the closed dispatch shapes', () =>
     );
     assert.deepEqual(dispatchProperties, dispatchShape.properties);
     assert.deepEqual(schema.required, dispatchShape.required);
+  }
+});
+
+test('MCP tv remote outputSchema accepts named buttons and raw codes and refuses other strings', () => {
+  const tvRemote = listCommandTools().find((tool) => tool.name === 'tv-remote');
+  assert.ok(tvRemote?.outputSchema);
+  for (const button of ['up', 'volume-down', 'android-keycode:300', 'android-keycode:2147483647']) {
+    assert.deepEqual(
+      validateAgainstSchema(
+        { action: 'tv-remote', button, message: 'Pressed TV remote' },
+        tvRemote.outputSchema,
+      ),
+      [],
+    );
+  }
+  for (const button of [
+    'sideways',
+    'android-keycode:0',
+    'android-keycode:01',
+    'android-keycode:2147483648',
+    'android-keycode:300\n',
+  ]) {
+    assert.notDeepEqual(
+      validateAgainstSchema(
+        { action: 'tv-remote', button, message: 'Pressed TV remote' },
+        tvRemote.outputSchema,
+      ),
+      [],
+    );
   }
 });

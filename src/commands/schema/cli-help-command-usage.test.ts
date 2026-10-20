@@ -58,7 +58,7 @@ test('usageForCommand documents tv-remote longpress preset', async () => {
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device tv-remote \[press\|longpress\]/);
   assert.match(help ?? '', /--duration-ms <ms>/);
-  assert.match(help ?? '', /longpress holds for 500ms by default/);
+  assert.match(help ?? '', /longpress selects the 500ms preset/);
 });
 
 test('usageForCommand supports legacy long-press alias', async () => {

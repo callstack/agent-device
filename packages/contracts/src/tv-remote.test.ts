@@ -94,6 +94,7 @@ test.each([
   'android-keycode:1e2',
   'android-keycode:2147483648',
   'android-keycode:99999999999',
+  'android-keycode:300\n',
 ])('rejects invalid TV button %j', (button) => {
   assert.throws(() => parseTvRemoteButton(button), { code: 'INVALID_ARGS' });
 });

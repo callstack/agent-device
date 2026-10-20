@@ -3,7 +3,7 @@ import type { JsonSchema } from '../../commands/command-contract.ts';
 /**
  * A focused JSON Schema validator for the MCP `outputSchema` dialect actually
  * used by COMMAND_OUTPUT_SCHEMAS: `type` (including union type arrays), `enum`,
- * `const`, `required`, `properties`, `items`, and `oneOf`. It exists so the
+ * `const`, `required`, `properties`, `items`, `pattern`, and `oneOf`. It exists so the
  * command-tools tests can validate representative structured content against the
  * COMPLETE advertised schema — enums/consts and nested required fields — rather
  * than only checking that required keys are present.
@@ -30,6 +30,9 @@ function collectErrors(value: unknown, schema: JsonSchema, path: string): string
     return errors;
   }
 
+  if (typeof value === 'string' && schema.pattern && !new RegExp(schema.pattern).test(value)) {
+    errors.push(`${path}: string does not match pattern`);
+  }
   if (schema.oneOf) errors.push(...oneOfErrors(value, schema.oneOf, path));
   errors.push(...objectErrors(value, schema, path), ...arrayErrors(value, schema, path));
   return errors;
