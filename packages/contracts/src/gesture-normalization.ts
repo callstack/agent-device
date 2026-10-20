@@ -485,8 +485,6 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
           intent: 'tap',
           points: input.points,
           holdMs: input.holdMs,
-          count: input.count,
-          pauseMs: input.pauseMs,
         },
       };
     case 'drag':

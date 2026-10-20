@@ -64,9 +64,6 @@ export type GestureSemanticInput =
       intent: 'tap';
       points: readonly Point[];
       holdMs?: number;
-      /** Repeats the same stationary contacts; the plan is built once for the whole series. */
-      count?: number;
-      pauseMs?: number;
     };
 
 export type GestureCommandInput = GestureSemanticInput | DragGestureInput;

@@ -249,14 +249,6 @@ export type DaemonCoordinateGestureResult = Readonly<{
   kind: GestureIntent;
   durationMs: number;
   pointerCount: GestureContactCount;
-  /** A tap reports its contacts and how many of its repetitions ran. */
-  tapSeries?: Readonly<{
-    points: Point[];
-    holdMs: number;
-    count: number;
-    pauseMs: number;
-    completed: number;
-  }>;
   from: Point;
   to: Point;
   backendResult?: Record<string, unknown>;

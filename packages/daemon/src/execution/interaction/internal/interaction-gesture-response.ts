@@ -10,7 +10,6 @@ type GestureResponseResult = {
   pointerCount: GestureContactCount;
   from: Point;
   to: Point;
-  tapSeries?: Record<string, unknown>;
   targets?: unknown;
   backendResult?: Record<string, unknown>;
   message?: string;
@@ -30,7 +29,6 @@ export function gestureResponseData(
     from: result.from,
     to: result.to,
     ...(result.kind === 'drag' ? { targets: result.targets } : {}),
-    ...(result.tapSeries ?? {}),
     ...(result.backendResult ?? {}),
     ...extra,
     ...(executionProfile
