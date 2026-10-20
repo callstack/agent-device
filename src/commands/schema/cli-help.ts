@@ -690,10 +690,10 @@ Rules:
   Do not let iOS simulator-set scoping hide macOS desktop targets.
   Prefer refs/selectors over raw coordinates.
   macOS snapshot rects are window-space; use current refs or overlay refs instead of guessing coordinates.
+  On the default XCTest backend a read (snapshot, get, find) of a session app that sits behind other windows is answered from where it sits, without raising the app; interactions and a window-level screenshot of that app still bring it forward.
   With AGENT_DEVICE_MACOS_APP_BACKEND=native, an app session whose target resolves before launch claims only that bundle id. Sessions on different apps can coexist; commands taking the device execution lock still serialize within one daemon.
   An app-claimed session can reopen only its claimed app on the app surface. For a link, use open <app> <url>; for another app or surface, close the session or use a new --session.
-  Read help open for activation behavior and the initial-snapshot flag.
-  On the default XCTest backend a read (snapshot, get, find) of a session app that sits behind other windows is answered from where it sits, without raising the app; interactions and a window-level screenshot of that app still bring it forward.`,
+  Read help open for activation behavior and the initial-snapshot flag.`,
   },
   web: {
     summary: 'Minimal browser workflow with the managed web backend',
