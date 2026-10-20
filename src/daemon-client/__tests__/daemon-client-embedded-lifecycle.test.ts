@@ -138,7 +138,11 @@ async function crashedStaleRegistration(ownership: 'embedded' | 'unrecognized' |
 }
 
 for (const [ownership, reason, hint] of [
-  ['embedded', DAEMON_LIFECYCLE_REASONS.ownerEmbedded, /Close the host that started it/],
+  [
+    'embedded',
+    DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
+    /owned by host process \d+\. Close it there/,
+  ],
   ['sideways', 'daemon-owner-unrecognized', /Update agent-device/],
 ] as const)
   test(`a managed client preserves a ${ownership} owner`, async (t) => {
@@ -259,6 +263,7 @@ test('a matching pin does not bypass attach compatibility checks', async (t) => 
       }),
     );
     assert.equal(refusal.details?.reason, 'daemon-incompatible');
+    assert.match(String(refusal.details?.hint), /owned by host process \d+\. Close it there/);
     assert.deepEqual(daemon.rpcCommands, []);
     assert.equal(spawn.mock.calls.length, 0);
   } finally {

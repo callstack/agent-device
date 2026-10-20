@@ -64,29 +64,17 @@ export function buildDaemonShutdownReport(outcome: DaemonShutdownOutcome): Daemo
   };
 }
 
-export type DaemonShutdownRecord = Readonly<{
-  report: DaemonShutdownReport | null;
-  completion: DaemonShutdownCompletion | null;
-}>;
-
-export function readDaemonShutdownRecord(stateDir: string): DaemonShutdownRecord {
+export function readDaemonShutdownReport(stateDir: string): DaemonShutdownReport | null {
   try {
     const parsed: unknown = JSON.parse(
       fs.readFileSync(resolveDaemonShutdownReportPath(stateDir), 'utf8'),
     );
-    return {
-      report: isProviderReleaseReport(parsed)
-        ? { providerReleases: parsed.providerReleases, claims: readClaimSection(parsed) }
-        : null,
-      completion: readCompletion(parsed),
-    };
+    return isProviderReleaseReport(parsed)
+      ? { providerReleases: parsed.providerReleases, claims: readClaimSection(parsed) }
+      : null;
   } catch {
-    return { report: null, completion: null };
+    return null;
   }
-}
-
-export function readDaemonShutdownReport(stateDir: string): DaemonShutdownReport | null {
-  return readDaemonShutdownRecord(stateDir).report;
 }
 
 export function resolveDaemonShutdownReportPath(stateDir: string): string {
@@ -157,46 +145,4 @@ function isProviderReleaseRecord(value: unknown): value is ProviderReleaseRecord
     record.leaseId.trim().length > 0 &&
     (record.provider === undefined || typeof record.provider === 'string')
   );
-}
-
-/** The registration disposition proved before releasing its claim; lock release can still fail. */
-export type DaemonShutdownCompletion = Readonly<{
-  pid: number;
-  processStartTime: string;
-  token: string;
-  outcome: 'released' | 'retained';
-  unfinished: readonly string[];
-}>;
-
-export type DaemonShutdownCompletionQuery = Pick<
-  DaemonShutdownCompletion,
-  'pid' | 'processStartTime' | 'token'
->;
-
-export function daemonShutdownCompletionAnswers(
-  completion: DaemonShutdownCompletion,
-  query: DaemonShutdownCompletionQuery,
-): boolean {
-  return (
-    completion.pid === query.pid &&
-    completion.processStartTime === query.processStartTime &&
-    completion.token === query.token
-  );
-}
-
-function readCompletion(value: unknown): DaemonShutdownCompletion | null {
-  if (!value || typeof value !== 'object') return null;
-  const record = (value as { completion?: Partial<DaemonShutdownCompletion> }).completion;
-  return record &&
-    Number.isSafeInteger(record.pid) &&
-    Number(record.pid) > 0 &&
-    typeof record.processStartTime === 'string' &&
-    record.processStartTime.trim().length > 0 &&
-    typeof record.token === 'string' &&
-    record.token.length > 0 &&
-    (record.outcome === 'released' || record.outcome === 'retained') &&
-    Array.isArray(record.unfinished) &&
-    record.unfinished.every((line) => typeof line === 'string')
-    ? (record as DaemonShutdownCompletion)
-    : null;
 }

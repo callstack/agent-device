@@ -265,7 +265,6 @@ test('a host without a state directory is refused, never a daemon in an inherite
     expect(refusal, JSON.stringify(stateDir)).toMatchObject({
       code: 'INVALID_ARGS',
       details: {
-        reason: 'host_state_dir_required',
         hint: 'Pass an explicit stateDir to startAgentDevice({ stateDir }).',
       },
     });
@@ -273,7 +272,7 @@ test('a host without a state directory is refused, never a daemon in an inherite
   expect(fs.existsSync('/tmp/agent-device-host-entry-inherited/daemon.json')).toBe(false);
 });
 
-test('a host ends its own runtime once, and an outside stop ends it the same way', async () => {
+test('a host ends its own runtime once', async () => {
   const { stateDir, paths, host } = await bootHost();
   const signals = vi.spyOn(process, 'kill');
   const exit = vi.spyOn(process, 'exit');
@@ -309,31 +308,32 @@ test('a host ends its own runtime once, and an outside stop ends it the same way
   }
 });
 
-test("an operator's stop tears a host's runtime down exactly as its own close would", async () => {
+test('an outside stop refuses and the host keeps serving until its owner closes it', async () => {
   const { stateDir, paths, host } = await bootHost();
   const signals = vi.spyOn(process, 'kill');
-
   try {
-    const stopped = await stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), {
-      paths,
-      host: createTestHostEnvironment(),
+    await expect(
+      stopRecordedDaemon(readDaemonStopIdentity(paths.infoPath), {
+        paths,
+        host: createTestHostEnvironment(),
+      }),
+    ).rejects.toMatchObject({
+      details: {
+        reason: 'daemon-owner-embedded',
+        hint: `The runtime is owned by host process ${process.pid}. Close it there with the handle returned by startAgentDevice(). If the host has exited, call ensureDaemon() for this state directory to recover its abandoned registration.`,
+      },
     });
-
-    // The runtime answered with its own close: asked over its transport, never signaled.
-    expect(stopped).toMatchObject({ stopped: true, mode: 'graceful' });
     expect(hostSignals(signals)).toEqual([]);
-    expect(fs.existsSync(paths.infoPath)).toBe(false);
-    // The host learns the same report it would have from closing itself, and closing again is not an
-    // error — the case of a scope that closes after an operator already stopped the runtime.
+    expect(fs.existsSync(paths.infoPath)).toBe(true);
+    await expect(host.client.sessions.list()).resolves.toEqual([]);
     const report = await host.close();
     expect(report).toMatchObject({
-      requests: { drained: 0, abandoned: 0 },
+      requests: { abandoned: 0 },
       platformOwners: 'closed',
-      sessions: { closed: 0, failed: 0 },
-      runners: { stopped: [], handedOff: [] },
       plugins: { failed: [], pending: [] },
     });
     await expect(host.close()).resolves.toEqual(report);
+    expect(fs.existsSync(paths.infoPath)).toBe(false);
   } finally {
     signals.mockRestore();
     await host.close();

@@ -15,7 +15,7 @@ import {
 } from '@agent-device/host-kit/code-signature';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 
-export type DaemonLaunchSpec = {
+type DaemonLaunchSpec = {
   root: string;
   distPath: string;
   distPaths: string[];
@@ -70,7 +70,7 @@ export function resolveDaemonLaunchSpec(): DaemonLaunchSpec {
  * each other's daemon — live session with it (#2458). A source checkout is the tree
  * whose code moves under a version that does not, so it keeps a fingerprint.
  */
-export type LocalDaemonCodeIdentity =
+type LocalDaemonCodeIdentity =
   | { origin: 'installed' }
   | { origin: 'checkout'; codeSignature: string };
 

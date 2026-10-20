@@ -47,10 +47,8 @@ export type DaemonStopResult = {
 /**
  * Retires the daemon whose lifetime the caller read, and shapes that retirement as a stop result.
  *
- * The caller hands over the lifetime and the owner its own read proved, so routing and retirement judge
- * one record. Ownership is judged here and nowhere else: an embedded runtime belongs to its host, and a
- * record this build cannot place proves nothing about what is safe to signal, so both come back as the
- * refusal that names their owner, with nothing signaled.
+ * The public stop router refuses embedded and unknown registrations before this path.
+ * Direct callers still supply ownership to retirement, which refuses to signal a non-detached owner.
  */
 export async function stopDaemon(params: {
   paths: DaemonPaths;

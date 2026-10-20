@@ -385,11 +385,6 @@ test('daemon status names a record whose owner it cannot recognize', async () =>
   expect(render()).toContain('pid 321, owner-not-recognized');
 });
 
-// A host-owned record never reaches the signal path a detached stop uses: it is answered by a shutdown
-// request over the record's own transport, so a record that states no usable transport is refused before
-// anything is asked or signaled, and the record stays. What a reachable embedded stop answers, and what
-// the retirement raises for a live owner without signaling it, are pinned at those seams by
-// src/daemon-client-embedded-stop.test.ts and src/__tests__/daemon-registration-embedded-owner.test.ts.
 test('daemon stop routes a host-owned record through the one router and never the signal path', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-command-embedded-');
   fs.writeFileSync(
@@ -406,7 +401,7 @@ test('daemon stop routes a host-owned record through the one router and never th
         flags: { help: false, json: false, stateDir, version: false },
         client: {} as never,
       }),
-    ).rejects.toMatchObject({ details: { reason: 'daemon-embedded-stop-unreachable' } });
+    ).rejects.toMatchObject({ details: { reason: 'daemon-owner-embedded' } });
 
     // The embedded route owns this record end to end: no detached retirement, no cleanup, no output.
     expect(mocks.stopDaemon).not.toHaveBeenCalled();

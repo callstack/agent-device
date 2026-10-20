@@ -46,7 +46,6 @@ import {
   type WritableOutput,
   createPluginClose,
   createStartupRollback,
-  describeUnfinishedShutdownWork,
   settleWithinBudget,
   type ShutdownReport,
   type StartupRollback,
@@ -224,8 +223,8 @@ export type DaemonRuntimeOptions = {
   shutdownBudgets?: { requestDrainMs?: number; pluginMs?: number; ownerMs?: number };
   /**
    * Who owns this process. A host that started this runtime in its own process passes `embedded`: the
-   * record says so, no idle timer ends the runtime, and it answers a shutdown request instead of a
-   * quiesce. Defaults to a detached daemon. `unknown` is not offered: it is what a reader answers for a
+   * record says so, no idle timer ends the runtime, and only the host closes it. Defaults to a detached
+   * daemon. `unknown` is not offered: it is what a reader answers for a
    * record it cannot place, and a runtime always knows which of these two it is.
    */
   ownership?: DaemonRuntimeOwnership;
@@ -559,8 +558,8 @@ async function startDaemonRuntimeOnHost(
     leaseSessionEnd.cancel();
   });
 
-  // Both lifecycle requests are answered before dispatch and never join `inFlightRequests`, so the
-  // count they read needs no allowance for them. The servers listen and `daemon.json` is published
+  // Quiesce is answered before dispatch and never joins `inFlightRequests`, so the
+  // count it reads needs no allowance for it. The servers listen and `daemon.json` is published
   // before `close` exists, and a daemon answers `draining` only once it has a drain path to run.
   let startingUp = true;
   const lifecycleAdmission = createDaemonLifecycleAdmission({
@@ -628,7 +627,7 @@ async function startDaemonRuntimeOnHost(
       registration,
       infoPath,
       logPath,
-      close: { retainRegistration: false, unfinished: ['Daemon startup rolled back.'] },
+      close: { retainRegistration: false },
     });
   });
   const startupPhasesPath = resolveDaemonStartupPhasesPath(baseDir, process.pid);
@@ -919,9 +918,6 @@ async function startDaemonRuntimeOnHost(
           outcome: shutdownOutcome,
           close: {
             retainRegistration: hasUnfinishedWork(),
-            unfinished: report
-              ? describeUnfinishedShutdownWork(report)
-              : ['Daemon shutdown: a close step failed, so the runtime did not finish leaving.'],
           },
         }),
       ]);

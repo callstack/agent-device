@@ -451,12 +451,18 @@ try {
     },
   );
   assert.deepEqual(await a.client.sessions.list(), []);
-  const stopped = await exec(
-    process.execPath,
-    [cli, 'daemon', 'stop', '--state-dir', a.clientConfig.stateDir, '--json'],
-    { cwd },
+  await assert.rejects(
+    exec(
+      process.execPath,
+      [cli, 'daemon', 'stop', '--state-dir', a.clientConfig.stateDir, '--json'],
+      { cwd },
+    ),
+    (error) => {
+      assert.equal(JSON.parse(error.stdout).error.details.reason, 'daemon-owner-embedded');
+      return true;
+    },
   );
-  assert.equal(JSON.parse(stopped.stdout).data.stopped, true);
+  assert.deepEqual(await a.client.sessions.list(), []);
   const [first, second] = await Promise.all([a.close(), a.close()]);
   assert.strictEqual(first, second);
   assert.deepEqual(first.requests, { drained: 0, abandoned: 0 });
@@ -486,7 +492,7 @@ try {
     JSON.stringify({
       attachedFromChild: true,
       cleanRefused: true,
-      externalStop: true,
+      externalStopRefused: true,
       siblingPreserved: true,
       replacementRefused: true,
       report: first,

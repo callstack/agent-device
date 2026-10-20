@@ -188,7 +188,7 @@ async function quiesceOrRetireUnresponsive(
   settings: DaemonClientSettings,
 ): Promise<'draining' | 'gone' | 'retired'> {
   try {
-    return (await requestDaemonLifecycle(info, settings, 'quiesce')).outcome;
+    return (await requestDaemonLifecycle(info, settings)).outcome;
   } catch (error) {
     if (!(error instanceof AppError) || error.details?.reason !== 'daemon_transport_timeout')
       throw error;

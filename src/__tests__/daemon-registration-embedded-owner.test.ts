@@ -8,7 +8,7 @@ import {
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
-  readDaemonShutdownRecord,
+  readDaemonShutdownReport,
   resolveDaemonShutdownReportPath,
 } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -227,94 +227,44 @@ test.each([ownIdentity, deadIdentity])(
   },
 );
 
-test('a close answers its stop through the release, and an acquisition clears the answer', async () => {
-  const { paths, owner } = await acquire();
-  owner.publish({ ...fields, ownership: 'embedded' });
-
-  await owner.finish(undefined, {
-    retainRegistration: false,
-    unfinished: ['1 provider release left pending'],
-  });
-  const record = readDaemonShutdownRecord(paths.baseDir).completion;
-  // The disposition is the removal this call performed, not the caller's guess about it.
-  assert.equal(record?.outcome, 'released');
-  assert.deepEqual(record?.unfinished, ['1 provider release left pending']);
-  assert.equal(record?.pid, process.pid, 'the record names the instance a stop is fenced to');
-  // This is the production write, so it is where the file mode is a fact rather than a fixture's
-  // choice: a state-directory file a stranger could read leaks what a daemon said about its own close.
-  assert.equal(
-    fs.statSync(resolveDaemonShutdownReportPath(paths.baseDir)).mode & 0o777,
-    0o600,
-    'the completion record is published at 0600',
-  );
-
-  const before = fs.readFileSync(resolveDaemonShutdownReportPath(paths.baseDir), 'utf8');
-  await assert.rejects(owner.finish(undefined, { retainRegistration: true, unfinished: ['late'] }));
-  assert.equal(fs.readFileSync(resolveDaemonShutdownReportPath(paths.baseDir), 'utf8'), before);
-
-  const next = await acquire(paths);
-  assert.equal(
-    readDaemonShutdownRecord(paths.baseDir).completion,
-    null,
-    "a new instance must not inherit an answer to somebody else's stop",
-  );
-  await next.owner.finish();
-});
-
-test.each(['intentional', 'unlink failure', 'publication failure'] as const)(
-  'embedded finalization reports actual registration disposition: %s',
+test.each(['intentional', 'unlink failure'] as const)(
+  'embedded finalization retains its registration and lock for %s',
   async (scenario) => {
     const { paths, owner } = await acquire();
     owner.publish({ ...fields, ownership: 'embedded' });
     const primary = new Error('registration unlink failed');
     const originalUnlink = fs.unlinkSync;
-    const originalRename = fs.renameSync;
-    const recordPath = resolveDaemonShutdownReportPath(paths.baseDir);
-    let registrationPresentAtPublish: boolean | undefined;
     vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
       if (target === paths.infoPath && scenario === 'unlink failure') throw primary;
       return originalUnlink(target);
     });
-    vi.spyOn(fs, 'renameSync').mockImplementation((source, target) => {
-      if (target === recordPath) {
-        assert.equal(fs.existsSync(paths.lockPath), true);
-        registrationPresentAtPublish = fs.existsSync(paths.infoPath);
-        if (scenario === 'publication failure') throw new Error('publication failed');
-      }
-      return originalRename(source, target);
-    });
-    const finished = owner.finish(undefined, {
-      retainRegistration: scenario === 'intentional',
-      unfinished: ['unfinished work'],
-    });
+    const finished = owner.finish(undefined, { retainRegistration: scenario === 'intentional' });
     if (scenario === 'unlink failure') await assert.rejects(finished, (error) => error === primary);
-    else await finished;
-    const retained = scenario !== 'publication failure';
-    assert.equal(registrationPresentAtPublish, retained);
-    assert.equal(fs.existsSync(paths.infoPath), retained);
-    assert.equal(fs.existsSync(paths.lockPath), retained);
-    assert.equal(readDaemonShutdownRecord(paths.baseDir).report, null);
-    assert.equal(
-      readDaemonShutdownRecord(paths.baseDir).completion?.outcome ?? null,
-      retained ? 'retained' : null,
-    );
-    const next = await tryAcquireDaemonRegistration(paths);
-    assert.equal(next.status, retained ? 'busy' : 'acquired');
-    if (next.status === 'acquired') await next.owner.finish();
+    else assert.deepEqual(await finished, { state: 'retained' });
+    assert.equal(fs.existsSync(paths.infoPath), true);
+    assert.equal(fs.existsSync(paths.lockPath), true);
+    assert.equal(readDaemonShutdownReport(paths.baseDir), null);
+    assert.equal((await tryAcquireDaemonRegistration(paths)).status, 'busy');
   },
 );
 
-test('a spent embedded owner cannot overwrite a same-host successor', async () => {
+test('a spent embedded owner cannot overwrite a same-host successor report', async () => {
   const { paths, owner } = await acquire();
   owner.publish({ ...fields, ownership: 'embedded' });
-  await owner.finish(undefined, { retainRegistration: false, unfinished: [] });
+  await owner.finish();
   const next = await acquire(paths);
   next.owner.publish({ ...fields, ownership: 'embedded', token: 'next-runtime' });
-  await next.owner.finish(undefined, { retainRegistration: true, unfinished: ['next work'] });
-  const before = fs.readFileSync(resolveDaemonShutdownReportPath(paths.baseDir), 'utf8');
-  await assert.rejects(owner.finish(undefined, { retainRegistration: false, unfinished: [] }));
-  assert.equal(fs.readFileSync(resolveDaemonShutdownReportPath(paths.baseDir), 'utf8'), before);
-  assert.equal(readDaemonShutdownRecord(paths.baseDir).completion?.token, 'next-runtime');
+  const outcome = {
+    providerReleases: { released: [], pending: [] },
+    claims: { released: [], orphaned: [], superseded: [], unattributable: [] },
+  };
+  await next.owner.finish(outcome, { retainRegistration: true });
+  const file = resolveDaemonShutdownReportPath(paths.baseDir);
+  const before = fs.readFileSync(file, 'utf8');
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  await assert.rejects(owner.finish(outcome));
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  assert.deepEqual(readDaemonShutdownReport(paths.baseDir), outcome);
   assert.equal(fs.existsSync(paths.infoPath), true);
   assert.equal(fs.existsSync(paths.lockPath), true);
 });

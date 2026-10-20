@@ -2,10 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   buildDaemonLifecycleRequest,
-  DAEMON_LIFECYCLE_COMMANDS,
+  DAEMON_QUIESCE_COMMAND,
   readDaemonLifecycleCensus,
   readDaemonLifecycleFence,
-  readDaemonLifecycleMode,
   readDaemonOwnership,
 } from './daemon-resolution.ts';
 
@@ -47,20 +46,12 @@ test('a fence names an integer pid and a start time or null, nothing else', () =
   assert.equal(readDaemonLifecycleFence('7'), undefined);
 });
 
-test('both lifecycle requests carry one fence shape under the command of their mode', () => {
+test('quiesce carries its fence under its command', () => {
   const fence = { pid: 7, processStartTime: 'Fri Oct 17 09:00:00 2026' };
-  for (const mode of ['quiesce', 'shutdown'] as const) {
-    const request = buildDaemonLifecycleRequest({ mode, token: 't0ken', fence, requestId: 'r-1' });
-    assert.equal(request.command, DAEMON_LIFECYCLE_COMMANDS[mode]);
-    assert.deepEqual(request.input, fence);
-    assert.equal(request.meta?.requestId, 'r-1');
-    assert.equal(readDaemonLifecycleMode(request.command), mode);
-  }
-  // A request that is not one of the two is dispatched like any other command, including a name the
-  // lookup would answer for through the object prototype.
-  assert.equal(readDaemonLifecycleMode('open'), undefined);
-  assert.equal(readDaemonLifecycleMode('toString'), undefined);
-  assert.equal(readDaemonLifecycleMode('__proto__'), undefined);
+  const request = buildDaemonLifecycleRequest({ token: 't0ken', fence, requestId: 'r-1' });
+  assert.equal(request.command, DAEMON_QUIESCE_COMMAND);
+  assert.deepEqual(request.input, fence);
+  assert.equal(request.meta?.requestId, 'r-1');
 });
 
 test('ownership names who may end the process, and an older record is detached', () => {

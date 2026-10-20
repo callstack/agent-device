@@ -40,17 +40,15 @@ export type DaemonInfo = {
   remoteUpstreamInstanceId?: string;
 };
 
-export type DaemonMetadataState = {
+type DaemonMetadataState = {
   hasInfo: boolean;
   hasLock: boolean;
 };
 
 export function readDaemonInfo(infoPath: string): DaemonInfo | null {
   const read = readDaemonRecord(infoPath);
-  return read.status === 'present' ? daemonInfoFromRecord(read.record) : null;
-}
-
-export function daemonInfoFromRecord(parsed: Partial<DaemonInfo>): DaemonInfo | null {
+  if (read.status !== 'present') return null;
+  const parsed = read.record;
   const token = readRequiredDaemonToken(parsed);
   const ports = readDaemonInfoPorts(parsed);
   return token && ports ? readDaemonInfoFromRecord(parsed, token, ports) : null;

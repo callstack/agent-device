@@ -3,7 +3,6 @@ import {
   DAEMON_LIFECYCLE_REASONS,
   DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
   type DaemonLifecycleCensus,
-  type DaemonOwnership,
   type DaemonPaths,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
@@ -29,7 +28,7 @@ const DAEMON_UNAVAILABLE_REASONS = {
   drainTimeout: 'daemon-drain-timeout',
 } as const;
 
-export function daemonIdentityOf(info: DaemonInfo): DaemonIdentity {
+export function daemonIdentityOf(info: DaemonIdentity): DaemonIdentity {
   return {
     pid: info.pid,
     ...(info.version !== undefined ? { version: info.version } : {}),
@@ -71,7 +70,7 @@ export function daemonNotRunningError(stateDir: string, registered?: DaemonInfo)
     reason: DAEMON_UNAVAILABLE_REASONS.notRunning,
     stateDir,
     ...(registered ? { daemon: daemonIdentityOf(registered) } : {}),
-    hint: `Start one with a local agent-device command that uses the daemon (agent-device devices --state-dir ${shellQuoteIfNeeded(stateDir)}, for example), or with ensureDaemon({ stateDir: ${JSON.stringify(stateDir)} }) from the SDK, before attaching.${registered ? ` The registered daemon (pid ${registered.pid}) does not answer; ${daemonStopCommand(stateDir)} clears it.` : ''}`,
+    hint: `Start one with a local agent-device command that uses the daemon (agent-device devices --state-dir ${shellQuoteIfNeeded(stateDir)}, for example), or with ensureDaemon({ stateDir: ${JSON.stringify(stateDir)} }) from the SDK, before attaching.${registered ? ` The registered daemon (pid ${registered.pid}) does not answer. ${registered.ownership === 'embedded' ? embeddedCloseHint(registered.pid) : `${daemonStopCommand(stateDir)} clears it.`}` : ''}`,
   });
 }
 
@@ -98,7 +97,7 @@ export function daemonTakeoverRetirementError(
   paths: DaemonPaths,
 ): AppError {
   if (retirement.reason === 'embedded-owner')
-    return daemonNotRetirableError({ info, stateDir: paths.baseDir, owner: 'embedded' });
+    return daemonNotRetirableError({ info, stateDir: paths.baseDir });
   if (retirement.reason === 'owner-unproven')
     return daemonRecordOwnerUnrecognizedError({ info, stateDir: paths.baseDir });
   return daemonRetirementUnconfirmedError(retirement, paths);
@@ -122,7 +121,10 @@ export async function daemonIncompatibleError(params: {
     stateDir,
     daemon: daemonIdentityOf(info),
     client: await readClientIdentity(),
-    hint: `Stop it with ${daemonStopCommand(stateDir)}, then retry. SDK clients call ensureDaemon() to start a compatible one.`,
+    hint:
+      info.ownership === 'embedded'
+        ? embeddedCloseHint(info.pid)
+        : `Stop it with ${daemonStopCommand(stateDir)}, then retry. SDK clients call ensureDaemon() to start a compatible one.`,
   });
 }
 
@@ -159,59 +161,42 @@ export function daemonBusyError(
   });
 }
 
-/** Refuses managed replacement when the record cannot prove a detached owner. */
-function daemonRecordOwnerUnrecognizedError(params: {
-  info: DaemonInfo;
+/** Refuses stop or replacement when the record cannot prove a detached owner. */
+export function daemonRecordOwnerUnrecognizedError(params: {
+  info: DaemonIdentity | null;
   stateDir: string;
 }): AppError {
   const { info, stateDir } = params;
   return new AppError(
     'COMMAND_FAILED',
-    'This daemon record states an owner this version cannot read, so its daemon was not replaced.',
+    'This daemon record states an owner this version cannot read, so this client did not stop or replace it.',
     {
       reason: DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
       stateDir,
-      daemon: daemonIdentityOf(info),
-      hint: `Update agent-device if the record comes from a newer build. Otherwise check what owns pid ${info.pid}, then repair the record: stop that process by its own means and remove ${shellQuoteIfNeeded(stateDir)}/daemon.json so a daemon can register again.`,
+      ...(info ? { daemon: daemonIdentityOf(info) } : {}),
+      hint: `Update agent-device if the record comes from a newer build. Otherwise check what owns ${info ? `pid ${info.pid}` : 'this registration'}, then repair the record: stop that process by its own means and remove ${shellQuoteIfNeeded(stateDir)}/daemon.json so a daemon can register again.`,
     },
   );
 }
 
-/**
- * A caller wanted this daemon gone, and its owner's rule says otherwise: a host process owns an
- * embedded runtime and ends it, and a detached daemon is stopped by signalling its own process, which is
- * what `daemon stop` does for a record that proves that owner.
- *
- * Both cases mean the same thing to a caller: this daemon is not yours to retire. `owner` is the
- * daemon's own answer about itself, so it is trusted over this process's read of the record — except for
- * the hint, which reads the record too. A detached answer against a record this build cannot place is a
- * corrupt state directory, and `daemon stop` refuses that record for the same reason this client just
- * did, so its hint names the record repair instead of sending the operator to a second refusal.
- */
+/** The host that started an embedded runtime owns its close. */
 export function daemonNotRetirableError(params: {
-  info: DaemonInfo;
+  info: DaemonIdentity | null;
   stateDir: string;
-  owner: Exclude<DaemonOwnership, 'unknown'>;
 }): AppError {
-  const { info, stateDir, owner } = params;
-  const embedded = owner === 'embedded';
-  const recordUnreadable = !embedded && info.ownership === 'unknown';
+  const { info, stateDir } = params;
   return new AppError(
     'COMMAND_FAILED',
-    embedded
-      ? 'A host process owns this daemon, so it was not replaced.'
-      : 'This daemon is not embedder-owned, so a shutdown request is not how it is stopped.',
+    'A host process owns this runtime, so it was not retired.',
     {
-      reason: embedded
-        ? DAEMON_LIFECYCLE_REASONS.ownerEmbedded
-        : DAEMON_LIFECYCLE_REASONS.notEmbedded,
+      reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
       stateDir,
-      daemon: daemonIdentityOf(info),
-      hint: embedded
-        ? `Close the host that started it, or ask this daemon to leave with ${daemonStopCommand(stateDir)}, which sends it a shutdown request instead of a signal.`
-        : recordUnreadable
-          ? `The daemon says it is a daemon of its own, so the owner its record states is wrong. Nothing was signaled. Check what owns pid ${info.pid}, then repair the record: stop that process by its own means and remove ${shellQuoteIfNeeded(stateDir)}/daemon.json so a daemon can register again.`
-          : `Stop it with ${daemonStopCommand(stateDir)}.`,
+      ...(info ? { daemon: daemonIdentityOf(info) } : {}),
+      hint: embeddedCloseHint(info?.pid),
     },
   );
+}
+
+function embeddedCloseHint(pid: number | undefined): string {
+  return `${pid === undefined ? 'The runtime is owned by its host process.' : `The runtime is owned by host process ${pid}.`} Close it there with the handle returned by startAgentDevice(). If the host has exited, call ensureDaemon() for this state directory to recover its abandoned registration.`;
 }

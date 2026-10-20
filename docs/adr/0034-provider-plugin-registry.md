@@ -58,13 +58,15 @@ had to fake the store to load a plugin from its own dependencies (#3747).
 
 ## Daemon ownership
 
-Clients retain managed and attach lifecycles. Managed clients may start a daemon; attach clients cannot start or replace one. An embedder calls `startAgentDevice({ stateDir, plugins?, host? })` from `agent-device` to own a runtime in its process. The main entry loads the runtime when called. The returned client and serializable `clientConfig` identify that exact instance. Attaching checks normal version and code compatibility before checking the instance pin. `close()` shuts the runtime down. The CLI cannot signal or replace an embedder-owned runtime.
+Clients retain managed and attach lifecycles. Managed clients may start a daemon; attach clients cannot start or replace one. An embedder calls `startAgentDevice({ stateDir, plugins?, host? })` from `agent-device` to own a runtime in its process. The main entry loads the runtime when called. The returned client and serializable `clientConfig` identify that exact instance. Attaching checks normal version and code compatibility before checking the instance pin. `close()` in the host process is the only way to shut an embedded runtime down, and returns its `ShutdownReport`. `daemon stop` refuses embedded ownership with `daemon-owner-embedded` and unrecognized ownership with `daemon-owner-unrecognized`, without a request or signal. The embedded-ownership refusal names the host PID and directs the caller to close the runtime there. The CLI cannot replace an embedded runtime. Registration and its lock remain held while requests or platform owners are unfinished.
 
 The embedder supplies plugin objects directly. They follow the built-ins through the same registry validation; this runtime does not read the plugin store. Plugin failures remain inventory data. Logging adapters, a separate package entry, and disposal protocols are not required to own a daemon: the library exposes the client, its attach configuration, and `close()`.
 
 Decision history: the former explicit-start target is dropped; the client lifecycle continues to choose startup behavior. The main-entry API replaces the proposed host subpath and optional host controls, keeping ownership and attachment on the existing runtime and client paths (#3757).
 
 ## Alternatives refused
+
+- **Outside shutdown of an embedded runtime.** The host that starts it owns its close. An authenticated shutdown request, completion record and outside waiter mix ownership and duplicate the host's close handle.
 
 - **Keep the manifest as the contract.** It cannot describe options-dependent credentials, and a
   bundled provider has no package to hold one.

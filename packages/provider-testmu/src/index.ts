@@ -1,7 +1,4 @@
 import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
-import manifest from '../package.json' with { type: 'json' };
-
-type ConnectionCapabilities = NonNullable<AgentDevicePlugin['connection']>['capabilities'];
 
 export type TestmuOptions = {
   /** Used instead of `LT_USERNAME` and `LT_ACCESS_KEY` when set. */
@@ -45,9 +42,15 @@ function testmu(options: TestmuOptions = {}): AgentDevicePlugin {
     provider: 'testmu',
     credentials: { variables: environmentVariables },
     connection: {
-      // The declaration hosts without the version 2 contract read from package.json; the registry
-      // validates it when the plugin loads.
-      capabilities: manifest.agentDevicePlugin.connection as ConnectionCapabilities,
+      capabilities: {
+        leaseKind: 'direct-device-provider',
+        requiresAppAttachment: false,
+        requiresRemoteDaemon: false,
+        supportsArtifacts: true,
+        supportsDeferredAppSelection: false,
+        supportsDirectPortReverse: false,
+        usesCloudWebDriverLease: true,
+      },
       resolve: async (context) =>
         (await loadConnection(withCredentials(context.host))).resolve(context),
       verify: async (context) =>

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import { DAEMON_LIFECYCLE_COMMANDS } from '@agent-device/daemon-contracts/daemon-resolution';
+import { DAEMON_QUIESCE_COMMAND } from '@agent-device/daemon-contracts/daemon-resolution';
 import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -138,20 +138,27 @@ test('attach reports an incompatible daemon with both identities and leaves it r
   }
 });
 
-test('attach reports a registered daemon that answers nothing as not running and leaves it', async (t) => {
-  if (!(await withLoopback(t))) return;
-  const { stateDir, paths } = stateDirAndPaths();
-  const closed = await startScriptedDaemon(okResult({}));
-  await closeLoopbackServer(closed.server);
-  const { child } = await registerDaemon(paths, { httpPort: closed.port });
+for (const ownership of ['detached', 'embedded'] as const)
+  test(`attach leaves an unreachable ${ownership} daemon and names its owner recovery`, async (t) => {
+    if (!(await withLoopback(t))) return;
+    const { stateDir, paths } = stateDirAndPaths();
+    const closed = await startScriptedDaemon(okResult({}));
+    await closeLoopbackServer(closed.server);
+    const { child } = await registerDaemon(paths, { httpPort: closed.port, ownership });
 
-  const error = await failureOf(sendToDaemon(request(stateDir), { daemonLifecycle: 'attach' }));
+    const error = await failureOf(sendToDaemon(request(stateDir), { daemonLifecycle: 'attach' }));
 
-  assert.equal(error.details?.reason, 'daemon-not-running');
-  assert.equal(identityIn(error, 'daemon').pid, child.pid);
-  assert.equal(isProcessAlive(child.pid), true);
-  assert.equal(spawn.mock.calls.length, 0);
-});
+    assert.equal(error.details?.reason, 'daemon-not-running');
+    assert.equal(identityIn(error, 'daemon').pid, child.pid);
+    assert.match(
+      String(error.details?.hint),
+      ownership === 'embedded'
+        ? /owned by host process \d+\. Close it there/
+        : /agent-device daemon stop/,
+    );
+    assert.equal(isProcessAlive(child.pid), true);
+    assert.equal(spawn.mock.calls.length, 0);
+  });
 
 test('attach uses a compatible daemon and never lets a timeout retire it', async (t) => {
   if (!(await withLoopback(t))) return;
@@ -254,7 +261,7 @@ test('ensureDaemon replaces an incompatible idle daemon through a fenced quiesce
     });
 
     assert.equal(connection.started, true);
-    assert.deepEqual(stale.rpcCommands, [DAEMON_LIFECYCLE_COMMANDS.quiesce]);
+    assert.deepEqual(stale.rpcCommands, [DAEMON_QUIESCE_COMMAND]);
     assert.equal(stale.rpcRequests[0]?.params.token, 'local-secret');
     assert.deepEqual(stale.rpcRequests[0]?.params.input, {
       pid: info.pid,
@@ -485,7 +492,7 @@ test('a live daemon on another transport is quiesced, never killed as unreachabl
       onStart: (reason) => started.push(reason),
     });
 
-    assert.deepEqual(live.commands, [DAEMON_LIFECYCLE_COMMANDS.quiesce]);
+    assert.deepEqual(live.commands, [DAEMON_QUIESCE_COMMAND]);
     assert.deepEqual(started, ['incompatible']);
     assert.equal(isProcessAlive(child.pid), false, 'it left because it agreed to');
     assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
@@ -543,7 +550,7 @@ test('ensureDaemon judges again after the daemon it addressed turned out to be g
     assert.equal(typeof actualSend, 'function');
     assert.deepEqual(
       stale.rpcCommands,
-      [DAEMON_LIFECYCLE_COMMANDS.quiesce],
+      [DAEMON_QUIESCE_COMMAND],
       'the second judgement asked again',
     );
     assert.deepEqual(leaver.clientSignals, [], 'the client signaled nothing');
@@ -648,11 +655,7 @@ test('ensureDaemon quiesces an incompatible daemon that wins a startup race inst
     const connection = await ensureDaemon({ stateDir, daemonTransport: 'http' });
 
     assert.equal(connection.started, true);
-    assert.deepEqual(
-      stale.rpcCommands,
-      [DAEMON_LIFECYCLE_COMMANDS.quiesce],
-      'the racer was asked to leave',
-    );
+    assert.deepEqual(stale.rpcCommands, [DAEMON_QUIESCE_COMMAND], 'the racer was asked to leave');
     assert.ok(winner);
     assert.equal(isProcessAlive(winner.pid), false);
     assert.equal(spawn.mock.calls.length, 2, 'the second start follows the quiesce');
