@@ -29,6 +29,15 @@ type CropTargetDevice = Readonly<{
   surface: SessionSurface | undefined;
 }>;
 
+const IPADOS_DEVICE: DeviceInfo = { ...IPADOS_SIMULATOR, kind: 'device' };
+
+/** The cells with live pixel-identity evidence; every other cell stays rejected. */
+const ACCEPTED_CROP_TARGETS: readonly CropTargetDevice['target'][] = [
+  'ios-simulator',
+  'android-emulator',
+  'ios-physical',
+];
+
 /** One device per matrix cell: the classifier's whole reachable output, named by its cell. */
 const CROP_TARGET_DEVICES: readonly CropTargetDevice[] = [
   { target: 'ios-simulator', device: IOS_SIMULATOR, surface: undefined },
@@ -36,6 +45,7 @@ const CROP_TARGET_DEVICES: readonly CropTargetDevice[] = [
   { target: 'android-device', device: ANDROID_DEVICE, surface: undefined },
   { target: 'macos-app-window', device: MACOS_DEVICE, surface: 'app' },
   { target: 'ios-physical', device: IOS_DEVICE, surface: undefined },
+  { target: 'ipados-physical', device: IPADOS_DEVICE, surface: undefined },
   { target: 'macos-helper', device: MACOS_DEVICE, surface: 'desktop' },
   { target: 'web', device: WEB_DESKTOP_DEVICE, surface: undefined },
   { target: 'linux', device: LINUX_DEVICE, surface: undefined },
@@ -60,11 +70,7 @@ test('the classifier and the acceptance matrix agree one-to-one, and the accepte
   }
   expect(CROP_TARGET_DEVICES.map((row) => row.target)).toEqual(matrixTargets);
   for (const cell of SCREENSHOT_CROP_TARGET_CELLS) {
-    if (
-      cell.target === 'ios-simulator' ||
-      cell.target === 'android-emulator' ||
-      cell.target === 'ios-physical'
-    ) {
+    if (ACCEPTED_CROP_TARGETS.includes(cell.target)) {
       expect(cell.status).toBe('accepted');
     } else {
       expect(cell).toEqual({
@@ -76,9 +82,29 @@ test('the classifier and the acceptance matrix agree one-to-one, and the accepte
   }
 });
 
-test('a physical iPad classifies into the ios-physical cell', () => {
-  expect(classifyScreenshotCropTarget({ ...IPADOS_SIMULATOR, kind: 'device' }, undefined)).toBe(
-    'ios-physical',
+test('a physical iPad has its own cell, and an iPad simulator stays in the simulator cell', () => {
+  expect(classifyScreenshotCropTarget(IPADOS_DEVICE, undefined)).toBe('ipados-physical');
+  expect(classifyScreenshotCropTarget(IPADOS_SIMULATOR, undefined)).toBe('ios-simulator');
+});
+
+test('a physical iPad is refused with the pending-evidence reason, naming its own cell', () => {
+  expect(() =>
+    assertScreenshotCropPolicy({
+      device: IPADOS_DEVICE,
+      surface: undefined,
+      cropOn: 'label="Continue"',
+      overlayRefs: false,
+      fullscreen: false,
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'screenshot --crop-on is not accepted on ipados-physical targets',
+      details: {
+        reason: SCREENSHOT_CROP_REASONS.targetNotAccepted,
+        rejectionReason: SCREENSHOT_CROP_REASONS.pendingPixelIdentityEvidence,
+      },
+    }),
   );
 });
 

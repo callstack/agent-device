@@ -30,7 +30,7 @@ test('usageForCommand documents screenshot web aliases and stabilization flags',
   assert.match(help, /deterministic iOS simulator or Android chrome/);
   assert.match(help, /--crop-on <selector-expression>/);
   assert.match(help, /crop the capture to the frame of the selector/);
-  assert.match(help, /currently iOS simulators, physical iOS devices, and Android emulators/);
+  assert.match(help, /currently iOS simulators, physical iPhones, and Android emulators/);
 });
 
 test('usageForCommand documents screenshot diff normalization', async () => {
