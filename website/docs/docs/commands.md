@@ -342,7 +342,7 @@ agent-device snapshot -i --platform apple --target desktop
 
 - With the native backend, app sessions claim one bundle id. Sessions on different apps can run together within one daemon or across daemons that share a claims directory. Same-app and whole-Mac claims conflict. `open --wait` waits only for sessions in the same daemon. An app claim can reopen only its app on the `app` surface; use `open <app> <url>` for links. Copies of one app need distinct bundle ids. Helper screenshots run one at a time. Use one agent-device version per claims directory; older daemons do not enforce app claims. `macos-app` leases take no host claim, so their exclusion applies only within one daemon.
 
-Native app-scoped opens keep the app in the background; XCTest opens and explicit `--surface frontmost-app` opens activate it. The backend selects this behavior; there is no activation flag. `--foreground` requests an initial snapshot. Run `agent-device help open` for the versioned contract.
+Native app-scoped opens keep the app in the background; XCTest opens activate the named app. `open --surface frontmost-app` takes no app target and opens the app already frontmost with activation enabled. The backend selects this behavior; there is no activation flag. `--foreground` requests an initial snapshot. Run `agent-device help open` for the versioned contract.
 
 `frontmost-app` and `menubar` pointer actions move the real pointer. `settings permission` opens System Settings in front, and clipboard and appearance changes affect the whole Mac. `close <other app>` can quit an app held by another session.
 

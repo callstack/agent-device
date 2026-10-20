@@ -64,8 +64,9 @@ daemon's session holds), and `settings permission` (opens System Settings in fro
 
 **Background open follows the session's scope.** A session that holds one app opens it with
 `open -g`, because bringing it forward would move the frontmost app under every other session.
-A session that holds the whole Mac, including `open <app> --surface frontmost-app`, opens the app in
-front as before. Native app events that name a bundle deliver their URL to that app in the background; they do not use the default URL handler.
+A session that holds the whole Mac opens a named app in front as before.
+`open --surface frontmost-app` takes no app target and opens the app that is already frontmost;
+it does not select another named app. Native app events that name a bundle deliver their URL to that app in the background; they do not use the default URL handler.
 
 ## Rejected alternatives
 

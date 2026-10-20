@@ -41,7 +41,8 @@ Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
 6. Screenshots capture only the session app's front window through ScreenCaptureKit.
 
 7. A native `app` session whose target resolves before launch claims only that app ([ADR 0035](0035-macos-per-app-claims.md)).
-8. Native app-scoped opens keep the app in the background; XCTest opens and explicit `--surface frontmost-app` opens activate it.
+8. Native app-scoped opens keep the app in the background; XCTest opens activate the named app.
+   `open --surface frontmost-app` takes no app target and opens the app already frontmost with activation enabled.
    The backend selects this behavior without an activation flag.
    `--foreground` retains its initial-snapshot meaning.
 
