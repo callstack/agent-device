@@ -1,5 +1,9 @@
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonLifecycle, EnsureDaemonOptions } from '@agent-device/contracts/client';
+import type {
+  DaemonBinding,
+  DaemonLifecycle,
+  EnsureDaemonOptions,
+} from '@agent-device/contracts/client';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
@@ -48,6 +52,8 @@ export type DaemonClientSettings = {
   ownedStateDir?: OwnedReplayStateDir;
   remoteBaseUrl?: string;
   remoteAuthToken?: string;
+  /** See {@link DaemonBinding}. Present on a client that is pinned to one daemon instance. */
+  daemonBinding?: DaemonBinding;
 };
 
 export type EnsuredDaemon = {
@@ -68,7 +74,7 @@ LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 export function resolveTimeoutRecovery(
   settings: DaemonClientSettings,
 ): 'retire-unresponsive' | 'none' {
-  if (settings.daemonLifecycle === 'attach') return 'none';
+  if (settings.daemonBinding || settings.daemonLifecycle === 'attach') return 'none';
   return 'retire-unresponsive';
 }
 
@@ -77,13 +83,30 @@ export function resolveClientSettings(
   suppliedAuthToken: string | undefined,
   host: HostEnvironment,
   daemonLifecycle: DaemonLifecycle = 'managed',
+  daemonBinding: DaemonBinding | undefined = undefined,
 ): DaemonClientSettings {
   const explicitStateDir = resolveExplicitStateDir(req, host.env);
   const remote = resolveRemoteClientSettings(req, suppliedAuthToken, host.env);
+  // A pin names one local daemon instance: its token, pid and start time are read from a state
+  // directory's record. A base URL sends requests somewhere else entirely, so a client that sets both
+  // has stated two different answers to "which daemon". Refusing here beats picking one silently.
+  if (daemonBinding && remote.remoteBaseUrl) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'daemonBinding names a local daemon instance and cannot be combined with a daemon base URL.',
+      {
+        reason: 'daemon_binding_with_remote_base_url',
+        daemonBaseUrl: remote.remoteBaseUrl,
+        hint: 'Drop the base URL to reach the pinned daemon on its own state dir, or drop the pin to reach a remote daemon.',
+      },
+    );
+  }
   const transport = resolveTransportClientSettings(req.flags, remote.remoteBaseUrl, host.env);
-  // An attach client owns no daemon, and a private state directory would hold one nobody started.
+  // An attach client owns no daemon, and a private state directory would hold one nobody started. A
+  // pinned client owns one neither: it uses the instance it was given and starts nothing.
   const ownedStateDir =
     daemonLifecycle !== 'attach' &&
+    !daemonBinding &&
     shouldUseOwnedReplayStateDir(req, explicitStateDir, remote.rawBaseUrl)
       ? createOwnedReplayStateDir()
       : undefined;
@@ -99,6 +122,7 @@ export function resolveClientSettings(
     ownedStateDir,
     remoteBaseUrl: remote.remoteBaseUrl,
     remoteAuthToken: remote.authToken,
+    ...(daemonBinding ? { daemonBinding } : {}),
   };
 }
 

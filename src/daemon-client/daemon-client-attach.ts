@@ -1,7 +1,29 @@
 import { ensureManagedDaemon } from './daemon-client-lifecycle.ts';
 import { assertDaemonPolicyMatches, observeLocalDaemon } from './daemon-client-startup.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
+import type { DaemonBinding } from '@agent-device/contracts/client';
+import { readDaemonRecordAddress } from './daemon-client-metadata.ts';
+import { daemonBindingMismatchError, readPinnedDaemonRecord } from './daemon-client-binding.ts';
 import { daemonIncompatibleError, daemonNotRunningError } from './daemon-lifecycle-errors.ts';
+
+/**
+ * Connects to the one daemon instance this client is pinned to, and to no other. It compares the
+ * state directory's record before dispatch and never starts, replaces, retires, or redirects: a pin
+ * is the host's answer to "which daemon", so any other instance is a refusal, not a candidate.
+ */
+async function attachBoundDaemon(
+  binding: DaemonBinding,
+  settings: DaemonClientSettings,
+): Promise<EnsuredDaemon> {
+  const pinned = readPinnedDaemonRecord(binding, readDaemonRecordAddress(settings.paths.infoPath));
+  if ('mismatch' in pinned) {
+    throw daemonBindingMismatchError(binding, pinned, settings.paths.baseDir);
+  }
+  // The record matched the pin, so it is the pinned instance. The request goes out with the pin's own
+  // token anyway: a replacement that lands after this read then fails authentication at the daemon
+  // rather than being served by a token this client never agreed to use.
+  return { info: { ...pinned.registered, token: binding.token }, startedByClient: false };
+}
 
 /**
  * Connects to the local daemon registered in the state directory and nothing else: it never starts,
@@ -25,13 +47,20 @@ async function attachLocalDaemon(settings: DaemonClientSettings): Promise<Ensure
   }
 }
 
-/** The daemon a request goes to, by the lifecycle its client chose. A remote one is never ours. */
+/** The daemon a request goes to, by the lifecycle and pin its client chose. A remote one is never ours. */
 export async function connectToDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
-  if (settings.remoteBaseUrl || settings.daemonLifecycle !== 'attach') {
+  if (settings.remoteBaseUrl) {
     return await ensureManagedDaemon(settings);
   }
-  const attached = await attachLocalDaemon(settings);
-  // Checked on this branch too: attaching must not hand a policy-bound caller a daemon without it.
+  const binding = settings.daemonBinding;
+  const attached = binding
+    ? await attachBoundDaemon(binding, settings)
+    : settings.daemonLifecycle === 'attach'
+      ? await attachLocalDaemon(settings)
+      : await ensureManagedDaemon(settings);
+  // A pin never reaches the remote branch: a client that pins an instance and names a base URL is
+  // refused where its settings are read. Checked on this branch too: attaching must not hand a
+  // policy-bound caller a daemon without it.
   await assertDaemonPolicyMatches(attached.info, settings.paths.baseDir, settings.host);
   return attached;
 }

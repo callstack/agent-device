@@ -4,12 +4,15 @@
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import net from 'node:net';
 import { afterEach, test, vi } from 'vitest';
 import {
   closeLoopbackServer,
   createTestHostEnvironment,
   skipWhenLoopbackUnavailable,
+  listenOnLoopback,
 } from '@agent-device/test-kit';
+import type { DaemonBinding } from '@agent-device/contracts/client';
 import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
 import { isProcessAlive } from '@agent-device/host-kit/process';
@@ -48,6 +51,10 @@ function request(stateDir: string) {
   } as Parameters<typeof sendToDaemon>[0];
 }
 
+function pinTo(info: { token: string; pid: number; processStartTime?: string }): DaemonBinding {
+  return { token: info.token, pid: info.pid, processStartTime: info.processStartTime ?? '' };
+}
+
 /**
  * The signals this code sent at a process. `0` is the liveness probe and is not one; a call with no
  * signal argument is SIGTERM, so an omitted signal counts.
@@ -63,6 +70,23 @@ async function refusalFrom(promise: Promise<unknown>): Promise<AppError> {
   );
   assert.ok(refusal instanceof AppError, String(refusal));
   return refusal;
+}
+
+/** A socket stand-in that keeps every request line it was sent, token included. */
+async function startRecordingSocketDaemon() {
+  const requests: Record<string, any>[] = [];
+  const server = net.createServer((socket) => {
+    socket.setEncoding('utf8');
+    socket.on('error', () => {});
+    let buffered = '';
+    socket.on('data', (chunk) => {
+      buffered += chunk;
+      if (!buffered.includes('\n')) return;
+      requests.push(JSON.parse(buffered) as Record<string, unknown>);
+      socket.write(`${JSON.stringify({ ok: true, data: { devices: [] } })}\n`);
+    });
+  });
+  return { server, port: await listenOnLoopback(server), requests };
 }
 
 /**
@@ -218,3 +242,173 @@ test('timeout recovery asks only whether this client may, and attach never may',
   assert.equal(resolveTimeoutRecovery(managed), 'retire-unresponsive');
   assert.equal(resolveTimeoutRecovery(attach), 'none');
 });
+
+test('a pinned client dispatches to the instance it pins and starts nothing', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  const daemon = await startRecordingSocketDaemon();
+  const { child, info } = await registerDaemon(paths, {
+    socketPort: daemon.port,
+    ownership: 'embedded',
+  });
+
+  try {
+    const transport = createDaemonTransport(createTestHostEnvironment());
+    const response = await transport(
+      {
+        session: 'default',
+        command: 'devices',
+        positionals: [],
+        flags: { stateDir, daemonTransport: 'socket' },
+      } as Parameters<typeof sendToDaemon>[0],
+      { daemonBinding: pinTo(info) },
+    );
+
+    assert.equal(response.ok, true);
+    // The credential that went out is the one the pin names, not one re-read from a record that may
+    // have changed since the pin was handed out.
+    assert.deepEqual(
+      daemon.requests.map((entry) => entry.command),
+      ['devices'],
+    );
+    assert.equal(daemon.requests[0]?.token, info.token);
+    assert.equal(spawn.mock.calls.length, 0, 'a pinned client starts no daemon');
+    assert.equal(isProcessAlive(child.pid), true);
+  } finally {
+    await closeLoopbackServer(daemon.server);
+  }
+});
+
+test('a pinned client refuses an instance that is not the one it pins', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { stateDir, paths, daemon, child, info } = await startStaleRegistration('embedded');
+  // A runtime that took the state directory since the pin was handed out: same place, other instance.
+  const pin = { ...pinTo(info), token: 'a-different-instance' };
+
+  try {
+    const transport = createDaemonTransport(createTestHostEnvironment());
+    const refusal = await refusalFrom(transport(request(stateDir), { daemonBinding: pin }));
+
+    assert.equal(refusal.details?.reason, 'daemon-binding-mismatch');
+    assert.equal(refusal.details?.mismatch, 'replaced');
+    // The refusal names the instance that is really there so an operator can tell which host to ask,
+    // and never the credentials of either side.
+    assert.equal((refusal.details as { registered: { pid: number } }).registered.pid, child.pid);
+    assert.doesNotMatch(JSON.stringify(refusal.details), /local-secret|a-different-instance/);
+    assert.deepEqual(daemon.rpcCommands, [], 'another instance is never dispatched to');
+    assert.equal(spawn.mock.calls.length, 0, 'a pin is never satisfied by starting a daemon');
+    assert.equal(isProcessAlive(child.pid), true);
+    // The refusal read the record and changed nothing about it: the pinned-away instance still owns
+    // the state directory, which is what a client that pins must leave behind.
+    assert.equal(readDaemonInfo(paths.infoPath)?.pid, child.pid);
+  } finally {
+    await closeLoopbackServer(daemon.server);
+  }
+});
+
+test('a pinned client refuses a state directory that registers no daemon', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  const daemon = await startRecordingSocketDaemon();
+  const { info } = await registerDaemon(paths, { socketPort: daemon.port });
+  const pin = pinTo(info);
+  await finishRegisteredDaemonFixtures();
+  assert.equal(readDaemonInfo(paths.infoPath), null);
+
+  try {
+    const transport = createDaemonTransport(createTestHostEnvironment());
+    const refusal = await refusalFrom(transport(request(stateDir), { daemonBinding: pin }));
+
+    assert.equal(refusal.details?.reason, 'daemon-binding-mismatch');
+    assert.equal(refusal.details?.mismatch, 'absent');
+    assert.equal(daemon.requests.length, 0, 'an absent instance is not replaced by a live one');
+    assert.equal(spawn.mock.calls.length, 0, 'a pin names an instance, not a place to start one');
+  } finally {
+    await closeLoopbackServer(daemon.server);
+  }
+});
+
+// A pin is a local instance's identity, and a base URL sends requests somewhere else. Silently
+// preferring either one would make the pin a way to redirect a remote client, or to ignore it.
+test('a client that pins a local daemon and names a base URL is refused where settings are read', () => {
+  const pin: DaemonBinding = { token: 'token', pid: 4242, processStartTime: 'start' };
+  // Loopback so the row reads as the combination under test, not as the separate rule that a remote
+  // URL outside the machine needs an auth token.
+  const remote = 'http://127.0.0.1:9';
+
+  for (const [label, resolve] of [
+    [
+      'from the request flags',
+      () =>
+        resolveClientSettings(
+          { ...request(stateDirAndPaths().stateDir), flags: { daemonBaseUrl: remote } },
+          undefined,
+          createTestHostEnvironment(),
+          'managed',
+          pin,
+        ),
+    ],
+    // The env form is the one that bites: a pin handed to a client on a machine that exports the URL.
+    [
+      'from the environment',
+      () =>
+        resolveClientSettings(
+          request(stateDirAndPaths().stateDir),
+          undefined,
+          createTestHostEnvironment({ env: { AGENT_DEVICE_DAEMON_BASE_URL: remote } }),
+          'managed',
+          pin,
+        ),
+    ],
+  ] as const) {
+    let refusal: AppError | undefined;
+    try {
+      resolve();
+      assert.fail(`${label}: expected the combination to be refused`);
+    } catch (error) {
+      assert.ok(error instanceof AppError, `${label}: ${String(error)}`);
+      refusal = error;
+    }
+    assert.equal(refusal.code, 'INVALID_ARGS', label);
+    assert.equal(refusal.details?.reason, 'daemon_binding_with_remote_base_url', label);
+    assert.match(String(refusal.details?.hint), /Drop the base URL/, label);
+  }
+});
+
+// `absent` tells an operator the host stopped; this says something holds the state directory and the
+// client cannot name it. Folding the two together would send someone to start a new host for a daemon
+// that may be serving right now.
+test('a pinned client refuses a record it cannot read as an address', async () => {
+  const { stateDir, paths } = stateDirAndPaths();
+  const pin: DaemonBinding = { token: 'token', pid: 4242, processStartTime: 'start' };
+  fs.mkdirSync(paths.baseDir, { recursive: true });
+  fs.writeFileSync(paths.infoPath, '{not json', { mode: 0o600 });
+
+  const refusal = await refusalFrom(
+    createDaemonTransport(createTestHostEnvironment())(request(stateDir), { daemonBinding: pin }),
+  );
+
+  assert.equal(refusal.details?.reason, 'daemon-binding-mismatch');
+  assert.equal(refusal.details?.mismatch, 'unaddressable');
+  assert.match(String(refusal.details?.hint), /daemon\.json/);
+  assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), '{not json', 'the refusal changed nothing');
+});
+
+test('a pinned client keeps its hands off the state directory it was given', async () => {
+  const { stateDir, paths } = stateDirAndPaths();
+  const pin: DaemonBinding = { token: 'token', pid: 4242, processStartTime: 'start' };
+
+  const settings = resolveClientSettings(
+    request(stateDir),
+    undefined,
+    createTestHostEnvironment(),
+    'managed',
+    pin,
+  );
+
+  // A private state directory would hold a daemon nobody started, and a pinned client starts none.
+  assert.equal(settings.ownedStateDir, undefined);
+  assert.deepEqual(settings.daemonBinding, pin);
+  assert.equal(settings.paths.baseDir, paths.baseDir);
+});
+

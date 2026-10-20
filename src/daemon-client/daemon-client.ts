@@ -82,6 +82,7 @@ async function sendToDaemonOnHost(
     options.authToken ?? flagAuthToken,
     host,
     options.daemonLifecycle,
+    options.daemonBinding,
   );
   const requestTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),

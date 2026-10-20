@@ -37,6 +37,7 @@ export type {
   DaemonConnection,
   DaemonIdentity,
   DaemonLifecycle,
+  DaemonBinding,
   DeviceCommandBaseOptions,
   EnsureDaemonOptions,
 } from '../client-connection.ts';
