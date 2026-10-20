@@ -2,6 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   readSnapshotOcclusionContextEvidence,
   snapshotCaptureAnnotationsFrom,
+  publicSnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
 import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-ownership';
 import {
@@ -84,7 +85,6 @@ export function buildSnapshotState(
       ? scopeSnapshotNodes(normalizedNodes, flags.snapshotScope)
       : normalizedNodes;
   const annotations = snapshotCaptureAnnotationsFrom(data);
-  const snapshotQuality = annotations.quality;
   const nodes = attachRefs(
     snapshotRaw
       ? scopedNodes
@@ -96,8 +96,10 @@ export function buildSnapshotState(
     truncated: data?.truncated,
     createdAt: Date.now(),
     ...snapshotStateProvenance(data),
-    ...(snapshotQuality ? { snapshotQuality } : {}),
-    ...(annotations.qualityNotes ? { snapshotQualityNotes: annotations.qualityNotes } : {}),
+    ...publicSnapshotCaptureAnnotations({
+      quality: annotations.quality,
+      qualityNotes: annotations.qualityNotes,
+    }),
     ...(data.comparisonIdentity
       ? { comparisonKey: iosSnapshotComparisonIdentityKey(data.comparisonIdentity) }
       : {}),
