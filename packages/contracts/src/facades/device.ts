@@ -44,7 +44,6 @@ export {
   foldPoseForHingeAngle,
   isDeviceRotation,
   ORIENTATION_REQUESTS,
-  parseDeviceRotation,
   parseOrientationRequest,
   parseFoldPose,
 } from '../device-rotation.ts';

@@ -5,7 +5,7 @@ import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
  * Neutral intent for one orientation change. `rotation` is already parsed by the caller
- * (`parseDeviceRotation`); the operation names no command, request, session, or CLI flag.
+ * (`parseOrientationRequest`); the operation names no command, request, session, or CLI flag.
  */
 export type SetOrientationInput = Readonly<{
   rotation: DeviceRotation;

@@ -45,7 +45,8 @@ export function deviceRotationOrientation(rotation: DeviceRotation): 'PORTRAIT' 
   return DEVICE_ROTATION_SURFACE_INDEX[rotation] % 2 === 0 ? 'PORTRAIT' : 'LANDSCAPE';
 }
 
-export function parseDeviceRotation(input: string | undefined): DeviceRotation {
+/** The public entry for parsing one is `parseOrientationRequest`; this stays module-private. */
+function parseDeviceRotation(input: string | undefined): DeviceRotation {
   if (input === undefined) {
     throw new AppError(
       'INVALID_ARGS',
