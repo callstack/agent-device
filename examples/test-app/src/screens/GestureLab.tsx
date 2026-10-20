@@ -37,6 +37,12 @@ type GestureCounts = {
   twoPointerPan: number;
 };
 
+/** A multi-tap round ends when the last contact lifts; it reports the most contacts held at once. */
+type MultiTapState = {
+  rounds: number;
+  lastRoundContacts: number;
+};
+
 const panDurationBucketMs = 400;
 
 type AndroidTouchStart = TransformState & {
@@ -57,6 +63,7 @@ const initialCounts: GestureCounts = {
   fling: 0,
   twoPointerPan: 0,
 };
+const initialMultiTap: MultiTapState = { rounds: 0, lastRoundContacts: 0 };
 const minScale = 0.5;
 const maxScale = 2;
 
@@ -68,6 +75,9 @@ export function GestureLab() {
   const [counts, setCounts] = useState<GestureCounts>(initialCounts);
   const [dragCompleted, setDragCompleted] = useState(false);
   const [panDurationStatus, setPanDurationStatus] = useState('pending');
+  const [multiTap, setMultiTap] = useState<MultiTapState>(initialMultiTap);
+  const multiTapRoundContactsRef = useRef(0);
+  const multiTapActiveTouchesRef = useRef(new Set<number>());
   const transformRef = useRef<TransformState>(initialTransform);
   const gestureStartRef = useRef<TransformState>(initialTransform);
   const panDurationStartRef = useRef<number | undefined>(undefined);
@@ -196,6 +206,32 @@ export function GestureLab() {
     .minDistance(4)
     .runOnJS(true)
     .onStart(handleTwoPointerPan);
+  // A manual gesture sees every native touch without competing with the transform recognizers.
+  // Touches are tracked by id because a lifting touch may still be listed in the up event.
+  const multiTapGesture = Gesture.Manual()
+    .runOnJS(true)
+    .onTouchesDown((event) => {
+      const active = multiTapActiveTouchesRef.current;
+      // A first contact starts a new round, so a lift this handler never saw cannot wedge it.
+      if (event.allTouches.length === event.changedTouches.length) {
+        active.clear();
+        multiTapRoundContactsRef.current = 0;
+      }
+      for (const touch of event.changedTouches) active.add(touch.id);
+      multiTapRoundContactsRef.current = Math.max(multiTapRoundContactsRef.current, active.size);
+    })
+    .onTouchesUp((event) => {
+      const active = multiTapActiveTouchesRef.current;
+      for (const touch of event.changedTouches) active.delete(touch.id);
+      if (active.size > 0) return;
+      const contacts = multiTapRoundContactsRef.current;
+      multiTapRoundContactsRef.current = 0;
+      setMultiTap((current) => ({ rounds: current.rounds + 1, lastRoundContacts: contacts }));
+    })
+    .onTouchesCancelled(() => {
+      multiTapActiveTouchesRef.current.clear();
+      multiTapRoundContactsRef.current = 0;
+    });
   const holdDragGesture = Gesture.Pan()
     .activateAfterLongPress(500)
     .minDistance(10)
@@ -408,6 +444,9 @@ export function GestureLab() {
         <Text style={styles.metric} testID="gesture-two-pointer-pan-status">
           two-pointer pan activations {counts.twoPointerPan}
         </Text>
+        <Text style={styles.metric} testID="gesture-multi-tap-status">
+          multi-tap rounds {multiTap.rounds}, last round contacts {multiTap.lastRoundContacts}
+        </Text>
         <Text style={styles.metric} testID="gesture-pan-duration-status">
           pan duration {panDurationStatus}
         </Text>
@@ -415,6 +454,15 @@ export function GestureLab() {
           {changeStatusLabel}
         </Text>
       </View>
+
+      <GestureDetector gesture={multiTapGesture}>
+        <View
+          accessibilityLabel="Multi-finger tap target"
+          accessible
+          style={styles.multiTapTarget}
+          testID="multi-tap-target"
+        />
+      </GestureDetector>
     </SectionCard>
   );
 }

@@ -38,6 +38,13 @@ export function createGestureLabStyles(colors: AppColors) {
     metrics: {
       gap: 6,
     },
+    multiTapTarget: {
+      backgroundColor: colors.cardStrong,
+      borderColor: colors.line,
+      borderRadius: 4,
+      borderWidth: StyleSheet.hairlineWidth,
+      height: 160,
+    },
     metric: {
       color: colors.textSoft,
       fontSize: 13,

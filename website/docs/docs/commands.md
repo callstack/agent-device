@@ -447,6 +447,8 @@ agent-device gesture pinch 2.0          # zoom in 2x
 agent-device gesture pinch 0.5 200 400 # zoom out at coordinates
 agent-device gesture rotate 35 200 420 # rotate app content
 agent-device gesture transform 200 420 80 -40 2 35 700 # combined pan, zoom, and rotate
+agent-device gesture tap 80 300 200 450 310 600        # three fingers at once
+agent-device gesture tap 80 300 200 450 --count 20 --pause-ms 100 # repeated two-finger tap
 ```
 
 A successful `click` or `press` means the action was sent to where the command found the target. It does not confirm that the element received it or that the screen changed. When the next step depends on it, add `--verify` (reports `changedFromBefore`), add `--settle` (returns the diff once the UI goes quiet), or follow with `wait <selector>`. Before retrying a failed interaction, see [Retry after a failed command](#retry-after-a-failed-command).
@@ -490,6 +492,7 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 - `gesture fling up|down|left|right x y [distance]` is a fast directional throw. Neither `swipe` nor `gesture fling` takes a duration, and `gesture rotate` takes no velocity; see [Rewrite Old Gesture Commands](/docs/migrating-gestures) to update old scripts.
 - `gesture drag source destination [sourceHoldMs] [moveMs] [destinationHoldMs]` holds one pointer down from source to destination. Endpoints are selectors or refs, resolved before dispatch and recorded as selector chains. Defaults are 800, 500, and 0ms, capped at 10000ms in total. It works on Android touch devices and iOS/iPadOS; other backends refuse it before touching the screen.
 - `gesture pinch <scale> [x] [y]`, `gesture rotate <degrees> [x] [y]` (the sign sets direction), `gesture transform x y dx dy scale degrees [durationMs]`, and two-finger `gesture pan` work in Android, iOS, and iPadOS app sessions, on simulators and physical devices. On Apple they use the XCTest runner, so iOS sessions reached through a WebDriver provider refuse them. One-finger `gesture pan` works wherever coordinate drags do. A path that does not fit the viewport fails before injection instead of being clamped. Use `orientation` to rotate the device.
+- `gesture tap x1 y1 x2 y2 [... x5 y5]` touches 2 to 5 distinct points and holds them for `--hold-ms` (default 50ms, at least 16ms) before lifting. `--count` repeats the same contacts up to 200 times with `--pause-ms` between repetitions; the series must fit in 60000ms, counting about 500ms of overhead per repetition. It works in Android and iOS/iPadOS app sessions; WebDriver providers refuse it unless they declare `tapGesture` support. On iOS the contacts touch down and lift together; on Android they touch down up to 8ms apart and lift 8ms apart in reverse order. Three or more fingers can trigger iOS system gestures such as undo, so verify app state afterwards. A cancelled series stops between repetitions and still succeeds, with `completed` below `count`. Use `press` for one finger.
 - App recognizers may not report exactly the requested pan, scale, and rotation. Verify app-level state such as `pan changed yes`, and prefer separate `gesture pan`, `gesture pinch`, or `gesture rotate` commands when exact values matter. See `agent-device help gestures`.
 
 ### Scroll

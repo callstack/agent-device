@@ -19,6 +19,8 @@ Completed process history is in git history.
 - On Android, gestures do not stop or restart the snapshot session.
 - Keep the positional `.ad` codec. One `PUBLIC_GESTURE_SYNTAX` table defines argument arity for the CLI argv parse and the `.ad` line parse.
 - For repeated coordinate swipes, the combined planned gesture and pause schedule must fit within 60 seconds.
+- `gesture tap` holds 2 to 5 stationary contacts; the motion intents keep exactly two (amended 2026-10).
+  A tap series must fit within 60 seconds, counting 500 ms of overhead per repetition, and plans each repetition against a fresh viewport.
 - For target-authored drag, resolve both endpoints before device injection. On replay, verify both identities before pointer-down.
 - Admit target-authored drag only on Android touch devices and iOS/iPadOS.
 - iOS timing changes require live simulator evidence from an independent app-observed postcondition.
@@ -60,7 +62,16 @@ The runtime plans canonical intent in `packages/contracts/src/gesture-plan.ts`.
 Contact topology is separate from motion:
 
 - One contact: pan, fling, or target-authored drag with a complete pointer trajectory and an explicit execution profile.
-- Two contacts: pan, pinch, rotate, or transform with two complete, synchronized trajectories.
+- Multiple contacts: pan, pinch, rotate, or transform with exactly two complete, synchronized trajectories, or tap with 2 to 5 stationary ones.
+
+Amended 2026-10: this widens the multi-contact topology from exactly two contacts to two through five, for `gesture tap` only.
+Stress-testing touch-heavy apps needs simultaneous contacts on arbitrary points, which a line of fingers cannot place.
+Five is a tested API cap, not a hardware claim; the iOS runner and Android helper refuse more.
+Tap contacts must be distinct, because two contacts on one point would reach the app as one touch.
+iOS synthesizes the contacts together.
+Android cannot inject simultaneous contacts, so it touches them down in ascending order up to 8 ms apart, shrinking the gap so every contact is down before the hold ends, and lifts them in reverse order 8 ms apart.
+Two-contact gestures keep their original Android schedule.
+WebDriver providers refuse a tap unless they declare `tapGesture`; two-contact transform support does not prove five simultaneous contacts.
 
 Public `swipe` without a duration remains an alias for a fixed-duration fling.
 These timed public forms are rejected:
@@ -201,7 +212,7 @@ Thus, a form removed from the CLI is removed from `.ad` in the same edit.
 If a `.ad` script still carries a removed positional, the script fails when it is parsed.
 This failure occurs before the replay executes any device action.
 The error names the offending line and its rewrite.
-Arity is the only thing checked at parse time.
+Arity, and whether the gesture kind reads each flag on the line (`GESTURE_FLAGS_BY_KIND`), are the only things checked at parse time.
 `${VAR}` tokens resolve after planning, and interpolation never splits a token.
 Thus, the count is decidable at parse time, but the values are not.
 These inputs follow a removal process.
@@ -275,5 +286,11 @@ Its endpoint resolution and recording contracts are tested at that composition s
 - **Make swipe a public synonym for pan.** Rejected because established gesture vocabulary treats a fling/swipe as a quick directional throw and pan as deliberate timed translation.
 - **Add `two-finger-pan`.** Rejected because pointer count is topology, not a new motion intent.
 - **Expose span/angle controls.** Rejected until a concrete automation use case needs them.
+- **Add `--pointer-count` to `press`.** Rejected because `press` owns semantic targets and one contact; a tap with explicit points is a distinct intent.
+- **Allow a one-contact `gesture tap`.** Rejected because it would duplicate `press`.
+- **Keep the `two` topology name beside `multi`.** Rejected because the multi-contact guards would have to name both, and a missed guard compiles silently.
+- **Enforce a minimum separation between tap contacts.** Rejected because no measured threshold supports a number; only coincident contacts are refused.
+- **Gate Android taps on the device's declared touchscreen features.** Rejected because synthetic injection is not limited by the digitizer declaration; injection failures stay typed.
+- **Batch a tap series into one synthesis call.** Deferred: it would avoid the per-repetition iOS synthesis cost, but whether one XCTest event record carries disjoint repeats of one finger is unverified.
 - **Consolidate scroll command semantics.** Rejected because edge/content verification is distinct.
   Only its Android physical touch execution is shared.
