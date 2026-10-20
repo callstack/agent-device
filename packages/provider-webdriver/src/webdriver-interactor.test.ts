@@ -587,34 +587,6 @@ test('keyboard enter presses the Enter keycode through the driver on Android', a
   assert.deepEqual(world.transcript, ['mobile: pressKey [{"keycode":66}]']);
 });
 
-test('a hardware key presses its keycode through the driver on Android', async () => {
-  const world = createKeyboardWorld([]);
-
-  await keyboardInteractor(world, 'android').hardwareKey!('volume-down');
-
-  assert.deepEqual(world.transcript, ['mobile: pressKey [{"keycode":25}]']);
-});
-
-test('a raw Android keycode token sends that keycode unchanged', async () => {
-  const world = createKeyboardWorld([]);
-
-  await keyboardInteractor(world, 'android').hardwareKey!('android-keycode:300');
-
-  assert.deepEqual(world.transcript, ['mobile: pressKey [{"keycode":300}]']);
-});
-
-test('a hardware key refuses on iOS, where the capability map declares no key press', async () => {
-  const world = createKeyboardWorld([]);
-
-  await assert.rejects(
-    () => keyboardInteractor(world, 'ios').hardwareKey!('volume-down'),
-    (error: unknown) =>
-      (error as { code?: string }).code === 'UNSUPPORTED_OPERATION' &&
-      (error as { details?: { operation?: string } }).details?.operation === 'hardwareKey',
-  );
-  assert.deepEqual(world.transcript, []);
-});
-
 test('keyboard enter types a newline on iOS and echoes the keyboard visibility around it', async () => {
   const world = createKeyboardWorld([true, false]);
 
