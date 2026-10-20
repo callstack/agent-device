@@ -2,12 +2,16 @@
 
 import type { ClickButton } from './click-button.ts';
 import type { GesturePointerCount } from './gesture-plan-types.ts';
-import type { GesturePayload } from './gesture-input.ts';
+import type {
+  DragGesturePayload,
+  GesturePayload,
+  SwipeGesturePayload,
+  TapGesturePayload,
+} from './gesture-input.ts';
 import type {
   ScrollDirection,
   ScrollInputDirection,
   SwipePattern,
-  SwipePreset,
   TransformGestureParams,
 } from './scroll-gesture.ts';
 import type { SelectorSnapshotCommandOptions } from './client-capture.ts';
@@ -90,13 +94,7 @@ export type PanOptions = DeviceCommandBaseOptions & {
   durationMs?: number;
 };
 
-export type DragOptions = DeviceCommandBaseOptions & {
-  source: string;
-  destination: string;
-  sourceHoldMs?: number;
-  moveMs?: number;
-  destinationHoldMs?: number;
-};
+export type DragOptions = DeviceCommandBaseOptions & Omit<DragGesturePayload, 'kind'>;
 
 export type FlingOptions = DeviceCommandBaseOptions & {
   direction: ScrollDirection;
@@ -105,9 +103,7 @@ export type FlingOptions = DeviceCommandBaseOptions & {
   distance?: number;
 };
 
-export type SwipeGestureOptions = DeviceCommandBaseOptions & {
-  preset: SwipePreset;
-};
+export type SwipeGestureOptions = DeviceCommandBaseOptions & Omit<SwipeGesturePayload, 'kind'>;
 
 export type FocusOptions = DeviceCommandBaseOptions & {
   x: number;
@@ -147,12 +143,7 @@ export type RotateGestureOptions = DeviceCommandBaseOptions & {
 export type TransformGestureOptions = DeviceCommandBaseOptions & TransformGestureParams;
 
 /** Touches 2 to 5 points and holds them for `holdMs`; `count` repeats the same contacts. */
-export type TapGestureOptions = DeviceCommandBaseOptions & {
-  points: { x: number; y: number }[];
-  holdMs?: number;
-  count?: number;
-  pauseMs?: number;
-};
+export type TapGestureOptions = DeviceCommandBaseOptions & Omit<TapGesturePayload, 'kind'>;
 
 export type ScrollOptions = DeviceCommandBaseOptions &
   SettleCommandOptions & {
