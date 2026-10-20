@@ -27,8 +27,9 @@ Accepted (2026-10-08). Applies to the native macOS app backend (ADR 0031) only.
    the `app` surface; a link opens as `open <app> <url>`, because a bare URL's handler is not known
    before launch.
 6. Helper screenshots take a host-wide lock (`macos-screen-capture.lock` in the device claims
-   directory) for the length of one capture. It is the only action sessions on different apps
-   serialize on.
+   directory) for the length of one capture. Across daemons, only helper screenshots serialize
+   sessions on different apps. Within one daemon, commands that take the device execution lock
+   still serialize across its app sessions.
 7. App keys are lowercase, and the predicate of rule 5 compares bundle ids without regard to case,
    because LaunchServices matches them that way. An `open --wait` resolves the claim it would take
    under the device lock; until then it waits only for a whole-device session, and when the open
@@ -68,9 +69,9 @@ front as before. Native app events that name a bundle deliver their URL to that 
 
 ## Rejected alternatives
 
-- **An input lock around every action.** The native actions need neither focus nor the pointer
-  once `open` stops activating, so a lock would only serialize sessions for nothing. Only the
-  capture, which contends on ScreenCaptureKit rather than on input, is serialized.
+- **A host-wide input lock around every action.** The native actions need neither focus nor the
+  pointer once `open` stops activating. Only helper capture needs a cross-daemon action lock
+  because it contends on ScreenCaptureKit. The existing same-daemon device execution lock remains.
 - **A separate claims directory per app.** Two stores could not exclude each other under one
   lock, and every stale-claim path would need a second scan.
 
