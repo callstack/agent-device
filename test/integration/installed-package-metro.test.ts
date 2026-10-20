@@ -96,10 +96,13 @@ async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<v
   fs.writeFileSync(
     source,
     `import type { AgentDevicePluginFactory } from 'agent-device/plugins';
-import { startAgentDevice, type AgentDeviceHost, type HostEnvironment, type LogEntry, type ShutdownReport } from 'agent-device/host';
+import { startAgentDevice, type AgentDeviceHost, type StartAgentDeviceOptions, type AgentDeviceClientConfig } from 'agent-device';
 
-export async function hostConsumer(host: HostEnvironment): Promise<ShutdownReport> {
-  const running: AgentDeviceHost = await startAgentDevice({ stateDir: './state', host, plugins: [await example()], log: (entry: LogEntry) => { void entry.text; } });
+export async function hostConsumer(host: NonNullable<StartAgentDeviceOptions['host']>) {
+  const options: StartAgentDeviceOptions = { stateDir: './state', host, plugins: [await example()] };
+  const running: AgentDeviceHost = await startAgentDevice(options);
+  const config: AgentDeviceClientConfig = running.clientConfig;
+  void config;
   return await running.close();
 }
 
@@ -350,7 +353,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { createAgentDeviceClient } from 'agent-device';
-import { startAgentDevice } from 'agent-device/host';
+import { startAgentDevice } from 'agent-device';
 
 const exec = promisify(execFile);
 const cwd = process.cwd();
@@ -375,6 +378,8 @@ const a = await startAgentDevice({
   plugins: [
     fixture('fixture-a'),
     fixture('limrun'),
+    null,
+    { ...fixture('wrong-version'), apiVersion: 1 },
     {
       ...fixture('broken'),
       setup() {
@@ -386,7 +391,6 @@ const a = await startAgentDevice({
 const bCwd = path.join(cwd, 'b-cwd');
 fs.mkdirSync(bCwd);
 const b = await startAgentDevice({
-  log() { throw new Error('sink failed'); },
   stateDir: 'host-b',
   host: { cwd: bCwd, env: { ...supplied.env, HOST_MARKER: 'B' } },
   plugins: [fixture('fixture-b')],
@@ -400,24 +404,27 @@ try {
     ['fixture-a', 'A'],
     ['fixture-b', 'B'],
   ]);
-  assert.equal(a.plugins.find((p) => p.provider === 'fixture-a').state, 'active');
+  const inventory = JSON.parse(fs.readFileSync(path.join(a.clientConfig.stateDir, 'daemon.json'), 'utf8')).plugins;
+  assert.equal(inventory.find((p) => p.provider === 'fixture-a').state, 'active');
   assert.equal(
-    a.plugins.filter((p) => p.provider === 'limrun' && p.source === 'embedder')[0].state,
+    inventory.filter((p) => p.provider === 'limrun' && p.source === 'embedder')[0].state,
     'failed',
   );
-  assert.equal(a.plugins.find((p) => p.provider === 'broken').state, 'failed');
+  assert.equal(inventory.find((p) => p.provider === 'broken').state, 'failed');
+  assert.equal(inventory.find((p) => p.source === 'embedder' && p.provider === undefined).error.reason, 'invalid_plugin');
+  assert.equal(inventory.find((p) => p.provider === 'wrong-version').error.reason, 'incompatible_plugin');
   assert.equal(process.cwd(), cwd);
   assert.deepEqual({ ...process.env }, beforeEnv);
   assert.deepEqual(
     listeners.map((event) => process.listeners(event)),
     beforeListeners,
   );
-  await assert.rejects(startAgentDevice({ stateDir: a.clientConfig.stateDir, host: supplied, plugins: [fixture('rollback')] }), (error) => error.details?.reason === 'state-dir-in-use');
+  await assert.rejects(startAgentDevice({ stateDir: a.clientConfig.stateDir, host: supplied, plugins: [fixture('rollback')] }), (error) => error.details?.reason === 'daemon_registration_refused' && error.details?.status === 'busy');
   assert.deepEqual(disposed.splice(0), ['rollback:shutdown', 'rollback:dispose']);
   const unprovenDir = path.join(cwd, 'unproven');
   fs.mkdirSync(unprovenDir);
   fs.writeFileSync(path.join(unprovenDir, 'daemon.lock'), 'legacy lock');
-  await assert.rejects(startAgentDevice({ stateDir: unprovenDir, host: supplied, plugins: [fixture('unproven')] }), (error) => error.details?.reason === 'state-dir-ownership-unproven');
+  await assert.rejects(startAgentDevice({ stateDir: unprovenDir, host: supplied, plugins: [fixture('unproven')] }), (error) => error.details?.reason === 'daemon_registration_refused' && error.details?.status === 'unproven');
   assert.equal(fs.readFileSync(path.join(unprovenDir, 'daemon.lock'), 'utf8'), 'legacy lock');
   assert.deepEqual(disposed.splice(0), ['unproven:shutdown', 'unproven:dispose']);
   const config = JSON.stringify(a.clientConfig);
@@ -450,13 +457,8 @@ try {
     { cwd },
   );
   assert.equal(JSON.parse(stopped.stdout).data.stopped, true);
-  const [first, second, disposal] = await Promise.all([
-    a.close(),
-    a.close(),
-    a[Symbol.asyncDispose](),
-  ]);
+  const [first, second] = await Promise.all([a.close(), a.close()]);
   assert.strictEqual(first, second);
-  assert.equal(disposal, undefined);
   assert.deepEqual(first.requests, { drained: 0, abandoned: 0 });
   assert.deepEqual(disposed, ['fixture-a:shutdown', 'fixture-a:dispose']);
   assert.deepEqual(await b.client.sessions.list(), []);
@@ -492,7 +494,7 @@ try {
   );
 } finally {
   await a.close();
-  await b[Symbol.asyncDispose]();
+  await b.close();
 }
 assert.deepEqual(disposed, [
   'fixture-a:shutdown',
@@ -598,8 +600,6 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
           },
           './contracts': (mod) => mod.centerOfRect({ x: 2, y: 2, width: 6, height: 6 }),
           './finders': (mod) => mod.findBestMatchesByLocator([], 'text', 'anything').matches.length,
-          // Importing the host entry must be cheap: it reaches the daemon only when a caller starts one.
-          './host': (mod) => typeof mod.startAgentDevice,
           './install-source': (mod) => typeof mod.isTrustedInstallSourceUrl('https://example.test/app.apk'),
           './io': (mod) => typeof mod.createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
           './limrun': async (mod) => {
@@ -622,6 +622,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
           subpathSmokeResults[subpath] = await subpathSmoke[subpath](mod);
         }
         const removedSubpaths = await Promise.all([
+          'agent-device/host',
           'agent-device/backend',
           'agent-device/commands',
           'agent-device/testing/conformance',
@@ -664,6 +665,7 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
       'isAgentDeviceError',
       'isUnreadableCaptureContentError',
       'normalizeAgentDeviceError',
+      'startAgentDevice',
     ]);
     assert.equal(imports.rootClientSnapshot, 'function');
     assert.equal(imports.rootArtifactAdapter, 'function');
@@ -685,7 +687,6 @@ assert.equal(fs.existsSync(path.join(cwd, 'host-a', 'daemon.json')), false);
       './batch': 'INVALID_ARGS',
       './contracts': { x: 5, y: 5 },
       './finders': 0,
-      './host': 'function',
       './install-source': 'boolean',
       './io': 'function',
       './limrun': 'limrun',

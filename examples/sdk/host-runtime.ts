@@ -2,7 +2,7 @@
  * Host-owned runtime: start the daemon inside this process, drive it through the
  * client it hands back, and end it with one `close()`.
  *
- * Demonstrates: `startAgentDevice` from `agent-device/host`.
+ * Demonstrates: `startAgentDevice` from `agent-device`.
  *
  * Prerequisites: none — the runtime is this process's own, so no daemon needs to
  * be running and no device is touched here. `sessions.list()` asks that runtime
@@ -10,18 +10,16 @@
  *
  * Run: node --experimental-strip-types examples/sdk/host-runtime.ts
  */
-import { startAgentDevice } from 'agent-device/host';
+import { startAgentDevice } from 'agent-device';
 
 const host = await startAgentDevice({
   // Required: a host claims a directory of its own rather than attaching to
   // whatever an ambient AGENT_DEVICE_STATE_DIR happens to name.
   stateDir: './.host-runtime-state',
-  // `log` receives the runtime's stdout and stderr lines; omitted keeps them silent.
 });
 
 try {
   console.log(`state dir: ${host.clientConfig.stateDir}`);
-  console.log(`providers: ${host.plugins.map((plugin) => plugin.provider).join(', ')}`);
   // The pin names exactly this instance — token, pid and process start time — so a
   // second process handed this config reaches this runtime and refuses anything
   // that later replaced it. It carries a bearer token: keep it inside this host.

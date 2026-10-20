@@ -1,4 +1,4 @@
-// `agent-device/host`, end to end: an embedder starts the runtime inside its own process and gets a
+// `startAgentDevice`, end to end: an embedder starts the runtime inside its own process and gets a
 // client, a config another process attaches with, and one close. The host here is the test process,
 // which is what makes the central assertion cheap and final: a code path that reached for a signal, or
 // for `process.exit`, would take the test runner down with it.
@@ -9,6 +9,7 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import { readDaemonStopIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
+import type { PluginCandidate } from '@agent-device/plugins/registry';
 import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { stopRecordedDaemon } from './daemon-client/daemon-client-stop.ts';
 import { startAgentDevice } from './host.ts';
@@ -53,22 +54,27 @@ vi.mock('./provider-device-runtimes.ts', async (importOriginal) => {
     },
     createEmbeddedProviderRuntimeComposition: async (
       _env: unknown,
-      embedderCandidates: readonly unknown[],
+      embedderCandidates: readonly PluginCandidate[],
     ) => {
       composition.embedderCandidates = [...embedderCandidates];
+      const { resolveProviderPlugins } = await import('@agent-device/plugins/registry');
+      const resolved = await resolveProviderPlugins(embedderCandidates);
       return {
         runtimes: [],
         platformModules: [],
         shutdown: async () => [],
-        inventory: await (
-          await import('./__tests__/test-utils/builtin-plugin-inventory.ts')
-        ).builtinPluginInventory(),
+        inventory: [
+          ...(await (
+            await import('./__tests__/test-utils/builtin-plugin-inventory.ts')
+          ).builtinPluginInventory()),
+          ...resolved.inventory(),
+        ],
       };
     },
   };
 });
 
-import type { AgentDeviceHost } from './host.ts';
+import type { AgentDeviceHost } from './sdk/host-types.ts';
 
 type Booted = {
   stateDir: string;
@@ -161,7 +167,6 @@ test('a host runs its runtime on the socket its client is given, whatever the pr
     expect(record.transport).toBe('socket');
     expect(typeof record.port).toBe('number');
     expect(record.httpPort).toBeUndefined();
-    expect(host.clientConfig.daemonServerMode).toBe('socket');
     // The client of the host that started this runtime reaches it over that socket, which is the whole
     // promise. A record that names no socket makes this fail instead.
     await expect(host.client.sessions.list()).resolves.toBeInstanceOf(Array);
@@ -180,44 +185,48 @@ test('a host registers the plugins its embedder imported and reports the invento
       throw new Error('not invoked by composition fixture');
     },
   };
-  const { stateDir, host } = await bootHost({ plugins: [plugin] });
+  const { stateDir, paths, host } = await bootHost({ plugins: [plugin] });
   try {
     // The embedder's objects reach the composition as candidates the registry claims in order, and the
     // store is never consulted: a plugin somebody installed later cannot change this process.
     expect(composition.embedderCandidates).toEqual([
       { source: 'embedder', load: expect.any(Function) },
     ]);
-    expect(host.plugins).toEqual(await builtinPluginInventory());
+    expect(JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')).plugins).toEqual([
+      ...(await builtinPluginInventory()),
+      expect.objectContaining({ provider: 'embedder-plugin', state: 'active', source: 'embedder' }),
+    ]);
   } finally {
     await host.close();
     removeStateDir(stateDir);
   }
 });
 
-test('a plugin that is not a plugin is refused before anything starts', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-host-entry-');
-  try {
-    const refusal = await startAgentDevice({
-      stateDir,
-      plugins: [
-        // @ts-expect-error malformed JavaScript input
-        'not-a-plugin',
-      ],
-    }).then(
-      () => null,
-      (error: unknown) => error as { code?: string; details?: { reason?: string } },
-    );
-
-    expect(refusal).toMatchObject({
-      code: 'INVALID_ARGS',
-      details: { reason: 'invalid_embedder_plugin' },
+test.each([
+  { plugin: 'not-a-plugin', reason: 'invalid_plugin' },
+  { plugin: { apiVersion: 1, provider: 'wrong-version' }, reason: 'incompatible_plugin' },
+])(
+  'plugin validation reports $reason through the registry inventory',
+  async ({ plugin, reason }) => {
+    const { stateDir, paths, host } = await bootHost({
+      // @ts-expect-error malformed JavaScript input
+      plugins: [plugin],
     });
-    // Refused at the boundary the embedder can still fix: no state directory was claimed.
-    expect(fs.existsSync(resolveDaemonPaths(stateDir).infoPath)).toBe(false);
-  } finally {
-    removeStateDir(stateDir);
-  }
-});
+    try {
+      expect(JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')).plugins).toContainEqual(
+        expect.objectContaining({
+          source: 'embedder',
+          state: 'failed',
+          error: expect.objectContaining({ reason }),
+        }),
+      );
+      expect(fs.existsSync(paths.infoPath)).toBe(true);
+    } finally {
+      await host.close();
+      removeStateDir(stateDir);
+    }
+  },
+);
 
 test('a host without a state directory is refused, never a daemon in an inherited one', async () => {
   for (const stateDir of [undefined, '', '   ']) {
@@ -235,7 +244,6 @@ test('a host without a state directory is refused, never a daemon in an inherite
     // directory nobody picked for this process.
     expect(refusal, JSON.stringify(stateDir)).toMatchObject({
       code: 'INVALID_ARGS',
-      details: { reason: 'state_dir_required' },
     });
   }
   expect(fs.existsSync('/tmp/agent-device-host-entry-inherited/daemon.json')).toBe(false);
@@ -254,7 +262,6 @@ test('a host ends its own runtime once, and an outside stop ends it the same way
 
     expect(first).toEqual(second);
     expect(exit).not.toHaveBeenCalled();
-    await expect(host[Symbol.asyncDispose]()).resolves.toBeUndefined();
     expect(first).toMatchObject({
       requests: { drained: 0, abandoned: 0 },
       plugins: { failed: [], pending: [] },
@@ -294,7 +301,15 @@ test("an operator's stop tears a host's runtime down exactly as its own close wo
     expect(fs.existsSync(paths.infoPath)).toBe(false);
     // The host learns the same report it would have from closing itself, and closing again is not an
     // error — the case of a scope that closes after an operator already stopped the runtime.
-    await expect(host.close()).resolves.toBeDefined();
+    const report = await host.close();
+    expect(report).toMatchObject({
+      requests: { drained: 0, abandoned: 0 },
+      platformOwners: 'closed',
+      sessions: { closed: 0, failed: 0 },
+      runners: { stopped: [], handedOff: [] },
+      plugins: { failed: [], pending: [] },
+    });
+    await expect(host.close()).resolves.toEqual(report);
   } finally {
     signals.mockRestore();
     await host.close();
@@ -316,7 +331,7 @@ test('a host never takes a state directory somebody else holds', async () => {
 
     expect(refusal).toMatchObject({
       code: 'COMMAND_FAILED',
-      details: { reason: 'state-dir-in-use', stateDir: resolveDaemonPaths(held.stateDir).baseDir },
+      details: { reason: 'daemon_registration_refused', status: 'busy' },
     });
     // Refusing left the first host untouched: same runtime, same record, still attachable.
     expect(readDaemonStopIdentity(held.paths.infoPath).ownership).toBe('embedded');

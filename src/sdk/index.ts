@@ -1,4 +1,13 @@
+import type { AgentDeviceHost, StartAgentDeviceOptions } from './host-types.ts';
+
 export { createAgentDeviceClient } from '../agent-device-client.ts';
+export type { AgentDeviceHost, StartAgentDeviceOptions } from './host-types.ts';
+
+/** Starts an in-process daemon, loading its runtime only when called. */
+export async function startAgentDevice(options: StartAgentDeviceOptions): Promise<AgentDeviceHost> {
+  const { startAgentDevice } = await import('../host.ts');
+  return await startAgentDevice(options);
+}
 export { ensureDaemon } from './ensure-daemon.ts';
 export { createLocalArtifactAdapter } from '../io.ts';
 export {

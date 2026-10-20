@@ -34,8 +34,6 @@ const supportedSubpaths = [
   './selectors',
   './finders',
   './ai-sdk',
-  // The embedder's entry: it starts a daemon in the caller's process, which no other subpath does.
-  './host',
 ];
 const typeOnlySubpaths = new Set(['./remote-config']);
 
@@ -70,6 +68,7 @@ test('package exports only supported public subpaths', () => {
 
   assert.equal(pkg.exports['./android-apps'], undefined);
   assert.equal(pkg.exports['./daemon'], undefined);
+  assert.equal(pkg.exports['./host'], undefined);
 });
 
 test('every public subpath is backed by a configured tsdown build entry', () => {

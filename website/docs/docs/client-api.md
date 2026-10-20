@@ -31,6 +31,8 @@ Entry points for driving devices from Node.js:
 
 - `agent-device`
   - `createAgentDeviceClient(options?)`
+  - `startAgentDevice(options)`
+  - types: `AgentDeviceHost`, `StartAgentDeviceOptions`
   - `ensureDaemon(options?)`
   - `createLocalArtifactAdapter(options?)`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
@@ -54,9 +56,6 @@ Entry points for driving devices from Node.js:
 - `agent-device/ai-sdk`
   - `createAgentDeviceTools(options)`
   - types: `AgentDeviceToolSet`, `AgentDeviceTools`, `CreateAgentDeviceToolsOptions`
-- `agent-device/host`
-  - `startAgentDevice(options)`
-  - types: `AgentDeviceHost`, `StartAgentDeviceOptions`, `HostClientConfig`, `LogEntry`, `HostEnvironment`, `ShutdownReport`
 
 ## Basic usage
 
@@ -134,29 +133,27 @@ These failures carry a typed `error.details.reason`:
 
 ## Running the daemon inside your process
 
-`startAgentDevice()` on `agent-device/host` starts the daemon inside your own process and returns a client for it. Use it when you want the daemon's lifetime to be exactly your process's, or when you import plugin objects you already have.
+`startAgentDevice()` starts the daemon inside your own process and returns a client for it. Use it when you want the daemon's lifetime to be exactly your process's, or when you import plugin objects you already have.
 
 ```ts
-import { startAgentDevice } from 'agent-device/host';
+import { startAgentDevice } from 'agent-device';
 
 const host = await startAgentDevice({
   stateDir: './.my-app/agent-device-state',
-  log: (line) => console.log(line.stream, line.text),
 });
 
 const devices = await host.client.devices.list();
 await host.close();
 ```
 
-`stateDir` is required, and a host never takes one somebody else holds: a live occupant is refused with `state-dir-in-use`, and a record whose owner cannot be proven dead with `state-dir-ownership-unproven`. Pass plugin objects you imported in `plugins`, after the built-ins and in that order: the plugin store is not read, so `plugin add` never changes a running host. `host.plugins` is the inventory `agent-device daemon status` shows, so a plugin that failed to register is visible. `close()` reports what it could not finish; repeated and concurrent calls share one close, and closing after `agent-device daemon stop` is not an error. The object works with `await using`, and `close()` never exits your process.
+`stateDir` is required. If another daemon owns it, startup refuses with `daemon_registration_refused`; choose a separate directory or close its owner first. Pass imported plugin objects in `plugins`. They register after the built-ins without reading the plugin store, so `plugin add` does not change a running host. Plugin failures appear in `agent-device daemon status --state-dir <path>`. `close()` reports unfinished teardown. Repeated calls share one close, including after an operator stops the runtime, and never exit your process.
 
 The runtime stays alive until you close it or send `agent-device daemon stop --state-dir <path>`; idle reaping is disabled. `daemon stop --clean` is refused because cleanup must stay within this runtime. If the shutdown report lists abandoned requests or unfinished cleanup, inspect those outcomes before reusing the state directory: the runtime may retain its registration to protect work still in progress.
 
-`host.clientConfig` is serializable JSON: pass it to another process or worker and build an attach client from it. It pins that client to exactly one daemon instance, and a state directory whose daemon is any other instance is refused rather than attached to:
+`host.clientConfig` is serializable JSON: pass it to another process or worker and build an attach client from it. The client must pass normal version and code compatibility checks, then match the pinned instance. An incompatible or replacement daemon is refused:
 
 ```ts
-import { createAgentDeviceClient } from 'agent-device';
-import { startAgentDevice } from 'agent-device/host';
+import { createAgentDeviceClient, startAgentDevice } from 'agent-device';
 
 const host = await startAgentDevice({ stateDir: './.my-app/agent-device-state' });
 // Hand the config to a worker or another process: it is plain JSON, no build step.

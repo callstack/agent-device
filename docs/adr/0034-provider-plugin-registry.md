@@ -7,7 +7,7 @@ Status: accepted. Umbrella #3747; contract and registry #3755.
 - One contract. A provider plugin is a factory that returns `{ apiVersion: 2, provider, credentials,
   connection?, setup(host) }`. `setup` returns `{ runtime, platformModule, dispose? }` or
   `{ webDriver, dispose? }`. A `{ webDriver }` result stays a data descriptor the host interprets.
-- One registry. Sources compose in the order built-in, store, embedder; the embedder slot arrives with #3757. Built-in providers use the
+- One registry. Composition selects built-in, store, or embedder sources. Built-in providers use the
   same shape as an installed plugin, and one function validates what every factory returns.
 - Plugins import only types from agent-device. The type-only contract is `agent-device/plugins`;
   there is no runtime helper, and the contract does not depend on a plugin's module URL.
@@ -58,10 +58,11 @@ had to fake the store to load a plugin from its own dependencies (#3747).
 
 ## Daemon ownership
 
-The target is that starting or replacing a daemon is an explicit act, not a side effect of a client
-call. Today a client call can still start a daemon; #3754 makes that explicit for the client
-lifecycle, and #3757 adds `agent-device/host`, where an embedder owns its daemon and passes its
-plugins as the third source.
+Clients retain managed and attach lifecycles. Managed clients may start a daemon; attach clients cannot start or replace one. An embedder calls `startAgentDevice({ stateDir, plugins?, host? })` from `agent-device` to own a runtime in its process. The main entry loads the runtime when called. The returned client and serializable `clientConfig` identify that exact instance. Attaching checks normal version and code compatibility before checking the instance pin. `close()` shuts the runtime down. The CLI cannot signal or replace an embedder-owned runtime.
+
+The embedder supplies plugin objects directly. They follow the built-ins through the same registry validation; this runtime does not read the plugin store. Plugin failures remain inventory data. Logging adapters, a separate package entry, and disposal protocols are not required to own a daemon: the library exposes the client, its attach configuration, and `close()`.
+
+Decision history: the former explicit-start target is dropped; the client lifecycle continues to choose startup behavior. The main-entry API replaces the proposed host subpath and optional host controls, keeping ownership and attachment on the existing runtime and client paths (#3757).
 
 ## Alternatives refused
 

@@ -12,7 +12,7 @@ import {
   skipWhenLoopbackUnavailable,
   listenOnLoopback,
 } from '@agent-device/test-kit';
-import * as metadata from '../daemon-client-metadata.ts';
+import * as startup from '../daemon-client-startup.ts';
 import type { DaemonBinding } from '@agent-device/contracts/client';
 import { DAEMON_LIFECYCLE_REASONS } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
@@ -247,13 +247,23 @@ test('timeout recovery asks only whether this client may, and attach never may',
   // daemon-registration-embedded-owner.test.ts pins at that seam for both modes.
   assert.equal(resolveTimeoutRecovery(managed), 'retire-unresponsive');
   assert.equal(resolveTimeoutRecovery(attach), 'none');
-  assert.equal(
-    resolveTimeoutRecovery({
-      ...managed,
-      daemonBinding: { token: 'pin', pid: 4242, processStartTime: 'start' },
-    }),
-    'none',
-  );
+});
+
+test('a matching pin does not bypass attach compatibility checks', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { stateDir, daemon, info } = await startStaleRegistration('embedded');
+  try {
+    const refusal = await refusalFrom(
+      createDaemonTransport(createTestHostEnvironment())(request(stateDir), {
+        daemonBinding: pinTo(info),
+      }),
+    );
+    assert.equal(refusal.details?.reason, 'daemon-incompatible');
+    assert.deepEqual(daemon.rpcCommands, []);
+    assert.equal(spawn.mock.calls.length, 0);
+  } finally {
+    await closeLoopbackServer(daemon.server);
+  }
 });
 
 test('a pinned client dispatches to the instance it pins and starts nothing', async (t) => {
@@ -294,7 +304,12 @@ test('a pinned client dispatches to the instance it pins and starts nothing', as
 
 test('a pinned client refuses an instance that is not the one it pins', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
-  const { stateDir, paths, daemon, child, info } = await startStaleRegistration('embedded');
+  const { stateDir, paths } = stateDirAndPaths();
+  const daemon = await startScriptedDaemon(okResult({ devices: [] }));
+  const { child, info } = await registerDaemon(paths, {
+    httpPort: daemon.port,
+    ownership: 'embedded',
+  });
   // A runtime that took the state directory since the pin was handed out: same place, other instance.
   const pin = { ...pinTo(info), token: 'a-different-instance' };
 
@@ -303,7 +318,6 @@ test('a pinned client refuses an instance that is not the one it pins', async (t
     const refusal = await refusalFrom(transport(request(stateDir), { daemonBinding: pin }));
 
     assert.equal(refusal.details?.reason, 'daemon-binding-mismatch');
-    assert.equal(refusal.details?.mismatch, 'replaced');
     // The refusal names the instance that is really there so an operator can tell which host to ask,
     // and never the credentials of either side.
     assert.equal((refusal.details as { registered: { pid: number } }).registered.pid, child.pid);
@@ -333,7 +347,6 @@ test('a pinned client refuses a state directory that registers no daemon', async
     const refusal = await refusalFrom(transport(request(stateDir), { daemonBinding: pin }));
 
     assert.equal(refusal.details?.reason, 'daemon-binding-mismatch');
-    assert.equal(refusal.details?.mismatch, 'absent');
     assert.equal(daemon.requests.length, 0, 'an absent instance is not replaced by a live one');
     assert.equal(spawn.mock.calls.length, 0, 'a pin names an instance, not a place to start one');
   } finally {
@@ -388,9 +401,7 @@ test('a client that pins a local daemon and names a base URL is refused where se
   }
 });
 
-// `absent` tells an operator the host stopped; this says something holds the state directory and the
-// client cannot name it. Folding the two together would send someone to start a new host for a daemon
-// that may be serving right now.
+// An unreadable record cannot authorize a pinned client to dispatch or replace its owner.
 test('a pinned client refuses a record it cannot read as an address', async () => {
   const { stateDir, paths } = stateDirAndPaths();
   const pin: DaemonBinding = { token: 'token', pid: 4242, processStartTime: 'start' };
@@ -402,7 +413,6 @@ test('a pinned client refuses a record it cannot read as an address', async () =
   );
 
   assert.equal(refusal.details?.reason, 'daemon-binding-mismatch');
-  assert.equal(refusal.details?.mismatch, 'unaddressable');
   assert.match(String(refusal.details?.hint), /daemon\.json/);
   assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), '{not json', 'the refusal changed nothing');
 });
@@ -420,6 +430,7 @@ test('a pinned client keeps its hands off the state directory it was given', asy
   );
 
   // A private state directory would hold a daemon nobody started, and a pinned client starts none.
+  assert.equal(settings.daemonLifecycle, 'attach');
   assert.equal(settings.ownedStateDir, undefined);
   assert.deepEqual(settings.daemonBinding, pin);
   assert.equal(settings.paths.baseDir, paths.baseDir);
@@ -432,9 +443,9 @@ test('replacement after binding lookup cannot authenticate a pinned request with
   const daemon = await startRecordingSocketDaemon(() => token);
   const { info } = await registerDaemon(paths, { socketPort: daemon.port, ownership: 'embedded' });
   token = info.token;
-  const readInfo = metadata.daemonInfoFromRecord;
-  const lookup = vi.spyOn(metadata, 'daemonInfoFromRecord').mockImplementation((record) => {
-    const observed = readInfo(record);
+  const observe = startup.observeLocalDaemon;
+  const lookup = vi.spyOn(startup, 'observeLocalDaemon').mockImplementation(async (...args) => {
+    const observed = await observe(...args);
     // The replacement reuses the endpoint and process lifetime after this lookup. Its auth token
     // changes, so a request can only succeed here if the client incorrectly adopts the new token.
     token = 'replacement-token';

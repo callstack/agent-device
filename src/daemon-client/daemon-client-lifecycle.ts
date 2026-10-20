@@ -74,7 +74,7 @@ LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 export function resolveTimeoutRecovery(
   settings: DaemonClientSettings,
 ): 'retire-unresponsive' | 'none' {
-  if (settings.daemonBinding || settings.daemonLifecycle === 'attach') return 'none';
+  if (settings.daemonLifecycle === 'attach') return 'none';
   return 'retire-unresponsive';
 }
 
@@ -101,12 +101,12 @@ export function resolveClientSettings(
       },
     );
   }
+  if (daemonBinding) daemonLifecycle = 'attach';
   const transport = resolveTransportClientSettings(req.flags, remote.remoteBaseUrl, host.env);
   // An attach client owns no daemon, and a private state directory would hold one nobody started. A
   // pinned client owns one neither: it uses the instance it was given and starts nothing.
   const ownedStateDir =
     daemonLifecycle !== 'attach' &&
-    !daemonBinding &&
     shouldUseOwnedReplayStateDir(req, explicitStateDir, remote.rawBaseUrl)
       ? createOwnedReplayStateDir()
       : undefined;
