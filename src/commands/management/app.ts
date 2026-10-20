@@ -35,7 +35,7 @@ const appsCommandMetadata = defineFieldCommandMetadata(
 
 const openCommandMetadata = defineFieldCommandMetadata(
   'open',
-  'Boot the selected device when needed, then open an app, deep link, or URL in a session. On macOS, native app-scoped opens keep the app in the background; XCTest opens and explicit --surface frontmost-app opens activate it.',
+  'Boot the selected device when needed, then open an app, deep link, or URL in a session. On macOS, native app-scoped opens keep the app in the background; XCTest opens and explicit frontmost-app surface opens activate it.',
   {
     app: stringField('App name, bundle id, package, or URL.'),
     url: stringField('Optional URL passed with an app shell.'),
