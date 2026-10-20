@@ -131,11 +131,6 @@ export async function acquireDeviceClaim(params: {
   });
 }
 
-/**
- * An app acquisition that found the device key available leaves no record there: what remains can
- * only be this daemon's own abandoned whole-device claim, which would otherwise keep fencing every
- * other daemon's apps. The caller holds the device key's lock.
- */
 function removeSupersededDeviceClaim(deviceKey: string, env: EnvMap): void {
   try {
     fs.unlinkSync(resolveDeviceClaimPath(deviceKey, env));
@@ -245,9 +240,11 @@ async function claimHeldDevice(params: {
   const owner = readCurrentOwnerIdentity();
   const claimOwnerKind: DeviceClaimAcquirerKind =
     params.transientCommand === undefined ? 'open-session' : 'transient-command';
+  let supersededAppClaims: string[] = [];
   if (!params.app && isMacOs(params.device)) {
-    const appConflict = await settleAppClaims(deviceKey, params);
-    if (appConflict) return { status: 'conflict', conflict: appConflict };
+    const apps = await settleAppClaims(deviceKey, params);
+    if (apps.conflict) return { status: 'conflict', conflict: apps.conflict };
+    supersededAppClaims = apps.abandoned;
   }
   const existing = await resolveExistingClaim({
     ...params,
@@ -255,7 +252,10 @@ async function claimHeldDevice(params: {
     claimOwnerKind,
   });
   if (existing.status === 'conflict') return existing;
-  if (existing.status === 'held') return { status: 'acquired', ownership: existing.ownership };
+  if (existing.status === 'held') {
+    await removeSupersededAppClaims(supersededAppClaims, params.env);
+    return { status: 'acquired', ownership: existing.ownership };
+  }
   const now = Date.now();
   const claim: DeviceClaim = {
     schemaVersion: DEVICE_CLAIM_SCHEMA_VERSION,
@@ -277,6 +277,7 @@ async function claimHeldDevice(params: {
     ...(params.transientCommand === undefined ? {} : { transientCommand: params.transientCommand }),
   };
   writeDeviceClaim(claim, params.env);
+  await removeSupersededAppClaims(supersededAppClaims, params.env);
   return {
     status: 'acquired',
     ownership: ownershipFromClaim(claim),
@@ -287,7 +288,8 @@ async function claimHeldDevice(params: {
 async function settleAppClaims(
   deviceKey: string,
   params: { stateDir: string; env: EnvMap; reconcileOrphanedDeviceClaim: DeviceClaimReconciler },
-): Promise<InspectedDeviceClaim | undefined> {
+): Promise<{ abandoned: string[]; conflict?: InspectedDeviceClaim }> {
+  const abandoned: string[] = [];
   const appKeyPrefix = appScopedDeviceKey(deviceKey, '');
   for (const entry of inspectDeviceClaims({}, params.env)) {
     const scanned = entry.claim;
@@ -299,7 +301,7 @@ async function settleAppClaims(
       if (
         isAbandonedClaimOfThisDaemon(current.claim, params.stateDir, readCurrentOwnerIdentity())
       ) {
-        removeSupersededDeviceClaim(current.claim.deviceKey, params.env);
+        abandoned.push(current.claim.deviceKey);
         return undefined;
       }
       if (!deviceClaimOwnerCannotRelease(current.classification)) return current;
@@ -310,9 +312,17 @@ async function settleAppClaims(
       );
       return settled.status === 'retained' ? current : undefined;
     });
-    if (conflict) return conflict;
+    if (conflict) return { conflict, abandoned: [] };
   }
-  return undefined;
+  return { abandoned };
+}
+
+async function removeSupersededAppClaims(deviceKeys: string[], env: EnvMap): Promise<void> {
+  for (const deviceKey of deviceKeys) {
+    await withDeviceClaimLock(deviceKey, env, async () =>
+      removeSupersededDeviceClaim(deviceKey, env),
+    );
+  }
 }
 
 /**

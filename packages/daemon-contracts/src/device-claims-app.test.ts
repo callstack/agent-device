@@ -1,3 +1,4 @@
+import * as claimInspection from './device-claim-inspection.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -320,4 +321,43 @@ test('whole-Mac acquisition supersedes only its own abandoned app claims', async
   });
   assert.equal(refused.status, 'conflict');
   assert.equal(fs.existsSync(foreignFile), true);
+});
+
+test('failed whole-Mac acquisition leaves its abandoned app fenced against foreign acquisition', async () => {
+  const root = useClaimsRoot();
+  const app = await acquireDeviceClaim({
+    device: mac,
+    session: 'app',
+    workspace: '/app',
+    stateDir: root,
+    app: { bundleId: 'com.example.one' },
+  });
+  if (app.status !== 'acquired') throw new Error('seed failed');
+  await abandonDeviceClaim(app.ownership, process.env);
+  await seedForeignMacClaim(root, { bundleId: 'com.example.two' });
+  const entries = inspectDeviceClaims({}, process.env);
+  const own = entries.find((entry) => entry.claim?.app?.bundleId === 'com.example.one')!;
+  const foreign = entries.find((entry) => entry.claim?.app?.bundleId === 'com.example.two')!;
+  const orderedScan = vi
+    .spyOn(claimInspection, 'inspectDeviceClaims')
+    .mockReturnValue([own, foreign]);
+  const whole = await acquireDeviceClaim({
+    device: mac,
+    session: 'whole',
+    workspace: '/whole',
+    stateDir: root,
+  });
+  orderedScan.mockRestore();
+  assert.equal(whole.status, 'conflict');
+  assert.equal(fs.existsSync(resolveDeviceClaimPath(app.ownership.deviceKey, process.env)), true);
+  const otherState = path.join(root, 'other-daemon');
+  fs.mkdirSync(otherState);
+  const otherApp = await acquireDeviceClaim({
+    device: mac,
+    session: 'foreign',
+    workspace: '/foreign',
+    stateDir: otherState,
+    app: { bundleId: 'com.example.one' },
+  });
+  assert.equal(otherApp.status, 'conflict');
 });
