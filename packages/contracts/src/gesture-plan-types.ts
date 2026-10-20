@@ -79,7 +79,7 @@ export type SinglePointerGesturePlan = {
 };
 
 export type MultiTouchGesturePlan = {
-  topology: 'two';
+  topology: 'multi';
   intent: 'pan' | 'pinch' | 'rotate' | 'transform';
   durationMs: number;
   viewport: Rect;

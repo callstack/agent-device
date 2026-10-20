@@ -59,7 +59,7 @@ function createLinuxInteractorBody(): Interactor {
     fill: (x, y, text, delayMs) => fillLinux(x, y, text, delayMs),
     scroll: (direction, options) => scrollLinux(direction, options),
     performGesture: async (plan) => {
-      if (plan.topology === 'two') {
+      if (plan.topology !== 'single') {
         throw new AppError(
           'UNSUPPORTED_OPERATION',
           'Multi-touch gestures are not supported on Linux',

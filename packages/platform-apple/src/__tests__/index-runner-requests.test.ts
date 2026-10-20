@@ -116,7 +116,10 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     IOS_SIMULATOR,
     (i) => i.performGesture!(singlePointerPanPlan()),
   ],
-  'ios-simulator.interactions-gesture.two': [IOS_SIMULATOR, (i) => i.performGesture!(pinchPlan())],
+  'ios-simulator.interactions-gesture.multi': [
+    IOS_SIMULATOR,
+    (i) => i.performGesture!(pinchPlan()),
+  ],
   'tvos.interactions-scroll.remote-press': [
     TVOS_SIMULATOR,
     (i) => i.scroll('down', { durationMs: 300 }),
@@ -278,7 +281,7 @@ function onlyRequest(name: string, calls: RecordedRunnerCall[]): RunnerCommand {
 
 function pinchPlan(): GesturePlan {
   return {
-    topology: 'two',
+    topology: 'multi',
     intent: 'pinch',
     durationMs: 250,
     viewport: { x: 0, y: 0, width: 390, height: 844 },

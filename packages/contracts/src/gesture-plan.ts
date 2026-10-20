@@ -352,7 +352,7 @@ function buildTransformPlan(
   };
 
   return {
-    topology: 'two',
+    topology: 'multi',
     intent: motion.intent,
     durationMs: motion.durationMs,
     viewport,

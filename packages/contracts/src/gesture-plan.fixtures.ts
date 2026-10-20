@@ -12,7 +12,7 @@ export const LANDSCAPE: Rect = { x: 0, y: 0, width: 844, height: 390 };
 export function requireTwoPointerPlan(
   plan: ReturnType<typeof buildGesturePlan>,
 ): MultiTouchGesturePlan {
-  assert.equal(plan.topology, 'two');
+  assert.equal(plan.topology, 'multi');
   return plan as MultiTouchGesturePlan;
 }
 

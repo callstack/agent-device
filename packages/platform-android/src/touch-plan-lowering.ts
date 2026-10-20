@@ -59,7 +59,7 @@ export type AndroidProviderTouchPlan =
   | (AndroidLongPressTouchPlan & { viewport: Rect });
 
 export function lowerAndroidTouchPlan(plan: AndroidTouchPlan): AndroidLoweredTouchPlan {
-  if (plan.topology === 'two' || plan.intent === 'longPress') return plan;
+  if (plan.topology !== 'single' || plan.intent === 'longPress') return plan;
 
   const { releaseBehavior, ...gesturePlan } = plan;
   const [{ pointerId, samples: canonicalSamples }] = gesturePlan.pointers;

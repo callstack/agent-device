@@ -226,10 +226,10 @@ test(ANDROID_TOUCH_CONTRACT_EVIDENCE.testName, async () => {
         { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 350 },
         { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 300 },
         { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 500 },
-        { topology: 'two', intent: 'pan', pointerCount: 2, durationMs: 500 },
-        { topology: 'two', intent: 'pinch', pointerCount: 2, durationMs: 300 },
-        { topology: 'two', intent: 'rotate', pointerCount: 2, durationMs: 784 },
-        { topology: 'two', intent: 'transform', pointerCount: 2, durationMs: 700 },
+        { topology: 'multi', intent: 'pan', pointerCount: 2, durationMs: 500 },
+        { topology: 'multi', intent: 'pinch', pointerCount: 2, durationMs: 300 },
+        { topology: 'multi', intent: 'rotate', pointerCount: 2, durationMs: 784 },
+        { topology: 'multi', intent: 'transform', pointerCount: 2, durationMs: 700 },
       ]);
       assert.equal(world.gestureViewportCalls, 8);
     },

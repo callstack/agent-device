@@ -136,7 +136,7 @@ test('HarmonyOS gestures lower a single trajectory and reject multi-touch', asyn
     () =>
       performHarmonyGesture(DEVICE, {
         ...singlePlan,
-        topology: 'two',
+        topology: 'multi',
         intent: 'pinch',
         pointers: [singlePlan.pointers[0], { ...singlePlan.pointers[0], pointerId: 1 }],
       }),

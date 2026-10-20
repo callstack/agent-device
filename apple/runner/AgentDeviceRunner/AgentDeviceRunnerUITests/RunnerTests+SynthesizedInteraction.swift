@@ -461,8 +461,8 @@ extension RunnerTests {
   }
 
   func plannedGestureValidationError(_ plan: RunnerGesturePlan) -> String? {
-    guard plan.topology == "single" || plan.topology == "two" else {
-      return "planned gesture topology must be single or two"
+    guard plan.topology == "single" || plan.topology == "multi" else {
+      return "planned gesture topology must be single or multi"
     }
     let supportedIntent = plan.topology == "single"
       ? plan.intent == "fling" || plan.intent == "pan"
@@ -523,7 +523,7 @@ extension RunnerTests {
         return "planned pointer paths must start at 0 and end at durationMs"
       }
     }
-    if plan.topology == "two" {
+    if plan.topology == "multi" {
       guard let firstStart = firstSamples.first?.point,
         let secondStart = plan.pointers[1].samples.first?.point,
         hypot(firstStart.x - secondStart.x, firstStart.y - secondStart.y) > 0

@@ -43,9 +43,9 @@ test('resolveAppleBackRunnerCommand maps the default and explicit back modes', (
   assert.equal(resolveAppleBackRunnerCommand('system'), 'backSystem');
 });
 
-function twoFingerPanPlan(): Extract<GesturePlan, { topology: 'two' }> {
+function twoFingerPanPlan(): Extract<GesturePlan, { topology: 'multi' }> {
   return {
-    topology: 'two',
+    topology: 'multi',
     intent: 'pan',
     durationMs: 32,
     viewport: { x: 0, y: 0, width: 400, height: 800 },

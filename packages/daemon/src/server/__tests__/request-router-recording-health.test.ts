@@ -25,7 +25,7 @@ const testCreateCommandSurface = createTouchCommandSurface({
         return {
           kind: plan.intent,
           durationMs: plan.durationMs,
-          pointerCount: plan.topology === 'two' ? 2 : 1,
+          pointerCount: plan.topology === 'multi' ? 2 : 1,
           from: first,
           to: last,
           ...(backendResult ? { backendResult } : {}),
