@@ -121,6 +121,7 @@ export async function ensureAndroidSnapshotHelper(options: {
             options.signal,
           ),
           reason: 'forced' as const,
+          installedSha256: undefined,
         }
       : await inspectInstalledAndroidHelper({
           adb,
@@ -130,15 +131,9 @@ export async function ensureAndroidSnapshotHelper(options: {
           sha256,
           signal: options.signal,
         });
-  const { installedVersionCode } = installedState;
-  const installedSha256 =
-    'installedSha256' in installedState ? installedState.installedSha256 : undefined;
-  const reason = installedState.reason;
+  const { installedVersionCode, installedSha256, reason } = installedState;
 
   if (reason === 'current') {
-    if (installedVersionCode === undefined) {
-      throw new Error('Expected installed versionCode for current Android snapshot helper');
-    }
     rememberInstalledSnapshotHelper(installCacheKey, installedVersionCode);
     return {
       packageName,

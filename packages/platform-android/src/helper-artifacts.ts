@@ -52,10 +52,15 @@ export type AndroidHelperInstallDecision = {
   reason: 'missing' | 'outdated' | 'mismatched' | 'unverifiable' | 'current';
 };
 
-export type InstalledAndroidHelperState = Pick<
-  AndroidHelperInstallDecision,
-  'installedVersionCode' | 'installedSha256' | 'reason'
->;
+export type InstalledAndroidHelperState =
+  | { reason: 'missing'; installedVersionCode?: never; installedSha256?: never }
+  | {
+      reason: 'outdated' | 'unverifiable';
+      installedVersionCode: number;
+      installedSha256?: never;
+    }
+  | { reason: 'mismatched'; installedVersionCode: number; installedSha256: string }
+  | { reason: 'current'; installedVersionCode: number; installedSha256?: string };
 
 // --- Manifest field validators, shared by every helper's manifest parser ---------------------
 
