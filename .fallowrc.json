@@ -41,6 +41,7 @@
     "examples/sdk/contracts-result.ts",
     "examples/sdk/batch-orchestration.ts",
     "examples/sdk/ai-sdk-tools.ts",
+    "examples/sdk/host-runtime.ts",
     "test/integration/**/*.test.ts",
     "website/docs/404.mdx",
     "website/rspress.config.ts"

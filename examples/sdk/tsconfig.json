@@ -6,6 +6,7 @@
     "tsBuildInfoFile": "../../.tmp/examples-sdk.tsbuildinfo",
     "paths": {
       "agent-device": ["../../src/sdk/index.ts"],
+      "agent-device/host": ["../../src/host.ts"],
       "agent-device/io": ["../../src/sdk/io.ts"],
       "agent-device/artifacts": ["../../src/sdk/artifacts.ts"],
       "agent-device/metro": ["../../src/sdk/metro.ts"],

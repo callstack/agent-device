@@ -34,6 +34,8 @@ const supportedSubpaths = [
   './selectors',
   './finders',
   './ai-sdk',
+  // The embedder's entry: it starts a daemon in the caller's process, which no other subpath does.
+  './host',
 ];
 const typeOnlySubpaths = new Set(['./remote-config']);
 

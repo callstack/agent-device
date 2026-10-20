@@ -2,7 +2,7 @@ import { ensureManagedDaemon } from './daemon-client-lifecycle.ts';
 import { assertDaemonPolicyMatches, observeLocalDaemon } from './daemon-client-startup.ts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import type { DaemonBinding } from '@agent-device/contracts/client';
-import { readDaemonRecordAddress } from './daemon-client-metadata.ts';
+import { readDaemonRecord } from '@agent-device/daemon-contracts/daemon-resolution';
 import { daemonBindingMismatchError, readPinnedDaemonRecord } from './daemon-client-binding.ts';
 import { daemonIncompatibleError, daemonNotRunningError } from './daemon-lifecycle-errors.ts';
 
@@ -15,7 +15,7 @@ async function attachBoundDaemon(
   binding: DaemonBinding,
   settings: DaemonClientSettings,
 ): Promise<EnsuredDaemon> {
-  const pinned = readPinnedDaemonRecord(binding, readDaemonRecordAddress(settings.paths.infoPath));
+  const pinned = readPinnedDaemonRecord(binding, readDaemonRecord(settings.paths.infoPath));
   if ('mismatch' in pinned) {
     throw daemonBindingMismatchError(binding, pinned, settings.paths.baseDir);
   }

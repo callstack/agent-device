@@ -242,6 +242,11 @@ export type DaemonRuntimeController = {
   /** Runs `fn` as this runtime, for code that serves it from outside its own callbacks. */
   run: <T>(fn: () => T) => T;
   token: string;
+  /**
+   * Every plugin this runtime saw, active or failed. A host's caller reads this to learn that a plugin
+   * it asked for did not register; the daemon publishes the same list in its record.
+   */
+  plugins: readonly PluginInventoryEntry[];
 };
 
 /**
@@ -952,5 +957,6 @@ async function startDaemonRuntimeOnHost(
     run: runtimeState.run,
     socketPort,
     token,
+    plugins: deps.pluginInventory,
   };
 }

@@ -96,6 +96,13 @@ async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<v
   fs.writeFileSync(
     source,
     `import type { AgentDevicePluginFactory } from 'agent-device/plugins';
+import { startAgentDevice, type AgentDeviceHost, type HostEnvironment, type LogEntry, type ShutdownReport } from 'agent-device/host';
+
+export async function hostConsumer(host: HostEnvironment): Promise<ShutdownReport> {
+  const running: AgentDeviceHost = await startAgentDevice({ stateDir: './state', host, plugins: [await example()], log: (entry: LogEntry) => { void entry.text; } });
+  return await running.close();
+}
+
 
 type ExampleOptions = { credentials?: { username: string; accessKey: string } };
 
@@ -126,6 +133,8 @@ export default example;
       '--strict',
       '--target',
       'es2022',
+      '--lib',
+      'es2022,dom,esnext.disposable',
       '--module',
       'nodenext',
       '--moduleResolution',
@@ -292,6 +301,16 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       );
     }
     await typeCheckInstalledPluginContract(consumerRoot);
+    const hostConsumer = path.join(consumerRoot, 'host-consumer.mjs');
+    fs.copyFileSync(
+      path.join(repoRoot, 'test/integration/fixtures/host-consumer.mjs'),
+      hostConsumer,
+    );
+    const hosted = readJson(
+      await execFileText(process.execPath, [hostConsumer], { cwd: consumerRoot }),
+    );
+    assert.equal(hosted.attachedFromChild, true);
+    assert.equal(hosted.replacementRefused, true);
     metroPort = await listenOnLoopback(metroServer);
     t.after(async () => {
       await closeLoopbackServer(metroServer);
@@ -381,6 +400,8 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
           },
           './contracts': (mod) => mod.centerOfRect({ x: 2, y: 2, width: 6, height: 6 }),
           './finders': (mod) => mod.findBestMatchesByLocator([], 'text', 'anything').matches.length,
+          // Importing the host entry must be cheap: it reaches the daemon only when a caller starts one.
+          './host': (mod) => typeof mod.startAgentDevice,
           './install-source': (mod) => typeof mod.isTrustedInstallSourceUrl('https://example.test/app.apk'),
           './io': (mod) => typeof mod.createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
           './limrun': async (mod) => {
@@ -466,6 +487,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       './batch': 'INVALID_ARGS',
       './contracts': { x: 5, y: 5 },
       './finders': 0,
+      './host': 'function',
       './install-source': 'boolean',
       './io': 'function',
       './limrun': 'limrun',

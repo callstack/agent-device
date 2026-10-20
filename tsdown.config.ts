@@ -108,6 +108,7 @@ export default defineConfig({
     selectors: 'src/sdk/selectors.ts',
     finders: 'src/sdk/finders.ts',
     'ai-sdk': 'src/ai-sdk/index.ts',
+    host: 'src/host.ts',
     'internal/bin': 'src/bin.ts',
     'internal/companion-tunnel': 'packages/react-native/src/companion/companion-tunnel.ts',
     'internal/daemon': 'src/daemon.ts',

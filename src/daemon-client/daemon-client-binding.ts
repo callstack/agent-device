@@ -1,7 +1,8 @@
 import type { DaemonBinding } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
-import type { DaemonInfo, DaemonRecordAddress } from './daemon-client-metadata.ts';
+import { readDaemonRecord } from '@agent-device/daemon-contracts/daemon-resolution';
+import { daemonInfoFromRecord, type DaemonInfo } from './daemon-client-metadata.ts';
 import { daemonIdentityOf } from './daemon-lifecycle-errors.ts';
 
 /**
@@ -25,13 +26,13 @@ export type PinnedDaemonRecord =
 
 export function readPinnedDaemonRecord(
   binding: DaemonBinding,
-  record: DaemonRecordAddress,
+  record: ReturnType<typeof readDaemonRecord>,
 ): PinnedDaemonRecord {
   if (record.status === 'absent') return { mismatch: 'absent', registered: null };
-  if (record.status !== 'addressable') {
+  const registered = record.status === 'present' ? daemonInfoFromRecord(record.record) : null;
+  if (!registered) {
     return { mismatch: 'unaddressable', registered: null };
   }
-  const registered = record.info;
   // Every field is compared, the token included: a replacement that somehow reused the pid and its
   // start time is still a different runtime, and the token is what proves it.
   if (

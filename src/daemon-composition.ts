@@ -17,7 +17,10 @@ import {
   createProviderDeviceRuntimeRequestProviders,
   isActiveProviderDevice,
 } from './provider-device-runtime.ts';
-import { createDaemonProviderRuntimeComposition } from './provider-device-runtimes.ts';
+import {
+  createDaemonProviderRuntimeComposition,
+  createEmbeddedProviderRuntimeComposition,
+} from './provider-device-runtimes.ts';
 import { readDaemonProviderCredentials } from './provider-credential-fingerprint.ts';
 import { getInteractor } from './core/interactors.ts';
 import {
@@ -35,6 +38,7 @@ import {
 } from '@agent-device/host-kit/process';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
+import type { PluginCandidate } from '@agent-device/plugins/registry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { RunnerContext } from '@agent-device/contracts/interactor-types';
@@ -73,10 +77,20 @@ export function createDaemonStartupWebOrphanCleanup(
  * factory (ADR 0019). The session-scoped callbacks are the daemon's own data seen as questions —
  * recording artifact paths, session directories, and which web sessions are open — so no daemon
  * value crosses here.
+ *
+ * `providerCandidates` replaces the plugin store as the second provider source. The daemon
+ * executable omits it; a host that embeds the runtime passes what its own process imported.
  */
 export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
   input,
 ): Promise<DaemonRuntimeDeps> => {
+  return await composeDaemonRuntimeDeps(input);
+};
+
+export async function composeDaemonRuntimeDeps(
+  input: Parameters<ComposeDaemonRuntimeDeps>[0],
+  providerCandidates?: readonly PluginCandidate[],
+): Promise<DaemonRuntimeDeps> {
   const {
     host,
     baseDir,
@@ -93,7 +107,10 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
     resolveSessionDir,
   });
   const hostDiagnostics = createHostDiagnostics(host);
-  const providerComposition = await createDaemonProviderRuntimeComposition(host);
+  const providerComposition =
+    providerCandidates === undefined
+      ? await createDaemonProviderRuntimeComposition(host)
+      : await createEmbeddedProviderRuntimeComposition(host, providerCandidates);
   // The registry has set up every plugin. Until this function returns, nothing else owns its
   // cleanup, so any later failure closes it here; success transfers ownership to the daemon.
   try {
@@ -183,4 +200,4 @@ export const createDaemonRuntimeDeps: ComposeDaemonRuntimeDeps = async (
     await providerComposition.shutdown();
     throw error;
   }
-};
+}

@@ -241,6 +241,13 @@ test('timeout recovery asks only whether this client may, and attach never may',
   // daemon-registration-embedded-owner.test.ts pins at that seam for both modes.
   assert.equal(resolveTimeoutRecovery(managed), 'retire-unresponsive');
   assert.equal(resolveTimeoutRecovery(attach), 'none');
+  assert.equal(
+    resolveTimeoutRecovery({
+      ...managed,
+      daemonBinding: { token: 'pin', pid: 4242, processStartTime: 'start' },
+    }),
+    'none',
+  );
 });
 
 test('a pinned client dispatches to the instance it pins and starts nothing', async (t) => {
@@ -411,4 +418,3 @@ test('a pinned client keeps its hands off the state directory it was given', asy
   assert.deepEqual(settings.daemonBinding, pin);
   assert.equal(settings.paths.baseDir, paths.baseDir);
 });
-

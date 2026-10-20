@@ -40,7 +40,7 @@ Entry points for driving devices from Node.js:
     platform, backend, and mechanism failure.
   - `centerOfRect(rect)`
   - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
-  - types: `DaemonLifecycle`, `EnsureDaemonOptions`, `DaemonConnection`, `DaemonIdentity`
+  - types: `DaemonBinding`, `DaemonLifecycle`, `EnsureDaemonOptions`, `DaemonConnection`, `DaemonIdentity`
   - types: every option and result type of the client's methods, among them `AppOpenOptions`,
     `AppOpenResult`, `CaptureSnapshotOptions`, `CaptureSnapshotResult`, `CaptureScreenshotResult`,
     `PressOptions`
@@ -54,6 +54,9 @@ Entry points for driving devices from Node.js:
 - `agent-device/ai-sdk`
   - `createAgentDeviceTools(options)`
   - types: `AgentDeviceToolSet`, `AgentDeviceTools`, `CreateAgentDeviceToolsOptions`
+- `agent-device/host`
+  - `startAgentDevice(options)`
+  - types: `AgentDeviceHost`, `StartAgentDeviceOptions`, `HostClientConfig`, `LogEntry`, `HostEnvironment`, `ShutdownReport`
 
 ## Basic usage
 
@@ -128,6 +131,39 @@ These failures carry a typed `error.details.reason`:
 | `daemon-binding-mismatch` | A client pinned to one daemon instance reached another one instead. `details.mismatch` says which: `replaced`, `absent`, or `unaddressable`. Nothing was dispatched, started, or signaled. Take a fresh config from the host that owns the daemon, or start a host of your own. |
 
 `ensureDaemon()` only ever manages the local daemon on `stateDir`. A client with `daemonBaseUrl` never starts or stops a local daemon in either mode, and `daemonLifecycle` does not change `daemonTransport` or `daemonServerMode`.
+
+## Running the daemon inside your process
+
+`startAgentDevice()` on `agent-device/host` starts the daemon inside your own process and returns a client for it. Use it when you want the daemon's lifetime to be exactly your process's, or when you import plugin objects you already have.
+
+```ts
+import { startAgentDevice } from 'agent-device/host';
+
+const host = await startAgentDevice({
+  stateDir: './.my-app/agent-device-state',
+  log: (line) => console.log(line.stream, line.text),
+});
+
+const devices = await host.client.devices.list();
+await host.close();
+```
+
+`stateDir` is required, and a host never takes one somebody else holds: a live occupant is refused with `state-dir-in-use`, and a record whose owner cannot be proven dead with `state-dir-ownership-unproven`. Pass plugin objects you imported in `plugins`, after the built-ins and in that order: the plugin store is not read, so `plugin add` never changes a running host. `host.plugins` is the inventory `agent-device daemon status` shows, so a plugin that failed to register is visible. `close()` reports what it could not finish; repeated and concurrent calls share one close, and closing after `agent-device daemon stop` is not an error. The object works with `await using`, and `close()` never exits your process.
+
+The runtime stays alive until you close it or send `agent-device daemon stop --state-dir <path>`; idle reaping is disabled. `daemon stop --clean` is refused because cleanup must stay within this runtime. If the shutdown report lists abandoned requests or unfinished cleanup, inspect those outcomes before reusing the state directory: the runtime may retain its registration to protect work still in progress.
+
+`host.clientConfig` is serializable JSON: pass it to another process or worker and build an attach client from it. It pins that client to exactly one daemon instance, and a state directory whose daemon is any other instance is refused rather than attached to:
+
+```ts
+import { createAgentDeviceClient } from 'agent-device';
+import { startAgentDevice } from 'agent-device/host';
+
+const host = await startAgentDevice({ stateDir: './.my-app/agent-device-state' });
+// Hand the config to a worker or another process: it is plain JSON, no build step.
+const client = createAgentDeviceClient(host.clientConfig);
+```
+
+A client can also pin one instance on its own with `daemonBinding: { token, pid, processStartTime }`. Every request then goes to that instance and authenticates with its token. The client never starts, replaces, retires or redirects a daemon to satisfy the pin, so a state directory that registers any other instance is refused with `details.reason: 'daemon-binding-mismatch'`, and so is one that registers none or holds a record it cannot read as an address. The pin holds the daemon's token, so treat it as a credential: share it only with trusted processes that should control this runtime.
 
 ## Device cloud sessions
 
