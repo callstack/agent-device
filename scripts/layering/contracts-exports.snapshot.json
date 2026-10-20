@@ -59,6 +59,8 @@
   "@agent-device/contracts/gesture-plan",
   "@agent-device/contracts/gesture-plan-types",
   "@agent-device/contracts/gesture-runtime",
+  "@agent-device/contracts/hardware-key",
+  "@agent-device/contracts/hardware-key-runtime",
   "@agent-device/contracts/host-diagnostics",
   "@agent-device/contracts/input-validation",
   "@agent-device/contracts/interaction",
