@@ -21,12 +21,11 @@ function validateJpegPixels(bytes: Buffer, label: string, maxPixels: number): vo
     while (bytes[offset] === 0xff) offset += 1;
     const marker = bytes[offset++];
     if (marker === 0xda || marker === 0xd9) return;
-    if (marker === 0x01 || (marker != null && marker >= 0xd0 && marker <= 0xd7)) continue;
     if (offset + 2 > bytes.length) return;
     const length = bytes.readUInt16BE(offset);
     if (length < 2 || offset + length > bytes.length) return;
     // These are the three frame types supported by the screenshot JPEG decoder.
-    if ((marker === 0xc0 || marker === 0xc1 || marker === 0xc2) && length >= 8) {
+    if ([0xc0, 0xc1, 0xc2].includes(marker ?? 0) && length >= 8) {
       validateScreenshotPixels(
         bytes.readUInt16BE(offset + 5),
         bytes.readUInt16BE(offset + 3),
