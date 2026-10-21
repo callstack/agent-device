@@ -2,9 +2,17 @@ import {
   actionButtonRuntimeUse,
   appSwitcherRuntimeUse,
   homeRuntimeUse,
+  mediaFastForwardRuntimeUse,
+  mediaNextRuntimeUse,
+  mediaPlayPauseRuntimeUse,
+  mediaPreviousRuntimeUse,
+  mediaRewindRuntimeUse,
+  muteRuntimeUse,
   powerRuntimeUse,
+  sleepRuntimeUse,
   volumeDownRuntimeUse,
   volumeUpRuntimeUse,
+  wakeRuntimeUse,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime, RuntimeUse } from '@agent-device/contracts/platform-runtime';
@@ -87,6 +95,23 @@ const HARDWARE_BUTTON_COMMAND_ROWS = {
   volumeUp: { use: volumeUpRuntimeUse, label: HARDWARE_BUTTON_NAME_LABELS.volumeUp },
   volumeDown: { use: volumeDownRuntimeUse, label: HARDWARE_BUTTON_NAME_LABELS.volumeDown },
   power: { use: powerRuntimeUse, label: HARDWARE_BUTTON_NAME_LABELS.power },
+  mute: { use: muteRuntimeUse, label: HARDWARE_BUTTON_NAME_LABELS.mute },
+  sleep: { use: sleepRuntimeUse, label: HARDWARE_BUTTON_NAME_LABELS.sleep },
+  wake: { use: wakeRuntimeUse, label: HARDWARE_BUTTON_NAME_LABELS.wake },
+  mediaPlayPause: {
+    use: mediaPlayPauseRuntimeUse,
+    label: HARDWARE_BUTTON_NAME_LABELS.mediaPlayPause,
+  },
+  mediaNext: { use: mediaNextRuntimeUse, label: HARDWARE_BUTTON_NAME_LABELS.mediaNext },
+  mediaPrevious: {
+    use: mediaPreviousRuntimeUse,
+    label: HARDWARE_BUTTON_NAME_LABELS.mediaPrevious,
+  },
+  mediaRewind: { use: mediaRewindRuntimeUse, label: HARDWARE_BUTTON_NAME_LABELS.mediaRewind },
+  mediaFastForward: {
+    use: mediaFastForwardRuntimeUse,
+    label: HARDWARE_BUTTON_NAME_LABELS.mediaFastForward,
+  },
 } as const satisfies Record<HardwareButton, Readonly<{ use: SystemButtonUse; label: string }>>;
 
 /** The neutral intent one press carries, projected from a resolved command context. */
@@ -157,7 +182,7 @@ export async function resolveBoundHardwareButtonRuntime(
   // refuses with INVALID_ARGS before any device dispatch.
   const button = parseHardwareButtonPositionals(params.positionals ?? []);
   const row = HARDWARE_BUTTON_COMMAND_ROWS[button];
-  // Widen to the family use so one call site serves all three rows.
+  // Widen to the family use so one call site serves every row.
   const use: SystemButtonUse = row.use;
   return await resolveBoundGenericRuntime(
     {

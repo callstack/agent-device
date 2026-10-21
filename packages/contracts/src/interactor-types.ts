@@ -451,6 +451,34 @@ export type Interactor = {
    * it; an owner without it leaves it undefined and its fact refuses before binding.
    */
   power?(): Promise<void>;
+  /**
+   * Optional (parity with `volumeUp`): presses the media mute key once. Android-only today:
+   * Apple exposes no public mute press, so no Apple leaf carries it.
+   */
+  mute?(): Promise<void>;
+  /**
+   * Optional (parity with `volumeUp`): sends the explicit Android sleep event (KEYCODE_SLEEP),
+   * which turns the screen off without toggling the way `power` does.
+   */
+  sleep?(): Promise<void>;
+  /**
+   * Optional (parity with `volumeUp`): sends the explicit Android wake event (KEYCODE_WAKEUP),
+   * which turns the screen on without toggling the way `power` does.
+   */
+  wake?(): Promise<void>;
+  /**
+   * Optional (parity with `volumeUp`): presses the media play/pause key once. The press goes to
+   * whatever media session the OS routes it to; it does not claim playback started.
+   */
+  mediaPlayPause?(): Promise<void>;
+  /** Optional (parity with `mediaPlayPause`): presses the media next key once. */
+  mediaNext?(): Promise<void>;
+  /** Optional (parity with `mediaPlayPause`): presses the media previous key once. */
+  mediaPrevious?(): Promise<void>;
+  /** Optional (parity with `mediaPlayPause`): presses the media rewind key once. */
+  mediaRewind?(): Promise<void>;
+  /** Optional (parity with `mediaPlayPause`): presses the media fast-forward key once. */
+  mediaFastForward?(): Promise<void>;
   /** Optional: only Android implements a live status read (see {@link KeyboardStatusResult}). */
   keyboardStatus?(): Promise<KeyboardStatusResult>;
   /** Optional: platforms with no keyboard-dismiss concept leave it undefined. */

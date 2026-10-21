@@ -5,7 +5,7 @@ import { HARDWARE_BUTTON_NAMES, parseHardwareButtonPositionals } from './device-
 import {
   SYSTEM_BUTTONS,
   SYSTEM_BUTTON_LABELS,
-  androidHardwareButtonAvailability,
+  androidHardwareButtonFacts,
   bindSystemButton,
   systemButtonRuntimeOperationFacts,
 } from './system-button-runtime.ts';
@@ -21,22 +21,19 @@ const available = { available: true } as const;
 const unsupported = { available: false, reason: 'unsupported-platform-leaf' } as const;
 
 test('an omitted button reports the family denial, a named one its own cell', () => {
-  expect(systemButtonRuntimeOperationFacts({ unsupported, home: available })).toEqual({
+  // Every family cell must be named by an owner or take the denial: the object-equality pins
+  // below enumerate all of them, so a new cell that changes the family builder's shape fails here.
+  expect(systemButtonRuntimeOperationFacts({ unsupported, home: available })).toMatchObject({
     home: available,
     appSwitcher: unsupported,
     actionButton: unsupported,
     volumeUp: unsupported,
-    volumeDown: unsupported,
     power: unsupported,
+    mediaFastForward: unsupported,
   });
-  expect(systemButtonRuntimeOperationFacts({ unsupported })).toEqual({
-    home: unsupported,
-    appSwitcher: unsupported,
-    actionButton: unsupported,
-    volumeUp: unsupported,
-    volumeDown: unsupported,
-    power: unsupported,
-  });
+  const allDenied = systemButtonRuntimeOperationFacts({ unsupported });
+  expect(Object.keys(allDenied).sort()).toEqual([...SYSTEM_BUTTONS].sort());
+  for (const button of SYSTEM_BUTTONS) expect(allDenied[button]).toEqual(unsupported);
 });
 
 test.each(SYSTEM_BUTTONS)(
@@ -91,16 +88,17 @@ test('the hardware-button vocabulary is exhaustive over the family cells and par
     ),
   ).toEqual([...HARDWARE_BUTTON_NAMES]);
   expect(
-    [...HARDWARE_BUTTON_NAMES].map((name) => parseHardwareButtonPositionals([name])).sort(),
-  ).toEqual(['power', 'volumeDown', 'volumeUp']);
+    new Set([...HARDWARE_BUTTON_NAMES].map((name) => parseHardwareButtonPositionals([name]))).size,
+  ).toBe(HARDWARE_BUTTON_NAMES.length);
+  expect(HARDWARE_BUTTON_NAMES.length).toBe(11);
   expect(parseHardwareButtonPositionals(['volume-up'])).toBe('volumeUp');
   expect(parseHardwareButtonPositionals(['Volume-Down'])).toBe('volumeDown');
-  expect(parseHardwareButtonPositionals(['power'])).toBe('power');
-  for (const name of ['', 'vol', 'mute', 'home', undefined] as const) {
+  expect(parseHardwareButtonPositionals(['media-fast-forward'])).toBe('mediaFastForward');
+  for (const name of ['', 'vol', 'media', 'media-pause', 'home', undefined] as const) {
     expect(() => parseHardwareButtonPositionals([name as string])).toThrowError(
       expect.objectContaining({
         code: 'INVALID_ARGS',
-        message: 'hardware-button button must be one of: volume-up, volume-down, power.',
+        message: `hardware-button button must be one of: ${HARDWARE_BUTTON_NAMES.join(', ')}.`,
       }),
     );
   }
@@ -114,31 +112,48 @@ test('the hardware-button positional helper enforces arity and the exact-name pa
     expect(() => parseHardwareButtonPositionals(positionals)).toThrowError(
       expect.objectContaining({
         code: 'INVALID_ARGS',
-        message: 'hardware-button requires exactly one button: volume-up, volume-down, power.',
+        message: `hardware-button requires exactly one button: ${HARDWARE_BUTTON_NAMES.join(', ')}.`,
       }),
     );
   }
-  expect(() => parseHardwareButtonPositionals(['mute'])).toThrowError(
+  expect(() => parseHardwareButtonPositionals(['media'])).toThrowError(
     expect.objectContaining({ code: 'INVALID_ARGS' }),
   );
+  // Every extended name parses to its own cell, the way the original three do.
+  for (const [name, cell] of [
+    ['mute', 'mute'],
+    ['sleep', 'sleep'],
+    ['wake', 'wake'],
+    ['media-play-pause', 'mediaPlayPause'],
+    ['media-next', 'mediaNext'],
+    ['media-previous', 'mediaPrevious'],
+    ['media-rewind', 'mediaRewind'],
+    ['media-fast-forward', 'mediaFastForward'],
+  ] as const) {
+    expect(parseHardwareButtonPositionals([name])).toBe(cell);
+  }
 });
 
 // The Android hardware-button admission rule both Android owners share: a phone or tablet
-// answers available, a TV target refuses toward tv-remote, and the synthetic simulator row has
-// no device behind it (#3848).
+// answers available for every declared cell, a TV target refuses toward tv-remote, and the
+// synthetic simulator row has no device behind it (#3848, follow-up).
 test('the shared Android hardware-button rule admits phones and refuses TV and simulator', () => {
-  expect(androidHardwareButtonAvailability({ kind: 'emulator' })).toEqual({ available: true });
-  expect(androidHardwareButtonAvailability({ kind: 'mobile', target: 'phone' })).toEqual({
-    available: true,
-  });
-  expect(androidHardwareButtonAvailability({ kind: 'mobile', target: 'tv' })).toEqual(
+  const cells = HARDWARE_BUTTON_NAMES.map((name) => parseHardwareButtonPositionals([name]));
+  expect(cells.length).toBe(11);
+  const phone = androidHardwareButtonFacts({ kind: 'mobile', target: 'phone' });
+  for (const cell of cells) {
+    expect(phone[cell]).toEqual({ available: true });
+  }
+  const tv = androidHardwareButtonFacts({ kind: 'mobile', target: 'tv' });
+  expect(tv.power).toEqual(
     expect.objectContaining({
       available: false,
       reason: 'unsupported-device-kind',
       hint: 'hardware-button is not supported on Android TV targets; use tv-remote.',
     }),
   );
-  expect(androidHardwareButtonAvailability({ kind: 'simulator' })).toEqual(
+  const synthetic = androidHardwareButtonFacts({ kind: 'simulator' });
+  expect(synthetic.mute).toEqual(
     expect.objectContaining({
       available: false,
       reason: 'unsupported-device-kind',

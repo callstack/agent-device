@@ -1,4 +1,8 @@
 import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
+import {
+  HARDWARE_BUTTON_NAMES,
+  parseHardwareButtonPositionals,
+} from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -91,22 +95,25 @@ test('home is admitted on both legs, app-switcher only on Android, the action bu
   expect(stale.actionButton).toEqual(liveSessionUnavailable);
 });
 
-// The Android leg's interactor comes from createAndroidInteractor, which carries the three
-// hardware-button presses, so a leased phone/tablet admits them with the local owner's phone
-// and TV rule; the iOS leg has no such member and falls to the family denial (#3848).
+// The Android leg's interactor comes from createAndroidInteractor, which carries every
+// hardware-button press, so a leased phone/tablet admits them all with the local owner's phone
+// and TV rule; the iOS leg has no such member and falls to the family denial (#3848, follow-up).
 test('the Android leg admits the hardware-button presses and gates them on the local rule', () => {
+  const cells = HARDWARE_BUTTON_NAMES.map((name) => parseHardwareButtonPositionals([name]));
+  expect(cells.length).toBe(11);
   const android = limrunSystemButtonOperationFacts(androidMobileDevice);
-  expect(android.volumeUp).toEqual({ available: true });
-  expect(android.volumeDown).toEqual({ available: true });
-  expect(android.power).toEqual({ available: true });
+  for (const cell of cells) {
+    expect(android[cell]).toEqual({ available: true });
+  }
 
   const tv = limrunSystemButtonOperationFacts(androidTvDevice);
-  expect(tv.volumeUp).toEqual({
-    available: false,
-    reason: 'unsupported-device-kind',
-    hint: 'hardware-button is not supported on Android TV targets; use tv-remote.',
-  });
-  expect(tv.power).toEqual(tv.volumeUp);
+  for (const cell of cells) {
+    expect(tv[cell]).toEqual({
+      available: false,
+      reason: 'unsupported-device-kind',
+      hint: 'hardware-button is not supported on Android TV targets; use tv-remote.',
+    });
+  }
 
   const ios = limrunSystemButtonOperationFacts(iosDevice);
   expect(ios.volumeUp).toMatchObject({
@@ -114,11 +121,12 @@ test('the Android leg admits the hardware-button presses and gates them on the l
     reason: 'unsupported-provider-mode',
     hint: 'No Limrun session exposes this system button.',
   });
+  expect(ios.mediaPlayPause).toEqual(ios.volumeUp);
 
   const stale = limrunSystemButtonOperationFacts(androidMobileDevice, liveSessionUnavailable);
-  expect(stale.volumeUp).toEqual(liveSessionUnavailable);
-  expect(stale.volumeDown).toEqual(liveSessionUnavailable);
-  expect(stale.power).toEqual(liveSessionUnavailable);
+  for (const cell of cells) {
+    expect(stale[cell]).toEqual(liveSessionUnavailable);
+  }
 });
 
 // R57: app-event delivery is the one system leaf BOTH direct-session legs serve, because each

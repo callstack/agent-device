@@ -43,7 +43,7 @@ import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtim
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import {
-  androidHardwareButtonAvailability,
+  androidHardwareButtonFacts,
   systemButtonRuntimeOperationFacts,
 } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
@@ -353,9 +353,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           unsupported: systemButtonUnavailable,
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
-          volumeUp: androidHardwareButtonAvailability(device),
-          volumeDown: androidHardwareButtonAvailability(device),
-          power: androidHardwareButtonAvailability(device),
+          ...androidHardwareButtonFacts(device),
         }),
         ...androidFoldableFacts(device),
         ...androidTelephonyFacts(device),

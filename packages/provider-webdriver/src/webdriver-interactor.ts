@@ -59,6 +59,22 @@ const ANDROID_KEYCODE_VOLUME_UP = 24;
 const ANDROID_KEYCODE_VOLUME_DOWN = 25;
 /** The Android `KEYCODE_POWER` the `hardware-button power` press sends. */
 const ANDROID_KEYCODE_POWER = 26;
+/**
+ * The Android keycodes the extended `hardware-button` names send through `mobile: pressKey` —
+ * the same keyevents the local Android owner sends through `input keyevent`. XCUITest exposes no
+ * press route for any of them, so the iOS capability map declares them unsupported and the
+ * declaration refuses before these legs run.
+ */
+const ANDROID_HARDWARE_BUTTON_KEYCODES = {
+  mute: 164,
+  sleep: 223,
+  wake: 224,
+  mediaPlayPause: 85,
+  mediaNext: 87,
+  mediaPrevious: 88,
+  mediaRewind: 89,
+  mediaFastForward: 90,
+} as const;
 /** How a WebDriver dismiss lowers the iOS keyboard: Appium's hide-keyboard route. */
 const WEBDRIVER_DISMISS_MECHANISM = 'appium-hide-keyboard';
 
@@ -459,6 +475,56 @@ class WebDriverInteractor implements Interactor {
   async power(): Promise<void> {
     this.requireSupport('power');
     await this.client.executeScript('mobile: pressKey', [{ keycode: ANDROID_KEYCODE_POWER }]);
+  }
+
+  /**
+   * The eight extended hardware keys each ride `mobile: pressKey` with their own keycode, the
+   * same keyevents the local Android owner sends. Their capability declarations refuse an iOS
+   * session before these legs run; the runtime guard here keeps the refusal typed even if a
+   * caller reaches past the facts.
+   */
+  async mute(): Promise<void> {
+    this.requireSupport('mute');
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mute);
+  }
+
+  async sleep(): Promise<void> {
+    this.requireSupport('sleep');
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.sleep);
+  }
+
+  async wake(): Promise<void> {
+    this.requireSupport('wake');
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.wake);
+  }
+
+  async mediaPlayPause(): Promise<void> {
+    this.requireSupport('mediaPlayPause');
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaPlayPause);
+  }
+
+  async mediaNext(): Promise<void> {
+    this.requireSupport('mediaNext');
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaNext);
+  }
+
+  async mediaPrevious(): Promise<void> {
+    this.requireSupport('mediaPrevious');
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaPrevious);
+  }
+
+  async mediaRewind(): Promise<void> {
+    this.requireSupport('mediaRewind');
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaRewind);
+  }
+
+  async mediaFastForward(): Promise<void> {
+    this.requireSupport('mediaFastForward');
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaFastForward);
+  }
+
+  private async pressAndroidKeycode(keycode: number): Promise<void> {
+    await this.client.executeScript('mobile: pressKey', [{ keycode }]);
   }
 
   async tvRemote(_button: TvRemoteButton, _durationMs?: number): Promise<void> {

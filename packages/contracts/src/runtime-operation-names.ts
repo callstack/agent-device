@@ -50,6 +50,12 @@ export const RUNTIME_OPERATION_NAMES = [
   'listApps',
   'longPressPoint',
   'materializeAppSource',
+  'mediaFastForward',
+  'mediaNext',
+  'mediaPlayPause',
+  'mediaPrevious',
+  'mediaRewind',
+  'mute',
   'networkDump',
   'openApplication',
   'perfFrames',
@@ -83,6 +89,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'setSetting',
   'setViewport',
   'shutdownTarget',
+  'sleep',
   'tapElementSelector',
   'tapPoint',
   'tapRef',
@@ -93,6 +100,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'unlockOrientation',
   'volumeDown',
   'volumeUp',
+  'wake',
   'writeClipboard',
 ] as const;
 

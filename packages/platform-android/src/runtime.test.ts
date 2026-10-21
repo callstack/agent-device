@@ -1,4 +1,8 @@
 import { expect, test, vi } from 'vitest';
+import {
+  HARDWARE_BUTTON_NAMES,
+  parseHardwareButtonPositionals,
+} from '@agent-device/contracts/device';
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
 import { runtimeSubjectFact, type DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
@@ -189,6 +193,12 @@ test.each([
   },
 );
 
+// Every `hardware-button` cell the command vocabulary declares, parsed from the command's own
+// names: a key added to the vocabulary is admitted/refused here without restating the list.
+const HARDWARE_BUTTON_CELLS = HARDWARE_BUTTON_NAMES.map((name) =>
+  parseHardwareButtonPositionals([name]),
+);
+
 test('Android admits the hardware-button facts on phones and tablets and refuses a TV target', async () => {
   for (const runtimeDevice of [
     ANDROID_EMULATOR,
@@ -200,16 +210,16 @@ test('Android admits the hardware-button facts on phones and tablets and refuses
       runtimeDevice,
     );
     // One `input keyevent` each on the same adb path `home` rides, on every kind with a device.
-    for (const operation of ['volumeUp', 'volumeDown', 'power'] as const) {
+    for (const operation of HARDWARE_BUTTON_CELLS) {
       expect(binding.facts.operations[operation]).toEqual({ available: true });
       expect(binding.operations[operation]).toBeTypeOf('function');
     }
   }
 
-  // A TV target has no phone volume/power semantics; the refusal points at `tv-remote`.
+  // A TV target has no phone volume/power/media semantics; the refusal points at `tv-remote`.
   const tvDevice = { ...ANDROID_EMULATOR, kind: 'emulator' as const, target: 'tv' as const };
   const tv = await bindOrdinary(createAndroidPlatformRuntime(androidNavigationHost()), tvDevice);
-  for (const operation of ['volumeUp', 'volumeDown', 'power'] as const) {
+  for (const operation of HARDWARE_BUTTON_CELLS) {
     expect(tv.facts.operations[operation]).toEqual({
       available: false,
       reason: 'unsupported-device-kind',
@@ -224,7 +234,7 @@ test('Android admits the hardware-button facts on phones and tablets and refuses
     ...ANDROID_EMULATOR,
     kind: 'simulator' as const,
   });
-  for (const operation of ['volumeUp', 'volumeDown', 'power'] as const) {
+  for (const operation of HARDWARE_BUTTON_CELLS) {
     expect(synthetic.facts.operations[operation]).toEqual({
       available: false,
       reason: 'unsupported-device-kind',

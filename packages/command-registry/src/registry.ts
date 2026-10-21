@@ -1646,10 +1646,10 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public', key: 'hardwareButton' },
     frameworkTier: 'extended',
-    // The first positional selects the cell (volume-up, volume-down, power), the way `orientation`
-    // selects between setOrientation and unlockOrientation; admission binds exactly that one fact.
-    // Like action-button, no post-action observation is declared: the press goes to the system,
-    // not the session app, and settling would re-capture the app the press leaves alone (#3848).
+    // The first positional selects one of the eleven named keys, the way `orientation` selects
+    // between setOrientation and unlockOrientation; admission binds exactly that one fact. Like
+    // action-button, no post-action observation is declared: the press goes to the system, not
+    // the session app, and settling would re-capture the app the press leaves alone (#3848).
     ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: hardwareButtonRuntimePlanUses },
   },

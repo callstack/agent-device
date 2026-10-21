@@ -54,13 +54,21 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   readSetting: 'simulator',
   setFoldPose: 'simulator',
   // Refused on every Apple leaf at admission, so nothing waits on the runner. The volume keys are
-  // refused on the simulator leaf too (XCUIDevice exposes no volume press there), and power is
-  // refused on every kind and OS.
+  // refused on the simulator leaf too (XCUIDevice exposes no volume press there), and power and
+  // the mute/sleep/wake/media keys are refused on every kind and OS.
   sendTelephonyEvent: 'simulator',
   unlockOrientation: 'simulator',
   power: 'simulator',
   volumeDown: 'simulator',
   volumeUp: 'simulator',
+  mute: 'simulator',
+  sleep: 'simulator',
+  wake: 'simulator',
+  mediaPlayPause: 'simulator',
+  mediaNext: 'simulator',
+  mediaPrevious: 'simulator',
+  mediaRewind: 'simulator',
+  mediaFastForward: 'simulator',
   // Observation: the AX bridge presents regular and raw trees; custom actions need XCTest.
   captureSnapshot: 'simulator',
   captureSnapshotWithoutActiveApp: 'simulator',

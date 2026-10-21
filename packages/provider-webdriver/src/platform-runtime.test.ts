@@ -621,8 +621,8 @@ test('a reachable provider with no overrides still admits its declared operation
 });
 
 // The hardware-button split lives in the platform's declared map, not in a device-kind rule:
-// the Android map carries `power` (mobile pressKey 26) and volume on the pressKey keycodes, the
-// iOS map refuses power and carries volume on mobile pressButton (#3848).
+// the Android map carries every key on the mobile pressKey keycodes, the iOS map carries volume
+// on mobile pressButton and refuses power and the extended keys (#3848 and its follow-up).
 test('hardware-button facts follow the platform capability map', async () => {
   const owner = (platform: CloudWebDriverPlatform) =>
     createWebDriverPlatformRuntimeOwner({
@@ -634,18 +634,42 @@ test('hardware-button facts follow the platform capability map', async () => {
     });
 
   const android = await owner('android').inspectFacts(device);
-  for (const key of ['volumeUp', 'volumeDown', 'power'] as const) {
-    expect(android.operations[key].available).toBe(true);
+  for (const key of [
+    'volumeUp',
+    'volumeDown',
+    'power',
+    'mute',
+    'sleep',
+    'wake',
+    'mediaPlayPause',
+    'mediaNext',
+    'mediaPrevious',
+    'mediaRewind',
+    'mediaFastForward',
+  ] as const) {
+    expect(android.operations[key].available, key).toBe(true);
   }
 
   const iosDevice: DeviceInfo = { ...device, platform: 'apple', appleOs: 'ios' };
   const ios = await owner('ios').inspectFacts(iosDevice);
   expect(ios.operations.volumeUp.available).toBe(true);
   expect(ios.operations.volumeDown.available).toBe(true);
-  expect(ios.operations.power).toMatchObject({
-    available: false,
-    reason: 'owner-capability-missing',
-  });
+  for (const key of [
+    'power',
+    'mute',
+    'sleep',
+    'wake',
+    'mediaPlayPause',
+    'mediaNext',
+    'mediaPrevious',
+    'mediaRewind',
+    'mediaFastForward',
+  ] as const) {
+    expect(ios.operations[key], key).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+    });
+  }
 });
 
 test('an Apple WebDriver dump bounded to one entry reports unnamed traffic without its identities', async () => {

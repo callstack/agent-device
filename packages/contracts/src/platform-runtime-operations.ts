@@ -128,14 +128,30 @@ export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 export const appSwitcherRuntimeUse = defineUse({ required: ['appSwitcher'] });
 export const actionButtonRuntimeUse = defineUse({ required: ['actionButton'] });
 // `hardware-button`'s cells (ADR 0019 §9): the daemon admits and binds exactly the one the parsed
-// positional names, never all three (#3848).
+// positional names, never all of them (#3848, follow-up for the mute/sleep/wake/media keys).
 export const volumeUpRuntimeUse = defineUse({ required: ['volumeUp'] });
 export const volumeDownRuntimeUse = defineUse({ required: ['volumeDown'] });
 export const powerRuntimeUse = defineUse({ required: ['power'] });
+export const muteRuntimeUse = defineUse({ required: ['mute'] });
+export const sleepRuntimeUse = defineUse({ required: ['sleep'] });
+export const wakeRuntimeUse = defineUse({ required: ['wake'] });
+export const mediaPlayPauseRuntimeUse = defineUse({ required: ['mediaPlayPause'] });
+export const mediaNextRuntimeUse = defineUse({ required: ['mediaNext'] });
+export const mediaPreviousRuntimeUse = defineUse({ required: ['mediaPrevious'] });
+export const mediaRewindRuntimeUse = defineUse({ required: ['mediaRewind'] });
+export const mediaFastForwardRuntimeUse = defineUse({ required: ['mediaFastForward'] });
 export const hardwareButtonRuntimePlanUses = Object.freeze([
   volumeUpRuntimeUse,
   volumeDownRuntimeUse,
   powerRuntimeUse,
+  muteRuntimeUse,
+  sleepRuntimeUse,
+  wakeRuntimeUse,
+  mediaPlayPauseRuntimeUse,
+  mediaNextRuntimeUse,
+  mediaPreviousRuntimeUse,
+  mediaRewindRuntimeUse,
+  mediaFastForwardRuntimeUse,
 ] as const);
 export const appEventRuntimeUse = defineUse({ required: ['triggerAppEvent'] });
 export const settingsRuntimeUse = defineUse({ required: ['setSetting'] });

@@ -1409,12 +1409,12 @@ const COMMAND_COVERAGE_DECLARATIONS = {
   [C.hardwareButton]: {
     androidEmulator: androidEmulator.contract(
       ANDROID_HARDWARE_BUTTON_RUNTIME_CONTRACT_EVIDENCE,
-      'Android admits the hardware-button facts on phones and tablets through the keyevent path and refuses a TV target with a pointer to tv-remote',
+      'Android admits the hardware-button facts for every named key on phones and tablets through the keyevent path and refuses a TV target with a pointer to tv-remote',
     ),
     iosSimulator: iosSimulator.contract(
       APPLE_HARDWARE_BUTTON_FACT_EVIDENCE.path,
       APPLE_HARDWARE_BUTTON_FACT_EVIDENCE.test,
-      'the exact-owner runtime fact refuses hardware-button volume on the simulator leaf (XCUIDevice exposes no volume press there) and power on every leaf',
+      'the exact-owner runtime fact refuses hardware-button volume on the simulator leaf (XCUIDevice exposes no volume press there) and power and the extended keys on every leaf',
     ),
     macos: macos.contract(
       APPLE_HARDWARE_BUTTON_FACT_EVIDENCE.path,

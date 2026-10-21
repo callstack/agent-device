@@ -14,7 +14,15 @@ import {
   actionButtonRuntimeUse,
   appSwitcherRuntimeUse,
   homeRuntimeUse,
+  mediaFastForwardRuntimeUse,
+  mediaNextRuntimeUse,
+  mediaPlayPauseRuntimeUse,
+  mediaPreviousRuntimeUse,
+  mediaRewindRuntimeUse,
+  muteRuntimeUse,
+  sleepRuntimeUse,
   volumeUpRuntimeUse,
+  wakeRuntimeUse,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { SystemButton } from '@agent-device/contracts/system-button-runtime';
@@ -263,7 +271,7 @@ test('hardware-button binds the named cell and reports the public button name', 
 
 test('hardware-button refuses an unknown or missing button before inspecting any device', async () => {
   const harness = runtimeHarness('volumeUp');
-  for (const positionals of [[], ['mute'], ['volume-up', 'extra']] as const) {
+  for (const positionals of [[], ['vol'], ['volume-up', 'extra']] as const) {
     await expect(
       resolveBoundHardwareButtonRuntime({
         platformServices: daemonPlatformServicesFixture(),
@@ -276,4 +284,56 @@ test('hardware-button refuses an unknown or missing button before inspecting any
   }
   expect(harness.inspectFacts).not.toHaveBeenCalled();
   expect(harness.press).not.toHaveBeenCalled();
+});
+
+// Each extended name admits and binds exactly its own cell, the way volume-up does: the row
+// table, not the command, decides which one use the daemon asks the runtime to prove (#3848
+// follow-up).
+test('hardware-button binds each extended key to its own runtime use', async () => {
+  const cases = [
+    ['mute', 'mute', muteRuntimeUse],
+    ['sleep', 'sleep', sleepRuntimeUse],
+    ['wake', 'wake', wakeRuntimeUse],
+    ['media-play-pause', 'mediaPlayPause', mediaPlayPauseRuntimeUse],
+    ['media-next', 'mediaNext', mediaNextRuntimeUse],
+    ['media-previous', 'mediaPrevious', mediaPreviousRuntimeUse],
+    ['media-rewind', 'mediaRewind', mediaRewindRuntimeUse],
+    ['media-fast-forward', 'mediaFastForward', mediaFastForwardRuntimeUse],
+  ] as const;
+  for (const [name, cell, use] of cases) {
+    const harness = runtimeHarness(cell);
+    const resolved = await resolveBoundHardwareButtonRuntime({
+      platformServices: daemonPlatformServicesFixture(),
+      device: iosSimulator,
+      positionals: [name],
+      inspectFacts: harness.inspectFacts,
+      bindDevice: harness.bindDevice,
+    });
+    expect(resolved.ok, name).toBe(true);
+    if (!resolved.ok) continue;
+    expect(harness.bindDevice, name).toHaveBeenCalledWith(iosSimulator, use);
+    const session = makeSession('system-button-runtime', { device: iosSimulator });
+    expect(
+      await resolved.execute({
+        session,
+        sessionName: session.name,
+        logPath: '/tmp/daemon.log',
+        command: 'hardware-button',
+        request: {
+          command: 'hardware-button',
+          positionals: [name],
+          token: 't',
+          session: session.name,
+        },
+        positionals: [name],
+        out: undefined,
+        dispatchContext: {},
+      }),
+    ).toEqual({
+      action: 'hardware-button',
+      button: name,
+      message: `Pressed hardware button ${name}`,
+    });
+    expect(harness.press, name).toHaveBeenCalledTimes(1);
+  }
 });

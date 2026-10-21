@@ -114,6 +114,46 @@ export const INTERACTOR_OPERATIONS = [
     label: SYSTEM_BUTTON_LABELS.power,
     bind: (signal, resolve) => bindSystemButton('power', signal, resolve),
   },
+  {
+    operation: 'mute',
+    label: SYSTEM_BUTTON_LABELS.mute,
+    bind: (s, r) => bindSystemButton('mute', s, r),
+  },
+  {
+    operation: 'sleep',
+    label: SYSTEM_BUTTON_LABELS.sleep,
+    bind: (s, r) => bindSystemButton('sleep', s, r),
+  },
+  {
+    operation: 'wake',
+    label: SYSTEM_BUTTON_LABELS.wake,
+    bind: (s, r) => bindSystemButton('wake', s, r),
+  },
+  {
+    operation: 'mediaPlayPause',
+    label: SYSTEM_BUTTON_LABELS.mediaPlayPause,
+    bind: (s, r) => bindSystemButton('mediaPlayPause', s, r),
+  },
+  {
+    operation: 'mediaNext',
+    label: SYSTEM_BUTTON_LABELS.mediaNext,
+    bind: (s, r) => bindSystemButton('mediaNext', s, r),
+  },
+  {
+    operation: 'mediaPrevious',
+    label: SYSTEM_BUTTON_LABELS.mediaPrevious,
+    bind: (s, r) => bindSystemButton('mediaPrevious', s, r),
+  },
+  {
+    operation: 'mediaRewind',
+    label: SYSTEM_BUTTON_LABELS.mediaRewind,
+    bind: (s, r) => bindSystemButton('mediaRewind', s, r),
+  },
+  {
+    operation: 'mediaFastForward',
+    label: SYSTEM_BUTTON_LABELS.mediaFastForward,
+    bind: (s, r) => bindSystemButton('mediaFastForward', s, r),
+  },
   { operation: 'triggerAppEvent', label: 'trigger-app-event', bind: bindAppEvent },
   { operation: 'setSetting', label: 'settings', bind: bindSetSetting },
   { operation: 'readSetting', label: 'settings read', bind: bindReadSetting },

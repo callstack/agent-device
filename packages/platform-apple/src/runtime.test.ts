@@ -354,7 +354,8 @@ test.each(Object.entries(leaves))(
 // .volumeDown)` is simulator-unavailable in the XCUITest header, so only a physical iPhone or
 // iPad admits them. Each refusal names its own axis: the iOS-family simulator hears the kind
 // refusal, tvOS/macOS/watchOS/visionOS hear the leaf refusal for having no volume key at all.
-// Power is the family denial on every leaf: XCUITest exposes no power press.
+// Power and the mute/sleep/wake/media keys are the family denial on every leaf: XCUITest exposes
+// no press route for any of them.
 test.each([
   ...Object.entries(leaves).map(([name, device]) => [name, device, false] as const),
   ['ios physical device', appleDevice({ kind: 'device' }), true] as const,
@@ -393,11 +394,25 @@ test.each([
             },
       );
     }
-    expectOperationAvailability(binding, 'power', false);
-    expect(binding.facts.operations.power).toMatchObject({
-      reason: 'unsupported-platform-leaf',
-      hint: expect.stringContaining('No Apple leaf carries this system button'),
-    });
+    // Power and the extended keys are the family denial on every Apple leaf: XCUITest exposes no
+    // press route for any of them, so the fact — not a driver call — refuses them everywhere.
+    for (const operation of [
+      'power',
+      'mute',
+      'sleep',
+      'wake',
+      'mediaPlayPause',
+      'mediaNext',
+      'mediaPrevious',
+      'mediaRewind',
+      'mediaFastForward',
+    ] as const) {
+      expectOperationAvailability(binding, operation, false);
+      expect(binding.facts.operations[operation]).toMatchObject({
+        reason: 'unsupported-platform-leaf',
+        hint: expect.stringContaining('No Apple leaf carries this system button'),
+      });
+    }
   },
 );
 

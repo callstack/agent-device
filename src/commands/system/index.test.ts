@@ -403,7 +403,14 @@ describe('system command interface', () => {
     );
     // Exact names only: no aliases, and nothing reaches the daemon for an unknown name.
     expectInvalidArgs(() => hardwareButtonCliReader(['vol'], flags()), 'button must be one of');
-    expectInvalidArgs(() => hardwareButtonCliReader(['mute'], flags()), 'button must be one of');
+    expectInvalidArgs(() => hardwareButtonCliReader(['media'], flags()), 'button must be one of');
+    // The extended names read and write through the same seam as the original three.
+    expect(hardwareButtonCliReader(['media-fast-forward'], flags())).toMatchObject({
+      button: 'media-fast-forward',
+    });
+    expect(
+      hardwareButtonDaemonWriter({ button: 'sleep' } as Record<string, unknown>).positionals,
+    ).toEqual(['sleep']);
   });
 });
 

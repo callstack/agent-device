@@ -23,6 +23,14 @@ export type CloudWebDriverOperation =
   | 'volumeUp'
   | 'volumeDown'
   | 'power'
+  | 'mute'
+  | 'sleep'
+  | 'wake'
+  | 'mediaPlayPause'
+  | 'mediaNext'
+  | 'mediaPrevious'
+  | 'mediaRewind'
+  | 'mediaFastForward'
   | 'clipboard.read'
   | 'clipboard.write'
   | 'settings'
@@ -122,6 +130,41 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
     support: 'unsupported',
     note: 'XCUITest exposes no power press to Appium on any iOS session.',
   },
+  // The extended hardware keys: XCUITest exposes no press route for any of them (only the
+  // volume names), so the iOS base declares them unsupported and the Android entry below
+  // replaces each with the `mobile: pressKey` keycode UiAutomator2 presses.
+  mute: {
+    support: 'unsupported',
+    note: 'XCUITest exposes no mute press to Appium on any iOS session.',
+  },
+  sleep: {
+    support: 'unsupported',
+    note: 'XCUITest exposes no sleep event to Appium on any iOS session.',
+  },
+  wake: {
+    support: 'unsupported',
+    note: 'XCUITest exposes no wake event to Appium on any iOS session.',
+  },
+  mediaPlayPause: {
+    support: 'unsupported',
+    note: 'XCUITest exposes no media play/pause press to Appium on any iOS session.',
+  },
+  mediaNext: {
+    support: 'unsupported',
+    note: 'XCUITest exposes no media next press to Appium on any iOS session.',
+  },
+  mediaPrevious: {
+    support: 'unsupported',
+    note: 'XCUITest exposes no media previous press to Appium on any iOS session.',
+  },
+  mediaRewind: {
+    support: 'unsupported',
+    note: 'XCUITest exposes no media rewind press to Appium on any iOS session.',
+  },
+  mediaFastForward: {
+    support: 'unsupported',
+    note: 'XCUITest exposes no media fast-forward press to Appium on any iOS session.',
+  },
   tvRemote: unsupported,
   'clipboard.read': {
     support: 'partial',
@@ -169,6 +212,38 @@ export function createCloudWebDriverCapabilities(options: {
           power: {
             support: 'partial',
             note: "Uses provider/Appium mobile pressKey keycode 26 where available; the screen state after the press is the device's own.",
+          },
+          mute: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 164 where available.',
+          },
+          sleep: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 223 where available; the explicit sleep event, not a power toggle.',
+          },
+          wake: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 224 where available; the explicit wake event, not a power toggle.',
+          },
+          mediaPlayPause: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 85 where available; what the OS routes the press to is device behavior.',
+          },
+          mediaNext: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 87 where available.',
+          },
+          mediaPrevious: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 88 where available.',
+          },
+          mediaRewind: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 89 where available.',
+          },
+          mediaFastForward: {
+            support: 'partial',
+            note: 'Uses provider/Appium mobile pressKey keycode 90 where available.',
           },
         }
       : BASE_WEBDRIVER_CAPABILITIES;

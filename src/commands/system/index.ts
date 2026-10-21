@@ -334,7 +334,7 @@ const tvRemoteCommandDescription =
   'Press or long-press a TV remote button on Android TV, tvOS, or Vega OS. Android TV also supports volume, power, media, channel, guide, captions, input, color keys, and android-keycode:N. tvOS and Vega OS support up, down, left, right, select, menu, home, and back. Phones and WebDriver sessions are unsupported. The aliases ok, center, and enter map to select.';
 
 const hardwareButtonCommandDescription =
-  'Press a phone hardware button once: volume-up, volume-down, or power. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the OS decides what the key does — which audio stream a volume press moves, and whether the HUD shows, is device behavior this command does not claim. Power toggles the Android screen; after a press that turns it off, later commands may hit a locked screen. Android (ADB-backed and Appium) presses all three on phones and tablets; a physical iPhone or iPad presses volume only through the local runner or Appium, never power. iOS Simulators, Android TV and tvOS targets refuse: on TV targets use tv-remote.';
+  'Press a phone hardware button once: volume-up, volume-down, power, mute, sleep, wake, media-play-pause, media-next, media-previous, media-rewind, or media-fast-forward. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the OS decides what the key does — which audio stream a volume press moves, which media session a media key reaches, and whether the HUD shows, is device behavior this command does not claim. Power toggles the Android screen; sleep and wake are the explicit Android events that turn it off or on without toggling, and after a press that turns it off, later commands may hit a locked screen. Android (ADB-backed and Appium) presses all eleven on phones and tablets; a physical iPhone or iPad presses volume only through the local runner or Appium, never power, mute, sleep, wake, or media. iOS Simulators, Android TV and tvOS targets refuse: on TV targets use tv-remote.';
 
 const telephonyCommandDescription =
   'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
@@ -439,7 +439,7 @@ const hardwareButtonCommandMetadata = defineFieldCommandMetadata(
     button: requiredField(
       enumField(
         HARDWARE_BUTTON_NAMES,
-        'One press each. volume-up and volume-down move the system volume stream the OS selects; power toggles the screen on Android and is refused on every Apple leaf.',
+        'One press each. volume-up and volume-down move the system volume stream the OS selects; power toggles the screen on Android; sleep and wake are the explicit Android events that turn the screen off or on without toggling; mute, media-play-pause, media-next, media-previous, media-rewind, and media-fast-forward are Android keys the OS routes to its own streams and media sessions. All of these except volume are refused on every Apple leaf.',
       ),
     ),
   },
@@ -741,7 +741,7 @@ const hardwareButtonCommandFacet = defineCommandFacet({
   text: {
     summary: 'Press a phone hardware button once',
     cliDetail:
-      'Single press; no hold. Android presses volume-up, volume-down, and power on phones and tablets. A physical iPhone or iPad presses volume only; power is never supported on Apple targets. iOS Simulators, Android TV, and tvOS refuse — use tv-remote on TV targets.',
+      'Single press; no hold. Android presses all eleven named keys on phones and tablets: volume-up, volume-down, power, mute, sleep, wake, and the five media keys. A physical iPhone or iPad presses volume only; the other keys are never supported on Apple targets. iOS Simulators, Android TV, and tvOS refuse — use tv-remote on TV targets.',
   },
   metadata: hardwareButtonCommandMetadata,
   run: (client, input) => client.command.hardwareButton(input),

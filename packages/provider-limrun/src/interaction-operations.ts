@@ -22,7 +22,7 @@ import type { AndroidSetting } from '@agent-device/platform-android/mechanics';
 import type { LimrunIosSetting } from './ios-settings.ts';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import {
-  androidHardwareButtonAvailability,
+  androidHardwareButtonFacts,
   systemButtonRuntimeOperationFacts,
 } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
@@ -311,9 +311,7 @@ export function limrunSystemButtonOperationFacts(
       unsupported: systemButtonUnavailable,
       home: available,
       appSwitcher: available,
-      volumeUp: androidHardwareButtonAvailability(device),
-      volumeDown: androidHardwareButtonAvailability(device),
-      power: androidHardwareButtonAvailability(device),
+      ...androidHardwareButtonFacts(device),
     });
   }
   return systemButtonRuntimeOperationFacts({

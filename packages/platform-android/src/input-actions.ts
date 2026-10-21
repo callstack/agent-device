@@ -267,6 +267,14 @@ const ANDROID_HARDWARE_BUTTON_KEYCODES = {
   volumeUp: 24,
   volumeDown: 25,
   power: 26,
+  mute: 164,
+  sleep: 223,
+  wake: 224,
+  mediaPlayPause: 85,
+  mediaNext: 87,
+  mediaPrevious: 88,
+  mediaRewind: 89,
+  mediaFastForward: 90,
 } as const;
 
 /** Presses one phone hardware key once. TV targets are gated by the runtime facts, not here. */

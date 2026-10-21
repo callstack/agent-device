@@ -93,9 +93,10 @@ export type TvRemoteCommandResult = {
 /**
  * `hardware-button` — `{ action: 'hardware-button', button, message: 'Pressed hardware button <button>' }`.
  *
- * The button is the public name (`volume-up`, `volume-down`, `power`). The result reports that the
- * press was dispatched; it carries no volume level or screen state, because the command observes
- * neither (#3848).
+ * The button is the public name (`volume-up`, `volume-down`, `power`, `mute`, `sleep`, `wake`, or
+ * one of the five media names). The result reports that the press was dispatched; it carries no
+ * volume level, mute state, or screen state, because the command observes none of them (#3848,
+ * follow-up).
  */
 export type HardwareButtonCommandResult = {
   action: 'hardware-button';

@@ -100,16 +100,40 @@ export function parseOrientationRequest(input: string | undefined): OrientationR
  * Each name is a cell of {@link SYSTEM_BUTTONS}; system-button-runtime.ts checks that at
  * compile time. The cells stay module-internal: consumers select a button by its public name.
  */
-const HARDWARE_BUTTONS = ['volumeUp', 'volumeDown', 'power'] as const;
+const HARDWARE_BUTTONS = [
+  'volumeUp',
+  'volumeDown',
+  'power',
+  'mute',
+  'sleep',
+  'wake',
+  'mediaPlayPause',
+  'mediaNext',
+  'mediaPrevious',
+  'mediaRewind',
+  'mediaFastForward',
+] as const;
 
 export type HardwareButton = (typeof HARDWARE_BUTTONS)[number];
 
 /**
- * The public positional names of the hardware keys: `volume-up`, `volume-down`, `power`.
- * The literals are the same ones SYSTEM_BUTTON_LABELS carries for these buttons; the label
- * owner's type-level check and the contracts tests refuse drift between the two lists.
+ * The public positional names of the hardware keys: the volume/power/mute keys, the explicit
+ * sleep and wake events, and the five media keys. The literals are the same ones
+ * SYSTEM_BUTTON_LABELS carries for these buttons; the label owner's type-level check and the
+ * contracts tests refuse drift between the two lists.
  */
-export type HardwareButtonName = 'volume-up' | 'volume-down' | 'power';
+export type HardwareButtonName =
+  | 'volume-up'
+  | 'volume-down'
+  | 'power'
+  | 'mute'
+  | 'sleep'
+  | 'wake'
+  | 'media-play-pause'
+  | 'media-next'
+  | 'media-previous'
+  | 'media-rewind'
+  | 'media-fast-forward';
 
 /**
  * The accepted positional values, in command order. `satisfies` turns an out-of-vocabulary
@@ -119,6 +143,14 @@ export const HARDWARE_BUTTON_NAMES = [
   'volume-up',
   'volume-down',
   'power',
+  'mute',
+  'sleep',
+  'wake',
+  'media-play-pause',
+  'media-next',
+  'media-previous',
+  'media-rewind',
+  'media-fast-forward',
 ] as const satisfies readonly HardwareButtonName[];
 
 /** The CLI synopsis tail naming the accepted positional names. */
@@ -134,6 +166,14 @@ export const HARDWARE_BUTTON_NAME_LABELS = {
   volumeUp: 'volume-up',
   volumeDown: 'volume-down',
   power: 'power',
+  mute: 'mute',
+  sleep: 'sleep',
+  wake: 'wake',
+  mediaPlayPause: 'media-play-pause',
+  mediaNext: 'media-next',
+  mediaPrevious: 'media-previous',
+  mediaRewind: 'media-rewind',
+  mediaFastForward: 'media-fast-forward',
 } as const satisfies Record<HardwareButton, HardwareButtonName>;
 
 const HARDWARE_BUTTON_NAME_MAP: ReadonlyMap<HardwareButtonName, HardwareButton> = new Map(
