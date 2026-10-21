@@ -85,6 +85,8 @@ export function createRequestExecutionLocks(params: {
       }
       const key = `device:${deviceId}` as const;
       if (initialKeySet.has(key)) return;
+      // An enclosing request already holds it, and this request runs inside that hold.
+      if (enclosing().some((held) => held.has(key))) return;
 
       let retained = retainedLocks.get(key);
       if (!retained) {

@@ -260,3 +260,22 @@ test('a nested request is refused a busy lock on its parent Mac but still waits 
   // The refused step left nothing queued on the host.
   expect(locks.has('device:mac')).toBe(false);
 });
+
+test('a nested request retaining a lock its enclosing request holds re-enters it', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const parent = createRequestExecutionLocks({
+    locks,
+    initialKeys: ['session:batch', 'device:mac:app:com.example.one'],
+  });
+
+  await expect(
+    parent.run(async () => {
+      // A batch step whose lock plan resolved no device reopens the same app.
+      const step = createRequestExecutionLocks({ locks, initialKeys: ['session:batch'] });
+      return await step.run(async () => {
+        await step.retainDevice('mac:app:com.example.one');
+        return 'reentered';
+      });
+    }),
+  ).resolves.toBe('reentered');
+});
