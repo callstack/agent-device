@@ -1,11 +1,71 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
+import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
 import { createProviderScenarioHarness } from './harness.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import { respondToAndroidSettingsAdbCommand } from './android-world.ts';
 import { assertRpcOk } from './assertions.ts';
+
+type DeadlineAdbState = {
+  started: () => void;
+  observedFill: () => void;
+  signal?: AbortSignal;
+  retired: boolean;
+  diagnosticCaptureAfterAbort: boolean;
+  pendingDeadlineResult: boolean;
+  completedActions: string[];
+  searchText: string;
+};
+
+function awaitGestureAbort(signal: AbortSignal): Promise<never> {
+  return new Promise<never>((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+}
+
+function deadlineAdbProvider(state: DeadlineAdbState): AndroidAdbProvider {
+  return {
+    snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+    text: async (request) => {
+      state.searchText = request.text;
+      state.completedActions.push('fill');
+    },
+    exec: async (args, options) => {
+      if (args.join(' ').includes('AGENT_DEVICE_NO_HELPER'))
+        return { exitCode: 0, stdout: 'AGENT_DEVICE_NO_HELPER\n', stderr: '' };
+      if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'tap') {
+        state.completedActions.push('press');
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      if (args.includes('instrument') && args.includes('gesture')) {
+        state.signal = options?.signal;
+        state.started();
+        assert.ok(state.signal, 'longpress must carry the request signal to its helper');
+        return await awaitGestureAbort(state.signal);
+      }
+      if (state.pendingDeadlineResult && state.signal?.aborted && args.includes('instrument')) {
+        state.diagnosticCaptureAfterAbort = true;
+        throw new Error('post-failure snapshot transport is stalled');
+      }
+      if (args.includes('force-stop')) {
+        if (state.signal?.aborted) state.retired = true;
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      if (args.includes('--show-versioncode'))
+        return {
+          exitCode: 0,
+          stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:999999',
+          stderr: '',
+        };
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start')
+        return { exitCode: 0, stdout: 'Starting: Intent', stderr: '' };
+      if (state.searchText && args.includes('instrument')) state.observedFill();
+      return respondToAndroidSettingsAdbCommand([...args], state.searchText, '', {});
+    },
+  };
+}
 
 test.each(['batch', 'replay'])(
   '%s deadline cancels Android longpress instrumentation and preserves its session',
@@ -18,56 +78,19 @@ test.each(['batch', 'replay'])(
     const fillObservation = new Promise<void>((resolve) => {
       observedFill = resolve;
     });
-    let signal: AbortSignal | undefined;
-    let retired = false;
-    let diagnosticCaptureAfterAbort = false;
-    let pendingDeadlineResult = true;
-    const completedActions: string[] = [];
-    let searchText = '';
+    const state: DeadlineAdbState = {
+      started,
+      observedFill,
+      retired: false,
+      diagnosticCaptureAfterAbort: false,
+      pendingDeadlineResult: true,
+      completedActions: [],
+      searchText: '',
+    };
     const daemon = await createProviderScenarioHarness({
       deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
       env: { AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION: '0' },
-      androidAdbProvider: () => ({
-        snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-        text: async (request) => {
-          searchText = request.text;
-          completedActions.push('fill');
-        },
-        exec: async (args, options) => {
-          if (args.join(' ').includes('AGENT_DEVICE_NO_HELPER'))
-            return { exitCode: 0, stdout: 'AGENT_DEVICE_NO_HELPER\n', stderr: '' };
-          if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'tap') {
-            completedActions.push('press');
-            return { exitCode: 0, stdout: '', stderr: '' };
-          }
-          if (args.includes('instrument') && args.includes('gesture')) {
-            signal = options?.signal;
-            started();
-            assert.ok(signal, 'longpress must carry the request signal to its helper');
-            return await new Promise<never>((_resolve, reject) => {
-              signal!.addEventListener('abort', () => reject(signal!.reason), { once: true });
-            });
-          }
-          if (pendingDeadlineResult && signal?.aborted && args.includes('instrument')) {
-            diagnosticCaptureAfterAbort = true;
-            throw new Error('post-failure snapshot transport is stalled');
-          }
-          if (args.includes('force-stop')) {
-            if (signal?.aborted) retired = true;
-            return { exitCode: 0, stdout: '', stderr: '' };
-          }
-          if (args.includes('--show-versioncode'))
-            return {
-              exitCode: 0,
-              stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:999999',
-              stderr: '',
-            };
-          if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start')
-            return { exitCode: 0, stdout: 'Starting: Intent', stderr: '' };
-          if (searchText && args.includes('instrument')) observedFill();
-          return respondToAndroidSettingsAdbCommand([...args], searchText, '', {});
-        },
-      }),
+      androidAdbProvider: () => deadlineAdbProvider(state),
     });
     try {
       await daemon.client().apps.open({
@@ -109,10 +132,10 @@ test.each(['batch', 'replay'])(
         injecting,
         pending.then((response) => assert.fail(JSON.stringify(response.json))),
       ]);
-      assert.deepEqual(completedActions, ['press', 'fill']);
+      assert.deepEqual(state.completedActions, ['press', 'fill']);
       await vi.advanceTimersByTimeAsync(timeoutMs);
       const response = await pending;
-      pendingDeadlineResult = false;
+      state.pendingDeadlineResult = false;
       assert.equal(
         response.json.error?.data?.details?.reason,
         'daemon_request_timeout',
@@ -136,10 +159,10 @@ test.each(['batch', 'replay'])(
           divergence: { step: { source: { path: script, line: 4 } } },
         });
       }
-      assert.equal(signal?.aborted, true);
-      assert.equal(diagnosticCaptureAfterAbort, false);
+      assert.equal(state.signal?.aborted, true);
+      assert.equal(state.diagnosticCaptureAfterAbort, false);
       assert.equal(
-        retired,
+        state.retired,
         true,
         'canceled one-shot instrumentation must release its device runtime',
       );

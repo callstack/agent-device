@@ -406,6 +406,44 @@ test('fold worst-case ledger covers the client envelope with the daemon-result m
   );
 }, 20_000);
 
+function assertCompositeFoldOutcome(params: {
+  response: DaemonResponse;
+  command: 'batch' | 'replay';
+  timeoutMs?: number;
+  operationBudgetMs: number;
+  scriptPath: string;
+  hingeReadCount: () => number;
+  settleAttempts: number;
+  ledger: readonly FoldLedgerCall[];
+}): void {
+  const {
+    response,
+    command,
+    timeoutMs,
+    operationBudgetMs,
+    scriptPath,
+    hingeReadCount,
+    settleAttempts,
+    ledger,
+  } = params;
+  if (timeoutMs === 300_000) {
+    assert.equal(response.ok, true, JSON.stringify(response));
+    assert.equal(hingeReadCount(), settleAttempts);
+    assertFoldLedgerPhaseCoverage(ledger);
+    return;
+  }
+  assert.equal(response.ok, false, JSON.stringify(response));
+  if (response.ok) return;
+  assert.equal(response.error.code, command === 'batch' ? 'COMMAND_FAILED' : 'REPLAY_DIVERGENCE');
+  assert.equal(response.error.details?.reason, 'daemon_request_timeout');
+  assert.equal(response.error.details?.timeoutMs, operationBudgetMs);
+  if (command === 'replay') {
+    expect(response.error.details).toMatchObject({
+      divergence: { step: { source: { path: scriptPath, line: 1 } } },
+    });
+  }
+}
+
 test.each([
   { command: 'batch' },
   { command: 'replay' },
@@ -539,26 +577,16 @@ test.each([
           elapsedMs + 30_000 <= envelopeMs,
           `daemon result lost its margin: ${elapsedMs}; ledger: ${JSON.stringify(ledger)}`,
         );
-        if (timeoutMs === 300_000) {
-          assert.equal(response.ok, true, JSON.stringify(response));
-          assert.equal(hingeReadCount(), settleAttempts);
-          assertFoldLedgerPhaseCoverage(ledger);
-        } else {
-          assert.equal(response.ok, false, JSON.stringify(response));
-          if (!response.ok) {
-            assert.equal(
-              response.error.code,
-              command === 'batch' ? 'COMMAND_FAILED' : 'REPLAY_DIVERGENCE',
-            );
-            assert.equal(response.error.details?.reason, 'daemon_request_timeout');
-            assert.equal(response.error.details?.timeoutMs, operationBudgetMs);
-            if (command === 'replay') {
-              expect(response.error.details).toMatchObject({
-                divergence: { step: { source: { path: scriptPath, line: 1 } } },
-              });
-            }
-          }
-        }
+        assertCompositeFoldOutcome({
+          response,
+          command,
+          timeoutMs,
+          operationBudgetMs,
+          scriptPath,
+          hingeReadCount,
+          settleAttempts,
+          ledger,
+        });
         tracking = false;
         vi.useRealTimers();
         assert.equal(await daemon.hasSession(), true);
