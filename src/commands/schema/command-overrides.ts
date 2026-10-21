@@ -6,7 +6,6 @@ import {
   COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
   METRO_PREPARE_FLAGS,
 } from '@agent-device/command-registry/flag-groups';
-import { providerPluginHelp } from '../provider-plugin-catalog.ts';
 
 type SchemaOnlyCliCommandName = Exclude<LocalCliCommandName, CommandName>;
 
@@ -77,7 +76,8 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   connect: {
     text: {
       summary: 'Configure remote or provider state',
-      description: `Configure remote access without allocating a device. Direct providers validate credentials/resources before saving state and print the exact device/app preparation needed before open. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.\n\nOptional provider plugins:\n${providerPluginHelp()}`,
+      description:
+        'Configure remote access without allocating a device. Direct providers validate credentials/resources before saving state and print the exact device/app preparation needed before open. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.',
     },
     usageOverride:
       'connect [provider] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',

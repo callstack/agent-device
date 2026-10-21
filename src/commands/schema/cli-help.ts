@@ -914,6 +914,9 @@ export function buildCommandUsageText(commandName: string): string | null {
     schema.flagDescriptionOverrides,
   );
   const sections: string[] = [];
+  if (commandName === 'connect') {
+    sections.push(`Optional provider plugins:\n${providerPluginHelp()}`);
+  }
   if (commandFlags.length > 0) {
     sections.push(renderFlagSection('Command flags:', commandFlags));
   }
