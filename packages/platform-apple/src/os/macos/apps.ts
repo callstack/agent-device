@@ -17,7 +17,7 @@ const MACOS_ALIASES: Record<string, string> = {
   settings: 'com.apple.systempreferences',
 };
 
-const MACOS_BUNDLE_ID_PATTERN = /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/;
+const MACOS_BUNDLE_ID_PATTERN = /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i;
 const MACOS_APP_TERMINATION_POLL_MS = 100;
 const MACOS_APP_TERMINATION_MAX_ATTEMPTS = 20;
 
