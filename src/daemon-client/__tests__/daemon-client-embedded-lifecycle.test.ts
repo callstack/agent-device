@@ -137,13 +137,19 @@ async function crashedStaleRegistration(ownership: 'embedded' | 'unrecognized' |
   return { stateDir, paths, ...registered };
 }
 
-for (const [ownership, reason, hint] of [
+for (const [ownership, reason, message, hint] of [
   [
     'embedded',
     DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
+    'A host process owns this runtime, so it was not retired.',
     /owned by host process \d+\. Close it there/,
   ],
-  ['sideways', 'daemon-owner-unrecognized', /Update agent-device/],
+  [
+    'sideways',
+    'daemon-owner-unrecognized',
+    'This daemon record states an owner this version cannot read, so this client did not replace it.',
+    /Update agent-device/,
+  ],
 ] as const)
   test(`a managed client preserves a ${ownership} owner`, async (t) => {
     if (await skipWhenLoopbackUnavailable(t)) return;
@@ -159,6 +165,7 @@ for (const [ownership, reason, hint] of [
         createDaemonTransport(createTestHostEnvironment())(request(stateDir)),
       );
       assert.equal(refusal.details?.reason, reason);
+      assert.equal(refusal.message, message);
       assert.match(String(refusal.details?.hint), hint);
       assert.deepEqual(daemon.rpcCommands, [], 'the takeover was never attempted');
       assert.equal(spawn.mock.calls.length, 0);

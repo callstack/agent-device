@@ -162,27 +162,27 @@ export function daemonBusyError(
   });
 }
 
-/** Refuses stop or replacement when the record cannot prove a detached owner. */
+/** Refuses replacement when the record cannot prove a detached owner. */
 function daemonRecordOwnerUnrecognizedError(params: {
-  info: DaemonIdentity | null;
+  info: DaemonIdentity;
   stateDir: string;
 }): AppError {
   const { info, stateDir } = params;
   return new AppError(
     'COMMAND_FAILED',
-    'This daemon record states an owner this version cannot read, so this client did not stop or replace it.',
+    'This daemon record states an owner this version cannot read, so this client did not replace it.',
     {
       reason: DAEMON_RECORD_OWNER_UNRECOGNIZED_REASON,
       stateDir,
-      ...(info ? { daemon: daemonIdentityOf(info) } : {}),
-      hint: `Update agent-device if the record comes from a newer build. Otherwise check what owns ${info ? `pid ${info.pid}` : 'this registration'}, then repair the record: stop that process by its own means and remove ${shellQuoteIfNeeded(stateDir)}/daemon.json so a daemon can register again.`,
+      daemon: daemonIdentityOf(info),
+      hint: `Update agent-device if the record comes from a newer build. Otherwise check what owns pid ${info.pid}, then repair the record: stop that process by its own means and remove ${shellQuoteIfNeeded(stateDir)}/daemon.json so a daemon can register again.`,
     },
   );
 }
 
 /** The host that started an embedded runtime owns its close. */
 export function daemonNotRetirableError(params: {
-  info: DaemonIdentity | null;
+  info: DaemonIdentity;
   stateDir: string;
 }): AppError {
   const { info, stateDir } = params;
@@ -192,8 +192,8 @@ export function daemonNotRetirableError(params: {
     {
       reason: DAEMON_LIFECYCLE_REASONS.ownerEmbedded,
       stateDir,
-      ...(info ? { daemon: daemonIdentityOf(info) } : {}),
-      hint: embeddedCloseHint(info?.pid),
+      daemon: daemonIdentityOf(info),
+      hint: embeddedCloseHint(info.pid),
     },
   );
 }
