@@ -552,5 +552,153 @@
     },
     "probe": false,
     "source": "ref-frame"
+  },
+  {
+    "name": "UITextField-without-automation-type",
+    "nodes": [
+      {
+        "role": "UITextField",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "UISearchTextField-without-automation-type",
+    "nodes": [
+      {
+        "role": "UISearchTextField",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "UITextView-without-automation-type",
+    "nodes": [
+      {
+        "role": "UITextView",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "RCTUITextField-without-automation-type",
+    "nodes": [
+      {
+        "role": "RCTUITextField",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
   }
 ]

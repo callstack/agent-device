@@ -17,7 +17,7 @@ import { recordCaptureProof } from '../../../core/capture-disclosure.ts';
 import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
 import { runtimeExecutionFromContext } from '../../../core/snapshot-runtime-capture-input.ts';
 import { createDaemonRuntimeSessionStore } from '../../../core/runtime-session.ts';
-import { expireRefFrame, refFrame, refFrameState, refFrameTree } from '../../../core/ref-frame.ts';
+import { expireRefFrame, refFrameState, refFrameTree } from '../../../core/ref-frame.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';
 import type {
   CaptureSnapshotForSession,
@@ -101,8 +101,7 @@ export async function createInteractionRuntimeForRoute(
           'selector-capture',
         );
       }
-      if (refFrameState(current) !== 'active' || !refFrame(current).treeIsUnprojected)
-        return undefined;
+      if (refFrameState(current) !== 'active') return undefined;
       return buildCoordinateTapTextInputEvidence(
         consumedCapture.state ?? refFrameTree(current),
         point,

@@ -175,7 +175,6 @@ async function createSnapshotRuntime(params: {
         nextSession,
         keepCurrentSnapshot,
         req.command === 'snapshot' && req.internal?.observationOnly !== true,
-        !snapshotScope && req.flags?.snapshotDepth === undefined,
       );
       return ref ?? sessionStore.publish(sessionName, nextSession);
     },
@@ -216,10 +215,8 @@ function reactivateCompleteFrameIfIssuing(
   session: SessionState,
   keepCurrentSnapshot: boolean,
   issuesRefsToClient: boolean,
-  treeIsUnprojected: boolean,
 ): void {
-  if (!keepCurrentSnapshot && issuesRefsToClient)
-    activateCompleteRefFrame(session, { treeIsUnprojected });
+  if (!keepCurrentSnapshot && issuesRefsToClient) activateCompleteRefFrame(session);
 }
 
 function resolveNextSnapshotScopeSource(params: {

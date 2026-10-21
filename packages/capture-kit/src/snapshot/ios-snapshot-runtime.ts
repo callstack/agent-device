@@ -1,4 +1,9 @@
 import {
+  attachSnapshotTextInputGeometry,
+  type SnapshotTextInputGeometry,
+} from '@agent-device/contracts/capture';
+import { isFillableType, normalizeType } from '@agent-device/contracts/snapshot';
+import {
   IosSnapshotEngineError,
   publishIosSnapshot,
   toIosSnapshotEngineErrorDetails,
@@ -8,6 +13,7 @@ import type {
   IosAcquisitionResidue,
   IosSnapshotFact,
   IosSnapshotInput,
+  IosSnapshotAcquisitionFacts,
 } from '@agent-device/contracts/ios-snapshot';
 import type {
   SnapshotOptions,
@@ -15,7 +21,7 @@ import type {
   SnapshotRuntimeAcquiredResult,
 } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
-import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect, snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 
 const IOS_SNAPSHOT_FACT_WARNINGS: Partial<Record<IosSnapshotFact, string>> = {
   'acquisition-depth':
@@ -41,15 +47,18 @@ export function presentIosSnapshotAcquisition(
   const input = iosSnapshotInput(acquired, request);
 
   try {
+    const textInputGeometry = acquiredTextInputGeometry(acquired.acquisition);
     const presentation = publishIosSnapshot(input, request);
     // The engine returns the box its regular fold validated against and no box for raw; this seam
     // only passes it through the shared construction guard (#3182).
     const validatedViewport = snapshotViewportSizeFrom(presentation.validatedViewport);
+    const nodes = [...presentation.payload.nodes];
+    if (textInputGeometry) attachSnapshotTextInputGeometry(nodes, textInputGeometry);
     return {
       backend: 'xctest',
       ...(presentation.qualityNotes ? { qualityNotes: presentation.qualityNotes } : {}),
       producer: acquired.acquisition.producer,
-      nodes: [...presentation.payload.nodes],
+      nodes,
       ...(acquired.acquisition.keyboard ? { keyboard: acquired.acquisition.keyboard } : {}),
       comparisonIdentity: presentation.comparisonIdentity,
       ...(acquired.acquisition.truncated === undefined
@@ -118,4 +127,41 @@ function throwIosSnapshotPresentationError(error: unknown): never {
     { ...details, ...(hint ? { hint } : {}) },
     error,
   );
+}
+
+function acquiredTextInputGeometry(
+  acquisition: IosSnapshotAcquisitionFacts,
+): SnapshotTextInputGeometry | undefined {
+  if (
+    acquisition.intent !== 'full' ||
+    acquisition.truncated !== false ||
+    acquisition.nodes.length === 0
+  )
+    return undefined;
+  if (
+    acquisition.residue.some(
+      (entry) =>
+        entry.kind === 'provider-pruned' ||
+        entry.kind === 'truncated' ||
+        (entry.kind === 'unavailable-fact' && entry.fact === 'acquisition-depth'),
+    )
+  )
+    return undefined;
+  const rects = [];
+  for (const node of acquisition.nodes) {
+    const input = [node.type, node.role].some((type) => {
+      if (!type) return false;
+      const normalized = normalizeType(type).replaceAll(/[-_ ]/g, '');
+      return (
+        normalized !== '' &&
+        (isFillableType(normalized, 'ios') ||
+          normalized === 'textbox' ||
+          normalized === 'searchbox')
+      );
+    });
+    if (!input) continue;
+    if (!isPositiveFiniteRect(node.rect)) return undefined;
+    rects.push({ ...node.rect });
+  }
+  return { rects };
 }

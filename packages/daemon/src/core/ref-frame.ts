@@ -141,11 +141,8 @@ export function readSessionRuntimeRevision(session: SessionState): number {
  * Retention and epoch semantics are shared with partial issuance; see
  * {@link activateRefFrame}.
  */
-export function activateCompleteRefFrame(
-  session: SessionState,
-  options?: Readonly<{ treeIsUnprojected: boolean }>,
-): void {
-  activateRefFrame(session, 'all', options?.treeIsUnprojected === true);
+export function activateCompleteRefFrame(session: SessionState): void {
+  activateRefFrame(session, 'all');
 }
 
 /**
@@ -171,15 +168,10 @@ export function activatePartialRefFrame(session: SessionState, scope: ReadonlySe
  * `session.snapshot` without disturbing this tree, so a ref keeps resolving against the
  * namespace that authorized it.
  */
-function activateRefFrame(
-  session: SessionState,
-  scope: RefFrameScope,
-  treeIsUnprojected = false,
-): void {
+function activateRefFrame(session: SessionState, scope: RefFrameScope): void {
   session.refFrame = issuedRefFrame({
     scope,
     tree: session.snapshot,
-    treeIsUnprojected,
     generation: session.snapshotGeneration,
   });
 }

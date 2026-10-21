@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import type { CoordinateTapTextInputEvidence } from '@agent-device/contracts/interactor-types';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { presentIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-runtime';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { buildCoordinateTapTextInputEvidence } from './coordinate-tap-text-input-evidence.ts';
 
 type Fixture = {
   name: string;
-  nodes: SnapshotNode[];
+  nodes: Omit<RawSnapshotNode, 'index'>[];
   point: { x: number; y: number };
   appBundleId: string;
   source?: CoordinateTapTextInputEvidence['source'];
@@ -21,14 +23,35 @@ const cases: Fixture[] = JSON.parse(
   ),
 );
 
-test.each(cases)('$name preserves the typed input rectangles and their target', (fixture) => {
-  const result = buildCoordinateTapTextInputEvidence(
+test.each(cases)('$name preserves acquired input geometry through presentation', (fixture) => {
+  const screen = { x: 0, y: 0, width: 400, height: 874 };
+  const presented = presentIosSnapshotAcquisition(
     {
-      nodes: fixture.nodes,
-      createdAt: 1,
-      truncated: fixture.truncated,
-      iosSystemSurfaceBundleId: fixture.iosSystemSurfaceBundleId,
+      stage: 'acquired',
+      acquisition: {
+        producer: 'simulator-ax-bridge',
+        intent: 'full',
+        nodes: [
+          { index: 0, type: 'Application', rect: screen },
+          ...fixture.nodes.map((node, index) => ({
+            ...node,
+            index: index + 1,
+            parentIndex: 0,
+            depth: 1,
+          })),
+        ],
+        truncated: fixture.truncated ?? false,
+        viewport: { kind: 'reported', rect: screen },
+        lineage: { targetId: 'sim-1', generation: 'g1' },
+        residue: [],
+      },
     },
+    { interactiveOnly: true },
+  );
+  const snapshot = buildSnapshotState(presented, { snapshotInteractiveOnly: true });
+  snapshot.iosSystemSurfaceBundleId = fixture.iosSystemSurfaceBundleId;
+  const result = buildCoordinateTapTextInputEvidence(
+    snapshot,
     fixture.point,
     fixture.appBundleId,
     fixture.source ?? 'selector-capture',
