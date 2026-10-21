@@ -17,13 +17,16 @@ enum TextInputProbeOutcome {
 }
 
 extension RunnerTests {
-  func textInputAt(app: XCUIApplication, x: Double, y: Double) -> XCUIElement? {
-    textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y)).first
+  /// The smallest text input at the point, with the snapshot its lookup read.
+  func textInputAt(app: XCUIApplication, x: Double, y: Double) -> ResolvedTextEntryInput? {
+    safely("TEXT_INPUT_AT_POINT", []) {
+      queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: { false })
+    }.first
   }
 
   func textInputCandidatesAt(app: XCUIApplication, point: CGPoint) -> [XCUIElement] {
     safely("TEXT_INPUT_AT_POINT", []) {
-      queryTextInputs(app: app, point: point, shouldStop: { false })
+      queryTextInputs(app: app, point: point, shouldStop: { false }).map(\.element)
     }
   }
 
@@ -57,7 +60,7 @@ extension RunnerTests {
   ) -> CoordinateTextInputResolution {
     let probed = containingTextInputProbeIssues(fallback: CoordinateTextInputResolution.unavailable) {
       shouldStop -> CoordinateTextInputResolution in
-      guard let element = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first
+      guard let element = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first?.element
       else {
         return .absent
       }
@@ -78,21 +81,23 @@ extension RunnerTests {
     }
   }
 
-  /// Whether `input`'s handle still resolves to the input it named when found, read inside the
-  /// same issue containment. A read that cannot answer counts as no.
-  func textInputStillResolves(_ input: TextInputAtPoint) -> Bool {
-    let probed = containingTextInputProbeIssues(fallback: false) { _ in
-      input.element.exists && probeTextEntryInput(input.element) == .input(input.identity)
+  /// The snapshot of `input`'s handle when it still resolves to the input it named when found, read
+  /// inside the same issue containment. A read that cannot answer counts as no.
+  func textInputSnapshotIfStillResolves(_ input: TextInputAtPoint) -> XCUIElementSnapshot? {
+    let probed = containingTextInputProbeIssues(fallback: nil as XCUIElementSnapshot?) { _ in
+      guard input.element.exists else { return nil }
+      let read = snapshotTextEntryInput(input.element)
+      return read.probe == .input(input.identity) ? read.snapshot : nil
     }
-    guard case .success(let resolves) = probed else { return false }
-    return resolves
+    guard case .success(let snapshot) = probed else { return nil }
+    return snapshot
   }
 
   /// What `target`'s input reads between a replacement's clear passes, read inside the same issue
   /// containment, with a placeholder read as empty. A read that cannot answer is `.unavailable`.
   func clearedFieldRead(app: XCUIApplication, target: TextEntryTarget) -> TextValueRead {
     let probed = containingTextInputProbeIssues(fallback: TextValueRead.unavailable) { _ in
-      textValueRead(for: resolveTextEntryElement(app: app, target: target), treatingPlaceholderAsEmpty: true)
+      textValueRead(for: resolveTextEntryInput(app: app, target: target)?.attributes, treatingPlaceholderAsEmpty: true)
     }
     guard case .success(let read) = probed else { return .unavailable }
     return read
@@ -100,7 +105,7 @@ extension RunnerTests {
 
   func probeTextInputs(app: XCUIApplication, point: CGPoint) -> TextInputProbeOutcome {
     switch containingTextInputProbeIssues(fallback: [], { shouldStop in
-      queryTextInputs(app: app, point: point, shouldStop: shouldStop)
+      queryTextInputs(app: app, point: point, shouldStop: shouldStop).map(\.element)
     }) {
     case .success(let elements):
       return elements.isEmpty ? .absent : .matches(elements)
@@ -152,26 +157,49 @@ extension RunnerTests {
     return true
   }
 
+  private static let textInputElementTypeRawValues: [UInt] = [
+    XCUIElement.ElementType.textField,
+    .secureTextField,
+    .searchField,
+    .textView,
+  ].map(\.rawValue)
+
   private func queryTextInputs(
     app: XCUIApplication,
     point: CGPoint,
     shouldStop: () -> Bool
-  ) -> [XCUIElement] {
-    var candidates: [XCUIElement] = []
-    for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {
-      if shouldStop() { break }
-      candidates.append(contentsOf: query.allElementsBoundByIndex)
+  ) -> [ResolvedTextEntryInput] {
+    // One query for every text input type: each query snapshots the whole application.
+    let candidates = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "elementType IN %@", Self.textInputElementTypeRawValues))
+      .allElementsBoundByIndex
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-      if let issue = textInputProbeIssueForTesting {
-        textInputProbeIssueForTesting = nil
-        record(issue)
-      }
-#endif
+    if let issue = textInputProbeIssueForTesting {
+      textInputProbeIssueForTesting = nil
+      record(issue)
     }
+#endif
     guard !shouldStop() else { return [] }
-    return candidates.filter { element in
-      guard !shouldStop(), element.exists else { return false }
-      return isCoordinateTextInputCandidate(enabled: element.isEnabled, frame: element.frame, point: point)
-    }.sorted(by: smallestElementFirst)
+    // One snapshot per candidate answers enablement, frame, and the ordering below: each attribute
+    // read from the live element runs the candidate's query again. A candidate that cannot be
+    // snapshotted is read live, so its failure still reaches the caller's issue handling.
+    // Each handle binds by index within its own element type, so an input of another type that
+    // appears ahead of it later does not take its place.
+    var indexByType: [XCUIElement.ElementType: Int] = [:]
+    return candidates.compactMap { element -> ResolvedTextEntryInput? in
+      guard !shouldStop(), element.exists else { return nil }
+      let snapshot = try? element.snapshot()
+      let elementType = snapshot?.elementType ?? element.elementType
+      let typeIndex = indexByType[elementType, default: 0]
+      indexByType[elementType] = typeIndex + 1
+      let input = ResolvedTextEntryInput(
+        element: app.descendants(matching: elementType).element(boundBy: typeIndex),
+        snapshot: snapshot
+      )
+      let attributes = input.attributes
+      return isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point)
+        ? input
+        : nil
+    }.sorted { smallestElementFirst($0.attributes, $1.attributes) }
   }
 }

@@ -21,7 +21,7 @@ extension RunnerTests {
       // place while the response reported "typed". Append (`type`) and unrepaired entry stay
       // no-ops, which is what an empty payload means for them.
       if repairMode == .replacement {
-        guard let clearTarget = resolveTextEntryElement(app: app, target: target) else {
+        guard let clearTarget = target.postFocusRead ?? resolveTextEntryInput(app: app, target: target) else {
           // No resolvable input means no clear happened — including the synthesized
           // first-responder route, whose target carries no element. Success here would claim a
           // clear the runner never performed.
@@ -37,7 +37,7 @@ extension RunnerTests {
         clearTextInput(app: app, clearTarget)
         // nil means the value is unreadable (secure fields), not "not empty": leave `verified`
         // nil there rather than reporting a mismatch the runner cannot actually observe.
-        let observed = editableTextValue(for: clearTarget, treatingPlaceholderAsEmpty: true)
+        let observed = editableTextValue(for: clearTarget.element, treatingPlaceholderAsEmpty: true)
         logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: 0, mode: repairMode)
         return TextEntryResult(
           verified: observed.map { $0.isEmpty },
@@ -83,9 +83,12 @@ extension RunnerTests {
       softwareKeyboardVisible: isKeyboardVisible(app: app)
     )
     let initialResolveStartedAt = Date()
-    let initialTarget = resolveTextEntryElement(app: app, target: activeTarget)
-    activeTarget = activeTarget.withElement(initialTarget)
-    let currentText = editableTextValue(for: initialTarget, treatingPlaceholderAsEmpty: true)
+    let initialTarget = activeTarget.postFocusRead ?? resolveTextEntryInput(app: app, target: activeTarget)
+    activeTarget = activeTarget.withResolvedInput(initialTarget)
+    // The target's last read while nothing has been dispatched to the app since it was taken. The next
+    // post types into it instead of resolving the target again, and consumes it.
+    var undispatchedRead = initialTarget
+    let currentText = editableTextValue(for: initialTarget?.attributes, treatingPlaceholderAsEmpty: true)
     let initialText = repairMode == .append ? currentText : nil
     let expectedText = expectedTextEntryValue(typedText: text, mode: repairMode, initialText: initialText)
     var textEntryRoute: String?
@@ -123,10 +126,15 @@ extension RunnerTests {
         logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
         return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
       }
+      var baselineInput: ResolvedTextEntryInput? = replacementTarget
       if currentText == nil || currentText?.isEmpty == false {
         let clearStartedAt = Date()
         clearTextInput(app: app, replacementTarget)
-        activeTarget = activeTarget.withElement(replacementTarget)
+        // The clear dispatched to the app, so the field resolves again: a bound target refuses an
+        // input that took its place.
+        baselineInput = resolveTextEntryInput(app: app, target: activeTarget)
+        activeTarget = activeTarget.withResolvedInput(baselineInput)
+        undispatchedRead = baselineInput
         logTextEntryPhase(
           commandId: commandId,
           phase: "clear",
@@ -135,7 +143,7 @@ extension RunnerTests {
           mode: repairMode
         )
       }
-      entryBaseline = textEntryObservation(for: replacementTarget)
+      entryBaseline = textEntryObservation(for: baselineInput)
     }
 
     // The shape this command posts, decided once: a spaced per-character plan, a peeled warmup plus
@@ -159,7 +167,7 @@ extension RunnerTests {
     // falls back to, and what private synthesis falls back to. The route cannot read the value back
     // afterwards, so the text arrives unverified either way. The refusal is charged the whole command
     // and the post is a chunk of it, so the log names both lengths.
-    func typeApplicationWide(_ value: String, reason: String) -> (element: XCUIElement?, failure: TextEntryFailure?) {
+    func typeApplicationWide(_ value: String, reason: String) -> (input: ResolvedTextEntryInput?, failure: TextEntryFailure?) {
       NSLog(
         "AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=xctest-application-fallback reason=%@ chars=%d commandChars=%d",
         reason,
@@ -168,13 +176,15 @@ extension RunnerTests {
       )
       textEntryRoute = "xctest-application-fallback"
       app.typeText(value)
-      return (resolveTextEntryElement(app: app, target: activeTarget), nil)
+      return (resolveTextEntryInput(app: app, target: activeTarget), nil)
     }
 
-    func typeIntoCurrentTarget(_ value: String) -> (element: XCUIElement?, failure: TextEntryFailure?) {
+    func typeIntoCurrentTarget(_ value: String) -> (input: ResolvedTextEntryInput?, failure: TextEntryFailure?) {
+      let lastRead = undispatchedRead
+      undispatchedRead = nil
 #if os(iOS)
       if shouldUseSynthesizedFirstResponderType {
-        guard let currentTarget = resolveTextEntryElement(app: app, target: activeTarget) else {
+        guard let currentTarget = lastRead ?? resolveTextEntryInput(app: app, target: activeTarget) else {
           return (nil, .notFocused)
         }
         textEntryRoute = "synthesized-first-responder"
@@ -192,9 +202,9 @@ extension RunnerTests {
         }
       }
 #endif
-      if let currentTarget = resolveTextEntryElement(app: app, target: activeTarget) {
+      if let currentTarget = lastRead ?? resolveTextEntryInput(app: app, target: activeTarget) {
         textEntryRoute = "xctest-element"
-        currentTarget.typeText(value)
+        currentTarget.element.typeText(value)
         return (currentTarget, nil)
       } else if activeTarget.boundIdentity == nil && activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
 #if os(iOS)
@@ -221,7 +231,7 @@ extension RunnerTests {
 #else
         app.typeText(value)
 #endif
-        return (resolveTextEntryElement(app: app, target: activeTarget), nil)
+        return (resolveTextEntryInput(app: app, target: activeTarget), nil)
       }
       return (nil, .notFocused)
     }
@@ -252,7 +262,11 @@ extension RunnerTests {
       }
       let deadline = Date().addingTimeInterval(TextEntryTiming.warmupValueTimeout)
       while Date() < deadline {
-        let observed = textValueRead(for: resolveTextEntryElement(app: app, target: activeTarget))
+        // Each read refreshes the target from the field as the character left it.
+        let input = resolveTextEntryInput(app: app, target: activeTarget)
+        activeTarget = activeTarget.withResolvedInput(input)
+        undispatchedRead = input
+        let observed = textValueRead(for: input?.attributes)
         if !observed.warmupReadIsPending(expectedText: warmupExpectedText) {
           if observed == .unreadable { sleepFor(TextEntryTiming.pollInterval) }
           return
@@ -263,7 +277,7 @@ extension RunnerTests {
 
     // One pass over the plan the budget charged: each step posts its slice and takes the wait the
     // plan carries, so the shape a refusal was measured against is the shape dispatched (#2955).
-    var typedTarget: XCUIElement?
+    var typedTarget: ResolvedTextEntryInput?
     var sawWarmupPost = false
     var planFailure: TextEntryResult?
     var stepStartedAt = Date()
@@ -278,10 +292,11 @@ extension RunnerTests {
           planFailure = dispatchFailureResult(failure)
           return .stop
         }
-        typedTarget = dispatch.element ?? typedTarget
+        typedTarget = dispatch.input ?? typedTarget
         if step.warmsUpField {
           // The read-back wants the element this post just typed into, not a re-resolve from scratch.
-          activeTarget = activeTarget.withElement(typedTarget)
+          // Its reads refresh the frame this post may have moved.
+          activeTarget = activeTarget.withResolvedInput(typedTarget)
         }
         return .posted
       },
@@ -332,7 +347,7 @@ extension RunnerTests {
     if let failure = planFailure {
       return failure
     }
-    activeTarget = activeTarget.withElement(typedTarget)
+    activeTarget = activeTarget.withElement(typedTarget?.element)
     if repairMode == .none {
       logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
       return TextEntryResult(
@@ -398,7 +413,7 @@ extension RunnerTests {
   ) -> TextEntryResult {
     var confirmation = ReplacementTextEntryConfirmation(requested: requested, baseline: baseline, startedAt: Date())
     while true {
-      guard let element = resolveTextEntryElement(app: app, target: target) else {
+      guard let input = resolveTextEntryInput(app: app, target: target) else {
         let failure: TextEntryFailure? = target.boundIdentity != nil && !boundTextEntryInputIsGone(app: app, target: target)
           ? .commitNotObserved : nil
         if target.boundIdentity != nil && failure == nil {
@@ -406,7 +421,7 @@ extension RunnerTests {
         }
         return TextEntryResult(verified: nil, repaired: false, expectedText: requested, observedText: nil, failure: failure)
       }
-      guard let observed = textEntryObservation(for: element) else {
+      guard let observed = textEntryObservation(for: input) else {
         return TextEntryResult(verified: nil, repaired: false, expectedText: requested, observedText: nil)
       }
       if let result = confirmation.observe(observed, at: Date()) {
@@ -473,18 +488,18 @@ extension RunnerTests {
       )
     }
 
-    guard let repairTarget = resolveTextEntryElement(app: app, target: target) else {
+    guard let repairTarget = resolveTextEntryInput(app: app, target: target) else {
       return initialResult
     }
-    let observedText = editableTextValue(for: repairTarget) ?? ""
+    let observedText = editableTextValue(for: repairTarget.attributes) ?? ""
     NSLog(
       "AGENT_DEVICE_RUNNER_REPAIR_TEXT_ENTRY expectedLength=%d observedLength=%d",
       expectedText.count,
       observedText.count
     )
     clearTextInput(app: app, repairTarget)
-    repairTarget.typeText(expectedText)
-    let repairedTarget = target.withElement(repairTarget)
+    repairTarget.element.typeText(expectedText)
+    let repairedTarget = target.withElement(repairTarget.element)
     let repairedResult = verifyTextEntry(
       app: app,
       target: repairedTarget,
@@ -503,19 +518,23 @@ extension RunnerTests {
     expectedText: String?,
     repaired: Bool
   ) -> TextEntryResult {
-    let targetElement = resolveTextEntryElement(app: app, target: target)
+    let targetInput = resolveTextEntryInput(app: app, target: target)
     guard let expectedText else {
       return TextEntryResult(
         verified: nil,
         repaired: repaired,
         expectedText: nil,
-        observedText: editableTextValue(for: targetElement)
+        observedText: editableTextValue(for: targetInput?.attributes)
       )
     }
-    guard let observedText = editableTextValue(for: targetElement) else {
+    guard let observedText = editableTextValue(for: targetInput?.attributes) else {
       return TextEntryResult(verified: nil, repaired: repaired, expectedText: expectedText, observedText: nil)
     }
-    guard textEntryValueMatchesExpected(targetElement, observedText: observedText, expectedText: expectedText) else {
+    guard textEntryValueMatchesExpected(
+      targetInput?.attributes.elementType,
+      observedText: observedText,
+      expectedText: expectedText
+    ) else {
       return TextEntryResult(
         verified: false,
         repaired: repaired,
@@ -527,12 +546,13 @@ extension RunnerTests {
     var latestObservedText = observedText
     while Date() < stableDeadline {
       sleepFor(TextEntryTiming.pollInterval)
-      guard let nextObservedText = editableTextValue(for: resolveTextEntryElement(app: app, target: target)) else {
+      let nextInput = resolveTextEntryInput(app: app, target: target)
+      guard let nextObservedText = editableTextValue(for: nextInput?.attributes) else {
         return TextEntryResult(verified: nil, repaired: repaired, expectedText: expectedText, observedText: nil)
       }
       latestObservedText = nextObservedText
       guard textEntryValueMatchesExpected(
-        resolveTextEntryElement(app: app, target: target),
+        nextInput?.attributes.elementType,
         observedText: nextObservedText,
         expectedText: expectedText
       ) else {
@@ -553,14 +573,14 @@ extension RunnerTests {
   }
 
   private func textEntryValueMatchesExpected(
-    _ element: XCUIElement?,
+    _ elementType: XCUIElement.ElementType?,
     observedText: String,
     expectedText: String
   ) -> Bool {
     if observedText == expectedText {
       return true
     }
-    guard element?.elementType != .textView else {
+    guard elementType != .textView else {
       return false
     }
     return observedText == Self.textEntryRequestWithoutSubmitKeys(expectedText)
@@ -591,13 +611,16 @@ extension RunnerTests {
   ) -> Bool {
 #if os(iOS)
     var latestObservedText: String?
+    var latestElementType: XCUIElement.ElementType?
     let deadline = Date().addingTimeInterval(TextEntryTiming.verificationStabilityWindow)
     repeat {
-      guard let observedText = editableTextValue(for: resolveTextEntryElement(app: app, target: target)) else {
+      let input = resolveTextEntryInput(app: app, target: target)
+      guard let observedText = editableTextValue(for: input?.attributes) else {
         return false
       }
+      latestElementType = input?.attributes.elementType
       if textEntryValueMatchesExpected(
-        resolveTextEntryElement(app: app, target: target),
+        latestElementType,
         observedText: observedText,
         expectedText: expectedText
       ) {
@@ -617,7 +640,7 @@ extension RunnerTests {
       return false
     }
     guard !textEntryValueMatchesExpected(
-      resolveTextEntryElement(app: app, target: target),
+      latestElementType,
       observedText: latestObservedText,
       expectedText: expectedText
     ) else {

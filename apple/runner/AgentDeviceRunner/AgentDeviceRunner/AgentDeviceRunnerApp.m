@@ -129,6 +129,39 @@ int main(int argc, const char *argv[]) {
 }
 @end
 
+// XCTest reads every element's accessibility value each time it snapshots the app, which it does
+// for every element query and every attribute read from a live element. Counting this field's
+// value reads therefore counts the accessibility queries a command makes. The value is masked, so a
+// fill's read-back ends at its first read instead of polling through a stability window whose
+// poll count depends on how fast the host answers.
+static NSUInteger AgentDeviceTextEntryValueReads = 0;
+
+@interface AgentDeviceValueReadCountingTextField : AgentDeviceMaskedTextField
+@end
+
+@implementation AgentDeviceValueReadCountingTextField
+- (NSString *)accessibilityValue {
+  AgentDeviceTextEntryValueReads += 1;
+  return [super accessibilityValue];
+}
+@end
+
+// Reports the read count as its accessibility label and the counted field's text as its value, so
+// reading either changes no view state and the masked text stays checkable.
+@interface AgentDeviceValueReadCountLabel : UILabel
+@property(nonatomic, weak) UITextField *countedField;
+@end
+
+@implementation AgentDeviceValueReadCountLabel
+- (NSString *)accessibilityLabel {
+  return [NSString stringWithFormat:@"%lu", (unsigned long)AgentDeviceTextEntryValueReads];
+}
+
+- (NSString *)accessibilityValue {
+  return self.countedField.text;
+}
+@end
+
 // A field that reformats its own text on every edit into `## ### ## ##` digit groups, the way a
 // digit-grouping formatter in a Flutter or React Native input does. The accessibility value is
 // what the user sees — the formatted string — so it never equals the digits a `fill` sent (#2634).
@@ -667,6 +700,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-submit-clears"];
     BOOL maskedValue =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-masked-value"];
+    BOOL countsValueReads =
+        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-counts-value-reads"];
     UITextField *textField;
     if (digitCountValue) {
       textField = [[AgentDeviceDigitCountTextField alloc] init];
@@ -679,6 +714,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       textField = [[AgentDeviceSubmitClearingTextField alloc] init];
     } else if (maskedValue) {
       textField = [[AgentDeviceMaskedTextField alloc] init];
+    } else if (countsValueReads) {
+      textField = [[AgentDeviceValueReadCountingTextField alloc] init];
     } else {
       textField = [[UITextField alloc] init];
     }
@@ -709,6 +746,18 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [textField.widthAnchor constraintEqualToConstant:240],
       [textField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
+    if (countsValueReads) {
+      AgentDeviceValueReadCountLabel *valueReads = [[AgentDeviceValueReadCountLabel alloc] init];
+      valueReads.countedField = textField;
+      valueReads.accessibilityIdentifier = @"agent-device-text-entry-value-reads";
+      valueReads.text = @"value reads";
+      valueReads.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:valueReads];
+      [NSLayoutConstraint activateConstraints:@[
+        [valueReads.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [valueReads.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
+      ]];
+    }
     if (currencyValue || submitClears) {
       UILabel *entryStatus = [[UILabel alloc] init];
       entryStatus.accessibilityIdentifier = @"agent-device-text-entry-events";
