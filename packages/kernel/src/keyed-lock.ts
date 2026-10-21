@@ -13,7 +13,9 @@ export async function withKeyedLock<T>(
   locks: Map<string, Promise<unknown>>,
   key: string,
   task: () => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
+  signal?.throwIfAborted();
   const activeLocks = keyedLockStorage.getStore() ?? [];
   const held = activeLocks.find(
     (entry) => entry.active && entry.locks === locks && entry.key === key,
@@ -32,9 +34,12 @@ export async function withKeyedLock<T>(
     }
   }
   const previous = locks.get(key) ?? Promise.resolve();
+  let entered = false;
   const current = previous
     .catch(() => {})
     .then(async () => {
+      entered = true;
+      signal?.throwIfAborted();
       const frame: LockFrame = { locks, key, active: true, descendants: new Set() };
       try {
         return await keyedLockStorage.run(
@@ -47,9 +52,18 @@ export async function withKeyedLock<T>(
       }
     });
   locks.set(key, current);
-  return current.finally(() => {
+  const completion = current.finally(() => {
     if (locks.get(key) === current) {
       locks.delete(key);
     }
+  });
+  if (!signal) return await completion;
+  return await new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      if (!entered) reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    completion.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+    if (signal.aborted) onAbort();
   });
 }

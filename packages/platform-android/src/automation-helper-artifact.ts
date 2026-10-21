@@ -46,7 +46,9 @@ export function androidAutomationHelperIdentity(artifact: AndroidSnapshotHelperA
 
 export async function prepareAndroidAutomationHelper(
   device: DeviceInfo,
+  signal?: AbortSignal,
 ): Promise<PreparedAndroidAutomationHelper> {
+  signal?.throwIfAborted();
   const adbProvider = resolveAndroidAdbProvider(device);
   // Same artifact precedence as snapshot capture: a provider-supplied helper artifact overrides
   // the bundled one so both transports install and run the single shared helper (issue #1275).
@@ -56,6 +58,7 @@ export async function prepareAndroidAutomationHelper(
   await recoverAndroidSnapshotHelperRetirement({
     deviceKey,
     adb: adbProvider.exec,
+    signal,
   });
   const install = await withDiagnosticTimer(
     'android_touch_helper_install',
@@ -66,6 +69,7 @@ export async function prepareAndroidAutomationHelper(
         artifact,
         deviceKey,
         timeoutMs: HELPER_INSTALL_TIMEOUT_MS,
+        signal,
       }),
     {
       packageName: artifact.manifest.packageName,
@@ -79,8 +83,9 @@ export async function prepareAndroidAutomationHelper(
   if (install.installed) {
     // An APK replacement kills the running instrumentation, so a persistent session started
     // against the previous binary must not serve this command; the next snapshot restarts it.
-    await stopAndroidSnapshotHelperSession(deviceKey);
+    await stopAndroidSnapshotHelperSession(deviceKey, { signal });
   }
+  signal?.throwIfAborted();
   return { adb: adbProvider.exec, adbProvider, artifact, install, deviceKey };
 }
 

@@ -260,6 +260,7 @@ export async function createRequestExecutionScope(params: {
     const requestExecutionLocks = createRequestExecutionLocks({
       locks: executionLocks,
       initialKeys: lockPlan.keys,
+      scope: params.platformRequestScope,
     });
     const dispatchLedger = requestDispatchLedger(scopedReq);
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({

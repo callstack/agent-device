@@ -20,8 +20,9 @@ export type RequestExecutionLocks = {
 export function createRequestExecutionLocks(params: {
   locks: Map<string, Promise<unknown>>;
   initialKeys: RequestExecutionLockKey[];
+  scope?: Readonly<{ signal: AbortSignal }>;
 }): RequestExecutionLocks {
-  const { locks, initialKeys } = params;
+  const { locks, initialKeys, scope } = params;
   const initialKeySet = new Set(initialKeys);
   const retainedLocks = new Map<RequestExecutionLockKey, RetainedExecutionLock>();
   let running = false;
@@ -40,7 +41,7 @@ export function createRequestExecutionLocks(params: {
       }
       running = true;
       try {
-        return await withRequestExecutionLockKeys(locks, initialKeys, task);
+        return await withRequestExecutionLockKeys(locks, initialKeys, task, scope?.signal);
       } finally {
         try {
           await releaseRetainedLocks();
@@ -58,7 +59,7 @@ export function createRequestExecutionLocks(params: {
 
       let retained = retainedLocks.get(key);
       if (!retained) {
-        retained = retainExecutionLock(locks, key);
+        retained = retainExecutionLock(locks, key, scope?.signal);
         retainedLocks.set(key, retained);
       }
       await retained.acquired;
@@ -70,31 +71,42 @@ export async function withRequestExecutionLockKeys<T>(
   locks: Map<string, Promise<unknown>>,
   keys: readonly RequestExecutionLockKey[],
   task: () => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
   const [key, ...remainingKeys] = keys;
   if (!key) return await task();
   return await withKeyedLock(
     locks,
     key,
-    async () => await withRequestExecutionLockKeys(locks, remainingKeys, task),
+    async () => await withRequestExecutionLockKeys(locks, remainingKeys, task, signal),
+    signal,
   );
 }
 
 function retainExecutionLock(
   locks: Map<string, Promise<unknown>>,
   key: RequestExecutionLockKey,
+  signal?: AbortSignal,
 ): RetainedExecutionLock {
   let markAcquired: () => void = () => {};
+  let rejectAcquired: (error: unknown) => void = () => {};
   let release: () => void = () => {};
-  const acquired = new Promise<void>((resolve) => {
+  const acquired = new Promise<void>((resolve, reject) => {
     markAcquired = resolve;
+    rejectAcquired = reject;
   });
   const released = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const completion = withKeyedLock(locks, key, async () => {
-    markAcquired();
-    await released;
-  });
+  const completion = withKeyedLock(
+    locks,
+    key,
+    async () => {
+      markAcquired();
+      await released;
+    },
+    signal,
+  );
+  void completion.catch((error) => rejectAcquired(error));
   return { acquired, completion, release };
 }

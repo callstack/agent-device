@@ -8,7 +8,7 @@ import {
   recoverAndroidSnapshotHelperRetirement,
   recordAndroidSnapshotHelperRelease,
   resetAndroidSnapshotHelperRetirements,
-  retireCanceledAndroidSnapshotHelperCapture,
+  retireCanceledAndroidSnapshotHelperCommand,
   settleAndroidSnapshotHelperSessionCleanup,
 } from '../snapshot-helper-retirement.ts';
 import type { AndroidAdbExecutorResult, AndroidAdbProcess } from '../adb-executor.ts';
@@ -44,7 +44,7 @@ test('canceled capture answers for the device, not for the force-stop call that 
 
   // A loaded host makes the stop call time out while the helper process is already gone. Ownership
   // is decided by the process Android reports, so this retirement resolves.
-  await retireCanceledAndroidSnapshotHelperCapture({
+  await retireCanceledAndroidSnapshotHelperCommand({
     deviceKey: DEVICE_KEY,
     packageName: PACKAGE_NAME,
     adb,
@@ -67,7 +67,7 @@ test('unproven release stays pending until an acquire reads the device', async (
     return { exitCode: 0, stdout: '', stderr: '' };
   };
 
-  await retireCanceledAndroidSnapshotHelperCapture({
+  await retireCanceledAndroidSnapshotHelperCommand({
     deviceKey: DEVICE_KEY,
     packageName: PACKAGE_NAME,
     adb,

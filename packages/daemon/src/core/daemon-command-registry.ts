@@ -9,7 +9,9 @@ import {
   commandDescriptors,
   resolveCommandRecordingEffect,
   resolveCommandDeviceClaimPolicy,
+  resolveCommandTimeoutPolicy,
 } from '@agent-device/command-registry/registry';
+import { resolveCommandDaemonTimeoutMs } from '@agent-device/command-registry/timeout-policy';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import type { DaemonRequest } from './daemon-request.ts';
 
@@ -30,6 +32,10 @@ export const DAEMON_COMMAND_DESCRIPTORS: readonly DaemonCommandDescriptor[] =
   deriveDaemonCommandDescriptors(commandDescriptors);
 
 const DAEMON_COMMAND_REGISTRY = buildDaemonCommandRegistry(DAEMON_COMMAND_DESCRIPTORS);
+
+export function resolveDaemonRequestTimeoutMs(req: DaemonRequest): number | undefined {
+  return resolveCommandDaemonTimeoutMs(resolveCommandTimeoutPolicy(req.command), req);
+}
 
 export function getDaemonCommandRoute(command: string): DaemonCommandRoute {
   return getDaemonCommandDescriptor(command)?.route ?? 'generic';

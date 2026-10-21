@@ -16,6 +16,7 @@ import {
   type AndroidGestureViewportReading,
 } from './gesture-viewport.ts';
 import type { AndroidLoweredTouchPlan } from './touch-plan-lowering.ts';
+import { retireCanceledAndroidSnapshotHelperCommand } from './snapshot-helper-retirement.ts';
 import {
   discloseHelperTouchDispatch,
   runAndroidSnapshotHelperSessionTouchCommand,
@@ -52,10 +53,11 @@ type AndroidTouchHelperGestureRequest = {
 export async function executeAndroidTouchHelperPlan(
   device: DeviceInfo,
   plan: AndroidLoweredTouchPlan,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const { prepareAndroidAutomationHelper, androidAutomationHelperIdentity } =
     await import('./automation-helper-artifact.ts');
-  const prepared = await prepareAndroidAutomationHelper(device);
+  const prepared = await prepareAndroidAutomationHelper(device, signal);
   const request = normalizeAndroidTouchHelperGestureRequest(plan);
   const timeoutMs = Math.max(
     HELPER_GESTURE_TIMEOUT_MS,
@@ -76,6 +78,7 @@ export async function executeAndroidTouchHelperPlan(
         helper: androidAutomationHelperIdentity(prepared.artifact),
         payloadBase64,
         timeoutMs,
+        signal,
       });
       if (sessionHeaders) {
         return { ...readGestureResult(sessionHeaders), helperTransport: 'persistent-session' };
@@ -87,6 +90,14 @@ export async function executeAndroidTouchHelperPlan(
           action: 'gesture',
           extraArgs: ['-e', 'payloadBase64', payloadBase64],
           timeoutMs,
+          signal,
+          retireCanceled: async (cause) =>
+            await retireCanceledAndroidSnapshotHelperCommand({
+              deviceKey: prepared.deviceKey,
+              packageName: prepared.artifact.manifest.packageName,
+              adb: prepared.adb,
+              cause,
+            }),
           readResult: readGestureResult,
         })),
         helperTransport: 'instrumentation',
@@ -184,12 +195,23 @@ async function runOneShotTouchHelper<Result>(options: {
   extraArgs: string[];
   timeoutMs: number;
   readResult: (record: Record<string, string>) => Result;
+  signal?: AbortSignal;
+  retireCanceled?: (cause: unknown) => Promise<void>;
 }): Promise<Result> {
   const result = await runAdbShell(
     options.adb,
     ['am', 'instrument', '-w', '-e', 'mode', options.action, ...options.extraArgs, options.runner],
-    { allowFailure: true, timeoutMs: options.timeoutMs },
-  );
+    { allowFailure: true, timeoutMs: options.timeoutMs, signal: options.signal },
+  ).catch(async (error) => {
+    if (!options.signal?.aborted) throw error;
+    await options.retireCanceled?.(error);
+    options.signal.throwIfAborted();
+    throw error;
+  });
+  if (options.signal?.aborted) {
+    await options.retireCanceled?.(options.signal.reason);
+    options.signal.throwIfAborted();
+  }
   let finalRecord: Record<string, string>;
   try {
     finalRecord = readAndroidTouchHelperFinalRecord(`${result.stdout}\n${result.stderr}`);

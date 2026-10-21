@@ -3,12 +3,19 @@ import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/t
 import { MAX_FOLD_DURATION_MS } from '@agent-device/contracts/device';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import type { ExecResult } from '@agent-device/host-kit/command';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import { normalizeError } from '@agent-device/kernel/errors';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { createTestHostEnvironment } from '@agent-device/test-kit';
+import { sendRequest } from '../../../src/daemon-client/daemon-client-transport.ts';
+import { setTimeout as realSleep } from 'node:timers/promises';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createProviderScenarioHarness, type ProviderScenarioRpcResult } from './harness.ts';
 import { createRecordingAppleToolProvider } from './providers.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
@@ -168,7 +175,7 @@ function alternatingHingeAngle(readIndex: number): number {
 
 function createFoldLedgerAppleToolProvider(params: {
   hingeAngleAt: (readIndex: number) => number;
-  onCall: (call: FoldLedgerCall) => void;
+  onCall: (call: FoldLedgerCall, signal?: AbortSignal) => void | Promise<void>;
   isTracking: () => boolean;
 }): { provider: AppleToolProvider; ledger: FoldLedgerCall[]; hingeReadCount: () => number } {
   const ledger: FoldLedgerCall[] = [];
@@ -178,11 +185,11 @@ function createFoldLedgerAppleToolProvider(params: {
   // core/tool-provider.ts, core/simctl.ts) carries a bounded timeoutMs. A call reaching this fake
   // with none is not a worst case the envelope assertion below can see, so it must fail the test
   // rather than cost 0 virtual ms.
-  const record = (
+  const record = async (
     tool: FoldLedgerCall['tool'],
     args: readonly string[],
-    options?: { timeoutMs?: number; kill?: { graceMs: number } },
-  ): void => {
+    options?: { timeoutMs?: number; kill?: { graceMs: number }; signal?: AbortSignal },
+  ): Promise<void> => {
     assert.ok(
       Number.isFinite(options?.timeoutMs) && options!.timeoutMs! > 0,
       `fold ledger call has no bounded timeoutMs: ${tool} ${args.join(' ')}`,
@@ -194,14 +201,14 @@ function createFoldLedgerAppleToolProvider(params: {
       ...(options?.kill ? { graceMs: options.kill.graceMs } : {}),
     };
     ledger.push(call);
-    params.onCall(call);
+    await params.onCall(call, options?.signal);
   };
   // Built on the shared recording provider so any call this route does not script (macosHelper,
   // macosHost, plist, or an unexpected runCommand) throws instead of being silently answered.
   const recording = createRecordingAppleToolProvider({
     simctl: async (args, options) => {
       if (args[0] === 'list') {
-        if (params.isTracking()) record('simctl', args, options);
+        if (params.isTracking()) await record('simctl', args, options);
         return {
           stdout: JSON.stringify({
             devices: {
@@ -213,11 +220,11 @@ function createFoldLedgerAppleToolProvider(params: {
         };
       }
       if (args[0] === 'launch') return ok;
-      record('simctl', args, options);
+      await record('simctl', args, options);
       return ok;
     },
     devicectl: async (args, options) => {
-      record('devicectl', args, options);
+      await record('devicectl', args, options);
       if (args.includes('hinge-angle')) {
         const angle = params.hingeAngleAt(hingeReads);
         hingeReads += 1;
@@ -231,7 +238,7 @@ function createFoldLedgerAppleToolProvider(params: {
   const provider: AppleToolProvider = {
     ...recording.provider,
     runCommand: async (cmd, args, options) => {
-      record('runCommand', [cmd, ...args], options);
+      await record('runCommand', [cmd, ...args], options);
       const probeAnswer = toolchainProbeAnswer(cmd, args);
       if (probeAnswer) return probeAnswer;
       assert.equal(cmd, 'xcrun', `unexpected runCommand call: ${cmd} ${args.join(' ')}`);
@@ -398,3 +405,176 @@ test('fold worst-case ledger covers the client envelope with the daemon-result m
       `exceeds the ${envelopeMs}ms envelope.\nLedger:\n${JSON.stringify(measured.ledger, null, 2)}`,
   );
 }, 20_000);
+
+test.each([
+  { command: 'batch' },
+  { command: 'replay' },
+  { command: 'replay', timeoutMs: 1_000 },
+  { command: 'replay', timeoutMs: 120_000 },
+  { command: 'replay', timeoutMs: 300_000 },
+] as const)(
+  '$command worst-case fold returns a daemon result (timeout=$timeoutMs)',
+  async ({ command, ...options }) => {
+    const timeoutMs = 'timeoutMs' in options ? options.timeoutMs : undefined;
+    const calibration = await runFoldLedgerScenario({
+      hingeAngleAt: alternatingHingeAngle,
+      withVirtualClock: false,
+    });
+    assert.equal(calibration.response.json.error?.data?.details?.reason, 'fold-pose-unsettled');
+    const settleAttempts = calibration.hingeReadCount;
+    await withColdFoldHelperCache(async () => {
+      const trajectory = [
+        { atMs: 0, angle: 0 },
+        { atMs: MAX_FOLD_DURATION_MS, angle: 100 },
+      ];
+      let tracking = false;
+      let activeTool = false;
+      let firstCall!: () => void;
+      const started = new Promise<void>((resolve) => {
+        firstCall = resolve;
+      });
+      const { provider, ledger, hingeReadCount } = createFoldLedgerAppleToolProvider({
+        hingeAngleAt: (index) => (index >= settleAttempts - 1 ? 100 : alternatingHingeAngle(index)),
+        isTracking: () => tracking,
+        onCall: async (call, signal) => {
+          if (!tracking) return;
+          firstCall();
+          activeTool = true;
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const timer = setTimeout(done, call.timeoutMs - 1 + (call.graceMs ?? 0));
+              function done() {
+                signal?.removeEventListener('abort', aborted);
+                resolve();
+              }
+              function aborted() {
+                clearTimeout(timer);
+                reject(signal!.reason);
+              }
+              signal?.addEventListener('abort', aborted, { once: true });
+              if (signal?.aborted) aborted();
+            });
+          } finally {
+            activeTool = false;
+          }
+        },
+      });
+      const daemon = await createProviderScenarioHarness({
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+        appleRunnerProvider: () => ({ hasLiveSession: () => true, runCommand: async () => ({}) }),
+        appleToolProvider: () => provider,
+      });
+      try {
+        await daemon.client().apps.open({
+          app: 'com.example.demo',
+          platform: 'ios',
+          udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+        });
+        ledger.splice(0);
+        const scriptPath = path.join(isolatedHome, 'fold.ad');
+        const request: DaemonWireRequest = {
+          token: daemon.token,
+          session: 'default',
+          command,
+          positionals: command === 'replay' ? [scriptPath] : [],
+          flags: {
+            platform: 'ios',
+            udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+            ...(command === 'batch'
+              ? {
+                  batchSteps: [
+                    {
+                      command: 'fold',
+                      positionals: [],
+                      flags: { keyframes: JSON.stringify(trajectory) },
+                    },
+                  ],
+                }
+              : {
+                  replayScriptSource: {
+                    entry: scriptPath,
+                    files: { [scriptPath]: `fold --keyframes '${JSON.stringify(trajectory)}'\n` },
+                  },
+                }),
+            ...(timeoutMs === undefined ? {} : { timeoutMs }),
+          },
+          meta: { requestId: 'composite-fold-deadline' },
+        };
+        const envelopeMs = resolveCommandRequestTimeoutMs(
+          resolveCommandTimeoutPolicy(command),
+          request,
+        )!;
+        const operationBudgetMs = timeoutMs ?? 60_000;
+        assert.equal(envelopeMs, operationBudgetMs + 30_000);
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        const start = Date.now();
+        tracking = true;
+        // Exercise the real client envelope and HTTP transport, including timeout classification.
+        const pending: Promise<DaemonResponse> = sendRequest(
+          { baseUrl: daemon.baseUrl, token: daemon.token, pid: 1 },
+          request,
+          'http',
+          resolveDaemonPaths(daemon.stateDir),
+          envelopeMs,
+          { host: createTestHostEnvironment() },
+        ).catch((error) => ({ ok: false, error: normalizeError(error) }));
+        let settled = false;
+        void pending.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        await started;
+        for (let turn = 0; turn < 1000 && !settled; turn++) {
+          if (activeTool) await vi.advanceTimersToNextTimerAsync();
+          await realSleep(1);
+        }
+        assert.ok(settled, `composite did not settle; ledger: ${JSON.stringify(ledger)}`);
+        const response = await pending;
+        const elapsedMs = Date.now() - start;
+        assert.ok(
+          elapsedMs + 30_000 <= envelopeMs,
+          `daemon result lost its margin: ${elapsedMs}; ledger: ${JSON.stringify(ledger)}`,
+        );
+        if (timeoutMs === 300_000) {
+          assert.equal(response.ok, true, JSON.stringify(response));
+          assert.equal(hingeReadCount(), settleAttempts);
+          assertFoldLedgerPhaseCoverage(ledger);
+        } else {
+          assert.equal(response.ok, false, JSON.stringify(response));
+          if (!response.ok) {
+            assert.equal(
+              response.error.code,
+              command === 'batch' ? 'COMMAND_FAILED' : 'REPLAY_DIVERGENCE',
+            );
+            assert.equal(response.error.details?.reason, 'daemon_request_timeout');
+            assert.equal(response.error.details?.timeoutMs, operationBudgetMs);
+            if (command === 'replay') {
+              expect(response.error.details).toMatchObject({
+                divergence: { step: { source: { path: scriptPath, line: 1 } } },
+              });
+            }
+          }
+        }
+        tracking = false;
+        vi.useRealTimers();
+        assert.equal(await daemon.hasSession(), true);
+        assertRpcOk(
+          await daemon.callCommand('fold', [], {
+            platform: 'ios',
+            udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+            keyframes: JSON.stringify(trajectory),
+          }),
+        );
+      } finally {
+        tracking = false;
+        vi.useRealTimers();
+        await daemon.close();
+      }
+    });
+  },
+  20_000,
+);

@@ -125,7 +125,9 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   helper: AndroidSnapshotHelperSessionHelperIdentity;
   payloadBase64?: string;
   timeoutMs: number;
+  signal?: AbortSignal;
 }): Promise<Record<string, string> | undefined> {
+  params.signal?.throwIfAborted();
   const session = await getLiveAndroidSnapshotHelperSession(params.deviceKey);
   if (!session) return undefined;
   if (!matchesSessionHelperIdentity(session.helper, params.helper)) {
@@ -154,12 +156,16 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
       session.port,
       command,
       params.timeoutMs,
+      params.signal,
     );
     headers = parseAndroidSnapshotHelperSessionTouchResponse(response, requestId);
   } catch (error) {
     // Transport-level failure: the session process can no longer be trusted. Stop it so the next
     // command runs against a fresh helper instead of a wedged socket.
-    await stopAndroidSnapshotHelperSession(params.deviceKey);
+    await stopAndroidSnapshotHelperSession(params.deviceKey, {
+      signal: params.signal,
+      cause: error,
+    });
     throw discloseHelperTouchDispatch(params.action, error);
   }
   if (headers.ok !== 'true') {

@@ -2,6 +2,67 @@ import { test, expect, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { withKeyedLock } from './keyed-lock.ts';
 
+test('canceled queued work returns before its owner and never runs or admits a competing task early', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const controller = new AbortController();
+  let release!: () => void;
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const owner = withKeyedLock(locks, 'session', async () => {
+    markStarted();
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  });
+  await started;
+  const expiredTask = vi.fn(async () => {});
+  const queued = withKeyedLock(locks, 'session', expiredTask, controller.signal);
+  const reason = new Error('deadline');
+  controller.abort(reason);
+  await assert.rejects(queued, (error) => error === reason);
+  const competingTask = vi.fn(async () => {});
+  const competing = withKeyedLock(locks, 'session', competingTask);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(competingTask.mock.calls.length, 0);
+  release();
+  await Promise.all([owner, competing]);
+  assert.equal(expiredTask.mock.calls.length, 0);
+  assert.equal(competingTask.mock.calls.length, 1);
+  assert.equal(locks.size, 0);
+});
+
+test('an abort after lock admission waits for the running task to settle', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const controller = new AbortController();
+  let release!: () => void;
+  let markStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let settled = false;
+  const running = withKeyedLock(
+    locks,
+    'session',
+    async () => {
+      markStarted();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    },
+    controller.signal,
+  ).finally(() => {
+    settled = true;
+  });
+  await started;
+  controller.abort();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(settled, false);
+  release();
+  await running;
+});
+
 test('withKeyedLock serializes work per key', async () => {
   const locks = new Map<string, Promise<unknown>>();
   const order: string[] = [];

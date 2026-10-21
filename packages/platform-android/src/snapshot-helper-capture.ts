@@ -33,7 +33,7 @@ import type {
 import type { AndroidAdbProvider } from './adb-executor.ts';
 import {
   recoverAndroidSnapshotHelperRetirement,
-  retireCanceledAndroidSnapshotHelperCapture,
+  retireCanceledAndroidSnapshotHelperCommand,
 } from './snapshot-helper-retirement.ts';
 
 type AndroidSnapshotHelperChunk = {
@@ -87,7 +87,7 @@ export async function captureAndroidSnapshotWithHelper(
     );
   } catch (error) {
     if (!options.signal?.aborted) throw error;
-    await retireCanceledAndroidSnapshotHelperCapture({
+    await retireCanceledAndroidSnapshotHelperCommand({
       deviceKey,
       packageName: resolved.packageName,
       adb: options.adb,
@@ -97,7 +97,7 @@ export async function captureAndroidSnapshotWithHelper(
     throw error;
   }
   if (options.signal?.aborted) {
-    await retireCanceledAndroidSnapshotHelperCapture({
+    await retireCanceledAndroidSnapshotHelperCommand({
       deviceKey,
       packageName: resolved.packageName,
       adb: options.adb,

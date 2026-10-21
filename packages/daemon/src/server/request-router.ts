@@ -56,7 +56,11 @@ import {
   type RequestExecutionScope,
 } from './request-execution-scope.ts';
 import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
-import { canRunReplayScopedAction } from '../core/daemon-command-registry.ts';
+import {
+  canRunReplayScopedAction,
+  resolveDaemonRequestTimeoutMs,
+} from '../core/daemon-command-registry.ts';
+import { resolveRequestTrackingId, withRequestDeadline } from '@agent-device/host-kit/request';
 import { isWebSession } from '../sessions/web-session-names.ts';
 import {
   inferFillText,
@@ -185,6 +189,12 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     : deps.deviceInventoryGateways;
 
   async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
+    if (resolveDaemonRequestTimeoutMs(req) !== undefined) {
+      req = {
+        ...req,
+        meta: { ...req.meta, requestId: resolveRequestTrackingId(req.meta?.requestId) },
+      };
+    }
     return await reportEndedLeases(req, handleRequestOnLedger);
   }
 
@@ -200,10 +210,21 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         logPath,
       },
       async () => {
-        const response = await withCommandHost(
-          { host, requestEnv: requestCommandEnv(req) },
-          async () => await runRequestWithinScope(req),
-        );
+        const run = async () =>
+          await withCommandHost(
+            { host, requestEnv: requestCommandEnv(req) },
+            async () => await runRequestWithinScope(req),
+          );
+        let response: DaemonResponse;
+        try {
+          const timeoutMs = resolveDaemonRequestTimeoutMs(req);
+          response =
+            timeoutMs === undefined
+              ? await run()
+              : await withRequestDeadline(req.meta!.requestId!, timeoutMs, run);
+        } catch (error) {
+          response = finalizeThrownRequestError(error);
+        }
         if (!response.ok) {
           // ADR 0012 decision 6, R7 (C5a): a command that finds no session but
           // hits a live repair tombstone gets `REPAIR_SESSION_EXPIRED` with

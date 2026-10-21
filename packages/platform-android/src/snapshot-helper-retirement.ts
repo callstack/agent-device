@@ -49,11 +49,11 @@ export function getAndroidSnapshotHelperSessionDeviceKey(
 }
 
 /**
- * Stops the runtime a canceled one-shot capture left behind and records what could not be proven.
+ * Stops the runtime a canceled one-shot helper command left behind and records what could not be proven.
  * The caller's own outcome — usually a cancellation — is what the caller reports; ownership is a
  * device fact recovered before the next command starts work, not a reason to fail this one.
  */
-export async function retireCanceledAndroidSnapshotHelperCapture(params: {
+export async function retireCanceledAndroidSnapshotHelperCommand(params: {
   deviceKey: string;
   packageName: string;
   adb: AndroidAdbExecutor;

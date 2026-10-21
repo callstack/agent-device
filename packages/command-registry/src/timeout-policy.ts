@@ -77,12 +77,25 @@ export function resolveCommandRequestTimeoutMs(
   input: RequestTimeoutInput,
 ): number | undefined {
   if (policy.envelopeMs === 'unbounded') return undefined;
+  const daemonBudgetMs = resolveCommandDaemonTimeoutMs(policy, input);
+  if (daemonBudgetMs !== undefined) return daemonBudgetMs + REQUEST_TIMEOUT_BUDGET_MARGIN_MS;
   const boundedPolicy: BoundedTimeoutPolicy = { ...policy, envelopeMs: policy.envelopeMs };
   return (
     resolvePositionalBudgetTimeoutMs(boundedPolicy, input.positionals ?? []) ??
     resolveFlagBudgetTimeoutMs(boundedPolicy, input.flags) ??
     boundedPolicy.envelopeMs
   );
+}
+
+/** Resolves an enforced daemon request deadline, when the command declares one. */
+export function resolveCommandDaemonTimeoutMs(
+  policy: CommandTimeoutPolicy,
+  input: RequestTimeoutInput,
+): number | undefined {
+  if (policy.daemonDeadlineMs === undefined) return undefined;
+  return policy.budget.source === 'flag' && typeof input.flags?.timeoutMs === 'number'
+    ? input.flags.timeoutMs
+    : policy.daemonDeadlineMs;
 }
 
 function resolvePositionalBudgetTimeoutMs(

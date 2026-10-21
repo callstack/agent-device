@@ -1,4 +1,5 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import {
   AppError,
@@ -10,6 +11,9 @@ import {
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
+  getRequestSignal,
+  throwIfRequestCanceled,
+  withRequestDeadline,
 } from './request-cancel.ts';
 
 test('resolveRequestTrackingId generates unique ids for fallback seeds', () => {
@@ -18,6 +22,179 @@ test('resolveRequestTrackingId generates unique ids for fallback seeds', () => {
   assert.match(first, /^req:42:/);
   assert.match(second, /^req:42:/);
   assert.notEqual(first, second);
+});
+
+test('daemon deadline cancels in-flight work with its typed reason and retains registration until settlement', async () => {
+  vi.useFakeTimers();
+  const registration = registerRequestAbort('deadline');
+  try {
+    const signal = getRequestSignal('deadline')!;
+    let finish!: () => void;
+    const task = withRequestDeadline('deadline', 60_000, async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      throw new Error('transport aborted without a response');
+    });
+    const rejected = assert.rejects(
+      task,
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'daemon_request_timeout' &&
+        error.details.timeoutMs === 60_000,
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(signal.aborted, true);
+    assert.equal(getRequestSignal('deadline'), signal);
+    finish();
+    await rejected;
+    assert.equal(getRequestSignal('deadline'), signal);
+  } finally {
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test('a completed daemon deadline releases its timer and preserves later cancellation', async () => {
+  vi.useFakeTimers();
+  const registration = registerRequestAbort('completed-deadline');
+  try {
+    const response: DaemonResponse = { ok: true, data: { completed: true } };
+    assert.equal(
+      await withRequestDeadline('completed-deadline', 100, async () => response),
+      response,
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    assert.equal(getRequestSignal('completed-deadline')?.aborted, false);
+    markRequestCanceled('completed-deadline');
+    assert.throws(() => throwIfRequestCanceled('completed-deadline'), isRequestCanceledError);
+  } finally {
+    clearRequestAbortRegistration(registration);
+    vi.useRealTimers();
+  }
+});
+
+test.each(['timer', 'wall-clock'])(
+  'a late completed response stays successful after the %s deadline',
+  async (clock) => {
+    vi.useFakeTimers();
+    try {
+      const response: DaemonResponse = {
+        ok: true,
+        data: { executed: 3, results: ['press', 'fill', 'longpress'] },
+      };
+      const result = await withRequestDeadline('late-success', 100, async () => {
+        if (clock === 'timer') await vi.advanceTimersByTimeAsync(101);
+        else vi.setSystemTime(Date.now() + 101);
+        return response;
+      });
+      assert.equal(result, response);
+      assert.equal(getRequestSignal('late-success'), undefined);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+test('deadline failure retains response diagnostics and progress while adding timeout metadata', async () => {
+  vi.useFakeTimers();
+  try {
+    const response: DaemonResponse = {
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'Batch failed at step 3',
+        hint: 'Inspect the failed step',
+        diagnosticId: 'diag-3',
+        logPath: '/tmp/request.log',
+        retriable: false,
+        details: {
+          executed: 2,
+          partialResults: [{ command: 'press' }, { command: 'fill' }],
+          dispatched: 'unknown',
+          reason: 'transport_aborted',
+        },
+      },
+    };
+    const result = await withRequestDeadline('failed-response', 100, async () => {
+      await vi.advanceTimersByTimeAsync(100);
+      return response;
+    });
+    assert.equal(result.ok, false);
+    if (result.ok) assert.fail('deadline failure became a success');
+    assert.equal(result.error.code, 'COMMAND_FAILED');
+    assert.equal(result.error.message, 'Batch failed at step 3');
+    assert.equal(result.error.hint, 'Inspect the failed step');
+    assert.equal(result.error.diagnosticId, 'diag-3');
+    assert.equal(result.error.logPath, '/tmp/request.log');
+    assert.equal(result.error.retriable, false);
+    assert.equal(result.error.details?.executed, 2);
+    assert.deepEqual(result.error.details?.partialResults, [
+      { command: 'press' },
+      { command: 'fill' },
+    ]);
+    assert.equal(result.error.details?.dispatched, 'unknown');
+    assert.equal(result.error.details?.reason, 'daemon_request_timeout');
+    assert.equal(result.error.details?.causeReason, 'transport_aborted');
+    assert.equal(result.error.details?.timeoutMs, 100);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a thrown error before the deadline retains its identity', async () => {
+  const error = new AppError('INVALID_ARGS', 'Invalid replay');
+  await assert.rejects(
+    withRequestDeadline('early-throw', 100, async () => {
+      throw error;
+    }),
+    (caught) => caught === error,
+  );
+});
+
+test.each([false, true])(
+  'a throw at the wall-clock cutoff observes the deadline and preserves prior cancellation=%s',
+  async (canceled) => {
+    vi.useFakeTimers();
+    const requestId = `wall-clock-throw-${canceled}`;
+    const registration = registerRequestAbort(requestId);
+    try {
+      const signal = getRequestSignal(requestId)!;
+      await assert.rejects(
+        withRequestDeadline(requestId, 100, async () => {
+          if (canceled) markRequestCanceled(requestId);
+          vi.setSystemTime(Date.now() + 100);
+          assert.equal(signal.aborted, canceled);
+          throw new Error('synchronous operation failed after blocking the event loop');
+        }),
+        (error: unknown) => {
+          assert.equal(error, signal.reason);
+          if (canceled) return isRequestCanceledError(error);
+          return (
+            error instanceof AppError &&
+            error.details?.reason === 'daemon_request_timeout' &&
+            error.details.timeoutMs === 100
+          );
+        },
+      );
+      assert.equal(signal.aborted, true);
+      assert.equal(getRequestSignal(requestId), signal);
+      assert.equal(vi.getTimerCount(), 0);
+    } finally {
+      clearRequestAbortRegistration(registration);
+      vi.useRealTimers();
+    }
+  },
+);
+
+test('explicit cancellation still rejects a settled response without deadline metadata', async () => {
+  await assert.rejects(
+    withRequestDeadline('canceled-response', 100, async () => {
+      markRequestCanceled('canceled-response');
+      return { ok: true };
+    }),
+    isRequestCanceledError,
+  );
 });
 
 test('createRequestCanceledError includes stable cancellation reason marker', () => {

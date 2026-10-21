@@ -31,8 +31,7 @@ export type DaemonCommandTraits = Omit<DaemonCommandDescriptor, 'command'>;
  *  - `'none'`             — the command has no user-supplied budget; the request
  *                           envelope is exactly `envelopeMs`.
  *  - `'flag'`             — the `--timeout` flag (`flags.timeoutMs`). By default it
- *                           REPLACES the envelope (replay semantics: --timeout
- *                           bounds the request). With `envelope: 'widen'` it only
+ *                           REPLACES the envelope. With `envelope: 'widen'` it only
  *                           ever EXTENDS the envelope to envelopeMs + budget +
  *                           margin (interaction --settle semantics, #1101: the
  *                           flag bounds a post-action wait, so the request must
@@ -73,6 +72,8 @@ export type CommandTimeoutBudget =
  */
 export type CommandTimeoutPolicy = {
   budget: CommandTimeoutBudget;
+  /** Default daemon wall-clock budget. Its envelope is the effective budget plus the result margin. */
+  daemonDeadlineMs?: number;
   envelopeMs: number | 'unbounded';
   onTimeout: 'preserve-daemon' | 'reset-daemon';
 };

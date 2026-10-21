@@ -83,13 +83,14 @@ export function createAndroidInteractor(
     close: (app) => closeAndroidApp(device, app),
     tap: (x, y) => pressAndroid(device, x, y),
     doubleTap: (x, y) => doubleTapAndroid(device, x, y),
-    longPress: (x, y, durationMs) => longPressAndroid(device, x, y, durationMs),
+    longPress: (x, y, durationMs) =>
+      longPressAndroid(device, x, y, durationMs, runnerContext?.signal),
     focus: (x, y) => focusAndroid(device, x, y),
     type: (text, delayMs) => typeAndroid(device, text, delayMs),
     fill: (x, y, text, delayMs) => fillAndroid(device, x, y, text, delayMs, { helperSessionScope }),
     scroll: (direction, options) =>
       scrollAndroid(device, direction, { ...options, helperSessionScope }),
-    performGesture: (plan) => executeAndroidTouchPlan(device, plan),
+    performGesture: (plan) => executeAndroidTouchPlan(device, plan, runnerContext?.signal),
     gestureViewport: () => readAndroidGestureViewport(device, { helperSessionScope }),
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
     readTextAtPoint: async (point, options) => {

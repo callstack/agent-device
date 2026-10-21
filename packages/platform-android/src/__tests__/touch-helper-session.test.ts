@@ -93,7 +93,7 @@ class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
   }
 }
 
-type TouchSessionCommandHandler = (command: string, requestId: string) => string;
+type TouchSessionCommandHandler = (command: string, requestId: string) => string | undefined;
 
 function readSessionPort(args: readonly string[]): number {
   const index = args.indexOf('sessionPort');
@@ -170,7 +170,8 @@ function createFakeTouchHelperSessionProvider(
             server.close(() => process.emitExit(0, null));
             return;
           }
-          socket.end(handleCommand(command, requestId));
+          const response = handleCommand(command, requestId);
+          if (response !== undefined) socket.end(response);
         });
       });
       server.listen(port, '127.0.0.1', () => {
@@ -191,6 +192,62 @@ function createFakeTouchHelperSessionProvider(
     },
   };
 }
+
+test('aborting an in-flight persistent gesture retires its helper without one-shot replay', async () => {
+  const device = makeIsolatedDevice();
+  const controller = new AbortController();
+  let entered!: () => void;
+  const injecting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const provider = createFakeTouchHelperSessionProvider((command, requestId) => {
+    if (command.startsWith('gesture')) {
+      entered();
+      return undefined;
+    }
+    return sessionHeaderResponse({
+      agentDeviceProtocol: 'android-snapshot-helper-v1',
+      requestId,
+      ok: 'true',
+      x: '0',
+      y: '0',
+      width: '400',
+      height: '800',
+    });
+  });
+  let retired = false;
+  let oneShot = false;
+  await withAndroidAdbProvider(
+    {
+      ...provider,
+      exec: currentVersionAdb(async (args, options) => {
+        if (args.includes('force-stop')) retired = true;
+        if (args.includes('instrument')) oneShot = true;
+        return await provider.exec(args, options);
+      }),
+    },
+    { serial: device.id },
+    async () => {
+      await readAndroidTouchHelperViewportReading(device, { helperSessionScope: 'daemon-session' });
+      const pending = executeAndroidTouchHelperPlan(
+        device,
+        lowerAndroidTouchPlan(flingPlan()),
+        controller.signal,
+      );
+      await injecting;
+      const reason = new AppError('COMMAND_FAILED', 'deadline', {
+        reason: 'daemon_request_timeout',
+      });
+      controller.abort(reason);
+      await assert.rejects(
+        pending,
+        (error) => error instanceof AppError && error.details?.reason === 'daemon_request_timeout',
+      );
+      assert.equal(retired, true);
+      assert.equal(oneShot, false);
+    },
+  );
+});
 
 test('touch helper does not run one-shot while the device still runs the helper', async () => {
   const device = makeIsolatedDevice();

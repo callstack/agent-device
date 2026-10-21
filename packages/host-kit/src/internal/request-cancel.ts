@@ -1,4 +1,5 @@
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { runtimeSlot } from '../runtime-slots.ts';
 
 type RequestCancelState = {
@@ -83,7 +84,7 @@ export function registerRequestAbort(
   const controller = new AbortController();
   requestAbortControllers().set(requestId, controller);
   if (canceledRequestIds().has(requestId)) {
-    controller.abort();
+    controller.abort(createRequestCanceledError());
   }
   return { requestId, controller };
 }
@@ -129,7 +130,7 @@ export function clearRequestAbortRegistration(
 
 export function isRequestCanceled(requestId: string | undefined): boolean {
   if (!requestId) return false;
-  return canceledRequestIds().has(requestId);
+  return canceledRequestIds().has(requestId) || getRequestSignal(requestId)?.aborted === true;
 }
 
 export function getRequestSignal(requestId: string | undefined): AbortSignal | undefined {
@@ -138,7 +139,61 @@ export function getRequestSignal(requestId: string | undefined): AbortSignal | u
 }
 
 export function throwIfRequestCanceled(requestId: string | undefined): void {
+  getRequestSignal(requestId)?.throwIfAborted();
   if (isRequestCanceled(requestId)) {
     throw createRequestCanceledError();
+  }
+}
+
+/** Keeps a daemon deadline on the request's existing cancellation signal until its work settles. */
+export async function withRequestDeadline(
+  requestId: string,
+  timeoutMs: number,
+  task: () => Promise<DaemonResponse>,
+): Promise<DaemonResponse> {
+  const ownedRegistration = requestAbortControllers().has(requestId)
+    ? undefined
+    : registerRequestAbort(requestId);
+  const controller = requestAbortControllers().get(requestId)!;
+  const deadlineMs = Date.now() + timeoutMs;
+  const deadlineError = new AppError('COMMAND_FAILED', 'Daemon request deadline exceeded', {
+    reason: 'daemon_request_timeout',
+    timeoutMs,
+    requestId,
+  });
+  const expire = () => controller.abort(deadlineError);
+  const timer = setTimeout(expire, timeoutMs);
+  try {
+    controller.signal.throwIfAborted();
+    const result = await task();
+    if (Date.now() >= deadlineMs) expire();
+    if (controller.signal.reason === deadlineError) {
+      return result.ok
+        ? result
+        : {
+            ...result,
+            error: {
+              ...result.error,
+              details: {
+                ...result.error.details,
+                ...(typeof result.error.details?.reason === 'string' &&
+                result.error.details.reason !== 'daemon_request_timeout'
+                  ? { causeReason: result.error.details.reason }
+                  : {}),
+                reason: 'daemon_request_timeout',
+                timeoutMs,
+              },
+            },
+          };
+    }
+    controller.signal.throwIfAborted();
+    return result;
+  } catch (error) {
+    if (Date.now() >= deadlineMs) expire();
+    controller.signal.throwIfAborted();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    clearRequestAbortRegistration(ownedRegistration);
   }
 }

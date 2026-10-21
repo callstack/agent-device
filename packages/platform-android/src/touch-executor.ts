@@ -15,7 +15,9 @@ import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 export async function executeAndroidTouchPlan(
   device: DeviceInfo,
   plan: AndroidTouchPlan,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
+  signal?.throwIfAborted();
   const loweredPlan = lowerAndroidTouchPlan(plan);
   const provider = resolveAndroidTouchProvider(device);
   if (provider) {
@@ -29,7 +31,7 @@ export async function executeAndroidTouchPlan(
     const result = (await provider.touch(providerPlan)) ?? {};
     return { backend: 'provider-native-touch', ...result };
   }
-  return await executeAndroidTouchHelperPlan(device, loweredPlan);
+  return await executeAndroidTouchHelperPlan(device, loweredPlan, signal);
 }
 
 export async function readAndroidGestureViewport(
