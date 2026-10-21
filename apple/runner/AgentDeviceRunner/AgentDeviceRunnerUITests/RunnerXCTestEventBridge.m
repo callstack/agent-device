@@ -1,6 +1,7 @@
 #import "RunnerXCTestEventBridge.h"
 #import "RunnerObjCExceptionCatcher.h"
 #import <CoreGraphics/CoreGraphics.h>
+#import <XCTest/XCTest.h>
 #import <math.h>
 
 NSString * _Nullable RunnerResolveXCTestEventBridge(
@@ -214,6 +215,30 @@ BOOL RunnerResolveApplicationScreen(
 // routed by the same window its reference frame was measured on. The window still resolves here:
 // its frame is read before its screen, and a window that answers empty or raises fails closed with
 // the same reasons the application walk gives.
+NSString * _Nullable RunnerResolveSoleScreenDisplayID(NSUInteger *displayID) {
+  __block NSUInteger screenCount = 0;
+  __block NSUInteger readDisplayID = 0;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    NSArray<XCUIScreen *> *screens = XCUIScreen.screens;
+    screenCount = screens.count;
+    if (screenCount != 1) return;
+    NSNumber *identifier = [screens.firstObject valueForKey:@"displayID"];
+    if ([identifier isKindOfClass:NSNumber.class]) {
+      readDisplayID = identifier.unsignedIntegerValue;
+    }
+  }];
+  if (exception != nil || screenCount != 1 || readDisplayID == 0) {
+    NSLog(
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=sole-screen screens=%lu raised=%@",
+      (unsigned long)screenCount,
+      exception != nil ? @"yes" : @"no"
+    );
+    return @"private XCTest event synthesis unavailable: no resolved application window and no sole screen to route to";
+  }
+  *displayID = readDisplayID;
+  return nil;
+}
+
 NSString * _Nullable RunnerResolveWindowDisplayID(id window, NSUInteger *displayID) {
   __block CGRect frame = CGRectNull;
   NSString *frameException = [RunnerObjCExceptionCatcher catchException:^{

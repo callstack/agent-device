@@ -331,10 +331,10 @@ static NSString * _Nullable RunnerCreateEventRecord(
   if (missing != nil) return missing;
 
   NSUInteger displayID = 0;
-  if (resolvedWindow == nil) {
-    return @"private XCTest event synthesis unavailable: no resolved application window";
-  }
-  NSString *displayError = RunnerResolveWindowDisplayID(resolvedWindow, &displayID);
+  // A nil window is the caller's sole-screen route: the app tree could not name its window.
+  NSString *displayError = resolvedWindow == nil
+    ? RunnerResolveSoleScreenDisplayID(&displayID)
+    : RunnerResolveWindowDisplayID(resolvedWindow, &displayID);
   if (displayError != nil) return displayError;
   NSInteger interfaceOrientation =
     ((RunnerMsgSendInteger)objc_msgSend)(application, bridge->interfaceOrientationSelector);

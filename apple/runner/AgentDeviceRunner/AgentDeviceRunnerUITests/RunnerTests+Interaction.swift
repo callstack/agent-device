@@ -259,13 +259,23 @@ extension RunnerTests {
   /// records, and the chosen window is read again on its way to a display ID
   /// (`RunnerResolveWindowDisplayID`).
   func resolveRunnerWindow(app: XCUIApplication) -> (window: XCUIElement?, frame: CGRect) {
+    guard let resolved = resolveRunnerWindowElement(app: app) else {
+      return (nil, app.frame)
+    }
+    return (resolved.window, resolved.frame)
+  }
+
+  /// The app's first window with a usable frame, or nil. Unlike `resolveRunnerWindow` it never falls
+  /// back to `app.frame`: when the windows query fails because XCTest cannot serialize the app's
+  /// tree, that read fails the same way after XCTest's own retries (about 2s on Bluesky's feed).
+  func resolveRunnerWindowElement(app: XCUIApplication) -> (window: XCUIElement, frame: CGRect)? {
     for window in app.windows.allElementsBoundByIndex where window.exists {
       let frame = window.frame
       if !frame.isEmpty {
         return (window, frame)
       }
     }
-    return (nil, app.frame)
+    return nil
   }
 
   func onScreenWindowFrame(app: XCUIApplication) -> CGRect {

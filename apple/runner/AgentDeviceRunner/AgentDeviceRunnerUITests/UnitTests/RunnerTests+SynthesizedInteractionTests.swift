@@ -3,6 +3,37 @@ import AgentDeviceSnapshotPresentation
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
+  func testSoleScreenReferenceFrameLaysTheScreenInTheAppsOrientation() {
+    let portrait = CGSize(width: 402, height: 874)
+    for orientation in [RunnerInterfaceOrientation.portrait, RunnerInterfaceOrientation.portraitUpsideDown] {
+      XCTAssertEqual(
+        Self.soleScreenReferenceFrame(nativePortraitSize: portrait, interfaceOrientation: orientation),
+        CGRect(x: 0, y: 0, width: 402, height: 874)
+      )
+    }
+    for orientation in [RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight] {
+      XCTAssertEqual(
+        Self.soleScreenReferenceFrame(nativePortraitSize: portrait, interfaceOrientation: orientation),
+        CGRect(x: 0, y: 0, width: 874, height: 402)
+      )
+    }
+  }
+
+  func testSoleScreenReferenceFrameRefusesAnUnknownOrientationOrAnEmptyScreen() {
+    XCTAssertNil(
+      Self.soleScreenReferenceFrame(
+        nativePortraitSize: CGSize(width: 402, height: 874),
+        interfaceOrientation: RunnerInterfaceOrientation.unknown
+      )
+    )
+    XCTAssertNil(
+      Self.soleScreenReferenceFrame(
+        nativePortraitSize: .zero,
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
+      )
+    )
+  }
+
   func testSynthesizedDispatchInvertsCaptureOnEveryInterfaceOrientation() {
     let frames = [
       CGRect(x: 0, y: 0, width: 430, height: 932),

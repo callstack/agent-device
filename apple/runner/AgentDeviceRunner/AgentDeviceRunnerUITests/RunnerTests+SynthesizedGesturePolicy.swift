@@ -57,8 +57,10 @@ struct SynthesizedGesturePolicy: Equatable, Hashable {
 struct SynthesizedCoordinateContext {
   let referenceFrame: CGRect
   /// The window `referenceFrame` was measured on. Synthesized records route their display ID
-  /// through this same window so geometry and routing can never name different windows.
-  let resolvedWindow: XCUIElement
+  /// through this same window so geometry and routing can never name different windows. Nil is the
+  /// sole-screen route: XCTest could not resolve the window, `referenceFrame` is the device's only
+  /// screen, and the record is routed to that screen.
+  let resolvedWindow: XCUIElement?
   let keyboardPolicy: SynthesizedKeyboardPolicy
   let accessibilityHealth: RunnerAccessibilityHealth
 

@@ -388,11 +388,17 @@ extension RunnerTests {
   ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
     let health = mainOwned.accessibilityHealth
-    let resolved = resolveRunnerWindow(app: app)
-    guard let window = resolved.window else {
+    let window: XCUIElement?
+    let referenceFrame: CGRect
+    if let resolved = resolveRunnerWindowElement(app: app) {
+      window = resolved.window
+      referenceFrame = resolved.frame
+    } else if let soleScreenFrame = soleScreenReferenceFrame(app: app) {
+      window = nil
+      referenceFrame = soleScreenFrame
+    } else {
       return nil
     }
-    let referenceFrame = resolved.frame
     guard referenceFrame.width.isFinite, referenceFrame.height.isFinite,
       referenceFrame.width > 0, referenceFrame.height > 0
     else {
@@ -409,6 +415,52 @@ extension RunnerTests {
 #endif
   }
 
+
+#if os(iOS)
+  /// The reference frame of the sole-screen route, read without the app's accessibility tree: on an
+  /// iPhone with one screen a full-screen app's window is that screen. A deep app tree makes the
+  /// windows query fail with `kAXErrorIllegalArgument`, and without this route every synthesized
+  /// tap and scroll on such a screen failed even though synthesis itself needs no tree. Anything
+  /// that can show an app in part of a screen (iPad, more than one screen) keeps requiring a window.
+  @MainActor
+  func soleScreenReferenceFrame(app: XCUIApplication) -> CGRect? {
+    guard UIDevice.current.userInterfaceIdiom == .phone, XCUIScreen.screens.count == 1 else {
+      return nil
+    }
+    let screen = UIScreen.main
+    let scale = screen.nativeScale
+    guard scale > 0 else { return nil }
+    let frame = Self.soleScreenReferenceFrame(
+      nativePortraitSize: CGSize(
+        width: screen.nativeBounds.width / scale,
+        height: screen.nativeBounds.height / scale
+      ),
+      interfaceOrientation: Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    )
+    NSLog(
+      "AGENT_DEVICE_RUNNER_SYNTHESIZED_SOLE_SCREEN_ROUTE resolved=%@",
+      frame.map { NSCoder.string(for: $0) } ?? "none"
+    )
+    return frame
+  }
+#endif
+
+  /// The screen in the app's interface orientation, anchored at the origin like a window frame. An
+  /// unknown orientation cannot say which way to lay the screen, so it names no frame.
+  static func soleScreenReferenceFrame(
+    nativePortraitSize size: CGSize,
+    interfaceOrientation: Int
+  ) -> CGRect? {
+    guard size.width > 0, size.height > 0 else { return nil }
+    switch interfaceOrientation {
+    case RunnerInterfaceOrientation.portrait, RunnerInterfaceOrientation.portraitUpsideDown:
+      return CGRect(origin: .zero, size: size)
+    case RunnerInterfaceOrientation.landscapeLeft, RunnerInterfaceOrientation.landscapeRight:
+      return CGRect(x: 0, y: 0, width: size.height, height: size.width)
+    default:
+      return nil
+    }
+  }
 
   func keyboardAvoidingSynthesizedDragPoints(
     app: XCUIApplication,
@@ -594,7 +646,7 @@ extension RunnerTests {
         ]
       }
     }
-    let resolvedWindow = resolveRunnerWindow(app: app).window
+    let resolvedWindow = resolveRunnerWindowElement(app: app)?.window
     if let message = RunnerSynthesizedGesture.synthesizeGesture(
       withApplication: app,
       resolvedWindow: resolvedWindow,
