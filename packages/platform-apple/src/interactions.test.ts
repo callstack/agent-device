@@ -729,3 +729,38 @@ test('TEXT_ENTRY_ROUTES names every route the Swift runner assigns', () => {
   assert.ok(swiftRoutes.size > 0, 'expected to find textEntryRoute literals in the runner sources');
   assert.deepEqual([...swiftRoutes].sort(), [...TEXT_ENTRY_ROUTES].sort());
 });
+
+test('an iOS single point press carries request evidence into the native tap command', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({});
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    { appBundleId: 'com.example.App' },
+    process.env,
+  );
+  const evidence = {
+    source: 'ref-frame' as const,
+    targetBundleId: 'com.example.App',
+    point: { x: 100, y: 200 },
+    textInputRects: [{ x: 0, y: 0, width: 30, height: 40 }],
+  };
+  await overrides.pressPoint!(
+    { x: 100, y: 200 },
+    {
+      button: 'primary',
+      count: 1,
+      intervalMs: 0,
+      holdMs: 0,
+      jitterPx: 0,
+      doubleTap: false,
+      coordinateTapTextInputEvidence: evidence,
+    },
+  );
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'tap',
+    x: 100,
+    y: 200,
+    synthesized: true,
+    appBundleId: 'com.example.App',
+    coordinateTapTextInputEvidence: evidence,
+  });
+});

@@ -85,6 +85,75 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
   }
 
+  @MainActor
+  func testFreshCoordinateTapEvidenceSkipsProbeAndClearsTypingWitness() throws {
+    app.launchArguments = ["--agent-device-text-entry-regression", "--agent-device-text-entry-tap-witness"]
+    app.launch()
+    defer {
+      textInputProbeIssueForTesting = nil
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    clearSnapshotXCTestChannelPenalty(reason: "fresh-runner")
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let fieldFrame = field.frame
+    let fieldTap = try runnerCommandFixture(
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"tap","commandId":"tap-field-before-exclusion","x":\#(fieldFrame.midX),"y":\#(fieldFrame.midY),"synthesized":true}"#
+    )
+    XCTAssertTrue(try execute(command: fieldTap).ok)
+    XCTAssertNotNil(textEntryTapWitness)
+    let button = app.buttons["agent-device-tap-witness"]
+    let frame = button.frame
+    textInputProbeIssueForTesting = XCTIssue(type: .assertionFailure, compactDescription: "excluded point must not query text inputs")
+    let tap = try runnerCommandFixture(
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"tap","commandId":"tap-excluded-point","x":\#(frame.midX),"y":\#(frame.midY),"synthesized":true,"coordinateTapTextInputEvidence":{"source":"ref-frame","targetBundleId":"com.callstack.agentdevice.runner","point":{"x":\#(frame.midX),"y":\#(frame.midY)},"textInputRects":[{"x":\#(fieldFrame.minX),"y":\#(fieldFrame.minY),"width":\#(fieldFrame.width),"height":\#(fieldFrame.height)}]}}"#
+    )
+    let response = try execute(command: tap)
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertNotNil(textInputProbeIssueForTesting, "skipping must bypass all optional text-input queries")
+    textInputProbeIssueForTesting = nil
+    XCTAssertNil(textEntryTapWitness, "a skipped probe must clear the preceding field's typing authorization")
+    XCTAssertEqual(app.staticTexts["agent-device-tap-witness-presses"].label, "presses=1")
+    try XCTSkipIf(isKeyboardVisible(app: app), "software keyboard is up; hidden-keyboard authorization cannot be exercised")
+    let type = try runnerCommandFixture(#"{"appBundleId":"com.callstack.agentdevice.runner","command":"type","commandId":"type-after-exclusion","text":"must-not-type","textEntryMode":"append"}"#)
+    let typed = try execute(command: type)
+    XCTAssertFalse(typed.ok)
+    XCTAssertEqual(typed.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertEqual(field.value as? String, "")
+  }
+
+  @MainActor
+  func testCoordinateTapEvidenceContainingInputPreservesBareTypingWitness() throws {
+    app.launchArguments = ["--agent-device-text-entry-regression"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(field.waitForFixtureExistence(timeout: appExistenceTimeout))
+    let frame = field.frame
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    clearSnapshotXCTestChannelPenalty(reason: "fresh-runner")
+    let tap = try runnerCommandFixture(
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"tap","commandId":"tap-input-evidence","x":\#(frame.midX),"y":\#(frame.midY),"synthesized":true,"coordinateTapTextInputEvidence":{"source":"selector-capture","targetBundleId":"com.callstack.agentdevice.runner","point":{"x":\#(frame.midX),"y":\#(frame.midY)},"textInputRects":[{"x":\#(frame.minX),"y":\#(frame.minY),"width":\#(frame.width),"height":\#(frame.height)}]}}"#
+    )
+    XCTAssertTrue(try execute(command: tap).ok)
+    XCTAssertNotNil(textEntryTapWitness)
+    try XCTSkipIf(isKeyboardVisible(app: app), "software keyboard is up; hidden-keyboard witness cannot be exercised")
+    let type = try runnerCommandFixture(#"{"appBundleId":"com.callstack.agentdevice.runner","command":"type","commandId":"type-input-evidence","text":"evidence-witness","textEntryMode":"append"}"#)
+    let response = try execute(command: type)
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.textEntryRoute, "xctest-element")
+    XCTAssertEqual(field.value as? String, "evidence-witness")
+  }
+
   func testTextInputProbeContainmentExcludesRequiredReadsAndLaterIssues() {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()

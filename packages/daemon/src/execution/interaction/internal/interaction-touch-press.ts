@@ -106,7 +106,8 @@ function buildTargetedRuntimeOptions(
   return {
     androidFreshnessBaseline: admitted.androidFreshnessBaseline,
     refContext: admitted.refContext,
-    iosTapCorroboration: { target, extra: targetedExtra },
+    target,
+    iosTapCorroboration: { extra: targetedExtra },
     run: async (runtime) =>
       await runTargetedTouchInteraction({
         runtime,

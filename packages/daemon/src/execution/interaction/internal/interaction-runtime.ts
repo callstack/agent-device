@@ -1,3 +1,5 @@
+import type { InteractionTarget } from '@agent-device/contracts/interaction';
+import { buildCoordinateTapTextInputEvidence } from './coordinate-tap-text-input-evidence.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
@@ -15,7 +17,7 @@ import { recordCaptureProof } from '../../../core/capture-disclosure.ts';
 import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
 import { runtimeExecutionFromContext } from '../../../core/snapshot-runtime-capture-input.ts';
 import { createDaemonRuntimeSessionStore } from '../../../core/runtime-session.ts';
-import { expireRefFrame } from '../../../core/ref-frame.ts';
+import { expireRefFrame, refFrame, refFrameState, refFrameTree } from '../../../core/ref-frame.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';
 import type {
   CaptureSnapshotForSession,
@@ -39,6 +41,7 @@ export async function createInteractionRuntimeForRoute(
     InteractionRouteInput & {
       captureSnapshotForSession: CaptureSnapshotForSession;
       pairedGestureViewport?: Rect;
+      tapTarget?: InteractionTarget;
       touchExecutor?: BoundTouchExecutor;
       gestures?: BoundGestureExecutor;
       /**
@@ -54,6 +57,7 @@ export async function createInteractionRuntimeForRoute(
   const ref = bindInteractionSession(params).sessionRef;
   if (!ref) throw new KernelAppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
   const session = params.sessionStore.requireCurrent(ref);
+  const consumedCapture = params.consumedCapture ?? {};
   return await createInteractionAgentDevice({
     createCommandSurface: params.createCommandSurface,
     requestId: params.req.meta?.requestId,
@@ -68,7 +72,7 @@ export async function createInteractionRuntimeForRoute(
         params.contextFromFlags,
         options,
       );
-      if (params.consumedCapture) params.consumedCapture.state = snapshot;
+      consumedCapture.state = snapshot;
       return recordCaptureProof(params.captureProof, snapshot);
     },
     runtimeSessions: createDaemonRuntimeSessionStore({
@@ -84,6 +88,28 @@ export async function createInteractionRuntimeForRoute(
         setSessionSnapshot(current!, record.snapshot);
       },
     }),
+    coordinateTapTextInputEvidence: (point) => {
+      const current = params.sessionStore.requireCurrent(ref);
+      if (publicPlatformString(current.device) !== 'ios') return undefined;
+      const target = params.tapTarget;
+      if (!target || target.kind === 'point') return undefined;
+      if (target.kind === 'selector') {
+        return buildCoordinateTapTextInputEvidence(
+          consumedCapture.state,
+          point,
+          current.appBundleId,
+          'selector-capture',
+        );
+      }
+      if (refFrameState(current) !== 'active' || !refFrame(current).treeIsUnprojected)
+        return undefined;
+      return buildCoordinateTapTextInputEvidence(
+        consumedCapture.state ?? refFrameTree(current),
+        point,
+        current.appBundleId,
+        'ref-frame',
+      );
+    },
     expireRefFrame: () => expireRefFrame(params.sessionStore.requireCurrent(ref)),
     // The #1542 rescue hook installs only when this request's own binding admitted the live
     // selector read — the same conditional fact the guard's refusal is built on, so the hook and
@@ -201,7 +227,12 @@ function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceB
             await params.confirmOffscreenTargetVisible!(node, rootViewport),
         }
       : {}),
-    ...touchBackendMembers(params.touchExecutor, params.expireRefFrame, flags),
+    ...touchBackendMembers(
+      params.touchExecutor,
+      params.expireRefFrame,
+      flags,
+      params.coordinateTapTextInputEvidence,
+    ),
   };
 }
 
@@ -230,6 +261,7 @@ function touchBackendMembers(
   executor: InteractionRuntimeInput['touchExecutor'],
   expireRefFrame: () => void,
   flags: InteractionRuntimeInput['flags'],
+  textInputEvidence: InteractionRuntimeInput['coordinateTapTextInputEvidence'],
 ): Partial<AgentDeviceBackend> {
   if (!executor) return {};
   const { tapPoint, tapRef, fillPoint, fillRef, longPressPoint, hoverPoint, hoverRef } = executor;
@@ -238,7 +270,17 @@ function touchBackendMembers(
     return toBackendActionResult(await action());
   };
   return {
-    tap: tapPoint ? (_context, point) => run(() => tapPoint(point, flags)) : undefined,
+    tap: tapPoint
+      ? (_context, point) => {
+          const evidence = textInputEvidence?.(point);
+          return run(() =>
+            tapPoint(point, {
+              ...flags,
+              ...(evidence ? { coordinateTapTextInputEvidence: evidence } : {}),
+            }),
+          );
+        }
+      : undefined,
     tapTarget: tapRef ? (_context, target) => run(() => tapRef(target.ref)) : undefined,
     fill: fillPoint
       ? (_context, point, text, options) => run(() => fillPoint(point, text, options))

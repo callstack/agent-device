@@ -213,6 +213,13 @@ extension Command {
   }
 }
 
+struct CoordinateTapTextInputEvidence: Codable {
+  let source: String
+  let targetBundleId: String
+  let point: RunnerGesturePoint
+  let textInputRects: [RunnerGestureViewport]
+}
+
 struct Command: Codable {
   let command: CommandType
   let commandId: String?
@@ -251,6 +258,7 @@ struct Command: Codable {
   let fullscreen: Bool?
   let inlineScreenshot: Bool?
   let synthesized: Bool?
+  let coordinateTapTextInputEvidence: CoordinateTapTextInputEvidence?
   let steps: [SequenceStep]?
 }
 

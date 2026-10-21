@@ -62,8 +62,8 @@ export async function dispatchRuntimeInteraction<
      */
     refContext?: RefAdmissionContext;
     /** A failed local iOS tap may be corroborated against one same-scope capture. */
+    target?: InteractionTarget;
     iosTapCorroboration?: {
-      target: InteractionTarget;
       extra: Record<string, unknown>;
     };
     run(runtime: Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>): Promise<TResult>;
@@ -83,6 +83,7 @@ export async function dispatchRuntimeInteraction<
     touchExecutor: options.touchExecutor,
     settleObservationCapture: options.settleObservationCapture,
     consumedCapture,
+    tapTarget: options.target,
   });
   const actionStartedAt = Date.now();
   try {
@@ -148,7 +149,7 @@ export async function dispatchRuntimeInteraction<
       handlerParams: params,
       observationCapture: options.settleObservationCapture,
       session,
-      target: options.iosTapCorroboration?.target,
+      target: options.target,
       extra: options.iosTapCorroboration?.extra,
       actionStartedAt,
       androidFreshnessBaseline: options.androidFreshnessBaseline,

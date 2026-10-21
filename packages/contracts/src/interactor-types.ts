@@ -89,6 +89,14 @@ export type ElementSelectorTapOptions = {
   expectedPoint?: Point;
 };
 
+/** Facts from a request's resolution capture or active ref frame; the native owner decides admission. */
+export type CoordinateTapTextInputEvidence = Readonly<{
+  source: 'selector-capture' | 'ref-frame';
+  targetBundleId: string;
+  point: Point;
+  textInputRects: readonly Rect[];
+}>;
+
 export type PressPointOptions = Readonly<{
   button: 'primary' | 'secondary' | 'middle';
   count: number;
@@ -97,6 +105,7 @@ export type PressPointOptions = Readonly<{
   jitterPx: number;
   doubleTap: boolean;
   surface?: SessionSurface;
+  coordinateTapTextInputEvidence?: CoordinateTapTextInputEvidence;
 }>;
 
 /**

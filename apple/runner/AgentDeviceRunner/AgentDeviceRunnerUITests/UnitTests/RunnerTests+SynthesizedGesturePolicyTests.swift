@@ -188,3 +188,34 @@ extension RunnerTests {
   }
 }
 #endif
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+private struct CoordinateTapTextInputFixture: Decodable {
+  let name: String
+  let point: RunnerGesturePoint
+  let dispatchPoint: RunnerGesturePoint?
+  let activeBundleId: String
+  let expectedEvidence: CoordinateTapTextInputEvidence?
+  let probe: Bool
+}
+
+extension RunnerTests {
+  func testCoordinateTapTextInputAdmissionMatchesGoldenTable() throws {
+    var root = URL(fileURLWithPath: #filePath)
+    for _ in 0..<6 { root.deleteLastPathComponent() }
+    let fixtures = try JSONDecoder().decode([CoordinateTapTextInputFixture].self, from:
+      Data(contentsOf: root.appendingPathComponent("contracts/fixtures/coordinate-tap-text-input.json")))
+    XCTAssertFalse(fixtures.isEmpty)
+    for fixture in fixtures {
+      let point = fixture.dispatchPoint ?? fixture.point
+      XCTAssertEqual(shouldProbeCoordinateTapTextInput(
+        xCTestChannelPenalized: false,
+        evidence: fixture.expectedEvidence,
+        point: CGPoint(x: point.x, y: point.y),
+        targetBundleId: fixture.activeBundleId
+      ), fixture.probe, fixture.name)
+    }
+    XCTAssertTrue(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: false), "raw coordinates keep probing")
+  }
+}
+#endif

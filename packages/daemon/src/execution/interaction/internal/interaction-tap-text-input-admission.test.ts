@@ -1,0 +1,117 @@
+import { beforeEach, expect, test } from 'vitest';
+import { attachRefs } from '@agent-device/kernel/snapshot';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { runInteraction } from '../../../__tests__/support/touch-interaction-runner.ts';
+import {
+  activateCompleteRefFrame,
+  activatePartialRefFrame,
+  refFrameState,
+} from '../../../core/ref-frame.ts';
+import {
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import {
+  mockTapPoint,
+  resetGetRuntimeFixture,
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
+import { makeSession } from './__tests__/interaction-touch-fixtures.ts';
+
+beforeEach(() => {
+  resetGetRuntimeFixture();
+  installInteractorSnapshotResolution();
+  mockInteractorSnapshot.mockReset();
+});
+
+function setup() {
+  const store = makeSessionStore();
+  const session = makeSession('tap-text-input');
+  session.snapshot = {
+    nodes: attachRefs([
+      { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+      {
+        index: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Home',
+        rect: { x: 10, y: 740, width: 60, height: 40 },
+        hittable: true,
+      },
+      {
+        index: 2,
+        parentIndex: 0,
+        type: 'TextField',
+        label: 'Search',
+        rect: { x: 10, y: 100, width: 300, height: 40 },
+        hittable: true,
+      },
+    ]),
+    createdAt: 1,
+    backend: 'xctest',
+    producer: 'apple-runner',
+  };
+  activateCompleteRefFrame(session, { treeIsUnprojected: true });
+  store.publish(session.name, session);
+  return { store, session };
+}
+
+test('the active ref frame supplies input geometry before the side-effect seam expires it', async () => {
+  const { store, session } = setup();
+  const result = await runInteraction(store, session.name, 'click', ['@e2']);
+  expect(result?.ok).toBe(true);
+  expect(mockTapPoint).toHaveBeenCalledWith(
+    expect.objectContaining({
+      point: { x: 40, y: 760 },
+      options: expect.objectContaining({
+        coordinateTapTextInputEvidence: {
+          source: 'ref-frame',
+          targetBundleId: session.appBundleId,
+          point: { x: 40, y: 760 },
+          textInputRects: [{ x: 10, y: 100, width: 300, height: 40 }],
+        },
+      }),
+    }),
+  );
+  expect(refFrameState(store.get(session.name)!)).toBe('expired');
+  expect((await runInteraction(store, session.name, 'click', ['@e2']))?.ok).toBe(false);
+  expect(mockTapPoint).toHaveBeenCalledTimes(1);
+});
+
+test('a selector uses this request capture rather than the stored input geometry', async () => {
+  const { store, session } = setup();
+  const nodes = session.snapshot!.nodes.map((node) =>
+    node.type === 'TextField'
+      ? { ...node, rect: { x: 200, y: 160, width: 100, height: 40 } }
+      : node,
+  );
+  mockInteractorSnapshot.mockResolvedValue({ nodes, backend: 'xctest', producer: 'apple-runner' });
+  const result = await runInteraction(store, session.name, 'click', ['role=button label=Home']);
+  expect(result?.ok).toBe(true);
+  expect(mockTapPoint.mock.calls[0]?.[0].options.coordinateTapTextInputEvidence).toEqual({
+    source: 'selector-capture',
+    targetBundleId: session.appBundleId,
+    point: { x: 40, y: 760 },
+    textInputRects: [{ x: 200, y: 160, width: 100, height: 40 }],
+  });
+});
+
+test('raw coordinates do not borrow a stored tree even when its ref frame is active', async () => {
+  const { store, session } = setup();
+  expect((await runInteraction(store, session.name, 'click', ['40', '760']))?.ok).toBe(true);
+  expect(mockTapPoint.mock.calls[0]?.[0].options.coordinateTapTextInputEvidence).toBeUndefined();
+});
+
+test('partial ref publication keeps probing because its projected tree cannot prove exclusion', async () => {
+  const { store, session } = setup();
+  session.snapshotGeneration = 9;
+  activatePartialRefFrame(session, new Set(['e2']));
+  expect((await runInteraction(store, session.name, 'click', ['@e2~s9']))?.ok).toBe(true);
+  expect(mockTapPoint.mock.calls[0]?.[0].options.coordinateTapTextInputEvidence).toBeUndefined();
+});
+
+test('scoped or depth-limited snapshot frames cannot establish text-input exclusion', async () => {
+  const { store, session } = setup();
+  activateCompleteRefFrame(session, { treeIsUnprojected: false });
+  expect((await runInteraction(store, session.name, 'click', ['@e2']))?.ok).toBe(true);
+  expect(mockTapPoint.mock.calls[0]?.[0].options.coordinateTapTextInputEvidence).toBeUndefined();
+});

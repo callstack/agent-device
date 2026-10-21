@@ -1,3 +1,4 @@
+import type { CoordinateTapTextInputEvidence } from '@agent-device/contracts/interactor-types';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../platform-services.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
@@ -113,6 +114,9 @@ export type InteractionRuntimeInput = {
   captureSnapshot: InteractionCaptureOperation;
   runtimeSessions: CommandSessionStore;
   expireRefFrame: () => void;
+  coordinateTapTextInputEvidence?: (
+    point: import('@agent-device/kernel/snapshot').Point,
+  ) => CoordinateTapTextInputEvidence | undefined;
   confirmOffscreenTargetVisible?: (
     node: Pick<import('@agent-device/kernel/snapshot').SnapshotNode, 'identifier' | 'label'>,
     rootViewport: Rect | null,

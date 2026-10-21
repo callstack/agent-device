@@ -25,6 +25,7 @@ type RefFrameFields = Readonly<{
   state: RefFrameState;
   scope: RefFrameScope;
   tree: SnapshotState | undefined;
+  treeIsUnprojected: boolean;
   generation: number | undefined;
 }>;
 
@@ -53,6 +54,10 @@ class SessionRefFrame {
     return this.#fields.tree;
   }
 
+  get treeIsUnprojected(): boolean {
+    return this.#fields.treeIsUnprojected;
+  }
+
   get generation(): number | undefined {
     return this.#fields.generation;
   }
@@ -76,6 +81,7 @@ export const PRISTINE_REF_FRAME: RefFrame = new SessionRefFrame({
   state: 'active',
   scope: 'all',
   tree: undefined,
+  treeIsUnprojected: false,
   generation: undefined,
 });
 
@@ -83,9 +89,14 @@ export const PRISTINE_REF_FRAME: RefFrame = new SessionRefFrame({
 export function issuedRefFrame(fields: {
   scope: RefFrameScope;
   tree: SnapshotState | undefined;
+  treeIsUnprojected?: boolean;
   generation: number | undefined;
 }): RefFrame {
-  return new SessionRefFrame({ state: 'active', ...fields });
+  return new SessionRefFrame({
+    state: 'active',
+    ...fields,
+    treeIsUnprojected: fields.treeIsUnprojected === true,
+  });
 }
 
 /** The expired counterpart of `frame`, or `frame` itself when it is already expired. */

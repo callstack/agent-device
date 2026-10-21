@@ -376,11 +376,15 @@ extension RunnerTests {
       routeToSpringboard: routeToSpringboard
     )
     let activeApp: XCUIApplication
+    let activeAppBundleId: String?
     switch preparation {
     case .response(let response):
       return response
     case .context(let context):
       activeApp = context.app
+      activeAppBundleId = routeToSpringboard
+        ? Self.springboardBundleId
+        : context.systemSurface?.bundleId ?? mainOwned.bundleId
     }
 
     switch command.command {
@@ -483,6 +487,7 @@ extension RunnerTests {
     return try executeOnMainPrepared(
       command: command,
       activeApp: activeApp,
+      activeAppBundleId: activeAppBundleId,
       alertDeadline: alertDeadline
     )
   }

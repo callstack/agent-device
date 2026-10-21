@@ -1,0 +1,556 @@
+[
+  {
+    "name": "button-away-from-text-field",
+    "nodes": [
+      {
+        "type": "Button",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      },
+      {
+        "type": "TextField",
+        "rect": {
+          "x": 10,
+          "y": 120,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 120,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": false
+  },
+  {
+    "name": "TextField-inside-wrapper",
+    "nodes": [
+      {
+        "type": "Other",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      },
+      {
+        "type": "TextField",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "SecureTextField-inside-wrapper",
+    "nodes": [
+      {
+        "type": "Other",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      },
+      {
+        "type": "SecureTextField",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "SearchField-inside-wrapper",
+    "nodes": [
+      {
+        "type": "Other",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      },
+      {
+        "type": "SearchField",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "TextView-inside-wrapper",
+    "nodes": [
+      {
+        "type": "Other",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      },
+      {
+        "type": "TextView",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "ios-role-input-inside-wrapper",
+    "nodes": [
+      {
+        "type": "Other",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      },
+      {
+        "type": "Other",
+        "role": "AXTextArea",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "presented-text-field-role",
+    "nodes": [
+      {
+        "type": "text-field",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "no-text-input-nodes",
+    "nodes": [
+      {
+        "type": "Button",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": []
+    },
+    "probe": false
+  },
+  {
+    "name": "input-on-point-boundary",
+    "nodes": [
+      {
+        "type": "TextField",
+        "rect": {
+          "x": 60,
+          "y": 40,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 60,
+          "y": 40,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "input-missing-frame",
+    "nodes": [
+      {
+        "type": "TextField"
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": null,
+    "probe": true
+  },
+  {
+    "name": "truncated-tree",
+    "nodes": [
+      {
+        "type": "Button",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": null,
+    "probe": true,
+    "truncated": true
+  },
+  {
+    "name": "system-surface-same-target",
+    "nodes": [
+      {
+        "type": "Button",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.apple.SafariViewService",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.apple.SafariViewService",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": []
+    },
+    "probe": false,
+    "iosSystemSurfaceBundleId": "com.apple.SafariViewService"
+  },
+  {
+    "name": "system-surface-changed-before-dispatch",
+    "nodes": [
+      {
+        "type": "Button",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.apple.SafariViewService",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": []
+    },
+    "probe": true,
+    "iosSystemSurfaceBundleId": "com.apple.SafariViewService"
+  },
+  {
+    "name": "dispatch-point-changed",
+    "nodes": [
+      {
+        "type": "Button",
+        "rect": {
+          "x": 10,
+          "y": 20,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": []
+    },
+    "probe": true,
+    "dispatchPoint": {
+      "x": 61,
+      "y": 40
+    }
+  },
+  {
+    "name": "ref-frame-away-from-input",
+    "nodes": [
+      {
+        "type": "TextField",
+        "rect": {
+          "x": 10,
+          "y": 120,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 60,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "ref-frame",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 60,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 10,
+          "y": 120,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": false,
+    "source": "ref-frame"
+  }
+]

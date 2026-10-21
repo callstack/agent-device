@@ -446,3 +446,25 @@ test('diff screenshot is not handled daemon-side (client-backed command)', async
     expect(response.error.message).toMatch(/diff.*supports.*snapshot/i);
   }
 });
+
+test.each([
+  { flags: {}, unprojected: true },
+  { flags: { snapshotDepth: 0 }, unprojected: false },
+  { flags: { snapshotScope: 'Fresh' }, unprojected: false },
+])(
+  'snapshot publication records projection completeness for $flags',
+  async ({ flags, unprojected }) => {
+    const sessionName = 'frame-projection';
+    const sessionStore = makeVersionedRefsScenario(sessionName);
+    const response = await handleSnapshotCommands({
+      createCommandSurface: forwardingCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req: snapshotRequest(sessionName, 'snapshot', { flags }),
+      sessionName,
+      logPath: '/tmp/daemon.log',
+      sessionStore,
+    });
+    expect(response?.ok).toBe(true);
+    expect(refFrame(sessionStore.get(sessionName)!).treeIsUnprojected).toBe(unprojected);
+  },
+);
