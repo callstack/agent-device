@@ -218,8 +218,8 @@ const systemButtonUnavailable = unavailableFact(
 /**
  * The hardware-button legs ride `mobile: pressButton` / `mobile: pressKey`, so the cell reads the
  * seam the same way `home` does: a reachable interactor plus the provider's declaration. The
- * declaration carries the platform split — the iOS capability map marks `power` unsupported, the
- * Android map does not — so nothing here restates it as a device-kind rule.
+ * declaration carries the platform split — the iOS capability map marks `power` and the extended
+ * keys unsupported, the Android map does not — so nothing here restates it as a device-kind rule.
  */
 const hardwareButtonUnavailable = unavailableFact(
   'unsupported-provider-mode',
@@ -635,8 +635,8 @@ function webDriverFacts(
         home: declared('home', homeUnavailable),
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
         // Volume and power ride the backend's own hardware-key route and read the same
-        // declared-capability seam `home` uses; the iOS platform map declares power unsupported, so
-        // the declaration — not a device-kind guess — is what refuses it there.
+        // declared-capability seam `home` uses; the iOS platform map declares power and the
+        // extended keys unsupported, so the declaration — not a device-kind guess — refuses them.
         volumeUp: declared('volumeUp', hardwareButtonUnavailable),
         volumeDown: declared('volumeDown', hardwareButtonUnavailable),
         power: declared('power', hardwareButtonUnavailable),

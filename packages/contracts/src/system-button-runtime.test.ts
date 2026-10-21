@@ -21,14 +21,22 @@ const available = { available: true } as const;
 const unsupported = { available: false, reason: 'unsupported-platform-leaf' } as const;
 
 test('an omitted button reports the family denial, a named one its own cell', () => {
-  // Every family cell must be named by an owner or take the denial: the object-equality pins
-  // below enumerate all of them, so a new cell that changes the family builder's shape fails here.
-  expect(systemButtonRuntimeOperationFacts({ unsupported, home: available })).toMatchObject({
+  // Every family cell must be named by an owner or take the denial: this full-object equality
+  // enumerates all of them, so a new cell that changes the family builder's shape fails here.
+  expect(systemButtonRuntimeOperationFacts({ unsupported, home: available })).toEqual({
     home: available,
     appSwitcher: unsupported,
     actionButton: unsupported,
     volumeUp: unsupported,
+    volumeDown: unsupported,
     power: unsupported,
+    mute: unsupported,
+    sleep: unsupported,
+    wake: unsupported,
+    mediaPlayPause: unsupported,
+    mediaNext: unsupported,
+    mediaPrevious: unsupported,
+    mediaRewind: unsupported,
     mediaFastForward: unsupported,
   });
   const allDenied = systemButtonRuntimeOperationFacts({ unsupported });
@@ -136,10 +144,9 @@ test('the hardware-button positional helper enforces arity and the exact-name pa
 
 // The Android hardware-button admission rule both Android owners share: a phone or tablet
 // answers available for every declared cell, a TV target refuses toward tv-remote, and the
-// synthetic simulator row has no device behind it (#3848, follow-up).
+// synthetic simulator row has no device behind it (#3848).
 test('the shared Android hardware-button rule admits phones and refuses TV and simulator', () => {
   const cells = HARDWARE_BUTTON_NAMES.map((name) => parseHardwareButtonPositionals([name]));
-  expect(cells.length).toBe(11);
   const phone = androidHardwareButtonFacts({ kind: 'mobile', target: 'phone' });
   for (const cell of cells) {
     expect(phone[cell]).toEqual({ available: true });

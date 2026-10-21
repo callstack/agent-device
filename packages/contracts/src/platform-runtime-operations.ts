@@ -128,7 +128,7 @@ export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 export const appSwitcherRuntimeUse = defineUse({ required: ['appSwitcher'] });
 export const actionButtonRuntimeUse = defineUse({ required: ['actionButton'] });
 // `hardware-button`'s cells (ADR 0019 §9): the daemon admits and binds exactly the one the parsed
-// positional names, never all of them (#3848, follow-up for the mute/sleep/wake/media keys).
+// positional names, never all of them (#3848).
 export const volumeUpRuntimeUse = defineUse({ required: ['volumeUp'] });
 export const volumeDownRuntimeUse = defineUse({ required: ['volumeDown'] });
 export const powerRuntimeUse = defineUse({ required: ['power'] });

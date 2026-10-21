@@ -53,19 +53,16 @@ const SNAPSHOT_VIEWPORT_PROBE_TIMEOUT_MS = 500;
 
 /** The Android `KEYCODE_ENTER` the IME's return key sends. */
 const ANDROID_KEYCODE_ENTER = 66;
-/** The Android `KEYCODE_VOLUME_UP` the `hardware-button volume-up` press sends. */
-const ANDROID_KEYCODE_VOLUME_UP = 24;
-/** The Android `KEYCODE_VOLUME_DOWN` the `hardware-button volume-down` press sends. */
-const ANDROID_KEYCODE_VOLUME_DOWN = 25;
-/** The Android `KEYCODE_POWER` the `hardware-button power` press sends. */
-const ANDROID_KEYCODE_POWER = 26;
 /**
- * The Android keycodes the extended `hardware-button` names send through `mobile: pressKey` —
- * the same keyevents the local Android owner sends through `input keyevent`. XCUITest exposes no
- * press route for any of them, so the iOS capability map declares them unsupported and the
+ * The Android keycodes every `hardware-button` name sends through `mobile: pressKey` — the same
+ * keyevents the local Android owner sends through `input keyevent`. XCUITest exposes no press
+ * route for the extended eight, so the iOS capability map declares them unsupported and the
  * declaration refuses before these legs run.
  */
 const ANDROID_HARDWARE_BUTTON_KEYCODES = {
+  volumeUp: 24,
+  volumeDown: 25,
+  power: 26,
   mute: 164,
   sleep: 223,
   wake: 224,
@@ -75,6 +72,12 @@ const ANDROID_HARDWARE_BUTTON_KEYCODES = {
   mediaRewind: 89,
   mediaFastForward: 90,
 } as const;
+
+/** The eight cells that ride the Android-only `pressKey` route (the volume and power legs split per backend). */
+type AndroidExtendedHardwareKey = Exclude<
+  keyof typeof ANDROID_HARDWARE_BUTTON_KEYCODES,
+  'volumeUp' | 'volumeDown' | 'power'
+>;
 /** How a WebDriver dismiss lowers the iOS keyboard: Appium's hide-keyboard route. */
 const WEBDRIVER_DISMISS_MECHANISM = 'appium-hide-keyboard';
 
@@ -451,17 +454,17 @@ class WebDriverInteractor implements Interactor {
    */
   async volumeUp(): Promise<void> {
     this.requireSupport('volumeUp');
-    await this.pressVolumeKey(ANDROID_KEYCODE_VOLUME_UP, 'volumeup');
+    await this.pressVolumeKey(ANDROID_HARDWARE_BUTTON_KEYCODES.volumeUp, 'volumeup');
   }
 
   async volumeDown(): Promise<void> {
     this.requireSupport('volumeDown');
-    await this.pressVolumeKey(ANDROID_KEYCODE_VOLUME_DOWN, 'volumedown');
+    await this.pressVolumeKey(ANDROID_HARDWARE_BUTTON_KEYCODES.volumeDown, 'volumedown');
   }
 
   private async pressVolumeKey(androidKeycode: number, xcuiButtonName: string): Promise<void> {
     if (this.backend === 'android') {
-      await this.client.executeScript('mobile: pressKey', [{ keycode: androidKeycode }]);
+      await this.pressAndroidKeycode(androidKeycode);
       return;
     }
     await this.client.executeScript('mobile: pressButton', [{ name: xcuiButtonName }]);
@@ -474,7 +477,7 @@ class WebDriverInteractor implements Interactor {
    */
   async power(): Promise<void> {
     this.requireSupport('power');
-    await this.client.executeScript('mobile: pressKey', [{ keycode: ANDROID_KEYCODE_POWER }]);
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.power);
   }
 
   /**
@@ -483,44 +486,41 @@ class WebDriverInteractor implements Interactor {
    * session before these legs run; the runtime guard here keeps the refusal typed even if a
    * caller reaches past the facts.
    */
+  private async pressAndroidHardwareKey(cell: AndroidExtendedHardwareKey): Promise<void> {
+    this.requireSupport(cell);
+    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES[cell]);
+  }
+
   async mute(): Promise<void> {
-    this.requireSupport('mute');
-    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mute);
+    await this.pressAndroidHardwareKey('mute');
   }
 
   async sleep(): Promise<void> {
-    this.requireSupport('sleep');
-    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.sleep);
+    await this.pressAndroidHardwareKey('sleep');
   }
 
   async wake(): Promise<void> {
-    this.requireSupport('wake');
-    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.wake);
+    await this.pressAndroidHardwareKey('wake');
   }
 
   async mediaPlayPause(): Promise<void> {
-    this.requireSupport('mediaPlayPause');
-    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaPlayPause);
+    await this.pressAndroidHardwareKey('mediaPlayPause');
   }
 
   async mediaNext(): Promise<void> {
-    this.requireSupport('mediaNext');
-    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaNext);
+    await this.pressAndroidHardwareKey('mediaNext');
   }
 
   async mediaPrevious(): Promise<void> {
-    this.requireSupport('mediaPrevious');
-    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaPrevious);
+    await this.pressAndroidHardwareKey('mediaPrevious');
   }
 
   async mediaRewind(): Promise<void> {
-    this.requireSupport('mediaRewind');
-    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaRewind);
+    await this.pressAndroidHardwareKey('mediaRewind');
   }
 
   async mediaFastForward(): Promise<void> {
-    this.requireSupport('mediaFastForward');
-    await this.pressAndroidKeycode(ANDROID_HARDWARE_BUTTON_KEYCODES.mediaFastForward);
+    await this.pressAndroidHardwareKey('mediaFastForward');
   }
 
   private async pressAndroidKeycode(keycode: number): Promise<void> {

@@ -97,10 +97,9 @@ test('home is admitted on both legs, app-switcher only on Android, the action bu
 
 // The Android leg's interactor comes from createAndroidInteractor, which carries every
 // hardware-button press, so a leased phone/tablet admits them all with the local owner's phone
-// and TV rule; the iOS leg has no such member and falls to the family denial (#3848, follow-up).
+// and TV rule; the iOS leg has no such member and falls to the family denial (#3848).
 test('the Android leg admits the hardware-button presses and gates them on the local rule', () => {
   const cells = HARDWARE_BUTTON_NAMES.map((name) => parseHardwareButtonPositionals([name]));
-  expect(cells.length).toBe(11);
   const android = limrunSystemButtonOperationFacts(androidMobileDevice);
   for (const cell of cells) {
     expect(android[cell]).toEqual({ available: true });

@@ -12,6 +12,11 @@ import {
   commandDescriptors,
   commandRuntimeUseRequirements,
 } from '@agent-device/command-registry/registry';
+import {
+  HARDWARE_BUTTON_NAMES,
+  parseHardwareButtonPositionals,
+  type HardwareButtonName,
+} from '@agent-device/contracts/device';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 import { makeSession } from './session-factories.ts';
 import { makeSessionStore } from './store-factory.ts';
@@ -99,6 +104,43 @@ function systemButtonConformedBindings(): Record<SystemButtonCommand, ConformedR
 }
 
 /**
+ * Each `hardware-button` name is its own admission cell on the one `hardware-button` descriptor
+ * (#3848), so each owes its own refusal row, the way `orientation auto` does. Derived from the
+ * command vocabulary so every declared name — and any future one — proves its own refusal.
+ */
+type HardwareButtonConformedKey = 'hardware-button' | `hardware-button ${HardwareButtonName}`;
+
+function hardwareButtonConformedBindings(): Record<
+  HardwareButtonConformedKey,
+  ConformedRuntimeBinding
+> {
+  const row = (name: HardwareButtonName): [string, ConformedRuntimeBinding] => {
+    return [
+      name === 'volume-up' ? 'hardware-button' : (`hardware-button ${name}` as const),
+      {
+        plan: {
+          refused: parseHardwareButtonPositionals([name]) as RuntimeOperation,
+          admitted: [],
+          command: 'hardware-button',
+        },
+        resolve: async (device, bindings) =>
+          refusable(
+            await resolveBoundSystemButtonRuntime('hardware-button', {
+              device,
+              positionals: [name],
+              ...bindings,
+            }),
+          ),
+      },
+    ];
+  };
+  return Object.fromEntries(HARDWARE_BUTTON_NAMES.map(row)) as Record<
+    HardwareButtonConformedKey,
+    ConformedRuntimeBinding
+  >;
+}
+
+/**
  * Every daemon route whose refusal on an unavailable exact-owner fact is proven through the shared
  * conformance helper, keyed by registry command name. `runtime-binding-conformance-completeness`
  * checks this table against the registry's runtime-use declarations in both directions.
@@ -157,41 +199,7 @@ export const conformedRuntimeBindings = {
         }),
       ),
   },
-  // Each `hardware-button` name is its own admission cell on the one `hardware-button`
-  // descriptor (#3848), so each owes its own refusal row, the way `orientation auto` does.
-  'hardware-button': {
-    plan: { refused: 'volumeUp', admitted: [] },
-    resolve: async (device, bindings) =>
-      refusable(
-        await resolveBoundSystemButtonRuntime('hardware-button', {
-          device,
-          positionals: ['volume-up'],
-          ...bindings,
-        }),
-      ),
-  },
-  'hardware-button volume-down': {
-    plan: { refused: 'volumeDown', admitted: [], command: 'hardware-button' },
-    resolve: async (device, bindings) =>
-      refusable(
-        await resolveBoundSystemButtonRuntime('hardware-button', {
-          device,
-          positionals: ['volume-down'],
-          ...bindings,
-        }),
-      ),
-  },
-  'hardware-button power': {
-    plan: { refused: 'power', admitted: [], command: 'hardware-button' },
-    resolve: async (device, bindings) =>
-      refusable(
-        await resolveBoundSystemButtonRuntime('hardware-button', {
-          device,
-          positionals: ['power'],
-          ...bindings,
-        }),
-      ),
-  },
+  ...hardwareButtonConformedBindings(),
   'tv-remote': {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundTvRemoteRuntime({ device, positionals: ['down'], ...bindings })),

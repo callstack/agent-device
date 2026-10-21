@@ -33,8 +33,7 @@ export type SystemButton = (typeof SYSTEM_BUTTONS)[number];
 
 /**
  * What the family names to a caller on a fail-closed refusal. The hardware keys read as the
- * positional names `hardware-button` takes; `sleep` and `wake` name themselves after the explicit
- * Android events they press, which never toggle the way `power` does.
+ * positional names `hardware-button` takes.
  */
 export const SYSTEM_BUTTON_LABELS = {
   home: 'home',
@@ -177,11 +176,11 @@ void hardwareCellsCoverCommandVocabulary;
  */
 export function androidHardwareButtonFacts(
   device: AndroidHardwareButtonSubject,
-): Readonly<Partial<Record<SystemButton, RuntimeOperationFact>>> {
+): Readonly<Record<HardwareButton, RuntimeOperationFact>> {
   const availability = androidHardwareButtonAvailability(device);
-  const facts: Record<string, RuntimeOperationFact> = {};
+  const facts: Partial<Record<HardwareButton, RuntimeOperationFact>> = {};
   for (const button of ANDROID_HARDWARE_BUTTON_CELLS) facts[button] = availability;
-  return facts;
+  return facts as Readonly<Record<HardwareButton, RuntimeOperationFact>>;
 }
 
 function androidHardwareButtonAvailability(
