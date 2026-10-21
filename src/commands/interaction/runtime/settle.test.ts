@@ -137,7 +137,7 @@ test('private-ax recovery resets the settle budget once', async () => {
   assert.equal(captures, 4);
 });
 
-test('press --settle pins an already-established private-ax observation backend', async () => {
+test('press --settle routes its first capture afresh after a private-ax session read', async () => {
   const established = welcomeSnapshot();
   established.snapshotQuality = {
     state: 'recovered',
@@ -166,8 +166,8 @@ test('press --settle pins an already-established private-ax observation backend'
     session: 'default',
     settle: { quietMs: 500, timeoutMs: 2_000 },
   });
-  assert.equal(preferredBackends[0], undefined);
-  assert.deepEqual(new Set(preferredBackends.slice(1)), new Set(['private-ax']));
+  assert.equal(preferredBackends[0] ?? preferredBackends[1], undefined);
+  assert.deepEqual(new Set(preferredBackends.slice(2)), new Set(['private-ax']));
 });
 
 test('penalty-deferred private-ax captures do not reset the settle budget', async () => {

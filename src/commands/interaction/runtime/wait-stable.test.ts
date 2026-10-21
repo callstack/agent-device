@@ -41,7 +41,7 @@ test('runtime wait stable settles after two unchanged captures', async () => {
   assert.equal(captures, 3);
 });
 
-test('runtime wait stable retains a recovered private-ax backend for each poll capture', async () => {
+test('runtime wait stable retains a recovered private-ax backend after its first poll capture', async () => {
   const snapshot = makeSnapshotState(
     [
       { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
@@ -77,7 +77,8 @@ test('runtime wait stable retains a recovered private-ax backend for each poll c
 
   assert.equal(result.kind, 'stable');
   assert.ok(preferredBackends.length >= 2);
-  assert.ok(preferredBackends.every((backend) => backend === 'private-ax'));
+  assert.equal(preferredBackends[0], undefined);
+  assert.ok(preferredBackends.slice(1).every((backend) => backend === 'private-ax'));
 });
 
 // A clock whose sleep lands `undershootMs` short of what was asked, modelling

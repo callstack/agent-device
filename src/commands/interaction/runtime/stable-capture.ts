@@ -139,7 +139,12 @@ export async function runStableCaptureLoop(
     platform: runtime.backend.platform,
     appBundleId: session?.appBundleId,
   });
-  let preferredBackend = preferredSnapshotBackendForVerdict(session?.snapshot?.snapshotQuality);
+  // The first capture is routed afresh rather than pinned to the producer of the session's last
+  // read. That read may come from a runner fallback the route no longer needs, such as a system
+  // surface since dismissed, and a pin taken from it would keep every later settle on the runner,
+  // because each settle stores its own pinned capture as the next baseline. Once a capture in this
+  // loop recovers on private AX, the rest of the loop stays on it.
+  let preferredBackend: SnapshotPreferredBackend | undefined;
   const pacing = createStableCapturePacing(start);
   let captures = 0;
   let lastCapture: CapturedSnapshot | undefined;
