@@ -385,6 +385,33 @@ test('a window in an unresolved coordinate space sends only that capture to the 
   expect(second.warnings).toEqual(refused);
 });
 
+// A permission alert over the app makes the reader refuse foreground ownership. The alert is gone after
+// one tap, so it must cost only the captures it covers, never the rest of the app generation.
+test.for(['foreground-owner-unverified', 'foreground-owner-changed'])(
+  'a %s refusal sends only that capture to the runner',
+  async (code) => {
+    const source = sourceReturning({
+      stage: 'failed',
+      failure: { kind: 'unsupported', code },
+    });
+    const fallback = vi.fn(async () => runnerResult());
+    const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+      source,
+      resolveTarget: vi.fn(async () => target),
+    });
+
+    const first = await route.capture(ios, input, signal(), fallback);
+    const second = await route.capture(ios, input, signal(), fallback);
+
+    expect(source.acquire).toHaveBeenCalledTimes(2);
+    const refused = [
+      `Simulator AX snapshot unavailable (${code}); used XCTest for this capture, while another surface owned the foreground.`,
+    ];
+    expect(first.warnings).toEqual(refused);
+    expect(second.warnings).toEqual(refused);
+  },
+);
+
 test('a new app generation re-enables the bridge', async () => {
   const source = sourceReturning({
     stage: 'failed',

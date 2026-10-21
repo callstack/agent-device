@@ -566,6 +566,11 @@ It is up now and gone after the next keystroke.
 If the refusal retired the generation, every later portrait capture of a healthy app would move to the runner because of one landscape keyboard.
 That is the cost that #2491 settled for a bridge that was only still in preparation.
 Which side of that line a failure falls on is a declared property of its code, not a judgment made at the call site.
+The foreground-ownership refusals (`foreground-owner-unverified`, `foreground-owner-changed`) are on the capture side of that line.
+Another surface owns the foreground, such as a permission alert over the app or the app's own launch transition.
+That is evidence about the screen.
+When the refusal retired the generation, one alert sent every later capture of the app to XCTest, which costs seconds per capture on a deep tree.
+The cost of capture scope is one refused bridge request on each capture that the other surface covers.
 
 The rest of this section states what stays unnormalized, and why the consumer rule stays.
 The runner's recursive-tree capture now answers the keyboard with a measured band instead of a rebuilt band.

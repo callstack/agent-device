@@ -65,6 +65,17 @@ const BRIDGE_PREPARATION_PENDING = 'bridge-preparation-pending';
  */
 const WINDOW_COORDINATE_SPACE_UNRESOLVED = 'window-coordinate-space-unresolved';
 
+/**
+ * Why this capture left the bridge: another surface owned the foreground when the reader checked, or
+ * took it during acquisition, such as a permission alert over the app. That is evidence about the
+ * screen, not the app, so the generation stays on the bridge path. Opening the circuit here sent every
+ * later capture of the app to XCTest after one alert, which costs seconds per capture on a deep tree.
+ */
+const FOREGROUND_OWNER_REFUSALS: ReadonlySet<string> = new Set([
+  'foreground-owner-unverified',
+  'foreground-owner-changed',
+]);
+
 export type AppleSnapshotRoute = LaunchObservationPort &
   Readonly<{
     capture(
@@ -305,14 +316,19 @@ async function fallbackAfterFailure(
 /**
  * Whether a bridge failure is evidence that this app generation cannot be served by the bridge.
  *
- * Two failures say something else instead. A bridge that is still being prepared speaks for the
- * daemon's build queue, and a screen holding a surface in another coordinate space speaks for this
- * capture only: the surface is on screen now and gone after the next keystroke, so retiring the
- * generation would move every later capture of a healthy app to the runner to work around one screen
- * (#2491 settled the first of these, and #2612 the second).
+ * Three failures say something else instead. A bridge that is still being prepared speaks for the
+ * daemon's build queue. A screen holding a surface in another coordinate space, and a screen whose
+ * foreground another surface owns, speak for this capture only: the surface is on screen now and gone
+ * after the next keystroke or tap, so retiring the generation would move every later capture of a
+ * healthy app to the runner to work around one screen (#2491 settled the first of these, and #2612
+ * the second).
  */
 function opensGenerationCircuit(failure: SnapshotSourceFailure): boolean {
-  return failure.kind !== 'preparing' && failure.code !== WINDOW_COORDINATE_SPACE_UNRESOLVED;
+  return (
+    failure.kind !== 'preparing' &&
+    failure.code !== WINDOW_COORDINATE_SPACE_UNRESOLVED &&
+    !FOREGROUND_OWNER_REFUSALS.has(failure.code)
+  );
 }
 
 async function runFallback(
@@ -463,6 +479,9 @@ function fallbackWarning(reason: string, lineage: IosSnapshotLineage, served: bo
   // that did not happen (#2491).
   if (reason === BRIDGE_PREPARATION_PENDING) {
     return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture while the bridge is still being prepared.`;
+  }
+  if (FOREGROUND_OWNER_REFUSALS.has(reason)) {
+    return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, while another surface owned the foreground.`;
   }
   if (reason === WINDOW_COORDINATE_SPACE_UNRESOLVED) {
     return `Simulator AX snapshot unavailable (${reason}); used XCTest for this capture, which reports captured geometry in the app's own orientation space.`;

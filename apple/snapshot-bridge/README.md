@@ -45,8 +45,9 @@ acquisition. If the target is covered by system UI, ownership is unavailable,
 or the owner changes during capture, it returns a typed failure without the
 app tree. The existing route then uses XCTest, which owns system-modal
 resolution. Secondary owners such as the return-to-app status-bar control do
-not replace the native primary owner. The route's generation circuit remains
-disabled after fallback until that app relaunches.
+not replace the native primary owner. An ownership refusal is evidence about
+the screen, so the route sends only that capture to XCTest and keeps the app
+generation on the bridge.
 
 ## Remote content
 
