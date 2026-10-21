@@ -112,7 +112,17 @@ export type ComposedDeviceInventoryGateways = Readonly<{
    * provide one; selection then falls back to the ordinary inventory rules.
    */
   findInstalledApp?: InstalledAppProbe;
+  /**
+   * Optional resolver for the app device an open target selects on a host that holds apps as
+   * devices of their own (ADR 0035). It returns `undefined` where the host device keeps the app.
+   */
+  resolveAppDevice?: AppDeviceResolver;
 }>;
+
+export type AppDeviceResolver = (
+  host: DeviceInfo,
+  appTarget: string,
+) => Promise<DeviceInfo | undefined>;
 
 /** A family module gains this interface only with an honest package-owned source. */
 /** A family module receives only the host authority its inventory mechanics need. */

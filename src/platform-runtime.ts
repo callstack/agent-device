@@ -56,7 +56,7 @@ import {
   createComposedPlatformRuntimeGateway,
   type PlatformRuntimeProviderRegistration,
 } from './platform-runtime-gateway.ts';
-import { attachAppleInstalledAppProbe } from './platform-runtime-device-inventory.ts';
+import { attachAppleSelectionProbes } from './platform-runtime-device-inventory.ts';
 import { createAndroidObservationHost } from './platform-runtime-android-observation-host.ts';
 import type { RequestPlatformProviderOptions } from './platform-runtime/request-providers.ts';
 
@@ -108,13 +108,14 @@ export async function createPlatformDeviceInventoryGateways(
   host: HostEnvironment,
   provider?: ProviderDeviceInventorySource,
 ): Promise<ComposedDeviceInventoryGateways> {
-  return await attachAppleInstalledAppProbe({
+  return await attachAppleSelectionProbes({
     registry: createPlatformModuleRegistryForHost(host.env),
     loadHost: async () => {
       const { createDeviceInventoryHost } = await import('./platform-runtime-host.ts');
       return createDeviceInventoryHost(host);
     },
     provider,
+    env: host.env,
   });
 }
 

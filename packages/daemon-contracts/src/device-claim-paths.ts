@@ -1,5 +1,4 @@
 import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
-export { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { EnvMap } from '@agent-device/kernel/source-value';
@@ -29,8 +28,4 @@ function formatLocalDeviceKey(
 export function resolveDeviceClaimPath(deviceKey: string, env: EnvMap): string {
   const hash = crypto.createHash('sha256').update(deviceKey).digest('hex');
   return path.join(resolveDeviceClaimRoot(env), `${hash}.json`);
-}
-
-export function appScopedDeviceKey(deviceKey: string, bundleId: string): string {
-  return `${deviceKey}:app:${bundleId.toLowerCase()}`;
 }

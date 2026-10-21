@@ -1,6 +1,7 @@
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../../core/session-state.ts';
+import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 
 import {
   requireSessionOrExplicitSelector,
@@ -191,3 +192,30 @@ for (const [label, session, flags] of [
     expect(requireSessionOrExplicitSelector('clipboard', session, flags)).toBeNull();
   });
 }
+
+test('resolveCommandDevice keeps an app device session on its app when a selector names the Mac', async () => {
+  const mac: DeviceInfo = {
+    platform: 'apple',
+    appleOs: 'macos',
+    id: 'host-mac',
+    name: 'Mac',
+    kind: 'device',
+    target: 'desktop',
+  };
+  const session: SessionState = {
+    name: 'text-edit',
+    createdAt: Date.now(),
+    device: hostAppDevice(mac, 'com.apple.textedit'),
+    actions: [],
+  };
+  mockResolveTargetDevice.mockResolvedValue(mac);
+
+  const device = await resolveCommandDevice({
+    platformServices,
+    session,
+    flags: { platform: 'macos', device: 'Mac' },
+    env: process.env,
+  });
+
+  expect(device).toBe(session.device);
+});

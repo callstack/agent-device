@@ -37,18 +37,21 @@ export async function resolveCommandDevice(params: {
   platformServices: DaemonPlatformServices;
 }): Promise<DeviceInfo> {
   const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.flags);
-  const device =
-    shouldUseExplicitIdentity || !params.session
-      ? await resolveTargetDevice(params.flags ?? {}, {
-          env: params.env,
-          androidAvdSelection: params.androidAvdSelection,
-        })
-      : await refreshSessionDeviceIfNeeded(
-          params.session.device,
-          params.platformServices,
-          params.env,
-        );
-  return device;
+  if (!shouldUseExplicitIdentity && params.session) {
+    return await refreshSessionDeviceIfNeeded(
+      params.session.device,
+      params.platformServices,
+      params.env,
+    );
+  }
+  const device = await resolveTargetDevice(params.flags ?? {}, {
+    env: params.env,
+    androidAvdSelection: params.androidAvdSelection,
+  });
+  // A selector that names the host of the session's app device stays on that app device: the
+  // session holds one app, not the host (ADR 0035).
+  const hostApp = params.session?.device.hostApp;
+  return hostApp && device.id === hostApp.hostDeviceId ? params.session!.device : device;
 }
 
 export async function refreshSessionDeviceIfNeeded(

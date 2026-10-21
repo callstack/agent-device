@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { runtimeSubjectFact } from '@agent-device/contracts/platform-runtime';
-import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, type AppleOS, type DeviceInfo } from '@agent-device/kernel/device';
 import { appleSystemFacts, createAppleSystemOperations } from './runtime.ts';
 
 function appleDevice(
@@ -98,6 +98,17 @@ test('a physical non-macOS Apple device refuses settings as a platform leaf', ()
     reason: 'unsupported-platform-leaf',
     hint: 'settings is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
   });
+});
+
+test('an app device of the Mac refuses the clipboard and host settings, which the whole Mac keeps', () => {
+  const mac = appleDevice('macos', 'device');
+  const facts = appleSystemFacts(hostAppDevice(mac, 'com.example.app'));
+  for (const operation of [facts.readClipboard, facts.writeClipboard, facts.setSetting]) {
+    expect(operation).toMatchObject({ available: false, reason: 'unsupported-device-scope' });
+  }
+  const whole = appleSystemFacts(mac);
+  expect(whole.readClipboard.available).toBe(true);
+  expect(whole.setSetting.available).toBe(true);
 });
 
 /**

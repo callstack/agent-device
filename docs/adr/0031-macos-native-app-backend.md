@@ -40,8 +40,8 @@ Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
    Other helper surfaces retain 12 levels.
 6. Screenshots capture only the session app's front window through ScreenCaptureKit.
 
-7. A native `app` session whose target resolves before launch claims only that app ([ADR 0035](0035-macos-per-app-claims.md)).
-8. Native app-scoped opens keep the app in the background; XCTest opens activate the named app.
+7. A native `app` open of a named app binds that app as a device of its own ([ADR 0035](0035-macos-app-devices.md)).
+8. An app device opens its app in the background; XCTest opens activate the named app.
    `open --surface frontmost-app` takes no app target and opens the app already frontmost with activation enabled.
    The backend selects this behavior without an activation flag.
    `--foreground` retains its initial-snapshot meaning.
@@ -57,10 +57,10 @@ It can therefore serve an app session without a test session while the app remai
 ## Decision details
 
 **Open activation.**
-An open scoped to one native app uses `open -g`, including a `macos-app` lease.
-Unresolved targets and other surfaces retain whole-Mac launch behavior.
+An app device opens its app with `open -g`, including under a `macos-app` lease.
+A link alone opens in the app device's own app.
+Other surfaces and a link-only open keep whole-Mac launch behavior.
 The backend opt-in supplies the activation choice accepted in [#3338](https://github.com/callstack/agent-device/issues/3338).
-Commands that affect host-global state retain their scope under ADR 0035.
 
 **Pointer delivery.**
 Initial `CGEventPostToPid` measurements used Calculator (SwiftUI) without window fields.

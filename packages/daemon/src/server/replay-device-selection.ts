@@ -4,6 +4,7 @@ import {
   type ReplayBackendId,
 } from '@agent-device/ad-script';
 import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
+import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { readReplayScriptSourceFile } from '@agent-device/replay-port/script-source';
@@ -87,8 +88,23 @@ function readAdScriptResolution(
   return {
     flags:
       platform && scriptFlags.platform === undefined ? { ...scriptFlags, platform } : scriptFlags,
-    options: platform === 'ios' ? appTargetResolutionOptions(selection.appTarget, env) : undefined,
+    options: adScriptTargetOptions(platform, selection.appTarget, env),
   };
+}
+
+/**
+ * The app the script opens first informs the device its replay locks: an iOS simulator that has it
+ * installed, or on the Mac its app device (ADR 0035), so the replay locks that app and not the host.
+ */
+function adScriptTargetOptions(
+  platform: string | undefined,
+  appTarget: string,
+  env: EnvMap,
+): ReplayTargetDeviceResolution['options'] {
+  if (platform === 'ios') return appTargetResolutionOptions(appTarget, env);
+  if (platform === 'macos')
+    return buildOpenTargetDeviceResolutionOptions(appTarget, env, undefined);
+  return undefined;
 }
 
 async function readAdvisoryResolution(

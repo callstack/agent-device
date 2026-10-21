@@ -26,7 +26,16 @@ export function resolveRequestedOpenSurface(params: {
     return resolveLinuxOpenSurface(surfaceFlag, openTarget, existingSurface);
   }
   if (isMacOs(device)) {
-    return resolveMacOsOpenSurface(surfaceFlag, openTarget, existingSurface);
+    const surface = resolveMacOsOpenSurface(surfaceFlag, openTarget, existingSurface);
+    // Every other surface reaches past one app, which an app device does not hold (ADR 0035).
+    if (device.hostApp && surface !== 'app') {
+      throw new AppError(
+        'INVALID_ARGS',
+        `This session holds ${device.hostApp.bundleId} as its own device, so it opens only the app surface. Use a new --session for --surface ${surface}.`,
+        { reason: 'app-device-scope', bundleId: device.hostApp.bundleId },
+      );
+    }
+    return surface;
   }
   return resolveNonDesktopOpenSurface(surfaceFlag);
 }

@@ -4,6 +4,7 @@ import {
   type ProviderDeviceInventorySource,
 } from '@agent-device/contracts/device';
 import {
+  type AppDeviceResolver,
   type ComposedDeviceInventoryGateways,
   type DeviceInventorySource,
   type InstalledAppProbe,
@@ -22,6 +23,7 @@ export type TestDeviceInventoryOptions = Readonly<{
   provider?: ProviderDeviceInventorySource;
   local?: (request: Readonly<DeviceInventoryRequest>) => Promise<readonly DeviceInfo[]>;
   findInstalledApp?: InstalledAppProbe;
+  resolveAppDevice?: AppDeviceResolver;
 }>;
 
 export const testRequestScope: PlatformRequestScope = Object.freeze({
@@ -79,6 +81,7 @@ export function createTestDeviceInventoryGateways(
     loadHost: async () => testInventoryHost,
     provider: options.provider,
     findInstalledApp: options.findInstalledApp,
+    resolveAppDevice: options.resolveAppDevice,
   });
 }
 

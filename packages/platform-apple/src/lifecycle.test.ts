@@ -558,35 +558,3 @@ test('a tvOS Simulator relaunch keeps the awaited prewarm and asks for no observ
   expect(prewarmRunnerSession).toHaveBeenCalledOnce();
   expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
 });
-
-test('a macOS follow-up launch URL remains inside the named background app', async () => {
-  const open = vi.fn(async () => {});
-  const interactor = { open } as unknown as Interactor;
-  const baseHost = platformRuntimeHostFixture();
-  const host = { ...baseHost, localInteractors: { resolve: async () => interactor } };
-  const mac: DeviceInfo = {
-    platform: 'apple',
-    appleOs: 'macos',
-    id: 'host',
-    name: 'Mac',
-    kind: 'device',
-    target: 'desktop',
-    booted: true,
-  };
-  const lifecycle = bindAppleApplicationLifecycle({
-    host,
-    device: mac,
-    signal: new AbortController().signal,
-  });
-  await lifecycle.openApplication({
-    ...openInput(),
-    hasExistingSession: false,
-    relaunch: false,
-    background: true,
-    runtimeLaunchUrl: 'https://example.com/route',
-  });
-  expect(open).toHaveBeenLastCalledWith(
-    'com.example.app',
-    expect.objectContaining({ url: 'https://example.com/route', background: true }),
-  );
-});

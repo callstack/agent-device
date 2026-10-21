@@ -1,7 +1,12 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { expandUserHomePath, resolveUserConfigPath, resolveUserPath } from './path-resolution.ts';
+import {
+  expandUserHomePath,
+  resolveDeviceClaimRoot,
+  resolveUserConfigPath,
+  resolveUserPath,
+} from './path-resolution.ts';
 
 test('expandUserHomePath expands the current user home prefix', () => {
   const env = { HOME: '/tmp/agent-device-home' };
@@ -40,4 +45,12 @@ test('resolveUserConfigPath resolves the home, the relocated home, and rejects a
   assert.throws(() => resolveUserConfigPath({ AGENT_DEVICE_HOME: './relative' }), {
     code: 'INVALID_ARGS',
   });
+});
+
+test('a relative claims dir is refused instead of following the working directory', () => {
+  assert.throws(
+    () => resolveDeviceClaimRoot({ AGENT_DEVICE_CLAIMS_DIR: 'claims' }),
+    (error: unknown) =>
+      (error as { details?: { reason?: string } }).details?.reason === 'relative_claims_dir',
+  );
 });

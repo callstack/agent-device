@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mechanics';
 import {
   resolveIosApp,
@@ -178,6 +178,23 @@ test('resolveRequestedOpenSurface keeps the stored macOS surface when no --surfa
       existingSurface: 'frontmost-app',
     }),
   ).toBe('frontmost-app');
+});
+
+test('resolveRequestedOpenSurface keeps a macOS app device on the app surface', () => {
+  const device = hostAppDevice(macOsDevice, 'com.example.app');
+  expect(
+    resolveRequestedOpenSurface({ device, surfaceFlag: undefined, openTarget: 'com.example.app' }),
+  ).toBe('app');
+  expect(() =>
+    resolveRequestedOpenSurface({
+      device,
+      surfaceFlag: 'desktop',
+      openTarget: undefined,
+      existingSurface: 'app',
+    }),
+  ).toThrow(
+    expect.objectContaining({ details: expect.objectContaining({ reason: 'app-device-scope' }) }),
+  );
 });
 
 test('resolveRequestedOpenSurface rejects surface flag on iOS', () => {

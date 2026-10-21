@@ -67,6 +67,7 @@ export function resolveOpenSurfaceResponse(
     return errorResponse(
       error instanceof AppError ? error.code : 'INVALID_ARGS',
       String((error as Error).message),
+      error instanceof AppError ? error.details : undefined,
     );
   }
 }

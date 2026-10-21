@@ -1,4 +1,3 @@
-import { reopenOutsideAppClaim } from './session-open-claims.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
@@ -262,19 +261,6 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     // frame becomes stale before those effects, rather than after the later visible launch.
     requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
     const preparedSession = sessionStore.requireCurrent(existingRef);
-    if (preparedSession.deviceClaim?.app) {
-      const resolved = await admission.runtime.operations.resolveOpenTarget({
-        target: openTarget,
-        surface: surfaceResult,
-        foreground: false,
-      });
-      const outsideAppClaim = reopenOutsideAppClaim({
-        session: preparedSession,
-        surface: surfaceResult,
-        appBundleId: resolved.appBundleId,
-      });
-      if (outsideAppClaim) return { type: 'response', response: outsideAppClaim };
-    }
     expireRefFrame(preparedSession);
     const details = await prepareOpenCommandDetails({
       req,
@@ -288,12 +274,6 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       foreground: false,
     });
     if (details.type === 'response') return { type: 'response', response: details.response };
-    const outsideAppClaim = reopenOutsideAppClaim({
-      session: preparedSession,
-      surface: surfaceResult,
-      appBundleId: details.details.appBundleId,
-    });
-    if (outsideAppClaim) return { type: 'response', response: outsideAppClaim };
 
     // Preparation may have booted the device to reach this surface, and a boot an owner caused for
     // its own reopen cannot later read as a boot its owner walked away from.
@@ -346,7 +326,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
 
   const selection = await resolveTargetDeviceSelection(
     req.flags ?? {},
-    buildOpenTargetDeviceResolutionOptions(openTarget, params.host.env),
+    buildOpenTargetDeviceResolutionOptions(openTarget, params.host.env, req.flags?.surface),
   );
   const device = selection.device;
   await req.internal?.retainDeviceExecutionLock?.(device.id);
@@ -380,9 +360,11 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     return { type: 'response', response: runtimePlanAdmission.response };
   const { admission, runtimeHintPlan } = runtimePlanAdmission;
 
+  // Keyed by the host: the session check and publication of first opens on one host run one at a
+  // time, so a whole-host open and an app device open never both pass the check (ADR 0035).
   return await withKeyedLock(
     firstSessionOpenLocks(sessionStore),
-    device.id,
+    device.hostApp?.hostDeviceId ?? device.id,
     async () =>
       await openNewSessionWithDeviceClaim({
         host: params.host,

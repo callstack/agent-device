@@ -60,7 +60,7 @@ import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/internal/session-close.ts';
 import { handleSessionOpenCommands as handleProductionOpenCommand } from '../../session-lifecycle/internal/session-open.ts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/support/session-factories.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -552,15 +552,16 @@ test('#1391: a close-time script save failure still clears the device claim and 
   assert.equal(durableCloseEvents.length, session.actions.length);
 });
 
-test('an open under a macos-app lease holds only its app, beside other claims on the Mac', async () => {
+test('an open under a macos-app lease claims its app device, beside other apps of the Mac', async () => {
   const { store, stateDir } = setup();
-  mockResolveTargetDevice.mockResolvedValue(MACOS_DEVICE);
+  const leasedApp = hostAppDevice(MACOS_DEVICE, 'com.example.app');
+  mockResolveTargetDevice.mockResolvedValue(leasedApp);
   mockDispatch.mockResolvedValue(undefined);
   const ownerStateDir = path.join(stateDir, 'host-user');
   fs.mkdirSync(ownerStateDir);
   const foreign = await acquireDeviceClaim({
     env: process.env,
-    device: MACOS_DEVICE,
+    device: hostAppDevice(MACOS_DEVICE, 'com.example.host-user'),
     session: 'host-user-session',
     workspace: '/worktrees/host-user',
     stateDir: ownerStateDir,
@@ -568,7 +569,7 @@ test('an open under a macos-app lease holds only its app, beside other claims on
   assert.equal(foreign.status, 'acquired');
   store.publish('other-app', {
     name: 'other-app',
-    device: MACOS_DEVICE,
+    device: hostAppDevice(MACOS_DEVICE, 'com.example.other'),
     appBundleId: 'com.example.other',
     lease: {
       leaseId: 'b'.repeat(32),
@@ -606,11 +607,42 @@ test('an open under a macos-app lease holds only its app, beside other claims on
   });
 
   assert.equal(response.ok, true, JSON.stringify(response));
-  assert.equal(store.get('leased-app')?.deviceClaim, undefined);
+  assert.equal(store.get('leased-app')?.device.id, leasedApp.id);
+  assert.notEqual(store.get('leased-app')?.deviceClaim, undefined);
   assert.deepEqual(
-    inspectDeviceClaims({ udid: MACOS_DEVICE.id }, process.env).map(
-      (entry) => entry.claim?.session,
-    ),
-    ['host-user-session'],
+    inspectDeviceClaims({}, process.env)
+      .map((entry) => entry.claim?.session)
+      .sort(),
+    ['host-user-session', 'leased-app'],
   );
+});
+
+test('a fresh app device open retains only its own device lock, never its host after an app lock', async () => {
+  const { store, stateDir } = setup();
+  const textEdit = hostAppDevice(MACOS_DEVICE, 'com.apple.textedit');
+  mockResolveTargetDevice.mockResolvedValue(textEdit);
+  mockDispatch.mockResolvedValue(undefined);
+  const retained: string[] = [];
+
+  const response = await handleOpenCommand({
+    host: createTestHostEnvironment(),
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'text-edit',
+      positionals: ['com.apple.textedit'],
+      flags: { platform: 'macos' },
+      meta: { cwd: '/worktrees/client' },
+      // A batch or replay step that already holds another app device's lock retains this one.
+      internal: { retainDeviceExecutionLock: async (deviceId) => void retained.push(deviceId) },
+    },
+    sessionName: 'text-edit',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+  });
+
+  assert.equal(response.ok, true, JSON.stringify(response));
+  assert.deepEqual(retained, [textEdit.id]);
 });

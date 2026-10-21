@@ -340,13 +340,18 @@ agent-device snapshot -i --platform apple --target desktop
 - macOS also supports `clipboard read|write`, `trigger-app-event`, `logs`, `network dump`, `audio probe`, `alert`, and part of `settings` (see [Settings helpers](#settings-helpers)). `audio probe` samples host system audio and needs Screen Recording permission; see [Debugging & Profiling](/docs/debugging-profiling#audio-probes).
 - Mobile-only commands are unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `fold`, `install`, `reinstall`, `uninstall`, `install-from-source`, and `push`.
 
-- With the native backend, app sessions claim one bundle id. Sessions on different apps can run together within one daemon or across daemons that share a claims directory. Same-app and whole-Mac claims conflict. `open --wait` waits only for sessions in the same daemon. An app claim can reopen only its app on the `app` surface; use `open <app> <url>` for links. Copies of one app need distinct bundle ids. Helper screenshots run one at a time. Use one agent-device version per claims directory; older daemons do not enforce app claims. `macos-app` leases take no host claim, so their exclusion applies only within one daemon.
-
-Native app-scoped opens keep the app in the background; XCTest opens activate the named app. `open --surface frontmost-app` takes no app target and opens the app already frontmost with activation enabled. The backend selects this behavior; there is no activation flag. `--foreground` requests an initial snapshot. Run `agent-device help open` for the versioned contract.
-
-`frontmost-app` and `menubar` pointer actions move the real pointer. `settings permission` opens System Settings in front, and clipboard and appearance changes affect the whole Mac. `close <other app>` can quit an app held by another session.
+XCTest opens bring the named app to the front. `open --surface frontmost-app` takes no app target and opens the app that is already frontmost. `--foreground` requests an initial snapshot; it does not choose activation. Run `agent-device help macos` for the versioned contract.
 
 Set `AGENT_DEVICE_MACOS_APP_BACKEND=native` to run macOS app sessions without XCTest. There is no Automation Mode overlay, the app can stay behind other windows, and your pointer stays yours while a drawn pointer shows each action.
+
+With the native backend, each app you open on the `app` surface is a device of its own. Several agents can drive different apps of one Mac at the same time, in one daemon or in daemons that share a claims directory. Two sessions on the same app conflict. A `desktop`, `menubar`, or `frontmost-app` session holds the whole Mac, so it conflicts with every app session. `open --wait` waits for a conflicting session in the same daemon only; another daemon's session refuses the open at once. An app session:
+
+- Opens its app in the background, so the frontmost app stays in front.
+- Opens and closes only its own app. `open <url>` opens the link in that app. Use a new `--session` for another app or surface.
+- Refuses `clipboard` and `settings`, which change the whole Mac, with `UNSUPPORTED_OPERATION` (`reason: unsupported-device-scope`). Use a `--surface desktop` session for them.
+- Cannot see UI that another process shows, such as a system permission prompt.
+
+Copies of one app need distinct bundle ids. Screenshots run one at a time across the Mac. Use one agent-device version per claims directory.
 
 - `click`, `press`, and `fill` use accessibility actions on the element at the target point, which must be inside one of the app's on-screen windows, not its menu bar. `type` inserts at the focused control or falls back to key events. `scroll` moves the scroll bar under the front window's center. Chromium-based apps expose their full tree. `screenshot` captures only the app's front window, even when it is covered. The front window is the app's frontmost visible, nonempty normal-level (layer-0) window on the current Space: floating palettes and app-modal alerts at window level 8 are skipped, and a sheet is captured as its own window. If that window cannot be captured, `screenshot` fails; it never captures another window.
 - `record`, `prepare`, `back`, `longpress`, `--hold-ms`, `--double-tap`, `--button secondary`, gestures, and clicks on an element with no accessibility action fail with `UNSUPPORTED_OPERATION` (`reason: unsupported-device-backend`). Use the default XCTest backend for those.

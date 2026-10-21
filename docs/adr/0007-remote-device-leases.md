@@ -4,6 +4,8 @@
 
 Accepted
 
+Decision history: 2026-10-21, a `macos-app` lease session takes its app device's claim instead of no claim, so exclusion against whole-Mac and same-app sessions also holds across daemons (ADR 0035, #3323).
+
 ## Rules at a glance
 
 - Allocate device leases lazily, when the device, backend, and provider are known.
@@ -17,6 +19,7 @@ Accepted
 - Before a pending human-control activation reports active, it fences new mutations and drains the mutations already admitted.
 - Only host administrators allocate `macos-app` leases. Tenant `lease_release` is refused.
 - Confine each request admitted under a `macos-app` lease to the leased app.
+- A `macos-app` lease session binds its app device and takes that device's claim (ADR 0035).
 
 ## Context
 
@@ -251,10 +254,7 @@ The host picks the lease id.
 A repeated PUT renews the lease.
 A PUT that names another scope for an existing id is refused, not rewritten.
 
-A session opened under a `macos-app` lease takes no host device claim (ADR 0035). Within one daemon, it conflicts with whole-Mac sessions and sessions on the same app. It can run beside sessions on other apps.
-
 Heartbeat, expiry, and the loss on daemon restart are those of any lease, with two exceptions:
-
 
 - A tenant heartbeat or request cannot renew the lease for longer than the window of the host's last PUT.
 - A tenant cannot release the lease. `lease_release` is refused with `MACOS_APP_LEASE_HOST_OWNED`.
@@ -282,10 +282,11 @@ The confinement has these parts:
 Thus, a request that names no session cannot fall back to the host Mac.
 `open` requires the native app backend (ADR 0031), because XCTest posts screen events that can land outside the app's window.
 Before each admitted request, a pid-pinned lease is checked against the running process.
-A session opened under the lease holds its app, not the Mac.
-It takes no host device claim.
-Other app-leased sessions on the same Mac do not conflict with it.
-Thus, one daemon serves several leased apps beside the host's own sessions.
+A session opened under the lease binds the app device of the leased bundle, not the Mac (ADR 0035).
+It takes that app device's claim, like any other session.
+Sessions on other apps of the Mac do not conflict with it, in this daemon or another.
+A session on the same app, or on the whole Mac, conflicts with it.
+Thus, one daemon serves several leased apps beside the host's own app sessions.
 
 These rules bind a request that names the lease or runs in its session.
 A daemon policy `leases.require` (ADR 0029) refuses requests that name no lease.

@@ -23,7 +23,8 @@ import { makeSession } from '../../../../__tests__/support/session-factories.ts'
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import {
   mkdtempForTestSync,
@@ -545,6 +546,45 @@ test('a claim never projects onto a same-id device from another platform family'
       expect(byPlatform.get('android')?.claimedBy).toEqual({
         session: 'android-session',
         workspace: '/worktrees/android',
+      });
+    }
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
+test('devices shows the Mac as claimed while one of its app devices is', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-devices-app-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  const mac: DeviceInfo = {
+    platform: 'apple',
+    appleOs: 'macos',
+    id: 'host-mac',
+    name: 'Mac',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  };
+  try {
+    const claimed = await acquireDeviceClaim({
+      device: hostAppDevice(mac, 'com.apple.TextEdit'),
+      session: 'text-edit',
+      workspace: '/worktrees/agent',
+      stateDir: process.cwd(),
+      env: process.env,
+      reconcileOrphanedDeviceClaim: async () => ({ status: 'retained', reason: 'test' }),
+    });
+    expect(claimed.status).toBe('acquired');
+    const response = await runDevices({}, [mac]);
+    expect(response?.ok).toBeTruthy();
+    if (response?.ok) {
+      const devices = response.data?.devices as Array<Record<string, unknown>> | undefined;
+      expect(devices?.[0]?.claimedBy).toEqual({
+        session: 'text-edit',
+        workspace: '/worktrees/agent',
       });
     }
   } finally {

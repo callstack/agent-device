@@ -31,7 +31,8 @@ export function buildDeviceClaimInspectionCommand(
   return [
     `agent-device device ${subcommand}`,
     `--platform ${shellQuoteIfNeeded(publicPlatform)}`,
-    `${selector} ${shellQuoteIfNeeded(device.id)}`,
+    // The held claim names the device in the way: the host itself, or one of its app devices.
+    `${selector} ${shellQuoteIfNeeded(held?.device.id ?? device.id)}`,
     ...(subcommand === 'release' || deviceClaimRequiresStaleInspection(conflict.classification)
       ? ['--stale']
       : []),
@@ -61,7 +62,7 @@ export function deviceClaimConflictError(
   return new AppError(
     'DEVICE_IN_USE',
     owner
-      ? `${publicPlatform} device ${device.id} is owned by session "${owner.session}" in workspace "${owner.workspace}".`
+      ? `${publicPlatform} device ${owner.device.id} is owned by session "${owner.session}" in workspace "${owner.workspace}".`
       : `${device.name} has an ownership claim that could not be verified.`,
     {
       reason: conflictReason(conflict.classification),

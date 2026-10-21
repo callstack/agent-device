@@ -329,7 +329,15 @@
       ]
     }
   ],
-  "usedClassMembers": ["name", "listActiveLeases", "delete", "values", "elapsedMs", "isExpired"],
+  "usedClassMembers": [
+    "name",
+    "listActiveLeases",
+    "delete",
+    "values",
+    "elapsedMs",
+    "isExpired",
+    "findByDevice"
+  ],
   "rules": {
     "unused-types": "error",
     "duplicate-exports": "off"

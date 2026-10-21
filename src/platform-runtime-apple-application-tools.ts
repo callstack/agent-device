@@ -141,6 +141,10 @@ async function resolveAppleOpenTarget(
       },
     );
   }
+  if (device.hostApp) {
+    const { resolveMacOsAppDeviceOpenTarget } = await loadAppResolution();
+    return await resolveMacOsAppDeviceOpenTarget(device, input.target);
+  }
   const macOsSurface = await resolveMacOsSurface(device, input.surface, env);
   const { resolveSessionAppBundleIdForTarget } = await loadOpenTarget();
   return {

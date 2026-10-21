@@ -5,7 +5,8 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import {
   deviceIdentity,
   isApplePlatform,
-  isMacOs,
+  canHostAppDevices,
+  hostDeviceIdPrefix,
   resolveDeviceAppleOs,
   type DeviceIdentity,
   type DeviceInfo,
@@ -23,18 +24,13 @@ import {
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
 import type { TakenOverDeviceClaim } from './device-claim-reboot.ts';
-import {
-  appScopedDeviceKey,
-  canonicalLocalDeviceKey,
-  resolveDeviceClaimPath,
-  resolveDeviceClaimRoot,
-} from './device-claim-paths.ts';
+import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
+import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
 import {
   DEVICE_CLAIM_SCHEMA_VERSION,
   ownershipFromClaim,
   transientDeviceClaimSession,
   type DeviceClaim,
-  type DeviceClaimApp,
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
 import {
@@ -59,7 +55,7 @@ export type {
   DeviceClaimSelectors,
   InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
-export type { DeviceClaim, DeviceClaimApp } from './device-claim-record.ts';
+export type { DeviceClaim } from './device-claim-record.ts';
 export type { TakenOverDeviceClaim } from './device-claim-reboot.ts';
 export type { DeviceClaimReconciler } from './device-claim-settlement.ts';
 export type { DeviceClaimSessionOwnership } from './device-claim-record.ts';
@@ -96,37 +92,57 @@ export async function acquireDeviceClaim(params: {
    * that outlives a live owner. Callers that have no answer to give omit it and keep the conflict.
    */
   observeDeviceBoot?: DeviceBootObservationService;
-  /** Claims only this app of the device; other apps stay available to other sessions. */
-  app?: DeviceClaimApp;
 }): Promise<DeviceClaimAcquireResult> {
   const identity = deviceClaimIdentity(params.device);
   const deviceKey = canonicalLocalDeviceKey(identity);
-  const { app } = params;
-  // Lock order is device key, then app key: every acquisition on the device holds the device
-  // key's lock, so a whole-device claim and an app claim are never written past each other.
-  return await withDeviceClaimLock(deviceKey, params.env, async () => {
-    if (!app) return await claimHeldDevice({ ...params, deviceKey, identity });
-    const deviceClaim = await resolveExistingClaim({
+  return await withAcquisitionLocks(
+    { ...params, claimOwnerKind: 'open-session' },
+    deviceKey,
+    async () => await claimHeldDevice({ ...params, deviceKey, identity }),
+  );
+}
+
+/**
+ * Runs an acquisition under its claim lock. An app device acquisition first takes its host key's
+ * lock, so a host claim and an app device claim are never written past each other (ADR 0035): a
+ * live host claim refuses it, and a host claim it supersedes is removed once its own is written.
+ */
+async function withAcquisitionLocks<Result extends TransientDeviceClaimResult>(
+  params: {
+    device: DeviceInfo;
+    session: string;
+    workspace: string;
+    stateDir: string;
+    env: EnvMap;
+    claimOwnerKind: DeviceClaimAcquirerKind;
+    transientCommand?: string;
+    reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+    observeDeviceBoot?: DeviceBootObservationService;
+  },
+  deviceKey: string,
+  acquire: () => Promise<Result>,
+): Promise<Result | DeviceClaimAcquireResult> {
+  const hostDeviceId = params.device.hostApp?.hostDeviceId;
+  if (hostDeviceId === undefined) return await withDeviceClaimLock(deviceKey, params.env, acquire);
+  const host: DeviceInfo = { ...params.device, id: hostDeviceId, hostApp: undefined };
+  const hostKey = canonicalLocalDeviceKey(deviceClaimIdentity(host));
+  return await withDeviceClaimLock(hostKey, params.env, async () => {
+    const hostClaim = await resolveExistingClaim({
       ...params,
-      deviceKey,
+      device: host,
+      deviceKey: hostKey,
       owner: readCurrentOwnerIdentity(),
-      claimOwnerKind: 'open-session',
     });
-    if (deviceClaim.status === 'conflict') return deviceClaim;
-    if (deviceClaim.status === 'held') {
-      const held = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
+    if (hostClaim.status === 'conflict') return hostClaim;
+    if (hostClaim.status === 'held') {
+      const held = inspectDeviceClaimFile(resolveDeviceClaimPath(hostKey, params.env));
       if (held) return { status: 'conflict', conflict: held };
     }
-    const appKey = appScopedDeviceKey(deviceKey, app.bundleId);
-    const acquired = await withDeviceClaimLock(
-      appKey,
-      params.env,
-      async () => await claimHeldDevice({ ...params, deviceKey: appKey, identity, app }),
-    );
+    const acquired = await withDeviceClaimLock(deviceKey, params.env, acquire);
     if (acquired.status !== 'acquired') return acquired;
-    removeSupersededDeviceClaim(deviceKey, params.env);
+    removeSupersededDeviceClaim(hostKey, params.env);
     const tookOver =
-      acquired.tookOver ?? (deviceClaim.status === 'available' ? deviceClaim.tookOver : undefined);
+      acquired.tookOver ?? (hostClaim.status === 'available' ? hostClaim.tookOver : undefined);
     return tookOver ? { ...acquired, tookOver } : acquired;
   });
 }
@@ -181,7 +197,14 @@ export async function acquireTransientDeviceClaim(params: {
 }): Promise<TransientDeviceClaimResult> {
   const identity = deviceClaimIdentity(params.device);
   const deviceKey = canonicalLocalDeviceKey(identity);
-  return await withDeviceClaimLock(deviceKey, params.env, async () => {
+  const session = transientDeviceClaimSession(params.command);
+  const lockParams = {
+    ...params,
+    session,
+    claimOwnerKind: 'transient-command' as const,
+    transientCommand: params.command,
+  };
+  return await withAcquisitionLocks(lockParams, deviceKey, async () => {
     const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey, params.env));
     if (
       existing?.claim &&
@@ -211,7 +234,7 @@ export async function acquireTransientDeviceClaim(params: {
       device: params.device,
       deviceKey,
       identity,
-      session: transientDeviceClaimSession(params.command),
+      session,
       transientCommand: params.command,
       workspace: params.workspace,
       stateDir: params.stateDir,
@@ -234,15 +257,17 @@ async function claimHeldDevice(params: {
   env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   observeDeviceBoot?: DeviceBootObservationService;
-  app?: DeviceClaimApp;
 }): Promise<DeviceClaimAcquireResult> {
   const { deviceKey, identity } = params;
   const owner = readCurrentOwnerIdentity();
   const claimOwnerKind: DeviceClaimAcquirerKind =
     params.transientCommand === undefined ? 'open-session' : 'transient-command';
   let supersededAppClaims: string[] = [];
-  if (!params.app && isMacOs(params.device)) {
-    const apps = await settleAppClaims(deviceKey, params);
+  if (!params.device.hostApp && canHostAppDevices(params.device)) {
+    const apps = await settleAppDeviceClaims(
+      canonicalLocalDeviceKey({ ...identity, id: hostDeviceIdPrefix(identity.id) }),
+      params,
+    );
     if (apps.conflict) return { status: 'conflict', conflict: apps.conflict };
     supersededAppClaims = apps.abandoned;
   }
@@ -264,7 +289,6 @@ async function claimHeldDevice(params: {
       ...identity,
       name: params.device.name,
     },
-    ...(params.app ? { app: params.app } : {}),
     session: params.session,
     workspace: params.workspace,
     stateDir: params.stateDir,
@@ -285,16 +309,20 @@ async function claimHeldDevice(params: {
   };
 }
 
-async function settleAppClaims(
-  deviceKey: string,
+/**
+ * A host acquisition settles the claims of its app devices first: reconciled when their owner is
+ * dead or this daemon abandoned them, a conflict otherwise. An unreadable claim file refuses too,
+ * because nothing proves it is not one of them.
+ */
+async function settleAppDeviceClaims(
+  appDeviceKeyPrefix: string,
   params: { stateDir: string; env: EnvMap; reconcileOrphanedDeviceClaim: DeviceClaimReconciler },
 ): Promise<{ abandoned: string[]; conflict?: InspectedDeviceClaim }> {
   const abandoned: string[] = [];
-  const appKeyPrefix = appScopedDeviceKey(deviceKey, '');
   for (const entry of inspectDeviceClaims({}, params.env)) {
     const scanned = entry.claim;
     if (!scanned) return { conflict: entry, abandoned: [] };
-    if (!scanned.app || !scanned.deviceKey.startsWith(appKeyPrefix)) continue;
+    if (!scanned.deviceKey.startsWith(appDeviceKeyPrefix)) continue;
     const conflict = await withDeviceClaimLock(scanned.deviceKey, params.env, async () => {
       const current = inspectDeviceClaimFile(resolveDeviceClaimPath(scanned.deviceKey, params.env));
       if (!current) return undefined;

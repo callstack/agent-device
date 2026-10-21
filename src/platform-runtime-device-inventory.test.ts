@@ -11,7 +11,7 @@ import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dis
 import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
 import { PLATFORMS, type DeviceInfo } from '@agent-device/kernel/device';
 import { describe, expect, test, vi } from 'vitest';
-import { attachAppleInstalledAppProbe } from './platform-runtime-device-inventory.ts';
+import { attachAppleSelectionProbes } from './platform-runtime-device-inventory.ts';
 
 const simctl = vi.hoisted(() => ({
   listapps: [] as Array<{ deviceId: string; apps: Record<string, unknown> }>,
@@ -50,9 +50,10 @@ describe('production device inventory composition', () => {
       loadInventory: async () =>
         source(family === 'apple' ? [simulator('sim-a'), simulator('sim-b')] : []),
     }));
-    const gateways = await attachAppleInstalledAppProbe({
+    const gateways = await attachAppleSelectionProbes({
       registry: createPlatformModuleRegistry(modules),
       loadHost: async () => testInventoryHost,
+      env: {},
     });
 
     // The fake answers through the production tool-provider scope — the same seam the
@@ -89,4 +90,42 @@ describe('production device inventory composition', () => {
     expect(selection.candidateCount).toBe(1);
     expect([...simctl.calls].sort()).toEqual(['sim-a', 'sim-b']);
   });
+
+  test.each([
+    ['native', 'host-mac:app:com.apple.textedit'],
+    ['xctest', 'host-mac'],
+  ] as const)(
+    'a %s backend open of a named Mac app selects device %s',
+    async (backend, expectedId) => {
+      const mac: DeviceInfo = {
+        platform: 'apple',
+        appleOs: 'macos',
+        id: 'host-mac',
+        name: 'Host Mac',
+        kind: 'device',
+        target: 'desktop',
+        booted: true,
+      };
+      const modules: InventoryPlatformModule[] = PLATFORMS.map((family) => ({
+        family,
+        loadInventory: async () => source(family === 'apple' ? [mac] : []),
+      }));
+      const gateways = await attachAppleSelectionProbes({
+        registry: createPlatformModuleRegistry(modules),
+        loadHost: async () => testInventoryHost,
+        env: { AGENT_DEVICE_MACOS_APP_BACKEND: backend },
+      });
+
+      const selection = await withDeviceInventoryContext(
+        { ...gateways, requestScope: testRequestScope },
+        () =>
+          resolveTargetDeviceSelection(
+            { platform: 'macos' },
+            { env: {}, appDeviceTarget: 'com.apple.textedit' },
+          ),
+      );
+
+      expect(selection.device.id).toBe(expectedId);
+    },
+  );
 });

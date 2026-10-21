@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { matchesPlatformSelector, type PlatformSelector } from '@agent-device/kernel/device';
+import {
+  devicesOverlap,
+  matchesPlatformSelector,
+  type PlatformSelector,
+} from '@agent-device/kernel/device';
 import {
   classifyOwnerLivenessFromObservation,
   type OwnerLiveness,
@@ -9,7 +13,7 @@ import {
 } from '@agent-device/host-kit/process';
 
 import { isSupersededDaemonOwner } from './daemon-registration.ts';
-import { resolveDeviceClaimRoot } from './device-claim-paths.ts';
+import { resolveDeviceClaimRoot } from '@agent-device/host-kit/file';
 import { decodeStoredDeviceClaim, type DeviceClaim } from './device-claim-record.ts';
 
 export type DeviceClaimClassification = OwnerLiveness | 'inconsistent' | 'owner-daemon-superseded';
@@ -78,8 +82,9 @@ function matchesClaimSelectors(
   ].every(Boolean);
 }
 
+/** A host selector also matches its app devices' claims, and an app device selector its host's. */
 function matchesClaimId(claim: DeviceClaim, expectedId: string | undefined): boolean {
-  return !expectedId || claim.device.id === expectedId;
+  return !expectedId || devicesOverlap(claim.device.id, expectedId);
 }
 
 function matchesClaimDevice(claim: DeviceClaim, device: string | undefined): boolean {

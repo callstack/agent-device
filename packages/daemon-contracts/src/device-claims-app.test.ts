@@ -9,13 +9,10 @@ import {
   acquireTransientDeviceClaim,
   releaseProvenStaleDeviceClaims,
 } from './device-claims.ts';
-import {
-  appScopedDeviceKey,
-  canonicalLocalDeviceKey,
-  resolveDeviceClaimPath,
-} from './device-claim-paths.ts';
+import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
 import { inspectDeviceClaims } from './device-claim-inspection.ts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, hostDeviceIdPrefix, type DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceClaim } from './device-claim-record.ts';
 import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
 import * as hostProcess from '@agent-device/host-kit/process';
 
@@ -65,13 +62,19 @@ const mac: DeviceInfo = {
   booted: true,
 };
 
+/** The app a claim holds as an app device of `mac`, or `undefined` for a whole-Mac claim. */
+function claimedApp(claim: DeviceClaim | undefined): string | undefined {
+  const prefix = hostDeviceIdPrefix(mac.id);
+  return claim?.device.id.startsWith(prefix) ? claim.device.id.slice(prefix.length) : undefined;
+}
+
 for (const [failure, opener] of [
   ['listing', 'transient'],
   ['reading', 'session'],
   ['reading', 'transient'],
   ['decoding', 'transient'],
 ] as const) {
-  test(`whole-Mac ${opener} acquisition refuses an uncertain app claim after ${failure} fails`, async () => {
+  test(`whole-Mac ${opener} acquisition refuses an uncertain app device claim after ${failure} fails`, async () => {
     const root = useClaimsRoot();
     const file = await seedForeignMacClaim(root, { bundleId: 'com.example.one' });
     const original = fs.readFileSync(file, 'utf8');
@@ -130,11 +133,10 @@ async function seedForeignMacClaim(
   const stateDir = path.join(root, `foreign-${options.bundleId ?? 'mac'}`);
   fs.mkdirSync(stateDir, { recursive: true });
   const seeded = await acquireDeviceClaim({
-    device: mac,
+    device: options.bundleId ? hostAppDevice(mac, options.bundleId) : mac,
     session: 'foreign',
     workspace: '/foreign',
     stateDir,
-    ...(options.bundleId ? { app: { bundleId: options.bundleId } } : {}),
   });
   assert.equal(seeded.status, 'acquired');
   if (seeded.status !== 'acquired') throw new Error('seed failed');
@@ -151,43 +153,40 @@ async function seedForeignMacClaim(
   return file;
 }
 
-test('app claims of different apps coexist and the same app stays exclusive', async () => {
+test('app device claims of different apps coexist and the same app stays exclusive', async () => {
   const root = useClaimsRoot();
   await seedForeignMacClaim(root, { bundleId: 'com.example.one' });
 
   const other = await acquireDeviceClaim({
-    device: mac,
+    device: hostAppDevice(mac, 'com.example.two'),
     session: 'two',
     workspace: '/two',
     stateDir: root,
-    app: { bundleId: 'com.example.two' },
   });
   assert.equal(other.status, 'acquired');
   if (other.status !== 'acquired') return;
   assert.equal(
     other.ownership.deviceKey,
-    appScopedDeviceKey(canonicalLocalDeviceKey(mac), 'com.example.two'),
+    canonicalLocalDeviceKey(hostAppDevice(mac, 'com.example.two')),
   );
   assert.deepEqual(
-    inspectDeviceClaims({ udid: mac.id }, process.env)
-      .map((entry) => entry.claim?.app?.bundleId)
+    inspectDeviceClaims({}, process.env)
+      .map((entry) => claimedApp(entry.claim))
       .sort(),
     ['com.example.one', 'com.example.two'],
   );
 
   const same = await acquireDeviceClaim({
-    device: mac,
+    device: hostAppDevice(mac, 'com.Example.One'),
     session: 'three',
     workspace: '/three',
     stateDir: root,
-    app: { bundleId: 'com.Example.One' },
   });
   assert.equal(same.status, 'conflict');
-  if (same.status === 'conflict')
-    assert.equal(same.conflict.claim?.app?.bundleId, 'com.example.one');
+  if (same.status === 'conflict') assert.equal(claimedApp(same.conflict.claim), 'com.example.one');
 });
 
-test('a whole-Mac claim and a foreign app claim exclude each other in both orders', async () => {
+test('a whole-Mac claim and a foreign app device claim exclude each other in both orders', async () => {
   const appFirst = useClaimsRoot();
   await seedForeignMacClaim(appFirst, { bundleId: 'com.example.one' });
   const whole = await acquireDeviceClaim({
@@ -198,7 +197,7 @@ test('a whole-Mac claim and a foreign app claim exclude each other in both order
   });
   assert.equal(whole.status, 'conflict');
   if (whole.status !== 'conflict') return;
-  assert.equal(whole.conflict.claim?.app?.bundleId, 'com.example.one');
+  assert.equal(claimedApp(whole.conflict.claim), 'com.example.one');
   const transient = await acquireTransientDeviceClaim({
     device: mac,
     command: 'install',
@@ -214,15 +213,14 @@ test('a whole-Mac claim and a foreign app claim exclude each other in both order
   const wholeFirst = useClaimsRoot();
   await seedForeignMacClaim(wholeFirst);
   const app = await acquireDeviceClaim({
-    device: mac,
+    device: hostAppDevice(mac, 'com.example.one'),
     session: 'app',
     workspace: '/app',
     stateDir: wholeFirst,
-    app: { bundleId: 'com.example.one' },
   });
   assert.equal(app.status, 'conflict');
   if (app.status !== 'conflict') return;
-  assert.equal(app.conflict.claim?.app, undefined);
+  assert.equal(claimedApp(app.conflict.claim), undefined);
 });
 
 test.each(['invalid-json', 'unknown'] as const)(
@@ -276,14 +274,13 @@ test('whole-Mac acquisition ignores a readable claim for another device', async 
   assert.equal(whole.status, 'acquired');
 });
 
-test("a daemon's own app claims exclude whole-Mac session and transient claims", async () => {
+test("a daemon's own app device claims exclude whole-Mac session and transient claims", async () => {
   const root = useClaimsRoot();
   const app = await acquireDeviceClaim({
-    device: mac,
+    device: hostAppDevice(mac, 'com.example.one'),
     session: 'app',
     workspace: '/app',
     stateDir: root,
-    app: { bundleId: 'com.example.one' },
   });
   assert.equal(app.status, 'acquired');
   const whole = await acquireDeviceClaim({
@@ -306,7 +303,7 @@ test("a daemon's own app claims exclude whole-Mac session and transient claims",
   assert.equal(transient.status, 'conflict');
 });
 
-test('a whole-Mac claim settles a dead owner app claim and keeps one with unsettled resources', async () => {
+test('a whole-Mac claim settles the app device claim of a dead owner and keeps one with unsettled resources', async () => {
   const root = useClaimsRoot();
   const retainedFile = await seedForeignMacClaim(root, {
     bundleId: 'com.example.one',
@@ -333,13 +330,11 @@ test('a whole-Mac claim settles a dead owner app claim and keeps one with unsett
     },
   });
   assert.equal(settled.status, 'acquired');
-  assert.deepEqual(reconciled, [
-    appScopedDeviceKey(canonicalLocalDeviceKey(mac), 'com.example.one'),
-  ]);
+  assert.deepEqual(reconciled, [canonicalLocalDeviceKey(hostAppDevice(mac, 'com.example.one'))]);
   assert.equal(fs.existsSync(retainedFile), false);
 });
 
-test('an app claim of a dead owner is released by release --stale like any claim', async () => {
+test('an app device claim of a dead owner is released by release --stale like any claim', async () => {
   const root = useClaimsRoot();
   const file = await seedForeignMacClaim(root, {
     bundleId: 'com.example.one',
@@ -357,7 +352,7 @@ test('an app claim of a dead owner is released by release --stale like any claim
   assert.equal(fs.existsSync(file), false);
 });
 
-test("an app claim taken over this daemon's abandoned whole-Mac claim leaves other daemons' apps free", async () => {
+test("an app device claim taken over this daemon's abandoned whole-Mac claim leaves other daemons' apps free", async () => {
   const root = useClaimsRoot();
   const whole = await acquireDeviceClaim({
     device: mac,
@@ -370,15 +365,17 @@ test("an app claim taken over this daemon's abandoned whole-Mac claim leaves oth
   assert.equal(await abandonDeviceClaim(whole.ownership, process.env), 'abandoned');
 
   const app = await acquireDeviceClaim({
-    device: mac,
+    device: hostAppDevice(mac, 'com.example.one'),
     session: 'app',
     workspace: '/app',
     stateDir: root,
-    app: { bundleId: 'com.example.one' },
   });
   assert.equal(app.status, 'acquired');
   if (app.status !== 'acquired') return;
-  assert.deepEqual(app.ownership.app, { bundleId: 'com.example.one' });
+  assert.equal(
+    app.ownership.deviceKey,
+    canonicalLocalDeviceKey(hostAppDevice(mac, 'com.example.one')),
+  );
   assert.equal(
     fs.existsSync(resolveDeviceClaimPath(canonicalLocalDeviceKey(mac), process.env)),
     false,
@@ -387,11 +384,10 @@ test("an app claim taken over this daemon's abandoned whole-Mac claim leaves oth
   const foreignStateDir = path.join(root, 'foreign');
   fs.mkdirSync(foreignStateDir);
   const foreign = await acquireDeviceClaim({
-    device: mac,
+    device: hostAppDevice(mac, 'com.example.two'),
     session: 'foreign',
     workspace: '/foreign',
     stateDir: foreignStateDir,
-    app: { bundleId: 'com.example.two' },
   });
   assert.equal(foreign.status, 'acquired');
 });
@@ -399,11 +395,10 @@ test("an app claim taken over this daemon's abandoned whole-Mac claim leaves oth
 test('whole-Mac acquisition supersedes only its own abandoned app claims', async () => {
   const root = useClaimsRoot();
   const app = await acquireDeviceClaim({
-    device: mac,
+    device: hostAppDevice(mac, 'com.example.one'),
     session: 'app',
     workspace: '/app',
     stateDir: root,
-    app: { bundleId: 'com.example.one' },
   });
   assert.equal(app.status, 'acquired');
   if (app.status !== 'acquired') throw new Error('seed failed');
@@ -434,18 +429,17 @@ test('whole-Mac acquisition supersedes only its own abandoned app claims', async
 test('failed whole-Mac acquisition leaves its abandoned app fenced against foreign acquisition', async () => {
   const root = useClaimsRoot();
   const app = await acquireDeviceClaim({
-    device: mac,
+    device: hostAppDevice(mac, 'com.example.one'),
     session: 'app',
     workspace: '/app',
     stateDir: root,
-    app: { bundleId: 'com.example.one' },
   });
   if (app.status !== 'acquired') throw new Error('seed failed');
   await abandonDeviceClaim(app.ownership, process.env);
   await seedForeignMacClaim(root, { bundleId: 'com.example.two' });
   const entries = inspectDeviceClaims({}, process.env);
-  const own = entries.find((entry) => entry.claim?.app?.bundleId === 'com.example.one')!;
-  const foreign = entries.find((entry) => entry.claim?.app?.bundleId === 'com.example.two')!;
+  const own = entries.find((entry) => claimedApp(entry.claim) === 'com.example.one')!;
+  const foreign = entries.find((entry) => claimedApp(entry.claim) === 'com.example.two')!;
   const orderedScan = vi
     .spyOn(claimInspection, 'inspectDeviceClaims')
     .mockReturnValue([own, foreign]);
@@ -461,11 +455,10 @@ test('failed whole-Mac acquisition leaves its abandoned app fenced against forei
   const otherState = path.join(root, 'other-daemon');
   fs.mkdirSync(otherState);
   const otherApp = await acquireDeviceClaim({
-    device: mac,
+    device: hostAppDevice(mac, 'com.example.one'),
     session: 'foreign',
     workspace: '/foreign',
     stateDir: otherState,
-    app: { bundleId: 'com.example.one' },
   });
   assert.equal(otherApp.status, 'conflict');
 });

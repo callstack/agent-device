@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   buildDeviceClaimConflictError,
   buildDeviceClaimInspectionCommand,
@@ -68,4 +68,34 @@ test('routes a provably dead owner to the exact stale release command', () => {
     command: 'agent-device device release --platform android --serial emulator-5554 --stale',
   });
   assert.match(String(response.error.hint), /settle its resources and release the claim with:/);
+});
+
+test('an app device refused by its host claim names the host as the device in the way', () => {
+  const mac: DeviceInfo = {
+    platform: 'apple',
+    appleOs: 'macos',
+    id: 'host-mac',
+    name: 'Host Mac',
+    kind: 'device',
+  };
+  const held = conflict('live');
+  const hostClaim: InspectedDeviceClaim = {
+    ...held,
+    deviceKey: 'local:apple:macos:host-mac',
+    claim: {
+      ...held.claim!,
+      deviceKey: 'local:apple:macos:host-mac',
+      device: { family: 'apple', appleOs: 'macos', id: mac.id, name: mac.name, kind: mac.kind },
+    },
+  };
+  const response = buildDeviceClaimConflictError(
+    hostAppDevice(mac, 'com.apple.TextEdit'),
+    hostClaim,
+  );
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.match(response.error.message, /^macos device host-mac is owned by session "checkout"/);
+  assert.deepEqual(response.error.details?.recovery, {
+    command: 'agent-device device status --platform macos --udid host-mac',
+  });
 });

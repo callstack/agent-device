@@ -31,6 +31,11 @@ export function readInstalledAppProbe() {
   return deviceInventoryContext.getStore()?.findInstalledApp;
 }
 
+/** The composition root's app-device resolver, or undefined where none was installed. */
+export function readAppDeviceResolver() {
+  return deviceInventoryContext.getStore()?.resolveAppDevice;
+}
+
 export async function listDeviceInventory(request: DeviceInventoryRequest): Promise<DeviceInfo[]> {
   return await discoverFrom('providerFirst', request);
 }

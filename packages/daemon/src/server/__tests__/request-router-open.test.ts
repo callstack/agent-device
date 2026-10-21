@@ -67,7 +67,7 @@ import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { ensureDeviceReady } from '../../core/device/device-ready.ts';
 import { awaitFixtureReadiness } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, hostAppDeviceId, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
@@ -172,10 +172,54 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
 
   expect(response.ok).toBe(true);
   expect(mockResolveTargetDevice.mock.calls).toEqual([
-    [{ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo', env: process.env }],
-    [{ platform: 'ios' }, { appleSimulatorAppTarget: 'com.example.demo', env: process.env }],
+    [
+      { platform: 'ios' },
+      {
+        appleSimulatorAppTarget: 'com.example.demo',
+        appDeviceTarget: 'com.example.demo',
+        env: process.env,
+      },
+    ],
+    [
+      { platform: 'ios' },
+      {
+        appleSimulatorAppTarget: 'com.example.demo',
+        appDeviceTarget: 'com.example.demo',
+        env: process.env,
+      },
+    ],
   ]);
   expect(sessionStore.get('session-app-aware')?.device.id).toBe(appDevice.id);
+});
+
+test('fresh macOS replay locks the app device it opens first, with its host', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-macos-lock-');
+  const replayPath = path.join(root, 'flow.ad');
+  fs.writeFileSync(replayPath, 'context platform=macos\nopen com.example.one\n');
+  mockResolveTargetDevice.mockImplementation(async (_flags, options) =>
+    options?.appDeviceTarget
+      ? hostAppDevice(LEASED_MACOS_HOST, options.appDeviceTarget)
+      : LEASED_MACOS_HOST,
+  );
+
+  const { keys } = await resolveRequestExecutionLockPlan({
+    req: {
+      token: 'test-token',
+      session: 'fresh-macos-replay',
+      command: 'replay',
+      positionals: [replayPath],
+      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
+      meta: { cwd: root },
+    },
+    sessionName: 'fresh-macos-replay',
+    sessionStore: makeSessionStore('agent-device-router-replay-macos-lock-'),
+  });
+
+  expect(keys).toEqual([
+    'session:fresh-macos-replay',
+    'device:host-macos-local',
+    'device:host-macos-local:app:com.example.one',
+  ]);
 });
 
 test('fresh replay reserves its authored app simulator before any replay step', async () => {
@@ -210,6 +254,37 @@ test('fresh replay reserves its authored app simulator before any replay step', 
     expect.objectContaining({ platform: 'ios' }),
     { appleSimulatorAppTarget: 'com.example.demo', env: process.env },
   );
+});
+
+test('a fresh open of an app device locks its host too, so opens on one Mac run one at a time', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-app-device-lock-');
+  mockResolveTargetDevice.mockImplementation(async (_flags, options) =>
+    options?.appDeviceTarget
+      ? hostAppDevice(LEASED_MACOS_HOST, options.appDeviceTarget)
+      : LEASED_MACOS_HOST,
+  );
+  const plan = async (positionals: string[], surface?: 'desktop') =>
+    await resolveRequestExecutionLockPlan({
+      req: {
+        token: 'test-token',
+        session: 'fresh-app',
+        command: 'open',
+        positionals,
+        flags: { platform: 'macos', ...(surface ? { surface } : {}) },
+      },
+      sessionName: 'fresh-app',
+      sessionStore,
+    });
+
+  expect((await plan(['com.example.one'])).keys).toEqual([
+    'session:fresh-app',
+    'device:host-macos-local',
+    'device:host-macos-local:app:com.example.one',
+  ]);
+  expect((await plan([], 'desktop')).keys).toEqual([
+    'session:fresh-app',
+    'device:host-macos-local',
+  ]);
 });
 
 test('fresh replay leaves a first deep-link open unbound when a later app target exists', async () => {
@@ -717,7 +792,12 @@ function leasedMacOsMeta(leaseId: string, requestId: string) {
 }
 
 test('open under a macos-app lease names no host path or device, and an unleased open still does', async () => {
-  mockResolveTargetDevice.mockResolvedValue(LEASED_MACOS_HOST);
+  // As the production selection does under the native backend: an app target selects its app device.
+  mockResolveTargetDevice.mockImplementation(async (_flags, options) =>
+    options?.appDeviceTarget
+      ? hostAppDevice(LEASED_MACOS_HOST, options.appDeviceTarget)
+      : LEASED_MACOS_HOST,
+  );
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {
     tenantId: 'tenant-a',
@@ -730,39 +810,48 @@ test('open under a macos-app lease names no host path or device, and an unleased
   const sessionStore = makeSessionStore('agent-device-router-open-macos-lease-');
 
   vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'native');
-  const opened = await createOpenHandler(
-    sessionStore,
-    leaseRegistry,
-  )(
-    openRequest(
-      'default',
-      { platform: 'macos' },
-      'req-open-macos-lease',
-      leasedMacOsMeta(lease.leaseId, 'req-open-macos-lease'),
-      [LEASED_MACOS_BUNDLE],
-    ),
-  );
-  vi.unstubAllEnvs();
+  try {
+    const opened = await createOpenHandler(
+      sessionStore,
+      leaseRegistry,
+    )(
+      openRequest(
+        'default',
+        { platform: 'macos' },
+        'req-open-macos-lease',
+        leasedMacOsMeta(lease.leaseId, 'req-open-macos-lease'),
+        [LEASED_MACOS_BUNDLE],
+      ),
+    );
 
-  expect(opened).toMatchObject({
-    ok: true,
-    data: { appBundleId: LEASED_MACOS_BUNDLE, platform: 'macos', target: 'desktop' },
-  });
-  const wire = JSON.stringify(opened);
-  for (const hostFact of [
-    sessionStore.resolveDaemonStateDir(),
-    LEASED_MACOS_HOST.name,
-    LEASED_MACOS_HOST.id,
-  ]) {
-    expect(wire).not.toContain(hostFact);
+    expect(opened).toMatchObject({
+      ok: true,
+      data: { appBundleId: LEASED_MACOS_BUNDLE, platform: 'macos', target: 'desktop' },
+    });
+    const wire = JSON.stringify(opened);
+    for (const hostFact of [
+      sessionStore.resolveDaemonStateDir(),
+      LEASED_MACOS_HOST.name,
+      LEASED_MACOS_HOST.id,
+    ]) {
+      expect(wire).not.toContain(hostFact);
+    }
+
+    // The lease holds its app device only, so an unleased open of another app runs beside it.
+    const unleased = await createOpenHandler(makeSessionStore('agent-device-router-open-macos-'))(
+      openRequest('plain', { platform: 'macos' }, 'req-open-macos-plain', {}, [
+        'com.example.other',
+      ]),
+    );
+    expect(unleased).toMatchObject({
+      ok: true,
+      data: {
+        device: LEASED_MACOS_HOST.name,
+        id: hostAppDeviceId(LEASED_MACOS_HOST.id, 'com.example.other'),
+      },
+    });
+    expect(unleased.ok && unleased.data?.sessionStateDir).toEqual(expect.any(String));
+  } finally {
+    vi.unstubAllEnvs();
   }
-
-  const unleased = await createOpenHandler(makeSessionStore('agent-device-router-open-macos-'))(
-    openRequest('plain', { platform: 'macos' }, 'req-open-macos-plain', {}, [LEASED_MACOS_BUNDLE]),
-  );
-  expect(unleased).toMatchObject({
-    ok: true,
-    data: { device: LEASED_MACOS_HOST.name, id: LEASED_MACOS_HOST.id },
-  });
-  expect(unleased.ok && unleased.data?.sessionStateDir).toEqual(expect.any(String));
 });

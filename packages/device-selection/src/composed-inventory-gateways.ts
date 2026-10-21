@@ -8,6 +8,7 @@ import type {
   ComposedDeviceInventoryGateways,
   DeviceInventoryGateway,
   DeviceInventorySource,
+  AppDeviceResolver,
   InstalledAppProbe,
   InventoryPlatformModule,
   PlatformModuleRegistry,
@@ -37,6 +38,8 @@ export function createComposedDeviceInventoryGateways(
      * probe); tests inject or omit one. Absent, selection falls back to the inventory rules.
      */
     findInstalledApp?: InstalledAppProbe;
+    /** The app device an open target selects on the macOS host; the host composes it in. */
+    resolveAppDevice?: AppDeviceResolver;
   }>,
 ): ComposedDeviceInventoryGateways {
   const localOnly = createLocalDeviceInventoryGateway(options.registry, options.loadHost);
@@ -69,7 +72,12 @@ export function createComposedDeviceInventoryGateways(
     discover: async (request, scope) => (await discoverWithSource(request, scope)).devices,
     discoverWithSource,
   });
-  return Object.freeze({ providerFirst, localOnly, findInstalledApp: options.findInstalledApp });
+  return Object.freeze({
+    providerFirst,
+    localOnly,
+    findInstalledApp: options.findInstalledApp,
+    resolveAppDevice: options.resolveAppDevice,
+  });
 }
 
 function createLocalDeviceInventoryGateway(

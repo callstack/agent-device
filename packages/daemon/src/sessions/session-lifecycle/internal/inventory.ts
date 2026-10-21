@@ -19,6 +19,7 @@ import {
 } from '../../../core/session-runtime-admission.ts';
 import {
   isApplePlatform,
+  hostDeviceIdPrefix,
   isIosFamily,
   isMacOs,
   matchesPlatformSelector,
@@ -192,7 +193,15 @@ function claimedByProjection(
   device: DeviceInfo,
   owners: Map<string, { session: string; workspace: string }>,
 ): { claimedBy?: { session: string; workspace: string } } {
-  const owner = owners.get(canonicalLocalDeviceKey(deviceClaimIdentity(device)));
+  const identity = deviceClaimIdentity(device);
+  // A host whose app devices are claimed is not free as a whole (ADR 0035).
+  const appDevicePrefix = canonicalLocalDeviceKey({
+    ...identity,
+    id: hostDeviceIdPrefix(device.id),
+  });
+  const owner =
+    owners.get(canonicalLocalDeviceKey(identity)) ??
+    [...owners].find(([deviceKey]) => deviceKey.startsWith(appDevicePrefix))?.[1];
   return owner ? { claimedBy: owner } : {};
 }
 

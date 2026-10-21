@@ -94,7 +94,18 @@ function appleHostOrSimulatorFact(
  * runner write, or `simctl pbcopy` on tvOS, and the macOS host pasteboard) expose the pair or
  * neither, so splitting them here would invent a cell no Apple owner can actually be in.
  */
+/**
+ * The clipboard and host settings belong to the whole Mac, which an app device does not hold
+ * (ADR 0035): another session may be driving another app beside it.
+ */
+const appDeviceHostStateUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-scope',
+  hint: 'This session holds one app of the Mac. Use a --surface desktop session for the clipboard and host settings.',
+} as const);
+
 function appleClipboardFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.hostApp) return appDeviceHostStateUnavailable;
   return appleHostOrSimulatorFact(device, clipboardKindUnavailable, clipboardLeafUnavailable);
 }
 
@@ -149,7 +160,9 @@ function appleClipboardFamilyUnavailable(device: DeviceInfo): RuntimeOperationUn
 }
 
 function appleSettingsFacts(device: DeviceInfo) {
-  const target = appleHostOrSimulatorFact(device, settingsKindUnavailable, settingsLeafUnavailable);
+  const target = device.hostApp
+    ? appDeviceHostStateUnavailable
+    : appleHostOrSimulatorFact(device, settingsKindUnavailable, settingsLeafUnavailable);
   if (isMacOs(device)) {
     return settingsRuntimeOperationFacts({
       target,

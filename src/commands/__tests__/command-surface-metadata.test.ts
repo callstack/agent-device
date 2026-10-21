@@ -111,7 +111,8 @@ test('every command states a summary that is shorter than its description', () =
 test('open keeps flag guidance on the CLI surface only', () => {
   const cliSchemas = listCommandFamilyCliSchemas();
   const open = listMcpCommandMetadata().find((metadata) => metadata.name === 'open');
-  assert.doesNotMatch(mcpBody(open!), /--launch-console/);
+  assert.match(mcpBody(open!), /foreground automation target/);
+  assert.match(helpBody(cliSchemas.open!.text), /foreground automation target/);
   assert.match(helpBody(cliSchemas.open!.text), /--launch-console/);
 });
 

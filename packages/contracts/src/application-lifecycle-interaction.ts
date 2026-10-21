@@ -141,7 +141,6 @@ export async function invokeApplicationOpen(
     appBundleId?: string;
     execution: ApplicationLifecycleExecution;
     terminateRunningApp?: boolean;
-    background?: boolean;
   }>,
 ): Promise<ApplicationLaunchReport | void> {
   const { device, positionals, execution } = params;
@@ -164,7 +163,6 @@ type DirectOpenParameters = Readonly<{
   appBundleId?: string;
   execution: ApplicationLifecycleExecution;
   terminateRunningApp?: boolean;
-  background?: boolean;
 }>;
 
 function assertOpenPositionals(positionals: readonly string[]): void {
@@ -218,7 +216,6 @@ async function invokeApplicationUrlOpen(
     launchArgs: params.execution.launchArgs ? [...params.execution.launchArgs] : undefined,
     terminateRunningApp: params.terminateRunningApp,
     url,
-    ...(params.background ? { background: true } : {}),
   });
 }
 
@@ -245,7 +242,6 @@ async function invokeApplicationTargetOpen(
     launchConsole: execution.launchConsole,
     launchArgs: execution.launchArgs ? [...execution.launchArgs] : undefined,
     terminateRunningApp: params.terminateRunningApp,
-    ...(params.background ? { background: true } : {}),
   });
 }
 

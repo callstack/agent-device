@@ -127,7 +127,7 @@ Validation and evidence:
 
 React Native: help react-native for Metro/Re.Pack reload, DevTools, RN overlays. JS-only change: metro reload, find "Home"; open --relaunch for native reset.
 
-Lifecycle facts (trust these instead of probing): open without --relaunch is idempotent-foreground except native macOS app-scoped opens (background); --relaunch restarts it. close keeps a healthy iOS runner warm by default; runners/daemons self-idle after 5 minutes; stale leases self-reclaim. open device claims reclaim other worktrees' warm runners; "already owned by another agent-device daemon" = owner outside claim arbitration. Env vars: help physical-device.
+Lifecycle facts (trust these instead of probing): open without --relaunch is idempotent-foreground except native macOS app opens (background); --relaunch restarts it. close keeps a healthy iOS runner warm by default; runners/daemons self-idle after 5 minutes; stale leases self-reclaim. open device claims reclaim other worktrees' warm runners; "already owned by another agent-device daemon" = owner outside claim arbitration. Env vars: help physical-device.
 
 Escalate:
   help manual-qa scripted manual QA
@@ -475,7 +475,7 @@ Android physical-device prerequisites:
   Android does not need the iOS runner signing setup. For React Native/Expo Metro reachability, read help react-native.
 
 Runner and daemon lifecycle (applies to simulators too):
-  open without --relaunch is idempotent-foreground for an already-running app, except native macOS app-scoped opens keep it in the background (help open); neither restarts the process. open --relaunch restarts the app; on iOS simulators this collapses to one simctl launch --terminate-running-process call instead of a separate terminate-then-launch.
+  open without --relaunch is idempotent-foreground for an already-running app, except native macOS app opens keep it in the background (help macos); neither restarts the process. open --relaunch restarts the app; on iOS simulators this collapses to one simctl launch --terminate-running-process call instead of a separate terminate-then-launch.
   No runner read launches a session app that is not running: snapshot, wait, is, get, a reading find, and an interaction's leading reads (a gesture's viewport read, the capture that resolves a selector click/fill) answer the retriable APP_NOT_RUNNING instead of bare-launching over a launch SpringBoard still holds behind its deep-link confirmation. Only open, activate, and a command that mutates without a leading read bring a stopped app up.
   close keeps a healthy iOS simulator XCTest runner warm by default so the next open on that simulator (same udid in the same simulator set) skips the runner build, unless --shutdown was requested, the session was recording, or the session held a device lease. A retained runner auto-stops after an idle window (default 5 minutes); set AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS to override, or 0 to disable idle stop and retain until daemon exit. Only a ready runner with an observed listener is retained; close retires unfinished prewarm recovery. Losing the retained listener stops that generation, and daemon shutdown stops idle retained runners rather than handing them off without supervision.
   Each AGENT_DEVICE_STATE_DIR runs its own daemon. It self-exits after an idle window (default 5 minutes, matching the runner idle-stop default) once it has no open sessions, no in-flight requests, and no active recording; set AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS to override, or 0 to disable idle reap.
@@ -691,9 +691,8 @@ Rules:
   Prefer refs/selectors over raw coordinates.
   macOS snapshot rects are window-space; use current refs or overlay refs instead of guessing coordinates.
   On the default XCTest backend a read (snapshot, get, find) of a session app that sits behind other windows is answered from where it sits, without raising the app; interactions and a window-level screenshot of that app still bring it forward.
-  With AGENT_DEVICE_MACOS_APP_BACKEND=native, an app session whose target resolves before launch claims only that bundle id. Sessions on different apps can coexist; commands taking the device execution lock still serialize within one daemon.
-  An app-claimed session can reopen only its claimed app on the app surface. For a link, use open <app> <url>; for another app or surface, close the session or use a new --session.
-  Read help open for activation behavior and the initial-snapshot flag.`,
+  With AGENT_DEVICE_MACOS_APP_BACKEND=native, each app opened on the app surface is its own device: sessions on different apps run in parallel; a same-app or whole-Mac (desktop, menubar, frontmost-app) session conflicts.
+  An app session opens its app in the background and opens or closes only that app (open <url> goes to it). It refuses clipboard and settings; use a --surface desktop session for those, or a new --session for another app.`,
   },
   web: {
     summary: 'Minimal browser workflow with the managed web backend',

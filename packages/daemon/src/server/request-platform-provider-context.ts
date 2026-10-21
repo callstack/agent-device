@@ -81,7 +81,7 @@ async function resolveProviderTargetDevice(
 ): Promise<SessionState['device']> {
   const options =
     req.command === 'open'
-      ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0], env)
+      ? buildOpenTargetDeviceResolutionOptions(req.positionals?.[0], env, req.flags?.surface)
       : undefined;
   return await resolveTargetDevice(req.flags ?? {}, { ...options, env });
 }

@@ -14,6 +14,7 @@ import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isola
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   listLocalDeviceInventory,
+  readAppDeviceResolver,
   readDeviceInventory,
   shouldPropagateDeviceInventoryProbeError,
 } from './device-inventory-context.ts';
@@ -62,6 +63,11 @@ export type ResolveTargetDeviceOptions = {
   env: EnvMap;
   androidAvdSelection?: 'running-only' | 'include-stopped';
   appleSimulatorAppTarget?: string;
+  /**
+   * The app an `open` names on the app surface. On a host that holds apps as devices of their own
+   * (ADR 0035), the selection is that app's device instead of the host.
+   */
+  appDeviceTarget?: string;
 };
 
 function canFallbackAfterAppleDeviceNotFound(
@@ -120,7 +126,7 @@ export async function resolveTargetDeviceSelection(
       const cached = readResolveTargetDeviceCache(cacheKey);
       if (cached) {
         diagnosticData.cacheHit = true;
-        return cached;
+        return await selectAppDevice(cached, options.appDeviceTarget);
       }
       const inventory = await readDeviceInventory(inventoryRequest);
       const devices = [...inventory.devices];
@@ -134,20 +140,38 @@ export async function resolveTargetDeviceSelection(
             appleSimulatorAppTarget: options.appleSimulatorAppTarget,
           },
         );
-        return cacheResolvedTargetDevice(cacheKey, selection);
+        return await selectAppDevice(
+          cacheResolvedTargetDevice(cacheKey, selection),
+          options.appDeviceTarget,
+        );
       }
 
-      return cacheResolvedTargetDevice(
-        cacheKey,
-        await resolveInventorySelection({
-          devices,
-          selector,
-          source: inventory.source,
-        }),
+      const selection = await resolveInventorySelection({
+        devices,
+        selector,
+        source: inventory.source,
+      });
+      return await selectAppDevice(
+        cacheResolvedTargetDevice(cacheKey, selection),
+        options.appDeviceTarget,
       );
     },
     diagnosticData,
   );
+}
+
+/**
+ * The app device `appTarget` names on the selected host. The request cache keeps the host, so each
+ * open in one request (a batch or a replay) derives the app device it names.
+ */
+async function selectAppDevice(
+  selection: DeviceSelectionResult,
+  appTarget: string | undefined,
+): Promise<DeviceSelectionResult> {
+  const resolveAppDevice = appTarget ? readAppDeviceResolver() : undefined;
+  if (!appTarget || !resolveAppDevice || selection.source !== 'local') return selection;
+  const device = await resolveAppDevice(selection.device, appTarget);
+  return device ? { ...selection, device } : selection;
 }
 
 async function resolveLocalAppleDeviceSelection(
@@ -269,6 +293,10 @@ function buildResolveTargetDeviceCacheKey(
   // The app target only informs the first device choice. Once a request has
   // chosen a device, every later resolution must reuse that same device even
   // when dispatch has no app target to pass back through this seam.
-  const { appleSimulatorAppTarget: _appleSimulatorAppTarget, ...cacheOptions } = options;
+  const {
+    appleSimulatorAppTarget: _appleSimulatorAppTarget,
+    appDeviceTarget: _appDeviceTarget,
+    ...cacheOptions
+  } = options;
   return JSON.stringify({ request, options: cacheOptions });
 }

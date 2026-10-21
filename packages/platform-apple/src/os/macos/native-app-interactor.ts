@@ -1,4 +1,3 @@
-import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import type {
   Interactor,
   PressPointOptions,
@@ -57,10 +56,7 @@ export function macOsNativeAppInteractor(
     return actedOn(result);
   };
   return {
-    open: (app, options) =>
-      isDeepLinkTarget(app) && options?.appBundleId
-        ? base.open(options.appBundleId, { ...options, url: app, background: true })
-        : base.open(app, options),
+    open: base.open,
     openDevice: base.openDevice,
     close: base.close,
     screenshot: base.screenshot,

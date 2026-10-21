@@ -7,3 +7,4 @@ export {
   resolveIosAppAlias,
   resolveIosSimulatorDeepLinkBundleId,
 } from './core/app-resolution.ts';
+export { resolveMacOsAppDeviceOpenTarget } from './os/macos/apps.ts';

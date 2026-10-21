@@ -18,7 +18,7 @@ import {
   withTestDeviceInventory,
   withTestDeviceInventoryProvider as withDeviceInventoryProvider,
 } from '../inventory-gateways.fixtures.ts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -110,6 +110,54 @@ beforeEach(() => {
   mockFindIosSimulatorInstalledApp.mockReset();
   mockFindIosSimulatorInstalledApp.mockResolvedValue(undefined);
   mockListAppleDevices.mockReset();
+});
+
+test('an app target selects the app device in either order of one request', async () => {
+  const resolveAppDevice = vi.fn(async (host: DeviceInfo, appTarget: string) =>
+    hostAppDevice(host, appTarget),
+  );
+  // Each entry is one resolution of the same request, with or without an app target.
+  const resolveInOrder = async (targets: Array<string | undefined>): Promise<DeviceInfo[]> =>
+    await withTestDeviceInventory(
+      { local: async () => [macDesktop], resolveAppDevice },
+      async () =>
+        await withResolveTargetDeviceCacheScope(async () => {
+          const devices: DeviceInfo[] = [];
+          for (const appDeviceTarget of targets) {
+            devices.push(
+              await resolveTargetDeviceInContext(
+                { platform: 'macos' },
+                appDeviceTarget ? { env: {}, appDeviceTarget } : { env: {} },
+              ),
+            );
+          }
+          return devices;
+        }),
+    );
+  const app = 'host-macos-local:app:com.example.one';
+
+  // The request keeps the host; each resolution that names an app gets that app's device.
+  const appFirst = await resolveInOrder(['com.example.one', undefined]);
+  assert.deepEqual(
+    appFirst.map((device) => device.id),
+    [app, macDesktop.id],
+  );
+  assert.deepEqual(appFirst[0]?.hostApp, {
+    hostDeviceId: macDesktop.id,
+    bundleId: 'com.example.one',
+  });
+
+  // A batch or replay that locked the host first still opens each app device it names.
+  const batch = await resolveInOrder([undefined, 'com.example.one', undefined, 'com.example.two']);
+  assert.deepEqual(
+    batch.map((device) => device.id),
+    [macDesktop.id, app, macDesktop.id, 'host-macos-local:app:com.example.two'],
+  );
+
+  assert.deepEqual(
+    (await resolveInOrder([undefined])).map((device) => device.id),
+    [macDesktop.id],
+  );
 });
 
 test('resolveTargetDevice narrows local Android discovery to an explicit serial', async () => {

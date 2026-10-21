@@ -62,8 +62,6 @@ export async function openIosApp(
     terminateRunningApp?: boolean;
     url?: string;
     runnerOptions?: AppleRunnerCommandOptions;
-    /** macOS only: launch or reopen without bringing the app to the front. */
-    background?: boolean;
   },
 ): Promise<void> {
   const launchConsole = options?.launchConsole?.trim();
