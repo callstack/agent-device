@@ -3,7 +3,7 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { deviceClaimConflictError } from './device-claim-conflict.ts';
+import { deviceClaimConflictError } from '@agent-device/daemon-contracts/device-claim-conflict';
 import { deviceClaimRuleForOwner } from './device-claim-rule.ts';
 import {
   abandonDeviceClaim,

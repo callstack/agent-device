@@ -302,6 +302,18 @@ const GENERIC_MUTATING_COMMAND_TRAITS = {
   | 'batchable'
 >;
 
+// Local client-backed CLI commands have no daemon route, record no session
+// action, and cannot run inside a batch.
+const LOCAL_CLI_COMMAND_TRAITS = {
+  catalog: { group: 'local-cli' },
+  recordsSessionAction: false,
+  timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+  batchable: false,
+} as const satisfies Pick<
+  Extract<CommandDescriptor, { recordsSessionAction: false }>,
+  'catalog' | 'recordsSessionAction' | 'timeoutPolicy' | 'batchable'
+>;
+
 // click/fill/press/longpress differ only in their timeout budget and response
 // shaping: same owner file, same pre-dispatch target identity, same interaction
 // route and dialog guard, same device buckets, and the same session-bound claim
@@ -1658,10 +1670,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'debug',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/debugging/index.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     // Wave 6 residue: this route reads local diagnostics files and has no daemon route, no
     // platform import, and no injected dispatch — it was `legacy` only because the discriminator
     // pass had nothing better to say about it.
@@ -1671,10 +1680,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'daemon',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/daemon.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     // `stop --clean` reconciles owner-scoped Apple runner resources through the neutral
     // daemon-owner cleanup service. It is host execution, not a request-bound device operation.
@@ -1684,41 +1690,42 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'device',
     deviceClaimPolicy: 'observe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/device.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
+  },
+  {
+    name: 'exec',
+    // #3263: the wrapper takes its own host-global claim through the shared
+    // claim store, owns it on this CLI process's identity, and releases it on
+    // every exit path. No daemon request ever binds a device for it.
+    deviceClaimPolicy: 'wrapper-exclusive',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/exec.ts'] as const } : {}),
+    ...LOCAL_CLI_COMMAND_TRAITS,
+    mcpExposed: false,
+    // Device selection resolves the selector through the local device inventory;
+    // the wrapped command, not this process, touches the device.
+    platformExecution: { kind: 'inventory', use: inventoryUse },
   },
   {
     name: 'metro',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/metro/index.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'session',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/session.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'cdp',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/agent-cdp.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
@@ -1726,10 +1733,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'auth',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/auth.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
@@ -1737,10 +1741,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'plugins',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/plugins.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
@@ -1748,10 +1749,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'connect',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
@@ -1759,10 +1757,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'connection',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
@@ -1770,10 +1765,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'disconnect',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
@@ -1781,10 +1773,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'mcp',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/bin.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
@@ -1792,10 +1781,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'proxy',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/proxy.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: NO_PLATFORM_EXECUTION,
   },
@@ -1803,10 +1789,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'takeover',
     deviceClaimPolicy: 'observe',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/takeover.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     platformExecution: { kind: 'inventory', use: inventoryUse },
   },
@@ -1825,10 +1808,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'web',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/web.ts'] as const } : {}),
-    catalog: { group: 'local-cli' },
-    recordsSessionAction: false,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
-    batchable: false,
+    ...LOCAL_CLI_COMMAND_TRAITS,
     mcpExposed: false,
     // setup/doctor mutate and inspect the managed browser installed on this host through the
     // neutral managed-web-backend service. Live web sessions remain device-runtime owned.

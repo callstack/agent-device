@@ -68,7 +68,7 @@ import {
   type TakenOverDeviceClaim,
 } from '@agent-device/daemon-contracts/device-claims';
 import { appendResponseWarning } from './session-open-warnings.ts';
-import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
+import { buildDeviceClaimConflictError } from '@agent-device/daemon-contracts/device-claim-conflict';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
 import {
   errorResponse,

@@ -80,6 +80,21 @@ export type TransientDeviceClaimResult =
   | DeviceClaimAcquireResult
   | { status: 'covered-by-owned-claim' };
 
+/**
+ * The claim `session` recorded for an `exec` wrapper claim. As with a transient
+ * claim, the session field is what tells `device status` the owner is a command
+ * in flight; the `exec` prefix names the wrapper that holds it for the whole
+ * lifetime of its child process. The command is a raw argv token and this label
+ * is echoed into `device status` and conflict messages, so it is sanitized the
+ * way session names are before being recorded. `safeSessionName`'s module stays
+ * behind this dynamic edge: the claim store's eager closure is budgeted, and a
+ * wrapper claim is taken on a cold CLI path that must not pay for it.
+ */
+async function wrapperDeviceClaimSession(command: string): Promise<string> {
+  const { safeSessionName } = await import('@agent-device/host-kit/session-paths');
+  return `exec:${safeSessionName(command)}`;
+}
+
 export async function acquireDeviceClaim(params: {
   device: DeviceInfo;
   session: string;
@@ -99,6 +114,37 @@ export async function acquireDeviceClaim(params: {
     deviceKey,
     params.env,
     async () => await claimHeldDevice({ ...params, deviceKey, identity }),
+  );
+}
+
+/**
+ * #3263: the claim an `exec` wrapper takes on its own process identity for the
+ * lifetime of a child command. Same host-global exclusion as a session claim,
+ * recorded with `claimOwnerKind: 'wrapper'` so the daemon-supersession proof never
+ * reads a `daemon.json` against a CLI process, and with the wrapped command in
+ * the session label so `device status` names who holds the device.
+ */
+export async function acquireWrapperDeviceClaim(params: {
+  device: DeviceInfo;
+  command: string;
+  workspace: string;
+  stateDir: string;
+  env: EnvMap;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+}): Promise<DeviceClaimAcquireResult> {
+  const identity = deviceClaimIdentity(params.device);
+  const deviceKey = canonicalLocalDeviceKey(identity);
+  return await withDeviceClaimLock(
+    deviceKey,
+    params.env,
+    async () =>
+      await claimHeldDevice({
+        ...params,
+        deviceKey,
+        identity,
+        session: await wrapperDeviceClaimSession(params.command),
+        claimOwnerKind: 'wrapper',
+      }),
   );
 }
 
@@ -197,11 +243,14 @@ async function claimHeldDevice(params: {
   env: EnvMap;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   observeDeviceBoot?: DeviceBootObservationService;
+  /** The persisted kind to record; session and transient acquirers derive theirs. */
+  claimOwnerKind?: DeviceClaimAcquirerKind;
 }): Promise<DeviceClaimAcquireResult> {
   const { deviceKey, identity } = params;
   const owner = readCurrentOwnerIdentity();
   const claimOwnerKind: DeviceClaimAcquirerKind =
-    params.transientCommand === undefined ? 'open-session' : 'transient-command';
+    params.claimOwnerKind ??
+    (params.transientCommand === undefined ? 'open-session' : 'transient-command');
   const existing = await resolveExistingClaim({
     ...params,
     owner,

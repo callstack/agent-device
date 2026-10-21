@@ -17,12 +17,15 @@ export const DEVICE_CLAIM_SCHEMA_VERSION = 3;
  * schemas wrote a command-scoped claim and an open session *named* `transient:<command>`
  * identically; the session label is never re-read as the discriminant. A claim that states no kind
  * can hold and fence a device but can never cover a command.
+ * `wrapper` names a plain CLI process holding the device for the lifetime of a child it runs
+ * (#3263); it is not a daemon, so the daemon-supersession proof never reads against its record.
  */
-export type DeviceClaimOwnerKind = 'open-session' | 'transient-command' | 'unstated';
+export type DeviceClaimOwnerKind = 'open-session' | 'transient-command' | 'wrapper' | 'unstated';
 
 const DEVICE_CLAIM_OWNER_KINDS: readonly DeviceClaimOwnerKind[] = [
   'open-session',
   'transient-command',
+  'wrapper',
   'unstated',
 ];
 

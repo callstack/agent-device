@@ -76,6 +76,9 @@ const POLICY_CLAIMS: [DeviceClaimPolicy, string[]][] = [
   ['acquire-session', []],
   ['release-session', []],
   ['transient-exclusive', ['transient:made-up-command']],
+  // The wrapper policy is never taken through daemon admission; only the `exec`
+  // CLI process records such a claim, on its own identity.
+  ['wrapper-exclusive', []],
 ];
 
 test.for(POLICY_CLAIMS)(

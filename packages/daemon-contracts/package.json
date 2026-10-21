@@ -56,6 +56,10 @@
       "types": "./src/device-claim-recovery.ts",
       "default": "./src/device-claim-recovery.ts"
     },
+    "./device-claim-conflict": {
+      "types": "./src/device-claim-conflict.ts",
+      "default": "./src/device-claim-conflict.ts"
+    },
     "./device-claims": {
       "types": "./src/device-claims.ts",
       "default": "./src/device-claims.ts"

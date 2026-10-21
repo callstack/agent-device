@@ -146,8 +146,13 @@ function classifyInspectedClaim(
   // release it. #2031: a replaced daemon keeps running and keeps its claim, but
   // clients reach the successor published for its state dir instead, so the
   // claim names a session no `session list` reports and no `close` can reach.
+  // #3263: that proof reads the state dir's daemon registration, which describes
+  // daemons only. A wrapper claim's owner is a plain CLI process no registration
+  // can ever name, so supersession does not apply to it and its liveness stands.
   const superseded =
-    liveness === 'live' && isSupersededDaemonOwner({ ...owner, stateDir: claim.stateDir });
+    liveness === 'live' &&
+    claim.claimOwnerKind !== 'wrapper' &&
+    isSupersededDaemonOwner({ ...owner, stateDir: claim.stateDir });
   return { ...entry, classification: superseded ? 'owner-daemon-superseded' : liveness };
 }
 

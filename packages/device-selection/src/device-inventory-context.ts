@@ -15,6 +15,16 @@ type DeviceInventoryContext = ComposedDeviceInventoryGateways &
 
 const deviceInventoryContext = new AsyncLocalStorage<DeviceInventoryContext>();
 
+/**
+ * Whether a device inventory gateway composition is already installed for this
+ * async scope. The daemon installs one per request; a process-owned local
+ * command composes one only when none was installed, so its test seams and the
+ * daemon's request path share the same entry point.
+ */
+export function hasDeviceInventoryContext(): boolean {
+  return deviceInventoryContext.getStore() !== undefined;
+}
+
 export async function withDeviceInventoryContext<T>(
   context: DeviceInventoryContext,
   task: () => Promise<T>,

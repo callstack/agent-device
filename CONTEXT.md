@@ -69,8 +69,8 @@ A mutual-exclusion guard for a platform helper process. It is not remote client 
 _Avoid_: Device lease, process lease
 
 **Device claim**:
-Host-global exclusive ownership of one local device by an open session or a sessionless mutating
-command.
+Host-global exclusive ownership of one local device: open session, sessionless command, or exec
+wrapper.
 
 **Device-claim policy**:
 A command's observation, ownership, or exclusive-mutation rule.
