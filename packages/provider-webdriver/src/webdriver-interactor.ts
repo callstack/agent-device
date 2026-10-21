@@ -73,7 +73,7 @@ const ANDROID_HARDWARE_BUTTON_KEYCODES = {
   mediaFastForward: 90,
 } as const;
 
-/** The eight cells that ride the Android-only `pressKey` route (the volume and power legs split per backend). */
+/** The eight cells that ride the Android-only `pressKey` route (the volume and power legs keep their own methods). */
 type AndroidExtendedHardwareKey = Exclude<
   keyof typeof ANDROID_HARDWARE_BUTTON_KEYCODES,
   'volumeUp' | 'volumeDown' | 'power'

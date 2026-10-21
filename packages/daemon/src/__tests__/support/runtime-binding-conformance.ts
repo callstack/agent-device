@@ -108,15 +108,15 @@ function systemButtonConformedBindings(): Record<SystemButtonCommand, ConformedR
  * (#3848), so each owes its own refusal row, the way `orientation auto` does. Derived from the
  * command vocabulary so every declared name — and any future one — proves its own refusal.
  */
-type HardwareButtonConformedKey = 'hardware-button' | `hardware-button ${HardwareButtonName}`;
+type HardwareButtonConformedKey = `hardware-button ${HardwareButtonName}`;
 
 function hardwareButtonConformedBindings(): Record<
   HardwareButtonConformedKey,
   ConformedRuntimeBinding
 > {
-  const row = (name: HardwareButtonName): [string, ConformedRuntimeBinding] => {
+  const row = (name: HardwareButtonName): [HardwareButtonConformedKey, ConformedRuntimeBinding] => {
     return [
-      name === 'volume-up' ? 'hardware-button' : (`hardware-button ${name}` as const),
+      `hardware-button ${name}`,
       {
         plan: {
           refused: parseHardwareButtonPositionals([name]) as RuntimeOperation,

@@ -428,7 +428,7 @@ test('homeAndroid presses keyevent 3', async () => {
 
 test('pressAndroidHardwareButton presses each named key as its own one keyevent', async () => {
   // The mapping this command promises: one `input keyevent` per named key, the exact Android
-  // keycode per name (#3848 and its mute/sleep/wake/media follow-up).
+  // keycode per name (#3848).
   const keyevents = [
     ['volumeUp', '24'],
     ['volumeDown', '25'],

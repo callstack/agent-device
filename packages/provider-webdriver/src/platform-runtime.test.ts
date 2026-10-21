@@ -622,7 +622,7 @@ test('a reachable provider with no overrides still admits its declared operation
 
 // The hardware-button split lives in the platform's declared map, not in a device-kind rule:
 // the Android map carries every key on the mobile pressKey keycodes, the iOS map carries volume
-// on mobile pressButton and refuses power and the extended keys (#3848 and its follow-up).
+// on mobile pressButton and refuses power and the extended keys (#3848).
 test('hardware-button facts follow the platform capability map', async () => {
   const owner = (platform: CloudWebDriverPlatform) =>
     createWebDriverPlatformRuntimeOwner({

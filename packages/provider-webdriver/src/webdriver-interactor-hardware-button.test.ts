@@ -51,7 +51,7 @@ test('iOS volume presses ride mobile pressButton and power refuses before the dr
 
   const powerClient = {
     executeScript: async () => {
-      throw new Error('the iOS power refusal must reach the driver');
+      throw new Error('the iOS power refusal must not reach the driver');
     },
   } as unknown as WebDriverClient;
   const powerIos = createWebDriverInteractor({
@@ -75,7 +75,7 @@ test('Android power presses KEYCODE_POWER through mobile pressKey', async () => 
   assert.deepEqual(transcript, ['mobile: pressKey [{"keycode":26}]']);
 });
 
-// The eight extended hardware keys (#3848 follow-up): Android presses each of their keycodes
+// The eight extended hardware keys (#3848): Android presses each of their keycodes
 // through `mobile: pressKey`, the same keyevents the local adb owner sends; XCUITest exposes no
 // press route for any of them, so the declared capability map refuses an iOS session before the
 // driver is asked.
@@ -106,7 +106,7 @@ test('iOS refuses every extended hardware key before the driver is asked', async
   const ios = createWebDriverInteractor({
     client: {
       executeScript: async () => {
-        throw new Error('the iOS hardware-key refusal must reach the driver');
+        throw new Error('the iOS hardware-key refusal must not reach the driver');
       },
     } as unknown as WebDriverClient,
     backend: 'xctest',
