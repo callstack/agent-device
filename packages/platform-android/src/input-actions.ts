@@ -4,6 +4,8 @@
  */
 import {
   DEVICE_ROTATION_SURFACE_INDEX,
+  HARDWARE_BUTTON_NAME_LABELS,
+  type HardwareButton,
   deviceRotationFromSurfaceIndex,
   type DeviceRotation,
 } from '@agent-device/contracts/device';
@@ -258,37 +260,19 @@ export async function appSwitcherAndroid(device: DeviceInfo): Promise<void> {
   await runAndroidShell(device, ['input', 'keyevent', '187']);
 }
 
-/**
- * The `input keyevent` codes for the phone hardware keys the `hardware-button` command names:
- * KEYCODE_VOLUME_UP/DOWN/POWER. The helper's `kind:'key'` path takes any code, so both Android
- * legs press all three the way `homeAndroid` presses 3.
- */
-const ANDROID_HARDWARE_BUTTON_KEYCODES = {
-  volumeUp: 24,
-  volumeDown: 25,
-  power: 26,
-  mute: 164,
-  sleep: 223,
-  wake: 224,
-  mediaPlayPause: 85,
-  mediaNext: 87,
-  mediaPrevious: 88,
-  mediaRewind: 89,
-  mediaFastForward: 90,
-} as const;
-
 /** Presses one phone hardware key once. TV targets are gated by the runtime facts, not here. */
 export async function pressAndroidHardwareButton(
   device: DeviceInfo,
-  button: keyof typeof ANDROID_HARDWARE_BUTTON_KEYCODES,
+  button: HardwareButton,
 ): Promise<void> {
-  const keyCode = ANDROID_HARDWARE_BUTTON_KEYCODES[button];
+  const keyevent = toAndroidTvRemoteKeyevent(HARDWARE_BUTTON_NAME_LABELS[button]);
+  const keyCode = Number(keyevent);
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (
     await runAndroidAutomationHelper(device, { action: 'input', input: { kind: 'key', keyCode } })
   )
     return;
-  await runAndroidShell(device, ['input', 'keyevent', String(keyCode)]);
+  await runAndroidShell(device, ['input', 'keyevent', keyevent]);
 }
 
 export async function longPressAndroid(

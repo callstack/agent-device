@@ -141,7 +141,7 @@ const systemButtonUnavailable = unavailableFact(
 );
 // The hardware-button cells use the shared Android admission rule, so a Limrun-managed phone
 // and a local adb phone state the same verdict. On a leased phone or tablet the Android leg's
-// `createAndroidInteractor` carries all three presses.
+// `createAndroidInteractor` carries these presses.
 
 /**
  * The interactor-backed interaction cells a live Limrun session serves: everything here rides
@@ -296,7 +296,7 @@ export function limrunAlertOperationFacts(
 
 /**
  * The Android leg rides the local family's own interactor factory for `home`, `appSwitcher` and
- * the three hardware-button presses. The iOS direct session presses `home` through Limrun's button
+ * the hardware-button presses. The iOS direct session presses `home` through Limrun's button
  * actions and refuses `appSwitcher`. No Limrun session exposes the action button.
  */
 export function limrunSystemButtonOperationFacts(

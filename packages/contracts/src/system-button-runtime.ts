@@ -144,23 +144,9 @@ const androidHardwareButtonKindUnavailable: RuntimeOperationUnavailability = Obj
 
 const ANDROID_AVAILABLE = Object.freeze({ available: true } as const);
 
-// The cells `hardware-button` selects between, stated here rather than value-imported from
-// device-rotation.ts: a value import would add this module's vocabulary to five entry closures
-// the eager-closure budgets gate refuses (measured in #3848 round 5). The type-level pins below
-// hold the list exactly equal to HardwareButton, so drift is a build failure.
-const ANDROID_HARDWARE_BUTTON_CELLS = [
-  'volumeUp',
-  'volumeDown',
-  'power',
-  'mute',
-  'sleep',
-  'wake',
-  'mediaPlayPause',
-  'mediaNext',
-  'mediaPrevious',
-  'mediaRewind',
-  'mediaFastForward',
-] as const satisfies readonly HardwareButton[];
+const ANDROID_HARDWARE_BUTTON_CELLS = SYSTEM_BUTTONS.filter(
+  (button) => button !== 'home' && button !== 'appSwitcher' && button !== 'actionButton',
+) satisfies readonly HardwareButton[];
 
 type HardwareCellsCoverCommandVocabulary =
   HardwareButton extends (typeof ANDROID_HARDWARE_BUTTON_CELLS)[number]
