@@ -97,12 +97,12 @@ function readVetoEvents(traceLogPath: string): Record<string, unknown>[] {
     .map((event) => event.data ?? {});
 }
 
-test('a backend flip mid-poll withholds the no-effect claim, and records the reason (#1620)', async () => {
-  // Corroboration reads the ORIGINAL pre-gesture baseline, so a rebase leaves
-  // the pair cross-backend and set equality cannot hold — the claim is
-  // withheld, which is correct and long-standing. What is new is that the
-  // veto says so: silence alone is indistinguishable from a gesture that
-  // worked, and that ambiguity is what left #1620 unresolvable for weeks.
+test('a backend flip mid-poll settles without a no-effect claim or a stale accept (#1620)', async () => {
+  // A rebase leaves nothing to corroborate against: the original baseline is
+  // from another backend, and the rebased one was read after the gesture. So
+  // the loop settles on the next quiet pair instead of distrusting its own
+  // post-gesture read up to the stale-accept cap, and the rebase diagnostic is
+  // what says why no claim was made.
   vi.useFakeTimers();
   const session = makeSession('ios');
   session.snapshot = makeSnapshotState(pickupSnapshot(500).nodes, {
@@ -133,20 +133,10 @@ test('a backend flip mid-poll withholds the no-effect claim, and records the rea
   );
 
   assert.equal(rebased, 1);
-  assert.equal(staleAccepts, 1, 'the loop still accepts the stale read after the distrust budget');
+  assert.equal(staleAccepts, 0, 'a rebased baseline is post-gesture evidence, not a stale read');
   assert.equal(result.postGestureOutcome, undefined);
-  assert.equal(vetoed, 1, 'the withheld claim must be observable');
-  // The reason is the point: a rebase means the corroboration pair is
-  // cross-backend, which is a categorically different answer from "the
-  // surfaces moved" and must not be reported as one. No divergence counts
-  // ride along, because there is no comparable pair to count over.
-  assert.deepEqual(vetoEvents, [
-    {
-      action: 'scroll',
-      backend: 'private-ax',
-      reason: 'baseline_rebased',
-    },
-  ]);
+  assert.equal(vetoed, 0);
+  assert.deepEqual(vetoEvents, []);
 });
 
 test('a successful scroll that flips the capture backend must not claim no-effect', async () => {
@@ -174,18 +164,11 @@ test('a successful scroll that flips the capture backend must not claim no-effec
     undefined,
     'the scroll swapped every list cell — a no-effect claim here is a false positive',
   );
-  assert.equal(vetoed, 1);
-  // Rebase wins the reason even though the surfaces also genuinely diverged:
-  // once the pair is cross-backend the divergence counts would describe two
-  // incomparable captures, and reporting them as movement is the exact
-  // misreading #1620 spent weeks on.
-  assert.deepEqual(vetoEvents, [
-    {
-      action: 'scroll',
-      backend: 'private-ax',
-      reason: 'baseline_rebased',
-    },
-  ]);
+  // No divergence counts are reported either: once the backend flipped they
+  // would describe two incomparable captures, and reporting them as movement
+  // is the exact misreading #1620 spent weeks on.
+  assert.equal(vetoed, 0);
+  assert.deepEqual(vetoEvents, []);
 });
 
 test('no pre-gesture snapshot means no baseline, no rebase, and no no-effect claim', async () => {

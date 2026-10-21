@@ -187,7 +187,10 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
         return { kind: 'continue' };
       }
       const verdict = decidePostGestureStabilityVerdict({
-        needsBaselineDistrust,
+        // A rebased baseline was read after the gesture. Matching it is what a surface at rest does,
+        // so it is no evidence of a stale read, and distrusting it would hold the loop to the
+        // distrust cap on every backend switch.
+        needsBaselineDistrust: needsBaselineDistrust && !baselineRebased,
         baselineSignature,
         quietSignature: current.signature,
         elapsedMs,
@@ -200,7 +203,7 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
       emitSettleDiagnostic(verdict, pending.action, attempts, elapsedMs);
       return {
         kind: 'done',
-        result: buildAcceptedOutcome(verdict, pending, current, hooks, baselineRebased),
+        result: buildAcceptedOutcome(verdict, pending, current, hooks),
       };
     },
   });
@@ -254,14 +257,13 @@ function emitSettleDiagnostic(
 /**
  * The no-effect claim needs BOTH the accept-stale verdict AND full-surface
  * corroboration (`surfacesIdentical`) against the ORIGINAL pre-gesture
- * baseline — deliberately NOT a mid-loop rebased one, so a backend flip can
- * never launder a cross-backend pair into a no-effect claim. The verdict
- * alone is subset-tolerant (#1601 review P1).
+ * baseline. The verdict alone is subset-tolerant (#1601 review P1). A rebased
+ * loop never reaches accept-stale, so a backend flip cannot launder a
+ * cross-backend pair into a no-effect claim.
  *
  * A veto here is invisible from the outside: the response looks exactly like
  * a gesture that worked. #1620 could not tell the two apart on live hostile
- * screens, so every veto on an accept-stale verdict records WHY — a rebase
- * (the pair is cross-backend) or the divergence counts that failed set
+ * screens, so every veto records the divergence counts that failed set
  * equality.
  */
 function buildAcceptedOutcome<T, S extends readonly unknown[]>(
@@ -269,7 +271,6 @@ function buildAcceptedOutcome<T, S extends readonly unknown[]>(
   pending: PostGestureStabilityPending<S>,
   current: CapturedSurface<T, S>,
   hooks: PostGestureStabilityHooks<T, S>,
-  baselineRebased: boolean,
 ): PostGestureStabilityOutcome<T> {
   if (verdict !== 'accept-stale') return { value: current.value };
   const baselineSignature = pending.baselineSignature;
@@ -285,14 +286,10 @@ function buildAcceptedOutcome<T, S extends readonly unknown[]>(
     data: {
       action: pending.action,
       backend: current.backend,
-      ...(baselineRebased
-        ? { reason: 'baseline_rebased' }
-        : {
-            reason: 'surface_divergence',
-            ...(baselineSignature === undefined
-              ? {}
-              : hooks.summarizeDivergence(baselineSignature, current.signature)),
-          }),
+      reason: 'surface_divergence',
+      ...(baselineSignature === undefined
+        ? {}
+        : hooks.summarizeDivergence(baselineSignature, current.signature)),
     },
   });
   return { value: current.value };

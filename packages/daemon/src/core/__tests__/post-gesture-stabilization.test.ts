@@ -531,7 +531,10 @@ test('capturePostGestureStabilizedResult re-baselines instead of concluding when
   // cross-backend comparison would have produced a verdict from incomparable
   // node sets instead.
   assert.equal(rebased, 1);
-  assert.equal(staleAccepts + settled, 1);
+  // The rebased baseline was read after the gesture, so matching it is a surface at rest: the next
+  // quiet pair settles instead of distrusting its way to the stale-accept cap.
+  assert.deepEqual([staleAccepts, settled], [0, 1]);
+  assert.equal(capture.mock.calls.length, 3);
 });
 
 // --- #2438: a system surface appearing or dismissing mid-poll is not comparable evidence ---
@@ -574,7 +577,10 @@ test('capturePostGestureStabilizedResult re-baselines when an in-place system su
   const { rebased, staleAccepts, settled } = await resultPromise;
 
   assert.equal(rebased, 1);
-  assert.equal(staleAccepts + settled, 1);
+  // The rebased baseline was read after the gesture, so matching it is a surface at rest: the next
+  // quiet pair settles instead of distrusting its way to the stale-accept cap.
+  assert.deepEqual([staleAccepts, settled], [0, 1]);
+  assert.equal(capture.mock.calls.length, 3);
 });
 
 test('capturePostGestureStabilizedResult re-baselines when an in-place system surface dismisses (iOS)', async () => {
@@ -612,7 +618,10 @@ test('capturePostGestureStabilizedResult re-baselines when an in-place system su
   const { rebased, staleAccepts, settled } = await resultPromise;
 
   assert.equal(rebased, 1);
-  assert.equal(staleAccepts + settled, 1);
+  // The rebased baseline was read after the gesture, so matching it is a surface at rest: the next
+  // quiet pair settles instead of distrusting its way to the stale-accept cap.
+  assert.deepEqual([staleAccepts, settled], [0, 1]);
+  assert.equal(capture.mock.calls.length, 3);
 });
 
 test('capturePostGestureStabilizedResult still distrusts a same-backend baseline match (iOS)', async () => {

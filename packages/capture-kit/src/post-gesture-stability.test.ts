@@ -16,7 +16,7 @@ beforeEach(() => {
   vi.mocked(emitDiagnostic).mockClear();
 });
 
-type Surface = Readonly<{ signature: readonly string[]; costMs: number }>;
+type Surface = Readonly<{ signature: readonly string[]; costMs: number; backend?: string }>;
 
 function fakeClock(): ObservationClock & { advance(ms: number): void } {
   let nowMs = 0;
@@ -46,7 +46,7 @@ function hooksFor(
       clock.advance(surface.costMs);
       return surface;
     },
-    readSurface: (value) => ({ signature: value.signature, backend: 'xctest' }),
+    readSurface: (value) => ({ signature: value.signature, backend: value.backend ?? 'xctest' }),
     signaturesStable: same,
     classifyBaselineEvidence: (baseline, quiet) =>
       same(baseline, quiet) ? 'unchanged' : 'changed',
@@ -57,10 +57,12 @@ function hooksFor(
 
 const PENDING = { action: 'scroll', positionals: ['down'] };
 
+function diagnostics(phase: string): unknown[] {
+  return vi.mocked(emitDiagnostic).mock.calls.filter(([event]) => event.phase === phase);
+}
+
 function timeoutWarnings(): unknown[] {
-  return vi
-    .mocked(emitDiagnostic)
-    .mock.calls.filter(([event]) => event.phase === 'post_gesture_snapshot_stabilization_timeout');
+  return diagnostics('post_gesture_snapshot_stabilization_timeout');
 }
 
 test('a capture that runs past the remaining budget is judged and ends unsettled, not thrown', async () => {
@@ -117,4 +119,41 @@ test('a capture error ends the loop by rethrowing that error', async () => {
     }),
     (error) => error === failure,
   );
+});
+
+test('a quiet pair on a rebased baseline settles instead of distrusting it to the cap', async () => {
+  const clock = fakeClock();
+  const atRest: Surface = { signature: ['moved'], costMs: 0, backend: 'bridge' };
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: { ...PENDING, baselineSignature: ['moved'], baselineBackend: 'runner' },
+    needsBaselineDistrust: true,
+    hooks: hooksFor(clock, [atRest, atRest, atRest]),
+    clock,
+  });
+
+  assert.equal(outcome.value, atRest);
+  assert.equal(outcome.postGestureOutcome, undefined);
+  assert.equal(diagnostics('post_gesture_snapshot_baseline_rebased').length, 1);
+  assert.equal(diagnostics('post_gesture_snapshot_stale_accept').length, 0);
+  assert.ok(clock.now() < 1_500, `settled after ${clock.now()}ms`);
+});
+
+test('a quiet pair matching a same-backend baseline is still distrusted to the cap', async () => {
+  const clock = fakeClock();
+  const unchanged: Surface = { signature: ['before'], costMs: 0, backend: 'bridge' };
+
+  await runPostGestureStabilityLoop({
+    pending: { ...PENDING, baselineSignature: ['before'], baselineBackend: 'bridge' },
+    needsBaselineDistrust: true,
+    hooks: hooksFor(
+      clock,
+      Array.from({ length: 40 }, () => unchanged),
+    ),
+    clock,
+  });
+
+  assert.equal(diagnostics('post_gesture_snapshot_baseline_rebased').length, 0);
+  assert.equal(diagnostics('post_gesture_snapshot_stale_accept').length, 1);
+  assert.ok(clock.now() >= 3_500, `accepted after ${clock.now()}ms`);
 });
