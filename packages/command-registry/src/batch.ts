@@ -8,7 +8,12 @@ import {
   isNonDefaultResponseLevel,
   namesSessionExplicitly,
 } from '@agent-device/kernel/contracts';
-import { AppError, asAppError, type DaemonError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  asAppError,
+  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
+  type DaemonError,
+} from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import {
   DEFAULT_BATCH_MAX_STEPS,
@@ -165,7 +170,13 @@ function batchStepFailure(
       ...(error.supportedOn === undefined ? {} : { supportedOn: error.supportedOn }),
       details: {
         ...(error.details ?? {}),
-        ...(progress.executedSteps.some(stepMayMutateApp) ? { dispatched: 'unknown' } : {}),
+        ...(progress.executedSteps.some(stepMayMutateApp) &&
+        !(
+          error.details?.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON &&
+          error.details.dispatched === 'no'
+        )
+          ? { dispatched: 'unknown' }
+          : {}),
         step: stepResponse.step,
         command: step.command,
         positionals: step.positionals,

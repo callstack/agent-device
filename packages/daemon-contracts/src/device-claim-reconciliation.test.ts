@@ -1,4 +1,5 @@
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
+import { inspectDeviceClaimRecovery } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -98,6 +99,14 @@ test('reconciles the dead owner session resources through their exact runtime ow
     shutdown: async () => {},
   };
 
+  const before = fs.readFileSync(resourcePath);
+  expect(inspectDeviceClaimRecovery(claim)).toEqual({
+    status: 'inspectable',
+    recoveryKinds: ['app-log'],
+  });
+  expect(bind).not.toHaveBeenCalled();
+  expect(fs.readFileSync(resourcePath)).toEqual(before);
+
   await expect(createDeviceClaimReconciler({ gateway, scope })(claim)).resolves.toEqual({
     status: 'reconciled',
   });
@@ -130,6 +139,11 @@ test('unreattachable resource evidence retains the claim without binding', async
     bind,
     shutdown: async () => {},
   } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+
+  expect(inspectDeviceClaimRecovery(claim)).toEqual({
+    status: 'retained',
+    reason: 'app-log-descriptor-invalid',
+  });
 
   await expect(createDeviceClaimReconciler({ gateway, scope })(claim)).resolves.toEqual({
     status: 'retained',

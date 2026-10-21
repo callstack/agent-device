@@ -4,7 +4,7 @@ import { makeIosSession, makeMacOsSession } from '../../__tests__/support/sessio
 import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { AppError } from '@agent-device/kernel/errors';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import { assertRequestLeaseAdmission } from '../request-admission.ts';
+import { assertRequestLeaseAdmission, isConfinedToAppLease } from '../request-admission.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { ProviderAppCatalog } from '@agent-device/contracts/device';
 
@@ -358,6 +358,57 @@ test('a request under a macos-app lease that names no existing session is refuse
         error.details.rule === 'session',
     );
   }
+});
+
+test('an expired macos-app lease does not confine standalone inventory', () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease({
+    tenantId: 'stim',
+    runId: 'session-1',
+    leaseBackend: 'macos-app',
+    deviceKey: 'com.example.app',
+    ttlMs: 5_000,
+  });
+  now = 5_000;
+  const request = makeRequest({
+    command: 'devices',
+    meta: { tenantId: 'stim', runId: 'session-1', leaseId: lease.leaseId },
+  });
+  assert.equal(
+    assertRequestLeaseAdmission(request, registry, undefined, { env: process.env }),
+    undefined,
+  );
+});
+
+test('read-only app lease confinement does not sweep an unrelated expired lease', () => {
+  let now = 0;
+  const expired: string[] = [];
+  const registry = new LeaseRegistry({
+    now: () => now,
+    defaultLeaseTtlMs: 5_000,
+    onLeaseExpired: (lease) => expired.push(lease.leaseId),
+  });
+  const other = registry.allocateLease({ tenantId: 'other', runId: 'old' });
+  now = 4_000;
+  const active = registry.allocateLease({
+    tenantId: 'stim',
+    runId: 'current',
+    leaseBackend: 'macos-app',
+    deviceKey: 'com.example.app',
+  });
+  now = 5_000;
+  assert.equal(
+    isConfinedToAppLease(
+      makeRequest({ command: 'devices', meta: { leaseId: active.leaseId } }),
+      registry,
+      undefined,
+      undefined,
+    ),
+    true,
+  );
+  assert.deepEqual(expired, []);
+  assert.equal(registry.consumeExpiredLease(other.leaseId)?.leaseId, other.leaseId);
 });
 
 test('a daemon policy that requires a macos-app lease refuses unleased and other-backend requests', () => {

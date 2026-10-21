@@ -7,7 +7,8 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from './daemon-resolution.ts';
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
-import type { DeviceClaimReconciler } from './device-claims.ts';
+import type { DeviceClaim, DeviceClaimReconciler } from './device-claims.ts';
+import type { DeviceClaimReconciliationResult } from './device-claim-settlement.ts';
 import type { ClaimRecoveryGatewayFactory } from './claim-recovery-gateway.ts';
 
 export type OwnerScopedClaimRecovery = {
@@ -34,6 +35,13 @@ export type OwnerScopedClaimRecoveryComposer = (stateDir: string) => OwnerScoped
 export function createOwnerScopedDeviceClaimReconciler(
   params: Readonly<{
     scope: PlatformRequestScope;
+    /** Optional claim-owner decision before gateway construction. No production caller supplies it in layer A. */
+    beforeGateway?: (
+      claim: DeviceClaim,
+    ) =>
+      | Extract<DeviceClaimReconciliationResult, { status: 'retained' }>
+      | undefined
+      | Promise<Extract<DeviceClaimReconciliationResult, { status: 'retained' }> | undefined>;
     /** Root composition's per-transaction recovery gateway; used unless `composeRecovery` replaces it. */
     composeGateway: ClaimRecoveryGatewayFactory;
     /** Test seam replacing the whole per-claim composition, gateway included. */
@@ -44,6 +52,8 @@ export function createOwnerScopedDeviceClaimReconciler(
     params.composeRecovery ??
     ((stateDir) => composeOwnerScopedClaimRecovery(stateDir, params.scope, params.composeGateway));
   return async (claim) => {
+    const refusal = await params.beforeGateway?.(claim);
+    if (refusal) return refusal;
     const recovery = compose(claim.stateDir);
     try {
       return await recovery.reconcile(claim);

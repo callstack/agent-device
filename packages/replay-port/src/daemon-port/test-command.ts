@@ -65,8 +65,11 @@ export const bindReplayTestAttemptCancellation: ReplayTestBindAttemptCancellatio
   attemptId,
   parentAttemptId,
 }) => {
-  registerRequestAbort(attemptId);
-  const clearParentRelay = relayReplayTestAbortFromParent(attemptId, parentAttemptId);
+  const registration = registerRequestAbort(attemptId, parentAttemptId);
+  const clearParentRelay = relayReplayTestAbortFromParent(
+    registration?.controller,
+    parentAttemptId,
+  );
   return {
     cancel: () => markRequestCanceled(attemptId),
     release: () => {
@@ -77,15 +80,15 @@ export const bindReplayTestAttemptCancellation: ReplayTestBindAttemptCancellatio
 };
 
 function relayReplayTestAbortFromParent(
-  requestId: string,
+  controller: AbortController | undefined,
   parentRequestId: string | undefined,
 ): () => void {
-  if (!parentRequestId || parentRequestId === requestId) return () => {};
+  if (!parentRequestId || !controller) return () => {};
   const parentSignal = getRequestSignal(parentRequestId);
-  if (!parentSignal) return () => {};
+  if (!parentSignal || parentSignal === controller.signal) return () => {};
 
   const cancelRequest = () => {
-    markRequestCanceled(requestId);
+    controller.abort(parentSignal.reason);
   };
   if (parentSignal.aborted) {
     cancelRequest();

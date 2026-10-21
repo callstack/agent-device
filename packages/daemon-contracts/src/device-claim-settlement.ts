@@ -37,6 +37,17 @@ export type ExistingClaimResolution =
   | { status: 'held'; ownership: DeviceClaimSessionOwnership }
   | { status: 'conflict'; conflict: InspectedDeviceClaim };
 
+export type InspectedClaimSettlement =
+  | { status: 'available'; superseded?: DeviceClaim }
+  | { status: 'held'; claim: DeviceClaim }
+  | { status: 'conflict'; conflict: InspectedDeviceClaim }
+  | {
+      status: 'reconcile';
+      claim: DeviceClaim;
+      conflict: InspectedDeviceClaim;
+      tookOver?: TakenOverDeviceClaim;
+    };
+
 export type DeviceClaimReconciliationResult =
   | { status: 'reconciled' }
   | { status: 'retained'; reason: string };
@@ -74,19 +85,60 @@ export async function resolveExistingClaim(params: {
   observeDeviceBoot?: DeviceBootObservationService;
   env: EnvMap;
 }): Promise<ExistingClaimResolution> {
+  const settlement = await inspectExistingClaimSettlement(params);
+  if (settlement.status === 'available') {
+    if (settlement.superseded) emitClaimSupersede(params.deviceKey, settlement.superseded);
+    return { status: 'available' };
+  }
+  if (settlement.status === 'held') {
+    return { status: 'held', ownership: renewHeldClaim(settlement.claim, params.env) };
+  }
+  if (settlement.status === 'conflict') {
+    emitClaimConflict(params.deviceKey, settlement.conflict);
+    return settlement;
+  }
+  return await settleForeignClaim(settlement, params);
+}
+
+/** Inspect the same ownership decision as acquisition without renewing or reconciling a claim. */
+export async function inspectExistingClaimSettlement(params: {
+  device: DeviceInfo;
+  deviceKey: string;
+  owner: ReturnType<typeof readCurrentOwnerIdentity>;
+  session: string;
+  workspace: string;
+  stateDir: string;
+  claimOwnerKind: DeviceClaimAcquirerKind;
+  transientCommand?: string;
+  observeDeviceBoot?: DeviceBootObservationService;
+  env: EnvMap;
+}): Promise<InspectedClaimSettlement> {
   const existing = inspectDeviceClaimFile(resolveDeviceClaimPath(params.deviceKey, params.env));
   if (!existing) return { status: 'available' };
   if (
     existing.claim &&
     isAbandonedClaimOfThisDaemon(existing.claim, params.stateDir, params.owner)
   ) {
-    emitClaimSupersede(params.deviceKey, existing.claim);
-    return { status: 'available' };
+    return { status: 'available', superseded: existing.claim };
   }
   if (existing.claim && isCurrentClaimOwner(existing.claim, params, params.owner)) {
-    return { status: 'held', ownership: renewHeldClaim(existing.claim, params.env) };
+    return { status: 'held', claim: existing.claim };
   }
-  return await settleForeignClaim(existing, params);
+  if (!existing.claim) return { status: 'conflict', conflict: existing };
+  const settlement = await foreignClaimSettlement({
+    classification: existing.classification,
+    claim: existing.claim,
+    device: params.device,
+    observeDeviceBoot: params.observeDeviceBoot,
+  });
+  return settlement.settles
+    ? {
+        status: 'reconcile',
+        claim: existing.claim,
+        conflict: existing,
+        tookOver: settlement.tookOver,
+      }
+    : { status: 'conflict', conflict: existing };
 }
 
 /**
@@ -108,43 +160,26 @@ function renewHeldClaim(claim: DeviceClaim, env: EnvMap): DeviceClaimSessionOwne
  * session keeps the device claimed rather than handing it over mid-cleanup.
  */
 async function settleForeignClaim(
-  existing: InspectedDeviceClaim,
+  settlement: Extract<InspectedClaimSettlement, { status: 'reconcile' }>,
   params: {
-    device: DeviceInfo;
     deviceKey: string;
     reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
-    observeDeviceBoot?: DeviceBootObservationService;
     env: EnvMap;
   },
 ): Promise<ExistingClaimResolution> {
-  const claim = existing.claim;
-  if (!claim) {
-    emitClaimConflict(params.deviceKey, existing);
-    return { status: 'conflict', conflict: existing };
-  }
-  const settlement = await foreignClaimSettlement({
-    classification: existing.classification,
-    claim,
-    device: params.device,
-    observeDeviceBoot: params.observeDeviceBoot,
-  });
-  if (!settlement.settles) {
-    emitClaimConflict(params.deviceKey, existing);
-    return { status: 'conflict', conflict: existing };
-  }
   const reconciliation = await settleVerifiedOrphanedClaim(
-    claim,
+    settlement.claim,
     params.reconcileOrphanedDeviceClaim,
     params.env,
   );
   if (reconciliation.status === 'retained') {
-    emitClaimConflict(params.deviceKey, existing, reconciliation.reason);
-    return { status: 'conflict', conflict: existing };
+    emitClaimConflict(params.deviceKey, settlement.conflict, reconciliation.reason);
+    return { status: 'conflict', conflict: settlement.conflict };
   }
   if (!settlement.tookOver) return { status: 'available' };
   emitClaimReleasedAfterDeviceReboot({
     deviceKey: params.deviceKey,
-    claim,
+    claim: settlement.claim,
     bootedAtMs: settlement.tookOver.bootedAtMs,
   });
   return { status: 'available', tookOver: settlement.tookOver };

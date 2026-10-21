@@ -3,6 +3,7 @@ export {
   clearRequestAbortRegistration,
   clearRequestCanceled,
   getRequestSignal,
+  getRequestExecutionDeadlineMs,
   isRequestCanceled,
   markRequestCanceled,
   registerRequestAbort,

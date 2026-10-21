@@ -59,6 +59,8 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    * it reports it, once, on its reply.
    */
   endedLeases?: EndedLeaseLedger;
+  /** Authority minted only by the test suite for its own attempt-session cleanup. */
+  cleanupIntent?: 'suite-owned-test-session';
 };
 
 /**

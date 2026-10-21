@@ -67,6 +67,28 @@ test('composes one recovery per claim from that claim state dir and disposes it'
   ]);
 });
 
+test('a retained owner decision stops recovery before gateway composition', async () => {
+  const events: string[] = [];
+  const claim = makeClaim('/state/blocked', 'shared');
+  const reconcile = createOwnerScopedDeviceClaimReconciler({
+    scope,
+    beforeGateway: async (current) => {
+      assert.equal(current, claim);
+      events.push('inspect');
+      return { status: 'retained', reason: 'resource-recovery-requires-standalone' };
+    },
+    composeGateway: () => {
+      events.push('gateway');
+      throw new Error('gateway must not be composed');
+    },
+  });
+  assert.deepEqual(await reconcile(claim), {
+    status: 'retained',
+    reason: 'resource-recovery-requires-standalone',
+  });
+  assert.deepEqual(events, ['inspect']);
+});
+
 test('disposes the composed recovery when reconciliation retains or throws', async () => {
   const disposed: string[] = [];
   const retainReconcile = createOwnerScopedDeviceClaimReconciler({

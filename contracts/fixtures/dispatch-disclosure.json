@@ -144,6 +144,12 @@
     "dispatched": "no"
   },
   {
+    "id": "daemon.route.batch-mutation-then-resource-refusal",
+    "producer": "daemon",
+    "trigger": "batch [press lands, next press fails with a typed resource refusal before send]: the current step reports no with details.dispatchedSteps 1",
+    "dispatched": "no"
+  },
+  {
     "id": "maestro-direct.fallback.pre-send-refusal",
     "producer": "daemon",
     "trigger": "the direct iOS selector tap failed with a runner refusal disclosed no (connect refused before send); the tree path taps instead",

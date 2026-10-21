@@ -10,6 +10,7 @@ import {
   releaseProvenStaleDeviceClaims,
 } from './device-claims.ts';
 import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from './device-claim-paths.ts';
+import { inspectExistingClaimSettlement } from './device-claim-settlement.ts';
 import { inspectDeviceClaims } from './device-claim-inspection.ts';
 import { hostAppDevice, hostDeviceIdPrefix, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceClaim } from './device-claim-record.ts';
@@ -212,6 +213,17 @@ test('a whole-Mac claim and a foreign app device claim exclude each other in bot
 
   const wholeFirst = useClaimsRoot();
   await seedForeignMacClaim(wholeFirst);
+  const inspected = await inspectExistingClaimSettlement({
+    device: mac,
+    deviceKey: canonicalLocalDeviceKey(mac),
+    owner: hostProcess.readCurrentOwnerIdentity(),
+    session: 'app',
+    workspace: '/app',
+    stateDir: wholeFirst,
+    claimOwnerKind: 'open-session',
+    env: process.env,
+  });
+  assert.equal(inspected.status, 'conflict');
   const app = await acquireDeviceClaim({
     device: hostAppDevice(mac, 'com.example.one'),
     session: 'app',
@@ -333,6 +345,57 @@ test('a whole-Mac claim settles the app device claim of a dead owner and keeps o
   assert.deepEqual(reconciled, [canonicalLocalDeviceKey(hostAppDevice(mac, 'com.example.one'))]);
   assert.equal(fs.existsSync(retainedFile), false);
 });
+
+test.each([
+  ['host', mac, 'com.example.one'],
+  ['app', hostAppDevice(mac, 'com.example.one'), undefined],
+] as const)(
+  'read-only %s owner inspection preserves the overlapping claim before acquisition',
+  async (_role, device, bundleId) => {
+    const root = useClaimsRoot();
+    const file = await seedForeignMacClaim(root, { bundleId, ownerPid: 999_999_999 });
+    const before = fs.readFileSync(file);
+    const overlappingDevice = bundleId ? hostAppDevice(mac, bundleId) : mac;
+    const inspected = await inspectExistingClaimSettlement({
+      device: overlappingDevice,
+      deviceKey: canonicalLocalDeviceKey(overlappingDevice),
+      owner: hostProcess.readCurrentOwnerIdentity(),
+      session: 'new-owner',
+      workspace: '/new',
+      stateDir: root,
+      claimOwnerKind: 'open-session',
+      env: process.env,
+    });
+    assert.equal(inspected.status, 'reconcile');
+    const selected = await inspectExistingClaimSettlement({
+      device,
+      deviceKey: canonicalLocalDeviceKey(device),
+      owner: hostProcess.readCurrentOwnerIdentity(),
+      session: 'new-owner',
+      workspace: '/new',
+      stateDir: root,
+      claimOwnerKind: 'open-session',
+      env: process.env,
+    });
+    assert.equal(selected.status, 'available');
+    assert.deepEqual(fs.readFileSync(file), before);
+    const reconciled: string[] = [];
+    const acquired = await acquireDeviceClaim({
+      device,
+      session: 'new-owner',
+      workspace: '/new',
+      stateDir: root,
+      reconcileOrphanedDeviceClaim: async (claim) => {
+        reconciled.push(claim.deviceKey);
+        return { status: 'reconciled' };
+      },
+    });
+    assert.equal(acquired.status, 'acquired');
+    assert.deepEqual(reconciled, [
+      canonicalLocalDeviceKey(bundleId ? hostAppDevice(mac, bundleId) : mac),
+    ]);
+  },
+);
 
 test('an app device claim of a dead owner is released by release --stale like any claim', async () => {
   const root = useClaimsRoot();

@@ -59,6 +59,38 @@ export function createDeviceClaimReconciler(params: {
   };
 }
 
+export type ClaimRecoveryInspection =
+  | { status: 'inspectable'; recoveryKinds: readonly DurableSessionResourceKind[] }
+  | { status: 'retained'; reason: string };
+
+/** Inspect exact-owner durable manifests without composing a gateway or settling a resource. */
+export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryInspection {
+  try {
+    const sessionsDir = resolveDaemonPaths(claim.stateDir).sessionsDir;
+    const sessionDir = path.join(sessionsDir, safeSessionName(claim.session));
+    const recoveryKinds: DurableSessionResourceKind[] = [];
+    for (const resource of Object.values(DEVICE_CLAIM_DURABLE_RESOURCES)) {
+      const ownership = inspectResourceOwnership(resource, claim, sessionDir);
+      if (ownership.status === 'retained') return ownership;
+      if (ownership.status === 'owned' && ownership.requiresRecovery) {
+        recoveryKinds.push(resource.resourceKind);
+      }
+    }
+    return { status: 'inspectable', recoveryKinds };
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'device_claim_orphan_reconciliation_failed',
+      data: {
+        deviceKey: claim.deviceKey,
+        ownerSession: claim.session,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    return { status: 'retained', reason: 'durable-resource-reconciliation-failed' };
+  }
+}
+
 type ClaimDurableResource = Readonly<{
   resourceKind: DurableSessionResourceKind;
   store:
@@ -126,7 +158,7 @@ function inspectResourceOwnership(
   sessionDir: string,
 ):
   | { status: 'missing' }
-  | { status: 'owned'; resourcePath: string }
+  | { status: 'owned'; resourcePath: string; requiresRecovery: boolean }
   | { status: 'retained'; reason: string } {
   const resourcePath = resource.store.resolvePath(sessionDir);
   const record = resource.store.read(resourcePath);
@@ -143,5 +175,5 @@ function inspectResourceOwnership(
   ) {
     return { status: 'retained', reason: `${resource.resourceKind}-owner-mismatch` };
   }
-  return { status: 'owned', resourcePath };
+  return { status: 'owned', resourcePath, requiresRecovery: record.envelope.lifecycle === 'open' };
 }

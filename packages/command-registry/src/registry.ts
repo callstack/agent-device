@@ -5,14 +5,23 @@ import type {
   RuntimeUseStep,
   RuntimeUseStepSelector,
 } from '@agent-device/contracts/command-platform-execution';
-import type { RefFrameEffect } from '@agent-device/contracts/replay';
-import {
-  checkFindArgs,
-  isReadOnlyFindAction,
-  parseFindArgs,
-  type FindAction,
-} from '@agent-device/selectors';
+import { checkFindArgs, isReadOnlyFindAction, type FindAction } from '@agent-device/selectors';
 import { resolveWaitBudgetMs } from './wait-positionals.ts';
+import {
+  keyboardRefFrameEffect,
+  alertRefFrameEffect,
+  keyboardRecordingEffect,
+  alertRecordingEffect,
+  findRecordingEffect,
+  clipboardRecordingEffect,
+  settingsRecordingEffect,
+  settingsRefFrameEffect,
+  HOST_PLATFORM_EXECUTION,
+  NO_PLATFORM_EXECUTION,
+  readDeclaredPlatformExecution,
+  resolveDeferredProviderAppCatalogLeaseAdmissionExemption,
+  resolvePlainCloseLeaseAdmissionExemption,
+} from './descriptor-request-policy.ts';
 import {
   COMPOSITE_TIMEOUT_POLICIES,
   DEFAULT_TIMEOUT_POLICY,
@@ -23,7 +32,6 @@ import {
 } from './timeout-policy.ts';
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
-import type { DaemonCommandDescriptor } from './daemon-command-descriptor.ts';
 import {
   deployAppUse,
   readyMaterializeAndDeployAppUse,
@@ -68,7 +76,6 @@ import {
   perfRuntimePlanUses,
   pressRuntimeUses,
   resolveSelectorCaptureRuntimePlan,
-  resolveSettingsRuntimePlan,
   resolveSnapshotRuntimePlan,
   screenshotRuntimePlanUses,
   scrollRuntimePlanUses,
@@ -86,7 +93,6 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import { assertRecordRuntimeExecution } from '@agent-device/contracts/record-runtime-execution';
 import { screenRecordingRuntimePlanUses } from '@agent-device/contracts/screen-recording-runtime-plan';
-import { readDeclaredPlatformExecution } from './platform-execution-entry.ts';
 import type {
   CommandCatalogGroup,
   CommandDescriptor,
@@ -180,104 +186,6 @@ const isShardedTestRequest = (req: DispatchedCommand): boolean =>
   req.command === 'test' &&
   (typeof req.flags?.shardAll === 'number' || typeof req.flags?.shardSplit === 'number');
 
-// #2016: a plain `close` (no app-target positional) has nothing to close via
-// flags, so it's the only close shape eligible for the sessionless
-// no-lease-anywhere admission bypass in request-admission.ts. `close <app>`
-// resolves its device straight from flags when there's no session and must
-// stay behind full lease/tenant admission.
-const resolvePlainCloseLeaseAdmissionExemption = (
-  req: DispatchedCommand,
-): { kind: 'unconditional' } | undefined =>
-  (req.positionals?.length ?? 0) === 0 ? { kind: 'unconditional' } : undefined;
-
-const resolveDeferredProviderAppCatalogLeaseAdmissionExemption: NonNullable<
-  DaemonCommandDescriptor['sessionlessLeaseAdmissionExemption']
-> = (req) => {
-  const provider = req.flags?.leaseProvider;
-  return req.flags?.leaseId === undefined &&
-    typeof provider === 'string' &&
-    (req.flags?.platform === 'android' || req.flags?.platform === 'ios')
-    ? { kind: 'provider-app-catalog', provider }
-    : undefined;
-};
-
-// ADR 0014 request-sensitive ref-frame resolvers. The action is the leading
-// positional (see keyboard/alert daemon writers in src/commands/system/index.ts
-// and src/commands/capture/alert.ts). Only the read-only status probes preserve
-// the frame; every mutating subaction crosses a device side effect.
-//
-// keyboard actions are status/get/dismiss/enter/return (src/commands/system/
-// runtime/system.ts): status/get inspect, while dismiss hides the keyboard and
-// enter/return dispatch a real return key. Anything other than a read is
-// classified may-invalidate (the honest superset for unknown subactions).
-const KEYBOARD_READ_ONLY_ACTIONS = new Set(['status', 'get']);
-const keyboardRefFrameEffect = (req: DispatchedCommand): RefFrameEffect =>
-  readOnlySubactionRefFrameEffect(req, KEYBOARD_READ_ONLY_ACTIONS, 'status');
-
-// alert actions are get/wait/accept/dismiss: get/wait read, accept/dismiss act.
-const ALERT_READ_ONLY_ACTIONS = new Set(['get', 'wait']);
-const alertRefFrameEffect = (req: DispatchedCommand): RefFrameEffect =>
-  readOnlySubactionRefFrameEffect(req, ALERT_READ_ONLY_ACTIONS, 'get');
-
-const keyboardRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
-  readOnlySubactionRecordingEffect(req, KEYBOARD_READ_ONLY_ACTIONS, 'status');
-
-const alertRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
-  readOnlySubactionRecordingEffect(req, ALERT_READ_ONLY_ACTIONS, 'get');
-
-const findRecordingEffect = (req: DispatchedCommand): RecordingEffect => {
-  try {
-    return isReadOnlyFindAction(parseFindArgs(req.positionals ?? []).action)
-      ? 'observes-app'
-      : 'mutates-app';
-  } catch {
-    // Invalid requests never record, but classify the unknown shape conservatively.
-    return 'mutates-app';
-  }
-};
-
-const clipboardRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
-  readOnlySubactionRecordingEffect(req, new Set(['read']), '');
-
-// A settings request reads only when it names a readable setting with nothing after it; every other
-// settings request changes device state — including `settings text-size <category>`, which names the
-// same word and performs a mutation. The leg comes from the same resolver the daemon admits with, so
-// the classification and the operation it selects are one declaration rather than two that a test
-// holds together.
-const settingsRequestReads = (req: DispatchedCommand): boolean =>
-  resolveSettingsRuntimePlan(req.positionals).kind === 'read';
-
-const settingsRecordingEffect = (req: DispatchedCommand): RecordingEffect =>
-  settingsRequestReads(req) ? 'observes-app' : 'mutates-app';
-
-const settingsRefFrameEffect = (req: DispatchedCommand): RefFrameEffect =>
-  settingsRequestReads(req) ? 'preserve' : 'may-invalidate';
-
-function readOnlySubactionRefFrameEffect(
-  req: DispatchedCommand,
-  readOnlyActions: ReadonlySet<string>,
-  defaultAction: string,
-): RefFrameEffect {
-  return readOnlyActions.has((req.positionals?.[0] ?? defaultAction).toLowerCase())
-    ? 'preserve'
-    : 'may-invalidate';
-}
-
-function readOnlySubactionRecordingEffect(
-  req: DispatchedCommand,
-  readOnlyActions: ReadonlySet<string>,
-  defaultAction: string,
-): RecordingEffect {
-  return readOnlyActions.has((req.positionals?.[0] ?? defaultAction).toLowerCase())
-    ? 'observes-app'
-    : 'mutates-app';
-}
-
-const NO_PLATFORM_EXECUTION = { kind: 'none' } as const;
-// Host-scoped platform work (ADR 0019): the descriptor consumes a neutral typed host service and
-// binds no device runtime of its own.
-const HOST_PLATFORM_EXECUTION = { kind: 'host' } as const;
-
 /**
  * The daemon/recording traits every generic-route mutating command shares. The legacy execution
  * pair it was split from (`dispatch`/`capability`) is gone: `scroll` was its last consumer, and
@@ -294,6 +202,7 @@ const GENERIC_MUTATING_COMMAND_TRAITS = {
   },
   timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
   batchable: true,
+  compositeResource: 'none',
 } as const satisfies Pick<
   Extract<CommandDescriptor, { recordsSessionAction: true }>,
   | 'recordsSessionAction'
@@ -302,6 +211,7 @@ const GENERIC_MUTATING_COMMAND_TRAITS = {
   | 'daemon'
   | 'timeoutPolicy'
   | 'batchable'
+  | 'compositeResource'
 >;
 
 // click/fill/press/longpress differ only in their timeout budget and response
@@ -456,6 +366,7 @@ const DEPLOY_APP_COMMAND_DESCRIPTOR = {
   platformExecution: { kind: 'device-runtime', use: deployAppUse },
   timeoutPolicy: INSTALL_TIMEOUT_POLICY,
   batchable: true,
+  compositeResource: 'none',
 } as const;
 
 /**
@@ -647,6 +558,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'inventory', use: inventoryUse },
   },
   {
@@ -666,6 +578,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     // R63: `capabilities` executes nothing on a device. It reads one side-effect-free facts
     // inspection and projects each command's own declared uses against it, so it has no platform
     // execution path of its own to migrate — which is what `none` states. It is deliberately last
@@ -690,6 +603,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: HOST_PLATFORM_EXECUTION,
   },
   {
@@ -710,6 +624,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', uses: [appsRuntimeUse] as const },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
   },
   {
     name: 'boot',
@@ -728,6 +643,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // (#2325). A first boot can outlast the fixed 90s envelope (#3004).
     timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, budget: { source: 'flag', envelope: 'margin' } },
     batchable: true,
+    compositeResource: 'none',
   },
   {
     name: 'shutdown',
@@ -744,6 +660,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', use: shutdownTargetUse },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
   },
   {
     name: 'appstate',
@@ -760,6 +677,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', uses: appStateRuntimeUses },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
   },
   {
     name: 'perf',
@@ -776,6 +694,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'operation',
     platformExecution: { kind: 'device-runtime', uses: perfRuntimePlanUses },
   },
   {
@@ -793,6 +712,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', uses: appLogRuntimePlanUses },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'operation',
   },
   {
     name: 'events',
@@ -829,6 +749,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', use: networkDumpUse },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
   },
   {
     name: 'audio',
@@ -844,6 +765,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'operation',
     platformExecution: { kind: 'device-runtime', uses: audioRuntimePlanUses },
   },
   {
@@ -884,12 +806,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // client envelope at all.
     timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, envelopeMs: 'unbounded' },
     batchable: true,
+    compositeResource: 'nested-test',
     // Test is suite orchestration over replay attempts; each attempt delegates its admitted
     // operations, including Maestro viewport acquisition, to their own descriptors.
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
     name: 'runtime',
+    compositeResource: 'none',
     deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled
       ? {
@@ -926,6 +850,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: clipboardRuntimePlanUses },
   },
   {
@@ -946,6 +871,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: keyboardRuntimePlanUses },
   },
   {
@@ -963,6 +889,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'install_source',
+    compositeResource: 'none',
     deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled
       ? {
@@ -985,6 +912,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'release_materialized_paths',
+    compositeResource: 'none',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
       ? {
@@ -1016,6 +944,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', use: readySendPushNotificationUse },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
   },
   {
     name: 'trigger-app-event',
@@ -1032,6 +961,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: [appEventRuntimeUse] },
   },
   {
@@ -1052,6 +982,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // --timeout is a startup budget: it reaches the Simulator boot wait (#2324).
     timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, budget: { source: 'flag', envelope: 'margin' } },
     batchable: true,
+    compositeResource: 'session-lifecycle',
     platformExecution: { kind: 'device-runtime', uses: openApplicationRuntimePlanUses },
   },
   {
@@ -1105,6 +1036,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'session-lifecycle',
     platformExecution: { kind: 'device-runtime', uses: closeApplicationRuntimePlanUses },
   },
 
@@ -1122,6 +1054,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // widens the envelope, and a timeout must not tear down the daemon.
     timeoutPolicy: { ...PRESERVE_DAEMON_TIMEOUT_POLICY, budget: { source: 'flag' } },
     batchable: true,
+    compositeResource: 'none',
     platformExecution: {
       kind: 'device-runtime',
       uses: snapshotRuntimePlanUses,
@@ -1139,6 +1072,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: {
       kind: 'device-runtime',
       uses: snapshotRuntimePlanUses,
@@ -1164,6 +1098,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       budget: { source: 'positional-parser', parser: resolveWaitBudgetMs },
     },
     batchable: true,
+    compositeResource: 'none',
     // A duration wait declares no operation and never binds (`waitObservesDevice`); every
     // observing shape uses the wait-specific capture plan so its conditional native observations
     // cannot affect capture-only or element-text selector commands.
@@ -1197,6 +1132,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: alertRuntimePlanUses },
   },
   {
@@ -1216,6 +1152,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'snapshot', refFrameEffect: settingsRefFrameEffect },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: settingsRuntimePlanUses },
   },
 
@@ -1234,6 +1171,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'reactNative', refFrameEffect: 'may-invalidate' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: [tapPointUse] },
   },
   {
@@ -1263,6 +1201,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // device refused until that exact session ran `record stop`.
     timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'operation',
   },
   {
     name: 'trace',
@@ -1282,6 +1221,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'recordTrace', refFrameEffect: 'preserve' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'operation',
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
@@ -1299,6 +1239,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: {
       kind: 'device-runtime',
       uses: findRuntimePlanUses,
@@ -1332,6 +1273,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     postActionObservation: postActionObservation('click'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: clickRuntimeUses },
   },
   {
@@ -1344,6 +1286,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     postActionObservation: postActionObservation('fill'),
     responseDataTransform: FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: fillRuntimeUses },
   },
   {
@@ -1361,6 +1304,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     postActionObservation: postActionObservation('longpress'),
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: longPressRuntimeUses },
   },
   {
@@ -1379,6 +1323,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: postActionObservationTimeoutPolicy('hover', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('hover'),
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: hoverRuntimeUses },
   },
   {
@@ -1391,6 +1336,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     postActionObservation: postActionObservation('press'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: pressRuntimeUses },
   },
   {
@@ -1409,6 +1355,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: postActionObservationTimeoutPolicy('type', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: [typeTextRuntimeUse] },
   },
   {
@@ -1423,6 +1370,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'interaction', refFrameEffect: 'preserve', appLease: 'allowed' },
     timeoutPolicy: postActionObservationTimeoutPolicy('get', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: selectorTextCaptureRuntimePlanUses },
   },
   {
@@ -1437,6 +1385,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'interaction', refFrameEffect: 'preserve', appLease: 'allowed' },
     timeoutPolicy: postActionObservationTimeoutPolicy('is', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: selectorCaptureRuntimePlanUses },
   },
 
@@ -1473,6 +1422,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // uses are the four tiers one gesture input can select between (ADR 0019 §9).
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: gestureRuntimePlanUses },
   },
   {
@@ -1562,6 +1512,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // fling, so it declares only the one-contact plan it can select.
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: swipeRuntimePlanUses },
   },
   {
@@ -1593,10 +1544,12 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'generic', refFrameEffect: 'preserve', appLease: 'allowed' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: screenshotRuntimePlanUses },
   },
   {
     name: 'viewport',
+    compositeResource: 'none',
     deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/management/viewport.ts'] as const } : {}),
     catalog: { group: 'public' },
@@ -1626,6 +1579,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
     platformExecution: { kind: 'device-runtime', uses: [appSwitcherRuntimeUse] },
   },
   {
@@ -1664,6 +1618,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: { kind: 'device-runtime', use: readyMaterializeAndDeployAppUse },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+    compositeResource: 'none',
   },
 
   // -- local client-backed CLI/MCP commands (no daemon route/capability) --
@@ -1860,6 +1815,15 @@ export type CommandOwnerFileClaimsAreComplete = AssertTrue<
   'ownerFiles' extends keyof (typeof RAW_COMMAND_DESCRIPTORS)[number] ? true : false
 >;
 
+type CompositeResourceClaimsAreComplete = AssertTrue<
+  'compositeResource' extends keyof Extract<
+    (typeof RAW_COMMAND_DESCRIPTORS)[number],
+    { batchable: true } | { recordsSessionAction: true }
+  >
+    ? true
+    : false
+>;
+
 const CLI_CATALOG_GROUPS = new Set<CommandCatalogGroup>(['public', 'local-cli']);
 
 const CLI_COMMAND_NAMES = new Set<string>(
@@ -1904,6 +1868,26 @@ const CLI_COMMAND_NAMES = new Set<string>(
  * entry keeps its literal `name`. That is what makes the {@link Command} union below a
  * precise set of command-name literals rather than `string`.
  */
+type StandaloneCommandProjection = Readonly<{
+  command: string;
+  arguments: 'original-required';
+  session: 'same-session';
+}>;
+
+function standaloneCommandProjection(
+  descriptor: RawCommandDescriptor,
+): StandaloneCommandProjection | undefined {
+  const publicCommand =
+    descriptor.catalog.group === 'internal'
+      ? descriptor.catalog.servesPublicCommand
+      : descriptor.catalog.group === 'public'
+        ? descriptor.name
+        : undefined;
+  return publicCommand
+    ? { command: publicCommand, arguments: 'original-required', session: 'same-session' }
+    : undefined;
+}
+
 export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
   const platformExecution = readDeclaredPlatformExecution(descriptor);
   if (descriptor.name === 'record') assertRecordRuntimeExecution(platformExecution);
@@ -1912,6 +1896,7 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
       ...descriptor,
       mcpExposed: resolveMcpExposure(descriptor),
       platformExecution,
+      standaloneCommandProjection: standaloneCommandProjection(descriptor),
     };
   }
 
@@ -1920,8 +1905,9 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
     ...runtimeDescriptor,
     mcpExposed: resolveMcpExposure(descriptor),
     platformExecution,
+    standaloneCommandProjection: standaloneCommandProjection(descriptor),
   };
-}) satisfies readonly CommandDescriptor[];
+}) satisfies CompositeResourceClaimsAreComplete extends true ? readonly CommandDescriptor[] : never;
 
 /** The literal union of every registered command name. */
 export type Command = (typeof commandDescriptors)[number]['name'];

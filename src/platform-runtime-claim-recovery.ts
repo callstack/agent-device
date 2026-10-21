@@ -2,6 +2,7 @@ import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import {
   createOwnerScopedDeviceClaimReconciler,
   createRecoveryPlatformScope,
+  inspectDeviceClaimRecovery,
   type ClaimRecoveryGatewayFactory,
   type OwnerScopedClaimRecoveryComposer,
 } from '@agent-device/daemon-contracts/device-claim-recovery';
@@ -54,6 +55,10 @@ export async function runStaleDeviceClaimRelease(
       scope: createRecoveryPlatformScope(),
       composeGateway: createClaimRecoveryGatewayFor(host),
       composeRecovery,
+      beforeGateway: (claim) => {
+        const inspection = inspectDeviceClaimRecovery(claim);
+        return inspection.status === 'retained' ? inspection : undefined;
+      },
     }),
   });
 }
