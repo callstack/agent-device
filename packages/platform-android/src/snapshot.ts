@@ -35,6 +35,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
   ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
   type AndroidHelperSessionScope,
+  type AndroidSnapshotHelperCaptureOptions,
 } from './snapshot-helper-types.ts';
 import {
   captureAndroidSnapshotWithHelper,
@@ -102,8 +103,7 @@ const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
  */
 const HELPER_CONTENT_RECAPTURE_WINDOW_MS = 10_000;
 export type AndroidSnapshotOptions = SnapshotOptions & {
-  skipIdleWait?: boolean;
-  androidIdleWait?: InteractorSnapshotOptions['androidIdleWait'];
+  idleWait?: AndroidSnapshotHelperCaptureOptions['idleWait'];
   appBundleId?: string;
   signal?: AbortSignal;
   helperArtifact?: AndroidSnapshotHelperArtifact;
@@ -447,8 +447,7 @@ async function installAndroidSnapshotHelper(
 }
 
 async function captureAndroidUiHierarchyFromHelper(params: {
-  skipIdleWait?: boolean;
-  androidIdleWait?: InteractorSnapshotOptions['androidIdleWait'];
+  idleWait?: AndroidSnapshotHelperCaptureOptions['idleWait'];
   signal?: AbortSignal;
   adb: AndroidAdbExecutor;
   adbProvider: AndroidAdbProvider;
@@ -463,8 +462,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     deviceKey: helperDeviceKey,
     signal,
   });
-  captureOptions.skipIdleWait = params.skipIdleWait;
-  captureOptions.shortIdleWait = params.androidIdleWait === 'short';
+  captureOptions.idleWait = params.idleWait;
   try {
     const sessionCapture = await withDiagnosticTimer(
       'android_snapshot_helper_session_capture',
@@ -560,8 +558,7 @@ async function captureAndroidHelperContentAttempt(params: {
       await stopAndroidSnapshotHelperSession(helperDeviceKey);
     }
     const capture = await captureAndroidUiHierarchyFromHelper({
-      skipIdleWait: options.skipIdleWait,
-      androidIdleWait: options.androidIdleWait,
+      idleWait: options.idleWait,
       signal: options.signal,
       adb,
       adbProvider,

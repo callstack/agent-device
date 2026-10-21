@@ -69,11 +69,15 @@ export async function captureAndroidSnapshotWithHelper(
     result = await options.adb(
       buildAndroidSnapshotHelperArgs({
         ...resolved,
-        waitForIdleTimeoutMs: options.skipIdleWait
-          ? 0
-          : options.shortIdleWait
-            ? Math.min(resolved.waitForIdleTimeoutMs, ANDROID_SNAPSHOT_HELPER_SHORT_IDLE_TIMEOUT_MS)
-            : resolved.waitForIdleTimeoutMs,
+        waitForIdleTimeoutMs:
+          options.idleWait === 'none'
+            ? 0
+            : options.idleWait === 'short'
+              ? Math.min(
+                  resolved.waitForIdleTimeoutMs,
+                  ANDROID_SNAPSHOT_HELPER_SHORT_IDLE_TIMEOUT_MS,
+                )
+              : resolved.waitForIdleTimeoutMs,
       }),
       {
         allowFailure: true,

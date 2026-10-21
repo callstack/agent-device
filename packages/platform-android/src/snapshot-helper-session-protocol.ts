@@ -12,6 +12,7 @@ import {
 import {
   ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
+  type AndroidSnapshotHelperCaptureOptions,
   type AndroidSnapshotHelperMetadata,
   type AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
@@ -85,15 +86,16 @@ export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
   port: number;
   commandTimeoutMs: number;
   signal?: AbortSignal;
-  skipIdleWait?: boolean;
-  shortIdleWait?: boolean;
+  idleWait?: AndroidSnapshotHelperCaptureOptions['idleWait'];
+  commands: ReadonlySet<string>;
 }): Promise<AndroidSnapshotHelperOutput> {
   const requestId = `snapshot-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const command = params.skipIdleWait
-    ? 'snapshot-immediate'
-    : params.shortIdleWait
-      ? 'snapshot-short-idle'
-      : 'snapshot';
+  const requestedCommand = {
+    full: 'snapshot',
+    short: 'snapshot-short-idle',
+    none: 'snapshot-immediate',
+  }[params.idleWait ?? 'full'];
+  const command = params.commands.has(requestedCommand) ? requestedCommand : 'snapshot';
   // The socket waits out the whole command budget the session was given. The device-side
   // `timeoutMs` bounds only the UiAutomation connect wait, not the traversal after it, so a deadline
   // built from that wait plus a fixed overhead cut off slow-but-healthy captures (tester-army/e2e#841).

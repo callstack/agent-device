@@ -83,7 +83,7 @@ export async function verifyAndroidFilledText(
   beforeCapture?: AndroidFillTargetCapture | null,
 ): Promise<AndroidFillVerification> {
   const deadline = Deadline.fromTimeoutMs(FILL_VERIFICATION_DEADLINE_MS);
-  const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
+  const capture = await captureAndroidUiHierarchy(device, { ...helper, idleWait: 'none' });
   let initialObservation: AndroidFillObservation | undefined = parseAndroidFillObservation(
     capture.xml,
     capture.metadata,
@@ -133,7 +133,7 @@ async function readAndroidFillTargetAtPoint(
   y: number,
   helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillTargetCapture> {
-  const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
+  const capture = await captureAndroidUiHierarchy(device, { ...helper, idleWait: 'none' });
   const observation = parseAndroidFillObservation(capture.xml, capture.metadata);
   const context = await readAndroidFillVerificationContext(device, observation);
   const targetInput = inspectAndroidTextAtPoint(observation, x, y, context).targetInput;
@@ -360,7 +360,7 @@ async function inspectAndroidFilledText(
 ): Promise<AndroidFillVerification> {
   // Each delay samples the live hierarchy again — settling is what the samples observe, so they
   // share the helper session but never a capture.
-  const capture = await captureAndroidUiHierarchy(device, { ...helper, skipIdleWait: true });
+  const capture = await captureAndroidUiHierarchy(device, { ...helper, idleWait: 'none' });
   return verifyAndroidFilledTextInObservation(
     parseAndroidFillObservation(capture.xml, capture.metadata),
     x,

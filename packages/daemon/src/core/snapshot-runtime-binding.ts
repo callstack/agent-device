@@ -216,7 +216,10 @@ export async function resolveBoundSnapshotCaptureRuntime(
     captureSnapshot: async () =>
       await bound.capture(
         canUseShortAndroidSnapshotIdleWait(session)
-          ? { ...captureInput, options: { ...captureInput.options, androidIdleWait: 'short' } }
+          ? {
+              ...captureInput,
+              options: { ...captureInput.options, captureBasis: 'unchanged-since-observation' },
+            }
           : captureInput,
       ),
   });

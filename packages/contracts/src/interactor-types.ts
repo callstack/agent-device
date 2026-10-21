@@ -191,8 +191,8 @@ export type SnapshotOptions = BaseSnapshotOptions & {
   surface?: SessionSurface;
   /** Internal capture purpose; action outcomes always require the full tree. */
   acquisitionIntent?: 'full' | 'surface-observation';
-  /** Internal Android observation hint; action and settling captures keep their normal idle wait. */
-  androidIdleWait?: 'short';
+  /** A stored observation remains current; action and settling captures do not supply this fact. */
+  captureBasis?: 'unchanged-since-observation';
   /**
    * A one-off read, such as an open's launch observation. It may use a capture host the session
    * already keeps warm, but it never installs one or leaves running one that it started. It starts

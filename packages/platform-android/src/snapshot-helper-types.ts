@@ -79,8 +79,7 @@ export type AndroidSnapshotHelperCaptureOptions = {
   maxDepth?: number;
   maxNodes?: number;
   emitChunks?: boolean;
-  skipIdleWait?: boolean;
-  shortIdleWait?: boolean;
+  idleWait?: 'full' | 'short' | 'none';
 };
 
 export type AndroidSnapshotHelperMetadata = {
