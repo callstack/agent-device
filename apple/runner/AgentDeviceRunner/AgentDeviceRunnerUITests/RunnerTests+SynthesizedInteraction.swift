@@ -387,7 +387,7 @@ extension RunnerTests {
     policy: SynthesizedGesturePolicy
   ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
-    let health = mainOwned.accessibilityHealth
+    var health = mainOwned.accessibilityHealth
     let window: XCUIElement?
     let referenceFrame: CGRect
     if let resolved = resolveRunnerWindowElement(app: app) {
@@ -396,6 +396,9 @@ extension RunnerTests {
     } else if let soleScreenFrame = soleScreenReferenceFrame(app: app) {
       window = nil
       referenceFrame = soleScreenFrame
+      // The windows query just failed on this tree, so this gesture's keyboard probes and XCTest
+      // fallbacks would fail on it too, after XCTest's own retries.
+      health = .unavailable
     } else {
       return nil
     }

@@ -19,6 +19,23 @@ extension RunnerTests {
     }
   }
 
+#if os(iOS)
+  /// The sole-screen route is the boundary every window-less gesture crosses, so it decides the device
+  /// rule itself: an iPhone with one screen names that screen, and an iPad refuses, because it can show
+  /// the app in part of its screen. Run on both device families to cover both answers.
+  func testSoleScreenDisplayIDIsNamedOnlyForAnIPhoneWithOneScreen() {
+    var displayID: UInt = 0
+    let refusal = RunnerResolveSoleScreenDisplayID(&displayID)
+    if UIDevice.current.userInterfaceIdiom == .phone, XCUIScreen.screens.count == 1 {
+      XCTAssertNil(refusal)
+      XCTAssertNotEqual(displayID, 0)
+    } else {
+      XCTAssertNotNil(refusal)
+      XCTAssertEqual(displayID, 0)
+    }
+  }
+#endif
+
   func testSoleScreenReferenceFrameRefusesAnUnknownOrientationOrAnEmptyScreen() {
     XCTAssertNil(
       Self.soleScreenReferenceFrame(

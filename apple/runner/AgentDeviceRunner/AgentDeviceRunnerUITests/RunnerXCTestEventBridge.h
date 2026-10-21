@@ -78,10 +78,10 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveWindowDisplayID(
 );
 
 // Reads the display ID of the device's only screen, for a gesture whose app window XCTest cannot
-// resolve because the app's accessibility tree is too deep to serialize. With exactly one screen
-// that screen hosts the app, so no window is needed to name it; with any other count this returns
-// a message and leaves `displayID` untouched, because only a window can say which panel lights the
-// app.
+// resolve because the app's accessibility tree is too deep to serialize. On an iPhone with exactly
+// one screen that screen hosts the full-screen app, so no window is needed to name it. Anywhere else
+// this returns a message and leaves `displayID` untouched: an iPad can show the app in part of its
+// screen, and only a window can say which panel lights a foldable's app.
 FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreenDisplayID(NSUInteger *displayID);
 
 FOUNDATION_EXPORT NSString * _Nullable RunnerRequireClass(
