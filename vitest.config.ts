@@ -196,6 +196,8 @@ export default defineConfig({
             'scripts/__tests__/release-version.test.ts',
             'scripts/__tests__/release-plan.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
+            // The perf suite's pure logic, without a device.
+            'scripts/perf/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             'test/ci/upload-artifact-hidden-paths.test.ts',

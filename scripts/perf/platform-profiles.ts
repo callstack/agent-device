@@ -1,10 +1,7 @@
 import type { PerfConfig } from './config.ts';
-import type { Platform } from './types.ts';
 
-// Local-convenience defaults for ad-hoc runs; CI always overrides them (--device / --serial).
-// The iOS UDID is a specific local "iPhone 17" sim; the Android default is an AVD name that
-// `boot` can launch. Pass --udid/--device/--serial to target your own device.
-const DEFAULT_IOS_UDID = 'D74E0B66-57EB-4EC1-92DC-DA0A30581FE7';
+// Local-convenience default for ad-hoc Android runs: an AVD name that `boot` can launch. CI
+// passes --serial. The iOS suite drives the fixture app instead (see ios-suite.ts).
 const DEFAULT_ANDROID_AVD = 'Pixel_9_Pro_XL_API_37';
 
 export type ProfileSelectors = {
@@ -14,10 +11,6 @@ export type ProfileSelectors = {
   searchField: string;
   // A selector that uniquely targets the EDITABLE search field (for fill).
   searchFieldEditable: string;
-  // iOS exposes an editable search field at the Settings root (fill works without focusing
-  // first; focusing then filling can hang). Android only reveals the editable after tapping
-  // the search card, so it must press the search entry before fill/type.
-  searchEditableAtRoot: boolean;
   // A label reliably visible on the Settings root, for get/is (selector form).
   anchorLabel: string;
   // Plain text of the anchor, for wait text / find (not a selector).
@@ -25,9 +18,8 @@ export type ProfileSelectors = {
 };
 
 export type ResolvedProfile = {
-  platform: Platform;
+  platform: 'android';
   deviceName: string;
-  udid?: string;
   serial?: string;
   platformFlags: string[]; // --platform; applied to every call (only conflicts if it mismatches a locked session)
   selectorFlags: string[]; // device selectors — ONLY on the session-establishing open / selectorless boot
@@ -36,27 +28,6 @@ export type ResolvedProfile = {
 };
 
 export function resolveProfile(cfg: PerfConfig): ResolvedProfile {
-  if (cfg.platform === 'ios') {
-    // Prefer targeting by device name (CI boots a named simulator); fall back to a UDID.
-    const useName = cfg.device !== undefined;
-    const udid = useName ? undefined : (cfg.udid ?? DEFAULT_IOS_UDID);
-    return {
-      platform: 'ios',
-      deviceName: cfg.device ?? 'iPhone 17',
-      udid,
-      platformFlags: ['--platform', 'ios'],
-      selectorFlags: useName ? ['--device', cfg.device!] : ['--udid', udid!],
-      appTarget: 'settings',
-      selectors: {
-        deepScreen: 'label="General"',
-        searchField: 'label="Search"',
-        searchFieldEditable: 'label="Search" editable',
-        searchEditableAtRoot: true,
-        anchorLabel: 'label="General"',
-        anchorText: 'General',
-      },
-    };
-  }
   const avdName = cfg.device ?? DEFAULT_ANDROID_AVD;
   const serialFlags = cfg.serial
     ? ['--serial', cfg.serial, '--android-device-allowlist', cfg.serial]
@@ -72,7 +43,6 @@ export function resolveProfile(cfg: PerfConfig): ResolvedProfile {
       deepScreen: 'text="Network & internet"',
       searchField: 'text="Search Settings"',
       searchFieldEditable: 'editable',
-      searchEditableAtRoot: false,
       anchorLabel: 'label="Network & internet"',
       anchorText: 'Network & internet',
     },

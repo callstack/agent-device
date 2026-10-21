@@ -37,7 +37,7 @@ function bat(
   return { label, command, execMode: 'batch' as const, step, ...opts };
 }
 
-// One ordered pass over Settings. The harness repeats this N (+warmup) times;
+// One ordered pass over Android Settings. The harness repeats this N (+warmup) times;
 // the leading `open --relaunch` resets the app to its root each round, so every
 // round starts from a known state while commands run in their natural order.
 export function buildSettingsTour(p: ResolvedProfile, ctx: StepContext): ScenarioStep[] {
@@ -46,92 +46,33 @@ export function buildSettingsTour(p: ResolvedProfile, ctx: StepContext): Scenari
   const rec = path.join(ctx.artifactsDir, 'rec.mp4');
   const trace = path.join(ctx.artifactsDir, 'trace.log');
 
-  // Text entry differs per platform: iOS fills the root search field directly (focusing it
-  // first can hang); Android must open the search screen before an editable field exists.
-  const textEntry: ScenarioStep[] = p.selectors.searchEditableAtRoot
-    ? [
-        // iOS: editable search field exists at root; fill it directly (freshRoot resets scroll).
-        bat(
-          'fill search',
-          'fill',
-          {
-            command: 'fill',
-            input: {
-              target: { kind: 'selector', selector: s.searchFieldEditable },
-              text: 'general',
-            },
-          },
-          { freshRoot: true },
-        ),
-        bat('type', 'type', { command: 'type', input: { text: 'wifi' } }),
-        bat('get editable text', 'get', {
-          command: 'get',
-          input: {
-            format: 'text',
-            target: { kind: 'selector', selector: s.searchFieldEditable },
-          },
-        }),
-        bat('keyboard return', 'keyboard', { command: 'keyboard', input: { action: 'return' } }),
-      ]
-    : [
-        // Android: tap the search entry first to reveal the editable, then type/fill it.
-        bat(
-          'press search field',
-          'press',
-          {
-            command: 'press',
-            input: { target: { kind: 'selector', selector: s.searchField } },
-          },
-          { freshRoot: true },
-        ),
-        bat('type', 'type', { command: 'type', input: { text: 'wifi' } }),
-        bat('fill search', 'fill', {
-          command: 'fill',
-          input: {
-            target: { kind: 'selector', selector: s.searchFieldEditable },
-            text: 'general',
-          },
-        }),
-        bat('get editable text', 'get', {
-          command: 'get',
-          input: {
-            format: 'text',
-            target: { kind: 'selector', selector: s.searchFieldEditable },
-          },
-        }),
-      ];
-
-  // These iOS-only repeated gesture forms fuse into `sequence` runner requests:
-  // press --count > 1 and swipe --count > 1 both batch their steps into one command.
-  const iosRunnerSeries: ScenarioStep[] =
-    p.platform === 'ios'
-      ? [
-          bat(
-            'press series (sequence)',
-            'press',
-            {
-              command: 'press',
-              input: { target: { kind: 'point', x: 200, y: 95 }, count: 2, intervalMs: 50 },
-            },
-            { freshRoot: true },
-          ),
-          bat(
-            'swipe series (sequence)',
-            'swipe',
-            {
-              command: 'swipe',
-              input: {
-                from: { x: 200, y: 650 },
-                to: { x: 200, y: 450 },
-                count: 2,
-                pauseMs: 50,
-                pattern: 'ping-pong',
-              },
-            },
-            { freshRoot: true },
-          ),
-        ]
-      : [];
+  // Android reveals the editable search field only after a tap on the search card.
+  const textEntry: ScenarioStep[] = [
+    bat(
+      'press search field',
+      'press',
+      {
+        command: 'press',
+        input: { target: { kind: 'selector', selector: s.searchField } },
+      },
+      { freshRoot: true },
+    ),
+    bat('type', 'type', { command: 'type', input: { text: 'wifi' } }),
+    bat('fill search', 'fill', {
+      command: 'fill',
+      input: {
+        target: { kind: 'selector', selector: s.searchFieldEditable },
+        text: 'general',
+      },
+    }),
+    bat('get editable text', 'get', {
+      command: 'get',
+      input: {
+        format: 'text',
+        target: { kind: 'selector', selector: s.searchFieldEditable },
+      },
+    }),
+  ];
 
   return [
     // --- reset to root via relaunch ---
@@ -165,9 +106,6 @@ export function buildSettingsTour(p: ResolvedProfile, ctx: StepContext): Scenari
       { isSnapshot: true },
     ),
     bat('back', 'back', { command: 'back', input: {} }),
-
-    // --- iOS runner series commands surfaced by PR #643 ---
-    ...iosRunnerSeries,
 
     // --- targeted reads against the visible anchor (freshRoot so the anchor is on screen) ---
     bat(

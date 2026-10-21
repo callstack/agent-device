@@ -12,24 +12,24 @@ on:
       rounds:
         description: 'Measured rounds per command (samples)'
         required: false
-        default: '5'
+        default: '3'
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  AGENT_DEVICE_PERF_CLI: '--experimental-strip-types src/bin.ts'
-  PERF_ROUNDS: ${{ github.event.inputs.rounds || '5' }}
+  PERF_ROUNDS: ${{ github.event.inputs.rounds || '3' }}
 
 jobs:
   perf-ios:
     name: iOS Command Perf
     runs-on: macos-26
-    timeout-minutes: 80
+    timeout-minutes: 100
     env:
       IOS_RUNTIME_VERSION: '26.2'
       AGENT_DEVICE_XCUITEST_ARCHS: 'arm64'
@@ -42,6 +42,15 @@ jobs:
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            examples/test-app/pnpm-lock.yaml
+
+      - name: Build the shared CLI
+        uses: ./.github/actions/run-gate
+        with:
+          gate: build
 
       - name: Restore and build iOS XCTest runner
         uses: ./.github/actions/setup-apple-runner-build
@@ -54,22 +63,35 @@ jobs:
           xcuitest-destination: generic/platform=iOS Simulator
 
       - name: Boot iOS test simulator
+        id: ios-simulator
         uses: ./.github/actions/boot-ios-test-simulator
         with:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
           preferred-device-name: iPhone 17 Pro
 
+      - name: Install the fixture app
+        id: fixture-app
+        uses: ./.github/actions/setup-fixture-app
+
       - name: Preflight iOS runner through public CLI
+        env:
+          UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
         run: |
+          # The keyboard must stay expanded for keyboard dismiss to find its Done key.
+          xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false
           pnpm clean:daemon
-          node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS"
+          node bin/agent-device.mjs prepare ios-runner --platform ios --udid "$UDID" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS"
           pnpm clean:daemon
 
-      - name: Run iOS command perf benchmark
+      - name: Run iOS command perf suite
+        env:
+          UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
+          APP_ID: ${{ steps.fixture-app.outputs.app-id }}
+          APP_PATH: ${{ steps.fixture-app.outputs.app-path }}
         run: |
-          pnpm perf --platform ios \
-            --device "iPhone 17 Pro" \
-            --n "$PERF_ROUNDS" --warmup 1 \
+          pnpm perf --platform ios --udid "$UDID" \
+            --app-id "$APP_ID" --app-path "$APP_PATH" \
+            --rounds "$PERF_ROUNDS" --warmup 1 \
             --out-dir "$GITHUB_WORKSPACE/perf-results"
 
       - name: Upload iOS perf report
@@ -84,6 +106,8 @@ jobs:
     name: Android Command Perf
     runs-on: ubuntu-latest
     timeout-minutes: 80
+    env:
+      AGENT_DEVICE_PERF_CLI: '--experimental-strip-types src/bin.ts'
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
