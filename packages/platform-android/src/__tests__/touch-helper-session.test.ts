@@ -41,6 +41,7 @@ import {
   createFakeTouchHelperSessionProvider,
   sessionHeaderResponse,
   snapshotSessionResponse,
+  type TouchSessionCommandHandler,
 } from './touch-helper-session.fixtures.ts';
 
 vi.mock('../helper-package-install.ts', async (importOriginal) => {

@@ -28,7 +28,7 @@ class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
   }
 }
 
-type TouchSessionCommandHandler = (command: string, requestId: string) => string | undefined;
+export type TouchSessionCommandHandler = (command: string, requestId: string) => string | undefined;
 
 function readSessionPort(args: readonly string[]): number {
   const index = args.indexOf('sessionPort');
