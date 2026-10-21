@@ -8,10 +8,28 @@ export function validateScreenshotImagePixels(
   maxPixels?: number,
 ): void {
   if (maxPixels == null || maxPixels <= 0) return;
-  if (hasPngSignature(bytes) && bytes.length >= 24 && bytes.toString('ascii', 12, 16) === 'IHDR') {
-    validateScreenshotPixels(bytes.readUInt32BE(16), bytes.readUInt32BE(20), label, maxPixels);
+  if (hasPngSignature(bytes)) {
+    validatePngPixels(bytes, label, maxPixels);
   } else if (bytes[0] === 0xff && bytes[1] === 0xd8) {
     validateJpegPixels(bytes, label, maxPixels);
+  }
+}
+
+function validatePngPixels(bytes: Buffer, label: string, maxPixels: number): void {
+  let offset = 8;
+  while (offset + 16 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString('ascii', offset + 4, offset + 8);
+    if (type === 'IHDR' && length >= 8) {
+      validateScreenshotPixels(
+        bytes.readUInt32BE(offset + 8),
+        bytes.readUInt32BE(offset + 12),
+        label,
+        maxPixels,
+      );
+    }
+    if (type === 'IEND') return;
+    offset += length + 12;
   }
 }
 

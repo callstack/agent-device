@@ -128,6 +128,17 @@ test('an oversized PNG is refused before decoding even an incomplete body', () =
   });
 });
 
+test('PNG headers cannot replace dimensions with an image above the pixel budget', () => {
+  const small = PNG.sync.write(new PNG({ width: 1, height: 1 }));
+  const large = PNG.sync.write(new PNG({ width: 4, height: 4 }));
+  const repeatedHeader = Buffer.concat([small.subarray(0, 33), large.subarray(8)]);
+  expect(decodeScreenshotImage(repeatedHeader, 'current', 16).width).toBe(4);
+  expect(thrownBy(() => decodeScreenshotImage(repeatedHeader, 'current', 1))).toMatchObject({
+    code: 'INVALID_ARGS',
+    message: expect.stringContaining('maxImagePixels'),
+  });
+});
+
 const PROPERTY_RUNS = 40;
 test('JPEG frame dimensions enforce the original pixel budget before decoding', () => {
   const jpeg = encodeJpeg(
