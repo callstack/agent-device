@@ -152,13 +152,16 @@ test('a successful scroll that flips the capture backend must not claim no-effec
   });
   markPostGestureStabilization(session, 'scroll', ['down']);
 
-  const { result, rebased, vetoed, vetoEvents } = await runStabilization(session, () =>
-    makeSnapshotState(chromeWithListSnapshot(['row-3', 'row-4']).nodes, {
-      snapshotQuality: { state: 'recovered', backend: 'private-ax' },
-    }),
+  const { result, rebased, staleAccepts, vetoed, vetoEvents } = await runStabilization(
+    session,
+    () =>
+      makeSnapshotState(chromeWithListSnapshot(['row-3', 'row-4']).nodes, {
+        snapshotQuality: { state: 'recovered', backend: 'private-ax' },
+      }),
   );
 
   assert.equal(rebased, 1);
+  assert.equal(staleAccepts, 0);
   assert.equal(
     result.postGestureOutcome,
     undefined,

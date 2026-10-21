@@ -157,3 +157,22 @@ test('a quiet pair matching a same-backend baseline is still distrusted to the c
   assert.equal(diagnostics('post_gesture_snapshot_stale_accept').length, 1);
   assert.ok(clock.now() >= 3_500, `accepted after ${clock.now()}ms`);
 });
+
+test('an effect that lands after a rebase keeps the loop polling until the moved surface is quiet', async () => {
+  const clock = fakeClock();
+  const rebasedRead: Surface = { signature: ['before'], costMs: 0, backend: 'bridge' };
+  const moving: Surface = { signature: ['moving'], costMs: 0, backend: 'bridge' };
+  const moved: Surface = { signature: ['moved'], costMs: 0, backend: 'bridge' };
+
+  const outcome = await runPostGestureStabilityLoop({
+    pending: { ...PENDING, baselineSignature: ['before'], baselineBackend: 'runner' },
+    needsBaselineDistrust: true,
+    hooks: hooksFor(clock, [rebasedRead, rebasedRead, moving, moved, moved]),
+    clock,
+  });
+
+  assert.equal(outcome.value, moved);
+  assert.equal(outcome.postGestureOutcome, undefined);
+  assert.equal(diagnostics('post_gesture_snapshot_baseline_rebased').length, 1);
+  assert.equal(diagnostics('post_gesture_snapshot_stale_accept').length, 0);
+});
