@@ -20,6 +20,10 @@ import {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from '@agent-device/test-kit';
 import type { DeviceClaim } from './device-claims.ts';
+import { resolveDeviceClaimPath } from './device-claim-paths.ts';
+import { settleVerifiedOrphanedClaim } from './device-claim-settlement.ts';
+import { writeDeviceClaim } from './device-claim-store.ts';
+import { createOwnerScopedDeviceClaimReconciler } from './device-claim-owner-recovery.ts';
 
 const scope = {
   signal: new AbortController().signal,
@@ -232,6 +236,108 @@ const unavailable = Object.freeze({
   available: false as const,
   reason: 'owner-capability-missing' as const,
 });
+
+test.each([
+  { caseName: 'appearing', initiallyOwned: false, mode: 'direct' },
+  { caseName: 'changing owner', initiallyOwned: true, mode: 'direct' },
+  { caseName: 'appearing', initiallyOwned: false, mode: 'owner-scoped' },
+  { caseName: 'changing owner', initiallyOwned: true, mode: 'owner-scoped' },
+] as const)(
+  'a later foreign manifest $caseName during $mode recovery retains the claim',
+  async ({ initiallyOwned, mode }) => {
+    const stateDir = mkdtempForTestSync('device-claim-late-resource-');
+    const claim = makeClaim(stateDir);
+    const env = { AGENT_DEVICE_CLAIMS_DIR: path.join(stateDir, 'claims') };
+    writeDeviceClaim(claim, env);
+    const sessionDir = path.join(stateDir, 'sessions', claim.session);
+    appLogResourceStore.write(
+      appLogResourceStore.resolvePath(sessionDir),
+      createDurableResourceEnvelope({
+        resourceKind: 'app-log',
+        sessionId: claim.session,
+        device: claim.device,
+        owner: localRuntimeOwner('android'),
+        fence: { token: 'app-log-fence', generation: 1 },
+        lifecycle: 'open',
+        descriptor: { version: 1, body: { pid: 123 } },
+      }),
+    );
+    const screenPath = screenRecordingDurableResource.store.resolvePath(sessionDir);
+    const writeScreen = (sessionId: string) =>
+      screenRecordingDurableResource.store.write(
+        screenPath,
+        createDurableResourceEnvelope({
+          resourceKind: 'screen-recording',
+          sessionId,
+          device: claim.device,
+          owner: localRuntimeOwner('android'),
+          fence: { token: 'screen-fence', generation: 1 },
+          lifecycle: 'open',
+          descriptor: { version: 1, body: {} },
+        }),
+      );
+    if (initiallyOwned) writeScreen(claim.session);
+    let enterBind!: () => void;
+    const enteredBind = new Promise<void>((resolve) => {
+      enterBind = resolve;
+    });
+    let resumeBind!: () => void;
+    const heldBind = new Promise<void>((resolve) => {
+      resumeBind = resolve;
+    });
+    const dispose = vi.fn(async () => {});
+    const bind = vi.fn(async ({ device }) => {
+      enterBind();
+      await heldBind;
+      return {
+        device,
+        owner: localRuntimeOwner('android'),
+        facts: {
+          device: { family: 'android' as const, kind: device.kind, providerMode: 'local' as const },
+          operations: {
+            appLogReattach: { available: true as const },
+            appLogCleanup: { available: true as const },
+          },
+        },
+        operations: {
+          appLogReattach: async () => ({ status: 'missing' as const }),
+          appLogCleanup: async () => ({ status: 'cleaned' as const }),
+        },
+        [Symbol.asyncDispose]: dispose,
+      };
+    });
+    const shutdown = vi.fn(async () => {});
+    const gateway = {
+      bind,
+      shutdown,
+    } as unknown as DeviceRuntimeGateway<PlatformRuntimeOperations>;
+    const reconciler =
+      mode === 'owner-scoped'
+        ? createOwnerScopedDeviceClaimReconciler({
+            scope,
+            beforeGateway: inspectDeviceClaimRecovery,
+            composeGateway: () => gateway,
+          })
+        : createDeviceClaimReconciler({ gateway, scope });
+    const settlement = settleVerifiedOrphanedClaim(claim, reconciler, env);
+    await enteredBind;
+    writeScreen('foreign-session');
+    resumeBind();
+
+    await expect(settlement).resolves.toEqual({
+      status: 'retained',
+      reason: 'screen-recording-owner-mismatch',
+    });
+    expect(fs.existsSync(resolveDeviceClaimPath(claim.deviceKey, env))).toBe(true);
+    expect(bind).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(shutdown).toHaveBeenCalledTimes(mode === 'owner-scoped' ? 1 : 0);
+    expect(screenRecordingDurableResource.store.read(screenPath)).toMatchObject({
+      status: 'decoded',
+      envelope: { sessionId: 'foreign-session', lifecycle: 'open' },
+    });
+  },
+);
 
 function makeClaim(stateDir: string): DeviceClaim {
   return {

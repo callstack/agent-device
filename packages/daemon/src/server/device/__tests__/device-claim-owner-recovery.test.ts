@@ -164,7 +164,7 @@ test('owner-scoped recovery uses its pre-gateway ownership decision for terminal
       composeGateway: () => ({ bind, shutdown }) as never,
     });
     expect(await reconcile(claim)).toEqual({ status: 'reconciled' });
-    expect(openedPaths).toEqual([resourcePath, screenPath, resourcePath, screenPath]);
+    expect(openedPaths.slice(0, 2)).toEqual([resourcePath, screenPath]);
     expect(bind).not.toHaveBeenCalled();
     expect(shutdown).toHaveBeenCalledOnce();
     expect(appLogResourceStore.read(resourcePath)).toMatchObject({

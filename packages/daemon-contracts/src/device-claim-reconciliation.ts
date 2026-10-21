@@ -30,8 +30,12 @@ export function createDeviceClaimReconciler(params: {
     if (inspection.status === 'retained') return inspection;
     try {
       const sessionsDir = resolveDaemonPaths(claim.stateDir).sessionsDir;
+      const sessionDir = path.join(sessionsDir, safeSessionName(claim.session));
       for (const { resourceKind, resourcePath } of inspection.ownedResources) {
         const resource = DEVICE_CLAIM_DURABLE_RESOURCES[resourceKind];
+        const currentOwnership = inspectResourceOwnership(resource, claim, sessionDir);
+        if (currentOwnership.status === 'retained') return currentOwnership;
+        if (currentOwnership.status === 'missing') continue;
         // Recovery is intentionally sequential: resources can bind the same exact
         // device/runtime owner, so one must release its binding before the next starts.
         const outcome = await resource.recover(params, sessionsDir, resourcePath);
@@ -41,6 +45,18 @@ export function createDeviceClaimReconciler(params: {
             reason: `${resource.resourceKind}-cleanup-pending`,
           };
         }
+      }
+      const afterRecovery = inspectDeviceClaimRecovery(claim);
+      if (afterRecovery.status === 'retained') return afterRecovery;
+      const initialPaths = new Set(
+        inspection.ownedResources.map(({ resourcePath }) => resourcePath),
+      );
+      const pending = afterRecovery.ownedResources.find(
+        ({ resourceKind, resourcePath }) =>
+          !initialPaths.has(resourcePath) || afterRecovery.recoveryKinds.includes(resourceKind),
+      );
+      if (pending) {
+        return { status: 'retained', reason: `${pending.resourceKind}-cleanup-pending` };
       }
       return { status: 'reconciled' };
     } catch (error) {
