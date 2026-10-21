@@ -188,3 +188,80 @@ test.each(['batch', 'replay'])(
   },
   20_000,
 );
+
+test('annotated replay capture aborts within its deadline without post-failure fallback', async () => {
+  let captureStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    captureStarted = resolve;
+  });
+  let captureSignal: AbortSignal | undefined;
+  let captureAfterAbort = false;
+  let captureAttempts = 0;
+  let stallReplayCapture = false;
+  const daemon = await createProviderScenarioHarness({
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+    env: { AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION: '0' },
+    androidAdbProvider: () => ({
+      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+      exec: async (args, options) => {
+        if (stallReplayCapture && args.includes('instrument')) {
+          captureAttempts += 1;
+          if (captureSignal?.aborted) captureAfterAbort = true;
+          captureSignal = options?.signal;
+          captureStarted();
+          if (!captureSignal) throw new Error('annotated replay capture lost the request signal');
+          return await awaitGestureAbort(captureSignal);
+        }
+        if (args.includes('--show-versioncode'))
+          return {
+            exitCode: 0,
+            stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:999999',
+            stderr: '',
+          };
+        if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start')
+          return { exitCode: 0, stdout: 'Starting: Intent', stderr: '' };
+        return respondToAndroidSettingsAdbCommand([...args], '', '', {});
+      },
+    }),
+  });
+  try {
+    await daemon.client().apps.open({
+      app: 'com.android.settings',
+      platform: 'android',
+      serial: PROVIDER_SCENARIO_ANDROID.id,
+    });
+    stallReplayCapture = true;
+    const script = path.join(daemon.stateDir, 'annotated.ad');
+    const source = [
+      '# agent-device:target-v1 {"role":"button","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"unverifiable"}',
+      'click @e1',
+      '',
+    ].join('\n');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const pending = daemon.callCommand('replay', [script], {
+      platform: 'android',
+      serial: PROVIDER_SCENARIO_ANDROID.id,
+      timeoutMs: 1_000,
+      replayScriptSource: { entry: script, files: { [script]: source } },
+    });
+    await started;
+    assert.ok(captureSignal, 'target observation must carry the request signal');
+    await vi.advanceTimersByTimeAsync(1_000);
+    const response = await pending;
+    assert.equal(
+      response.json.error?.data?.details?.reason,
+      'daemon_request_timeout',
+      JSON.stringify(response.json),
+    );
+    expect(response.json.error.data.details).toMatchObject({
+      timeoutMs: 1_000,
+      divergence: { step: { source: { path: script, line: 2 } } },
+    });
+    assert.equal(captureSignal.aborted, true);
+    assert.equal(captureAttempts, 1);
+    assert.equal(captureAfterAbort, false);
+  } finally {
+    vi.useRealTimers();
+    await daemon.close();
+  }
+}, 20_000);

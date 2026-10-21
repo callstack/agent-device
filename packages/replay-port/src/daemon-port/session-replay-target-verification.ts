@@ -278,14 +278,16 @@ async function captureFreshObservation(params: {
   logPath: string;
   action: SessionAction;
   unavailableHint: string;
+  signal?: AbortSignal;
 }): Promise<DivergenceObservation> {
-  const { session, observationStore, logPath, action, unavailableHint } = params;
+  const { session, observationStore, logPath, action, unavailableHint, signal } = params;
   return session
     ? await captureDivergenceObservation({
         session,
         observationStore,
         logPath,
         action,
+        signal,
       })
     : { state: 'unavailable', reason: 'no-session', hint: unavailableHint };
 }
@@ -307,6 +309,7 @@ export async function buildRecordedUnverifiableFailureResponse(
 ): Promise<DaemonResponse> {
   const observation = await captureFreshObservation({
     ...params,
+    signal: context.signal,
     unavailableHint:
       'The session closed before a screen could be captured to verify the recorded target evidence.',
   });
@@ -343,6 +346,7 @@ export async function buildPostDispatchTargetBindingFailureResponse(
 ): Promise<DaemonResponse> {
   const observation = await captureFreshObservation({
     ...params,
+    signal: context.signal,
     unavailableHint: 'The session closed before a post-failure screen could be captured.',
   });
   return buildTargetBindingFailureResponse(context, evidence, observation);

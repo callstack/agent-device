@@ -181,6 +181,7 @@ export function createAdReplayStepRuntime(params: {
       logPath: ctx.logPath,
       action,
       retryLaunchRace: true,
+      signal: ctx.signal,
     });
   };
 
