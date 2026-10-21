@@ -107,21 +107,19 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
 
 func shouldProbeCoordinateTapTextInput(
   xCTestChannelPenalized: Bool,
-  evidence: CoordinateTapTextInputEvidence? = nil,
-  point: CGPoint? = nil,
-  targetBundleId: String? = nil
+  evidence: CoordinateTapTextInputEvidence?,
+  point: CGPoint?,
+  targetBundleId: String?
 ) -> Bool {
   if xCTestChannelPenalized { return false }
   guard let evidence, let point, point.x.isFinite, point.y.isFinite,
-    evidence.source == "selector-capture" || evidence.source == "ref-frame",
     !evidence.targetBundleId.isEmpty, evidence.targetBundleId == targetBundleId,
     evidence.point.x == point.x, evidence.point.y == point.y
   else { return true }
   for input in evidence.textInputRects {
     let rect = CGRect(x: input.x, y: input.y, width: input.width, height: input.height)
     guard SnapshotGeometry.isPositiveFinite(rect) else { return true }
-    if point.x >= rect.minX, point.x <= rect.maxX,
-      point.y >= rect.minY, point.y <= rect.maxY { return true }
+    if isCoordinateTextInputCandidate(enabled: true, frame: rect, point: point) { return true }
   }
   return false
 }

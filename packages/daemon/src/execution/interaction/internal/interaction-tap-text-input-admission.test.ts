@@ -3,7 +3,12 @@ import { beforeEach, expect, test } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { runInteraction } from '../../../__tests__/support/touch-interaction-runner.ts';
-import { activateCompleteRefFrame, refFrameState } from '../../../core/ref-frame.ts';
+import {
+  activateCompleteRefFrame,
+  markSessionSnapshotOutdated,
+  refFrameState,
+} from '../../../core/ref-frame.ts';
+import { setSessionSnapshot } from '../../session-snapshot.ts';
 import {
   installInteractorSnapshotResolution,
   mockInteractorSnapshot,
@@ -94,6 +99,26 @@ test('a selector uses this request capture rather than the stored input geometry
     point: { x: 40, y: 760 },
     textInputRects: [{ x: 200, y: 160, width: 100, height: 40 }],
   });
+});
+
+test('a newer read-only observation keeps probing when the ref frame predates an input at the tap point', async () => {
+  const { store, session } = setup();
+  const nodes = session.snapshot!.nodes.map((node) =>
+    node.type === 'TextField' ? { ...node, rect: { x: 10, y: 740, width: 100, height: 40 } } : node,
+  );
+  attachSnapshotTextInputGeometry(nodes, { rects: [{ x: 10, y: 740, width: 100, height: 40 }] });
+  setSessionSnapshot(session, { ...session.snapshot!, nodes, createdAt: 2 });
+  expect(refFrameState(session)).toBe('active');
+  expect((await runInteraction(store, session.name, 'click', ['@e2']))?.ok).toBe(true);
+  expect(mockTapPoint.mock.calls[0]?.[0].options.coordinateTapTextInputEvidence).toBeUndefined();
+});
+
+test('an outdated observation keeps probing even when it still owns the active refs', async () => {
+  const { store, session } = setup();
+  markSessionSnapshotOutdated(session);
+  expect(refFrameState(session)).toBe('active');
+  expect((await runInteraction(store, session.name, 'click', ['@e2']))?.ok).toBe(true);
+  expect(mockTapPoint.mock.calls[0]?.[0].options.coordinateTapTextInputEvidence).toBeUndefined();
 });
 
 test('raw coordinates do not borrow a stored tree even when its ref frame is active', async () => {

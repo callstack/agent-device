@@ -8,8 +8,7 @@ export function buildCoordinateTapTextInputEvidence(
   appBundleId: string | undefined,
   source: CoordinateTapTextInputEvidence['source'],
 ): CoordinateTapTextInputEvidence | undefined {
-  if (!snapshot || snapshot.truncated || snapshot.nodes.length === 0) return undefined;
-  if (snapshot.snapshotQuality?.state === 'sparse') return undefined;
+  if (!snapshot) return undefined;
   const targetBundleId = snapshot.iosSystemSurfaceBundleId ?? appBundleId;
   const geometry = readSnapshotTextInputGeometry(snapshot.nodes);
   if (!targetBundleId || !geometry) return undefined;

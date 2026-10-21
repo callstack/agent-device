@@ -157,12 +157,14 @@ extension RunnerTests {
         if !xCTestTextInputProbeSkipped {
           textInput = coordinateTapTextInputAt(app: activeApp, x: x, y: y)
         } else {
-          // A process-scoped tap cannot authorize later typing without concrete element identity.
           textInput = nil
+          // Clear before dispatch so a throwing gesture cannot retain the preceding field's witness.
           clearRememberedTextEntryTap()
           NSLog(
-            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@",
-            mainOwned.bundleId ?? ""
+            "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@ reason=%@ source=%@",
+            mainOwned.bundleId ?? "",
+            xCTestChannelPenalized ? "penalized-xctest-channel" : "evidence",
+            command.coordinateTapTextInputEvidence?.source ?? "none"
           )
         }
         var fallback: GestureFallback?

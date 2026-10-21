@@ -17,7 +17,12 @@ import { recordCaptureProof } from '../../../core/capture-disclosure.ts';
 import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
 import { runtimeExecutionFromContext } from '../../../core/snapshot-runtime-capture-input.ts';
 import { createDaemonRuntimeSessionStore } from '../../../core/runtime-session.ts';
-import { expireRefFrame, refFrameState, refFrameTree } from '../../../core/ref-frame.ts';
+import {
+  expireRefFrame,
+  isOutdatedObservation,
+  refFrameState,
+  refFrameTree,
+} from '../../../core/ref-frame.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';
 import type {
   CaptureSnapshotForSession,
@@ -102,12 +107,13 @@ export async function createInteractionRuntimeForRoute(
         );
       }
       if (refFrameState(current) !== 'active') return undefined;
-      return buildCoordinateTapTextInputEvidence(
-        consumedCapture.state ?? refFrameTree(current),
-        point,
-        current.appBundleId,
-        'ref-frame',
-      );
+      const snapshot = consumedCapture.state ?? current.snapshot;
+      if (
+        !consumedCapture.state &&
+        (!snapshot || refFrameTree(current) !== snapshot || isOutdatedObservation(snapshot))
+      )
+        return undefined;
+      return buildCoordinateTapTextInputEvidence(snapshot, point, current.appBundleId, 'ref-frame');
     },
     expireRefFrame: () => expireRefFrame(params.sessionStore.requireCurrent(ref)),
     // The #1542 rescue hook installs only when this request's own binding admitted the live

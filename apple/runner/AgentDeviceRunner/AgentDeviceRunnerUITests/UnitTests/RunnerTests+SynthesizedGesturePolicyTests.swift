@@ -95,8 +95,23 @@ extension RunnerTests {
   }
 
   func testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel() {
-    XCTAssertTrue(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: false))
-    XCTAssertFalse(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: true))
+    XCTAssertTrue(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: false, evidence: nil, point: nil, targetBundleId: nil))
+    XCTAssertFalse(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: true, evidence: nil, point: nil, targetBundleId: nil))
+  }
+
+  func testCoordinateTapTextInputEvidenceSourceIsDiagnosticOnly() {
+    let evidence = CoordinateTapTextInputEvidence(
+      source: "unverified-daemon-tag",
+      targetBundleId: "com.example.app",
+      point: RunnerGesturePoint(x: 10, y: 20),
+      textInputRects: []
+    )
+    XCTAssertFalse(shouldProbeCoordinateTapTextInput(
+      xCTestChannelPenalized: false,
+      evidence: evidence,
+      point: CGPoint(x: 10, y: 20),
+      targetBundleId: "com.example.app"
+    ))
   }
 
   func testOnlySynthesizedSequenceTapStepsTakeTheCoordinateTapPolicy() {
@@ -215,7 +230,7 @@ extension RunnerTests {
         targetBundleId: fixture.activeBundleId
       ), fixture.probe, fixture.name)
     }
-    XCTAssertTrue(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: false), "raw coordinates keep probing")
+    XCTAssertTrue(shouldProbeCoordinateTapTextInput(xCTestChannelPenalized: false, evidence: nil, point: nil, targetBundleId: nil), "raw coordinates keep probing")
   }
 }
 #endif

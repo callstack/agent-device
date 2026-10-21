@@ -13,7 +13,6 @@ type Fixture = {
   appBundleId: string;
   source?: CoordinateTapTextInputEvidence['source'];
   truncated?: boolean;
-  iosSystemSurfaceBundleId?: string;
   expectedEvidence: CoordinateTapTextInputEvidence | null;
 };
 const cases: Fixture[] = JSON.parse(
@@ -36,8 +35,8 @@ test.each(cases)('$name preserves acquired input geometry through presentation',
           ...fixture.nodes.map((node, index) => ({
             ...node,
             index: index + 1,
-            parentIndex: 0,
-            depth: 1,
+            parentIndex: node.parentIndex ?? 0,
+            depth: node.depth ?? 1,
           })),
         ],
         truncated: fixture.truncated ?? false,
@@ -49,7 +48,6 @@ test.each(cases)('$name preserves acquired input geometry through presentation',
     { interactiveOnly: true },
   );
   const snapshot = buildSnapshotState(presented, { snapshotInteractiveOnly: true });
-  snapshot.iosSystemSurfaceBundleId = fixture.iosSystemSurfaceBundleId;
   const result = buildCoordinateTapTextInputEvidence(
     snapshot,
     fixture.point,

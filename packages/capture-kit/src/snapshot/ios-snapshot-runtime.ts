@@ -160,6 +160,14 @@ function acquiredTextInputGeometry(
       );
     });
     if (!input) continue;
+    if (
+      node.rect &&
+      Object.values(node.rect).every(Number.isFinite) &&
+      node.rect.width >= 0 &&
+      node.rect.height >= 0 &&
+      (node.rect.width === 0 || node.rect.height === 0)
+    )
+      continue;
     if (!isPositiveFiniteRect(node.rect)) return undefined;
     rects.push({ ...node.rect });
   }

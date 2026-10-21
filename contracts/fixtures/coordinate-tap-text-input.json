@@ -64,7 +64,9 @@
           "y": 20,
           "width": 100,
           "height": 40
-        }
+        },
+        "parentIndex": 1,
+        "depth": 2
       }
     ],
     "point": {
@@ -110,7 +112,9 @@
           "y": 20,
           "width": 100,
           "height": 40
-        }
+        },
+        "parentIndex": 1,
+        "depth": 2
       }
     ],
     "point": {
@@ -156,7 +160,9 @@
           "y": 20,
           "width": 100,
           "height": 40
-        }
+        },
+        "parentIndex": 1,
+        "depth": 2
       }
     ],
     "point": {
@@ -202,7 +208,9 @@
           "y": 20,
           "width": 100,
           "height": 40
-        }
+        },
+        "parentIndex": 1,
+        "depth": 2
       }
     ],
     "point": {
@@ -249,7 +257,9 @@
           "y": 20,
           "width": 100,
           "height": 40
-        }
+        },
+        "parentIndex": 1,
+        "depth": 2
       }
     ],
     "point": {
@@ -420,7 +430,7 @@
     "truncated": true
   },
   {
-    "name": "system-surface-same-target",
+    "name": "target-changed-before-dispatch",
     "nodes": [
       {
         "type": "Button",
@@ -440,46 +450,14 @@
     "activeBundleId": "com.apple.SafariViewService",
     "expectedEvidence": {
       "source": "selector-capture",
-      "targetBundleId": "com.apple.SafariViewService",
+      "targetBundleId": "com.example.app",
       "point": {
         "x": 60,
         "y": 40
       },
       "textInputRects": []
     },
-    "probe": false,
-    "iosSystemSurfaceBundleId": "com.apple.SafariViewService"
-  },
-  {
-    "name": "system-surface-changed-before-dispatch",
-    "nodes": [
-      {
-        "type": "Button",
-        "rect": {
-          "x": 10,
-          "y": 20,
-          "width": 100,
-          "height": 40
-        }
-      }
-    ],
-    "point": {
-      "x": 60,
-      "y": 40
-    },
-    "appBundleId": "com.example.app",
-    "activeBundleId": "com.example.app",
-    "expectedEvidence": {
-      "source": "selector-capture",
-      "targetBundleId": "com.apple.SafariViewService",
-      "point": {
-        "x": 60,
-        "y": 40
-      },
-      "textInputRects": []
-    },
-    "probe": true,
-    "iosSystemSurfaceBundleId": "com.apple.SafariViewService"
+    "probe": true
   },
   {
     "name": "dispatch-point-changed",
@@ -700,5 +678,79 @@
       ]
     },
     "probe": true
+  },
+  {
+    "name": "point-1pt-outside-input",
+    "nodes": [
+      {
+        "type": "TextField",
+        "rect": {
+          "x": 60,
+          "y": 40,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 59,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 59,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 60,
+          "y": 40,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": true
+  },
+  {
+    "name": "point-3pt-outside-input",
+    "nodes": [
+      {
+        "type": "TextField",
+        "rect": {
+          "x": 60,
+          "y": 40,
+          "width": 100,
+          "height": 40
+        }
+      }
+    ],
+    "point": {
+      "x": 57,
+      "y": 40
+    },
+    "appBundleId": "com.example.app",
+    "activeBundleId": "com.example.app",
+    "expectedEvidence": {
+      "source": "selector-capture",
+      "targetBundleId": "com.example.app",
+      "point": {
+        "x": 57,
+        "y": 40
+      },
+      "textInputRects": [
+        {
+          "x": 60,
+          "y": 40,
+          "width": 100,
+          "height": 40
+        }
+      ]
+    },
+    "probe": false
   }
 ]

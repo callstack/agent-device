@@ -27,6 +27,7 @@ function capture(
   truncated: boolean | undefined,
   residue: readonly IosAcquisitionResidue[] = [],
   options = { interactiveOnly: true },
+  acquiredNodes = nodes,
 ) {
   return presentIosSnapshotAcquisition(
     {
@@ -34,7 +35,7 @@ function capture(
       acquisition: {
         producer: 'simulator-ax-bridge',
         intent: 'full',
-        nodes,
+        nodes: acquiredNodes,
         truncated,
         viewport: { kind: 'reported', rect: screen },
         lineage: { targetId: 'sim-1', generation: 'g1' },
@@ -66,3 +67,27 @@ test.each([
     expect(readSnapshotTextInputGeometry(presented.nodes)).toBeUndefined();
   },
 );
+
+test.each([
+  { x: 0, y: 0, width: 0, height: 40 },
+  { x: 0, y: 0, width: 40, height: 0 },
+])('an empty input frame preserves the remaining geometry: $width/$height', (rect) => {
+  const presented = capture(false, [], { interactiveOnly: true }, [
+    ...nodes,
+    { index: 3, parentIndex: 0, depth: 1, type: 'TextField', rect },
+  ]);
+  expect(readSnapshotTextInputGeometry(presented.nodes)).toEqual({ rects: [field] });
+});
+
+test.each([
+  undefined,
+  { x: Number.NaN, y: 0, width: 0, height: 40 },
+  { x: 0, y: 0, width: Number.POSITIVE_INFINITY, height: 40 },
+  { x: 0, y: 0, width: -1, height: 40 },
+])('an unknown input frame prevents exclusion: %j', (rect) => {
+  const presented = capture(false, [], { interactiveOnly: true }, [
+    ...nodes,
+    { index: 3, parentIndex: 0, depth: 1, type: 'TextField', rect },
+  ]);
+  expect(readSnapshotTextInputGeometry(presented.nodes)).toBeUndefined();
+});

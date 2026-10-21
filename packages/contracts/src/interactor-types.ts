@@ -91,6 +91,7 @@ export type ElementSelectorTapOptions = {
 
 /** Facts from a request's resolution capture or active ref frame; the native owner decides admission. */
 export type CoordinateTapTextInputEvidence = Readonly<{
+  /** Diagnostics only; admission depends on the target, dispatch point, and acquired geometry. */
   source: 'selector-capture' | 'ref-frame';
   targetBundleId: string;
   point: Point;
