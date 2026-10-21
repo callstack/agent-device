@@ -61,3 +61,17 @@ test('expiry consumption rereads a lease protected by its before-consume owner',
   assert.equal(registry.inspectLeaseBackend(lease.leaseId), lease.backend);
   pass?.release();
 });
+
+test('expiry consumption sweeps expired holds even when the named lease is absent', async () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
+  const authority = { kind: 'lease', leaseId: lease.leaseId } as const;
+  await registry.putHumanControlHold(authority, 'console', { ttlMs: 7_000 });
+  now = 7_000;
+
+  assert.equal(registry.consumeExpiredLease('absent'), undefined);
+  const heldDevices = (registry as unknown as { holdsByDevice: Map<string, unknown> })
+    .holdsByDevice;
+  assert.equal(heldDevices.size, 0);
+});

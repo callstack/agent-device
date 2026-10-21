@@ -581,12 +581,11 @@ export class LeaseRegistry {
 
   consumeExpiredLease(leaseId: string, beforeConsume?: () => void): DeviceLease | undefined {
     const normalizedLeaseId = normalizeLeaseId(leaseId);
-    if (!normalizedLeaseId) return undefined;
-    const lease = this.leases.get(normalizedLeaseId);
-    if (!lease) return undefined;
+    const lease = normalizedLeaseId ? this.leases.get(normalizedLeaseId) : undefined;
     const now = this.now();
-    if (beforeConsume && this.wouldConsumeExpiredLease(lease, now)) beforeConsume();
+    if (lease && beforeConsume && this.wouldConsumeExpiredLease(lease, now)) beforeConsume();
     this.expireHumanControlHolds(now);
+    if (!normalizedLeaseId) return undefined;
     const currentLease = this.leases.get(normalizedLeaseId);
     if (!currentLease || this.isLeaseProtected(currentLease, now)) {
       return undefined;
