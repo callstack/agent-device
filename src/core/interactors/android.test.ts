@@ -41,6 +41,20 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
+test('maps the unchanged-observation fact to short idle and defaults other captures to full idle', async () => {
+  const nodes = [{ index: 0, identifier: 'target', rect: { x: 0, y: 0, width: 20, height: 20 } }];
+  snapshotAndroidMock.mockResolvedValue(makeAndroidSnapshotCapture(nodes));
+  for (const scenario of [
+    { options: {}, expected: 'full' },
+    { options: { captureBasis: 'unchanged-since-observation' }, expected: 'short' },
+  ] as const) {
+    const result = await createAndroidInteractor(device).snapshot(scenario.options);
+    expect(snapshotAndroidMock.mock.lastCall?.[1]?.idleWait).toBe(scenario.expected);
+    if ('stage' in result) throw new Error('Android snapshot must be presented');
+    expect(result.nodes).toEqual(nodes);
+  }
+});
+
 test('preserves Android clickability evidence through the interactor snapshot adapter', async () => {
   const nodes = [{ index: 0, identifier: 'target', rect: { x: 0, y: 0, width: 20, height: 20 } }];
   const evidence = {

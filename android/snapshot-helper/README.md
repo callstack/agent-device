@@ -109,9 +109,9 @@ closes that connection; the process stays alive for the next connection:
 
 The ready record advertises optional operations in `sessionCommands`. A host must check support before sending them. Text replacement retains a focus tap; the host owns post-write verification. Input failures must not be resent because a mutation may already have reached the app.
 
-The daemon uses the shorter wait for Android `snapshot` and `diff` only when the latest stored
-tree is at least 500 ms old, no later operation has retired it, and no freshness recovery or
-post-gesture stabilization is pending. Other captures keep their configured wait. Each capture
+The daemon uses the shorter wait for Android `snapshot` and `diff` through the ADB helper only
+when the latest stored tree is at least 500 ms old, no later operation has retired it, and no
+freshness recovery or post-gesture stabilization is pending. Other captures keep their configured wait. Each capture
 still reads a fresh tree. An asynchronous app transition can appear in progress; use an explicit
 landmark wait when the next command requires a destination screen.
 

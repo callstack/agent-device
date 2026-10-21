@@ -5,6 +5,7 @@ import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-l
 import { isAndroidSnapshotHelperRuntimeOccupiedError } from '../snapshot-helper-retirement.ts';
 import {
   createSessionProvider,
+  createPersistentSnapshotHelperProvider,
   type FakeAndroidProcess,
 } from './snapshot-helper-session.fixtures.ts';
 import path from 'node:path';
@@ -18,6 +19,48 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await resetAndroidSnapshotHelperSessions();
+});
+
+test('selects supported idle commands and keeps one helper across full, short and immediate captures', async () => {
+  const cases = [
+    {
+      commands: ['snapshot-short-idle', 'snapshot-immediate'],
+      expected: ['snapshot', 'snapshot', 'snapshot-short-idle', 'snapshot-immediate'],
+    },
+    {
+      commands: ['snapshot-immediate'],
+      expected: ['snapshot', 'snapshot', 'snapshot', 'snapshot-immediate'],
+    },
+    { commands: [], expected: ['snapshot', 'snapshot', 'snapshot', 'snapshot'] },
+  ];
+  for (const [index, scenario] of cases.entries()) {
+    const sessionRequests: string[] = [];
+    const spawnArgs: (readonly string[])[] = [];
+    const provider = createPersistentSnapshotHelperProvider({
+      calls: [],
+      spawnArgs,
+      processes: [],
+      sessionRequests,
+      sessionCommands: scenario.commands,
+    });
+    for (const [captureIndex, idleWait] of (
+      [undefined, 'full', 'short', 'none'] as const
+    ).entries()) {
+      const output = await captureAndroidSnapshotWithHelperSession({
+        adb: provider.exec,
+        adbProvider: provider,
+        deviceKey: `android:idle-policy-${index}`,
+        idleWait,
+      });
+      assert.match(output?.xml ?? '', /persistent helper snapshot/);
+      assert.equal(output?.metadata.sessionReused, captureIndex > 0);
+    }
+    assert.deepEqual(
+      sessionRequests.map((request) => request.split(' ')[0]),
+      scenario.expected,
+    );
+    assert.equal(spawnArgs.length, 1, 'per-request idle policy must not restart the helper');
+  }
 });
 
 test('allows a persistent session snapshot to use the helper command budget', async () => {
