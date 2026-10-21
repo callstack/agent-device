@@ -18,8 +18,9 @@ Accepted (2026-10-21). Applies to the native macOS app backend (ADR 0031) only.
    A request that opens an app device takes its host's execution lock first, in its lock plan, so an
    `open --wait` looks at the Mac's sessions under a lock a whole-Mac open also takes. The first
    opens on one Mac run their session check and publication one at a time in a daemon. Commands of
-   an open app session take only the app device's lock, and a lock retained mid-request is never a
-   host's, so a request that already holds an app lock cannot wait for its host.
+   an open app session take only the app device's lock. A request that already holds an app device's
+   lock is refused its host's lock mid-request (`host-after-app-device-lock`) rather than wait out
+   of order; for example, a replay that closes its app session and then opens `--surface desktop`.
 4. One rule relates an app device to its host: the Mac and each of its app devices overlap, and two
    app devices do not (`devicesOverlap`). The session store finds a session on an overlapping device,
    and a claim selector (`device status --udid`) matches overlapping claims.

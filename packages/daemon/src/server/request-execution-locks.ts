@@ -1,4 +1,6 @@
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
+import { hostDeviceIdPrefix } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import type { RequestExecutionLockKey } from './request-binding.ts';
 
 type RetainedExecutionLock = {
@@ -56,6 +58,7 @@ export function createRequestExecutionLocks(params: {
       }
       const key = `device:${deviceId}` as const;
       if (initialKeySet.has(key)) return;
+      assertNoHeldAppDeviceOf(deviceId, [...initialKeySet, ...retainedLocks.keys()]);
 
       let retained = retainedLocks.get(key);
       if (!retained) {
@@ -65,6 +68,28 @@ export function createRequestExecutionLocks(params: {
       await retained.acquired;
     },
   };
+}
+
+/**
+ * Every request takes a host's lock before the locks of its app devices (ADR 0035). A request that
+ * already holds an app device's lock would take its host's out of that order and could wait on a
+ * request that holds the host and waits for that app, so it is refused instead of waiting.
+ */
+function assertNoHeldAppDeviceOf(
+  deviceId: string,
+  heldKeys: readonly RequestExecutionLockKey[],
+): void {
+  const appDeviceKeyPrefix = `device:${hostDeviceIdPrefix(deviceId)}`;
+  if (!heldKeys.some((key) => key.startsWith(appDeviceKeyPrefix))) return;
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    'This request already holds an app of this device, so it cannot also take the whole device.',
+    {
+      reason: 'host-after-app-device-lock',
+      deviceId,
+      hint: 'Run the whole-device step (for example open --surface desktop) as a separate request.',
+    },
+  );
 }
 
 export async function withRequestExecutionLockKeys<T>(
