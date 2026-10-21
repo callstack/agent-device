@@ -74,6 +74,13 @@ export type DeviceInfo = {
 
 const HOST_APP_DEVICE_ID_INFIX = ':app:';
 
+const MACOS_BUNDLE_ID_PATTERN = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/;
+
+/** A macOS bundle id in reverse-DNS form such as com.apple.TextEdit; any segment may be mixed-case. */
+export function isMacOsBundleId(value: string): boolean {
+  return MACOS_BUNDLE_ID_PATTERN.test(value);
+}
+
 /** Bundle ids match without regard to case, as LaunchServices matches them. */
 export function hostAppDeviceId(hostDeviceId: string, bundleId: string): string {
   return `${hostDeviceIdPrefix(hostDeviceId)}${bundleId.toLowerCase()}`;

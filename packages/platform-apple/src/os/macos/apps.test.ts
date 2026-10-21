@@ -216,3 +216,15 @@ test('openMacOsApp keeps the typed error for an app that is not installed', asyn
   });
   expect(host.openBundle).not.toHaveBeenCalled();
 });
+
+test.each([
+  ['com.apple.TextEdit', 'com.apple.TextEdit'],
+  ['com.x.My_App', 'com.x.My_App'],
+  ['Booking.com', 'com.booking.BookingApp'],
+])('resolveMacOsApp(%j) is %j', async (typed, expected) => {
+  const host = macOsHost([{ name: 'Booking.com', bundleId: 'com.booking.BookingApp' }]);
+
+  expect(await host.run(() => resolveMacOsApp(typed))).toBe(expected);
+  // Only a lowercase-first dotted id is taken as a bundle id as typed; Booking.com is a name.
+  expect(host.listApps).toHaveBeenCalledTimes(typed === 'Booking.com' ? 1 : 0);
+});
