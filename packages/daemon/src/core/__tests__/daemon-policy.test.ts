@@ -359,6 +359,18 @@ function openApp(device: DeviceInfo, flags: DaemonRequest['flags'] = {}) {
   });
 }
 
+test('a policy id with `:app:` in it matches a device id spelled in another case', async () => {
+  const providerDevice: DeviceInfo = { ...IOS_SIMULATOR, id: 'pool:app:ABC' };
+  const { handler } = makeHandler(policy({ devices: { allow: [{ udid: 'pool:app:ABC' }] } }), {
+    inventory: [providerDevice],
+  });
+
+  expect(await handler(request('devices', { session: undefined }))).toMatchObject({
+    ok: true,
+    data: { devices: [expect.objectContaining({ id: 'pool:app:ABC' })] },
+  });
+});
+
 test('a policy that allows the Mac admits a native open of its app device', async () => {
   const { handler, bind } = makeHandler(
     policy({ devices: { allow: [{ udid: MACOS_DEVICE.id }] } }),
@@ -405,6 +417,20 @@ test('on a Mac the policy does not allow, app resolution reports nothing the Mac
     policy({ devices: { allow: [{ udid: TEXT_EDIT.id }] } }),
   );
   await expect(gateways.resolveAppDevice!(MACOS_DEVICE, 'Notes')).resolves.toBeUndefined();
+
+  // An installed app the policy does not allow answers like a missing one, so nothing is learned.
+  const resolving = restrictDeviceInventoryToDaemonPolicy(
+    createTestDeviceInventoryGateways({
+      resolveAppDevice: async (host, appTarget) => hostAppDevice(host, appTarget),
+    }),
+    policy({ devices: { allow: [{ udid: TEXT_EDIT.id }] } }),
+  );
+  await expect(
+    resolving.resolveAppDevice!(MACOS_DEVICE, 'com.apple.calculator'),
+  ).resolves.toBeUndefined();
+  await expect(resolving.resolveAppDevice!(MACOS_DEVICE, 'com.apple.TextEdit')).resolves.toEqual(
+    TEXT_EDIT,
+  );
 
   const hostAllowed = restrictDeviceInventoryToDaemonPolicy(
     createTestDeviceInventoryGateways({

@@ -6,7 +6,12 @@ import type {
   ProviderAwareDeviceInventoryGateway,
 } from '@agent-device/contracts/platform-module';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { hostDeviceIdOf, hostDeviceIdPrefix, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  canonicalDeviceId,
+  hostDeviceIdOf,
+  hostDeviceIdPrefix,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   resolveDaemonPolicyCommandName,
@@ -58,7 +63,9 @@ function assertInvocationAdmitted(
  * app device it names admits that app alone, never its host or the host's other apps.
  */
 function isDeviceIdAllowed(deviceIds: ReadonlySet<string>, id: string): boolean {
-  return deviceIds.has(id) || deviceIds.has(hostDeviceIdOf(id));
+  // Policy ids load canonicalized, so the compared id is too.
+  const canonical = canonicalDeviceId(id);
+  return deviceIds.has(canonical) || deviceIds.has(hostDeviceIdOf(canonical));
 }
 
 function isDeviceAllowedByDaemonPolicy(policy: DaemonPolicy, device: DeviceInfo): boolean {
@@ -136,12 +143,14 @@ export function restrictDeviceInventoryToDaemonPolicy(
   });
   const inner = gateways.resolveAppDevice;
   // On a host the policy does not allow, resolving an app name must not report what the host has
-  // installed: a failed resolution leaves the host selected, which binding then refuses.
+  // installed. Only an allowed app device is returned; a failed resolution and an app the policy
+  // does not allow both leave the host selected, which binding then refuses the same way.
   const resolveAppDevice: AppDeviceResolver | undefined = inner
     ? async (host, appTarget) => {
         if (isDeviceAllowedByDaemonPolicy(policy, host)) return await inner(host, appTarget);
         try {
-          return await inner(host, appTarget);
+          const device = await inner(host, appTarget);
+          return device && isDeviceAllowedByDaemonPolicy(policy, device) ? device : undefined;
         } catch (error) {
           if (isRequestCanceledError(error)) throw error;
           return undefined;

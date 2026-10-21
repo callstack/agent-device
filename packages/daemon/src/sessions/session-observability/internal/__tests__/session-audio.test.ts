@@ -247,6 +247,7 @@ test('audio refuses with the owner-stated hint when no fact admits it', async ()
   if (!response.ok) {
     assert.equal(response.error.code, 'UNSUPPORTED_OPERATION');
     assert.match(response.error.message, /web browser sessions, macOS sessions, iOS simulators/);
+    assert.equal(response.error.details?.reason, 'unsupported-platform-leaf');
   }
   assert.equal(bindDevice.mock.calls.length, 0);
 });

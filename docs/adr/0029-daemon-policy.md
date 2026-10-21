@@ -45,7 +45,7 @@ Accepted (2026-09-29).
   An allowed Mac also admits its app devices (ADR 0035).
   An allowed app device id (`<mac id>:app:<bundle id>`) admits that app alone; loading lowercases its bundle part.
   Inventory then lists its Mac so that selection can derive the app device, but binding the Mac stays denied.
-  App name resolution on a Mac the policy does not allow reports no installed apps; a failed resolution leaves the Mac selected, which binding denies.
+  App name resolution on a Mac the policy does not allow reports no installed apps: it returns only an allowed app device, so a missing app and an app the policy does not allow both leave the Mac selected, which binding denies.
 - `commands` contains exactly one of `allow` or `deny`.
   The command registry determines applicable daemon commands and names, without a manual list:
   - Public commands use their own names.

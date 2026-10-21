@@ -98,10 +98,13 @@ function audioUnsupportedResponse(
   const hint =
     (!startFact.available ? startFact.hint : undefined) ??
     (!queryFact.available ? queryFact.hint : undefined);
+  // The capture cell names why this device refuses: its kind, its backend, or its scope.
+  const reason = !startFact.available ? startFact.reason : undefined;
   return errorResponse(
     'UNSUPPORTED_OPERATION',
     hint ??
       'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
+    reason ? { reason } : undefined,
   );
 }
 
