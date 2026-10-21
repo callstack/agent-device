@@ -220,7 +220,10 @@ AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
 ```
 
 - `devices.allow` lists the only devices clients can see (`devices`) or use. Use `udid` for Apple
-  devices and `serial` for Android.
+  devices and `serial` for Android. With the native macOS backend, allowing the Mac also allows
+  each app on it. To allow one app only, list its app device id, for example
+  `host-macos-local:app:com.apple.textedit`. The Mac then appears in `devices`, but whole-Mac
+  sessions stay denied.
 - `commands` takes either `allow` or `deny`, not both. With `allow`, commands added in later releases
   stay denied. Some client-side tools reach the daemon through internal commands: allow `runtime` for
   Maestro flows, and `install-from-source` for remote installs.

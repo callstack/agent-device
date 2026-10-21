@@ -6,10 +6,11 @@ import { fakeCreateCommandSurface } from '../../__tests__/support/command-surfac
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
+  MACOS_DEVICE,
   mkdtempForTestSync,
   createTestHostEnvironment,
 } from '@agent-device/test-kit';
@@ -339,4 +340,51 @@ test('doctor counts only the devices the policy allows', async () => {
       ]),
     },
   });
+});
+
+const TEXT_EDIT = hostAppDevice(MACOS_DEVICE, 'com.apple.TextEdit');
+const CALCULATOR = hostAppDevice(MACOS_DEVICE, 'com.apple.calculator');
+
+/** A fresh native open resolves the app device of the Mac selection found, as production does. */
+function openApp(device: DeviceInfo, flags: DaemonRequest['flags'] = {}) {
+  mockResolveTargetDevice.mockResolvedValue(device);
+  return request('open', {
+    session: `open-${device.id}`,
+    positionals: [device.hostApp?.bundleId ?? 'com.example.app'],
+    flags: { platform: 'macos', ...flags },
+  });
+}
+
+test('a policy that allows the Mac admits a native open of its app device', async () => {
+  const { handler, bind } = makeHandler(
+    policy({ devices: { allow: [{ udid: MACOS_DEVICE.id }] } }),
+  );
+
+  const response = await handler(openApp(TEXT_EDIT));
+
+  expect(response).toMatchObject({ ok: true });
+  expect(bind).toHaveBeenCalledWith(expect.objectContaining({ device: TEXT_EDIT }));
+});
+
+test('a policy that allows one app of the Mac admits that app only, never the whole Mac', async () => {
+  const { handler, bind } = makeHandler(policy({ devices: { allow: [{ udid: TEXT_EDIT.id }] } }), {
+    inventory: [MACOS_DEVICE, OTHER_SIMULATOR],
+  });
+
+  // Selection still finds the Mac, because it derives the allowed app device from it.
+  expect(await handler(request('devices', { session: undefined }))).toMatchObject({
+    ok: true,
+    data: { devices: [expect.objectContaining({ id: MACOS_DEVICE.id })] },
+  });
+  expect(await handler(openApp(TEXT_EDIT))).toMatchObject({ ok: true });
+
+  bind.mockClear();
+  for (const denied of [
+    openApp(CALCULATOR),
+    openApp(MACOS_DEVICE, { surface: 'desktop' }),
+    request('open', { session: 'by-udid', flags: { platform: 'macos', udid: MACOS_DEVICE.id } }),
+  ]) {
+    expectPolicyDenied(await handler(denied), 'device');
+  }
+  expect(bind).not.toHaveBeenCalled();
 });
