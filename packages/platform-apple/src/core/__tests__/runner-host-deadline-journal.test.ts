@@ -2,17 +2,11 @@ import assert from 'node:assert/strict';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { getRequestSignal, withRequestDeadline } from '@agent-device/host-kit/request';
 import { AppError } from '@agent-device/kernel/errors';
-import { executeRunnerExchange } from '../../../packages/platform-apple/src/runner/runner-exchange.ts';
-import {
-  RunnerCommandAccounting,
-  type RunnerSession,
-} from '../../../packages/platform-apple/src/runner/runner-session-types.ts';
-import { IOS_SIMULATOR } from '../../../packages/platform-apple/src/runner/__tests__/device-fixtures.ts';
-import { startFakeRunnerServer } from '../../../packages/platform-apple/src/runner/__tests__/fake-runner-server.ts';
-import {
-  installAppleRunnerTestHost,
-  loadAppleRunnerHost,
-} from '../../../packages/platform-apple/src/runner/test-host.ts';
+import { executeRunnerExchange } from '../../runner/runner-exchange.ts';
+import { RunnerCommandAccounting, type RunnerSession } from '../../runner/runner-session-types.ts';
+import { IOS_SIMULATOR } from '../../runner/__tests__/device-fixtures.ts';
+import { startFakeRunnerServer } from '../../runner/__tests__/fake-runner-server.ts';
+import { installAppleRunnerTestHost, loadAppleRunnerHost } from '../../runner/test-host.ts';
 import { test } from 'vitest';
 
 test('a daemon deadline follows the ordinary canceled Apple runner journal drain', async () => {
