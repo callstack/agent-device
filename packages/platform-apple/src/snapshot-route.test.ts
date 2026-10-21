@@ -103,16 +103,7 @@ test.for([
     const source = sourceReturning(bridgeAcquisition());
     const fallback = vi.fn(async () => runnerResult());
     const systemSurfaceForeground = vi.fn(async () => foreground);
-    const presentIosAcquisition = vi.fn(async () => ({
-      backend: 'xctest' as const,
-      producer: 'simulator-ax-bridge' as const,
-      nodes: [{ index: 0, type: 'Application' }],
-    }));
-    const host = {
-      ...platformRuntimeHostFixture(),
-      snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
-    };
-    const route = createAppleSnapshotRoute(host, {
+    const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
       source,
       resolveTarget: vi.fn(async () => target),
       systemSurfacePresent: async () => presentSurface,
@@ -126,9 +117,32 @@ test.for([
       expect.objectContaining({ requestId: 'req-1' }),
     );
     expect(source.acquire).toHaveBeenCalledTimes(bridge ? 1 : 0);
-    expect(fallback).toHaveBeenCalledTimes(bridge ? 0 : 1);
   },
 );
+
+test('a generation the bridge no longer serves never pays the surface host foreground reads', async () => {
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
+  });
+  let presence: 'absent' | typeof presentSurface = 'absent';
+  const systemSurfaceForeground = vi.fn(async () => 'background' as const);
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => presence,
+    systemSurfaceForeground,
+  });
+
+  await route.capture(ios, input, signal(), fallback);
+  presence = presentSurface;
+  await route.capture(ios, input, signal(), fallback);
+
+  expect(source.acquire).toHaveBeenCalledOnce();
+  expect(systemSurfaceForeground).not.toHaveBeenCalled();
+  expect(fallback).toHaveBeenCalledTimes(2);
+});
 
 // The structural guarantee every comparison site downstream relies on (#2438): a surface capture is
 // lineaged to the HOST, not to the app (`target.targetId` here), so its comparison key cannot equal
