@@ -1,29 +1,57 @@
 name: Perf Nightly
 
-# Parked to workflow_dispatch by #1781 A3: it only writes a report and compares nothing, so it
-# structurally cannot catch a regression, and iOS wall-clock medians swing up to +122%
-# night-to-night at n=5 with no consumer reading the report. `pnpm perf` / scripts/perf are
-# unaffected — still runnable on demand. Un-park once a comparison step with multi-night
-# smoothing (someone reading it) exists, or a perf arc needs nightly data.
+# Nightly iOS command performance against the fixture app, compared night over night (#1781 A3).
+# - Catches: a command whose daemon time moves beyond the noise of earlier nights, or that starts
+#   failing. PR lanes check behavior, not time.
+# - Wanted for: tuning runner, snapshot, and settle paths while watching the effect. iOS medians
+#   swing up to +122% between single nights at n=5, so a step is judged against the median of up to
+#   seven earlier nights and must clear their spread, its own sampling error, 20%, and 50 ms.
+# - Cost: one macos-26 job of about 45 minutes a night; summaries are kept 90 days, raw logs 30.
+# - Delete or park when: no flagged change has been acted on for 60 nights.
+# Android stays report-only and runs only on request.
 
 on:
+  schedule:
+    - cron: '40 2 * * *'
   workflow_dispatch:
     inputs:
       rounds:
-        description: 'Measured rounds per command (samples)'
+        description: 'Measured rounds per step (samples)'
         required: false
         default: '3'
+      warmup:
+        description: 'Warmup rounds dropped before measuring'
+        required: false
+        default: '1'
+      scenarios:
+        description: 'Comma-separated iOS scenario ids (empty runs all)'
+        required: false
+        default: ''
+      baseline-nights:
+        description: 'Earlier runs in the rolling baseline'
+        required: false
+        default: '7'
+      baseline-branch:
+        description: 'Branch whose runs form the baseline'
+        required: false
+        default: 'main'
+      android:
+        description: 'Also run the report-only Android Settings tour'
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: perf-nightly-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   PERF_ROUNDS: ${{ github.event.inputs.rounds || '3' }}
+  PERF_WARMUP: ${{ github.event.inputs.warmup || '1' }}
 
 jobs:
   perf-ios:
@@ -52,6 +80,13 @@ jobs:
         with:
           gate: build
 
+      - name: Boot iOS test simulator
+        id: ios-simulator
+        uses: ./.github/actions/boot-ios-test-simulator
+        with:
+          runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
+          preferred-device-name: iPhone 17 Pro
+
       - name: Restore and build iOS XCTest runner
         uses: ./.github/actions/setup-apple-runner-build
         with:
@@ -61,13 +96,6 @@ jobs:
           gate: swift-runner-ios
           xcuitest-platform: ios
           xcuitest-destination: generic/platform=iOS Simulator
-
-      - name: Boot iOS test simulator
-        id: ios-simulator
-        uses: ./.github/actions/boot-ios-test-simulator
-        with:
-          runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
-          preferred-device-name: iPhone 17 Pro
 
       - name: Install the fixture app
         id: fixture-app
@@ -88,22 +116,53 @@ jobs:
           UDID: ${{ steps.ios-simulator.outputs.simulator-udid }}
           APP_ID: ${{ steps.fixture-app.outputs.app-id }}
           APP_PATH: ${{ steps.fixture-app.outputs.app-path }}
+          SCENARIOS: ${{ github.event.inputs.scenarios }}
         run: |
           pnpm perf --platform ios --udid "$UDID" \
             --app-id "$APP_ID" --app-path "$APP_PATH" \
-            --rounds "$PERF_ROUNDS" --warmup 1 \
+            --rounds "$PERF_ROUNDS" --warmup "$PERF_WARMUP" \
+            ${SCENARIOS:+--scenarios "$SCENARIOS"} \
             --out-dir "$GITHUB_WORKSPACE/perf-results"
 
-      - name: Upload iOS perf report
-        if: always()
+      - name: Compare with earlier nights
+        if: ${{ !cancelled() && hashFiles('perf-results/summary.json') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_BRANCH: ${{ github.event.inputs.baseline-branch || 'main' }}
+          BASELINE_NIGHTS: ${{ github.event.inputs.baseline-nights || '7' }}
+        run: |
+          pnpm perf:compare --to perf-results \
+            --branch "$BASELINE_BRANCH" \
+            --nights "$BASELINE_NIGHTS" \
+            --exclude-run "$GITHUB_RUN_ID" \
+            --out perf-results --github
+          echo "Full report: the perf-ios-summary artifact holds report.md and summary.json." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload iOS perf summary
+        if: ${{ !cancelled() && hashFiles('perf-results/summary.json') != '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: perf-ios
-          path: perf-results/
+          name: perf-ios-summary
+          path: |
+            perf-results/summary.json
+            perf-results/report.md
+            perf-results/comparison.json
+            perf-results/comparison.md
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload iOS perf raw logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perf-ios-raw
+          path: perf-results/raw/
+          retention-days: 30
           if-no-files-found: warn
 
   perf-android:
     name: Android Command Perf
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.android == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 80
     env:
@@ -134,7 +193,7 @@ jobs:
             adb -s emulator-5554 shell settings put global window_animation_scale 0 || true;
             adb -s emulator-5554 shell settings put global transition_animation_scale 0 || true;
             adb -s emulator-5554 shell settings put global animator_duration_scale 0 || true;
-            pnpm perf --platform android --serial emulator-5554 --n "$PERF_ROUNDS" --warmup 1 --out-dir "$GITHUB_WORKSPACE/perf-results"
+            pnpm perf --platform android --serial emulator-5554 --n "$PERF_ROUNDS" --warmup "$PERF_WARMUP" --out-dir "$GITHUB_WORKSPACE/perf-results"
 
       - name: Upload Android perf report
         if: always()

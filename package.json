@@ -131,6 +131,7 @@
     "test:ios-snapshot-differential": "node --experimental-strip-types scripts/swift-toolchain-tmpdir.ts swift test --package-path apple/snapshot-presentation && node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/ios-snapshot-differential.test.ts",
     "size": "node scripts/size-report.mjs",
     "perf": "node --experimental-strip-types scripts/perf/run.ts",
+    "perf:compare": "node --experimental-strip-types scripts/perf/compare-cli.ts",
     "bench:ios-snapshot": "node --experimental-strip-types scripts/ios-snapshot-benchmark/run.ts",
     "bench:ios-snapshot:deep-button": "node --experimental-strip-types scripts/ios-snapshot-benchmark/deep-button.ts",
     "bench:ios-snapshot:evidence": "node --experimental-strip-types scripts/ios-snapshot-benchmark/evidence.ts",
