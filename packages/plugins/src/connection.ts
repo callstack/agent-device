@@ -23,7 +23,7 @@ export type FailedPlugin = Extract<PluginInventoryEntry, { state: 'failed' }>;
 
 type PrimedStore = Readonly<{
   connections: ReadonlyMap<string, RegisteredConnection>;
-  failures: readonly FailedPlugin[];
+  inventory: readonly PluginInventoryEntry[];
 }>;
 const primed = new Map<string, PrimedStore>();
 
@@ -40,9 +40,7 @@ export async function primePluginConnections(
   ]);
   primed.set(resolveUserConfigPath(env), {
     connections: resolved.connections,
-    failures: resolved
-      .inventory()
-      .filter((entry): entry is FailedPlugin => entry.state === 'failed'),
+    inventory: resolved.inventory(),
   });
 }
 
@@ -56,7 +54,14 @@ export function primedPluginConnection(
 
 /** The store plugins that failed to load, as the primed registry saw them. */
 export function pluginLoadFailures(env: NodeJS.ProcessEnv): readonly FailedPlugin[] {
-  return primed.get(resolveUserConfigPath(env))?.failures ?? [];
+  return pluginConnectionInventory(env).filter(
+    (entry): entry is FailedPlugin => entry.state === 'failed',
+  );
+}
+
+/** The store inventory read when this process loaded its connection callbacks. */
+export function pluginConnectionInventory(env: NodeJS.ProcessEnv): readonly PluginInventoryEntry[] {
+  return primed.get(resolveUserConfigPath(env))?.inventory ?? [];
 }
 
 export function pluginConnectionCapabilities(

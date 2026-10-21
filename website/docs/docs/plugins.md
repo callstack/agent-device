@@ -9,6 +9,16 @@ agent-device plugins update @example/agent-device-provider
 agent-device plugins remove @example/agent-device-provider
 ```
 
+`agent-device help connect` and `agent-device help remote` identify known optional providers as
+`plugin, install separately` and show their installation commands, even before you install them.
+For example, TestMu AI requires `agent-device plugins add @agent-device/testmu`.
+
+If you run `agent-device connect testmu` without its plugin, the error gives that installation
+command and tells you to retry your original command. With `--json`, the error has
+`details.reason: plugin-not-installed`, `details.package`, and `details.installCommand`.
+If the plugin is selected but unavailable, the reason is `plugin-unavailable`; run
+`agent-device plugins list --json` to inspect it, then fix its configuration or update the package.
+
 Use a full npm package name, optionally with `@version` or `@tag`. `update` keeps valid version constraints and options, including when it repairs a damaged selection. To change a constraint, run `add <package>@<version-or-tag>`; to remove it, run `add <package>` without a suffix.
 
 Each installation lives in an npm project with a lockfile under `AGENT_DEVICE_HOME` (default `~/.agent-device`), and that directory's `config.json` records the selection. Plugin commands leave other settings in `config.json` unchanged. Project config and `--config` cannot select plugins. This home is independent of `--state-dir` and `AGENT_DEVICE_STATE_DIR`.

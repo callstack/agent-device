@@ -24,6 +24,7 @@ import {
   connectionProviderCapabilities,
   isConnectProviderName,
   primeProviderConnection,
+  unavailableConnectPluginError,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
 import {
@@ -64,8 +65,8 @@ export const connectCommand: ClientCommandHandler = async ({
     cwd: host.cwd,
     env: host.env,
   }).baseDir;
-  await primeProviderConnection(positionals[0]);
-  const provider = readConnectProvider(positionals);
+  await primeProviderConnection(positionals[0], host.env);
+  const provider = readConnectProvider(positionals, host.env);
   assertConnectProviderUsage(provider, flags);
   const resolved = await resolveConnectProviderProfile({
     provider,
@@ -417,18 +418,23 @@ function formatReadyArtifactLinks(artifacts: CloudArtifact[] | undefined): strin
     .map((artifact) => `${artifact.name}: ${artifact.url}`);
 }
 
-function readConnectProvider(positionals: string[]): ConnectProvider | undefined {
+function readConnectProvider(
+  positionals: string[],
+  env: NodeJS.ProcessEnv,
+): ConnectProvider | undefined {
   const provider = positionals[0];
   if (provider === undefined) return undefined;
   if (positionals.length > 1) {
     throw new AppError('INVALID_ARGS', 'connect accepts at most one provider positional.');
   }
-  if (isConnectProviderName(provider)) {
+  if (isConnectProviderName(provider, env)) {
     return provider;
   }
+  const pluginError = unavailableConnectPluginError(provider, env);
+  if (pluginError) throw pluginError;
   throw new AppError(
     'INVALID_ARGS',
-    `Unknown connect provider: ${provider}. Supported providers: ${connectProviderNamesForError()}.`,
+    `Unknown connect provider: ${provider}. Supported providers: ${connectProviderNamesForError(env)}.`,
   );
 }
 
