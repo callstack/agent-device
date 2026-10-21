@@ -17,7 +17,7 @@ import type { PngRgbDifferenceResult } from './png-rgb-difference.ts';
 export type PngWorkerJob =
   | { kind: 'decode'; png: Uint8Array; label: string }
   // A screenshot in whatever container it arrived in; answers decoded pixels, not PNG bytes.
-  | { kind: 'decode-image'; image: Uint8Array; label: string }
+  | { kind: 'decode-image'; image: Uint8Array; label: string; maxPixels?: number }
   | { kind: 'encode'; width: number; height: number; data: Uint8Array }
   | { kind: 'crop'; png: Uint8Array; label: string; box: Rect }
   | { kind: 'rgb-difference'; firstPng: Uint8Array; secondPng: Uint8Array; label: string }

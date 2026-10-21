@@ -11,9 +11,19 @@ const MAX_MATCHES_PER_REGION = 3;
 export function attachCurrentOverlayMatches(
   regions: ScreenshotDiffRegion[],
   overlayRefs: ScreenshotOverlayRef[],
+  currentScale = { x: 1, y: 1 },
 ): ScreenshotDiffRegion[] {
+  const scaledRefs = overlayRefs.map((ref) => ({
+    ...ref,
+    overlayRect: {
+      x: ref.overlayRect.x * currentScale.x,
+      y: ref.overlayRect.y * currentScale.y,
+      width: ref.overlayRect.width * currentScale.x,
+      height: ref.overlayRect.height * currentScale.y,
+    },
+  }));
   return regions.map((region) => {
-    const matches = findRegionOverlayMatches(region, overlayRefs);
+    const matches = findRegionOverlayMatches(region, scaledRefs);
     return matches.length > 0 ? { ...region, currentOverlayMatches: matches } : region;
   });
 }

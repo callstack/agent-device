@@ -1007,7 +1007,9 @@ agent-device record stop                # Stop active recording
 **Screenshot diffs**
 
 - `diff screenshot` compares a live capture, or a saved `current.png` (no session needed), against `--baseline`. Inputs may be PNG or JPEG regardless of extension; HarmonyOS captures are JPEG. Output ranks changed regions with rectangles, changed-pixel counts, and share of the diff; `--out` writes a diff PNG with changed pixels tinted red. `ocr` and `nonTextDeltas` are never populated, so read the images yourself for qualitative review.
-- `--threshold <0-1>` sets the per-pixel RGB tolerance (default `0.1`). Image dimensions must match. Keep it above `0` when either input is JPEG.
+- `--threshold <0-1>` sets the per-pixel RGB tolerance (default `0.1`). Keep it above `0` when either input is JPEG.
+- The current image scales proportionally to the baseline width and aligns at the top left. Its scaled height rounds to the nearest pixel, with a minimum of one row. The comparison includes the full height of both images: extra or missing bottom rows count as differences, including blank or transparent rows, even at `--threshold 1`. Your original files stay unchanged. This does not crop system bars or move content into alignment.
+- When dimensions differ, JSON `normalization` reports `baseline`, `current`, `scaledCurrent`, and `compared` dimensions. `currentScale.x` and `.y` map original current pixels to comparison pixels; the height scale includes pixel rounding. Region rectangles and ref-match rectangles use comparison pixels, and normalized region rectangles use percentages of the compared canvas. The separate current-screen overlay keeps its original capture size.
 - `--overlay-refs` also writes a separate current-screen ref overlay and lists refs under changed regions. It needs a live capture, so it is unavailable with a saved `current.png`.
 - Live iOS simulator diffs normalize status-bar chrome by default.
 

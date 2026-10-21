@@ -113,12 +113,12 @@ test('runtime diff screenshot rejects overlay refs with supplied current image',
   );
 });
 
-test('runtime diff screenshot enforces max image pixels policy', async () => {
+test('runtime diff screenshot enforces the normalized comparison pixel budget', async () => {
   const dir = mkdtempForTestSync('runtime-diff-screenshot-');
   const baseline = path.join(dir, 'baseline.png');
   const current = path.join(dir, 'current.png');
-  fs.writeFileSync(baseline, solidPngBuffer(10, 10, { r: 0, g: 0, b: 0 }));
-  fs.writeFileSync(current, solidPngBuffer(10, 10, { r: 255, g: 255, b: 255 }));
+  fs.writeFileSync(baseline, solidPngBuffer(10, 1, { r: 0, g: 0, b: 0 }));
+  fs.writeFileSync(current, solidPngBuffer(1, 50, { r: 255, g: 255, b: 255 }));
 
   try {
     const device = createAgentDevice({
@@ -153,7 +153,7 @@ test('runtime diff screenshot attaches overlay refs to live mismatch regions', a
   try {
     const device = createAgentDevice({
       backend: createScreenshotBackend((outPath, options) => {
-        fs.writeFileSync(outPath, solidPngBuffer(10, 10, { r: 255, g: 255, b: 255 }));
+        fs.writeFileSync(outPath, solidPngBuffer(20, 20, { r: 255, g: 255, b: 255 }));
         return {
           path: outPath,
           ...(options?.overlayRefs
@@ -163,7 +163,7 @@ test('runtime diff screenshot attaches overlay refs to live mismatch regions', a
                     ref: 'e1',
                     label: 'Continue',
                     rect: { x: 1, y: 2, width: 3, height: 4 },
-                    overlayRect: { x: 1, y: 2, width: 3, height: 4 },
+                    overlayRect: { x: 2, y: 4, width: 6, height: 8 },
                     center: { x: 3, y: 4 },
                   },
                 ],
@@ -188,6 +188,16 @@ test('runtime diff screenshot attaches overlay refs to live mismatch regions', a
     assert.equal(result.currentOverlayRefCount, 1);
     assert.equal(fs.existsSync(overlayOut), true);
     assert.equal(result.regions?.[0]?.currentOverlayMatches?.[0]?.ref, 'e1');
+    assert.deepEqual(result.regions?.[0]?.currentOverlayMatches?.[0]?.rect, {
+      x: 1,
+      y: 2,
+      width: 3,
+      height: 4,
+    });
+    assert.equal(result.regions?.[0]?.currentOverlayMatches?.[0]?.regionCoveragePercentage, 12);
+    const overlay = PNG.sync.read(fs.readFileSync(overlayOut));
+    assert.deepEqual([overlay.width, overlay.height], [20, 20]);
+    assert.deepEqual(result.normalization?.compared, { width: 10, height: 10 });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

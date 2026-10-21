@@ -1,4 +1,5 @@
 import { test } from 'vitest';
+import fc from 'fast-check';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -83,7 +84,7 @@ test('identical images produce match: true with 0% mismatch', async () => {
   assert.equal(result.nonTextDeltas, undefined);
   assert.equal(Object.hasOwn(result, 'ocr'), false);
   assert.equal(Object.hasOwn(result, 'nonTextDeltas'), false);
-  assert.equal(result.dimensionMismatch, undefined);
+  assert.equal(Object.hasOwn(result, 'dimensionMismatch'), false);
   assert.equal(result.diffPath, undefined, 'diffPath should not be set when images match');
   // No diff image should be written when images match
   assert.equal(fs.existsSync(diffOut), false);
@@ -304,25 +305,36 @@ test('diff image marks changed pixels red over a light current-screen context', 
   assert.equal(diffPng.data[6], 56); // B
 });
 
-test('dimension mismatch returns expected vs actual sizes', async () => {
+test('different dimensions scale current to baseline width and count missing bottom rows', async () => {
   const dir = tmpDir();
   const baseline = path.join(dir, 'baseline.png');
   const current = path.join(dir, 'current.png');
   const diffOut = path.join(dir, 'diff.png');
-
   writeSolidPng(baseline, 10, 20, { r: 0, g: 0, b: 0 });
   writeSolidPng(current, 15, 25, { r: 0, g: 0, b: 0 });
+  const original = fs.readFileSync(current);
 
-  const result = await compareScreenshots(baseline, current, { outputPath: diffOut });
+  const result = await compareScreenshots(baseline, current, { outputPath: diffOut, threshold: 1 });
 
   assert.equal(result.match, false);
-  assert.equal(result.mismatchPercentage, 100);
-  assert.equal(result.diffPath, undefined, 'diffPath should not be set for dimension mismatch');
-  assert.equal(result.regions, undefined);
-  assert.deepEqual(result.dimensionMismatch, {
-    expected: { width: 10, height: 20 },
-    actual: { width: 15, height: 25 },
+  assert.equal(result.differentPixels, 30);
+  assert.equal(result.totalPixels, 200);
+  assert.equal(result.mismatchPercentage, 15);
+  assert.equal(result.diffPath, diffOut);
+  assert.equal(Object.hasOwn(result, 'dimensionMismatch'), false);
+  assert.deepEqual(result.normalization, {
+    baseline: { width: 10, height: 20 },
+    current: { width: 15, height: 25 },
+    scaledCurrent: { width: 10, height: 17 },
+    compared: { width: 10, height: 20 },
+    currentScale: { x: 10 / 15, y: 17 / 25 },
+    alignment: 'top-left',
+    coordinateSpace: 'comparison-pixels',
   });
+  assert.deepEqual(result.regions?.[0]?.rect, { x: 0, y: 17, width: 10, height: 3 });
+  assert.deepEqual(fs.readFileSync(current), original);
+  const diff = PNG.sync.read(fs.readFileSync(diffOut));
+  assert.deepEqual([diff.width, diff.height], [10, 20]);
 });
 
 test('threshold controls sensitivity: small differences ignored at default threshold', async () => {
@@ -472,21 +484,20 @@ test('a JPEG comparison writes the diff artifact as PNG', async () => {
   assert.equal(hasPngSignature(fs.readFileSync(diffPath)), true);
 });
 
-test('a JPEG input is measured at its decoded dimensions', async () => {
+test('a JPEG input scales to baseline width and counts extra rows', async () => {
   const dir = tmpDir();
   const baseline = path.join(dir, 'baseline.jpg');
   const current = path.join(dir, 'current.png');
-
   await writeSolidJpeg(baseline, 8, 6, { r: 20, g: 200, b: 40 });
   writeSolidPng(current, 5, 5, { r: 20, g: 200, b: 40 });
 
   const result = await compareScreenshots(baseline, current);
 
   assert.equal(result.match, false);
-  assert.deepEqual(result.dimensionMismatch, {
-    expected: { width: 8, height: 6 },
-    actual: { width: 5, height: 5 },
-  });
+  assert.equal(result.totalPixels, 64);
+  assert.equal(result.differentPixels, 16);
+  assert.deepEqual(result.normalization?.scaledCurrent, { width: 8, height: 8 });
+  assert.deepEqual(result.normalization?.compared, { width: 8, height: 8 });
 });
 
 test('JPEG bytes that do not decode are refused with the JPEG decode error', async () => {
@@ -542,4 +553,168 @@ test('mismatchPercentage is rounded to 2 decimal places', async () => {
   });
 
   assert.equal(result.mismatchPercentage, 33.33);
+});
+
+test('375x812 reference compares with a 1080x2340 capture and retains the extra row', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'reference.png');
+  const current = path.join(dir, 'capture.png');
+  writeSolidPng(baseline, 375, 812, { r: 30, g: 80, b: 120 });
+  writeSolidPng(current, 1080, 2340, { r: 30, g: 80, b: 120 });
+  const result = await compareScreenshots(baseline, current, { threshold: 0 });
+  assert.equal(result.differentPixels, 375);
+  assert.equal(result.totalPixels, 304875);
+  assert.equal(result.mismatchPercentage, 0.12);
+  assert.deepEqual(result.normalization?.scaledCurrent, { width: 375, height: 813 });
+});
+
+test.each([0, 255])(
+  'transparent and blank tails count in either direction (alpha %i)',
+  async (alpha) => {
+    const dir = tmpDir();
+    const short = path.join(dir, 'short.png');
+    const tall = path.join(dir, 'tall.png');
+    for (const [file, height] of [
+      [short, 2],
+      [tall, 4],
+    ] as const) {
+      const png = new PNG({ width: 4, height });
+      for (let offset = 3; offset < png.data.length; offset += 4) png.data[offset] = alpha;
+      fs.writeFileSync(file, PNG.sync.write(png));
+    }
+    for (const [baseline, current] of [
+      [short, tall],
+      [tall, short],
+    ]) {
+      const result = await compareScreenshots(baseline!, current!, { threshold: 1 });
+      assert.equal(result.differentPixels, 8);
+      assert.equal(result.totalPixels, 16);
+      assert.equal(result.mismatchPercentage, 50);
+      assert.deepEqual(result.regions?.[0]?.rect, { x: 0, y: 2, width: 4, height: 2 });
+      assert.deepEqual(result.regions?.[0]?.normalizedRect, {
+        x: 0,
+        y: 50,
+        width: 100,
+        height: 50,
+      });
+    }
+  },
+);
+
+test('scaled content stays aligned at top left and regions use comparison pixels', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.png');
+  const current = path.join(dir, 'current.png');
+  const source = new PNG({ width: 4, height: 4 });
+  paintRect(source, { x: 0, y: 0, width: 2, height: 2 }, { r: 255, g: 255, b: 255 });
+  fs.writeFileSync(current, PNG.sync.write(source));
+  writeSolidPng(baseline, 2, 2, { r: 0, g: 0, b: 0 });
+  const result = await compareScreenshots(baseline, current, { threshold: 0 });
+  assert.equal(result.differentPixels, 1);
+  assert.deepEqual(result.regions?.[0]?.rect, { x: 0, y: 0, width: 1, height: 1 });
+  assert.deepEqual(result.regions?.[0]?.normalizedRect, { x: 0, y: 0, width: 50, height: 50 });
+});
+
+const PROPERTY_RUNS = 40;
+test('proportional captures match at narrower, wider and equal widths', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.png');
+  const current = path.join(dir, 'current.png');
+  await fc.assert(
+    fc.asyncProperty(
+      fc.record({
+        width: fc.integer({ min: 1, max: 12 }),
+        height: fc.integer({ min: 1, max: 12 }),
+        baselineDensity: fc.integer({ min: 1, max: 4 }),
+        currentDensity: fc.integer({ min: 1, max: 4 }),
+      }),
+      async ({ width, height, baselineDensity, currentDensity }) => {
+        writeSolidPng(baseline, width * baselineDensity, height * baselineDensity, {
+          r: 32,
+          g: 80,
+          b: 120,
+        });
+        writeSolidPng(current, width * currentDensity, height * currentDensity, {
+          r: 32,
+          g: 80,
+          b: 120,
+        });
+        const result = await compareScreenshots(baseline, current, { threshold: 0 });
+        assert.equal(result.match, true);
+        assert.equal(result.totalPixels, width * height * baselineDensity ** 2);
+      },
+    ),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
+
+test.each([
+  [10, 10, 20, 20, 399], // original current exceeds budget even though downscaling fits
+  [20, 20, 10, 10, 399], // original baseline exceeds budget
+  [10, 1, 1, 100, 100], // both originals fit; normalized/union canvas exceeds budget
+])(
+  'pixel budget bounds original and scaled images (%i,%i vs %i,%i)',
+  async (bw, bh, cw, ch, maxPixels) => {
+    const dir = tmpDir();
+    const baseline = path.join(dir, 'baseline.png');
+    const current = path.join(dir, 'current.png');
+    writeSolidPng(baseline, bw, bh, { r: 0, g: 0, b: 0 });
+    writeSolidPng(current, cw, ch, { r: 0, g: 0, b: 0 });
+    await assert.rejects(compareScreenshots(baseline, current, { maxPixels }), {
+      code: 'INVALID_ARGS',
+    });
+  },
+);
+
+test('fractional downscaling keeps at least one row and accepts the exact union budget', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.png');
+  const current = path.join(dir, 'current.png');
+  writeSolidPng(baseline, 1, 1, { r: 0, g: 0, b: 0 });
+  writeSolidPng(current, 100, 1, { r: 0, g: 0, b: 0 });
+  const result = await compareScreenshots(baseline, current, { maxPixels: 100 });
+  assert.equal(result.match, true);
+  assert.deepEqual(result.normalization?.scaledCurrent, { width: 1, height: 1 });
+});
+
+test.each([
+  [4, 2, 8, 4],
+  [8, 4, 4, 2],
+])(
+  'proportional patterned screenshots match at either density (%i x %i vs %i x %i)',
+  async (bw, bh, cw, ch) => {
+    const dir = tmpDir();
+    const baseline = path.join(dir, 'baseline.png');
+    const current = path.join(dir, 'current.png');
+    for (const [file, width, height] of [
+      [baseline, bw, bh],
+      [current, cw, ch],
+    ] as const) {
+      const png = new PNG({ width, height });
+      paintRect(png, { x: 0, y: 0, width: width / 2, height: height / 2 }, { r: 255, g: 0, b: 0 });
+      paintRect(
+        png,
+        { x: width / 2, y: height / 2, width: width / 2, height: height / 2 },
+        { r: 0, g: 80, b: 255 },
+      );
+      fs.writeFileSync(file, PNG.sync.write(png));
+    }
+    const result = await compareScreenshots(baseline, current, { threshold: 0 });
+    assert.equal(result.match, true);
+    assert.equal(result.totalPixels, bw * bh);
+  },
+);
+
+test('JPEG current screenshots use proportional normalization and the original pixel budget', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.png');
+  const current = path.join(dir, 'current.jpg');
+  writeSolidPng(baseline, 4, 3, { r: 20, g: 200, b: 40 });
+  await writeSolidJpeg(current, 8, 6, { r: 20, g: 200, b: 40 });
+  const result = await compareScreenshots(baseline, current, { maxPixels: 48 });
+  assert.equal(result.match, true);
+  assert.equal(result.totalPixels, 12);
+  await assert.rejects(compareScreenshots(baseline, current, { maxPixels: 47 }), {
+    code: 'INVALID_ARGS',
+  });
 });

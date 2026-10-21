@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { decode as decodeJpeg } from 'jpeg-js';
 import { decodePng, hasPngSignature, PNG } from './png.ts';
+import { validateScreenshotImagePixels } from './screenshot-image-size.ts';
 
 const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
 
@@ -21,10 +22,11 @@ export function detectScreenshotImageFormat(bytes: Buffer): ScreenshotImageForma
  * Synchronous and CPU-bound: daemon request paths reach it through the PNG worker
  * (`decodeScreenshotImageAsync` in `png-worker-client.ts`), like every other codec job.
  */
-export function decodeScreenshotImage(bytes: Buffer, label: string): PNG {
+export function decodeScreenshotImage(bytes: Buffer, label: string, maxPixels?: number): PNG {
+  validateScreenshotImagePixels(bytes, label, maxPixels);
   const format = detectScreenshotImageFormat(bytes);
   if (format === 'png') return decodePng(bytes, label);
-  if (format === 'jpeg') return decodeJpegImage(bytes, label);
+  if (format === 'jpeg') return decodeJpegImage(bytes, label, maxPixels);
   throw unsupportedContainer(label, bytes);
 }
 
@@ -45,9 +47,17 @@ export function transcodeScreenshotToPng(bytes: Buffer, label: string): Buffer {
 }
 
 /** A JPEG signature does not prove a decodable body; a failure keeps the label and the decoder's reason. */
-function decodeJpegImage(bytes: Buffer, label: string): PNG {
+function decodeJpegImage(bytes: Buffer, label: string, maxPixels?: number): PNG {
   try {
-    const decoded = decodeJpeg(bytes, { useTArray: true, formatAsRGBA: true });
+    const decoded = decodeJpeg(bytes, {
+      useTArray: true,
+      formatAsRGBA: true,
+      // The decoder also checks frames reached through its malformed-marker recovery.
+      // A half pixel keeps floating-point MP conversion away from integer budget boundaries.
+      ...(maxPixels != null && maxPixels > 0
+        ? { maxResolutionInMP: (Math.floor(maxPixels) + 0.5) / 1_000_000 }
+        : {}),
+    });
     const png = new PNG({ width: decoded.width, height: decoded.height });
     png.data = Buffer.from(decoded.data.buffer, decoded.data.byteOffset, decoded.data.byteLength);
     return png;

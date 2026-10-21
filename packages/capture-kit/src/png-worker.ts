@@ -28,7 +28,11 @@ async function runJob(request: PngWorkerRequest): Promise<PngWorkerJobResult> {
     }
     case 'decode-image': {
       const { decodeScreenshotImage } = await import('./screenshot-image.ts');
-      const image = decodeScreenshotImage(toBuffer(request.image), request.label);
+      const image = decodeScreenshotImage(
+        toBuffer(request.image),
+        request.label,
+        request.maxPixels,
+      );
       return { kind: 'decode-image', width: image.width, height: image.height, data: image.data };
     }
     case 'encode': {

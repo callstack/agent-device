@@ -234,14 +234,21 @@ export async function decodePngAsync(buffer: Buffer, label: string): Promise<PNG
  * command that rewrites a screenshot in place stays on `decodePngAsync`, which keeps the file's
  * container honest. Decode failures carry the canonical `AppError`.
  */
-export async function decodeScreenshotImageAsync(bytes: Buffer, label: string): Promise<PNG> {
-  const result = await runPngJob({ kind: 'decode-image', image: bytes, label }, async () => {
-    // Read on demand so the JPEG decoder stays out of the import closure of every entry that only
-    // needs the worker's other jobs.
-    const { decodeScreenshotImage } = await import('./screenshot-image.ts');
-    const image = decodeScreenshotImage(bytes, label);
-    return { kind: 'decode-image', width: image.width, height: image.height, data: image.data };
-  });
+export async function decodeScreenshotImageAsync(
+  bytes: Buffer,
+  label: string,
+  maxPixels?: number,
+): Promise<PNG> {
+  const result = await runPngJob(
+    { kind: 'decode-image', image: bytes, label, maxPixels },
+    async () => {
+      // Read on demand so the JPEG decoder stays out of the import closure of every entry that only
+      // needs the worker's other jobs.
+      const { decodeScreenshotImage } = await import('./screenshot-image.ts');
+      const image = decodeScreenshotImage(bytes, label, maxPixels);
+      return { kind: 'decode-image', width: image.width, height: image.height, data: image.data };
+    },
+  );
   return toDecodedPng(result);
 }
 

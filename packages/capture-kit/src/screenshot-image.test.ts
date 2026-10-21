@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import fc from 'fast-check';
 import { encode as encodeJpeg } from 'jpeg-js';
 import { PNG } from './png.ts';
 import {
@@ -116,5 +117,59 @@ test('decoding refuses bytes in neither container and a JPEG body that cannot be
     code: 'COMMAND_FAILED',
     message: 'Failed to decode fixture as JPEG',
     details: { label: 'fixture', reason: expect.any(String) },
+  });
+});
+
+test('an oversized PNG is refused before decoding even an incomplete body', () => {
+  const png = PNG.sync.write(new PNG({ width: 10, height: 10 }));
+  expect(thrownBy(() => decodeScreenshotImage(png.subarray(0, 24), 'baseline', 99))).toMatchObject({
+    code: 'INVALID_ARGS',
+    message: expect.stringContaining('maxImagePixels'),
+  });
+});
+
+const PROPERTY_RUNS = 40;
+test('JPEG frame dimensions enforce the original pixel budget before decoding', () => {
+  const jpeg = encodeJpeg(
+    { width: 2, height: 2, data: solidRgba(2, 2, [30, 80, 120, 255]) },
+    90,
+  ).data;
+  const frame = jpeg.indexOf(Buffer.from([0xff, 0xc0]));
+  expect(frame).toBeGreaterThan(0);
+  const header = Buffer.from(jpeg.subarray(0, frame + 2 + jpeg.readUInt16BE(frame + 2)));
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 2, max: 65535 }),
+      fc.integer({ min: 2, max: 65535 }),
+      (width, height) => {
+        header.writeUInt16BE(height, frame + 5);
+        header.writeUInt16BE(width, frame + 7);
+        expect(
+          thrownBy(() => decodeScreenshotImage(header, 'current', width * height - 1)),
+        ).toMatchObject({
+          code: 'INVALID_ARGS',
+          message: expect.stringContaining('maxImagePixels'),
+        });
+      },
+    ),
+    { numRuns: PROPERTY_RUNS },
+  );
+});
+
+test('the JPEG decoder enforces the budget through malformed APP marker recovery', () => {
+  const jpeg = encodeJpeg(
+    { width: 2, height: 2, data: solidRgba(2, 2, [30, 80, 120, 255]) },
+    90,
+  ).data;
+  const firstSegmentEnd = 4 + jpeg.readUInt16BE(4);
+  const malformed = Buffer.concat([
+    jpeg.subarray(0, firstSegmentEnd),
+    Buffer.from([0, 0xe1, 0, 2]),
+    jpeg.subarray(firstSegmentEnd),
+  ]);
+  expect(decodeScreenshotImage(malformed, 'current', 4).width).toBe(2);
+  expect(thrownBy(() => decodeScreenshotImage(malformed, 'current', 3))).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: expect.stringContaining('maxResolutionInMP') },
   });
 });

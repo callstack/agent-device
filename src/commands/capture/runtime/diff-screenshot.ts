@@ -156,7 +156,7 @@ async function maybeAttachCurrentOverlay(
   artifacts: ArtifactDescriptor[],
 ): Promise<ScreenshotDiffResult> {
   if (!options.overlayRefs) return result;
-  if (result.match || result.dimensionMismatch) {
+  if (result.match) {
     if (diffOutputPath) await removeStaleCurrentOverlay(diffOutputPath);
     return result;
   }
@@ -184,7 +184,11 @@ async function maybeAttachCurrentOverlay(
         : {}),
       ...(result.regions && overlayResult.overlayRefs
         ? {
-            regions: attachCurrentOverlayMatches(result.regions, overlayResult.overlayRefs),
+            regions: attachCurrentOverlayMatches(
+              result.regions,
+              overlayResult.overlayRefs,
+              result.normalization?.currentScale,
+            ),
           }
         : {}),
     };

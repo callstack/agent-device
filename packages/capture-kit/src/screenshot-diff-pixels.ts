@@ -5,6 +5,7 @@ const DIFF_CHANGE_COLOR = { r: 220, g: 0, b: 0 } as const;
 export type ScreenshotDiffPixelsJob = {
   width: number;
   height: number;
+  overlapHeight?: number;
   baselineData: Uint8Array;
   currentData: Uint8Array;
   maxColorDistance: number;
@@ -29,6 +30,7 @@ export function computeScreenshotDiffPixels(
   const diffData = Buffer.alloc(totalPixels * 4);
   const diffMask = new Uint8Array(totalPixels);
   let differentPixels = 0;
+  const overlapPixels = job.width * (job.overlapHeight ?? job.height);
 
   // PNG data is a flat RGBA buffer: [R, G, B, A, R, G, B, A, ...].
   // We step by 4 to visit each pixel and compute its Euclidean distance
@@ -39,7 +41,7 @@ export function computeScreenshotDiffPixels(
     const blueDelta = baselineData[index + 2]! - currentData[index + 2]!;
     const colorDistance = Math.sqrt(redDelta ** 2 + greenDelta ** 2 + blueDelta ** 2);
 
-    if (colorDistance > maxColorDistance) {
+    if (pixelIndex >= overlapPixels || colorDistance > maxColorDistance) {
       differentPixels += 1;
       diffMask[pixelIndex] = 1;
       const context = renderDiffContextChannel(currentData, index);

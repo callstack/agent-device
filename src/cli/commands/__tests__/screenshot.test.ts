@@ -1,11 +1,14 @@
-import { createTestHostEnvironment } from '@agent-device/test-kit';
+import { createTestHostEnvironment, mkdtempForTestSync } from '@agent-device/test-kit';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { withCapturedStdoutAsync } from '../../../__tests__/test-utils/stream-capture.ts';
 import { createAgentDeviceClient } from '../../../agent-device-client.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { screenshotCommand } from '../screenshot.ts';
+import { screenshotCommand, diffCommand } from '../screenshot.ts';
+import fs from 'node:fs';
+import path from 'node:path';
+import { PNG } from '@agent-device/capture-kit/png';
 
 function clientReturning(
   data: Record<string, unknown>,
@@ -96,3 +99,45 @@ test('screenshot --json at the default level still emits normalized screenshot m
   assert.equal(parsed.data.pixelDensity, 1);
   assert.ok(!('overlayCount' in parsed.data));
 });
+
+test.each([false, true])(
+  'diff screenshot CLI normalizes saved and live current images (live=%s)',
+  async (live) => {
+    const dir = mkdtempForTestSync('cli-diff-width-');
+    const baseline = path.join(dir, 'baseline.png');
+    const current = path.join(dir, 'current.png');
+    const diff = path.join(dir, 'diff.png');
+    fs.writeFileSync(baseline, PNG.sync.write(new PNG({ width: 2, height: 2 })));
+    fs.writeFileSync(current, PNG.sync.write(new PNG({ width: 4, height: 6 })));
+    let captures = 0;
+    const client = createAgentDeviceClient(
+      { session: 'qa' },
+      {
+        transport: async (req): Promise<DaemonResponse> => {
+          assert.equal(req.command, 'screenshot');
+          captures += 1;
+          const out = req.positionals?.[0];
+          assert.equal(typeof out, 'string');
+          fs.copyFileSync(current, out!);
+          return { ok: true, data: { path: out } };
+        },
+      },
+    );
+    const stdout = await withCapturedStdoutAsync(() =>
+      diffCommand({
+        host: createTestHostEnvironment(),
+        positionals: ['screenshot', ...(live ? [] : [current])],
+        flags: { json: true, baseline, out: diff, threshold: '1' } as CliFlags,
+        client,
+      }),
+    );
+    const { data } = JSON.parse(stdout);
+    assert.equal(captures, live ? 1 : 0);
+    assert.equal(data.differentPixels, 2);
+    assert.equal(data.totalPixels, 6);
+    assert.equal(data.mismatchPercentage, 33.33);
+    assert.deepEqual(data.normalization.scaledCurrent, { width: 2, height: 3 });
+    const image = PNG.sync.read(fs.readFileSync(diff));
+    assert.deepEqual([image.width, image.height], [2, 3]);
+  },
+);

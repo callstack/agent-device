@@ -130,26 +130,30 @@ test('formatScreenshotDiffText renders mismatch with pixel counts without color'
   assert.equal(text.includes('\u001b['), false);
 });
 
-test('formatScreenshotDiffText renders dimension mismatch', () => {
+test('formatScreenshotDiffText explains normalized comparison geometry', () => {
   const text = withNoColor(() =>
     formatScreenshotDiffText(
       {
         match: false,
-        differentPixels: 100,
-        totalPixels: 100,
-        mismatchPercentage: 100,
-        dimensionMismatch: {
-          expected: { width: 1170, height: 2532 },
-          actual: { width: 1080, height: 1920 },
+        differentPixels: 375,
+        totalPixels: 304875,
+        mismatchPercentage: 0.12,
+        normalization: {
+          baseline: { width: 375, height: 812 },
+          current: { width: 1080, height: 2340 },
+          scaledCurrent: { width: 375, height: 813 },
+          compared: { width: 375, height: 813 },
+          currentScale: { x: 375 / 1080, y: 813 / 2340 },
+          alignment: 'top-left',
+          coordinateSpace: 'comparison-pixels',
         },
       },
       { env: process.env, cwd: process.cwd() },
     ),
   );
-  assert.match(text, /✗ Screenshots have different dimensions/);
-  assert.match(text, /expected 1170x2532/);
-  assert.match(text, /got 1080x1920/);
-  assert.equal(text.includes('different /'), false);
+  assert.match(text, /current 1080x2340 → 375x813/);
+  assert.match(text, /Compared 375x813, aligned top-left; regions use comparison pixels/);
+  assert.match(text, /375 different \/ 304875 total pixels/);
 });
 
 test('formatScreenshotDiffText renders diff path relative to cwd', () => {

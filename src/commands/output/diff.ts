@@ -53,13 +53,21 @@ export function formatScreenshotDiffText(
 ): string {
   const useColor = supportsColor(host.env);
   const match = data.match === true;
-  const dimensionMismatch = data.dimensionMismatch;
 
   const lines: string[] = [];
   lines.push(...formatScreenshotDiffStatusLines(data, useColor));
+  if (data.normalization) {
+    const { baseline, current, scaledCurrent, compared } = data.normalization;
+    lines.push(
+      `  Baseline ${baseline.width}x${baseline.height}; current ${current.width}x${current.height} → ${scaledCurrent.width}x${scaledCurrent.height}`,
+    );
+    lines.push(
+      `  Compared ${compared.width}x${compared.height}, aligned top-left; regions use comparison pixels`,
+    );
+  }
   lines.push(...formatScreenshotDiffArtifactLines(data, match, useColor, host.cwd));
 
-  if (!match && !dimensionMismatch) {
+  if (!match) {
     lines.push(...formatScreenshotDiffPixelCountLines(data, useColor));
     lines.push(...formatScreenshotDiffRegionLines(data, useColor));
   }
@@ -72,18 +80,7 @@ function formatScreenshotDiffStatusLines(data: ScreenshotDiffResult, useColor: b
     const indicator = useColor ? colorize('✓', 'green') : '✓';
     return [`${indicator} Screenshots match.`];
   }
-  const dimensionMismatch = data.dimensionMismatch;
   const indicator = useColor ? colorize('✗', 'red') : '✗';
-  if (dimensionMismatch) {
-    const expected = dimensionMismatch.expected;
-    const actual = dimensionMismatch.actual;
-    return [
-      `${indicator} Screenshots have different dimensions: ` +
-        `expected ${expected?.width}x${expected?.height}, ` +
-        `got ${actual?.width}x${actual?.height}`,
-    ];
-  }
-
   const differentPixels = toNumber(data.differentPixels);
   const mismatchPercentage = toNumber(data.mismatchPercentage);
   const pctLabel =
