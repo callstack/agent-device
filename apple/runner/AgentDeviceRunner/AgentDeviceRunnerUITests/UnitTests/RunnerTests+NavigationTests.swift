@@ -8,16 +8,17 @@ extension RunnerTests {
 #if os(iOS)
   @MainActor
   func testRankedInAppBackUsesSynthesisWithoutXCTestTap() throws {
-    try assertInAppBackUsesSynthesis(navigationBar: false)
+    try assertInAppBackDispatch(navigationBar: false)
+  }
+
+  /// A navigation bar button keeps XCTest's element tap, which aims at its computed hittable point.
+  @MainActor
+  func testNavigationBarBackKeepsTheElementTap() throws {
+    try assertInAppBackDispatch(navigationBar: true)
   }
 
   @MainActor
-  func testNavigationBarBackUsesSynthesisWithoutXCTestTap() throws {
-    try assertInAppBackUsesSynthesis(navigationBar: true)
-  }
-
-  @MainActor
-  private func assertInAppBackUsesSynthesis(navigationBar: Bool) throws {
+  private func assertInAppBackDispatch(navigationBar: Bool) throws {
     app.launchArguments = ["--agent-device-back-regression"] + (navigationBar ? ["--navigation-bar"] : [])
     app.launch()
     mainOwned.app = app
@@ -53,7 +54,11 @@ extension RunnerTests {
     }
     let changed = expectation(for: NSPredicate(format: "label == %@", "Back performed"), evaluatedWith: status)
     wait(for: [changed], timeout: appExistenceTimeout)
-    XCTAssertEqual(xctestTaps, 0, "back must use synthesized dispatch without XCTest tap idle waits")
+    if navigationBar {
+      XCTAssertEqual(xctestTaps, 1, "a navigation bar button keeps the element tap")
+    } else {
+      XCTAssertEqual(xctestTaps, 0, "a ranked back control uses synthesized dispatch without idle waits")
+    }
   }
 #endif
 

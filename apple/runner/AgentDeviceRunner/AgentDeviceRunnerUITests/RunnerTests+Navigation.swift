@@ -60,7 +60,10 @@ extension RunnerTests {
 #else
     let buttons = app.navigationBars.buttons.allElementsBoundByIndex
     if let back = buttons.first(where: { $0.isHittable }) {
-      return tapResolvedNavigationBackControl(app: app, frame: back.frame)
+      // `isHittable` promises a hittable point, not a hittable center: a bar button partly under an
+      // overlay keeps the element tap, which aims at the point XCTest computed.
+      back.tap()
+      return .performed
     }
     if isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId) {
       NSLog("AGENT_DEVICE_RUNNER_IN_APP_BACK_SKIPPED_XCTEST_ENUMERATION bundle=%@", mainOwned.bundleId ?? "")
