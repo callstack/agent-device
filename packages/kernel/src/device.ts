@@ -79,6 +79,12 @@ export function hostAppDeviceId(hostDeviceId: string, bundleId: string): string 
   return `${hostDeviceIdPrefix(hostDeviceId)}${bundleId.toLowerCase()}`;
 }
 
+/** The host of an app device id, or the id itself for any other device. */
+export function hostDeviceIdOf(deviceId: string): string {
+  const infix = deviceId.indexOf(HOST_APP_DEVICE_ID_INFIX);
+  return infix < 0 ? deviceId : deviceId.slice(0, infix);
+}
+
 /** The id prefix every app device of `hostDeviceId` shares. */
 export function hostDeviceIdPrefix(hostDeviceId: string): string {
   return `${hostDeviceId}${HOST_APP_DEVICE_ID_INFIX}`;

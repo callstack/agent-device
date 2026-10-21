@@ -1,5 +1,5 @@
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
-import { hostDeviceIdPrefix } from '@agent-device/kernel/device';
+import { hostDeviceIdOf } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RequestExecutionLockKey } from './request-binding.ts';
 
@@ -58,10 +58,13 @@ export function createRequestExecutionLocks(params: {
       }
       const key = `device:${deviceId}` as const;
       if (initialKeySet.has(key)) return;
-      assertNoHeldAppDeviceOf(deviceId, [...initialKeySet, ...retainedLocks.keys()]);
 
       let retained = retainedLocks.get(key);
       if (!retained) {
+        const heldKeys = [...initialKeySet, ...retainedLocks.keys()];
+        if (holdsDeviceOfSameHost(deviceId, heldKeys) && locks.has(key)) {
+          throw deviceExecutionLockBusy(deviceId);
+        }
         retained = retainExecutionLock(locks, key, scope?.signal);
         retainedLocks.set(key, retained);
       }
@@ -71,23 +74,30 @@ export function createRequestExecutionLocks(params: {
 }
 
 /**
- * Every request takes a host's lock before the locks of its app devices (ADR 0035). A request that
- * already holds an app device's lock would take its host's out of that order and could wait on a
- * request that holds the host and waits for that app, so it is refused instead of waiting.
+ * Whether the request already holds a lock on `deviceId`'s host or one of its app devices
+ * (ADR 0035). Waiting for a second lock on the same host while holding one could cross another
+ * request that does the same in the other order: replays on two apps of one Mac that each close
+ * their app and open the other's, or a replay that leaves its app for the whole Mac while a fresh
+ * open holds the Mac and waits for that app. Such a lock is taken only while it is free.
  */
-function assertNoHeldAppDeviceOf(
+function holdsDeviceOfSameHost(
   deviceId: string,
   heldKeys: readonly RequestExecutionLockKey[],
-): void {
-  const appDeviceKeyPrefix = `device:${hostDeviceIdPrefix(deviceId)}`;
-  if (!heldKeys.some((key) => key.startsWith(appDeviceKeyPrefix))) return;
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    'This request already holds an app of this device, so it cannot also take the whole device.',
+): boolean {
+  const host = hostDeviceIdOf(deviceId);
+  return heldKeys.some(
+    (key) => key.startsWith('device:') && hostDeviceIdOf(key.slice('device:'.length)) === host,
+  );
+}
+
+function deviceExecutionLockBusy(deviceId: string): AppError {
+  return new AppError(
+    'DEVICE_IN_USE',
+    `Another request is using ${deviceId}, and this request already holds another device of the same host.`,
     {
-      reason: 'host-after-app-device-lock',
+      reason: 'DEVICE_EXECUTION_LOCK_BUSY',
       deviceId,
-      hint: 'Run the whole-device step (for example open --surface desktop) as a separate request.',
+      hint: 'Run this step as a separate request, or retry once the other request finishes.',
     },
   );
 }

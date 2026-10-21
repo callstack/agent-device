@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { devicesOverlap, hostAppDevice, type DeviceInfo } from './device.ts';
+import { devicesOverlap, hostAppDevice, hostDeviceIdOf, type DeviceInfo } from './device.ts';
 
 const mac: DeviceInfo = {
   platform: 'apple',
@@ -20,4 +20,10 @@ test('a host overlaps each of its app devices, and two of its app devices do not
   assert.equal(devicesOverlap(one, one), true);
   assert.equal(devicesOverlap(one, two), false);
   assert.equal(devicesOverlap('host-mac-2', one), false);
+});
+
+test('hostDeviceIdOf names the host of an app device and any other device itself', () => {
+  assert.equal(hostDeviceIdOf(hostAppDevice(mac, 'com.example.one').id), mac.id);
+  assert.equal(hostDeviceIdOf(mac.id), mac.id);
+  assert.equal(hostDeviceIdOf('emulator-5554'), 'emulator-5554');
 });

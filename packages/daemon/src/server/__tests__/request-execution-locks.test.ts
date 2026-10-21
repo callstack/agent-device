@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { createRequestExecutionLocks } from '../request-execution-locks.ts';
+import type { RequestExecutionLockKey } from '../request-binding.ts';
 
 test.each(['initial', 'retained'] as const)(
   'cancellation ends a queued %s lock without running device work',
@@ -98,14 +99,57 @@ test('retaining an initial device lock is reentrant within the request', async (
   ).resolves.toBe('done');
 });
 
-test('a request holding an app device lock is refused its host lock instead of deadlocking', async () => {
+/**
+ * Runs two requests that each hold their initial locks, lets both start, then has each retain one
+ * more device lock. Returns what each retention settled to: `retained` or the refusal.
+ */
+async function crossRetentions(
+  first: { keys: RequestExecutionLockKey[]; retain: string },
+  second: { keys: RequestExecutionLockKey[]; retain: string },
+): Promise<unknown[]> {
   const locks = new Map<string, Promise<unknown>>();
-  // A replay in an existing app session holds that app device until it finishes.
+  let started = 0;
+  let markBothStarted: () => void = () => {};
+  const bothStarted = new Promise<void>((resolve) => {
+    markBothStarted = resolve;
+  });
+  const run = async (request: { keys: RequestExecutionLockKey[]; retain: string }) => {
+    const requestLocks = createRequestExecutionLocks({ locks, initialKeys: request.keys });
+    return await requestLocks.run(async () => {
+      started += 1;
+      if (started === 2) markBothStarted();
+      await bothStarted;
+      return await requestLocks.retainDevice(request.retain).then(
+        () => 'retained',
+        (error: unknown) => error,
+      );
+    });
+  };
+  return await Promise.all([run(first), run(second)]);
+}
+
+const BUSY = {
+  code: 'DEVICE_IN_USE',
+  details: { reason: 'DEVICE_EXECUTION_LOCK_BUSY' },
+};
+
+test('replays on two apps of one Mac that each open the other app are refused, not deadlocked', async () => {
+  // Each replay runs in its existing app session, closes its app, and opens the other one.
+  const outcomes = await crossRetentions(
+    { keys: ['session:one', 'device:mac:app:com.example.one'], retain: 'mac:app:com.example.two' },
+    { keys: ['session:two', 'device:mac:app:com.example.two'], retain: 'mac:app:com.example.one' },
+  );
+  expect(outcomes).toHaveLength(2);
+  for (const outcome of outcomes) expect(outcome).toMatchObject(BUSY);
+});
+
+test('a replay that leaves its app for the whole Mac is refused while another request holds the Mac', async () => {
+  const locks = new Map<string, Promise<unknown>>();
   const replayLocks = createRequestExecutionLocks({
     locks,
     initialKeys: ['session:replay', 'device:mac:app:com.example.one'],
   });
-  // A fresh open of the same app in another session takes the host first, then waits for the app.
+  // A fresh open of the same app in another session holds the Mac and waits for the app.
   const freshOpenLocks = createRequestExecutionLocks({
     locks,
     initialKeys: ['session:fresh', 'device:mac', 'device:mac:app:com.example.one'],
@@ -123,14 +167,10 @@ test('a request holding an app device lock is refused its host lock instead of d
   const replayRun = replayLocks.run(async () => {
     replayHolding();
     await freshWaiting;
-    // The replay closes its app session and opens the whole Mac.
-    const refused = await replayLocks.retainDevice('mac').then(
-      () => undefined,
+    return await replayLocks.retainDevice('mac').then(
+      () => 'retained',
       (error: unknown) => error,
     );
-    // Another app device of the Mac keeps the host-then-app order and is retained as before.
-    await replayLocks.retainDevice('mac:app:com.example.two');
-    return refused;
   });
   await holding;
   const freshRun = freshOpenLocks.run(async () => {
@@ -140,10 +180,41 @@ test('a request holding an app device lock is refused its host lock instead of d
   expect(freshEntered).toBe(false);
   continueReplay();
 
-  expect(await replayRun).toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'host-after-app-device-lock', deviceId: 'mac' },
-  });
+  expect(await replayRun).toMatchObject({ ...BUSY, details: { ...BUSY.details, deviceId: 'mac' } });
   await freshRun;
   expect(freshEntered).toBe(true);
+});
+
+test('a second lock on the same Mac is taken while it is free, and other devices still wait', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const replayLocks = createRequestExecutionLocks({
+    locks,
+    initialKeys: ['session:replay', 'device:mac:app:com.example.one'],
+  });
+  await expect(
+    replayLocks.run(async () => {
+      await replayLocks.retainDevice('mac:app:com.example.two');
+      await replayLocks.retainDevice('mac');
+      return 'done';
+    }),
+  ).resolves.toBe('done');
+
+  // A lock on another device is still waited for, as before.
+  const holder = createRequestExecutionLocks({ locks, initialKeys: ['device:SIM-002'] });
+  let releaseHolder: () => void = () => {};
+  const holderRun = holder.run(
+    async () =>
+      await new Promise<void>((resolve) => {
+        releaseHolder = resolve;
+      }),
+  );
+  const simLocks = createRequestExecutionLocks({ locks, initialKeys: ['device:SIM-001'] });
+  const simRun = simLocks.run(async () => {
+    await simLocks.retainDevice('SIM-002');
+    return 'waited';
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  releaseHolder();
+  await holderRun;
+  await expect(simRun).resolves.toBe('waited');
 });
