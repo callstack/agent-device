@@ -173,6 +173,28 @@ function deadlineFailure(error: unknown, timeoutMs: number, requestId: string): 
   );
 }
 
+function projectDeadlineResponse(result: DaemonResponse, timeoutMs: number): DaemonResponse {
+  if (result.ok) return result;
+  const priorReason = result.error.details?.reason;
+  return {
+    ...result,
+    error: {
+      ...result.error,
+      ...(isRequestCanceledDetails(result.error.details)
+        ? { message: DEADLINE_MESSAGE, hint: DEADLINE_HINT }
+        : {}),
+      details: {
+        ...result.error.details,
+        ...(typeof priorReason === 'string' && priorReason !== 'daemon_request_timeout'
+          ? { causeReason: priorReason }
+          : {}),
+        reason: 'daemon_request_timeout',
+        timeoutMs,
+      },
+    },
+  };
+}
+
 /** Keeps a daemon deadline on the request's existing cancellation signal until its work settles. */
 export async function withRequestDeadline(
   requestId: string,
@@ -195,28 +217,7 @@ export async function withRequestDeadline(
     controller.signal.throwIfAborted();
     const result = await task();
     if (Date.now() >= deadlineMs) expire();
-    if (deadlineCanceled) {
-      return result.ok
-        ? result
-        : {
-            ...result,
-            error: {
-              ...result.error,
-              ...(isRequestCanceledDetails(result.error.details)
-                ? { message: DEADLINE_MESSAGE, hint: DEADLINE_HINT }
-                : {}),
-              details: {
-                ...result.error.details,
-                ...(typeof result.error.details?.reason === 'string' &&
-                result.error.details.reason !== 'daemon_request_timeout'
-                  ? { causeReason: result.error.details.reason }
-                  : {}),
-                reason: 'daemon_request_timeout',
-                timeoutMs,
-              },
-            },
-          };
-    }
+    if (deadlineCanceled) return projectDeadlineResponse(result, timeoutMs);
     controller.signal.throwIfAborted();
     return result;
   } catch (error) {
