@@ -9,9 +9,10 @@ the next sequence of actions.
 
 The whole batch has a 60-second wall-clock budget. If an in-progress step settles after cancellation,
 the batch returns `COMMAND_FAILED` with `details.reason: daemon_request_timeout`. The daemon stays
-available. A `close` step may already have ended its session. A failed batch keeps `details.executed`, `details.partialResults`,
-and its dispatch status, so you can continue from the failing step. A batch that completes every
-step returns success even if it settles just after the deadline. A step that ignores cancellation
+available. A `close` step may already have ended its session. A failed batch keeps
+`details.executed`, `details.partialResults`, and its dispatch status, so you can continue from
+the failing step. A batch that completes every step returns success even if it settles shortly
+after the deadline. A step that ignores cancellation
 can delay the result past the client timeout. Split longer sequences into separate requests.
 
 ## Run a batch from the CLI

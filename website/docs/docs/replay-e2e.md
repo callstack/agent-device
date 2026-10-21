@@ -10,8 +10,9 @@ Record a session as an `.ad` script, then run it again with `replay` or run a fo
 five minutes. The client allows another 30 seconds for the result. If the operation budget
 expires and an in-progress step settles after cancellation, a failed replay includes
 `details.reason: daemon_request_timeout` and `details.timeoutMs`. The daemon stays available. An
-authored `close` may already have ended its session. A failed replay keeps the failing script path and line. A replay that completes every
-step returns success even if it settles just after the deadline. A step that ignores cancellation
+authored `close` may already have ended its session. A failed replay keeps the failing script path
+and line. A replay that completes every step returns success even if it settles shortly after the
+deadline. A step that ignores cancellation
 can delay the result past the client timeout.
 
 To run Maestro YAML flows or export `.ad` scripts to Maestro YAML, see [Run Maestro flows](/docs/run-maestro-flows).
