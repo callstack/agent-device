@@ -83,6 +83,7 @@ int main(int argc, const char *argv[]) {
 #endif
 
 @interface AgentDeviceRunnerViewController : UIViewController
+@property(nonatomic, strong) UILabel *navigationBackStatus;
 @property(nonatomic, strong) UILabel *maskedToggleStatus;
 @property(nonatomic, strong) UILabel *maskedDeliveryStatus;
 @property(nonatomic, assign) NSUInteger maskedTogglePresses;
@@ -586,6 +587,10 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 }
 #endif
 
+- (void)navigationBackPressed {
+  self.navigationBackStatus.text = @"Back performed";
+}
+
 - (void)viewDidLoad {
   [super viewDidLoad];
 
@@ -605,6 +610,24 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 
   // Keep the fixture behind a launch argument so normal runner snapshots remain unchanged.
 #if TARGET_OS_IOS
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-back-regression"]) {
+    self.navigationBackStatus = label;
+    label.accessibilityIdentifier = @"agent-device-back-status";
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--navigation-bar"]) {
+      UINavigationBar *bar = [[UINavigationBar alloc] initWithFrame:CGRectMake(0, 62, self.view.bounds.size.width, 44)];
+      UINavigationItem *item = [[UINavigationItem alloc] initWithTitle:@"Thread"];
+      item.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Go back" style:UIBarButtonItemStylePlain target:self action:@selector(navigationBackPressed)];
+      bar.items = @[item];
+      [self.view addSubview:bar];
+    } else {
+      UIButton *back = [UIButton buttonWithType:UIButtonTypeSystem];
+      back.frame = CGRectMake(12, 62, 88, 44);
+      [back setTitle:@"Go back" forState:UIControlStateNormal];
+      [back addTarget:self action:@selector(navigationBackPressed) forControlEvents:UIControlEventTouchUpInside];
+      [self.view addSubview:back];
+    }
+  }
+
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-replacement-regression"]) {
     self.alertActionStatus = label;
     label.accessibilityIdentifier = @"agent-device-alert-actions";
