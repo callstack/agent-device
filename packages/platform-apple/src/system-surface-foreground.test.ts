@@ -58,7 +58,10 @@ test('every registered host off screen is background, read only from the ready r
 test('one background host does not hide another one presenting', async () => {
   statesByHost({ [safari!]: 'runningBackground', [passbook!]: 'runningForeground' });
 
-  await expect(probe()).resolves.toBe('foreground');
+  await expect(probe()).resolves.toEqual({
+    kind: 'foreground',
+    host: IOS_SYSTEM_SURFACE_HOSTS.find((host) => host.bundleId === passbook),
+  });
 });
 
 test.for([

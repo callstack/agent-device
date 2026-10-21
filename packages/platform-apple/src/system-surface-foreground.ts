@@ -1,4 +1,7 @@
-import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
+import {
+  IOS_SYSTEM_SURFACE_HOSTS,
+  type IosSystemSurfaceHost,
+} from '@agent-device/contracts/ios-system-surface';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isAppleApplicationState } from '@agent-device/kernel/snapshot';
 import { readRunnerSessionLiveness, runAppleRunnerCommand } from './core/runner-client.ts';
@@ -12,10 +15,13 @@ import { readRunnerSessionLiveness, runAppleRunnerCommand } from './core/runner-
  *
  * `background` is the only answer that may send a capture to the bridge, and it needs every
  * registered host to report a state other than foreground: one host lingering in the background says
- * nothing about another presenting. Anything else is `foreground` or `unknown`, and both keep the
- * runner route, which serves the surface while it is foreground and otherwise the app.
+ * nothing about another presenting. A foreground host names itself, and the capture takes the runner
+ * route that serves it. `unknown` leaves the decision to the host-side process probe.
  */
-export type SystemSurfaceForeground = 'foreground' | 'background' | 'unknown';
+export type SystemSurfaceForeground =
+  | Readonly<{ kind: 'foreground'; host: IosSystemSurfaceHost }>
+  | 'background'
+  | 'unknown';
 
 export type SystemSurfaceForegroundProbe = (
   device: DeviceInfo,
@@ -37,12 +43,11 @@ const BACKGROUND_STATES: ReadonlySet<string> = new Set([
 export function createSystemSurfaceForegroundProbe(): SystemSurfaceForegroundProbe {
   return async (device, input) => {
     const session = readRunnerSessionLiveness(device.id);
-    // The read never starts a runner: a capture with no ready runner keeps the runner route, which
-    // starts one for the capture itself, as it did before this probe existed.
+    // The read never starts a runner: with no ready runner the route asks the process probe.
     if (!session || session.liveness !== 'ready') return 'unknown';
     for (const host of IOS_SYSTEM_SURFACE_HOSTS) {
       const state = await readHostState(device, host.bundleId, session.sessionId, input);
-      if (state === 'runningForeground') return 'foreground';
+      if (state === 'runningForeground') return { kind: 'foreground', host };
       if (state === undefined || !BACKGROUND_STATES.has(state)) return 'unknown';
     }
     return 'background';

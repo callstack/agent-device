@@ -90,23 +90,29 @@ test.for([presentSurface, 'unknown'] as const)(
   },
 );
 
-// A host process outlives what it presented: password AutoFill at sign-in leaves SafariViewService
-// running for the rest of the session. Only the runner's foreground read of every registered host may
-// keep such a capture on the bridge; any other answer keeps the runner route.
+// A ready runner reads every registered host's foreground state before the process probe runs: a host
+// process outlives what it presented (password AutoFill at sign-in leaves SafariViewService running),
+// and the probe spawns processes on every capture. Only a runner that cannot answer defers to the probe.
 test.for([
-  { foreground: 'background', bridge: true },
-  { foreground: 'foreground', bridge: false },
-  { foreground: 'unknown', bridge: false },
+  { runner: 'background', probe: 'absent', bridge: true, probed: false },
+  { runner: 'foreground', probe: 'absent', bridge: false, probed: false },
+  { runner: 'unknown', probe: 'absent', bridge: true, probed: true },
+  { runner: 'unknown', probe: 'present', bridge: false, probed: true },
 ] as const)(
-  'a running surface host the runner reads as $foreground keeps the bridge: $bridge',
-  async ({ foreground, bridge }) => {
+  'runner reads $runner, process probe $probe: bridge $bridge, probed $probed',
+  async ({ runner, probe, bridge, probed }) => {
     const source = sourceReturning(bridgeAcquisition());
     const fallback = vi.fn(async () => runnerResult());
-    const systemSurfaceForeground = vi.fn(async () => foreground);
+    const systemSurfacePresent = vi.fn(async () => (probe === 'present' ? presentSurface : probe));
+    const systemSurfaceForeground = vi.fn(async () =>
+      runner === 'foreground'
+        ? ({ kind: 'foreground', host: presentSurface.host } as const)
+        : runner,
+    );
     const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
       source,
       resolveTarget: vi.fn(async () => target),
-      systemSurfacePresent: async () => presentSurface,
+      systemSurfacePresent,
       systemSurfaceForeground,
     });
 
@@ -116,33 +122,10 @@ test.for([
       ios,
       expect.objectContaining({ requestId: 'req-1' }),
     );
+    expect(systemSurfacePresent).toHaveBeenCalledTimes(probed ? 1 : 0);
     expect(source.acquire).toHaveBeenCalledTimes(bridge ? 1 : 0);
   },
 );
-
-test('a generation the bridge no longer serves never pays the surface host foreground reads', async () => {
-  const source = sourceReturning({
-    stage: 'failed',
-    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
-  });
-  let presence: 'absent' | typeof presentSurface = 'absent';
-  const systemSurfaceForeground = vi.fn(async () => 'background' as const);
-  const fallback = vi.fn(async () => runnerResult());
-  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
-    source,
-    resolveTarget: vi.fn(async () => target),
-    systemSurfacePresent: async () => presence,
-    systemSurfaceForeground,
-  });
-
-  await route.capture(ios, input, signal(), fallback);
-  presence = presentSurface;
-  await route.capture(ios, input, signal(), fallback);
-
-  expect(source.acquire).toHaveBeenCalledOnce();
-  expect(systemSurfaceForeground).not.toHaveBeenCalled();
-  expect(fallback).toHaveBeenCalledTimes(2);
-});
 
 // The structural guarantee every comparison site downstream relies on (#2438): a surface capture is
 // lineaged to the HOST, not to the app (`target.targetId` here), so its comparison key cannot equal

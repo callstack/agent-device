@@ -35,6 +35,7 @@ import {
 } from './snapshot-target.ts';
 import {
   createSystemSurfaceForegroundProbe,
+  type SystemSurfaceForeground,
   type SystemSurfaceForegroundProbe,
 } from './system-surface-foreground.ts';
 import {
@@ -125,7 +126,21 @@ export function createAppleSnapshotRoute(
       // otherwise serves the app, so this is correct even while a dismissed host lingers. Anything
       // but a proven `absent` takes the runner: an unproven probe must not fall through to a bridge
       // capture that would answer confidently from the occluded app tree.
-      const surfacePresence = await systemSurfacePresent(device, signal);
+      //
+      // A ready runner answers first, with the foreground state of every registered host: the
+      // predicate it serves a surface by, read in a few milliseconds. Only when it cannot answer does
+      // the host-side process probe run, which spawns processes on every capture.
+      const foreground = await readSurfaceForeground(
+        device,
+        input,
+        signal,
+        systemSurfaceForeground,
+      );
+      if (foreground !== 'background' && foreground !== 'unknown') {
+        return await runSurfaceFallback(device, input, fallback, foreground.host.bundleId);
+      }
+      const surfacePresence =
+        foreground === 'background' ? 'absent' : await systemSurfacePresent(device, signal);
       if (surfacePresence === 'unknown') {
         // The probe could not answer. Take the runner rather than a bridge capture that would
         // answer confidently from the occluded app tree — but say so: silently losing the bridge
@@ -140,22 +155,12 @@ export function createAppleSnapshotRoute(
           [unknownGenerationResidue()],
         );
       }
-      let lingeringHostTarget: SimulatorSnapshotTarget | undefined;
       if (surfacePresence !== 'absent') {
-        lingeringHostTarget = await bridgeTargetWhileSurfaceHostRuns(device, input, signal, {
-          resolveTarget,
-          isBridgeDisabled,
-          probe: systemSurfaceForeground,
-        });
-        if (!lingeringHostTarget) {
-          return await runSurfaceFallback(device, input, fallback, surfacePresence.host.bundleId);
-        }
+        return await runSurfaceFallback(device, input, fallback, surfacePresence.host.bundleId);
       }
       let target: SimulatorSnapshotTarget;
       try {
-        target =
-          lingeringHostTarget ??
-          (await resolveTargetForObservation(host, resolveTarget, device, input, signal));
+        target = await resolveTargetForObservation(host, resolveTarget, device, input, signal);
       } catch (error) {
         rethrowIfResolutionCancelled(signal, error);
         emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
@@ -240,40 +245,27 @@ export function createAppleSnapshotRoute(
 }
 
 /**
- * The bridge target for a capture while a registered surface host process runs, or undefined when the
- * capture keeps the runner route that serves a presented surface. A host process outlives what it
- * presented, so only the live runner reading every registered host off screen admits the bridge, and
- * only for a generation the bridge still serves: a disabled one would pay the runner reads for a
- * capture that goes to the runner anyway. The target is resolved once, without waiting on a pending
- * discovery; any failure keeps the runner route, as before this refinement.
+ * The live runner's read of every registered host's foreground state. A host process outlives what
+ * it presented, so this read rather than the process probe decides whether a lingering host keeps a
+ * capture off the bridge. `background` is recorded, because it is the answer that keeps the bridge
+ * while a host process may still be running.
  */
-async function bridgeTargetWhileSurfaceHostRuns(
+async function readSurfaceForeground(
   device: DeviceInfo,
   input: CaptureSnapshotInput,
   signal: AbortSignal,
-  deps: Readonly<{
-    resolveTarget: SimulatorSnapshotTargetResolver;
-    isBridgeDisabled: (target: SimulatorSnapshotTarget) => boolean;
-    probe: SystemSurfaceForegroundProbe;
-  }>,
-): Promise<SimulatorSnapshotTarget | undefined> {
-  let target: SimulatorSnapshotTarget;
-  try {
-    target = await deps.resolveTarget(device, input.options!.appBundleId!, signal);
-  } catch (error) {
-    rethrowIfResolutionCancelled(signal, error);
-    return undefined;
-  }
-  if (deps.isBridgeDisabled(target)) return undefined;
+  probe: SystemSurfaceForegroundProbe,
+): Promise<SystemSurfaceForeground> {
   const requestId = input.execution?.requestId;
-  const foreground = await deps.probe(device, { signal, ...(requestId ? { requestId } : {}) });
-  if (foreground !== 'background') return undefined;
-  emitDiagnostic({
-    level: 'debug',
-    phase: 'ios_snapshot_route_surface_host_background',
-    data: { deviceId: device.id, generation: target.generation },
-  });
-  return target;
+  const foreground = await probe(device, { signal, ...(requestId ? { requestId } : {}) });
+  if (foreground === 'background') {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_snapshot_route_surface_host_background',
+      data: { deviceId: device.id },
+    });
+  }
+  return foreground;
 }
 
 /**
