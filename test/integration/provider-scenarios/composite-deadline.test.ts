@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
+import type {
+  AndroidAdbExecutorResult,
+  AndroidAdbProvider,
+} from '@agent-device/platform-android/mechanics';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
 import { createProviderScenarioHarness } from './harness.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
@@ -25,6 +28,31 @@ function awaitGestureAbort(signal: AbortSignal): Promise<never> {
   });
 }
 
+function deadlineAdbInfrastructureResponse(
+  args: readonly string[],
+  state: DeadlineAdbState,
+): AndroidAdbExecutorResult | undefined {
+  if (args.join(' ').includes('AGENT_DEVICE_NO_HELPER'))
+    return { exitCode: 0, stdout: 'AGENT_DEVICE_NO_HELPER\n', stderr: '' };
+  if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'tap') {
+    state.completedActions.push('press');
+    return { exitCode: 0, stdout: '', stderr: '' };
+  }
+  if (args.includes('force-stop')) {
+    if (state.signal?.aborted) state.retired = true;
+    return { exitCode: 0, stdout: '', stderr: '' };
+  }
+  if (args.includes('--show-versioncode'))
+    return {
+      exitCode: 0,
+      stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:999999',
+      stderr: '',
+    };
+  if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start')
+    return { exitCode: 0, stdout: 'Starting: Intent', stderr: '' };
+  return undefined;
+}
+
 function deadlineAdbProvider(state: DeadlineAdbState): AndroidAdbProvider {
   return {
     snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
@@ -33,12 +61,8 @@ function deadlineAdbProvider(state: DeadlineAdbState): AndroidAdbProvider {
       state.completedActions.push('fill');
     },
     exec: async (args, options) => {
-      if (args.join(' ').includes('AGENT_DEVICE_NO_HELPER'))
-        return { exitCode: 0, stdout: 'AGENT_DEVICE_NO_HELPER\n', stderr: '' };
-      if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'tap') {
-        state.completedActions.push('press');
-        return { exitCode: 0, stdout: '', stderr: '' };
-      }
+      const infrastructure = deadlineAdbInfrastructureResponse(args, state);
+      if (infrastructure) return infrastructure;
       if (args.includes('instrument') && args.includes('gesture')) {
         state.signal = options?.signal;
         state.started();
@@ -49,18 +73,6 @@ function deadlineAdbProvider(state: DeadlineAdbState): AndroidAdbProvider {
         state.diagnosticCaptureAfterAbort = true;
         throw new Error('post-failure snapshot transport is stalled');
       }
-      if (args.includes('force-stop')) {
-        if (state.signal?.aborted) state.retired = true;
-        return { exitCode: 0, stdout: '', stderr: '' };
-      }
-      if (args.includes('--show-versioncode'))
-        return {
-          exitCode: 0,
-          stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:999999',
-          stderr: '',
-        };
-      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start')
-        return { exitCode: 0, stdout: 'Starting: Intent', stderr: '' };
       if (state.searchText && args.includes('instrument')) state.observedFill();
       return respondToAndroidSettingsAdbCommand([...args], state.searchText, '', {});
     },
