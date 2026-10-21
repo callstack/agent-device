@@ -10,8 +10,8 @@ import {
 } from './cli.ts';
 import type { PerfConfig } from './config.ts';
 import { resolveProfile, type ResolvedProfile } from './platform-profiles.ts';
+import { buildMeasurement } from './measurement.ts';
 import { buildSettingsTour, type ScenarioStep } from './scenario.ts';
-import { summarize } from './stats.ts';
 import type { CliResult, Measurement, Sample } from './types.ts';
 
 export type IsolationContext = {
@@ -32,7 +32,7 @@ export function setupIsolation(cfg: PerfConfig): IsolationContext {
   fs.mkdirSync(artifactsDir, { recursive: true });
   const baseFlags = ['--state-dir', stateDir, '--session', 'perf', ...profile.platformFlags];
   log(`state-dir: ${stateDir}`);
-  log(`device: ${profile.deviceName} (${profile.udid ?? profile.serial})`);
+  log(`device: ${profile.deviceName} (${profile.serial ?? 'default'})`);
   return { stateDir, artifactsDir, baseFlags, profile };
 }
 
@@ -72,8 +72,8 @@ function toSample(r: CliResult, round: number): Sample {
   return sample;
 }
 
-// The first interaction after open/relaunch pays the iOS XCUITest runner startup (~10s+ cold)
-// and a per-relaunch first-AX-query settle cost. Run an untimed throwaway interaction so that
+// The first interaction after open/relaunch pays the Android helper startup and a per-relaunch
+// first-query settle cost. Run an untimed throwaway interaction so that
 // cost is never attributed to a measured command.
 function warmRunner(ctx: IsolationContext): void {
   invokeCli(['snapshot', '-i'], ctx.baseFlags);
@@ -91,39 +91,31 @@ function runStep(step: ScenarioStep, ctx: IsolationContext, round: number): Samp
       : invokeBatchStep(step.step, ctx.baseFlags);
   const sample = toSample(r, round);
   if (step.execMode === 'batch') {
-    sample.daemonDurationMs = readBatchStepDurationMs(r);
+    sample.daemonMs = readBatchStepDurationMs(r);
     if (step.isSnapshot) sample.elementCount = countElements(r);
   }
   return sample;
 }
 
-function buildMeasurement(
+const TOUR_SCENARIO = 'settings-tour';
+
+function tourMeasurement(
   step: Pick<ScenarioStep, 'command' | 'label' | 'execMode'>,
   platform: ResolvedProfile['platform'],
   samples: Sample[],
   warmupDropped: number,
 ): Measurement {
-  const ok = samples.filter((s) => s.ok);
-  const failures = samples.length - ok.length;
-  const notes: string[] = [];
-  if (failures > 0) {
-    const codes = [...new Set(samples.filter((s) => !s.ok).map((s) => s.errorCode))].join(', ');
-    notes.push(`${failures}/${samples.length} samples failed: ${codes}`);
-  }
-  const num = (xs: (number | undefined)[]) => xs.filter((n): n is number => typeof n === 'number');
-  return {
-    command: step.command,
+  return buildMeasurement({
+    id: `${TOUR_SCENARIO}/${step.label}`,
+    scenario: TOUR_SCENARIO,
     label: step.label,
+    command: step.command,
+    args: [],
     platform,
     execMode: step.execMode,
     samples,
     warmupDropped,
-    wallClock: summarize(ok.map((s) => s.wallClockMs)),
-    daemonDuration: summarize(num(ok.map((s) => s.daemonDurationMs))),
-    elementCount: summarize(num(ok.map((s) => s.elementCount))),
-    failures,
-    notes,
-  };
+  });
 }
 
 function setupMeasurementFailed(measurement: Measurement): boolean {
@@ -137,7 +129,7 @@ function bootOnce(ctx: IsolationContext): Measurement {
   const bootFlags = ['--state-dir', ctx.stateDir, ...ctx.profile.platformFlags];
   const r = invokeCli(['boot', ...ctx.profile.selectorFlags], bootFlags);
   const sample = toSample(r, 0);
-  return buildMeasurement(
+  return tourMeasurement(
     { command: 'boot', label: 'boot device', execMode: 'standalone' },
     ctx.profile.platform,
     [sample],
@@ -152,7 +144,7 @@ function establishSession(ctx: IsolationContext): Measurement {
   log('establishing session (open with device selectors)');
   const r = invokeCli(['open', ctx.profile.appTarget, ...ctx.profile.selectorFlags], ctx.baseFlags);
   const sample = toSample(r, 0);
-  return buildMeasurement(
+  return tourMeasurement(
     { command: 'open', label: 'open (establish + cold)', execMode: 'standalone' },
     ctx.profile.platform,
     [sample],
@@ -176,10 +168,8 @@ export function runScenario(ctx: IsolationContext, cfg: PerfConfig): Measurement
 
   // Android accessibility dumps time out while the UI is animating; disable animations
   // up front (untimed) so snapshot/get/is/fill can read an idle hierarchy.
-  if (ctx.profile.platform === 'android') {
-    log('disabling animations (android)');
-    invokeCli(['settings', 'animations', 'off'], ctx.baseFlags);
-  }
+  log('disabling animations');
+  invokeCli(['settings', 'animations', 'off'], ctx.baseFlags);
 
   const totalRounds = cfg.warmup + cfg.rounds;
   for (let round = 0; round < totalRounds; round++) {
@@ -197,7 +187,7 @@ export function runScenario(ctx: IsolationContext, cfg: PerfConfig): Measurement
   }
 
   const tourMeasurements = steps.map((step) =>
-    buildMeasurement(step, ctx.profile.platform, acc.get(step.label)!, cfg.warmup),
+    tourMeasurement(step, ctx.profile.platform, acc.get(step.label)!, cfg.warmup),
   );
   return [boot, establish, ...tourMeasurements];
 }

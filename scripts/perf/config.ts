@@ -13,10 +13,15 @@ export type PerfConfig = {
   warmup: number; // leading rounds dropped from stats
   keepArtifacts: boolean; // keep temp state dir + leave device booted
   outDir: string;
-  udid?: string; // iOS device override (UDID)
-  device?: string; // device override by name (e.g. "iPhone 17 Pro"); preferred over udid
+  udid?: string; // iOS simulator UDID (required for iOS)
+  device?: string; // Android AVD name for boot
   serial?: string; // Android device override
+  appId: string; // iOS fixture bundle id
+  appPath?: string; // iOS fixture bundle path, recorded in the run metadata
+  scenarios?: string[]; // iOS scenario ids; all when omitted
 };
+
+export const DEFAULT_IOS_APP_ID = 'com.callstack.agentdevicelab';
 
 // How to invoke the CLI. Defaults to the built dist binary (bin/agent-device.mjs).
 // Set AGENT_DEVICE_PERF_CLI to run from source instead, e.g. on CI:
@@ -50,10 +55,11 @@ function readIntValue(argv: string[], i: number, flag: string, min: number): num
 export function parseConfig(argv: string[]): PerfConfig {
   const cfg: PerfConfig = {
     platform: 'ios',
-    rounds: 5,
+    rounds: 3,
     warmup: 1,
     keepArtifacts: false,
-    outDir: DEFAULT_OUT_DIR,
+    outDir: path.join(DEFAULT_OUT_DIR, new Date().toISOString().replaceAll(/[:.]/g, '-')),
+    appId: DEFAULT_IOS_APP_ID,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -86,9 +92,22 @@ export function parseConfig(argv: string[]): PerfConfig {
       case '--serial':
         cfg.serial = readValue(argv, i++, a);
         break;
+      case '--app-id':
+        cfg.appId = readValue(argv, i++, a);
+        break;
+      case '--app-path':
+        cfg.appPath = path.resolve(readValue(argv, i++, a));
+        break;
+      case '--scenarios':
+        cfg.scenarios = readValue(argv, i++, a)
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean);
+        break;
       default:
         throw new Error(`Unknown flag: ${a}`);
     }
   }
+  if (cfg.platform === 'ios' && !cfg.udid) throw new Error('--udid is required for --platform ios');
   return cfg;
 }
