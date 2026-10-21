@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { createLimrunIosInteractor, type LimrunIosSession } from './ios.ts';
 import type { IosTreeNode } from './snapshot.ts';
 
@@ -15,6 +15,10 @@ function emailField(editing: boolean): IosTreeNode {
       : ['TextEntry', 'TextOperationsAvailable'],
   };
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function sessionWithTrees(trees: IosTreeNode[]) {
   const calls: string[] = [];
@@ -34,6 +38,9 @@ function sessionWithTrees(trees: IosTreeNode[]) {
     }),
     typeText: vi.fn(async () => {
       calls.push('typeText');
+    }),
+    setElementValue: vi.fn(async () => {
+      calls.push('setElementValue');
     }),
   };
   const session = {
@@ -64,7 +71,7 @@ test('a delayed type sends one focused-blind key press per character', async () 
   ]);
 });
 
-test('fill waits for text-entry focus to arrive and only then sends keys', async () => {
+test('fill waits for text-entry focus to arrive and only then sets the value', async () => {
   const { interactor, client, calls } = sessionWithTrees([
     emailField(false),
     emailField(false),
@@ -73,40 +80,52 @@ test('fill waits for text-entry focus to arrive and only then sends keys', async
 
   const result = await interactor.fill(200, 170, 'qa@example.com');
 
-  expect(calls).toEqual([
-    'elementTree',
-    'tap',
-    'elementTree',
-    'elementTree',
-    'pressKey:a+command',
-    'typeText',
-  ]);
+  expect(calls).toEqual(['elementTree', 'tap', 'elementTree', 'elementTree', 'setElementValue']);
   expect(result).toEqual({ textEntryReadiness: 'focused-element' });
-  expect(client.typeText).toHaveBeenCalledWith('qa@example.com', false, { requireFocus: false });
-});
-
-test('fill selects the field value first, so entry replaces it', async () => {
-  const { interactor, calls } = sessionWithTrees([emailField(false), emailField(true)]);
-
-  await interactor.fill(200, 170, 'replacement');
-
-  expect(calls.indexOf('pressKey:a+command')).toBeLessThan(calls.indexOf('typeText'));
-});
-
-test('the clear request empties the focused field instead of typing nothing', async () => {
-  const { interactor, client, calls } = sessionWithTrees([emailField(false), emailField(true)]);
-
-  const result = await interactor.fill(200, 170, '');
-
-  expect(calls).toEqual([
-    'elementTree',
-    'tap',
-    'elementTree',
-    'pressKey:a+command',
-    'pressKey:delete',
-  ]);
+  expect(client.setElementValue.mock.calls).toEqual([['qa@example.com']]);
+  expect(client.pressKey).not.toHaveBeenCalled();
   expect(client.typeText).not.toHaveBeenCalled();
-  expect(result).toEqual({ textEntryReadiness: 'focused-element' });
+});
+
+test('fill sets Chinese, mixed, and emoji text in one write after focus', async () => {
+  for (const text of ['你好', 'qa@例子.com', '👋']) {
+    const { interactor, client, calls } = sessionWithTrees([emailField(false), emailField(true)]);
+
+    const result = await interactor.fill(200, 170, text);
+
+    expect(result).toEqual({ textEntryReadiness: 'focused-element' });
+    expect(calls.indexOf('tap')).toBeLessThan(calls.lastIndexOf('elementTree'));
+    expect(calls.lastIndexOf('elementTree')).toBeLessThan(calls.indexOf('setElementValue'));
+    expect(client.setElementValue.mock.calls).toEqual([[text]]);
+    expect(client.pressKey).not.toHaveBeenCalled();
+    expect(client.typeText).not.toHaveBeenCalled();
+  }
+});
+
+test('fill replaces an ASCII value and clears with an empty string on the same path', async () => {
+  for (const text of ['replacement', '']) {
+    const { interactor, client } = sessionWithTrees([emailField(false), emailField(true)]);
+
+    const result = await interactor.fill(200, 170, text);
+
+    expect(result).toEqual({ textEntryReadiness: 'focused-element' });
+    expect(client.setElementValue.mock.calls).toEqual([[text]]);
+    expect(client.pressKey).not.toHaveBeenCalled();
+    expect(client.typeText).not.toHaveBeenCalled();
+  }
+});
+
+test('a delayed fill still sets the complete value once', async () => {
+  for (const text of ['你好a', '']) {
+    const { interactor, client } = sessionWithTrees([emailField(false), emailField(true)]);
+
+    const result = await interactor.fill(200, 170, text, 1);
+
+    expect(result).toEqual({ textEntryReadiness: 'focused-element' });
+    expect(client.setElementValue.mock.calls).toEqual([[text]]);
+    expect(client.pressKey).not.toHaveBeenCalled();
+    expect(client.typeText).not.toHaveBeenCalled();
+  }
 });
 
 test('a session that cannot answer the focus read fails before the device is touched', async () => {
@@ -121,5 +140,39 @@ test('a session that cannot answer the focus read fails before the device is tou
   );
   expect(calls).toEqual(['elementTree']);
   expect(client.tap).not.toHaveBeenCalled();
+  expect(client.setElementValue).not.toHaveBeenCalled();
+  expect(client.pressKey).not.toHaveBeenCalled();
+  expect(client.typeText).not.toHaveBeenCalled();
+});
+
+test('fill writes no value when text-entry focus never arrives', async () => {
+  const { interactor, client } = sessionWithTrees([emailField(false)]);
+  // The focus budget is wall-clock time. Step the clock by that budget on every
+  // read so the first miss expires it, and the refusal is not a three-second wait.
+  let now = 0;
+  vi.spyOn(Date, 'now').mockImplementation(() => {
+    const current = now;
+    now += 3_000;
+    return current;
+  });
+
+  await expect(interactor.fill(200, 170, '你好')).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'text_entry_focus_not_observed' },
+  });
+  expect(client.tap).toHaveBeenCalledTimes(1);
+  expect(client.setElementValue).not.toHaveBeenCalled();
+  expect(client.pressKey).not.toHaveBeenCalled();
+  expect(client.typeText).not.toHaveBeenCalled();
+});
+
+test('a rejected value write fails the fill with that failure', async () => {
+  const { interactor, client } = sessionWithTrees([emailField(false), emailField(true)]);
+  const failure = new Error('element value refused');
+  client.setElementValue.mockRejectedValueOnce(failure);
+
+  await expect(interactor.fill(200, 170, '你好')).rejects.toBe(failure);
+  expect(client.setElementValue.mock.calls).toEqual([['你好']]);
+  expect(client.pressKey).not.toHaveBeenCalled();
   expect(client.typeText).not.toHaveBeenCalled();
 });
