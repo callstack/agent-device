@@ -16,16 +16,9 @@ export function validateScreenshotImagePixels(
 }
 
 function validateJpegPixels(bytes: Buffer, label: string, maxPixels: number): void {
-  let offset = 2;
-  while (offset + 3 < bytes.length && bytes[offset] === 0xff) {
-    while (bytes[offset] === 0xff) offset += 1;
-    const marker = bytes[offset++];
-    if (marker === 0xda || marker === 0xd9) return;
-    if (offset + 2 > bytes.length) return;
-    const length = bytes.readUInt16BE(offset);
-    if (length < 2 || offset + length > bytes.length) return;
+  for (const { marker, offset, length } of jpegSegments(bytes)) {
     // These are the three frame types supported by the screenshot JPEG decoder.
-    if ([0xc0, 0xc1, 0xc2].includes(marker ?? 0) && length >= 8) {
+    if ([0xc0, 0xc1, 0xc2].includes(marker) && length >= 8) {
       validateScreenshotPixels(
         bytes.readUInt16BE(offset + 5),
         bytes.readUInt16BE(offset + 3),
@@ -33,6 +26,21 @@ function validateJpegPixels(bytes: Buffer, label: string, maxPixels: number): vo
         maxPixels,
       );
     }
+  }
+}
+
+function* jpegSegments(
+  bytes: Buffer,
+): Generator<{ marker: number; offset: number; length: number }> {
+  let offset = 2;
+  while (offset + 3 < bytes.length && bytes[offset] === 0xff) {
+    while (bytes[offset] === 0xff) offset += 1;
+    const marker = bytes[offset++]!;
+    if (marker === 0xda || marker === 0xd9) return;
+    if (offset + 2 > bytes.length) return;
+    const length = bytes.readUInt16BE(offset);
+    if (length < 2 || offset + length > bytes.length) return;
+    yield { marker, offset, length };
     offset += length;
   }
 }

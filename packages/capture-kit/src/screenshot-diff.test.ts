@@ -718,3 +718,25 @@ test('JPEG current screenshots use proportional normalization and the original p
     code: 'INVALID_ARGS',
   });
 });
+
+test('unequal-height screenshots keep shared content at the top left', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.png');
+  const current = path.join(dir, 'current.png');
+  for (const [file, width, height] of [
+    [baseline, 2, 2],
+    [current, 4, 6],
+  ] as const) {
+    const image = new PNG({ width, height });
+    paintRect(
+      image,
+      { x: 0, y: 0, width: width / 2, height: width / 2 },
+      { r: 255, g: 255, b: 255 },
+    );
+    fs.writeFileSync(file, PNG.sync.write(image));
+  }
+  const result = await compareScreenshots(baseline, current, { threshold: 0 });
+  assert.equal(result.differentPixels, 2);
+  assert.equal(result.totalPixels, 6);
+  assert.deepEqual(result.regions?.[0]?.rect, { x: 0, y: 2, width: 2, height: 1 });
+});
