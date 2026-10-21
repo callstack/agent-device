@@ -89,10 +89,17 @@ export const closeApplicationWithRuntimeHintClearUse = defineUse({
   required: ['closeApplication', 'finalizeApplicationClose', 'clearRuntimeHints'],
 });
 
+/**
+ * Close resolves the target of a session on an app device before any teardown, so a target outside
+ * that app is refused while the session is still intact (ADR 0035).
+ */
+export const resolveCloseTargetRuntimeUse = defineUse({ required: ['resolveOpenTarget'] });
+
 /** Every close plan is declared at the descriptor: hint cleanup is part of close, never a sibling reach-through. */
 export const closeApplicationRuntimePlanUses = Object.freeze([
   closeApplicationRuntimeUse,
   closeApplicationWithRuntimeHintClearUse,
+  resolveCloseTargetRuntimeUse,
 ] as const);
 
 /** Daemon shutdown finalizes durable lifecycle resources without issuing a second close. */

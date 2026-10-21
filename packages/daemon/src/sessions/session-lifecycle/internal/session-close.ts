@@ -42,6 +42,8 @@ import {
 import { closeCleanupError, runSessionCloseTeardown } from './session-close-lifecycle-teardown.ts';
 import type { PlatformResourceCleanup } from '../../../core/platform-resource-cleanup.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import { resolveCloseTargetRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
+import { admitRuntimeUse } from '../../../core/runtime-admission.ts';
 
 export type SessionCloseCommandInput = Readonly<{
   host: HostEnvironment;
@@ -200,6 +202,37 @@ function assertTerminalRecordingCloseAllowed(req: DaemonRequest, session: Sessio
   );
 }
 
+/**
+ * A session on an app device closes only its own app (ADR 0035). The platform resolves the target
+ * before any teardown, the way open does, and refuses another app, so the session and its
+ * resources stay intact; the platform close refuses it too.
+ */
+async function refuseCloseOutsideAppDevice(params: {
+  session: SessionState;
+  app: string | undefined;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  bindDevice?: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
+}): Promise<DaemonResponse | undefined> {
+  const { session, app } = params;
+  if (!session.device.hostApp || !app) return undefined;
+  const admitted = await admitRuntimeUse({
+    command: 'close',
+    device: session.device,
+    use: resolveCloseTargetRuntimeUse,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+    platformServices: params.platformServices,
+  });
+  if (admitted.type === 'response') return admitted.response;
+  await admitted.runtime.operations.resolveOpenTarget({
+    target: app,
+    surface: 'app',
+    foreground: false,
+  });
+  return undefined;
+}
+
 export async function handleSessionCloseCommands(
   params: SessionCloseCommandInput,
 ): Promise<DaemonResponse> {
@@ -219,6 +252,14 @@ export async function handleSessionCloseCommands(
   let session = sessionStore.requireCurrent(ref);
   assertTerminalRecordingCloseAllowed(req, session);
   const app = req.positionals?.[0];
+  const outsideAppDevice = await refuseCloseOutsideAppDevice({
+    session,
+    app,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+    platformServices: params.platformServices,
+  });
+  if (outsideAppDevice) return outsideAppDevice;
   if (req.internal?.closeAppOnly === true && !app) {
     return errorResponse('INVALID_ARGS', 'App-only close requires an app target');
   }

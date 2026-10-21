@@ -286,6 +286,7 @@ A session opened under the lease binds the app device of the leased bundle, not 
 It takes that app device's claim, like any other session.
 Sessions on other apps of the Mac do not conflict with it, in this daemon or another.
 A session on the same app, or on the whole Mac, conflicts with it.
+A tenant sees that conflict as a generic `DEVICE_IN_USE` with its typed reason, never the other owner's session, workspace, state directory, or recovery command.
 Thus, one daemon serves several leased apps beside the host's own app sessions.
 
 These rules bind a request that names the lease or runs in its session.

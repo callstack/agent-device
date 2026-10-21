@@ -15,10 +15,12 @@ Accepted (2026-10-21). Applies to the native macOS app backend (ADR 0031) only.
 3. Every per-device rule applies to an app device unchanged: the execution lock, the claim, the
    new-session conflict check, and `open --wait`. Two sessions on two apps run in parallel, in one
    daemon or in several daemons that share a claims directory. Two sessions on one app conflict.
-   A request that opens an app device takes its host's execution lock first, in its lock plan, so an
+   A fresh `open` of an app device takes its host's execution lock first, in its lock plan, so an
    `open --wait` looks at the Mac's sessions under a lock a whole-Mac open also takes. The first
    opens on one Mac run their session check and publication one at a time in a daemon. Commands of
-   an open app session take only the app device's lock. A request that already holds a lock on a Mac or one of its apps, itself or through the request it
+   an open app session take only the app device's lock, and so does a replay or batch for the device
+   it starts on, since it holds its locks for its whole run. A fresh batch that selects the Mac itself, with no app
+   target, therefore holds the Mac's lock for its run. A request that already holds a lock on a Mac or one of its apps, itself or through the request it
    runs in (a batch step), takes another lock on that Mac only while it is free, and is otherwise
    refused with `DEVICE_IN_USE` (`DEVICE_EXECUTION_LOCK_BUSY`) instead of waiting. Waiting could
    cross a request that does the same in the other order: batches or replays on two apps that each

@@ -114,8 +114,14 @@ function applyOrdinaryScriptRecordingOpenOutcome(params: {
   );
 }
 
-/** What the caller's `open` output says when a claim was taken over because its device rebooted. */
-function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim): string {
+/**
+ * What the caller's `open` output says when a claim was taken over because its device rebooted. A
+ * `macos-app` lease tenant is not told whose claim it was: that belongs to the host (ADR 0007).
+ */
+function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim, req: DaemonRequest): string {
+  if (req.internal?.admittedLease?.backend === 'macos-app') {
+    return 'Took the device over: it rebooted after its previous claim was taken, so the previous app was already gone.';
+  }
   return (
     `Took the device from session "${tookOver.session}" in workspace "${tookOver.workspace}": ` +
     'that device rebooted after its claim was taken, so its app and runner were already gone.'
@@ -355,7 +361,7 @@ export async function completeOpenCommand(params: {
     launchConfirmation: launchConfirmationReport(outcome),
   });
   if (tookOverDeviceClaim) {
-    appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim));
+    appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim, req));
   }
   if (outcome.launchConfirmation === 'unanswered') {
     appendResponseWarning(

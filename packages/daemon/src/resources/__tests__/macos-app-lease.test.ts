@@ -628,3 +628,36 @@ test('a failure under the lease drops its log locators and every host path and t
     },
   });
 });
+
+test('a busy leased app is refused without naming who holds it, whatever host paths it has', () => {
+  const conflict = {
+    ok: false as const,
+    error: {
+      code: 'DEVICE_IN_USE',
+      message:
+        'macos device host:app:com.example.app is owned by session "s" in workspace "/srv/private-project".',
+      hint: 'Inspect the owner with: agent-device device status --platform macos --udid host:app:com.example.app',
+      retriable: false,
+      details: {
+        reason: 'DEVICE_CLAIM_LIVE_OWNER',
+        deviceKey: 'local:apple:macos:host:app:com.example.app',
+        owner: { session: 's', workspace: '/srv/private-project', stateDir: '/srv/daemon-state' },
+        recovery: { command: 'agent-device device status --platform macos --udid host' },
+      },
+    },
+  };
+
+  const redacted = redactMacOsAppLeaseResponse('open', conflict, host);
+
+  assert.deepEqual(redacted, {
+    ok: false,
+    error: {
+      code: 'DEVICE_IN_USE',
+      message: 'The leased app is in use by another session.',
+      hint: 'Retry once the other session ends.',
+      details: { reason: 'DEVICE_CLAIM_LIVE_OWNER' },
+      retriable: false,
+    },
+  });
+  assert.doesNotMatch(JSON.stringify(redacted), /\/srv\/|session "s"|device status/);
+});

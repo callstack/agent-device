@@ -388,8 +388,24 @@ function redactSuccessData(
 }
 
 function redactError(error: DaemonError, host: MacOsAppLeaseHost): DaemonError {
+  if (error.code === 'DEVICE_IN_USE') return tenantDeviceInUse(error);
   const { logPath: _logPath, diagnosticsRecord: _diagnosticsRecord, ...rest } = error;
   return redactHostText(rest, host);
+}
+
+/**
+ * A busy leased app, without who holds it: the owner's session, workspace, state directory, and
+ * host recovery command belong to the host, not the tenant. Only the typed reason stays.
+ */
+function tenantDeviceInUse(error: DaemonError): DaemonError {
+  const reason = error.details?.reason;
+  return {
+    code: 'DEVICE_IN_USE',
+    message: 'The leased app is in use by another session.',
+    hint: 'Retry once the other session ends.',
+    ...(typeof reason === 'string' ? { details: { reason } } : {}),
+    ...(error.retriable === undefined ? {} : { retriable: error.retriable }),
+  };
 }
 
 function redactHostText<T>(value: T, host: MacOsAppLeaseHost): T {

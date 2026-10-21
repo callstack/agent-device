@@ -59,10 +59,12 @@ export async function resolveRequestExecutionLockPlan(params: {
 
   const keys = new Set<RequestExecutionLockKey>([sessionExecutionLockKey(sessionName)]);
   const device = await resolveFreshSessionDevice(req, sessionStore.host.env);
-  // A fresh app device open also locks its host (ADR 0035), before its own lock, so an `open --wait`
-  // looks at the host's sessions under a lock a whole-host open also takes. An open app session's
-  // commands lock only the app device.
-  for (const id of device ? hostAndDeviceIds(device) : []) keys.add(deviceExecutionLockKey(id));
+  // A fresh app device `open` also locks its host (ADR 0035), before its own lock, so an
+  // `open --wait` looks at the host's sessions under a lock a whole-host open also takes. A replay
+  // or batch holds its locks for its whole run, so it locks only its device: the first-open lock
+  // keyed by host still serializes its opens. An open app session's commands lock only the app.
+  const ids = !device ? [] : req.command === 'open' ? hostAndDeviceIds(device) : [device.id];
+  for (const id of ids) keys.add(deviceExecutionLockKey(id));
   return { keys: orderRequestExecutionLockKeys(keys), deviceId: device?.id };
 }
 

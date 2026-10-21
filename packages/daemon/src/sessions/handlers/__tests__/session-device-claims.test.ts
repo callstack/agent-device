@@ -50,6 +50,7 @@ import {
   applyRuntimeHintsFixture,
   dispatchApplicationLifecycleEffect,
   prepareApplicationOpenFixture,
+  resolveOpenTargetFixture,
 } from '../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import {
@@ -645,4 +646,61 @@ test('a fresh app device open retains only its own device lock, never its host a
 
   assert.equal(response.ok, true, JSON.stringify(response));
   assert.deepEqual(retained, [textEdit.id]);
+});
+
+test('closing another app from an app device session is refused before teardown, keeping the session', async () => {
+  const { store, stateDir } = setup();
+  const textEdit = hostAppDevice(MACOS_DEVICE, 'com.apple.textedit');
+  const acquired = await acquireDeviceClaim({
+    env: process.env,
+    device: textEdit,
+    session: 'text-edit',
+    workspace: process.cwd(),
+    stateDir,
+  });
+  if (acquired.status !== 'acquired') throw new Error('claim seed failed');
+  store.publish('text-edit', {
+    name: 'text-edit',
+    device: textEdit,
+    deviceClaim: acquired.ownership,
+    appBundleId: 'com.apple.TextEdit',
+    appName: 'TextEdit',
+    surface: 'app',
+    createdAt: Date.now(),
+    actions: [],
+  });
+  mockDispatch.mockResolvedValue(undefined);
+  // The platform resolves the target as open does and refuses another app of the Mac.
+  resolveOpenTargetFixture.mockImplementationOnce(async () => {
+    throw new AppError('INVALID_ARGS', 'This session drives com.apple.TextEdit.', {
+      reason: 'app-device-scope',
+    });
+  });
+
+  const outcome = await handleCloseCommand({
+    host: createTestHostEnvironment(),
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      command: 'close',
+      token: 'test',
+      session: 'text-edit',
+      positionals: ['Calculator'],
+      flags: {},
+    },
+    sessionName: 'text-edit',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+    leaseRegistry: new LeaseRegistry(),
+  }).catch((error: unknown) => error);
+
+  assert.equal((outcome as AppError).details?.reason, 'app-device-scope');
+  assert.ok(
+    resolveOpenTargetFixture.mock.calls.some(([, , input]) => input.target === 'Calculator'),
+  );
+  assert.equal(mockDispatch.mock.calls.length, 0);
+  assert.equal(store.get('text-edit')?.device.id, textEdit.id);
+  assert.deepEqual(
+    inspectDeviceClaims({}, process.env).map((entry) => entry.claim?.session),
+    ['text-edit'],
+  );
 });

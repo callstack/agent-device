@@ -192,7 +192,7 @@ test('fresh open uses app-aware device selection for advisory locking and dispat
   expect(sessionStore.get('session-app-aware')?.device.id).toBe(appDevice.id);
 });
 
-test('fresh macOS replay locks the app device it opens first, with its host', async () => {
+test('fresh macOS replay locks only the app device it opens first, so other apps open beside it', async () => {
   const root = mkdtempForTestSync('agent-device-replay-macos-lock-');
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'context platform=macos\nopen com.example.one\n');
@@ -215,9 +215,10 @@ test('fresh macOS replay locks the app device it opens first, with its host', as
     sessionStore: makeSessionStore('agent-device-router-replay-macos-lock-'),
   });
 
+  // A replay holds these for its whole run; holding the host too would hold every other app's
+  // fresh open for as long. Its open still runs under the first-open lock keyed by the host.
   expect(keys).toEqual([
     'session:fresh-macos-replay',
-    'device:host-macos-local',
     'device:host-macos-local:app:com.example.one',
   ]);
 });
