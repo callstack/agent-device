@@ -3,8 +3,6 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { PNG } from './png.ts';
-import { resizePngBox } from './png-resize.ts';
-import { validateScreenshotPixels } from './screenshot-image-size.ts';
 import {
   computeScreenshotDiffPixelsAsync,
   decodeScreenshotImageAsync,
@@ -109,11 +107,17 @@ export async function compareScreenshots(
   ]);
   const normalization = screenshotDiffNormalization(baseline, current);
   const compared = normalization?.compared ?? baseline;
+  const { validateScreenshotPixels } = await import('./screenshot-image-size.ts');
   validateScreenshotPixels(compared.width, compared.height, 'comparison canvas', options.maxPixels);
-  const scaledCurrent =
-    normalization && current.width !== baseline.width
-      ? resizePngBox(current, normalization.scaledCurrent.width, normalization.scaledCurrent.height)
-      : current;
+  let scaledCurrent = current;
+  if (normalization && current.width !== baseline.width) {
+    const { resizePngBox } = await import('./png-resize.ts');
+    scaledCurrent = resizePngBox(
+      current,
+      normalization.scaledCurrent.width,
+      normalization.scaledCurrent.height,
+    );
+  }
   const alignedBaseline = padScreenshotHeight(baseline, compared.height);
   const alignedCurrent = padScreenshotHeight(scaledCurrent, compared.height);
   const overlapHeight = Math.min(baseline.height, scaledCurrent.height);
