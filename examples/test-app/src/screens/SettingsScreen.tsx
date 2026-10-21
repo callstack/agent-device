@@ -20,6 +20,7 @@ export interface SettingsScreenProps {
   onLoadDiagnostics: () => void;
   onOpenAccessorySetup: () => void;
   onOpenAutomationLab: () => void;
+  onOpenHeavyFeed: () => void;
   onOpenInertSurface: () => void;
   onOpenSnapshotDepth: () => void;
   onOpenWebViewLab: () => void;
@@ -80,6 +81,11 @@ export function SettingsScreen(props: SettingsScreenProps) {
           label="Open snapshot depth lab"
           onPress={props.onOpenSnapshotDepth}
           testID="open-snapshot-depth-lab"
+        />
+        <ActionButton
+          label="Open heavy feed"
+          onPress={props.onOpenHeavyFeed}
+          testID="open-heavy-feed"
         />
       </SectionCard>
 
