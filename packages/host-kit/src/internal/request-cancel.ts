@@ -1,4 +1,9 @@
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledDetails,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { runtimeSlot } from '../runtime-slots.ts';
 
@@ -145,6 +150,29 @@ export function throwIfRequestCanceled(requestId: string | undefined): void {
   }
 }
 
+const DEADLINE_MESSAGE = 'Daemon request deadline exceeded';
+const DEADLINE_HINT =
+  'Check completed steps and the current device state before retrying the timed-out operation.';
+
+function deadlineFailure(error: unknown, timeoutMs: number, requestId: string): AppError {
+  const prior = error instanceof AppError ? error.details : undefined;
+  return new AppError(
+    'COMMAND_FAILED',
+    DEADLINE_MESSAGE,
+    {
+      ...prior,
+      ...(typeof prior?.reason === 'string' && prior.reason !== 'daemon_request_timeout'
+        ? { causeReason: prior.reason }
+        : {}),
+      reason: 'daemon_request_timeout',
+      timeoutMs,
+      requestId,
+      hint: isRequestCanceledError(error) ? DEADLINE_HINT : (prior?.hint ?? DEADLINE_HINT),
+    },
+    error,
+  );
+}
+
 /** Keeps a daemon deadline on the request's existing cancellation signal until its work settles. */
 export async function withRequestDeadline(
   requestId: string,
@@ -156,24 +184,27 @@ export async function withRequestDeadline(
     : registerRequestAbort(requestId);
   const controller = requestAbortControllers().get(requestId)!;
   const deadlineMs = Date.now() + timeoutMs;
-  const deadlineError = new AppError('COMMAND_FAILED', 'Daemon request deadline exceeded', {
-    reason: 'daemon_request_timeout',
-    timeoutMs,
-    requestId,
-  });
-  const expire = () => controller.abort(deadlineError);
+  let deadlineCanceled = false;
+  const expire = () => {
+    if (controller.signal.aborted) return;
+    deadlineCanceled = true;
+    controller.abort(createRequestCanceledError({ timeoutMs, requestId }));
+  };
   const timer = setTimeout(expire, timeoutMs);
   try {
     controller.signal.throwIfAborted();
     const result = await task();
     if (Date.now() >= deadlineMs) expire();
-    if (controller.signal.reason === deadlineError) {
+    if (deadlineCanceled) {
       return result.ok
         ? result
         : {
             ...result,
             error: {
               ...result.error,
+              ...(isRequestCanceledDetails(result.error.details)
+                ? { message: DEADLINE_MESSAGE, hint: DEADLINE_HINT }
+                : {}),
               details: {
                 ...result.error.details,
                 ...(typeof result.error.details?.reason === 'string' &&
@@ -190,6 +221,7 @@ export async function withRequestDeadline(
     return result;
   } catch (error) {
     if (Date.now() >= deadlineMs) expire();
+    if (deadlineCanceled) throw deadlineFailure(error, timeoutMs, requestId);
     controller.signal.throwIfAborted();
     throw error;
   } finally {

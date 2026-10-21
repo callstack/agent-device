@@ -45,6 +45,7 @@ test('daemon deadline cancels in-flight work with its typed reason and retains r
     );
     await vi.advanceTimersByTimeAsync(60_000);
     assert.equal(signal.aborted, true);
+    assert.equal(isRequestCanceledError(signal.reason), true);
     assert.equal(getRequestSignal('deadline'), signal);
     finish();
     await rejected;
@@ -142,6 +143,40 @@ test('deadline failure retains response diagnostics and progress while adding ti
   }
 });
 
+test('deadline projection replaces cancellation copy while keeping completed-step evidence', async () => {
+  vi.useFakeTimers();
+  try {
+    const result = await withRequestDeadline('cancel-copy', 100, async () => {
+      await vi.advanceTimersByTimeAsync(100);
+      return {
+        ok: false,
+        error: {
+          code: 'COMMAND_FAILED',
+          message: 'request canceled',
+          hint: 'The request was canceled intentionally',
+          details: {
+            reason: 'request_canceled',
+            executed: 1,
+            partialResults: [{ command: 'press' }],
+            source: { path: '/tmp/workflow.ad', line: 3 },
+          },
+        },
+      } satisfies DaemonResponse;
+    });
+    assert.equal(result.ok, false);
+    if (result.ok) assert.fail('deadline failure became a success');
+    assert.equal(result.error.message, 'Daemon request deadline exceeded');
+    assert.doesNotMatch(String(result.error.hint), /canceled intentionally/);
+    assert.deepEqual(result.error.details?.partialResults, [{ command: 'press' }]);
+    assert.deepEqual(result.error.details?.source, { path: '/tmp/workflow.ad', line: 3 });
+    assert.equal(result.error.details?.executed, 1);
+    assert.equal(result.error.details?.causeReason, 'request_canceled');
+    assert.equal(result.error.details?.reason, 'daemon_request_timeout');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('a thrown error before the deadline retains its identity', async () => {
   const error = new AppError('INVALID_ARGS', 'Invalid replay');
   await assert.rejects(
@@ -150,6 +185,64 @@ test('a thrown error before the deadline retains its identity', async () => {
     }),
     (caught) => caught === error,
   );
+});
+
+test('a deadline after a thrown cancellation preserves its cause and progress', async () => {
+  vi.useFakeTimers();
+  try {
+    await assert.rejects(
+      withRequestDeadline('thrown-progress', 100, async () => {
+        await vi.advanceTimersByTimeAsync(100);
+        throw new AppError('COMMAND_FAILED', 'request canceled', {
+          reason: 'request_canceled',
+          hint: 'The request was canceled intentionally',
+          executed: 2,
+          partialResults: [{ command: 'press' }, { command: 'fill' }],
+          dispatched: 'unknown',
+          source: { path: '/tmp/workflow.ad', line: 4 },
+          diagnosticId: 'diag-4',
+          logPath: '/tmp/request.log',
+        });
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.message, 'Daemon request deadline exceeded');
+        assert.doesNotMatch(String(error.details?.hint), /canceled intentionally/);
+        assert.equal(error.details?.reason, 'daemon_request_timeout');
+        assert.equal(error.details?.causeReason, 'request_canceled');
+        assert.equal(error.details?.timeoutMs, 100);
+        assert.equal(error.details?.executed, 2);
+        assert.deepEqual(error.details?.partialResults, [
+          { command: 'press' },
+          { command: 'fill' },
+        ]);
+        assert.equal(error.details?.dispatched, 'unknown');
+        assert.deepEqual(error.details?.source, { path: '/tmp/workflow.ad', line: 4 });
+        assert.equal(error.details?.diagnosticId, 'diag-4');
+        assert.equal(error.details?.logPath, '/tmp/request.log');
+        return true;
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a timer firing after explicit cancellation does not relabel it as a deadline', async () => {
+  vi.useFakeTimers();
+  try {
+    await assert.rejects(
+      withRequestDeadline('explicit-first', 100, async () => {
+        markRequestCanceled('explicit-first');
+        await vi.advanceTimersByTimeAsync(100);
+        throw getRequestSignal('explicit-first')?.reason;
+      }),
+      (error: unknown) =>
+        isRequestCanceledError(error) && (error as AppError).details?.reason === 'request_canceled',
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test.each([false, true])(
@@ -168,12 +261,12 @@ test.each([false, true])(
           throw new Error('synchronous operation failed after blocking the event loop');
         }),
         (error: unknown) => {
-          assert.equal(error, signal.reason);
-          if (canceled) return isRequestCanceledError(error);
+          if (canceled) return error === signal.reason && isRequestCanceledError(error);
           return (
             error instanceof AppError &&
             error.details?.reason === 'daemon_request_timeout' &&
-            error.details.timeoutMs === 100
+            error.details.timeoutMs === 100 &&
+            isRequestCanceledError(signal.reason)
           );
         },
       );

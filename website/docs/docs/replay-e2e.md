@@ -6,14 +6,17 @@ title: Replay & E2E Testing
 
 Record a session as an `.ad` script, then run it again with `replay` or run a folder of scripts as an E2E suite with `test`.
 
-`replay` has a 60-second wall-clock budget. Use `replay workflow.ad --timeout 300000` to allow
-five minutes. The client allows another 30 seconds for the result. If the operation budget
-expires and an in-progress step settles after cancellation, a failed replay includes
-`details.reason: daemon_request_timeout` and `details.timeoutMs`. The daemon stays available. An
+`replay` has a 60-second wall-clock budget within a 90-second client timeout. Use
+`replay workflow.ad --timeout 300000` for a five-minute operation budget and a five-minute,
+30-second client timeout. At the budget, the running step receives the same cancellation as a
+canceled request. When it settles, a failed replay includes `details.reason: daemon_request_timeout`
+and `details.timeoutMs`. The daemon and other sessions stay available if it responds to the client. An
 authored `close` may already have ended its session. A failed replay keeps the failing script path
 and line. A replay that completes every step returns success even if it settles shortly after the
-deadline. A step that ignores cancellation
-can delay the result past the client timeout.
+deadline. Cancellation does not prove that native device work has stopped. If a step ignores
+cancellation beyond the remaining 30 seconds, the client may report a transport timeout. For a
+daemon that does not respond, the client's existing liveness check can reset it. Direct `test`
+runs keep their own timeout behavior.
 
 To run Maestro YAML flows or export `.ad` scripts to Maestro YAML, see [Run Maestro flows](/docs/run-maestro-flows).
 

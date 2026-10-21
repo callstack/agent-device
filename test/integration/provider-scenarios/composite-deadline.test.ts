@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import type {
   AndroidAdbExecutorResult,
   AndroidAdbProvider,
@@ -78,6 +80,77 @@ function deadlineAdbProvider(state: DeadlineAdbState): AndroidAdbProvider {
     },
   };
 }
+
+test('routed batch install reports its deadline and does not dispatch a later step', async () => {
+  let installStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    installStarted = resolve;
+  });
+  let installSignal: AbortSignal | undefined;
+  const actions: string[] = [];
+  const daemon = await createProviderScenarioHarness({
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+    androidAdbProvider: () => ({
+      exec: async (args) => {
+        if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'tap') {
+          actions.push('press');
+          return { exitCode: 0, stdout: '', stderr: '' };
+        }
+        if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'start')
+          return { exitCode: 0, stdout: 'Starting: Intent', stderr: '' };
+        return respondToAndroidSettingsAdbCommand([...args], '', '', {});
+      },
+      install: async (_apk, options) => {
+        actions.push('install');
+        installSignal = options?.signal;
+        installStarted();
+        assert.ok(installSignal, 'install must receive the routed request signal');
+        return await awaitGestureAbort(installSignal);
+      },
+    }),
+  });
+  try {
+    await daemon.client().apps.open({
+      app: 'com.android.settings',
+      platform: 'android',
+      serial: PROVIDER_SCENARIO_ANDROID.id,
+    });
+    const apkPath = path.join(daemon.stateDir, 'deadline-install.apk');
+    fs.writeFileSync(apkPath, 'fixture apk');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const pending = daemon.callCommand('batch', [], {
+      platform: 'android',
+      serial: PROVIDER_SCENARIO_ANDROID.id,
+      batchSteps: [
+        { command: 'press', positionals: ['20', '30'] },
+        { command: 'install', positionals: [apkPath] },
+        { command: 'press', positionals: ['40', '50'] },
+      ],
+    });
+    await Promise.race([
+      started,
+      pending.then((response) => assert.fail(JSON.stringify(response.json))),
+    ]);
+    assert.deepEqual(actions, ['press', 'install']);
+    await vi.advanceTimersByTimeAsync(60_000);
+    const response = await pending;
+    assert.equal(response.json.error?.data?.details?.reason, 'daemon_request_timeout');
+    expect(response.json.error.data.details).toMatchObject({
+      timeoutMs: 60_000,
+      executed: 1,
+      total: 3,
+      step: 2,
+      command: 'install',
+      partialResults: [{ step: 1, command: 'press', ok: true }],
+    });
+    assert.equal(installSignal?.aborted, true);
+    assert.equal(isRequestCanceledError(installSignal.reason), true);
+    assert.deepEqual(actions, ['press', 'install']);
+  } finally {
+    vi.useRealTimers();
+    await daemon.close();
+  }
+});
 
 test.each(['batch', 'replay'])(
   '%s deadline cancels Android longpress instrumentation and preserves its session',

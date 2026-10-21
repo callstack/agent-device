@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import type { ExecResult } from '@agent-device/host-kit/command';
+import { getRequestSignal, withRequestDeadline } from '@agent-device/host-kit/request';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { afterEach, test, vi } from 'vitest';
@@ -295,6 +296,38 @@ test('a canceled exchange whose command reached the runner settles only once its
   const commandId = sentCommandId(runner, 'longPress');
   assert.deepEqual(statusPolls(runner), [commandId, commandId]);
   assert.equal(requestsWhenSettled, runner.requests.length);
+  assert.equal(session.commandCharges.hasOutstandingCharges, false);
+});
+
+test('a daemon deadline follows the ordinary canceled exchange journal drain', async () => {
+  server = await startFakeRunnerServer({
+    longPress: [{ kind: 'hold' }],
+    status: [journalState('started'), journalState('completed')],
+  });
+  const runner = server;
+  const session = sessionFor(runner.port);
+  const requestId = `deadline-journal:${runner.port}`;
+
+  await assert.rejects(
+    withRequestDeadline(requestId, 25, async () => {
+      await executeRunnerExchange(
+        IOS_SIMULATOR,
+        session,
+        LONG_PRESS,
+        undefined,
+        10_000,
+        async () => {},
+        getRequestSignal(requestId),
+      );
+      return { ok: true };
+    }),
+    (error: unknown) =>
+      error instanceof Error &&
+      'details' in error &&
+      (error.details as { reason?: string }).reason === 'daemon_request_timeout',
+  );
+  const commandId = sentCommandId(runner, 'longPress');
+  assert.deepEqual(statusPolls(runner), [commandId, commandId]);
   assert.equal(session.commandCharges.hasOutstandingCharges, false);
 });
 
