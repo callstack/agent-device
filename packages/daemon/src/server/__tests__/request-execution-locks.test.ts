@@ -218,3 +218,45 @@ test('a second lock on the same Mac is taken while it is free, and other devices
   await holderRun;
   await expect(simRun).resolves.toBe('waited');
 });
+
+test('a nested request is refused a busy lock on its parent Mac but still waits for another device', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const holder = createRequestExecutionLocks({
+    locks,
+    initialKeys: ['device:mac:app:com.example.two', 'device:SIM-002'],
+  });
+  let releaseHolder: () => void = () => {};
+  const holderRun = holder.run(
+    async () =>
+      await new Promise<void>((resolve) => {
+        releaseHolder = resolve;
+      }),
+  );
+  const parent = createRequestExecutionLocks({
+    locks,
+    initialKeys: ['session:batch', 'device:mac:app:com.example.one'],
+  });
+
+  const outcomes = await parent.run(async () => {
+    // A batch step opening the other app takes the host and that app as its own initial locks.
+    const sameMac = createRequestExecutionLocks({
+      locks,
+      initialKeys: ['session:batch', 'device:mac', 'device:mac:app:com.example.two'],
+    });
+    const refused = await sameMac.run(async () => 'ran').catch((error: unknown) => error);
+    const otherDevice = createRequestExecutionLocks({ locks, initialKeys: ['device:SIM-002'] });
+    const waited = otherDevice.run(async () => 'waited');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    releaseHolder();
+    return [refused, await waited];
+  });
+  await holderRun;
+
+  expect(outcomes[0]).toMatchObject({
+    code: 'DEVICE_IN_USE',
+    details: { reason: 'DEVICE_EXECUTION_LOCK_BUSY', deviceId: 'mac:app:com.example.two' },
+  });
+  expect(outcomes[1]).toBe('waited');
+  // The refused step left nothing queued on the host.
+  expect(locks.has('device:mac')).toBe(false);
+});
