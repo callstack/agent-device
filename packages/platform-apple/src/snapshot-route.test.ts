@@ -90,6 +90,46 @@ test.for([presentSurface, 'unknown'] as const)(
   },
 );
 
+// A host process outlives what it presented: password AutoFill at sign-in leaves SafariViewService
+// running for the rest of the session. Only the runner's foreground read of every registered host may
+// keep such a capture on the bridge; any other answer keeps the runner route.
+test.for([
+  { foreground: 'background', bridge: true },
+  { foreground: 'foreground', bridge: false },
+  { foreground: 'unknown', bridge: false },
+] as const)(
+  'a running surface host the runner reads as $foreground keeps the bridge: $bridge',
+  async ({ foreground, bridge }) => {
+    const source = sourceReturning(bridgeAcquisition());
+    const fallback = vi.fn(async () => runnerResult());
+    const systemSurfaceForeground = vi.fn(async () => foreground);
+    const presentIosAcquisition = vi.fn(async () => ({
+      backend: 'xctest' as const,
+      producer: 'simulator-ax-bridge' as const,
+      nodes: [{ index: 0, type: 'Application' }],
+    }));
+    const host = {
+      ...platformRuntimeHostFixture(),
+      snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
+    };
+    const route = createAppleSnapshotRoute(host, {
+      source,
+      resolveTarget: vi.fn(async () => target),
+      systemSurfacePresent: async () => presentSurface,
+      systemSurfaceForeground,
+    });
+
+    await route.capture(ios, { ...input, execution: { requestId: 'req-1' } }, signal(), fallback);
+
+    expect(systemSurfaceForeground).toHaveBeenCalledWith(
+      ios,
+      expect.objectContaining({ requestId: 'req-1' }),
+    );
+    expect(source.acquire).toHaveBeenCalledTimes(bridge ? 1 : 0);
+    expect(fallback).toHaveBeenCalledTimes(bridge ? 0 : 1);
+  },
+);
+
 // The structural guarantee every comparison site downstream relies on (#2438): a surface capture is
 // lineaged to the HOST, not to the app (`target.targetId` here), so its comparison key cannot equal
 // an app capture's and no comparison site needs its own surface check.

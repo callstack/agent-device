@@ -34,6 +34,10 @@ import {
   type SimulatorSnapshotTargetResolver,
 } from './snapshot-target.ts';
 import {
+  createSystemSurfaceForegroundProbe,
+  type SystemSurfaceForegroundProbe,
+} from './system-surface-foreground.ts';
+import {
   createSystemSurfacePresenceProbe,
   type SystemSurfacePresenceProbe,
 } from './system-surface-presence.ts';
@@ -82,11 +86,14 @@ export function createAppleSnapshotRoute(
     source?: SimulatorSnapshotSource;
     resolveTarget?: SimulatorSnapshotTargetResolver;
     systemSurfacePresent?: SystemSurfacePresenceProbe;
+    systemSurfaceForeground?: SystemSurfaceForegroundProbe;
   }> = {},
 ): AppleSnapshotRoute {
   const source = options.source ?? createSimulatorSnapshotSource(host.hostEnvironment);
   const resolveTarget = options.resolveTarget ?? createSimulatorSnapshotTargetResolver();
   const systemSurfacePresent = options.systemSurfacePresent ?? createSystemSurfacePresenceProbe();
+  const systemSurfaceForeground =
+    options.systemSurfaceForeground ?? createSystemSurfaceForegroundProbe();
   const disabledGenerations = new Set<string>();
   const latestGeneration = new Map<string, string>();
   /**
@@ -133,7 +140,10 @@ export function createAppleSnapshotRoute(
           [unknownGenerationResidue()],
         );
       }
-      if (surfacePresence !== 'absent') {
+      if (
+        surfacePresence !== 'absent' &&
+        !(await isEverySurfaceHostInBackground(device, input, signal, systemSurfaceForeground))
+      ) {
         return await runSurfaceFallback(device, input, fallback, surfacePresence.host.bundleId);
       }
       let target: SimulatorSnapshotTarget;
@@ -220,6 +230,28 @@ export function createAppleSnapshotRoute(
       }
     },
   });
+}
+
+/**
+ * Whether the live runner reports every registered host off screen, which is what lets a capture
+ * whose host process is only lingering keep the bridge. Only a positive read decides: anything the
+ * probe could not establish keeps the runner route that serves a presented surface.
+ */
+async function isEverySurfaceHostInBackground(
+  device: DeviceInfo,
+  input: CaptureSnapshotInput,
+  signal: AbortSignal,
+  probe: SystemSurfaceForegroundProbe,
+): Promise<boolean> {
+  const requestId = input.execution?.requestId;
+  const foreground = await probe(device, { signal, ...(requestId ? { requestId } : {}) });
+  if (foreground !== 'background') return false;
+  emitDiagnostic({
+    level: 'debug',
+    phase: 'ios_snapshot_route_surface_host_background',
+    data: { deviceId: device.id },
+  });
+  return true;
 }
 
 /**

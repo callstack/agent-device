@@ -469,8 +469,15 @@ The runner never adopts the host as the cached session target.
 The session binding stays on the app.
 Thus, after the surface is gone, the next command resolves back to the app.
 On the Simulator, a cheap, device-scoped host-side probe checks for a registered host process that runs for the device.
-If such a host is running, the probe routes the capture to the runner instead of the bridge.
+If such a host is running, the route asks the live runner for the `XCUIApplication.state` of every registered host.
+This is the same foreground predicate that the runner uses to serve a surface in place.
+If every host reports a state other than foreground, the capture stays on the bridge.
+A host process outlives the surface it presented.
+For example, password AutoFill at sign-in leaves `SafariViewService` running for the rest of the session.
+Otherwise, the capture goes to the runner: a foreground host, an unreadable state, or no ready runner.
+The read never starts or replaces a runner.
 If no host is running, the bridge fast path is unchanged.
+Rejected: remembering a lingering verdict per host process. One process can present again.
 
 A presented surface also takes precedence over an explicitly requested bundle id.
 The runner checks for a presented host before it resolves or activates `command.appBundleId`.
