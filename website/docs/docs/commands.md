@@ -348,7 +348,7 @@ With the native backend, each app you open on the `app` surface is a device of i
 
 - Opens its app in the background, so the frontmost app stays in front.
 - Opens and closes only its own app. `open <url>` opens the link in that app. Use a new `--session` for another app or surface.
-- Refuses `clipboard` and `settings`, which change the whole Mac, with `UNSUPPORTED_OPERATION` (`reason: unsupported-device-scope`). Use a `--surface desktop` session for them.
+- Refuses `clipboard`, `settings`, and `audio probe`, which act on the whole Mac, with `UNSUPPORTED_OPERATION` (`reason: unsupported-device-scope`). Use a `--surface desktop` session for them.
 - Cannot see UI that another process shows, such as a system permission prompt.
 
 Copies of one app need distinct bundle ids. Screenshots run one at a time across the Mac. Use one agent-device version per claims directory.

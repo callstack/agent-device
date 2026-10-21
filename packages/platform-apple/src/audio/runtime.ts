@@ -9,6 +9,14 @@ import { isHostSystemAudioProbeDevice } from '@agent-device/contracts/audio-prob
  * so the physical cell is a stated refusal here, not an inherited one.
  */
 export function appleAudioProbeCaptureFact(device: DeviceInfo): RuntimeOperationFact {
+  // The probe samples the whole Mac's audio, which an app device does not hold (ADR 0035).
+  if (device.hostApp) {
+    return Object.freeze({
+      available: false,
+      reason: 'unsupported-device-scope' as const,
+      hint: 'This session holds one app of the Mac. Use a --surface desktop session for audio probe.',
+    });
+  }
   if (isHostSystemAudioProbeDevice(device)) return Object.freeze({ available: true });
   if (isMacOs(device) || (isIosFamily(device) && device.kind === 'simulator')) {
     return Object.freeze({

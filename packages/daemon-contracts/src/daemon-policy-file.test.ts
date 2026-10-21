@@ -115,3 +115,17 @@ test('every servesPublicCommand names a public command', () => {
   expect(served.length).toBeGreaterThan(0);
   for (const name of served) expect(publicNames.has(name)).toBe(true);
 });
+
+test('an allowed app device id matches the lowercase id app devices carry', () => {
+  const policy = parseDaemonPolicy(
+    {
+      version: 1,
+      devices: { allow: [{ udid: 'host-mac:app:com.apple.TextEdit' }, { udid: 'SIM-A' }] },
+    },
+    '/etc/agent-device/policy.json',
+  );
+  expect([...(policy.deviceIds ?? [])].sort()).toEqual([
+    'SIM-A',
+    'host-mac:app:com.apple.textedit',
+  ]);
+});

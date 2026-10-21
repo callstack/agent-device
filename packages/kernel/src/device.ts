@@ -85,6 +85,13 @@ export function hostDeviceIdOf(deviceId: string): string {
   return infix < 0 ? deviceId : deviceId.slice(0, infix);
 }
 
+/** A device id as devices carry it: the bundle part of an app device id is lowercase. */
+export function canonicalDeviceId(deviceId: string): string {
+  const hostDeviceId = hostDeviceIdOf(deviceId);
+  if (hostDeviceId === deviceId) return deviceId;
+  return hostAppDeviceId(hostDeviceId, deviceId.slice(hostDeviceIdPrefix(hostDeviceId).length));
+}
+
 /** The id prefix every app device of `hostDeviceId` shares. */
 export function hostDeviceIdPrefix(hostDeviceId: string): string {
   return `${hostDeviceId}${HOST_APP_DEVICE_ID_INFIX}`;

@@ -692,7 +692,7 @@ Rules:
   macOS snapshot rects are window-space; use current refs or overlay refs instead of guessing coordinates.
   On the default XCTest backend a read (snapshot, get, find) of a session app that sits behind other windows is answered from where it sits, without raising the app; interactions and a window-level screenshot of that app still bring it forward.
   With AGENT_DEVICE_MACOS_APP_BACKEND=native, each app opened on the app surface is its own device: sessions on different apps run in parallel; a same-app or whole-Mac (desktop, menubar, frontmost-app) session conflicts.
-  An app session opens its app in the background and opens or closes only that app (open <url> goes to it). It refuses clipboard and settings; use a --surface desktop session for those, or a new --session for another app.`,
+  An app session opens its app in the background and opens or closes only that app (open <url> goes to it). It refuses clipboard, settings, and audio probe; use a --surface desktop session for those, or a new --session for another app.`,
   },
   web: {
     summary: 'Minimal browser workflow with the managed web backend',

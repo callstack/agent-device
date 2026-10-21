@@ -4,6 +4,7 @@ import path from 'node:path';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import type { CommandDescriptor } from '@agent-device/command-registry/types';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { canonicalDeviceId } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 
 /**
@@ -131,7 +132,8 @@ function parseDevices(value: unknown, sourcePath: string): ReadonlySet<string> {
       if (ids.length !== 1 || typeof ids[0] !== 'string' || !ids[0].trim()) {
         throw invalidPolicy(sourcePath, `"${label}" must name exactly one "udid" or "serial"`);
       }
-      return ids[0].trim();
+      // An app device id matches the id devices carry, whatever case its bundle part is written in.
+      return canonicalDeviceId(ids[0].trim());
     }),
   );
 }

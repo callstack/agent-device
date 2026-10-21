@@ -1,12 +1,13 @@
 import { normalizeBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import type {
+  AppDeviceResolver,
   ComposedDeviceInventoryGateways,
   DeviceInventoryGateway,
   ProviderAwareDeviceInventoryGateway,
 } from '@agent-device/contracts/platform-module';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { hostDeviceIdOf, hostDeviceIdPrefix, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import {
   resolveDaemonPolicyCommandName,
   type DaemonPolicy,
@@ -133,7 +134,21 @@ export function restrictDeviceInventoryToDaemonPolicy(
     discover: async (request, scope) => (await discoverWithSource(request, scope)).devices,
     discoverWithSource,
   });
-  return Object.freeze({ ...gateways, localOnly, providerFirst });
+  const inner = gateways.resolveAppDevice;
+  // On a host the policy does not allow, resolving an app name must not report what the host has
+  // installed: a failed resolution leaves the host selected, which binding then refuses.
+  const resolveAppDevice: AppDeviceResolver | undefined = inner
+    ? async (host, appTarget) => {
+        if (isDeviceAllowedByDaemonPolicy(policy, host)) return await inner(host, appTarget);
+        try {
+          return await inner(host, appTarget);
+        } catch (error) {
+          if (isRequestCanceledError(error)) throw error;
+          return undefined;
+        }
+      }
+    : undefined;
+  return Object.freeze({ ...gateways, localOnly, providerFirst, resolveAppDevice });
 }
 
 function assertCommandAdmitted(policy: DaemonPolicy, command: string): void {

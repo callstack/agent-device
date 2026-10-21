@@ -32,8 +32,9 @@ Accepted (2026-10-21). Applies to the native macOS app backend (ADR 0031) only.
    this daemon's own. An unreadable claim file refuses a host acquisition.
 5. An app device acts on its own app only. It opens in the background (`open -g`), so the frontmost
    app and every other session's app stay where they are. It opens and closes only its own app, and
-   a link alone opens in that app. It keeps the `app` surface. The clipboard and host settings belong
-   to the whole Mac, so an app device refuses them with `reason: 'unsupported-device-scope'`.
+   a link alone opens in that app. It keeps the `app` surface. The clipboard, host settings, and the
+   system audio probe belong to the whole Mac, so an app device refuses them with
+   `reason: 'unsupported-device-scope'`.
 6. A `macos-app` lease (ADR 0007) binds the app device of its bundle and takes its claim like any
    other session.
 7. Helper screenshots take a host-wide lock (`macos-screen-capture.lock` in the claims directory) for

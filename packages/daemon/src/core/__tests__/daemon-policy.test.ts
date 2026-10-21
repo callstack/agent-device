@@ -18,7 +18,11 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
-import { assertDaemonPolicyAdmitsRequest } from '../daemon-policy.ts';
+import {
+  assertDaemonPolicyAdmitsRequest,
+  restrictDeviceInventoryToDaemonPolicy,
+} from '../daemon-policy.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { hostDiagnosticsFixture } from '../../__tests__/support/host-diagnostics-fixture.ts';
@@ -387,4 +391,30 @@ test('a policy that allows one app of the Mac admits that app only, never the wh
     expectPolicyDenied(await handler(denied), 'device');
   }
   expect(bind).not.toHaveBeenCalled();
+});
+
+test('on a Mac the policy does not allow, app resolution reports nothing the Mac has installed', async () => {
+  const gateways = restrictDeviceInventoryToDaemonPolicy(
+    createTestDeviceInventoryGateways({
+      resolveAppDevice: async () => {
+        throw new AppError('AMBIGUOUS_MATCH', 'Multiple apps matched "Notes"', {
+          matches: ['com.apple.Notes', 'com.example.notes'],
+        });
+      },
+    }),
+    policy({ devices: { allow: [{ udid: TEXT_EDIT.id }] } }),
+  );
+  await expect(gateways.resolveAppDevice!(MACOS_DEVICE, 'Notes')).resolves.toBeUndefined();
+
+  const hostAllowed = restrictDeviceInventoryToDaemonPolicy(
+    createTestDeviceInventoryGateways({
+      resolveAppDevice: async () => {
+        throw new AppError('APP_NOT_INSTALLED', 'No app found matching "Notes"');
+      },
+    }),
+    policy({ devices: { allow: [{ udid: MACOS_DEVICE.id }] } }),
+  );
+  await expect(hostAllowed.resolveAppDevice!(MACOS_DEVICE, 'Notes')).rejects.toMatchObject({
+    code: 'APP_NOT_INSTALLED',
+  });
 });
