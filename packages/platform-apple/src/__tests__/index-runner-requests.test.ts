@@ -58,6 +58,17 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
   'ios-simulator.interactions-focus.synthesized': [IOS_SIMULATOR, (i) => i.focus(10, 20)],
   'macos.interactions-focus.coordinate': [MACOS_DEVICE, (i) => i.focus(10, 20)],
   'ios-simulator.interactions-single-press-tap.synthesized': [IOS_SIMULATOR, press()],
+  'ios-simulator.interactions-single-press-tap.text-input-evidence': [
+    IOS_SIMULATOR,
+    press({
+      coordinateTapTextInputEvidence: {
+        source: 'selector-capture',
+        targetBundleId: APP,
+        point: { x: 10, y: 20 },
+        textInputRects: [{ x: 0, y: 100, width: 200, height: 44 }],
+      },
+    }),
+  ],
   'macos.interactions-single-press-tap.coordinate': [MACOS_DEVICE, press()],
   'ios-simulator.interactions-tap-element-selector.expected-point': [
     IOS_SIMULATOR,
