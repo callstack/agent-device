@@ -109,6 +109,8 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSTimeInterval textEntryBurstMinGap;
 @property(nonatomic, assign) NSTimeInterval textEntryAcknowledgeWindowSeconds;
 @property(nonatomic, strong) NSLayoutConstraint *textEntryFieldTop;
+@property(nonatomic, weak) UITextField *textEntryField;
+@property(nonatomic, weak) UITextField *mixedTextInputField;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @property(nonatomic, strong) NSTimer *alertBannerRepost;
@@ -545,18 +547,36 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   }
   if ((codeComplete && [arguments containsObject:@"--agent-device-text-entry-auto-submit"]) ||
       (textField.text.length > 0 && [arguments containsObject:@"--agent-device-text-entry-replace-after-input"])) {
-    UITextField *nextScreenField = [[UITextField alloc] initWithFrame:textField.frame];
-    if (![arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
-      nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
-    }
-    nextScreenField.borderStyle = UITextBorderStyleRoundedRect;
-    [textField.superview addSubview:nextScreenField];
-    [textField removeFromSuperview];
-    [nextScreenField becomeFirstResponder];
+    [self replaceTextEntryFieldWithNextScreenInput:textField];
   } else if (codeComplete &&
              [arguments containsObject:@"--agent-device-text-entry-auto-submit-without-successor"]) {
     [textField removeFromSuperview];
   }
+}
+
+- (void)replaceTextEntryFieldWithNextScreenInput:(UITextField *)textField {
+  UITextField *nextScreenField = [[UITextField alloc] initWithFrame:textField.frame];
+  if (![NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
+    nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
+  }
+  nextScreenField.borderStyle = UITextBorderStyleRoundedRect;
+  [textField.superview addSubview:nextScreenField];
+  [textField removeFromSuperview];
+  [nextScreenField becomeFirstResponder];
+}
+
+// The same navigation as `replace-after-input`, landing when a test presses the button instead of on
+// an edit, so the test decides which runner step it lands between.
+- (void)agentDeviceTextEntryReplaceDidPress:(UIButton *)sender {
+  (void)sender;
+  if (self.textEntryField.superview != nil) {
+    [self replaceTextEntryFieldWithNextScreenInput:self.textEntryField];
+  }
+}
+
+- (void)agentDeviceMixedTextInputRemoveFieldDidPress:(UIButton *)sender {
+  (void)sender;
+  [self.mixedTextInputField removeFromSuperview];
 }
 
 // Stops answering the element-type query that found it, the moment it takes focus, under
@@ -689,6 +709,31 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     }
   }
 
+  // A text field ahead of two search fields among all text inputs. Removing the text field moves the
+  // second search field into the first one's position among all text inputs, but not among search
+  // fields. A search bar's field reads as a search field; a bare `UISearchTextField` reads as a text
+  // field.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-mixed-text-inputs"]) {
+    UITextField *field = [[UITextField alloc] initWithFrame:CGRectMake(40, 120, 260, 44)];
+    field.accessibilityIdentifier = @"mixed-text";
+    field.borderStyle = UITextBorderStyleRoundedRect;
+    [self.view addSubview:field];
+    self.mixedTextInputField = field;
+    for (NSUInteger index = 0; index < 2; index++) {
+      UISearchBar *search = [[UISearchBar alloc] initWithFrame:CGRectMake(40, 180 + index * 60, 260, 44)];
+      search.searchTextField.accessibilityIdentifier = @[@"mixed-search-a", @"mixed-search-b"][index];
+      [self.view addSubview:search];
+    }
+    UIButton *removeField = [UIButton buttonWithType:UIButtonTypeSystem];
+    removeField.frame = CGRectMake(40, 320, 260, 44);
+    removeField.accessibilityIdentifier = @"mixed-remove-text";
+    [removeField setTitle:@"Remove text field" forState:UIControlStateNormal];
+    [removeField addTarget:self
+                    action:@selector(agentDeviceMixedTextInputRemoveFieldDidPress:)
+          forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:removeField];
+  }
+
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {
     BOOL digitCountValue =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-digit-count-value"];
@@ -738,6 +783,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         forControlEvents:UIControlEventEditingChanged];
     textField.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:textField];
+    self.textEntryField = textField;
     self.textEntryFieldTop = [textField.topAnchor constraintEqualToAnchor:label.bottomAnchor
                                                                  constant:AgentDeviceTextEntryFieldTopInset];
     [NSLayoutConstraint activateConstraints:@[
@@ -799,6 +845,21 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [self.tapWitnessStatus.topAnchor constraintEqualToAnchor:witness.bottomAnchor constant:12],
       ]];
       [self updateTapWitnessStatus];
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-replace-on-request"]) {
+      // Above the title, so the software keyboard never covers it.
+      UIButton *replace = [UIButton buttonWithType:UIButtonTypeSystem];
+      replace.accessibilityIdentifier = @"agent-device-text-entry-replace";
+      [replace setTitle:@"Replace input" forState:UIControlStateNormal];
+      replace.translatesAutoresizingMaskIntoConstraints = NO;
+      [replace addTarget:self
+                  action:@selector(agentDeviceTextEntryReplaceDidPress:)
+        forControlEvents:UIControlEventTouchUpInside];
+      [self.view addSubview:replace];
+      [NSLayoutConstraint activateConstraints:@[
+        [replace.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [replace.bottomAnchor constraintEqualToAnchor:label.topAnchor constant:-24],
+      ]];
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unqueryable-on-focus"]) {
       self.textEntryFocusWitness = [[UILabel alloc] init];

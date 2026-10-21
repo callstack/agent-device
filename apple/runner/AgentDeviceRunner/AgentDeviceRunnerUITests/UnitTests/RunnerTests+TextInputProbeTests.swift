@@ -85,6 +85,41 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: failures))
   }
 
+  // The lookup reads its candidates through one query for every text input type. The text field
+  // ahead of both search fields in that query leaves the app after the lookup read it, which moves
+  // the second search field into the first one's position. The input the lookup hands out for the
+  // point must still be the second search field, whose snapshot it read, and not the first.
+  @MainActor
+  func testTextInputLookupKeepsItsInputWhenAnEarlierInputOfAnotherTypeLeaves() throws {
+    app.launchArguments = ["--agent-device-mixed-text-inputs"]
+    app.launch()
+    defer {
+      textInputCandidateReadForTesting = nil
+      app.terminate()
+    }
+    let field = app.textFields["mixed-text"]
+    let second = app.searchFields["mixed-search-b"]
+    XCTAssertTrue(second.waitForFixtureExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(field.exists)
+    let frame = second.frame
+    let removeField = app.buttons["mixed-remove-text"]
+    var removals = 0
+    textInputCandidateReadForTesting = { position in
+      guard position == 0, removals == 0 else { return }
+      removals += 1
+      removeField.tap()
+    }
+
+    let input = try XCTUnwrap(textInputAt(app: app, x: frame.midX, y: frame.midY))
+    textInputCandidateReadForTesting = nil
+
+    XCTAssertEqual(removals, 1)
+    XCTAssertFalse(field.exists)
+    XCTAssertEqual(input.snapshot?.identifier, "mixed-search-b")
+    XCTAssertEqual(input.element.identifier, "mixed-search-b")
+    XCTAssertEqual(input.element.frame, frame)
+  }
+
   func testTextInputProbeContainmentExcludesRequiredReadsAndLaterIssues() {
     app.launchArguments = ["--agent-device-text-entry-regression"]
     app.launch()

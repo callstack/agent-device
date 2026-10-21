@@ -247,6 +247,13 @@ extension RunnerTests {
       )
     }
 
+    func pauseAfterWarmupRead() {
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      textEntryWarmupPauseForTesting?()
+#endif
+      sleepFor(TextEntryTiming.pollInterval)
+    }
+
     func readBackWarmupCharacter(_ peeledCharacter: String) {
       // A route with an element reads the peeled character back and waits up to `warmupValueTimeout`
       // for the app to accept it. The route that had to be budgeted has no element, so its expected
@@ -265,13 +272,18 @@ extension RunnerTests {
         // Each read refreshes the target from the field as the character left it.
         let input = resolveTextEntryInput(app: app, target: activeTarget)
         activeTarget = activeTarget.withResolvedInput(input)
-        undispatchedRead = input
         let observed = textValueRead(for: input?.attributes)
-        if !observed.warmupReadIsPending(expectedText: warmupExpectedText) {
-          if observed == .unreadable { sleepFor(TextEntryTiming.pollInterval) }
+        guard observed.warmupReadIsPending(expectedText: warmupExpectedText) else {
+          if observed == .unreadable {
+            pauseAfterWarmupRead()
+          } else {
+            // The next post follows this read directly, so it can type into it. After a pause the app
+            // may have replaced the input, so the next post resolves the target again.
+            undispatchedRead = input
+          }
           return
         }
-        sleepFor(TextEntryTiming.pollInterval)
+        pauseAfterWarmupRead()
       }
     }
 

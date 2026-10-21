@@ -186,20 +186,64 @@ extension RunnerTests {
     // Each handle binds by index within its own element type, so an input of another type that
     // appears ahead of it later does not take its place.
     var indexByType: [XCUIElement.ElementType: Int] = [:]
-    return candidates.compactMap { element -> ResolvedTextEntryInput? in
-      guard !shouldStop(), element.exists else { return nil }
+    var inputs: [ResolvedTextEntryInput] = []
+    for (position, element) in candidates.enumerated() {
+      if shouldStop() { break }
+      guard element.exists else { continue }
       let snapshot = try? element.snapshot()
       let elementType = snapshot?.elementType ?? element.elementType
       let typeIndex = indexByType[elementType, default: 0]
       indexByType[elementType] = typeIndex + 1
-      let input = ResolvedTextEntryInput(
-        element: app.descendants(matching: elementType).element(boundBy: typeIndex),
-        snapshot: snapshot
-      )
-      let attributes = input.attributes
-      return isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point)
-        ? input
-        : nil
-    }.sorted { smallestElementFirst($0.attributes, $1.attributes) }
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      textInputCandidateReadForTesting?(position)
+#endif
+      let handle = app.descendants(matching: elementType).element(boundBy: typeIndex)
+      let candidate = ResolvedTextEntryInput(element: handle, snapshot: snapshot)
+      let attributes = candidate.attributes
+      guard isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) else {
+        continue
+      }
+      guard let snapshot else {
+        inputs.append(candidate)
+        continue
+      }
+      // Each candidate re-runs the shared query, so an input that left the app since an earlier
+      // candidate's read shifts the positions after it, and the per-type count no longer names the
+      // input this candidate read. The handle must read as that input, or no position can be trusted.
+      guard let handleSnapshot = try? handle.snapshot(), Self.isSameTextInput(handleSnapshot, as: snapshot) else {
+        return queryTextInputsByType(app: app, point: point, shouldStop: shouldStop)
+      }
+      inputs.append(ResolvedTextEntryInput(element: handle, snapshot: handleSnapshot))
+    }
+    return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
+  }
+
+  /// `queryTextInputs` with one query per element type, whose handles each read through their own
+  /// snapshot, for a lookup whose shared query changed while it read the candidates.
+  private func queryTextInputsByType(
+    app: XCUIApplication,
+    point: CGPoint,
+    shouldStop: () -> Bool
+  ) -> [ResolvedTextEntryInput] {
+    NSLog("AGENT_DEVICE_RUNNER_TEXT_INPUT_LOOKUP_BY_TYPE reason=inputs-changed-during-lookup")
+    var inputs: [ResolvedTextEntryInput] = []
+    for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {
+      for element in query.allElementsBoundByIndex {
+        guard !shouldStop() else { return [] }
+        guard element.exists else { continue }
+        let input = ResolvedTextEntryInput(element: element, snapshot: try? element.snapshot())
+        let attributes = input.attributes
+        if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) {
+          inputs.append(input)
+        }
+      }
+    }
+    return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
+  }
+
+  private static func isSameTextInput(_ read: XCUIElementSnapshot, as candidate: XCUIElementSnapshot) -> Bool {
+    read.elementType == candidate.elementType
+      && read.identifier == candidate.identifier
+      && read.frame == candidate.frame
   }
 }
