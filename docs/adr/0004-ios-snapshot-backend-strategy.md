@@ -476,7 +476,9 @@ For example, password AutoFill at sign-in leaves `SafariViewService` running for
 If a host reports foreground, the capture goes to the runner.
 The read never starts or replaces a runner.
 If no runner is ready or the read fails, a device-scoped host-side probe checks for a registered host process that runs for the device.
-If such a process is running, the capture goes to the runner. Otherwise, it stays on the bridge.
+If such a process is running, the capture goes to the runner.
+If no such process is running, the capture stays on the bridge.
+If the probe cannot answer, the capture goes to the runner with the reason `system-surface-probe-unavailable`.
 The runner read comes first because the probe spawns processes on every capture.
 Rejected: remembering a lingering verdict per host process. One process can present again.
 
