@@ -55,10 +55,7 @@ export async function runStaleDeviceClaimRelease(
       scope: createRecoveryPlatformScope(),
       composeGateway: createClaimRecoveryGatewayFor(host),
       composeRecovery,
-      beforeGateway: (claim) => {
-        const inspection = inspectDeviceClaimRecovery(claim);
-        return inspection.status === 'retained' ? inspection : undefined;
-      },
+      beforeGateway: inspectDeviceClaimRecovery,
     }),
   });
 }

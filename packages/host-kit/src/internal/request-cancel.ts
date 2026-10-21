@@ -216,7 +216,7 @@ export async function withRequestDeadline(
     ? undefined
     : registerRequestAbort(requestId);
   const controller = requestAbortControllers().get(requestId)!;
-  const deadlineMs = controller.executionDeadlineMs ?? Date.now() + timeoutMs;
+  const deadlineMs = Math.min(controller.executionDeadlineMs ?? Infinity, Date.now() + timeoutMs);
   controller.executionDeadlineMs = deadlineMs;
   let deadlineCanceled = false;
   const expire = () => {
