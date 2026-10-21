@@ -14,6 +14,7 @@ import {
 } from '@agent-device/selectors';
 import { resolveWaitBudgetMs } from './wait-positionals.ts';
 import {
+  COMPOSITE_TIMEOUT_POLICIES,
   DEFAULT_TIMEOUT_POLICY,
   FOLD_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
@@ -859,12 +860,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       skipSessionlessProviderDevice: isShardedTestRequest,
       saveScriptFlagOwner: true,
     },
-    // The daemon owns the operation budget; the client leaves time for its typed result.
-    timeoutPolicy: {
-      ...DEFAULT_TIMEOUT_POLICY,
-      daemonDeadlineMs: 60_000,
-      budget: { source: 'flag', envelope: 'margin' },
-    },
+    timeoutPolicy: COMPOSITE_TIMEOUT_POLICIES.replay,
     batchable: false,
     // Every native and Maestro action re-enters the daemon request pipeline under the delegated
     // command descriptor. Maestro viewport reads do the same through `runtime gesture-viewport`,
@@ -1085,7 +1081,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'session', refFrameEffect: 'delegated', appLease: 'allowed' },
-    timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, daemonDeadlineMs: 60_000 },
+    timeoutPolicy: COMPOSITE_TIMEOUT_POLICIES.batch,
     batchable: false,
     // Wave 6 residue: every step runs as its own daemon request under its own descriptor, which
     // is what `refFrameEffect: 'delegated'` already says. `batch` itself reaches no device.

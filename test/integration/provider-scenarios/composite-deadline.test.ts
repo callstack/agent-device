@@ -20,6 +20,8 @@ test.each(['batch', 'replay'])(
     });
     let signal: AbortSignal | undefined;
     let retired = false;
+    let diagnosticCaptureAfterAbort = false;
+    let pendingDeadlineResult = true;
     const completedActions: string[] = [];
     let searchText = '';
     const daemon = await createProviderScenarioHarness({
@@ -45,6 +47,10 @@ test.each(['batch', 'replay'])(
             return await new Promise<never>((_resolve, reject) => {
               signal!.addEventListener('abort', () => reject(signal!.reason), { once: true });
             });
+          }
+          if (pendingDeadlineResult && signal?.aborted && args.includes('instrument')) {
+            diagnosticCaptureAfterAbort = true;
+            throw new Error('post-failure snapshot transport is stalled');
           }
           if (args.includes('force-stop')) {
             if (signal?.aborted) retired = true;
@@ -106,6 +112,7 @@ test.each(['batch', 'replay'])(
       assert.deepEqual(completedActions, ['press', 'fill']);
       await vi.advanceTimersByTimeAsync(timeoutMs);
       const response = await pending;
+      pendingDeadlineResult = false;
       assert.equal(
         response.json.error?.data?.details?.reason,
         'daemon_request_timeout',
@@ -130,6 +137,7 @@ test.each(['batch', 'replay'])(
         });
       }
       assert.equal(signal?.aborted, true);
+      assert.equal(diagnosticCaptureAfterAbort, false);
       assert.equal(
         retired,
         true,

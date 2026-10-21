@@ -46,6 +46,7 @@ export async function buildReplayBackendActionFailureResponse(
         observationStore,
         logPath,
         action: captureAction,
+        signal: requestSignal,
       })
     : {
         state: 'unavailable' as const,

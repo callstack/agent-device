@@ -47,6 +47,20 @@ export const DEFAULT_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   onTimeout: 'reset-daemon',
 };
 
+/** Composite work gets 60 seconds; its client envelope keeps 30 seconds for the result. */
+const COMPOSITE_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  ...DEFAULT_TIMEOUT_POLICY,
+  daemonDeadlineMs: 60_000,
+};
+
+export const COMPOSITE_TIMEOUT_POLICIES = {
+  batch: COMPOSITE_TIMEOUT_POLICY,
+  replay: {
+    ...COMPOSITE_TIMEOUT_POLICY,
+    budget: { source: 'flag', envelope: 'margin' },
+  },
+} satisfies Record<'batch' | 'replay', CommandTimeoutPolicy>;
+
 /**
  * Covers the fold route's worst-case ledger (display inventory, fold-helper preparation, HID
  * dispatch, hinge settle reads, final display inventory) plus the daemon-result margin. Proven by

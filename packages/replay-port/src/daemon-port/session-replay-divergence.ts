@@ -107,6 +107,7 @@ export async function buildReplayFailureDivergence(params: {
         observationStore,
         logPath,
         action,
+        signal,
       })
     : ({
         state: 'unavailable',
@@ -254,14 +255,16 @@ export async function captureDivergenceObservation(params: {
   logPath: string;
   action: ReplayReportAction;
   retryLaunchRace?: boolean;
+  signal?: AbortSignal;
 }): Promise<DivergenceObservation> {
-  const { session, observationStore, logPath, action, retryLaunchRace = false } = params;
+  const { session, observationStore, logPath, action, retryLaunchRace = false, signal } = params;
+  if (signal?.aborted) return canceledDivergenceObservation();
   const flags = divergenceCaptureFlags(action);
   // Anchored BEFORE the first attempt, not after: a slow first capture
   // shrinks the retry budget rather than getting a free `DEADLINE_MS` on top
   // of however long it took.
   const deadline = Date.now() + DIVERGENCE_CAPTURE_RETRY_DEADLINE_MS;
-  const observation = observationStore.bindAuthority();
+  const observation = observationStore.bindAuthority(signal);
 
   let attempt = await captureDivergenceObservationAttempt({
     session,
@@ -276,6 +279,7 @@ export async function captureDivergenceObservation(params: {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) break;
     await sleep(Math.min(delayMs, remainingMs));
+    if (signal?.aborted) return canceledDivergenceObservation();
     attempt = await captureDivergenceObservationAttempt({
       session,
       observation,
@@ -285,6 +289,14 @@ export async function captureDivergenceObservation(params: {
   }
 
   return attempt.observation;
+}
+
+function canceledDivergenceObservation(): DivergenceObservation {
+  return {
+    state: 'unavailable',
+    reason: 'request-canceled',
+    hint: 'Post-failure snapshot skipped after request cancellation; the original replay failure is unaffected.',
+  };
 }
 
 type DivergenceCaptureAttempt = {
