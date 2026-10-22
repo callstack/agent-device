@@ -618,7 +618,7 @@ const gestureCommandFacet = defineCommandFacet({
   text: {
     summary: 'Run pan, fling, swipe, pinch, rotate, transform, tap, or drag gestures',
     cliDetail:
-      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
+      'Argument shapes: pan <x> <y> <dx> <dy> [durationMs] [--hold-ms <ms>], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs], tap <x1> <y1> <x2> <y2> [... <x5> <y5>] [--hold-ms <ms>] [--count <n>] [--pause-ms <ms>], or drag <source-selector|pinned-ref> <destination-selector|pinned-ref> [sourceHoldMs] [moveMs] [destinationHoldMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
   },
   metadata: metadata('gesture'),
   run: (client, input) =>

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buildDragGesturePlan, singlePointerPlanEndpoints } from './gesture-plan.ts';
+import {
+  buildDragGesturePlan,
+  buildGesturePlan,
+  singlePointerPlanEndpoints,
+} from './gesture-plan.ts';
 
 const DRAG_PROPERTY_RUNS = 100;
 
@@ -78,4 +82,30 @@ test('every drag plan preserves ordered samples and exact hold/move endpoints', 
       assert.ok(samples[index]!.offsetMs >= samples[index - 1]!.offsetMs);
     }
   }
+});
+
+test('a single-pointer pan with holdMs holds the origin still, then moves over durationMs', () => {
+  const viewport = { x: 0, y: 0, width: 400, height: 800 };
+  const pan = { intent: 'pan', origin: { x: 20, y: 30 }, delta: { x: 100, y: 200 } } as const;
+  const held = buildGesturePlan({ ...pan, durationMs: 700, holdMs: 350 }, viewport, 'android');
+  assert.equal(held.topology, 'single');
+  assert.equal(held.durationMs, 1_050);
+  assert.deepEqual(held.pointers[0]?.samples, [
+    { offsetMs: 0, point: { x: 20, y: 30 } },
+    { offsetMs: 350, point: { x: 20, y: 30 } },
+    { offsetMs: 1_050, point: { x: 120, y: 230 } },
+  ]);
+  const plain = buildGesturePlan({ ...pan, durationMs: 700 }, viewport, 'android');
+  assert.deepEqual(plain.pointers[0]?.samples, [
+    { offsetMs: 0, point: { x: 20, y: 30 } },
+    { offsetMs: 700, point: { x: 120, y: 230 } },
+  ]);
+  assert.throws(() => buildGesturePlan({ ...pan, holdMs: 9_600 }, viewport), {
+    code: 'INVALID_ARGS',
+    message: 'gesture pan holdMs plus durationMs must be at most 10000',
+  });
+  assert.throws(() => buildGesturePlan({ ...pan, pointerCount: 2, holdMs: 300 }, viewport), {
+    code: 'INVALID_ARGS',
+    message: 'gesture pan holdMs requires a single pointer',
+  });
 });

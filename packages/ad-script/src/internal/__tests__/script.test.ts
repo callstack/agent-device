@@ -944,10 +944,7 @@ test('an .ad gesture line refuses a flag its kind does not read, as the CLI does
       'gesture tap 80 300 200 450 --pointer-count 3',
       'gesture tap does not read --pointer-count (line 1).',
     ],
-    [
-      'gesture pan 100 400 0 -200 500 --hold-ms 40',
-      'gesture pan does not read --hold-ms (line 1).',
-    ],
+    ['gesture fling up 100 400 --hold-ms 40', 'gesture fling does not read --hold-ms (line 1).'],
   ] as const) {
     assert.throws(() => parseReplayScriptDetailed(`${line}\n`), { code: 'INVALID_ARGS', message });
   }

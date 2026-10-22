@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   describeReplayGestureArityError,
+  describeReplayGestureFlagError,
   gesturePayloadFromPositionals,
   gesturePayloadToPositionals,
   normalizeGestureCommandInput,
@@ -9,6 +10,7 @@ import {
   normalizePublicSwipeMotion,
   swipePayloadFromPositionals,
 } from './gesture-normalization.ts';
+import { buildGesturePlan } from './gesture-plan.ts';
 
 test('CLI and .ad positionals normalize at one explicit syntax seam', () => {
   assert.deepEqual(
@@ -333,4 +335,37 @@ test('an .ad tap line with an odd coordinate count reports its source', () => {
     describeReplayGestureArityError('gesture', ['tap', '10', '20', '30'], 'line 4'),
     'gesture tap accepts 4 to 10 arguments: x1 y1 x2 y2 [x3 y3 [x4 y4 [x5 y5]]] (line 4).',
   );
+});
+
+test('a pan --hold-ms line reads the hold, keeps it out of the positionals, and plans it', () => {
+  const payload = gesturePayloadFromPositionals(['pan', '20', '30', '0', '200', '400'], {
+    holdMs: 600,
+  });
+  assert.deepEqual(payload, {
+    kind: 'pan',
+    origin: { x: 20, y: 30 },
+    delta: { x: 0, y: 200 },
+    pointerCount: undefined,
+    durationMs: 400,
+    holdMs: 600,
+  });
+  assert.deepEqual(gesturePayloadToPositionals(payload), ['pan', '20', '30', '0', '200', '400']);
+  assert.equal(
+    describeReplayGestureFlagError(
+      'gesture',
+      ['pan', '20', '30', '0', '200'],
+      { holdMs: 600 },
+      'line 1',
+    ),
+    undefined,
+  );
+  const { gesture } = normalizePublicGesture(payload);
+  assert.equal(gesture.intent === 'pan' ? gesture.holdMs : undefined, 600);
+  const plan = buildGesturePlan(gesture, { x: 0, y: 0, width: 400, height: 800 }, 'ios');
+  assert.equal(plan.durationMs, 1_000);
+  assert.deepEqual(plan.pointers[0]?.samples, [
+    { offsetMs: 0, point: { x: 20, y: 30 } },
+    { offsetMs: 600, point: { x: 20, y: 30 } },
+    { offsetMs: 1_000, point: { x: 20, y: 230 } },
+  ]);
 });

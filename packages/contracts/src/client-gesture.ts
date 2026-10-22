@@ -92,6 +92,8 @@ export type PanOptions = DeviceCommandBaseOptions & {
   dy: number;
   pointerCount?: GesturePointerCount;
   durationMs?: number;
+  /** Single-pointer pan only: hold still at the origin this long before moving. */
+  holdMs?: number;
 };
 
 export type DragOptions = DeviceCommandBaseOptions & Omit<DragGesturePayload, 'kind'>;

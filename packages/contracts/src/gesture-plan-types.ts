@@ -15,6 +15,7 @@ export type GestureContactCount = 1 | 2 | 3 | 4 | 5;
 
 export const GESTURE_DURATION_MIN_MS = 16;
 export const GESTURE_DURATION_MAX_MS = 10_000;
+export const DEFAULT_PAN_DURATION_MS = 500;
 export const DEFAULT_DRAG_SOURCE_HOLD_MS = 800;
 export const DEFAULT_DRAG_MOVE_MS = 500;
 export const DEFAULT_DRAG_DESTINATION_HOLD_MS = 0;
@@ -48,6 +49,7 @@ export type GestureSemanticInput =
       delta: Point;
       pointerCount?: GesturePointerCount;
       durationMs?: number;
+      holdMs?: number;
       executionProfile?: GestureExecutionProfile;
     }
   | { intent: 'pinch'; origin?: Point; scale: number }

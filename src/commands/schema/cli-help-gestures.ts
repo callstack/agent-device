@@ -15,6 +15,7 @@ Shapes:
   agent-device swipe 320 500 40 500 --count 8 --pause-ms 30 --pattern ping-pong
   agent-device gesture pan 200 420 0 -80 500
   agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
+  agent-device gesture pan 200 420 0 240 600 --hold-ms 600
   agent-device scroll down --until 'id=submit'
   agent-device gesture fling right 200 420 180
   agent-device gesture pinch 0.5 200 400
@@ -22,7 +23,7 @@ Shapes:
   agent-device gesture transform 200 420 80 -40 2 35 700
   agent-device gesture tap 80 300 200 450 310 600 --count 20 --pause-ms 100
   scroll <dir> --until <selector> repeats scroll-and-check passes until that element is on screen, then stops: one request instead of a scroll-then-snapshot loop, and it stops on the target rather than overshooting it. It reports the passes it spent, fails when the content runs out first, and is refused on top/bottom, which already stop themselves. The default limit is ${DEFAULT_SCROLL_UNTIL_PASSES} gestures. For a longer list, add --max-passes <n> (1–${SCROLL_UNTIL_MAX_PASSES}); it requires --until. Large pass budgets can hit the 90-second request timeout; inspect the current screen and continue with another search if that happens.
-  longpress accepts coordinates, @refs, or selectors; prefer @ref/selector, coordinates only as a fallback. Duration and gesture scale/center are positional. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan. Keep count/pause/pattern on one swipe: --count (cap 200), --pause-ms (cap 10000ms), --pattern ping-pong; the combined swipe/pause schedule is capped at 60000ms.
+  longpress accepts coordinates, @refs, or selectors; prefer @ref/selector, coordinates only as a fallback. Duration and gesture scale/center are positional. gesture pan is one finger by default; add --pointer-count 2 for a parallel two-finger pan, or --hold-ms <ms> to hold one finger still at the origin before it moves (long press, then drag). Keep count/pause/pattern on one swipe: --count (cap 200), --pause-ms (cap 10000ms), --pattern ping-pong; the combined swipe/pause schedule is capped at 60000ms.
   For repeated iOS smoke checks: press <x> <y> --count <n> --jitter-px <n> for tap series, swipe <x1> <y1> <x2> <y2> --count <n> for drag series. gesture tap touches 2 to 5 distinct points and holds them for --hold-ms (default 50, min 16); --count repeats the same contacts (cap 200) with --pause-ms between, the series must fit 60000ms counting about 500ms per repetition, and a repetition costs about 450ms on a physical iPhone. Use press for one finger.
 
 Platform quirks:

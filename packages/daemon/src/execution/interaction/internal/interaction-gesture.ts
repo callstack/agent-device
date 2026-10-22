@@ -475,6 +475,10 @@ function gestureReplayFlags(
       ...(input.pauseMs === undefined ? {} : { pauseMs: input.pauseMs }),
     };
   }
-  if (input.kind !== 'pan' || input.pointerCount === undefined) return flags;
-  return { ...flags, pointerCount: input.pointerCount };
+  if (input.kind !== 'pan') return flags;
+  return {
+    ...flags,
+    ...(input.pointerCount === undefined ? {} : { pointerCount: input.pointerCount }),
+    ...(input.holdMs === undefined ? {} : { holdMs: input.holdMs }),
+  };
 }
