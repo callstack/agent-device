@@ -23,8 +23,9 @@ If a resource step cannot run within replay's budget, the error includes
 `details.dispatched: no` for that step, and `details.standaloneCommandName` for a known public
 command. The name is not a complete command. Inspect the failed script path and line, then run
 that original operation separately with its original arguments and options, the same `--session`
-value, and the same private CLI context. Use the report's `resume.from` or `resume.alternateFrom`
-and `planDigest` after fixing or completing the refused step. Inspect completed steps before
+value, and the same private CLI context. If steps remain, use the report's `resume.from` or
+`resume.alternateFrom` and `planDigest` after fixing or completing the refused step. A final
+unrecorded `logs` or `audio` step leaves no replay tail to resume. Inspect completed steps before
 retrying; earlier steps may have changed the app. A nested
 `test` with an attempt timeout is refused before its first attempt. Direct `test` retains its own
 timeout behavior. An authored `.ad` command without a resource classification fails closed with

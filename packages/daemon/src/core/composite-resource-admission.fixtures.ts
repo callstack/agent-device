@@ -244,13 +244,11 @@ export async function resourceAdmissionWorld(
     finish,
     forceCleanup,
     native,
-    inspectTeardown,
     bind,
     inspectFacts,
     sample,
     home,
     setViewport,
-    facts,
     leaseRegistry,
   };
 }

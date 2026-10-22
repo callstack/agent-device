@@ -4,7 +4,6 @@ import { emptyAudioProbeResult } from '@agent-device/contracts/audio-probe-resul
 import { deviceIdentity } from '@agent-device/kernel/device';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
-import { perfCaptureResourceStore } from '@agent-device/capture-kit/perf-capture-resource-store';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { SessionRef, SessionState } from './session-state.ts';
 import type { resourceAdmissionWorld } from './composite-resource-admission.fixtures.ts';
@@ -13,7 +12,7 @@ type World = Awaited<ReturnType<typeof resourceAdmissionWorld>>;
 
 export function seedExistingCapture(
   world: World,
-  kind: 'audio-probe' | 'perf-capture' | 'screen-recording',
+  kind: 'audio-probe' | 'screen-recording',
   ref: SessionRef = world.ref,
 ) {
   const session = world.sessionStore.requireCurrent(ref);
@@ -34,7 +33,6 @@ export function seedExistingCapture(
   const disposal = { finish, forceCleanup, [Symbol.asyncDispose]: async () => {} };
   const sessionDir = world.sessionStore.resolveSessionDir(ref.address);
   let patch: Partial<SessionState>;
-  let resourcePath: string;
   switch (kind) {
     case 'audio-probe': {
       const status = vi.fn(async () =>
@@ -63,22 +61,8 @@ export function seedExistingCapture(
         },
       };
       patch = { audioProbe: resource };
-      resourcePath = audioProbeResourceStore.resolvePath(sessionDir);
+      const resourcePath = audioProbeResourceStore.resolvePath(sessionDir);
       audioProbeResourceStore.write(resourcePath, resource.envelope);
-      break;
-    }
-    case 'perf-capture': {
-      const resource = {
-        envelope: envelope(kind),
-        handle: {
-          ...disposal,
-          inspect: () => ({ kind: 'perfetto' as const, mode: 'trace' as const }),
-          setOutputPath: vi.fn(),
-        },
-      };
-      patch = { perfCapture: resource };
-      resourcePath = perfCaptureResourceStore.resolvePath(sessionDir);
-      perfCaptureResourceStore.write(resourcePath, resource.envelope);
       break;
     }
     case 'screen-recording': {
@@ -102,11 +86,11 @@ export function seedExistingCapture(
         },
       };
       patch = { screenRecording: resource };
-      resourcePath = screenRecordingResourceStore.resolvePath(sessionDir);
+      const resourcePath = screenRecordingResourceStore.resolvePath(sessionDir);
       screenRecordingResourceStore.write(resourcePath, resource.envelope);
       break;
     }
   }
   world.sessionStore.update(ref, patch);
-  return { finish, forceCleanup, resourcePath, patch };
+  return { finish, forceCleanup };
 }
