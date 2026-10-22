@@ -326,8 +326,8 @@ extension RunnerTests {
         mode: repairMode
       )
     }
-    // A stopped plan must answer before touching the target: the input can be gone by now, and the
-    // element the last post returned is then unreadable. That failure is already typed.
+    // A stopped plan must answer before touching the target: the input can be gone by now. That
+    // failure is already typed.
     if let failure = planFailure {
       return failure
     }
@@ -423,10 +423,8 @@ extension RunnerTests {
     reader: inout TextEntryReader,
     expectedText: String?
   ) -> TextEntryResult {
-    let resolved = reader.input()
-    let target = reader.target
-    if target.boundIdentity != nil, resolved == nil {
-      guard boundTextEntryInputIsGone(app: app, target: target) else {
+    if reader.input() == nil, reader.target.boundIdentity != nil {
+      guard boundTextEntryInputIsGone(app: app, target: reader.target) else {
         return TextEntryResult(
           verified: nil,
           repaired: false,
@@ -441,8 +439,7 @@ extension RunnerTests {
       return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
     }
     let initialResult = verifyTextEntry(
-      app: app,
-      target: target,
+      reader: &reader,
       expectedText: expectedText,
       repaired: false
     )
@@ -453,28 +450,25 @@ extension RunnerTests {
       return initialResult
     }
     guard shouldRepairAppendTextEntry(
-      app: app,
-      target: target,
+      reader: &reader,
       expectedText: expectedText
     ) else {
       return verifyTextEntry(
-        app: app,
-        target: target,
+        reader: &reader,
         expectedText: expectedText,
         repaired: false
       )
     }
-    guard Self.textEntryRepairCanTarget(boundIdentity: target.boundIdentity) else {
+    guard Self.textEntryRepairCanTarget(boundIdentity: reader.target.boundIdentity) else {
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_REPAIR_REFUSED reason=unidentified-input")
       return verifyTextEntry(
-        app: app,
-        target: target,
+        reader: &reader,
         expectedText: expectedText,
         repaired: false
       )
     }
 
-    guard let repairTarget = resolveTextEntryInput(app: app, target: target) else {
+    guard let repairTarget = reader.input() else {
       return initialResult
     }
     let observedText = editableTextValue(for: repairTarget.attributes) ?? ""
@@ -483,28 +477,26 @@ extension RunnerTests {
       expectedText.count,
       observedText.count
     )
-    clearTextInput(app: app, repairTarget)
-    repairTarget.element.typeText(expectedText)
-    let repairedTarget = target.withResolvedInput(ResolvedTextEntryInput(reading: repairTarget.element))
-    let repairedResult = verifyTextEntry(
-      app: app,
-      target: repairedTarget,
+    reader.dispatch {
+      clearTextInput(app: app, repairTarget)
+      repairTarget.element.typeText(expectedText)
+    }
+    return verifyTextEntry(
+      reader: &reader,
       expectedText: expectedText,
       repaired: true
     )
-    return repairedResult
 #else
     return initialResult
 #endif
   }
 
   private func verifyTextEntry(
-    app: XCUIApplication,
-    target: TextEntryTarget,
+    reader: inout TextEntryReader,
     expectedText: String?,
     repaired: Bool
   ) -> TextEntryResult {
-    let targetInput = resolveTextEntryInput(app: app, target: target)
+    let targetInput = reader.input()
     guard let expectedText else {
       return TextEntryResult(
         verified: nil,
@@ -531,8 +523,8 @@ extension RunnerTests {
     let stableDeadline = Date().addingTimeInterval(TextEntryTiming.verificationStabilityWindow)
     var latestObservedText = observedText
     while Date() < stableDeadline {
-      sleepFor(TextEntryTiming.pollInterval)
-      let nextInput = resolveTextEntryInput(app: app, target: target)
+      reader.dispatch { sleepFor(TextEntryTiming.pollInterval) }
+      let nextInput = reader.input()
       guard let nextObservedText = editableTextValue(for: nextInput?.attributes) else {
         return TextEntryResult(verified: nil, repaired: repaired, expectedText: expectedText, observedText: nil)
       }
@@ -591,8 +583,7 @@ extension RunnerTests {
   }
 
   private func shouldRepairAppendTextEntry(
-    app: XCUIApplication,
-    target: TextEntryTarget,
+    reader: inout TextEntryReader,
     expectedText: String
   ) -> Bool {
 #if os(iOS)
@@ -600,7 +591,7 @@ extension RunnerTests {
     var latestElementType: XCUIElement.ElementType?
     let deadline = Date().addingTimeInterval(TextEntryTiming.verificationStabilityWindow)
     repeat {
-      let input = resolveTextEntryInput(app: app, target: target)
+      let input = reader.input()
       guard let observedText = editableTextValue(for: input?.attributes) else {
         return false
       }
@@ -619,7 +610,7 @@ extension RunnerTests {
       ) {
         return false
       }
-      sleepFor(TextEntryTiming.pollInterval)
+      reader.dispatch { sleepFor(TextEntryTiming.pollInterval) }
     } while Date() < deadline
 
     guard let latestObservedText else {

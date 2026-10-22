@@ -25,8 +25,8 @@ extension RunnerTests {
   /// Bluesky's React Native Search screen (iPhone 17 Pro, iOS 27.0), so a fill's cost there is its
   /// query count. The fixture field counts how often XCTest reads its value, which it does once per
   /// query. Its value is masked, so the count does not depend on how many read-back polls fit in a
-  /// stability window. This fill made 19 queries when each resolution's snapshot served the reads
-  /// after it, and 35 when every attribute was read from the live element.
+  /// stability window. This fill made 17 queries when each read served the reads after it until the
+  /// next dispatch, and 35 when every attribute was read from the live element.
   @MainActor
   func testFillReadsEachResolvedFieldThroughOneSnapshot() throws {
     app.launchArguments = [

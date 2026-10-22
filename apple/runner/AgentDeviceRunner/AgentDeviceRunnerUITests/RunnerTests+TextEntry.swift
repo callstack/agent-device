@@ -209,27 +209,30 @@ extension RunnerTests {
     /// Nil when the element exists but could not be snapshotted.
     let snapshot: XCUIElementSnapshot?
 
-    init(element: XCUIElement, snapshot: XCUIElementSnapshot?) {
+    private init(element: XCUIElement, snapshot: XCUIElementSnapshot?) {
       self.element = element
       self.snapshot = snapshot
     }
 
-    /// Reads a handle that may name an input the app has removed; nil when it names none. The
-    /// snapshot of a missing element throws only after XCTest waits about two seconds for a match,
-    /// so existence is read first.
+    /// Reads a handle that may name an input the app has removed; nil when it names none or the read
+    /// raised. The snapshot of a missing element throws only after XCTest waits about two seconds for
+    /// a match, so existence is read first.
     init?(reading element: XCUIElement) {
       var exists = false
       var snapshot: XCUIElementSnapshot?
-      let exception = RunnerObjCExceptionCatcher.catchException {
+      if let exception = RunnerObjCExceptionCatcher.catchException({
         exists = element.exists
         snapshot = exists ? try? element.snapshot() : nil
+      }) {
+        NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_READ_IGNORED_EXCEPTION=%@", exception)
+        return nil
       }
-      guard exception == nil, exists else { return nil }
+      guard exists else { return nil }
       self.init(element: element, snapshot: snapshot)
     }
 
-    /// Reads a handle its query has just listed, so the snapshot is read first and existence only
-    /// when the snapshot fails; nil when it names no element.
+    /// Reads a handle its query has just listed, inside the caller's exception containment, so the
+    /// snapshot is read first and existence only when the snapshot fails; nil when it names no element.
     init?(readingListed element: XCUIElement) {
       let snapshot = try? element.snapshot()
       guard snapshot != nil || element.exists else { return nil }
@@ -323,8 +326,8 @@ extension RunnerTests {
     }
   }
 
+  /// Clears `input`, which must have been read with nothing dispatched since.
   func clearTextInput(app: XCUIApplication, _ input: ResolvedTextEntryInput) {
-    let element = input.element
     // Skip the clear (delete burst + moveCaretToEnd edge-tap) ONLY when we can confirm the
     // field is empty. Why skip: the edge-tap computes a point from the element frame, which can
     // be stale after the field repositions on focus (e.g. the Settings search bar jumps
@@ -340,10 +343,10 @@ extension RunnerTests {
     // Read before the caret tap, which dispatches to the app.
     let count = estimatedDeleteCount(for: input.attributes)
 #if !os(tvOS)
-    moveCaretToEnd(app: app, element: element)
+    moveCaretToEnd(app: app, input: input)
 #endif
     let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: count)
-    element.typeText(deletes)
+    input.element.typeText(deletes)
   }
 
   func isTextEntryElement(_ element: XCUIElement) -> Bool {
@@ -457,7 +460,7 @@ extension RunnerTests {
 
   /// Resolution for a target not bound to an input yet: the first element that exists.
   private func resolveUnboundTextEntryInput(app: XCUIApplication, target: TextEntryTarget) -> ResolvedTextEntryInput? {
-    if target.prefersFocusedElement, let focused = focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(readingListed:)) {
+    if target.prefersFocusedElement, let focused = focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(reading:)) {
       return focused
     }
     if let element = target.element, let input = ResolvedTextEntryInput(reading: element) {
@@ -467,10 +470,10 @@ extension RunnerTests {
        let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y) {
       return refreshed
     }
-    return focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(readingListed:))
+    return focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(reading:))
   }
 
-  private func moveCaretToEnd(app: XCUIApplication, element: XCUIElement) {
+  private func moveCaretToEnd(app: XCUIApplication, input: ResolvedTextEntryInput) {
 #if os(tvOS)
     return
 #else
@@ -478,14 +481,15 @@ extension RunnerTests {
     // focus tap, and an input that stopped answering its resolving query on focus (#3060) makes
     // every post-focus handle touch a recorder — `element.frame` records directly, and an
     // element-anchored `coordinate(...).tap()` re-runs that same query to resolve its anchor when
-    // the action executes. A fresh `snapshot()` proves the handle answered moments earlier, not
-    // that it still answers at tap-dispatch time. So the point comes from the snapshot frame and
+    // the action executes. The input's snapshot, read with nothing dispatched since, proves the handle
+    // answered moments earlier, not that it still answers at tap-dispatch time. So the point comes
+    // from the snapshot frame and
     // goes out app-relative through `tapAt`, which resolves no element at all — the shape
     // `waitForTextEntryReadinessAfterTap` settled on in #3237. With no trustworthy frame, or a
     // zero-size one (how a departed handle reads), there is no point to dispatch — an edge-tap
     // from a frame the field moved after records a failure or navigates away, the shape
     // `clearTextInput`'s comment refuses — so degrade to the caller's point-free delete burst.
-    guard let frame = ResolvedTextEntryInput(reading: element)?.snapshot?.frame, !frame.isEmpty else {
+    guard let frame = input.snapshot?.frame, !frame.isEmpty else {
       return
     }
     _ = tapAt(
