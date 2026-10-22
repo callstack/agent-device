@@ -64,6 +64,11 @@ import { handleSessionOpenCommands as handleProductionOpenCommand } from '../../
 import { hostAppDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/support/session-factories.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveMacOsAppDeviceOpenTarget } from '@agent-device/platform-apple/app-resolution';
+import {
+  createLocalAppleToolProvider,
+  withAppleToolProvider,
+} from '@agent-device/platform-apple/tool-provider';
 import {
   bindProviderLifecycleRuntime,
   bindLifecycleRuntime,
@@ -671,11 +676,24 @@ test('closing another app from an app device session is refused before teardown,
   });
   mockDispatch.mockResolvedValue(undefined);
   // The platform resolves the target as open does and refuses another app of the Mac.
-  resolveOpenTargetFixture.mockImplementationOnce(async () => {
-    throw new AppError('INVALID_ARGS', 'This session drives com.apple.TextEdit.', {
-      reason: 'app-device-scope',
-    });
+  // The production platform refusal, over a stubbed list of installed apps.
+  const provider = createLocalAppleToolProvider({
+    runCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
   });
+  const macosHost = {
+    ...provider.macosHost!,
+    listApps: async () => [
+      { bundleId: 'com.apple.TextEdit', name: 'TextEdit' },
+      { bundleId: 'com.apple.calculator', name: 'Calculator' },
+    ],
+  };
+  resolveOpenTargetFixture.mockImplementationOnce(
+    async (device, _directResolve, input) =>
+      await withAppleToolProvider(
+        { ...provider, macosHost },
+        async () => await resolveMacOsAppDeviceOpenTarget(device, input.target),
+      ),
+  );
 
   const outcome = await handleCloseCommand({
     host: createTestHostEnvironment(),

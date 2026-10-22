@@ -78,6 +78,33 @@ final class BackgroundInteractionTests: XCTestCase {
     XCTAssertEqual(scrollBarValue(current: 0.1, signedTravel: -600, overflow: 1200), 0)
   }
 
+  func testScrollOverflowSpansEveryContentChild() {
+    let area = RectResponse(x: 0, y: 100, width: 400, height: 600)
+    let rows = (0..<10).map { row in
+      RectResponse(x: 20, y: 100 + Double(row) * 120, width: 360, height: 100)
+    }
+    XCTAssertEqual(scrollContentOverflow(area: area, contentFrames: rows, isVertical: true), 580)
+    XCTAssertEqual(scrollContentOverflow(area: area, contentFrames: rows, isVertical: false), -40)
+  }
+
+  func testScrollOverflowCountsAChildFarOutsideTheContent() {
+    let area = RectResponse(x: 0, y: 100, width: 400, height: 600)
+    let rows = (0..<10).map { row in
+      RectResponse(x: 20, y: 100 + Double(row) * 120, width: 360, height: 100)
+    }
+    let header = RectResponse(x: 0, y: -5000, width: 400, height: 40)
+    XCTAssertEqual(
+      scrollContentOverflow(area: area, contentFrames: rows + [header], isVertical: true), 5680)
+  }
+
+  func testScrollOverflowIgnoresEmptyFrames() {
+    let area = RectResponse(x: 0, y: 100, width: 400, height: 600)
+    let document = RectResponse(x: 0, y: -400, width: 400, height: 2000)
+    let empty = RectResponse(x: 0, y: -5000, width: 0, height: 0)
+    XCTAssertEqual(
+      scrollContentOverflow(area: area, contentFrames: [document, empty], isVertical: true), 1400)
+  }
+
   /// Chromium marks wrapper groups pressable; only a control role may win the press outright.
   func testWrapperGroupsAreNotPressableControls() {
     XCTAssertTrue(isPressableControlRole("AXButton"))

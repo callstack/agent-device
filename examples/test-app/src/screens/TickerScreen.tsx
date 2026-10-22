@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 
+import { clampInteger } from '../route-params';
 import { useAppColors, type AppColors } from '../theme';
 
 /**
@@ -69,12 +70,6 @@ export function TickerScreen() {
       />
     </View>
   );
-}
-
-function clampInteger(raw: string | undefined, fallback: number, min: number, max: number): number {
-  const parsed = Number.parseInt(raw ?? '', 10);
-  if (Number.isNaN(parsed)) return fallback;
-  return Math.min(max, Math.max(min, parsed));
 }
 
 function createStyles(colors: AppColors) {

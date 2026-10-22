@@ -9,6 +9,9 @@ type RetryPolicy = {
   shouldRetry?: (error: unknown, attempt: number) => boolean;
 };
 
+/** The diagnostic phase of each retry attempt and outcome. */
+export const RETRY_PHASE = 'retry';
+
 /**
  * The read side of a deadline. Holders are typed against this rather than the class so a caller
  * can hand one a substitute clock; {@link Deadline} is the production implementation.
@@ -281,7 +284,7 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 function publishRetryEvent(event: RetryTelemetryEvent): void {
   emitDiagnostic({
     level: event.event === 'attempt_failed' || event.event === 'exhausted' ? 'warn' : 'debug',
-    phase: 'retry',
+    phase: RETRY_PHASE,
     data: {
       ...event,
     },

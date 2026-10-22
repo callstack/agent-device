@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { parsePerfSummary } from './summary.ts';
-import { summaryFixture } from './summary-fixture.ts';
+import { summaryFixture } from './summary.fixtures.ts';
 
 const valid = () =>
   JSON.parse(JSON.stringify(summaryFixture([{ id: 's/step', daemonMs: [10, 20] }]))) as Record<

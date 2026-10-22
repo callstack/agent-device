@@ -41,6 +41,7 @@ import {
   settleVerifiedOrphanedClaim,
   type DeviceClaimAcquirerKind,
   type DeviceClaimReconciler,
+  type InspectedClaimSettlement,
 } from './device-claim-settlement.ts';
 import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
 
@@ -326,16 +327,18 @@ async function settleAppDeviceClaims(
     const conflict = await withDeviceClaimLock(scanned.deviceKey, params.env, async () => {
       const current = inspectDeviceClaimFile(resolveDeviceClaimPath(scanned.deviceKey, params.env));
       if (!current) return undefined;
-      if (!current.claim) return current;
-      if (
-        isAbandonedClaimOfThisDaemon(current.claim, params.stateDir, readCurrentOwnerIdentity())
-      ) {
-        abandoned.push(current.claim.deviceKey);
+      const settlement = inspectOverlappingAppClaim(
+        current,
+        params.stateDir,
+        readCurrentOwnerIdentity(),
+      );
+      if (settlement.status === 'available') {
+        if (settlement.superseded) abandoned.push(settlement.superseded.deviceKey);
         return undefined;
       }
-      if (!deviceClaimOwnerCannotRelease(current.classification)) return current;
+      if (settlement.status === 'conflict') return settlement.conflict;
       const settled = await settleVerifiedOrphanedClaim(
-        current.claim,
+        settlement.claim,
         params.reconcileOrphanedDeviceClaim,
         params.env,
       );
@@ -344,6 +347,21 @@ async function settleAppDeviceClaims(
     if (conflict) return { conflict, abandoned: [] };
   }
   return { abandoned };
+}
+
+function inspectOverlappingAppClaim(
+  current: InspectedDeviceClaim,
+  stateDir: string,
+  owner: ReturnType<typeof readCurrentOwnerIdentity>,
+): Exclude<InspectedClaimSettlement, { status: 'held' }> {
+  if (!current.claim) return { status: 'conflict', conflict: current };
+  if (isAbandonedClaimOfThisDaemon(current.claim, stateDir, owner)) {
+    return { status: 'available', superseded: current.claim };
+  }
+  if (!deviceClaimOwnerCannotRelease(current.classification)) {
+    return { status: 'conflict', conflict: current };
+  }
+  return { status: 'reconcile', claim: current.claim, conflict: current };
 }
 
 async function removeSupersededAppClaims(deviceKeys: string[], env: EnvMap): Promise<void> {

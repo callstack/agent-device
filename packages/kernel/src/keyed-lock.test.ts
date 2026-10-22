@@ -1,6 +1,11 @@
 import { test, expect, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { withKeyedLock } from './keyed-lock.ts';
+import {
+  heldKeyedLockKeys,
+  withKeyedLock,
+  withKeyedLockHolder,
+  type KeyedLockHolder,
+} from './keyed-lock.ts';
 
 test('canceled queued work returns before its owner and never runs or admits a competing task early', async () => {
   const locks = new Map<string, Promise<unknown>>();
@@ -214,3 +219,162 @@ test.each([false, true])(
     assert.deepEqual(order, ['descendant', 'finished', 'nested', 'competing']);
   },
 );
+
+test('a lock a holder takes partway through is held by later sibling scopes until the holder ends', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const order: string[] = [];
+  let markHeld: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    markHeld = resolve;
+  });
+  let finishHolder: () => void = () => {};
+  const holderMayFinish = new Promise<void>((resolve) => {
+    finishHolder = resolve;
+  });
+
+  const holderRun = withKeyedLockHolder(async (holder) => {
+    // A first nested scope takes the hold, as a replay action retains its device.
+    await withKeyedLock(locks, 'session', async () => {
+      await holder.hold(locks, 'device:app');
+    });
+    markHeld();
+    // A later sibling scope re-enters the hold instead of queueing behind it.
+    await withKeyedLock(locks, 'device:app', async () => {
+      order.push('sibling re-entered');
+      expect(heldKeyedLockKeys(locks)).toEqual(['device:app']);
+    });
+    await holderMayFinish;
+    order.push('holder done');
+  });
+  await held;
+  // Another context queues behind the live hold.
+  let waiterEntered = false;
+  const waiter = withKeyedLock(locks, 'device:app', async () => {
+    waiterEntered = true;
+    order.push('waiter entered');
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(waiterEntered).toBe(false);
+  finishHolder();
+
+  await Promise.all([holderRun, waiter]);
+  expect(order).toEqual(['sibling re-entered', 'holder done', 'waiter entered']);
+  expect(locks.size).toBe(0);
+});
+
+test('a hold cancelled while queued rejects with the signal reason and leaves nothing held', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  let releaseOwner: () => void = () => {};
+  const owner = withKeyedLock(
+    locks,
+    'device:app',
+    async () =>
+      await new Promise<void>((resolve) => {
+        releaseOwner = resolve;
+      }),
+  );
+  const controller = new AbortController();
+  const reason = new Error('request canceled');
+
+  await withKeyedLockHolder(async (holder) => {
+    const pending = holder.hold(locks, 'device:app', controller.signal);
+    // A key the holder is still taking already reads as held, so no second same-host wait starts.
+    expect(heldKeyedLockKeys(locks)).toEqual(['device:app']);
+    controller.abort(reason);
+    await expect(pending).rejects.toBe(reason);
+    expect(heldKeyedLockKeys(locks)).toEqual([]);
+  });
+  releaseOwner();
+  await owner;
+  expect(locks.size).toBe(0);
+});
+
+test('a holder refuses a lock once it has ended', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  let late: KeyedLockHolder | undefined;
+  await withKeyedLockHolder(async (holder) => {
+    late = holder;
+  });
+  await expect(late!.hold(locks, 'device:app')).rejects.toThrow(/after it ends/);
+  expect(locks.size).toBe(0);
+});
+
+test('heldKeyedLockKeys lists only the locks of the map held by the current context', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const other = new Map<string, Promise<unknown>>();
+  await withKeyedLock(other, 'other', async () => {
+    await withKeyedLock(locks, 'host', async () => {
+      await withKeyedLock(locks, 'host:app:one', async () => {
+        expect(heldKeyedLockKeys(locks).sort()).toEqual(['host', 'host:app:one']);
+      });
+      expect(heldKeyedLockKeys(locks)).toEqual(['host']);
+    });
+  });
+});
+
+test('a scope wanting a key its enclosing holder is still taking re-enters it once taken', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  let releaseOwner: () => void = () => {};
+  const owner = withKeyedLock(
+    locks,
+    'device:app',
+    async () =>
+      await new Promise<void>((resolve) => {
+        releaseOwner = resolve;
+      }),
+  );
+
+  const outcome = withKeyedLockHolder(async (holder) => {
+    const taking = holder.hold(locks, 'device:app');
+    // A nested step asks for the same key while the hold still waits for the owner.
+    const step = withKeyedLock(locks, 'device:app', async () => 'step re-entered');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    releaseOwner();
+    await taking;
+    return await step;
+  });
+
+  await expect(outcome).resolves.toBe('step re-entered');
+  await owner;
+  expect(locks.size).toBe(0);
+});
+
+test('taking or holding a free key queues it synchronously, so a check just before stays true', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const taken = withKeyedLock(locks, 'device:a', async () => {});
+  expect(locks.has('device:a')).toBe(true);
+  await taken;
+
+  await withKeyedLockHolder(async (holder) => {
+    const hold = holder.hold(locks, 'device:b');
+    expect(locks.has('device:b')).toBe(true);
+    await hold;
+  });
+  expect(locks.size).toBe(0);
+});
+
+test('a scope waiting on its holder for a key fails with the hold when the hold is cancelled', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  let releaseOwner: () => void = () => {};
+  const owner = withKeyedLock(
+    locks,
+    'device:app',
+    async () =>
+      await new Promise<void>((resolve) => {
+        releaseOwner = resolve;
+      }),
+  );
+  const controller = new AbortController();
+  const reason = new Error('request canceled');
+
+  await withKeyedLockHolder(async (holder) => {
+    const taking = holder.hold(locks, 'device:app', controller.signal);
+    const step = withKeyedLock(locks, 'device:app', async () => 'ran');
+    controller.abort(reason);
+    await expect(taking).rejects.toBe(reason);
+    await expect(step).rejects.toBe(reason);
+  });
+  releaseOwner();
+  await owner;
+  expect(locks.size).toBe(0);
+});

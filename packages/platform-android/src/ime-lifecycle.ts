@@ -11,6 +11,7 @@ export {
 } from './ime-settings-record.ts';
 export {
   isAndroidTestImeActive,
+  inspectAndroidSessionTeardownResources,
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
 } from './ime-state.ts';

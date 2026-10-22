@@ -35,53 +35,44 @@ const APP_BUNDLE_INFO_PLIST = 'Contents/Info.plist';
 const LSAPPINFO_ASN = /ASN:/;
 
 /**
- * Waits out the LaunchServices registration race so an open does not start a second copy of an app
- * whose running copy LaunchServices has not listed yet (#3406).
+ * The bundle path of the one running copy of `bundleId` that LaunchServices lists, or undefined to
+ * leave the open to `open -b`. `open -b` opens the copy LaunchServices resolves the bundle id to,
+ * which can be a stale build registered at another path rather than the running copy.
  *
  * A copy started directly — by a supervisor or a dev script — is only listed by LaunchServices
- * about half a second after it spawns. While it is unlisted, `open -b` sees no instance and launches
- * a second one with no arguments, which the session then drives instead of the copy the caller
- * owns. An open whose bundle LaunchServices already lists reaches `open` on that single read; an
- * open with no running copy pays one `lsappinfo find` and one process-table read (plus a
- * bundle-identifier read only when app-shaped candidates exist) to learn that; only a copy that
- * runs while unlisted is waited for, and only until LaunchServices lists it, since `open -b` then
- * attaches instead of launching. Every read shares one budget, and the wait itself stays well
- * inside it:
+ * about half a second after it spawns (#3406). While it is unlisted, `open` sees no instance and
+ * launches a second one with no arguments, which the session then drives instead of the copy the
+ * caller owns. An open with no running copy pays one `lsappinfo find` and one process-table read
+ * (plus a bundle-identifier read only when app-shaped candidates exist) to learn that; an open of a
+ * running copy pays the bundle-identifier read as well; only a copy that runs while unlisted is
+ * waited for. Every read shares one budget, and the wait itself stays well inside it:
  *
  * - `LAUNCH_SERVICES_PROBE_BUDGET_MS` bounds every read below, each read also taking its own
  *   smaller cap so a single hung tool cannot consume the budget alone;
  * - `LAUNCH_SERVICES_MAX_POLLS` x `LAUNCH_SERVICES_POLL_MS` bounds the wait, sized for the ~0.5 s
  *   race measured on host Macs and far below the 90 s request envelope an open runs inside.
  *
- * A copy still unlisted when either bound runs out is opened anyway: the wait can only delay a
- * duplicate, never cause one, and never withhold the open.
+ * A copy still unlisted when either bound runs out is opened by bundle id anyway: the wait can only
+ * delay a duplicate, never cause one, and never withhold the open.
  */
-export async function waitForLaunchServicesRegistration(
+export async function resolveListedRunningBundle(
   runCommand: AppleToolCommandExecutor,
   bundleId: string,
-): Promise<void> {
+): Promise<string | undefined> {
   const deadline = Deadline.fromTimeoutMs(LAUNCH_SERVICES_PROBE_BUDGET_MS);
   try {
     const listed = await readsLaunchServicesInstance(runCommand, bundleId, deadline);
-    // Only an explicit "nothing is listed" is worth probing the process table for; a read that
-    // cannot answer leaves this open the way it was before the check existed.
-    if (listed !== false) return;
-    const unlistedPids = await findUnlistedInstancePids(runCommand, bundleId, deadline);
-    if (unlistedPids.length === 0) return;
-    for (let poll = 0; poll < LAUNCH_SERVICES_MAX_POLLS; poll += 1) {
-      if (deadline.remainingMs() < LAUNCH_SERVICES_POLL_MS + MIN_PROBE_READ_MS) return;
-      await sleep(LAUNCH_SERVICES_POLL_MS);
-      for (const pid of unlistedPids) {
-        // A copy LaunchServices has come to list is the copy `open -b` will attach to, whichever of
-        // the running copies it is. A read that answers nothing keeps the wait on its own bound
-        // rather than being read as a registration, which is what would hand the duplicate back. A
-        // read that cannot run at all ends the probe, which opens the bundle the way an unreadable
-        // host always did.
-        if ((await readsLaunchServicesInstance(runCommand, bundleId, deadline, pid)) === true) {
-          return;
-        }
-      }
+    // A read that cannot answer leaves this open the way it was before the check existed.
+    if (listed === undefined) return undefined;
+    const running = await findRunningInstances(runCommand, bundleId, deadline);
+    if (running.size === 0) return undefined;
+    if (
+      !listed &&
+      !(await waitForListing(runCommand, bundleId, [...running.values()].flat(), deadline))
+    ) {
+      return undefined;
     }
+    return running.size === 1 ? [...running.keys()][0] : undefined;
   } catch (error) {
     // The probe is an extra read on someone else's app launch, so a host that cannot answer it at
     // all gets the open it would have had without the probe. The diagnostic is the only trace of
@@ -94,7 +85,31 @@ export async function waitForLaunchServicesRegistration(
         reason: error instanceof AppError ? error.code : 'probe_read_failed',
       },
     });
+    return undefined;
   }
+}
+
+async function waitForListing(
+  runCommand: AppleToolCommandExecutor,
+  bundleId: string,
+  pids: readonly number[],
+  deadline: Deadline,
+): Promise<boolean> {
+  for (let poll = 0; poll < LAUNCH_SERVICES_MAX_POLLS; poll += 1) {
+    if (deadline.remainingMs() < LAUNCH_SERVICES_POLL_MS + MIN_PROBE_READ_MS) return false;
+    await sleep(LAUNCH_SERVICES_POLL_MS);
+    for (const pid of pids) {
+      // A copy LaunchServices has come to list is the copy `open` will attach to, whichever of
+      // the running copies it is. A read that answers nothing keeps the wait on its own bound
+      // rather than being read as a registration, which is what would hand the duplicate back. A
+      // read that cannot run at all ends the probe, which opens the bundle the way an unreadable
+      // host always did.
+      if ((await readsLaunchServicesInstance(runCommand, bundleId, deadline, pid)) === true) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
@@ -131,18 +146,13 @@ async function readsLaunchServicesInstance(
   return LSAPPINFO_ASN.test(result.stdout);
 }
 
-/**
- * The processes running `bundleId` that LaunchServices does not list. `open -b` attaches to
- * whichever copy the registration eventually names, so every running copy of the bundle is watched
- * and any one of them being listed ends the wait.
- */
-async function findUnlistedInstancePids(
+async function findRunningInstances(
   runCommand: AppleToolCommandExecutor,
   bundleId: string,
   deadline: Deadline,
-): Promise<number[]> {
+): Promise<Map<string, number[]>> {
   const timeoutMs = probeBudgetMs(deadline, PROCESS_TABLE_TIMEOUT_MS);
-  if (timeoutMs === undefined) return [];
+  if (timeoutMs === undefined) return new Map();
   // The provider's own executor, so every read of this probe answers about the same host its
   // `lsappinfo`, `plutil` and `open` run on: a scoped Apple provider must never pair pids from one
   // host with tools on another.
@@ -156,7 +166,7 @@ async function findUnlistedInstancePids(
       phase: 'macos_launch_services_process_table_unreadable',
       data: { bundleId },
     });
-    return [];
+    return new Map();
   }
   const pidsByBundle = new Map<string, number[]>();
   for (const processInfo of processes) {
@@ -166,19 +176,23 @@ async function findUnlistedInstancePids(
     if (pids) pids.push(processInfo.pid);
     else pidsByBundle.set(bundlePath, [processInfo.pid]);
   }
-  if (pidsByBundle.size === 0) return [];
+  if (pidsByBundle.size === 0) return pidsByBundle;
   const bundlePaths = Array.from(pidsByBundle.keys());
   const bundleIds = await readAppBundleIds(
     runCommand,
     bundlePaths.map((bundlePath) => path.join(bundlePath, APP_BUNDLE_INFO_PLIST)),
     deadline,
   );
-  return bundlePaths
-    .filter(
-      (bundlePath) =>
-        bundleIds.get(path.join(bundlePath, APP_BUNDLE_INFO_PLIST))?.trim() === bundleId,
-    )
-    .flatMap((bundlePath) => pidsByBundle.get(bundlePath)!);
+  return new Map(
+    bundlePaths
+      .filter(
+        // LaunchServices compares bundle identifiers without regard to case.
+        (bundlePath) =>
+          bundleIds.get(path.join(bundlePath, APP_BUNDLE_INFO_PLIST))?.trim().toLowerCase() ===
+          bundleId.toLowerCase(),
+      )
+      .map((bundlePath) => [bundlePath, pidsByBundle.get(bundlePath)!]),
+  );
 }
 
 /**
@@ -188,6 +202,7 @@ async function findUnlistedInstancePids(
  * XPC services, app extensions, and driver bundles, whose identifiers match no app anyone opens.
  */
 function macAppBundlePath(command: string): string | undefined {
+  if (!path.isAbsolute(command)) return undefined;
   const marker = command.indexOf(APP_EXECUTABLE_MARKER);
   if (marker <= 0) return undefined;
   const bundlePath = command.slice(0, marker);

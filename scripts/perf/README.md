@@ -83,7 +83,7 @@ All times are milliseconds. Statistics use only the successful samples of a step
 | Metric | Meaning |
 | --- | --- |
 | `wall` | The CLI process time, from spawn to exit. |
-| `daemon` | The daemon request round trip that the client measures (`daemon_request`). For the pinned-backend capture, the span of its request log. Comparisons use this metric. |
+| `daemon` | The daemon request round trip that the client measures (`daemon_request`). For the pinned-backend capture (`home-reads/snapshot-forced-tree`, marked SDK in the report), the span of its request log. Comparisons use this metric. |
 | `mean ± sd`, `cv` | The mean, the sample standard deviation, and the standard deviation divided by the mean. |
 | `median`, `p95`, `min`, `max` | The median (the mean of the two middle values for an even count), the nearest-rank 95th percentile, and the extremes. |
 | `runner` | The median sum of XCTest runner command times (iOS) or snapshot-helper gesture times (Android) in one request. |

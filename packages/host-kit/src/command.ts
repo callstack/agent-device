@@ -26,3 +26,4 @@ export {
   withCommandHost,
   withoutCommandExecutorOverride,
 } from './internal/exec.ts';
+export { EXEC_COMMAND_PHASE } from './internal/exec-trace.ts';

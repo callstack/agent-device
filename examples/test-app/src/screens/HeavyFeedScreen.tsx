@@ -2,6 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { clampInteger } from '../route-params';
 import { useAppColors, type AppColors } from '../theme';
 
 /**
@@ -304,12 +305,6 @@ function MediaGrid({ postId, tiles, styles }: { postId: number; tiles: number; s
       </View>
     </View>
   );
-}
-
-function clampInteger(value: string | undefined, fallback: number, min: number, max: number) {
-  const parsed = Number.parseInt(value ?? '', 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(max, Math.max(min, parsed));
 }
 
 type Styles = ReturnType<typeof createStyles>;

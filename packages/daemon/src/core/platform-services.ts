@@ -21,6 +21,8 @@ export type DaemonPlatformServices = Readonly<{
   appleSessionObservation: AppleSessionObservation;
   deviceBootObservation: DeviceBootObservationService;
   ensureLocalDeviceReady: EnsureLocalDeviceReady;
+  /** Read-only owner inspection before a bounded request can enter teardown. */
+  inspectSessionTeardownResources(device: DeviceInfo): Promise<readonly string[]>;
   resolveRequestedOpenSurface(params: {
     device: DeviceInfo;
     surfaceFlag: string | undefined;

@@ -63,22 +63,32 @@ test('every platform runs at least one step of every scenario', () => {
   }
 });
 
-test('a heavy-feed capture breaks its expectation when the tree flattens or the tree backend copes', () => {
+test('a heavy-feed capture breaks its expectation when the tree flattens', () => {
   const depth = { maxDepthAtLeast: 64 };
   assert.equal(expectationViolation(depth, { maxDepth: 64 }), undefined);
   assert.match(expectationViolation(depth, { maxDepth: 63 })!, /below 64/);
   assert.match(expectationViolation(depth, undefined)!, /unknown/);
+});
 
-  const degraded = { treeBackendDegraded: true };
-  assert.equal(
-    expectationViolation(degraded, { backend: 'private-ax', state: 'recovered' }),
-    undefined,
-  );
-  assert.equal(expectationViolation(degraded, { backend: 'tree', state: 'sparse' }), undefined);
+test('a pinned capture breaks its expectation unless the pinned backend served it', () => {
+  const pinned = { pinnedBackend: 'tree' } as const;
+  const served = { backend: 'tree', state: 'healthy', reasonCode: 'requested-backend' };
+  assert.equal(expectationViolation(pinned, served), undefined);
+  // The raw plan ignores the pin and recovers through private AX on the heavy feed.
   assert.match(
-    expectationViolation(degraded, { backend: 'tree', state: 'healthy' })!,
-    /non-sparse/,
+    expectationViolation(pinned, {
+      backend: 'private-ax',
+      state: 'recovered',
+      reasonCode: 'ax-rejected',
+    })!,
+    /private-ax backend \(ax-rejected\)/,
   );
+  // An unpinned capture can still be tree-first on a light screen.
+  assert.match(
+    expectationViolation(pinned, { backend: 'tree', state: 'healthy' })!,
+    /no reason code/,
+  );
+  assert.match(expectationViolation(pinned, undefined)!, /unknown backend/);
 });
 
 test('an Android capture breaks its expectation when another helper transport served it', () => {

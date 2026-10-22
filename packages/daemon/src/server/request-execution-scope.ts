@@ -311,7 +311,7 @@ export async function createRequestExecutionScope(params: {
       bindDevice: runtimeBindings?.bindDevice ?? gatewayMissing,
       inspectFacts: runtimeBindings?.inspectFacts ?? gatewayMissing,
       bindExactDevice: runtimeBindings?.bindExactDevice ?? gatewayMissing,
-      platformServices: params.platformServices,
+      platformServices: { ...params.platformServices },
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {

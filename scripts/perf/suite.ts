@@ -1,4 +1,8 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import type {
+  SnapshotPreferredBackend,
+  SnapshotQualityVerdict,
+} from '@agent-device/kernel/snapshot';
 import type { Platform, SnapshotFacts } from './types.ts';
 
 /** Routes `trigger-app-event` into the fixture's automation screen. */
@@ -23,8 +27,8 @@ export type PlatformStep = {
   args: Cli;
   before?: readonly Cli[];
   after?: readonly Cli[];
-  // `sdk-forced-tree` captures a raw snapshot through the daemon with the XCTest tree backend
-  // pinned; the CLI has no flag for it.
+  // `sdk-forced-tree` captures a snapshot through the daemon with the XCTest tree backend pinned;
+  // the CLI has no flag for it.
   via?: 'cli' | 'sdk-forced-tree';
   // The step runs against a daemon started with these variables. The harness restarts the daemon
   // and reopens the session on the current screen, untimed, before and after the step.
@@ -48,11 +52,14 @@ export type SuiteStep = PlatformStep & {
 export type StepExpectation = {
   // Deepest raw node depth, counted from the application at 0.
   maxDepthAtLeast?: number;
-  // The pinned XCTest tree backend did not serve a healthy capture.
-  treeBackendDegraded?: boolean;
+  // The pinned backend that must serve the capture. The runner marks a pinned capture with the
+  // reason code `requested-backend`; any other backend or code means the pin was not honored.
+  pinnedBackend?: SnapshotPreferredBackend;
   // The Android helper transport that served the capture.
   transport?: string;
 };
+
+const PINNED_REASON_CODE: SnapshotQualityVerdict['reasonCode'] = 'requested-backend';
 
 /** Describes how a snapshot breaks the step expectation, or returns undefined. */
 export function expectationViolation(
@@ -63,8 +70,11 @@ export function expectationViolation(
   if (expect.maxDepthAtLeast !== undefined && (snapshot?.maxDepth ?? -1) < expect.maxDepthAtLeast) {
     return `max depth ${snapshot?.maxDepth ?? 'unknown'} is below ${expect.maxDepthAtLeast}`;
   }
-  if (expect.treeBackendDegraded && snapshot?.backend === 'tree' && snapshot.state !== 'sparse') {
-    return 'the pinned tree backend served a non-sparse capture';
+  if (
+    expect.pinnedBackend !== undefined &&
+    (snapshot?.backend !== expect.pinnedBackend || snapshot.reasonCode !== PINNED_REASON_CODE)
+  ) {
+    return `the ${snapshot?.backend ?? 'unknown'} backend (${snapshot?.reasonCode ?? 'no reason code'}) served the capture, not the pinned ${expect.pinnedBackend}`;
   }
   if (expect.transport !== undefined && snapshot?.transport !== expect.transport) {
     return `the ${snapshot?.transport ?? 'unknown'} transport served the capture, not ${expect.transport}`;
@@ -184,6 +194,13 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
       step('snapshot-i', C.snapshot, ['snapshot', '-i']),
       step('snapshot', C.snapshot, ['snapshot']),
       step('snapshot-raw', C.snapshot, ['snapshot', '--raw']),
+      // Only the regular capture plan honors the pin; the raw plan runs its own backend ladder. The
+      // XCTest tree rejects the heavy feed, so the pinned capture runs on this light screen.
+      step('snapshot-forced-tree', C.snapshot, ['snapshot'], {
+        only: 'ios',
+        via: 'sdk-forced-tree',
+        expect: { pinnedBackend: 'tree' },
+      }),
       step('snapshot-diff', C.snapshot, ['snapshot', '--diff']),
       step('diff-snapshot', C.diff, ['diff', 'snapshot']),
       step('wait-text', C.wait, ['wait', 'text', 'Agent Device Tester']),
@@ -373,14 +390,6 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
       step('scroll-down-settle', C.scroll, ['scroll', 'down', '--settle']),
       step('swipe', C.swipe, ['swipe', '200', '650', '200', '300'], {
         on: { android: { args: ['swipe', '540', '1750', '540', '800'] } },
-      }),
-      // The pinned XCTest capture outlives its watchdog by about a second, and the next runner
-      // command refuses until it ends; the untimed wait keeps that cost out of the next step.
-      step('snapshot-raw-forced-tree', C.snapshot, ['snapshot', '--raw'], {
-        only: 'ios',
-        via: 'sdk-forced-tree',
-        expect: { treeBackendDegraded: true },
-        after: [['wait', '2000']],
       }),
       // Android has one snapshot engine. Its other path is the one-shot `am instrument` capture that
       // serves a request when the helper session is off or fails; only the daemon environment

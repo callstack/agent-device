@@ -16,7 +16,7 @@ type AgentDeviceSdk = typeof import('../../src/sdk/index.ts');
 const FORCED_CAPTURE_TIMEOUT_MS = 90_000;
 
 /**
- * Captures one raw snapshot with the internal backend pin that the CLI does not expose. The
+ * Captures one snapshot with the internal backend pin that the CLI does not expose. The
  * transport talks to the daemon that the built CLI already started and never starts or replaces
  * it, so the measured daemon stays the daemon under test.
  */
@@ -37,7 +37,6 @@ export async function captureWithForcedBackend(options: {
   const t0 = performance.now();
   try {
     const snapshot = await client.capture.snapshot({
-      raw: true,
       platform: 'ios',
       udid: options.udid,
       timeoutMs: FORCED_CAPTURE_TIMEOUT_MS,

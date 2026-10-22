@@ -396,6 +396,47 @@ test('the bridge tree reads selected from the selected trait, matching the XCTes
   assert.equal(enabled(disabledSelected), false);
 });
 
+test('the bridge tree types a tab-button-trait element as Button, matching the XCTest tree', () => {
+  // Real guest words from the iPadOS 27 floating tab bar: each item is a collection-view cell
+  // (automation type Cell) that holds an item view (Other). Neither carries the button trait (bit 0);
+  // both carry the tab-button trait (bit 28), and the XCTest tree types both nodes Button (#3844).
+  const cellTraits = 146297323520n;
+  const itemViewTraits = 8858370048n;
+  const item = (elementClass: string, type: number, word: bigint, nested: unknown[] = []) => ({
+    [application]: elementClass,
+    [automationType]: type,
+    [label]: 'Catalog',
+    [frame]: { X: 287, Y: 36, Width: 93, Height: 36 },
+    [traits]: word.toString(),
+    [children]: nested,
+  });
+  const types = (word: (tabTrait: bigint) => bigint) =>
+    decodeSnapshotBridgeTree(
+      {
+        [application]: 'Application',
+        [children]: [
+          item('_UIFloatingTabBarItemCell', 75, word(cellTraits), [
+            item('_UIFloatingTabBarItemView', 0, word(itemViewTraits)),
+          ]),
+        ],
+      },
+      { truncated: false },
+      limits,
+    )
+      .nodes.slice(1)
+      .map((node) => node.type);
+
+  assert.deepEqual(
+    types((captured) => captured),
+    ['Button', 'Button'],
+  );
+  assert.deepEqual(
+    types((captured) => captured & ~(1n << 28n)),
+    ['Cell', 'Other'],
+    'without the tab-button trait the automation type decides',
+  );
+});
+
 test('the bridge tree reads keyboard focus from the is-editing trait, matching the XCTest tree', () => {
   const editor = (word?: unknown) => ({
     [automationType]: 57,

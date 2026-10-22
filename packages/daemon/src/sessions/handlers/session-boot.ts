@@ -6,7 +6,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   requireSessionOrExplicitSelector,
-  resolveCommandDevice,
+  resolvePowerCommandDevice,
 } from '../../resources/session-device-resolution.ts';
 import {
   admitRuntimeOperations,
@@ -52,11 +52,10 @@ async function resolveBootTargetDevice(
   const session = sessionStore.get(sessionName);
   const flags = req.flags ?? {};
   try {
-    const device = await resolveCommandDevice({
+    const device = await resolvePowerCommandDevice({
       session,
       flags,
       env: sessionStore.host.env,
-      androidAvdSelection: 'include-stopped',
       platformServices,
     });
     if (flags.target && (device.target ?? 'mobile') !== flags.target) {

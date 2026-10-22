@@ -279,3 +279,22 @@ test('a nested request retaining a lock its enclosing request holds re-enters it
     }),
   ).resolves.toBe('reentered');
 });
+
+test('a nested request whose initial key its parent retained re-enters it instead of waiting on its parent', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const parent = createRequestExecutionLocks({ locks, initialKeys: ['session:replay'] });
+
+  await expect(
+    parent.run(async () => {
+      // A fresh replay retains its device once its first open selects it.
+      await parent.retainDevice('SIM-001');
+      // A later step runs as a full request whose plan names the same device.
+      const step = createRequestExecutionLocks({
+        locks,
+        initialKeys: ['session:replay', 'device:SIM-001'],
+      });
+      return await step.run(async () => 'reentered');
+    }),
+  ).resolves.toBe('reentered');
+  expect(locks.size).toBe(0);
+});

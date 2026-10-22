@@ -152,8 +152,7 @@ export function isConfinedToAppLease(
   const scope = resolveRequestOrSessionLeaseScope(req, session);
   if (scope.leaseBackend === 'macos-app') return true;
   return (
-    scope.leaseId !== undefined &&
-    leaseRegistry.findActiveLeaseBackend(scope.leaseId) === 'macos-app'
+    scope.leaseId !== undefined && leaseRegistry.inspectLeaseBackend(scope.leaseId) === 'macos-app'
   );
 }
 

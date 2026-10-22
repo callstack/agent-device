@@ -5,6 +5,7 @@ import {
   detailsAfterDispatchedSteps,
   discloseDispatch,
   type ErrorWireDetails,
+  BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON,
 } from '@agent-device/kernel/errors';
 import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -14,8 +15,9 @@ type RecordingEffect = ReturnType<typeof resolveCommandRecordingEffect>;
 
 /**
  * The daemon's verdict around one request. Once the request's ledger holds a returned mutation, its
- * failure is `unknown` with the sent count added to `details.dispatchedSteps`, whatever produced it
- * and whatever the command declares. Before that, the registry's `recordingEffect` decides: a read
+ * failure is `unknown` with the sent count added to `details.dispatchedSteps`, except that a typed
+ * composite resource refusal keeps `no` for its current step. Before that, the registry's
+ * `recordingEffect` decides: a read
  * (`observes-app`) is `no` over any producer verdict, because a resend repeats no app-visible
  * action; a mutation keeps a producer verdict and is `unknown` when no producer classified the
  * failure; a command without a declared effect passes through.
@@ -46,8 +48,13 @@ function disclosedDetails(
   details: ErrorWireDetails | undefined,
   ledger: RequestDispatchLedger,
 ): ErrorWireDetails | undefined {
-  if (ledger.dispatchedSteps > 0)
-    return detailsAfterDispatchedSteps(details, ledger.dispatchedSteps);
+  if (ledger.dispatchedSteps > 0) {
+    const disclosed = detailsAfterDispatchedSteps(details, ledger.dispatchedSteps);
+    return details?.reason === BOUNDED_COMPOSITE_RESOURCE_UNSUPPORTED_REASON &&
+      details.dispatched === 'no'
+      ? { ...disclosed, dispatched: 'no' }
+      : disclosed;
+  }
   if (effect === undefined) return details;
   if (effect === 'observes-app') {
     return details?.dispatched === 'no' ? details : { ...details, dispatched: 'no' };

@@ -6,7 +6,7 @@ import { publicPlatformString } from '@agent-device/kernel/device';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import {
   requireSessionOrExplicitSelector,
-  resolveCommandDevice,
+  resolvePowerCommandDevice,
 } from '../../resources/session-device-resolution.ts';
 import {
   requireRuntimeBinding,
@@ -43,11 +43,10 @@ export async function handleShutdownCommand(
   const guard = requireSessionOrExplicitSelector(params.req.command, activeSession, flags);
   if (guard) return guard;
 
-  const device = await resolveCommandDevice({
+  const device = await resolvePowerCommandDevice({
     flags,
     session: activeSession,
     env: params.sessionStore.host.env,
-    androidAvdSelection: 'include-stopped',
     platformServices: params.platformServices,
   });
   const inspectFacts = requireRuntimeFacts(params.inspectFacts);

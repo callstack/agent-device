@@ -12,6 +12,7 @@ import {
   runMacOsPressAction,
   runMacOsReadTextAction,
   runMacOsScreenshotAction,
+  quitMacOsApp,
   runMacOsSnapshotAction,
 } from './helper.ts';
 
@@ -380,4 +381,28 @@ test('the helper vocabulary matches the table the Swift helper is held to', () =
   };
   assert.deepEqual([...MACOS_HELPER_REFUSAL_REASONS], fixture.refusalReasons);
   assert.deepEqual([...MACOS_DELIVERY_MECHANISMS], fixture.deliveryMechanisms);
+});
+
+test('the helper accepts a bundle id with an uppercase first segment and refuses a bare name', async () => {
+  const receivedArgs: string[][] = [];
+  const provider = createLocalAppleToolProvider({
+    macosHelper: {
+      run: async (args) => {
+        receivedArgs.push(args);
+        return helperReturn({
+          bundleId: 'Foo.Bar',
+          running: false,
+          terminated: false,
+          forceTerminated: false,
+        });
+      },
+    },
+  });
+
+  await withAppleToolProvider(provider, async () => {
+    await quitMacOsApp('Foo.Bar', captureEnv);
+    await assert.rejects(quitMacOsApp('TextEdit', captureEnv), { code: 'INVALID_ARGS' });
+  });
+
+  assert.deepEqual(receivedArgs, [['app', 'quit', '--bundle-id', 'Foo.Bar']]);
 });

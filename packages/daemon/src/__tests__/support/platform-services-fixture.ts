@@ -28,6 +28,7 @@ export function daemonPlatformServicesFixture(
       observeBootTimeMs: observeBootTimeMsFixture,
     }),
     ensureLocalDeviceReady: ensureLocalDeviceReadyFixture,
+    inspectSessionTeardownResources: inspectSessionTeardownResourcesFixture,
     resolveRequestedOpenSurface: resolveRequestedOpenSurfaceFixture,
     validateOpenRelaunchTarget: validateOpenRelaunchTargetFixture,
     resolveSessionAppBundleIdForTarget: resolveSessionAppBundleIdForTargetFixture,
@@ -37,6 +38,9 @@ export function daemonPlatformServicesFixture(
 
 /** The canned runner-session observation: no live runner on any device. */
 const observeRunnerSessionFixture = vi.fn(async (_deviceId: string) => undefined);
+const inspectSessionTeardownResourcesFixture = vi.fn(
+  async (_device: DeviceInfo): Promise<readonly string[]> => [],
+);
 
 /** The canned foreground answer: nothing observable to name a sole foreground app. */
 const resolveSoleForegroundAppFixture = vi.fn(
