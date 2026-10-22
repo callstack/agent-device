@@ -268,7 +268,7 @@ agent-device react-devtools profile stop
 React Native home feed, shaped after Bluesky 1.136. Thirty nested containers stand in for its
 navigation and provider layers. Below them a virtualized list renders posts with avatar, text,
 image, link, quote, and quote-with-media embeds. Every level opts out of view flattening, so the
-native accessibility tree is deeper than 65 levels and holds about 360 raw nodes.
+native accessibility tree is deeper than 65 levels and holds about 300 raw nodes.
 
 On this screen the XCTest tree capture fails with `kAXErrorIllegalArgument` and recovers through
 private AX, while the simulator accessibility bridge still answers. Use it to reproduce deep-tree
