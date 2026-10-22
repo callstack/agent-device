@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { IosAcquisitionResidue } from '@agent-device/contracts/ios-snapshot';
-import { readSnapshotTextInputGeometry } from '@agent-device/contracts/capture';
+import { readSnapshotTextInputGeometry } from '@agent-device/contracts/snapshot-private-evidence';
 import { presentIosSnapshotAcquisition } from '../ios-snapshot-runtime.ts';
 import { buildSnapshotState } from '../../snapshot-state.ts';
 
