@@ -10,7 +10,8 @@ import {
   canonicalLocalDeviceKey,
   inspectDeviceClaims,
   renewDeviceClaim,
-} from '@agent-device/daemon-contracts/device-claims';
+} from './device-claims.ts';
+import { inspectExistingClaimSettlement } from './device-claim-settlement.ts';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
@@ -470,6 +471,73 @@ function observesDeviceBootAt(bootedAtMs: number): DeviceBootObservationService 
 const UNOBSERVED_BOOT: DeviceBootObservationService = {
   observeBootTimeMs: async () => ({ observed: false, reason: 'unobserved' }),
 };
+
+test('a live foreign claim after reboot is inspectable without renewing or reconciling it', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'read-only-owner');
+  await seedForeignLiveClaim(root, stateDir);
+  publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
+  const before = fs.readFileSync(claimPath(root));
+  const claim = storedClaim();
+
+  const result = await inspectExistingClaimSettlement({
+    device,
+    deviceKey: canonicalLocalDeviceKey(device),
+    owner: hostProcess.readCurrentOwnerIdentity(),
+    session: 'new-owner',
+    workspace: '/w',
+    stateDir: root,
+    claimOwnerKind: 'open-session',
+    observeDeviceBoot: observesDeviceBootAt(claim.updatedAtMs + 1),
+    env: process.env,
+  });
+
+  assert.equal(result.status, 'reconcile');
+  if (result.status === 'reconcile') {
+    assert.equal(result.conflict.classification, 'live');
+    assert.equal(result.claim.session, claim.session);
+    assert.equal(result.tookOver?.bootedAtMs, claim.updatedAtMs + 1);
+  }
+  assert.deepEqual(fs.readFileSync(claimPath(root)), before);
+});
+
+test('read-only claim inspection preserves own hold and unobserved foreign conflict', async () => {
+  const root = useClaimsRoot();
+  const stateDir = path.join(root, 'read-only-hold');
+  await seedForeignLiveClaim(root, stateDir);
+  publishDaemonRegistration(stateDir, { pid: process.ppid, startTime: null });
+  const params = {
+    device,
+    deviceKey: canonicalLocalDeviceKey(device),
+    owner: hostProcess.readCurrentOwnerIdentity(),
+    stateDir,
+    claimOwnerKind: 'open-session' as const,
+    env: process.env,
+  };
+  const conflict = await inspectExistingClaimSettlement({
+    ...params,
+    session: 'new-owner',
+    workspace: '/w',
+    observeDeviceBoot: UNOBSERVED_BOOT,
+  });
+  assert.equal(conflict.status, 'conflict');
+
+  const record = JSON.parse(fs.readFileSync(claimPath(root), 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(
+    claimPath(root),
+    JSON.stringify({
+      ...record,
+      ownerPid: params.owner.pid,
+      ownerStartTime: params.owner.startTime,
+    }),
+  );
+  const held = await inspectExistingClaimSettlement({
+    ...params,
+    session: 'cwd:/w:default',
+    workspace: '/w',
+  });
+  assert.equal(held.status, 'held');
+});
 
 // #2538: a claim that predates the device's current boot cannot describe live device-side ownership
 // — the reboot destroyed the app process, the runner, and the accessibility connection — so it loses

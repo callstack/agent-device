@@ -6,12 +6,18 @@ import {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { resolveDaemonPaths } from './daemon-resolution.ts';
-import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
-import type { DeviceClaimReconciler } from './device-claims.ts';
+import {
+  createDeviceClaimReconciler,
+  type ClaimRecoveryInspection,
+} from './device-claim-reconciliation.ts';
+import type { DeviceClaim, DeviceClaimReconciler } from './device-claims.ts';
 import type { ClaimRecoveryGatewayFactory } from './claim-recovery-gateway.ts';
 
 export type OwnerScopedClaimRecovery = {
-  reconcile: DeviceClaimReconciler;
+  reconcile: (
+    claim: DeviceClaim,
+    inspection?: ClaimRecoveryInspection,
+  ) => ReturnType<DeviceClaimReconciler>;
   dispose(): Promise<void>;
 };
 
@@ -34,6 +40,10 @@ export type OwnerScopedClaimRecoveryComposer = (stateDir: string) => OwnerScoped
 export function createOwnerScopedDeviceClaimReconciler(
   params: Readonly<{
     scope: PlatformRequestScope;
+    /** Optional claim-owner decision before gateway construction. */
+    beforeGateway?: (
+      claim: DeviceClaim,
+    ) => ClaimRecoveryInspection | undefined | Promise<ClaimRecoveryInspection | undefined>;
     /** Root composition's per-transaction recovery gateway; used unless `composeRecovery` replaces it. */
     composeGateway: ClaimRecoveryGatewayFactory;
     /** Test seam replacing the whole per-claim composition, gateway included. */
@@ -44,9 +54,11 @@ export function createOwnerScopedDeviceClaimReconciler(
     params.composeRecovery ??
     ((stateDir) => composeOwnerScopedClaimRecovery(stateDir, params.scope, params.composeGateway));
   return async (claim) => {
+    const inspection = await params.beforeGateway?.(claim);
+    if (inspection?.status === 'retained') return inspection;
     const recovery = compose(claim.stateDir);
     try {
-      return await recovery.reconcile(claim);
+      return await recovery.reconcile(claim, inspection);
     } finally {
       await recovery.dispose();
     }

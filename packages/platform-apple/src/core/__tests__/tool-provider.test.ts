@@ -182,6 +182,9 @@ test('local Apple tool provider exposes macOS host operations as semantic method
       if (cmd === '/usr/bin/lsappinfo') {
         return { exitCode: 0, stdout: 'ASN:0x0-0x1234-"Demo":\n', stderr: '' };
       }
+      if (cmd === 'ps') {
+        return { exitCode: 0, stdout: '    1     0 /sbin/launchd\n', stderr: '' };
+      }
       calls.push([cmd, args, typeof options?.stdin === 'string' ? options.stdin : undefined]);
       if (cmd === 'pbpaste') {
         return { exitCode: 0, stdout: 'copied\r\n', stderr: '' };

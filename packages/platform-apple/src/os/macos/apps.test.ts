@@ -12,6 +12,7 @@ import {
   resolveMacOsAppDeviceOpenTarget,
 } from './apps.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
+import type { AppleMacOsHostProvider } from '../../core/tool-provider-types.ts';
 
 const MACOS_DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -172,4 +173,58 @@ test('an app device resolves any name of its own app and refuses another app', a
       });
     },
   );
+});
+
+function macOsHost(apps: Array<{ name: string; bundleId: string }>) {
+  const openBundle = vi.fn<AppleMacOsHostProvider['openBundle']>(async () => undefined);
+  const listApps = vi.fn(async () => apps);
+  const macosHost = { openBundle, listApps } as unknown as AppleMacOsHostProvider;
+  return {
+    openBundle,
+    listApps,
+    run: <T>(fn: () => Promise<T>) =>
+      withAppleToolProvider(createLocalAppleToolProvider({ macosHost }), fn),
+  };
+}
+
+test('openMacOsApp opens a mixed-case bundle id without display-name resolution', async () => {
+  const host = macOsHost([{ name: 'TextEdit', bundleId: 'com.apple.TextEdit' }]);
+
+  await host.run(() => openMacOsApp(MACOS_DEVICE, 'com.apple.TextEdit'));
+
+  expect(host.openBundle).toHaveBeenCalledWith('com.apple.TextEdit', undefined, {
+    background: false,
+  });
+  expect(host.listApps).not.toHaveBeenCalled();
+});
+
+test('openMacOsApp resolves a display name to its canonical mixed-case bundle id', async () => {
+  const host = macOsHost([{ name: 'TextEdit', bundleId: 'com.apple.TextEdit' }]);
+
+  await host.run(() => openMacOsApp(MACOS_DEVICE, 'TextEdit'));
+
+  expect(host.openBundle).toHaveBeenCalledWith('com.apple.TextEdit', undefined, {
+    background: false,
+  });
+});
+
+test('openMacOsApp keeps the typed error for an app that is not installed', async () => {
+  const host = macOsHost([]);
+
+  await expect(host.run(() => openMacOsApp(MACOS_DEVICE, 'No Such App'))).rejects.toMatchObject({
+    code: 'APP_NOT_INSTALLED',
+  });
+  expect(host.openBundle).not.toHaveBeenCalled();
+});
+
+test.each([
+  ['com.apple.TextEdit', 'com.apple.TextEdit'],
+  ['com.x.My_App', 'com.x.My_App'],
+  ['Booking.com', 'com.booking.BookingApp'],
+])('resolveMacOsApp(%j) is %j', async (typed, expected) => {
+  const host = macOsHost([{ name: 'Booking.com', bundleId: 'com.booking.BookingApp' }]);
+
+  expect(await host.run(() => resolveMacOsApp(typed))).toBe(expected);
+  // Only a lowercase-first dotted id is taken as a bundle id as typed; Booking.com is a name.
+  expect(host.listApps).toHaveBeenCalledTimes(typed === 'Booking.com' ? 1 : 0);
 });

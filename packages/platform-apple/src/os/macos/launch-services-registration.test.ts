@@ -125,22 +125,90 @@ afterEach(() => {
   mockEmitDiagnostic.mockClear();
 });
 
-test('openBundle runs open at once when LaunchServices already lists an instance', async () => {
-  const { runCommand, calls, transcript } = fakeMacHost((call) =>
-    call.cmd === LAUNCH_SERVICES_TOOL ? { stdout: REGISTERED } : {},
-  );
+test('openBundle opens the listed running copy by its own path, not by bundle id', async () => {
+  runningCopies();
+  const { runCommand, calls, transcript } = fakeMacHost((call) => {
+    if (call.cmd === LAUNCH_SERVICES_TOOL) return { stdout: REGISTERED };
+    if (call.cmd === 'plutil') return { stdout: 'com.example.demo\ncom.ghost.app\n' };
+    return {};
+  });
 
   await openBundle(runCommand);
 
-  // Attaching to a listed instance is `open -b`'s own job, so no process-table read and no poll
-  // stands between this open and `open`.
   expect(transcript()).toEqual([
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
-    { cmd: 'open', args: ['-b', BUNDLE_ID] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
+    { cmd: 'plutil', args: ['-extract', 'CFBundleIdentifier', 'raw', DEMO_PLIST, GHOST_PLIST] },
+    { cmd: 'open', args: [DEMO_BUNDLE] },
   ]);
   expect(mockSleep).not.toHaveBeenCalled();
-  // One read of the registration view, inside its own cap.
   expect(registrationReads(calls)[0]?.timeoutMs).toBeLessThanOrEqual(LAUNCH_SERVICES_READ_CAP_MS);
+});
+
+test('openBundle sends a link to the listed running copy by its own path', async () => {
+  runningCopies();
+  const { runCommand, calls } = fakeMacHost((call) => {
+    if (call.cmd === LAUNCH_SERVICES_TOOL) return { stdout: REGISTERED };
+    if (call.cmd === 'plutil') return { stdout: 'com.example.demo\ncom.ghost.app\n' };
+    return {};
+  });
+
+  await createLocalAppleMacOsHostProvider(runCommand, async () => null).openBundle(
+    BUNDLE_ID,
+    'demo://item/1',
+    { background: true },
+  );
+
+  expect(calls.at(-1)).toEqual({ cmd: 'open', args: ['-g', '-a', DEMO_BUNDLE, 'demo://item/1'] });
+});
+
+test('openBundle finds the running copy whose identifier differs only in case', async () => {
+  runningCopies();
+  const { runCommand, calls } = fakeMacHost((call) => {
+    if (call.cmd === LAUNCH_SERVICES_TOOL) return { stdout: REGISTERED };
+    if (call.cmd === 'plutil') return { stdout: 'com.Example.Demo\ncom.ghost.app\n' };
+    return {};
+  });
+
+  await openBundle(runCommand);
+
+  expect(calls.at(-1)).toEqual({ cmd: 'open', args: [DEMO_BUNDLE] });
+});
+
+test('openBundle leaves copies running from two paths to open -b', async () => {
+  processTable.stdout = psRows([
+    [4242, `${DEMO_BUNDLE}/Contents/MacOS/Demo -DevFlag`],
+    [4300, `${GHOST_BUNDLE}/Contents/MacOS/Ghost`],
+  ]);
+  const { runCommand, calls } = fakeMacHost((call) => {
+    if (call.cmd === LAUNCH_SERVICES_TOOL) return { stdout: REGISTERED };
+    if (call.cmd === 'plutil') return { stdout: 'com.example.demo\ncom.example.demo\n' };
+    return {};
+  });
+
+  await openBundle(runCommand);
+
+  expect(calls.at(-1)).toEqual({ cmd: 'open', args: ['-b', BUNDLE_ID] });
+});
+
+test.each([
+  ['a relative', 'Contents/Resources/FortiTray/FortiTray.app/Contents/MacOS/FortiTray'],
+  ['a dash-led', '-Demo.app/Contents/MacOS/Demo'],
+])('openBundle leaves a copy run from %s path to open -b', async (_shape, command) => {
+  processTable.stdout = psRows([[4242, command]]);
+  const { runCommand, transcript } = fakeMacHost((call) => {
+    if (call.cmd === LAUNCH_SERVICES_TOOL) return { stdout: REGISTERED };
+    if (call.cmd === 'plutil') return { stdout: `${BUNDLE_ID}\n` };
+    return {};
+  });
+
+  await openBundle(runCommand);
+
+  expect(transcript()).toEqual([
+    { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`] },
+    { cmd: PROCESS_TABLE_TOOL, args: PROCESS_TABLE_ARGS },
+    { cmd: 'open', args: ['-b', BUNDLE_ID] },
+  ]);
 });
 
 test('openBundle runs open at once when no process of the opened bundle runs', async () => {
@@ -196,7 +264,7 @@ test('openBundle waits for LaunchServices to list a copy that runs unlisted', as
     { cmd: LAUNCH_SERVICES_TOOL, args: ['find', `bundleid=${BUNDLE_ID}`, 'pid=4242'] },
   ]);
   expect(mockSleep).toHaveBeenCalledTimes(2);
-  expect(transcript().at(-1)).toEqual({ cmd: 'open', args: ['-b', BUNDLE_ID] });
+  expect(transcript().at(-1)).toEqual({ cmd: 'open', args: [DEMO_BUNDLE] });
   // Each probe read carries a budget: the registration reads their own cap, the identifier read
   // its larger one, and neither spends more than that.
   for (const read of registrationReads(calls)) {
@@ -291,7 +359,7 @@ test('openBundle pairs rows with paths when an unreadable bundle name itself con
     },
   ]);
   expect(mockSleep).toHaveBeenCalledTimes(1);
-  expect(calls.at(-1)).toEqual({ cmd: 'open', args: ['-b', BUNDLE_ID] });
+  expect(calls.at(-1)).toEqual({ cmd: 'open', args: [DEMO_BUNDLE] });
 });
 
 test('openBundle still opens a copy LaunchServices never lists', async () => {

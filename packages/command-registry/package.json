@@ -47,10 +47,6 @@
       "types": "./src/owner-files.ts",
       "default": "./src/owner-files.ts"
     },
-    "./platform-execution-entry": {
-      "types": "./src/platform-execution-entry.ts",
-      "default": "./src/platform-execution-entry.ts"
-    },
     "./post-action-observation": {
       "types": "./src/post-action-observation.ts",
       "default": "./src/post-action-observation.ts"

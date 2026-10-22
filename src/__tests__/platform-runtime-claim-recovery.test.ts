@@ -258,6 +258,45 @@ test('device release --stale keeps the claim when resource evidence is unreadabl
   }
 });
 
+test('stale release inspects retained resource evidence before gateway composition', async () => {
+  const claimsDir = mkdtempForTestSync('agent-device-cli-release-');
+  const ownerStateDir = mkdtempForTestSync('agent-device-cli-release-owner-');
+  try {
+    writeClaim(claimsDir, {
+      deviceKey: 'local:android:none:emulator-5554',
+      id: 'emulator-5554',
+      name: 'Dead Pixel',
+      session: 'dead-session',
+      ownerPid: 999_999_999,
+      ownerStartTime: 'old-start-time',
+      stateDir: ownerStateDir,
+    });
+    const resourcePath = appLogResourceStore.resolvePath(
+      path.join(ownerStateDir, 'sessions', 'dead-session'),
+    );
+    fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
+    fs.writeFileSync(resourcePath, '{');
+    process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+    const composed: string[] = [];
+    const outcomes = await runStaleDeviceClaimRelease(
+      {},
+      createLiveTestHostEnvironment(),
+      (stateDir) => {
+        composed.push(stateDir);
+        throw new Error('retained evidence must not compose a gateway');
+      },
+    );
+    assert.deepEqual(composed, []);
+    assert.equal(outcomes[0]?.status, 'retained');
+    assert.equal(outcomes[0]?.reason, 'app-log-descriptor-invalid');
+    assert.equal(fs.readFileSync(resourcePath, 'utf8'), '{');
+  } finally {
+    delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+    fs.rmSync(ownerStateDir, { recursive: true, force: true });
+  }
+});
+
 test('recovery is composed per claim from the stale owner state dir, never the caller', async () => {
   const claimsDir = mkdtempForTestSync('agent-device-cli-release-');
   const ownerDirA = mkdtempForTestSync('agent-device-cli-release-owner-a-');

@@ -60,14 +60,15 @@ extension RunnerTests {
 #else
     let buttons = app.navigationBars.buttons.allElementsBoundByIndex
     if let back = buttons.first(where: { $0.isHittable }) {
+      // `isHittable` promises a hittable point, not a hittable center: a bar button partly under an
+      // overlay keeps the element tap, which aims at the point XCTest computed.
       back.tap()
       return .performed
     }
     if isSnapshotXCTestChannelPenalized(bundleId: mainOwned.bundleId) {
       NSLog("AGENT_DEVICE_RUNNER_IN_APP_BACK_SKIPPED_XCTEST_ENUMERATION bundle=%@", mainOwned.bundleId ?? "")
-    } else if let back = topNavigationBackElement(app: app) {
-      tapElementCenter(app: app, element: back)
-      return .performed
+    } else if let frame = topNavigationBackFrame(app: app) {
+      return tapResolvedNavigationBackControl(app: app, frame: frame)
     }
     return tapTopLeadingNavigationFallback(app: app)
 #endif
@@ -84,32 +85,48 @@ extension RunnerTests {
 #endif
   }
 
-  private func topNavigationBackElement(app: XCUIApplication) -> XCUIElement? {
-#if os(iOS)
-    let frame = onScreenWindowFrame(app: app)
-    let candidates = app.buttons.matching(Self.navigationBackPredicate()).allElementsBoundByIndex.compactMap {
-      element -> (XCUIElement, Int)? in
-      guard element.exists, element.isHittable else { return nil }
-      guard Self.isTopNavigationBackCandidateFrame(
-        element.frame,
-        in: frame,
-        identifier: element.identifier
-      ) else { return nil }
-      guard let rank = Self.navigationBackControlRank(
-        label: element.label,
-        identifier: element.identifier
-      ) else {
-        return nil
+  @MainActor
+  private func tapResolvedNavigationBackControl(app: XCUIApplication, frame: CGRect) -> InAppBackOutcome {
+    guard SnapshotGeometry.isPositiveFinite(frame) else { return .unavailable }
+    let context = synthesizedCoordinateContext(
+      app: app,
+      policy: synthesizedGesturePolicy(.coordinateTap)
+    )
+    switch performSynthesizedGesture(app, kind: .coordinateTap, context: context, synthesize: {
+      synthesizedTapAt(app: app, x: frame.midX, y: frame.midY, context: context)
+    }) {
+    case .performed:
+      return .performed
+    case .refused:
+      return .unavailable
+    case .xctestFallback:
+      let fallback = performGesture(app) {
+        tapAt(app: app, x: frame.midX, y: frame.midY)
       }
-      return (element, rank)
+      if case .performed = fallback.outcome { return .performed }
+      return .unavailable
+    }
+  }
+
+  private func topNavigationBackFrame(app: XCUIApplication) -> CGRect? {
+#if os(iOS)
+    let window = onScreenWindowFrame(app: app)
+    let candidates = app.buttons.matching(Self.navigationBackPredicate()).allElementsBoundByIndex.compactMap {
+      element -> (frame: CGRect, rank: Int)? in
+      guard element.exists, element.isHittable else { return nil }
+      let frame = element.frame
+      let identifier = element.identifier
+      guard Self.isTopNavigationBackCandidateFrame(frame, in: window, identifier: identifier)
+      else { return nil }
+      guard let rank = Self.navigationBackControlRank(label: element.label, identifier: identifier)
+      else { return nil }
+      return (frame, rank)
     }
     return candidates.sorted { lhs, rhs in
-      if lhs.1 != rhs.1 { return lhs.1 < rhs.1 }
-      let leftFrame = lhs.0.frame
-      let rightFrame = rhs.0.frame
-      if leftFrame.minY != rightFrame.minY { return leftFrame.minY < rightFrame.minY }
-      return leftFrame.minX < rightFrame.minX
-    }.first?.0
+      if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+      if lhs.frame.minY != rhs.frame.minY { return lhs.frame.minY < rhs.frame.minY }
+      return lhs.frame.minX < rhs.frame.minX
+    }.first?.frame
 #else
     return nil
 #endif

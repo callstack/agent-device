@@ -7,7 +7,7 @@ import type { DeviceLease } from '@agent-device/contracts/device';
 import { readMacOsAppBackend } from '@agent-device/contracts/session';
 import { runCmd } from '@agent-device/host-kit/command';
 import { isProcessAlive } from '@agent-device/host-kit/process';
-import { isMacOs } from '@agent-device/kernel/device';
+import { isMacOs, isMacOsBundleId } from '@agent-device/kernel/device';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { isAppLeaseAllowed } from '../core/daemon-command-registry.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
@@ -20,7 +20,6 @@ import type { SessionState } from '../core/session-state.ts';
  */
 export type MacOsAppLeaseKey = Readonly<{ bundleId: string; pid?: number }>;
 
-const BUNDLE_ID = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/;
 const PID = /^[1-9][0-9]{0,9}$/;
 
 export function parseMacOsAppLeaseKey(deviceKey: string | undefined): MacOsAppLeaseKey {
@@ -28,7 +27,7 @@ export function parseMacOsAppLeaseKey(deviceKey: string | undefined): MacOsAppLe
   const at = value.lastIndexOf('@');
   const bundleId = at < 0 ? value : value.slice(0, at);
   const pidText = at < 0 ? undefined : value.slice(at + 1);
-  if (!BUNDLE_ID.test(bundleId) || (pidText !== undefined && !PID.test(pidText))) {
+  if (!isMacOsBundleId(bundleId) || (pidText !== undefined && !PID.test(pidText))) {
     throw new AppError(
       'INVALID_ARGS',
       'A macos-app lease device key must be <bundleId> or <bundleId>@<pid>.',

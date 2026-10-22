@@ -12,6 +12,7 @@ import type {
 } from '../../../core/request-runtime-binding.ts';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import { normalizeFreshForegroundOpenSelection } from '../../../core/device/device-selector-intent.ts';
 
 export type ForegroundOpenResolution =
   | { type: 'not-requested' }
@@ -79,10 +80,7 @@ export async function resolveForegroundOpenRequest(params: {
 
   return {
     type: 'resolved',
-    req: {
-      ...req,
-      flags: { ...req.flags, platform: 'ios' },
-    },
+    req: normalizeFreshForegroundOpenSelection(req),
   };
 }
 

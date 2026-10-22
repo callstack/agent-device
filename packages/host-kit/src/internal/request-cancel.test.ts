@@ -56,6 +56,45 @@ test('daemon deadline cancels in-flight work with its typed reason and retains r
   }
 });
 
+test('a nested request keeps its own shorter deadline than its parent', async () => {
+  vi.useFakeTimers();
+  const parent = registerRequestAbort('parent-deadline');
+  try {
+    await withRequestDeadline('parent-deadline', 1_000, async () => {
+      const child = registerRequestAbort('child-deadline', 'parent-deadline');
+      try {
+        const signal = getRequestSignal('child-deadline')!;
+        let finish!: () => void;
+        const pending = withRequestDeadline('child-deadline', 100, async () => {
+          await new Promise<void>((resolve) => {
+            finish = resolve;
+          });
+          signal.throwIfAborted();
+          return { ok: true };
+        });
+        const rejected = assert.rejects(
+          pending,
+          (error: unknown) =>
+            error instanceof AppError &&
+            error.details?.reason === 'daemon_request_timeout' &&
+            error.details.timeoutMs === 100,
+        );
+        await vi.advanceTimersByTimeAsync(100);
+        assert.equal(signal.aborted, true);
+        assert.equal(getRequestSignal('parent-deadline')?.aborted, false);
+        finish();
+        await rejected;
+      } finally {
+        clearRequestAbortRegistration(child);
+      }
+      return { ok: true };
+    });
+  } finally {
+    clearRequestAbortRegistration(parent);
+    vi.useRealTimers();
+  }
+});
+
 test('a completed daemon deadline releases its timer and preserves later cancellation', async () => {
   vi.useFakeTimers();
   const registration = registerRequestAbort('completed-deadline');

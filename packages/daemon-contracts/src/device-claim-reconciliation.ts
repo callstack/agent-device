@@ -21,27 +21,42 @@ import { safeSessionName } from '@agent-device/host-kit/session-paths';
 export function createDeviceClaimReconciler(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
-}): DeviceClaimReconciler {
-  return async (claim) => {
-    const sessionsDir = resolveDaemonPaths(claim.stateDir).sessionsDir;
-    const sessionDir = path.join(sessionsDir, safeSessionName(claim.session));
+}): (
+  claim: DeviceClaim,
+  inspection?: ClaimRecoveryInspection,
+) => ReturnType<DeviceClaimReconciler> {
+  return async (claim, suppliedInspection) => {
+    const inspection = suppliedInspection ?? inspectDeviceClaimRecovery(claim);
+    if (inspection.status === 'retained') return inspection;
     try {
-      for (const resource of Object.values(DEVICE_CLAIM_DURABLE_RESOURCES)) {
-        const ownership = inspectResourceOwnership(resource, claim, sessionDir);
-        if (ownership.status === 'retained') {
-          return { status: 'retained', reason: ownership.reason };
-        }
-        // Recovery is intentionally sequential: both resources can bind the same exact
+      const sessionsDir = resolveDaemonPaths(claim.stateDir).sessionsDir;
+      const sessionDir = path.join(sessionsDir, safeSessionName(claim.session));
+      for (const { resourceKind, resourcePath } of inspection.ownedResources) {
+        const resource = DEVICE_CLAIM_DURABLE_RESOURCES[resourceKind];
+        const currentOwnership = inspectResourceOwnership(resource, claim, sessionDir);
+        if (currentOwnership.status === 'retained') return currentOwnership;
+        if (currentOwnership.status === 'missing') continue;
+        // Recovery is intentionally sequential: resources can bind the same exact
         // device/runtime owner, so one must release its binding before the next starts.
-        if (ownership.status === 'owned') {
-          const outcome = await resource.recover(params, sessionsDir, ownership.resourcePath);
-          if (outcome === 'retained') {
-            return {
-              status: 'retained',
-              reason: `${resource.resourceKind}-cleanup-pending`,
-            };
-          }
+        const outcome = await resource.recover(params, sessionsDir, resourcePath);
+        if (outcome === 'retained') {
+          return {
+            status: 'retained',
+            reason: `${resource.resourceKind}-cleanup-pending`,
+          };
         }
+      }
+      const afterRecovery = inspectDeviceClaimRecovery(claim);
+      if (afterRecovery.status === 'retained') return afterRecovery;
+      const initialPaths = new Set(
+        inspection.ownedResources.map(({ resourcePath }) => resourcePath),
+      );
+      const pending = afterRecovery.ownedResources.find(
+        ({ resourceKind, resourcePath }) =>
+          !initialPaths.has(resourcePath) || afterRecovery.recoveryKinds.includes(resourceKind),
+      );
+      if (pending) {
+        return { status: 'retained', reason: `${pending.resourceKind}-cleanup-pending` };
       }
       return { status: 'reconciled' };
     } catch (error) {
@@ -57,6 +72,50 @@ export function createDeviceClaimReconciler(params: {
       return { status: 'retained', reason: 'durable-resource-reconciliation-failed' };
     }
   };
+}
+
+export type ClaimRecoveryInspection =
+  | {
+      status: 'inspectable';
+      recoveryKinds: readonly DurableSessionResourceKind[];
+      ownedResources: readonly Readonly<{
+        resourceKind: DurableSessionResourceKind;
+        resourcePath: string;
+      }>[];
+    }
+  | { status: 'retained'; reason: string };
+
+/** Inspect exact-owner durable manifests without composing a gateway or settling a resource. */
+export function inspectDeviceClaimRecovery(claim: DeviceClaim): ClaimRecoveryInspection {
+  try {
+    const sessionsDir = resolveDaemonPaths(claim.stateDir).sessionsDir;
+    const sessionDir = path.join(sessionsDir, safeSessionName(claim.session));
+    const recoveryKinds: DurableSessionResourceKind[] = [];
+    const ownedResources: { resourceKind: DurableSessionResourceKind; resourcePath: string }[] = [];
+    for (const resource of Object.values(DEVICE_CLAIM_DURABLE_RESOURCES)) {
+      const ownership = inspectResourceOwnership(resource, claim, sessionDir);
+      if (ownership.status === 'retained') return ownership;
+      if (ownership.status === 'owned') {
+        ownedResources.push({
+          resourceKind: resource.resourceKind,
+          resourcePath: ownership.resourcePath,
+        });
+        if (ownership.requiresRecovery) recoveryKinds.push(resource.resourceKind);
+      }
+    }
+    return { status: 'inspectable', recoveryKinds, ownedResources };
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'device_claim_orphan_reconciliation_failed',
+      data: {
+        deviceKey: claim.deviceKey,
+        ownerSession: claim.session,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    return { status: 'retained', reason: 'durable-resource-reconciliation-failed' };
+  }
 }
 
 type ClaimDurableResource = Readonly<{
@@ -126,7 +185,7 @@ function inspectResourceOwnership(
   sessionDir: string,
 ):
   | { status: 'missing' }
-  | { status: 'owned'; resourcePath: string }
+  | { status: 'owned'; resourcePath: string; requiresRecovery: boolean }
   | { status: 'retained'; reason: string } {
   const resourcePath = resource.store.resolvePath(sessionDir);
   const record = resource.store.read(resourcePath);
@@ -143,5 +202,5 @@ function inspectResourceOwnership(
   ) {
     return { status: 'retained', reason: `${resource.resourceKind}-owner-mismatch` };
   }
-  return { status: 'owned', resourcePath };
+  return { status: 'owned', resourcePath, requiresRecovery: record.envelope.lifecycle === 'open' };
 }

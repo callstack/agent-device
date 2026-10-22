@@ -278,12 +278,11 @@ export class LeaseRegistry {
     return this.macOsAppTenantIds.has(tenantId);
   }
 
-  /** The backend of the active lease `leaseId` names, read without an owner check. */
-  findActiveLeaseBackend(leaseId: string): LeaseBackend | undefined {
+  /** Read active backend without sweeping another lease or mutating owner state. */
+  inspectLeaseBackend(leaseId: string): LeaseBackend | undefined {
     const id = normalizeLeaseId(leaseId);
-    if (!id) return undefined;
-    this.cleanupExpiredLeases();
-    return this.leases.get(id)?.backend;
+    const lease = id ? this.leases.get(id) : undefined;
+    return lease && !this.wouldConsumeExpiredLease(lease, this.now()) ? lease.backend : undefined;
   }
 
   /**
@@ -510,25 +509,31 @@ export class LeaseRegistry {
     return undefined;
   }
 
-  private hasHumanControl(lease: DeviceLease): boolean {
-    const key = leaseDeviceBindingKey(lease);
-    return key !== undefined && this.holdsByDevice.has(key);
-  }
-
   /**
    * What keeps a past-due lease alive: a human holding the device, or an admitted
    * request still working on it while its client still wants the result.
    */
   private isLeaseProtected(lease: DeviceLease, now: number): boolean {
-    return (
-      lease.expiresAt > now ||
-      this.hasHumanControl(lease) ||
-      this.inFlightWork.isDeferred(lease.leaseId)
-    );
+    return !this.wouldConsumeExpiredLease(lease, now);
   }
 
-  private expireHumanControlHolds(): void {
-    const now = this.now();
+  private wouldConsumeExpiredLease(lease: DeviceLease, now: number): boolean {
+    if (lease.expiresAt > now || this.inFlightWork.isDeferred(lease.leaseId)) return false;
+    const key = leaseDeviceBindingKey(lease);
+    const holds = key ? this.holdsByDevice.get(key) : undefined;
+    let releasedAt = 0;
+    for (const { hold } of holds?.values() ?? []) {
+      if (hold.expiresAt === undefined || hold.expiresAt > now) return false;
+      releasedAt = Math.max(releasedAt, hold.expiresAt);
+    }
+    if (releasedAt === 0) return true;
+    const hostTtlMs = this.hostTtlMsByLeaseId.get(lease.leaseId);
+    const ttlMs = leaseOwnTtlMs(lease);
+    const renewedAt = Math.max(releasedAt, lease.heartbeatAt);
+    return renewedAt + (hostTtlMs === undefined ? ttlMs : Math.min(ttlMs, hostTtlMs)) <= now;
+  }
+
+  private expireHumanControlHolds(now = this.now()): void {
     for (const [key, holds] of this.holdsByDevice) {
       let releasedAt = 0;
       for (const [id, { hold }] of holds) {
@@ -574,17 +579,20 @@ export class LeaseRegistry {
     return expired;
   }
 
-  consumeExpiredLease(leaseId: string): DeviceLease | undefined {
-    this.expireHumanControlHolds();
+  consumeExpiredLease(leaseId: string, beforeConsume?: () => void): DeviceLease | undefined {
     const normalizedLeaseId = normalizeLeaseId(leaseId);
+    const lease = normalizedLeaseId ? this.leases.get(normalizedLeaseId) : undefined;
+    const now = this.now();
+    if (lease && beforeConsume && this.wouldConsumeExpiredLease(lease, now)) beforeConsume();
+    this.expireHumanControlHolds(now);
     if (!normalizedLeaseId) return undefined;
-    const lease = this.leases.get(normalizedLeaseId);
-    if (!lease || this.isLeaseProtected(lease, this.now())) {
+    const currentLease = this.leases.get(normalizedLeaseId);
+    if (!currentLease || this.isLeaseProtected(currentLease, now)) {
       return undefined;
     }
-    this.leases.delete(lease.leaseId);
-    this.unbindLease(lease, lease.expiresAt);
-    const expiredLease = { ...lease };
+    this.leases.delete(currentLease.leaseId);
+    this.unbindLease(currentLease, currentLease.expiresAt);
+    const expiredLease = { ...currentLease };
     this.onLeaseExpired?.(expiredLease);
     return expiredLease;
   }
