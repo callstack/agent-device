@@ -6,6 +6,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
   ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
   ANDROID_TOUCH_HELPER_GESTURE_PHASE,
+  type AndroidSnapshotHelperTransport,
 } from '@agent-device/platform-android/mechanics';
 import { test } from 'vitest';
 import {
@@ -125,32 +126,46 @@ test('reads the settle wait of a --settle response and nothing from other respon
 });
 
 // Trimmed from Android heavy-feed request logs.
-const androidCapture = (session: Record<string, unknown>, oneShot = false) =>
+const sessionTimer = (answered: boolean, event: Record<string, unknown> = {}) =>
+  line({
+    phase: ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
+    ...event,
+    data: {
+      transport: 'persistent-session' satisfies AndroidSnapshotHelperTransport,
+      answered,
+      ...(event.data as Record<string, unknown> | undefined),
+    },
+  });
+const oneShotTimer = [
+  line({
+    level: 'debug',
+    phase: 'exec_command',
+    durationMs: 373,
+    data: { command: 'adb', event: 'settled' },
+  }),
+  line({
+    phase: ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE,
+    durationMs: 373,
+    data: { transport: 'instrumentation' satisfies AndroidSnapshotHelperTransport },
+  }),
+];
+const androidCapture = (...timers: string[]) =>
   [
-    line({ phase: ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE, ...session }),
-    ...(oneShot
-      ? [
-          line({
-            level: 'debug',
-            phase: 'exec_command',
-            durationMs: 373,
-            data: { command: 'adb', event: 'settled' },
-          }),
-          line({ phase: ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE, durationMs: 373 }),
-        ]
-      : []),
+    ...timers,
     line({ phase: 'snapshot_capture', durationMs: 380, data: { backend: 'android' } }),
   ].join('\n');
 
 test('names the Android helper transport that answered each capture', () => {
-  const session = profileRequestLog(androidCapture({ durationMs: 40 }));
+  const session = profileRequestLog(androidCapture(sessionTimer(true, { durationMs: 40 })));
   assert.deepEqual(session.snapshotSources, {
     'android-helper/persistent-session': { count: 1, totalMs: 40, failures: 0 },
   });
   assert.deepEqual(session.fallbacks, []);
 
-  // With the session off, the session timer settles cleanly and a one-shot capture answers.
-  const sessionOff = profileRequestLog(androidCapture({ durationMs: 0 }, true));
+  // With the session off, the session timer settles unanswered and a one-shot capture answers.
+  const sessionOff = profileRequestLog(
+    androidCapture(sessionTimer(false, { durationMs: 0 }), ...oneShotTimer),
+  );
   assert.deepEqual(sessionOff.snapshotSources, {
     'android-helper/persistent-session': { count: 1, totalMs: 0, failures: 1 },
     'android-helper/instrumentation': { count: 1, totalMs: 373, failures: 0 },
@@ -165,7 +180,10 @@ test('names the Android helper transport that answered each capture', () => {
 
   const sessionFailed = profileRequestLog(
     [
-      androidCapture({ level: 'error', durationMs: 5000, data: { error: 'socket closed' } }, true),
+      androidCapture(
+        sessionTimer(false, { level: 'error', durationMs: 5000, data: { error: 'socket closed' } }),
+        ...oneShotTimer,
+      ),
       line({
         level: 'warn',
         phase: 'android_snapshot_helper_session_fallback',
@@ -182,6 +200,24 @@ test('names the Android helper transport that answered each capture', () => {
     'android-helper/persistent-session: socket closed',
     'android_snapshot_helper_session_fallback: socket closed',
   ]);
+});
+
+test('reads whether the Android session answered from its own timer, not from event order', () => {
+  // A content re-capture can follow a session capture that answered. The answer still counts.
+  const recaptured = profileRequestLog(
+    androidCapture(sessionTimer(true, { durationMs: 40 }), ...oneShotTimer),
+  );
+  assert.deepEqual(recaptured.snapshotSources['android-helper/persistent-session'], {
+    count: 1,
+    totalMs: 40,
+    failures: 0,
+  });
+
+  // A request that ends before any one-shot capture still records the unanswered session.
+  const unanswered = profileRequestLog(androidCapture(sessionTimer(false, { durationMs: 12 })));
+  assert.deepEqual(unanswered.snapshotSources, {
+    'android-helper/persistent-session': { count: 1, totalMs: 12, failures: 1 },
+  });
 });
 
 test('counts Android helper gestures as runner commands', () => {

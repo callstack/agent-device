@@ -36,6 +36,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
   type AndroidHelperSessionScope,
   type AndroidSnapshotHelperCaptureOptions,
+  type AndroidSnapshotHelperTransport,
 } from './snapshot-helper-types.ts';
 import {
   captureAndroidSnapshotWithHelper,
@@ -102,10 +103,17 @@ const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
  * a busy screen run a snapshot past the daemon request envelope.
  */
 const HELPER_CONTENT_RECAPTURE_WINDOW_MS = 10_000;
-/** The diagnostic phase of a capture through the snapshot helper's persistent session. */
+/**
+ * The diagnostic phase of a capture through the snapshot helper's persistent session. Its
+ * `data.transport` names the session transport, and `data.answered` is false when the session
+ * returned no capture (off, backed off, failed to start, or retired) and a one-shot capture follows.
+ */
 export const ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE =
   'android_snapshot_helper_session_capture';
-/** The diagnostic phase of a one-shot `am instrument` snapshot helper capture. */
+/**
+ * The diagnostic phase of a one-shot `am instrument` snapshot helper capture. Its `data.transport`
+ * names the instrumentation transport.
+ */
 export const ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE = 'android_snapshot_helper_capture';
 
 export type AndroidSnapshotOptions = SnapshotOptions & {
@@ -469,15 +477,18 @@ async function captureAndroidUiHierarchyFromHelper(params: {
     signal,
   });
   captureOptions.idleWait = params.idleWait;
+  let sessionCapture: AndroidSnapshotHelperOutput | undefined;
   try {
-    const sessionCapture = await withDiagnosticTimer(
+    sessionCapture = await withDiagnosticTimer(
       ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE,
-      async () => await captureAndroidSnapshotWithHelperSession(captureOptions),
-      {
+      async () => (sessionCapture = await captureAndroidSnapshotWithHelperSession(captureOptions)),
+      () => ({
         packageName: artifact.manifest.packageName,
         version: artifact.manifest.version,
         timeoutMs: ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
-      },
+        transport: 'persistent-session' satisfies AndroidSnapshotHelperTransport,
+        answered: sessionCapture !== undefined,
+      }),
     );
     if (sessionCapture) return sessionCapture;
   } catch (error) {
@@ -500,6 +511,7 @@ async function captureAndroidUiHierarchyFromHelper(params: {
       version: artifact.manifest.version,
       timeoutMs: ANDROID_SNAPSHOT_HELPER_CAPTURE_TIMEOUT_MS,
       commandTimeoutMs: ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS,
+      transport: 'instrumentation' satisfies AndroidSnapshotHelperTransport,
     },
   );
 }

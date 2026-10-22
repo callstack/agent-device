@@ -31,10 +31,6 @@ type DiagnosticEvent = {
   data?: Record<string, unknown>;
 };
 
-// Android: the snapshot helper answers through its persistent session, or through a one-shot
-// `am instrument` capture when the session is off or fails. Touch gestures run in the helper too.
-const ANDROID_SESSION_PRODUCER = 'android-helper/persistent-session';
-const ANDROID_ONE_SHOT_PRODUCER = 'android-helper/instrumentation';
 const STABILIZATION_PHASE = /settle|stabiliz/i;
 const FALLBACK_TEXT_LIMIT = 140;
 
@@ -74,19 +70,15 @@ export function profileRequestLog(ndjson: string): SampleProfile {
     fallbacks: [],
   };
   const fallbacks = new Set<string>();
-  const addSource = (producer: string, event: DiagnosticEvent): boolean => {
+  const addSource = (producer: string, event: DiagnosticEvent, answered = true): void => {
     const entry = (profile.snapshotSources[producer] ??= { count: 0, totalMs: 0, failures: 0 });
     entry.count += 1;
     entry.totalMs += eventDuration(event) ?? 0;
     const error = text(event.data?.error);
-    if (!error && event.level !== 'error') return true;
-    entry.failures += 1;
-    fallbacks.add(`${producer}: ${error ?? 'failed'}`);
-    return false;
+    const failed = error !== undefined || event.level === 'error';
+    if (failed || !answered) entry.failures += 1;
+    if (failed) fallbacks.add(`${producer}: ${error ?? 'failed'}`);
   };
-  // A session capture that settles cleanly but is followed by a one-shot capture did not answer:
-  // the session is off, and the one-shot capture served the request.
-  let sessionAnswered = false;
   let firstTs: number | undefined;
   let lastTs: number | undefined;
   for (const line of ndjson.split('\n')) {
@@ -113,12 +105,15 @@ export function profileRequestLog(ndjson: string): SampleProfile {
       addTiming(profile.runnerCommands, text(data.command) ?? 'unknown', duration);
     } else if (phase === SNAPSHOT_SOURCE_ACQUIRE_PHASE) {
       addSource(text(data.producer) ?? 'unknown', event);
-    } else if (phase === ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE) {
-      sessionAnswered = addSource(ANDROID_SESSION_PRODUCER, event);
-    } else if (phase === ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE) {
-      if (sessionAnswered) profile.snapshotSources[ANDROID_SESSION_PRODUCER]!.failures += 1;
-      sessionAnswered = false;
-      addSource(ANDROID_ONE_SHOT_PRODUCER, event);
+    } else if (
+      phase === ANDROID_SNAPSHOT_HELPER_SESSION_CAPTURE_PHASE ||
+      phase === ANDROID_SNAPSHOT_HELPER_CAPTURE_PHASE
+    ) {
+      addSource(
+        `android-helper/${text(data.transport) ?? 'unknown'}`,
+        event,
+        data.answered !== false,
+      );
     } else if (phase === ANDROID_TOUCH_HELPER_GESTURE_PHASE) {
       addTiming(profile.runnerCommands, 'gesture', duration);
       if (event.level === 'error') fallbacks.add(`${phase}: ${text(data.error) ?? 'failed'}`);
