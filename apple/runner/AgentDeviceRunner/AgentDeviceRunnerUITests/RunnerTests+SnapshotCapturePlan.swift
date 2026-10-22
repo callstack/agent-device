@@ -237,6 +237,12 @@ extension RunnerTests {
   /// deferred shape. A capture that ASKED for a private-AX-only reading (custom
   /// actions) degraded nothing, so reporting slow accessibility work would name a
   /// cause that does not exist.
+  ///
+  /// The 'requested-backend' answer names a plan decision, not a failure, so the runner carries
+  /// it in its own slot (`preSelectionReason`) where a tier that actually failed replaces it as
+  /// the verdict reason. The breaker's 'deferred' and 'budget' answers stay first-failure seeds:
+  /// their established contract is that the pre-selection IS the reason a deferred plan answers
+  /// with, whatever the bounded probe's tier did on the way.
   static func xcTestChannelStateFirstFailure(
     _ state: SnapshotXCTestChannelPlanState,
     requestPinnedBackend: Bool = false,
@@ -398,13 +404,24 @@ extension RunnerTests {
       preferredBackend: options.preferredBackend
     )
     let effectivePlan = effective.plan
-    // Only a customActions-implied pin is request-pinned; the daemon's
-    // same-backend evidence probe pins for its own reasons and keeps 'deferred'.
-    firstFailure = Self.xcTestChannelStateFirstFailure(
+    // The pre-selection reason names why the plan was shaped this way, not what went wrong on
+    // this capture. The breaker's 'deferred' and probe 'budget' answers seed the first-failure
+    // slot and keep their established contract: a deferred plan reports the pre-selection
+    // whatever its bounded probe did. A 'requested-backend' answer (the request-pin) travels in
+    // its own slot instead, and is reported only where nothing failed on this capture — an
+    // accepted payload keeps it, a failing terminal reports the real reason. A pinned backend
+    // that rejected the screen must say so (#3885 follow-up): 'requested-backend' on a sparse
+    // terminal claimed nothing degraded while the pinned tier had just failed, and hid the
+    // typed reason the caller needs. Only a customActions-implied pin is request-pinned; the
+    // daemon's same-backend evidence probe pins for its own reasons and keeps 'deferred'.
+    let preSelectionReason = Self.xcTestChannelStateFirstFailure(
       effective.xCTestChannelState,
       requestPinnedBackend: options.customActions && !xCTestChannelPenalizedByBreaker,
       preferredBackend: effective.preferredBackend?.rawValue
     )
+    if preSelectionReason?.code != "requested-backend" {
+      firstFailure = preSelectionReason
+    }
     switch effective.xCTestChannelState {
     case .normal:
       break
@@ -489,7 +506,7 @@ extension RunnerTests {
       let verdictReason = Self.planVerdictReason(
         xCTestTierRan: kind.usesXCTestAccessibilityChannel,
         state: effective.xCTestChannelState,
-        firstFailure: firstFailure
+        firstFailure: firstFailure ?? preSelectionReason
       )
       if recovered {
         NSLog(
@@ -502,7 +519,7 @@ extension RunnerTests {
         capture,
         backend: kind,
         state: recovered ? .recovered : .healthy,
-        reason: recovered || firstFailure?.code == "requested-backend" ? verdictReason : nil
+        reason: recovered || verdictReason?.code == "requested-backend" ? verdictReason : nil
       )
     }
 
@@ -528,7 +545,7 @@ extension RunnerTests {
     let terminalReason = Self.planVerdictReason(
       xCTestTierRan: xCTestTierRan,
       state: effective.xCTestChannelState,
-      firstFailure: firstFailure
+      firstFailure: firstFailure ?? preSelectionReason
     )
     let fallbackPayload =
       best.map { stampedSnapshotPayload($0.capture, backend: $0.kind, state: .sparse, reason: terminalReason) }
