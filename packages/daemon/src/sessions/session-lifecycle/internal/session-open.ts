@@ -10,6 +10,7 @@ import {
   resolveOpenApplicationRuntimePlan,
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
@@ -174,6 +175,62 @@ async function resolveOpenRuntimePlanAdmission(params: {
   return { type: 'runtime', runtimeHintPlan: runtimeHintPlan.plan, admission };
 }
 
+/** Read-only existing-session open decision shared with bounded resource admission. */
+export async function resolveExistingOpenRequest(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  platformServices: DaemonPlatformServices;
+}): Promise<
+  | { type: 'response'; response: DaemonResponse }
+  | {
+      type: 'resolved';
+      requestedOpenTarget: string | undefined;
+      openTarget: string | undefined;
+      surface: SessionSurface;
+    }
+> {
+  const { req, session, platformServices } = params;
+  const foreground = await resolveForegroundOpenRequest({ req, hasExistingSession: true });
+  if (foreground.type === 'response') return foreground;
+  if (req.flags?.saveScript) {
+    return {
+      type: 'response',
+      response: errorResponse(
+        'INVALID_ARGS',
+        'open --save-script can only arm a fresh session. Use the current session without --save-script, or close it and start a fresh session.',
+      ),
+    };
+  }
+  const shouldRelaunch = req.flags?.relaunch === true;
+  const requestedOpenTarget = req.positionals?.[0];
+  const openTarget = requestedOpenTarget ?? (shouldRelaunch ? session.appName : undefined);
+  const surface = resolveOpenSurfaceResponse(
+    platformServices,
+    session.device,
+    req.flags?.surface,
+    openTarget,
+    session.surface,
+  );
+  if (typeof surface !== 'string') return { type: 'response', response: surface };
+  if (!openTarget && surface === 'app') {
+    return {
+      type: 'response',
+      response: shouldRelaunch
+        ? invalidOpenArgs('open --relaunch requires an app name or an active session app.')
+        : invalidOpenArgs('Session already active. Close it first or pass a new --session name.'),
+    };
+  }
+  const validation = await validateResolvedOpenRequest({
+    shouldRelaunch,
+    openTarget,
+    surface,
+    device: session.device,
+    platformServices,
+  });
+  if (validation) return { type: 'response', response: validation };
+  return { type: 'resolved', requestedOpenTarget, openTarget, surface };
+}
+
 // fallow-ignore-next-line complexity
 async function handleOpenCommand(params: SessionOpenCommandInput): Promise<SessionOpenResult> {
   const { sessionName, logPath, sessionStore } = params;
@@ -190,43 +247,13 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
   if (existingRef) {
     const session = sessionStore.requireCurrent(existingRef);
-    if (req.flags?.saveScript) {
-      return {
-        type: 'response',
-        response: errorResponse(
-          'INVALID_ARGS',
-          'open --save-script can only arm a fresh session. Use the current session without --save-script, or close it and start a fresh session.',
-        ),
-      };
-    }
-    const shouldRelaunch = req.flags?.relaunch === true;
-    const requestedOpenTarget = req.positionals?.[0];
-    const openTarget = requestedOpenTarget ?? (shouldRelaunch ? session.appName : undefined);
-    const surfaceResult = resolveOpenSurfaceResponse(
-      params.platformServices,
-      session.device,
-      req.flags?.surface,
-      openTarget,
-      session.surface,
-    );
-    if (typeof surfaceResult !== 'string') return { type: 'response', response: surfaceResult };
-    if (!openTarget && surfaceResult === 'app') {
-      return {
-        type: 'response',
-        response: shouldRelaunch
-          ? invalidOpenArgs('open --relaunch requires an app name or an active session app.')
-          : invalidOpenArgs('Session already active. Close it first or pass a new --session name.'),
-      };
-    }
-
-    const validation = await validateResolvedOpenRequest({
-      shouldRelaunch,
-      openTarget,
-      surface: surfaceResult,
-      device: session.device,
+    const resolved = await resolveExistingOpenRequest({
+      req,
+      session,
       platformServices: params.platformServices,
     });
-    if (validation) return { type: 'response', response: validation };
+    if (resolved.type === 'response') return resolved;
+    const { requestedOpenTarget, openTarget, surface: surfaceResult } = resolved;
 
     // Reopening renews the claim before anything touches the device, so no other daemon ever sees
     // a device this session is actively coming back to as one its owner walked away from.

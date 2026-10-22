@@ -266,6 +266,62 @@ test('claim preview uses the request workspace to recognize its own exact claim'
   expect(response.ok, JSON.stringify(response)).toBe(true);
 });
 
+test('bounded reopen renews its own claim after the caller changes cwd', async () => {
+  const device = { ...makeIosDevice('SIM-REOPEN-CWD'), appleOs: 'ios' as const };
+  process.env.AGENT_DEVICE_CLAIMS_DIR = root('bounded-reopen-cwd-');
+  const { handler } = route(device);
+  expect(
+    (
+      await handler(
+        openRequest('shared', { platform: 'ios' }, 'original-cwd', { cwd: '/tmp/ws-a' }, [
+          'com.example.app',
+        ]),
+      )
+    ).ok,
+  ).toBe(true);
+  const request = batchStep('open', {}, 'reopen-other-cwd');
+  const response = await handler({
+    ...request,
+    session: 'shared',
+    meta: { ...request.meta, cwd: '/tmp/ws-b' },
+    flags: {
+      batchSteps: [
+        {
+          command: 'open',
+          positionals: ['com.example.app'],
+          flags: { platform: 'ios', relaunch: true },
+        },
+      ],
+    },
+  });
+  expect(response.ok, JSON.stringify(response)).toBe(true);
+});
+
+test('bounded open preserves in-daemon session conflict guidance', async () => {
+  const device = { ...makeIosDevice('SIM-IN-DAEMON-CONFLICT'), appleOs: 'ios' as const };
+  process.env.AGENT_DEVICE_CLAIMS_DIR = root('bounded-in-daemon-claims-');
+  const { handler } = route(device);
+  expect((await handler(openRequest('first', { platform: 'ios' }, 'first-open'))).ok).toBe(true);
+  const direct = await handler(openRequest('second', { platform: 'ios' }, 'second-direct'));
+  const bounded = await handler({
+    ...batchStep('open', { platform: 'ios' }, 'third-bounded'),
+    session: 'third',
+  });
+  expect(direct).toMatchObject({
+    ok: false,
+    error: { code: 'DEVICE_IN_USE', message: 'Device is already in use by session "first".' },
+  });
+  expect(bounded).toMatchObject({
+    ok: false,
+    error: {
+      code: 'DEVICE_IN_USE',
+      details: { session: 'first' },
+    },
+  });
+  expect(bounded.error?.message).toContain(direct.error!.message);
+  expect(bounded.error?.details?.hint).toBe(direct.error?.details?.hint);
+});
+
 test('a completed owned manifest still refuses bounded recovery before cleanup', async () => {
   const device = { ...makeIosDevice('SIM-TERMINAL-MANIFEST'), appleOs: 'ios' as const };
   const { resourcePath } = seedClaim(device);
@@ -344,6 +400,33 @@ test('replay preserves source and step identity for bounded claim recovery', asy
   expect(runtime.bind).not.toHaveBeenCalled();
   expect(recovery).not.toHaveBeenCalled();
   expect(fs.readFileSync(resourcePath!)).toEqual(before);
+});
+
+test('active-session replay install reaches its handler without a child scope lock', async () => {
+  const device = { ...makeIosDevice('SIM-REPLAY-INSTALL-LOCK'), appleOs: 'ios' as const };
+  const { handler, runtime, sessionStore } = route(device);
+  sessionStore.publish('takeover', {
+    name: 'takeover',
+    device,
+    appBundleId: 'com.example.app',
+    createdAt: Date.now(),
+    actions: [],
+  });
+  const scriptDir = root('bounded-replay-install-');
+  const scriptPath = path.join(scriptDir, 'install.ad');
+  const appPath = path.join(scriptDir, 'app.ipa');
+  fs.writeFileSync(appPath, 'test artifact');
+  fs.writeFileSync(scriptPath, `install com.example.app ${appPath}\n`);
+  const response = await handler({
+    token: 'test-token',
+    session: 'takeover',
+    command: 'replay',
+    positionals: [scriptPath],
+    flags: { replayScriptSource: replayScriptSourceBundleFor(scriptPath) },
+    meta: { cwd: scriptDir, requestId: 'replay-install-lock', sessionExplicit: true },
+  });
+  expect(response.error?.message).not.toContain('A device execution lock can only be retained');
+  expect(runtime.inspectFacts).toHaveBeenCalled();
 });
 
 test('a bounded host open inspects a stale app claim and its resource', async () => {

@@ -64,6 +64,28 @@ test('bounded reopen keeps an owned IME and skips close teardown inspection', as
   }
 });
 
+test('invalid foreground reopen preserves the open validity error before resource refusal', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    const owned = seedExistingCapture(world, 'audio-probe');
+    const before = fs.readFileSync(owned.resourcePath, 'utf8');
+    const response = await world.call('batch', [], {
+      batchSteps: [{ command: 'open', flags: { foreground: true } }],
+    });
+    expect(response.json.error?.data).toMatchObject({
+      code: 'INVALID_ARGS',
+      details: { executed: 0 },
+    });
+    expect(response.json.error?.data?.message).toContain('fresh session');
+    expect(world.bind).not.toHaveBeenCalled();
+    expect(world.inspectFacts).not.toHaveBeenCalled();
+    expect(owned.finish).not.toHaveBeenCalled();
+    expect(fs.readFileSync(owned.resourcePath, 'utf8')).toBe(before);
+  } finally {
+    await world.daemon.close();
+  }
+});
+
 test('bounded close may release a local lease when the daemon has no provider release', async () => {
   const world = await resourceAdmissionWorld();
   try {

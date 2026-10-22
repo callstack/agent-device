@@ -38,6 +38,7 @@ const DAEMON_SESSION_LIFECYCLE_FACADES = [
     exports: [
       'SessionOpenCommandInput',
       'handleSessionOpenCommands',
+      'resolveExistingOpenRequest',
       'resolveForegroundOpenRequest',
     ],
   },

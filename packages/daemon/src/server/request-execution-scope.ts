@@ -395,6 +395,19 @@ export async function createRequestExecutionScope(params: {
             await boundedResources.admitBoundedCompositeResourceRequest({
               req: scopedReq,
               session,
+              validateSessionReopen: async (current) => {
+                const { resolveExistingOpenRequest } =
+                  await import('../sessions/session-lifecycle/internal/session-open.ts');
+                const resolution = await resolveExistingOpenRequest({
+                  req: scopedReq,
+                  session: current,
+                  platformServices: scope.platformServices,
+                });
+                if (resolution.type === 'response' && !resolution.response.ok) {
+                  const { code, message, details } = resolution.response.error;
+                  throw new AppError(code, message, details);
+                }
+              },
               inspectSessionTeardownResources: async (current) =>
                 await scope.platformServices.inspectSessionTeardownResources(current.device),
               closeWouldReleaseProviderLease: () =>
@@ -407,6 +420,7 @@ export async function createRequestExecutionScope(params: {
                   }),
                 ),
               claimRecovery: {
+                currentSessionExists: Boolean(session),
                 resolveDevice: async () => {
                   const selected = await resolveBoundedClaimDevice(
                     prepareLockedRequestBinding({ req: scopedReq, existingRef }).req,
@@ -414,11 +428,11 @@ export async function createRequestExecutionScope(params: {
                     params.host.env,
                     scope.platformServices,
                   );
-                  await (
-                    scopedReq.internal?.retainDeviceExecutionLock ?? scope.retainDeviceExecutionLock
-                  )(selected.id);
+                  await scopedReq.internal?.retainDeviceExecutionLock?.(selected.id);
                   return selected;
                 },
+                hasInMemorySessionOwner: (device) =>
+                  sessionStore.findByDevice(device.id) !== undefined,
                 session: sessionName,
                 workspace: scopedReq.meta?.cwd ?? params.host.cwd,
                 stateDir: sessionStore.resolveDaemonStateDir(),

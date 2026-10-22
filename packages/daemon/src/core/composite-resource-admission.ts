@@ -68,9 +68,11 @@ function assertBoundedCompositeSessionDisposal(
 export async function admitBoundedCompositeResourceRequest(params: {
   req: DaemonRequest;
   session: SessionState | undefined;
+  validateSessionReopen: (session: SessionState) => Promise<void>;
   inspectSessionTeardownResources: (session: SessionState) => Promise<readonly string[]>;
   closeWouldReleaseProviderLease: () => boolean;
   claimRecovery: {
+    currentSessionExists: boolean;
     resolveDevice: () => Promise<DeviceInfo>;
     session: string;
     workspace: string;
@@ -79,6 +81,7 @@ export async function admitBoundedCompositeResourceRequest(params: {
     coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
     observeDeviceBoot?: DeviceBootObservationService;
     claimConflictError: (device: DeviceInfo, conflict: InspectedDeviceClaim) => AppError;
+    hasInMemorySessionOwner: (device: DeviceInfo) => boolean;
   };
 }): Promise<void> {
   const { req, session } = params;
@@ -90,6 +93,7 @@ export async function admitBoundedCompositeResourceRequest(params: {
     case 'session-lifecycle': {
       // Maestro app-only close leaves the session and its durable resources owned.
       if (req.command === 'close' && req.internal?.closeAppOnly === true) return;
+      if (req.command === 'open' && session) await params.validateSessionReopen(session);
       const platformOwned =
         req.command === 'close' && session
           ? await params.inspectSessionTeardownResources(session)
@@ -126,7 +130,9 @@ async function assertBoundedClaimRecovery(
 ): Promise<void> {
   const policy = resolveCommandDeviceClaimPolicy(req.command);
   if (policy !== 'acquire-session' && policy !== 'transient-exclusive') return;
+  if (req.command === 'open' && params.currentSessionExists) return;
   const device = await params.resolveDevice();
+  if (req.command === 'open' && params.hasInMemorySessionOwner(device)) return;
   if (isActiveProviderDevice(device)) return;
   const settlements = await inspectDeviceClaimAcquisition({
     device,
