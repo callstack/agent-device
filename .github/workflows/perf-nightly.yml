@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       rounds:
-        description: 'Measured rounds per step (samples)'
+        description: 'Measured rounds per step (samples, at least 3)'
         required: false
         default: '3'
       warmup:
@@ -28,7 +28,7 @@ on:
         required: false
         default: ''
       baseline-nights:
-        description: 'Earlier runs in the rolling baseline'
+        description: 'Earlier scheduled nights in the rolling baseline'
         required: false
         default: '7'
       baseline-branch:

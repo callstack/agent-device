@@ -282,8 +282,40 @@ export async function runIosSuite(
   );
 }
 
+// A stalled close or daemon stop must not keep the run, and its logs, from finishing.
+const TEARDOWN_TIMEOUT_MS = 60_000;
+
+/**
+ * Returns the end of a run: save the logs, stop the session and the daemon within a deadline, save
+ * the logs again with the teardown, and remove the state directory unless it is kept. It runs once,
+ * so the interrupt handler and the normal finish can both call it.
+ */
+export function iosRunFinalizer(ctx: IosSuiteContext, keepArtifacts: boolean): () => void {
+  let finalized = false;
+  const saveLogs = (): void => {
+    try {
+      copyRawState(ctx);
+    } catch (error) {
+      log(`finalize: saving logs failed: ${(error as Error).message}`);
+    }
+  };
+  const teardown = (args: string[], flags: string[]): void => {
+    const result = invokeCli(args, flags, { timeoutMs: TEARDOWN_TIMEOUT_MS });
+    if (!result.ok) log(`finalize: ${args.join(' ')} failed: ${result.stderr.trim().slice(-400)}`);
+  };
+  return () => {
+    if (finalized) return;
+    finalized = true;
+    saveLogs();
+    teardown(['close'], ['--state-dir', ctx.stateDir, '--session', SESSION]);
+    teardown(['daemon', 'stop', '--clean'], ['--state-dir', ctx.stateDir]);
+    saveLogs();
+    if (!keepArtifacts) fs.rmSync(ctx.stateDir, { recursive: true, force: true });
+  };
+}
+
 /** Copies daemon and session logs into the raw artifact; the daemon token file stays behind. */
-export function copyRawState(ctx: IosSuiteContext): void {
+function copyRawState(ctx: IosSuiteContext): void {
   const target = path.join(ctx.rawDir, 'state');
   fs.mkdirSync(target, { recursive: true });
   const daemonLog = path.join(ctx.stateDir, 'daemon.log');

@@ -18,8 +18,9 @@ The suite records a reason for each catalog command that it does not time. `ios-
 pnpm perf --platform ios --udid <udid> --rounds 3 --warmup 1 --out-dir .tmp/perf/local
 ```
 
-`--scenarios lifecycle,heavy-feed` runs a subset. `--app-id` changes the fixture bundle id.
+`--rounds` is at least 3. `--scenarios lifecycle,heavy-feed` runs a subset. `--app-id` changes the fixture bundle id.
 The suite uses its own temporary state directory and daemon. It stops them at the end.
+At the end, or on SIGINT or SIGTERM, the suite saves the logs to `raw/state/`, stops the session and daemon within a deadline, and saves the logs again.
 
 ## Output
 
@@ -54,19 +55,22 @@ All times are milliseconds. Statistics use only the successful samples of a step
 
 `.github/workflows/perf-nightly.yml` runs the iOS suite every night on `main`.
 Each run uploads `perf-ios-summary` (summary, report, comparison; 90 days) and `perf-ios-raw` (logs; 30 days).
-The job compares the run with up to seven earlier runs and writes the result to the job summary.
+The job compares the run with up to seven earlier nights and writes the result to the job summary.
+A night is the newest scheduled run of one UTC day that ran every scenario of the judged run.
+Manual dispatches are never part of the rolling baseline.
 
 To fetch and compare runs on your machine, use `gh` with access to the repository:
 
 ```sh
 pnpm perf:compare                                  # latest night against the 7 nights before it
 pnpm perf:compare --to 2026-10-28                  # that night against the 7 nights before it
-pnpm perf:compare --to latest --from 2026-10-21    # latest against one night
-pnpm perf:compare --to latest --from 2026-10-21..2026-10-25 --out .tmp/perf/compare
+pnpm perf:compare --to latest --from 2026-10-21    # latest against the newest run of that day
+pnpm perf:compare --to latest --from 2026-10-21..2026-10-25 --out .tmp/perf/compare  # every run in the range
 pnpm perf:compare --to .tmp/perf/local             # a local run against recent nights
 ```
 
 A reference is `latest`, a run id, a `YYYY-MM-DD` date, or a local output path.
+An explicit `--to` or `--from` reference accepts runs of any trigger, so it can compare dispatches and local runs.
 Downloads stay in `.tmp/perf-nightly/<run-id>/`.
 Do not judge a local run against CI nights. The comparison warns when the device, Xcode, or CPU differs.
 
@@ -81,7 +85,19 @@ A step is a `regression` or an `improvement` only when its change is more than a
 - Two times the coefficient of variation of the run divided by √n.
 - 50 ms.
 
-The rolling baseline skips runs that did not run every scenario of the judged run, such as a partial dispatch.
-Fewer than three baseline nights give `insufficient-baseline`.
-`new-failures` means that the step failed and no baseline night failed. `fixed` means the reverse.
+Each step gets a timing verdict and a failure verdict.
+A timing verdict uses only successful samples:
+
+- `insufficient-samples`: the judged run has fewer than three successful samples of the step.
+- `insufficient-baseline`: fewer than three baseline nights have three successful samples of the step. Nights with fewer do not count.
+
+The failure verdict compares failed samples with the worst baseline night:
+
+- `new-failures`: the step failed and no baseline night failed.
+- `more-failures`: the step failed more often than on every baseline night, both in count and in share of its samples.
+- `fixed`: the step did not fail and every baseline night failed.
+
+When failures are new or more, a faster median is `insufficient-samples`, not `improvement`.
+The samples that still pass do not show that the step got faster.
+Regressions and worse failures are workflow warnings. The job stays green.
 The thresholds are in `compare.ts`.

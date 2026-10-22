@@ -23,6 +23,9 @@ export type PerfConfig = {
 
 export const DEFAULT_IOS_APP_ID = 'com.callstack.agentdevicelab';
 
+/** The fewest measured rounds that a run accepts; a comparison needs as many successful samples. */
+export const MIN_MEASURED_ROUNDS = 3;
+
 // How to invoke the CLI. Defaults to the built dist binary (bin/agent-device.mjs).
 // Set AGENT_DEVICE_PERF_CLI to run from source instead, e.g. on CI:
 //   AGENT_DEVICE_PERF_CLI="--experimental-strip-types src/bin.ts"
@@ -55,7 +58,7 @@ function readIntValue(argv: string[], i: number, flag: string, min: number): num
 export function parseConfig(argv: string[]): PerfConfig {
   const cfg: PerfConfig = {
     platform: 'ios',
-    rounds: 3,
+    rounds: MIN_MEASURED_ROUNDS,
     warmup: 1,
     keepArtifacts: false,
     outDir: path.join(DEFAULT_OUT_DIR, new Date().toISOString().replaceAll(/[:.]/g, '-')),
@@ -72,7 +75,7 @@ export function parseConfig(argv: string[]): PerfConfig {
       }
       case '--n':
       case '--rounds':
-        cfg.rounds = readIntValue(argv, i++, a, 1);
+        cfg.rounds = readIntValue(argv, i++, a, MIN_MEASURED_ROUNDS);
         break;
       case '--warmup':
         cfg.warmup = readIntValue(argv, i++, a, 0);
