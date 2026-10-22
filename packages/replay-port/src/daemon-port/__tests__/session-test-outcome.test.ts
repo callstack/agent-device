@@ -39,6 +39,30 @@ test('failed attempt outcome reads an empty warnings array when absent or non-st
   expect(emptyWarnings.status === 'failed' && emptyWarnings.warnings).toEqual([]);
 });
 
+test('only the typed bounded refusal stops retries without being infrastructure', () => {
+  const message = 'bounded_composite_resource_unsupported';
+  const typed = toReplayTestAttemptOutcome({
+    ok: false,
+    error: {
+      code: 'REPLAY_DIVERGENCE',
+      message,
+      details: { reason: 'bounded_composite_resource_unsupported' },
+    },
+  });
+  expect(typed).toMatchObject({
+    status: 'failed',
+    infrastructure: false,
+    stopRetries: true,
+  });
+
+  const untyped = toReplayTestAttemptOutcome({
+    ok: false,
+    error: { code: 'REPLAY_DIVERGENCE', message, details: { reason: 'selector_not_found' } },
+  });
+  expect(untyped).toMatchObject({ status: 'failed', infrastructure: false });
+  expect(untyped).not.toHaveProperty('stopRetries');
+});
+
 test('passed attempt outcome keeps reading warnings from response data', () => {
   const outcome = toReplayTestAttemptOutcome({
     ok: true,

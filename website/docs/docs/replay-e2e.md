@@ -30,8 +30,10 @@ value, and the same private CLI context. If steps remain and the report offers
 unrecorded `logs` or `audio` step leaves no replay tail to resume. Inspect completed steps before
 retrying; earlier steps may have changed the app. A nested `test` with an attempt timeout or
 `--record-video` is refused before its first attempt. Direct `test` retains its own timeout
-behavior. An authored `.ad` command without a resource classification fails closed with
-`details.shape: <command>:unclassified` and the same original-input guidance.
+behavior. If a nested test reaches a bounded resource refusal, it stops after that attempt even
+when you configured retries. Other test failures can still retry. An authored `.ad` command
+without a resource classification fails closed with `details.shape: <command>:unclassified`
+and the same original-input guidance.
 
 To run Maestro YAML flows or export `.ad` scripts to Maestro YAML, see [Run Maestro flows](/docs/run-maestro-flows).
 

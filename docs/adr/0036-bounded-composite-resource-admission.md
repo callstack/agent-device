@@ -17,3 +17,5 @@ The daemon deadline bounds the composite but cannot prove that a resource operat
 ## Consequences
 
 Callers inspect completed steps before retrying and run a refused shape separately with its original arguments, options, session, and private CLI context. `standaloneCommandName` is a public name, not a copy-paste command. Replay keeps the failed step, source, `repairHint`, and digest-bound resume metadata; it skips post-refusal capture. Ordinary replay failure capture and recovery remain unchanged. The final layer must add session disposal and foreign-claim recovery without weakening this step admission boundary. A cross-daemon change after preview cannot promise universal zero binding.
+
+A bounded resource refusal inside a nested test ends that test's attempts after cleanup. It remains the reported test failure, distinct from infrastructure failure. Unrelated failures retain their configured retries.

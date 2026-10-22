@@ -154,6 +154,8 @@ export type ReplayTestAttemptFailed = {
    * tags the outcome and the scheduler only reads the tag.
    */
   infrastructure: boolean;
+  /** A typed policy failure that must not repeat this attempt, distinct from infrastructure. */
+  stopRetries?: true;
 };
 
 /** Every expected attempt state resolves as a tagged outcome; nothing throws across the seam. */

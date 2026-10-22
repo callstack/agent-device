@@ -396,6 +396,117 @@ test('nested bounded test refuses resource work while direct test retains native
   }
 });
 
+test.each(['cli', 'manifest'] as const)(
+  'bounded nested test stops after typed resource refusal with %s retries',
+  async (retrySource) => {
+    const world = await resourceAdmissionWorld();
+    try {
+      world.sessionStore.retire(world.ref);
+      const script = path.join(world.daemon.stateDir, 'retry-resource.ad');
+      const contents =
+        `context platform=android${retrySource === 'manifest' ? ' retries=2' : ''}\n` +
+        'open com.android.settings\nhome\nperf memory snapshot\n';
+      fs.writeFileSync(script, contents);
+      const response = await world.call('batch', [], {
+        batchSteps: [
+          {
+            command: 'test',
+            positionals: [script],
+            flags: {
+              replayScriptSources: [{ entry: script, files: { [script]: contents } }],
+              artifactsDir: path.join(world.daemon.stateDir, 'retry-artifacts'),
+              ...(retrySource === 'cli' ? { retries: 2 } : {}),
+            },
+          },
+        ],
+      });
+      const suite = response.json.result.data.results[0].data;
+      expect(suite).toMatchObject({ failed: 1, executed: 1 });
+      expect(world.home).toHaveBeenCalledOnce();
+      expect(suite.failures[0]).toMatchObject({
+        attempts: 1,
+        error: {
+          details: {
+            reason: 'bounded_composite_resource_unsupported',
+            shape: 'perf:memory-snapshot',
+            dispatched: 'no',
+            divergence: {
+              step: { index: 3, source: { path: script, line: 4 } },
+              screen: { state: 'unavailable', reason: 'bounded-composite-resource-unsupported' },
+            },
+          },
+        },
+      });
+      expect(suite.failures[0].error.details.divergence.cause.hint).toContain('original test');
+      expect(suite.failures[0].error.details.divergence.cause.hint).not.toContain('attempt-1');
+      expect(world.native).not.toHaveBeenCalled();
+      expect(world.sessionStore.listRefs()).toHaveLength(0);
+    } finally {
+      await world.daemon.close();
+    }
+  },
+);
+
+test('direct unbounded test keeps ordinary retries after a resource step fails', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    world.sessionStore.retire(world.ref);
+    const script = path.join(world.daemon.stateDir, 'direct-retry-resource.ad');
+    const contents =
+      'context platform=android\nopen com.android.settings\nhome\nperf memory snapshot\n';
+    fs.writeFileSync(script, contents);
+    const response = await world.call('test', [script], {
+      retries: 2,
+      replayScriptSources: [{ entry: script, files: { [script]: contents } }],
+      artifactsDir: path.join(world.daemon.stateDir, 'direct-retry-artifacts'),
+    });
+    const suite = response.json.result.data;
+    expect(suite).toMatchObject({ failed: 1, executed: 1 });
+    expect(suite.failures[0]).toMatchObject({ attempts: 3 });
+    expect(suite.failures[0].error.details?.reason).not.toBe(
+      'bounded_composite_resource_unsupported',
+    );
+    expect(world.home).toHaveBeenCalledTimes(3);
+    expect(world.native).toHaveBeenCalledTimes(3);
+    expect(world.sessionStore.listRefs()).toHaveLength(0);
+  } finally {
+    await world.daemon.close();
+  }
+});
+
+test('resource-free nested test keeps retries for an ordinary failure', async () => {
+  const world = await resourceAdmissionWorld();
+  try {
+    world.sessionStore.retire(world.ref);
+    const script = path.join(world.daemon.stateDir, 'nested-ordinary-retry.ad');
+    const contents =
+      'context platform=android\nopen com.android.settings\nhome\npress id="never-present"\n';
+    fs.writeFileSync(script, contents);
+    const response = await world.call('batch', [], {
+      batchSteps: [
+        {
+          command: 'test',
+          positionals: [script],
+          flags: {
+            retries: 2,
+            replayScriptSources: [{ entry: script, files: { [script]: contents } }],
+            artifactsDir: path.join(world.daemon.stateDir, 'ordinary-retry-artifacts'),
+          },
+        },
+      ],
+    });
+    const suite = response.json.result.data.results[0].data;
+    expect(suite.failures[0]).toMatchObject({ attempts: 3 });
+    expect(suite.failures[0].error.details?.reason).not.toBe(
+      'bounded_composite_resource_unsupported',
+    );
+    expect(world.home).toHaveBeenCalledTimes(3);
+    expect(world.sessionStore.listRefs()).toHaveLength(0);
+  } finally {
+    await world.daemon.close();
+  }
+});
+
 test('bounded test cleanup retires an attempt with another durable resource and keeps the primary refusal', async () => {
   const world = await resourceAdmissionWorld();
   try {
