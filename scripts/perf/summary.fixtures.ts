@@ -51,6 +51,7 @@ export function summaryFixture(
     },
     metadata: {
       commit: '0123456789abcdef',
+      dirty: false,
       runId: overrides.runId,
       agentDeviceVersion: '0.0.0',
       host: { os: 'Darwin', arch: 'arm64', cpu: 'Apple M1 (Virtual)', cores: 3, memoryGb: 7 },

@@ -1,3 +1,7 @@
+import { EXEC_COMMAND_PHASE } from '@agent-device/host-kit/command';
+import { DIAGNOSTIC_STDERR_PREFIX } from '@agent-device/host-kit/diagnostics';
+import { RETRY_PHASE } from '@agent-device/host-kit/retry';
+import { DAEMON_REQUEST_PHASE } from '../../src/daemon-client/daemon-client.ts';
 import { median } from './stats.ts';
 import type {
   MeasurementProfile,
@@ -8,6 +12,12 @@ import type {
   Timing,
 } from './types.ts';
 
+// The platform-apple façades export only what production code consumes, so its phase names stay
+// literal here.
+const RUNNER_COMMAND_SEND_PHASE = 'ios_runner_command_send';
+const SNAPSHOT_SOURCE_ACQUIRE_PHASE = 'ios.snapshot-source.acquire';
+const SNAPSHOT_SOURCE_RECOVERY_PHASE = 'ios_snapshot_source_recovery';
+
 type DiagnosticEvent = {
   ts?: string;
   level?: string;
@@ -16,13 +26,8 @@ type DiagnosticEvent = {
   data?: Record<string, unknown>;
 };
 
-const RUNNER_COMMAND_PHASE = 'ios_runner_command_send';
-const SPAWN_PHASE = 'exec_command';
-const SNAPSHOT_SOURCE_PHASE = 'ios.snapshot-source.acquire';
-const SNAPSHOT_RECOVERY_PHASE = 'ios_snapshot_source_recovery';
 const STABILIZATION_PHASE = /settle|stabiliz/i;
 const FALLBACK_TEXT_LIMIT = 140;
-const CLIENT_DIAG_PREFIX = '[agent-device][diag] ';
 
 function addTiming(map: Record<string, Timing>, key: string, durationMs: number | undefined): void {
   const entry = (map[key] ??= { count: 0, totalMs: 0 });
@@ -77,12 +82,12 @@ export function profileRequestLog(ndjson: string): SampleProfile {
     }
     const data = event.data ?? {};
     const duration = eventDuration(event);
-    if (phase === SPAWN_PHASE) {
+    if (phase === EXEC_COMMAND_PHASE) {
       if (data.event !== 'settled') continue;
       addTiming(profile.spawns, text(data.command) ?? 'unknown', duration);
-    } else if (phase === RUNNER_COMMAND_PHASE) {
+    } else if (phase === RUNNER_COMMAND_SEND_PHASE) {
       addTiming(profile.runnerCommands, text(data.command) ?? 'unknown', duration);
-    } else if (phase === SNAPSHOT_SOURCE_PHASE) {
+    } else if (phase === SNAPSHOT_SOURCE_ACQUIRE_PHASE) {
       const producer = text(data.producer) ?? 'unknown';
       const entry = (profile.snapshotSources[producer] ??= { count: 0, totalMs: 0, failures: 0 });
       entry.count += 1;
@@ -92,11 +97,11 @@ export function profileRequestLog(ndjson: string): SampleProfile {
         entry.failures += 1;
         fallbacks.add(`${producer}: ${error ?? 'failed'}`);
       }
-    } else if (phase === SNAPSHOT_RECOVERY_PHASE && data.truncated === true) {
+    } else if (phase === SNAPSHOT_SOURCE_RECOVERY_PHASE && data.truncated === true) {
       fallbacks.add(
         `${text(data.producer) ?? 'unknown'}: truncated at ${String(data.acceptedLevels)} levels`,
       );
-    } else if (phase === 'retry' && data.event === 'attempt_failed') {
+    } else if (phase === RETRY_PHASE && data.event === 'attempt_failed') {
       profile.retries += 1;
     } else if (event.level === 'warn' || event.level === 'error') {
       fallbacks.add(`${phase}${text(data.reason) ? `: ${text(data.reason)}` : ''}`);
@@ -115,15 +120,15 @@ export function profileRequestLog(ndjson: string): SampleProfile {
 /** Reads the client's `daemon_request` timer and request id from `--debug` stderr. */
 export function readClientDiagnostics(stderr: string): { daemonMs?: number; requestId?: string } {
   for (const line of stderr.split('\n')) {
-    const start = line.indexOf(CLIENT_DIAG_PREFIX);
+    const start = line.indexOf(DIAGNOSTIC_STDERR_PREFIX);
     if (start < 0) continue;
     try {
-      const event = JSON.parse(line.slice(start + CLIENT_DIAG_PREFIX.length)) as {
+      const event = JSON.parse(line.slice(start + DIAGNOSTIC_STDERR_PREFIX.length)) as {
         phase?: string;
         durationMs?: number;
         requestId?: string;
       };
-      if (event.phase === 'daemon_request') {
+      if (event.phase === DAEMON_REQUEST_PHASE) {
         return { daemonMs: event.durationMs, requestId: event.requestId };
       }
     } catch {

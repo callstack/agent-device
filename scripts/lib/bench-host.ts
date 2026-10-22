@@ -1,7 +1,38 @@
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import type { GitRevision, HostIdentity, Target, Toolchain } from './types.ts';
+
+export type Toolchain = {
+  node: string;
+  pnpm: string;
+  xcode: string;
+  simctl: string;
+  os: string;
+  arch: string;
+};
+
+export type HostIdentity = {
+  model: string;
+  modelIdentifier: string;
+  cpu: string;
+  cpuCores: number;
+};
+
+export type GitRevision = {
+  commit: string;
+  branch: string;
+  dirty: boolean;
+};
+
+export type Target = {
+  platform: 'ios';
+  kind: 'simulator';
+  udid: string;
+  name: string;
+  runtime: string;
+  appId: string;
+  appPath?: string;
+};
 
 export function readToolchain(): Toolchain {
   return {

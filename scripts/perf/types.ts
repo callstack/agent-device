@@ -102,6 +102,8 @@ export type Measurement = {
 export type RunMetadata = {
   commit: string;
   ref?: string;
+  // Uncommitted changes in the checkout at the start of the run.
+  dirty: boolean;
   runId?: string;
   runAttempt?: string;
   agentDeviceVersion: string;

@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import { EXEC_COMMAND_PHASE } from '@agent-device/host-kit/command';
+import { DIAGNOSTIC_STDERR_PREFIX } from '@agent-device/host-kit/diagnostics';
+import { RETRY_PHASE } from '@agent-device/host-kit/retry';
 import { test } from 'vitest';
+import { DAEMON_REQUEST_PHASE } from '../../src/daemon-client/daemon-client.ts';
 import {
   aggregateProfiles,
   profileRequestLog,
@@ -14,13 +18,17 @@ const line = (event: Record<string, unknown>) => JSON.stringify({ level: 'info',
 const PRESS_LOG = [
   line({ ts: '2026-10-21T19:00:00.000Z', phase: 'request_start', data: { command: 'press' } }),
   line({
-    phase: 'exec_command',
+    phase: EXEC_COMMAND_PHASE,
     durationMs: 0.02,
     data: { command: 'xcrun', event: 'spawn_start' },
   }),
-  line({ phase: 'exec_command', durationMs: 9, data: { command: 'xcrun', event: 'spawn' } }),
-  line({ phase: 'exec_command', durationMs: 120, data: { command: 'xcrun', event: 'exit' } }),
-  line({ phase: 'exec_command', durationMs: 121, data: { command: 'xcrun', event: 'settled' } }),
+  line({ phase: EXEC_COMMAND_PHASE, durationMs: 9, data: { command: 'xcrun', event: 'spawn' } }),
+  line({ phase: EXEC_COMMAND_PHASE, durationMs: 120, data: { command: 'xcrun', event: 'exit' } }),
+  line({
+    phase: EXEC_COMMAND_PHASE,
+    durationMs: 121,
+    data: { command: 'xcrun', event: 'settled' },
+  }),
   line({
     level: 'error',
     phase: 'ios.snapshot-source.acquire',
@@ -36,7 +44,7 @@ const PRESS_LOG = [
     phase: 'ios_snapshot_source_recovery',
     data: { producer: 'simulator-ax-bridge', truncated: true, acceptedLevels: 32 },
   }),
-  line({ phase: 'retry', data: { event: 'attempt_failed', attempt: 1 } }),
+  line({ phase: RETRY_PHASE, data: { event: 'attempt_failed', attempt: 1 } }),
   line({ phase: 'ios_runner_command_send', durationMs: 900, data: { command: 'tap' } }),
   line({ phase: 'post_gesture_snapshot_stabilized', data: { attempts: 2, durationMs: 300 } }),
   line({
@@ -95,12 +103,12 @@ test('counts a producer only for samples where it answered', () => {
 
 test('reads the client daemon timer from --debug stderr', () => {
   const stderr = [
-    '[agent-device][diag] {"phase":"daemon_startup","durationMs":30,"requestId":"r1"}',
+    `${DIAGNOSTIC_STDERR_PREFIX}{"phase":"daemon_startup","durationMs":30,"requestId":"r1"}`,
     'noise',
-    '[agent-device][diag] {"phase":"daemon_request","durationMs":812,"requestId":"r1"}',
+    `${DIAGNOSTIC_STDERR_PREFIX}{"phase":"${DAEMON_REQUEST_PHASE}","durationMs":812,"requestId":"r1"}`,
   ].join('\n');
   assert.deepEqual(readClientDiagnostics(stderr), { daemonMs: 812, requestId: 'r1' });
-  assert.deepEqual(readClientDiagnostics('[agent-device][diag] {"phase":"daemon_req'), {});
+  assert.deepEqual(readClientDiagnostics(`${DIAGNOSTIC_STDERR_PREFIX}{"phase":"daemon_req`), {});
 });
 
 test('reads the settle wait of a --settle response and nothing from other responses', () => {

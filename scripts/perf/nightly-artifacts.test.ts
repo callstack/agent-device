@@ -7,7 +7,7 @@ import {
   selectRange,
   type WorkflowRun,
 } from './nightly-artifacts.ts';
-import { summaryFixture } from './summary-fixture.ts';
+import { summaryFixture } from './summary.fixtures.ts';
 
 const run = (id: string, createdAt: string, event = 'schedule'): WorkflowRun => ({
   id,

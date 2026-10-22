@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { compareRuns, type ComparisonRow } from './compare.ts';
-import { summaryFixture, type StepFixture } from './summary-fixture.ts';
+import { summaryFixture, type StepFixture } from './summary.fixtures.ts';
 
 const STEP = 'heavy-feed/snapshot';
 

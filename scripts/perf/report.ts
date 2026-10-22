@@ -30,7 +30,7 @@ function cell(text: string): string {
 function timingRow(m: Measurement): string {
   return [
     m.id.slice(m.scenario.length + 1),
-    `\`${cell(m.label)}\``,
+    `\`${cell(m.label)}\`${m.execMode === 'sdk' ? ' (SDK, in process; daemon = log span)' : ''}`,
     String(m.samples.length),
     wallCells(m.wallClock),
     ms(m.daemon?.median),
@@ -59,7 +59,7 @@ export function renderReport(summary: PerfSummary): string {
   const lines: string[] = [
     `# agent-device perf — ${summary.platform}`,
     '',
-    `- **Commit**: ${meta.commit.slice(0, 12)}${meta.ref ? ` (${meta.ref})` : ''}${meta.runId ? ` · run ${meta.runId}` : ''}`,
+    `- **Commit**: ${meta.commit.slice(0, 12)}${meta.dirty ? ' (dirty)' : ''}${meta.ref ? ` (${meta.ref})` : ''}${meta.runId ? ` · run ${meta.runId}` : ''}`,
     `- **Device**: ${meta.device.name}${meta.device.runtime ? ` · ${meta.device.runtime}` : ''}`,
     `- **Toolchain**: ${meta.xcode ?? 'no Xcode'} · Node ${meta.node} · agent-device ${meta.agentDeviceVersion}`,
     `- **Host**: ${meta.host.os} · ${meta.host.cpu} · ${meta.host.cores} cores · ${meta.host.memoryGb} GB`,

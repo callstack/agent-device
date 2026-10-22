@@ -36,7 +36,7 @@ All times are milliseconds. Statistics use only the successful samples of a step
 | Metric | Meaning |
 | --- | --- |
 | `wall` | The CLI process time, from spawn to exit. |
-| `daemon` | The daemon request round trip that the client measures (`daemon_request`). For the pinned-backend capture, the span of its request log. Comparisons use this metric. |
+| `daemon` | The daemon request round trip that the client measures (`daemon_request`). For the pinned-backend capture (`home-reads/snapshot-forced-tree`, marked SDK in the report), the span of its request log. Comparisons use this metric. |
 | `mean ± sd`, `cv` | The mean, the sample standard deviation, and the standard deviation divided by the mean. |
 | `median`, `p95`, `min`, `max` | The median (the mean of the two middle values for an even count), the nearest-rank 95th percentile, and the extremes. |
 | `runner` | The median sum of XCTest runner command times in one request. |
@@ -49,7 +49,7 @@ All times are milliseconds. Statistics use only the successful samples of a step
 | `producer` | The number of samples that each snapshot producer answered (`simulator-ax-bridge`, `apple-runner`). |
 | backends | The `snapshotQuality` backend, state, and reason code, for example `private-ax/recovered/ax-rejected`. |
 | fallbacks | Degraded paths: snapshot-source errors, truncated recovery, and warn-level phases. |
-| `fail` | The number of failed samples. `setup_failed` and `before_failed` mean that the untimed preparation failed. `daemon_stuck` means that an earlier request outlived its timeout; the suite restarts the daemon before the next scenario. `expectation_failed` means that the screen no longer has the shape that the step requires, for example the heavy-feed depth. |
+| `fail` | The number of failed samples. `setup_failed` and `before_failed` mean that the untimed preparation failed. `daemon_stuck` means that an earlier request outlived its timeout; the suite restarts the daemon before the next scenario. `expectation_failed` means that the screen no longer has the shape that the step requires, for example the heavy-feed depth, or that a backend other than the pinned one served the pinned capture. |
 
 ## Nightly results
 

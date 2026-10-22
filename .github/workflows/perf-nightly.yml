@@ -4,8 +4,10 @@ name: Perf Nightly
 # - Catches: a command whose daemon time moves beyond the noise of earlier nights, or that starts
 #   failing. PR lanes check behavior, not time.
 # - Wanted for: tuning runner, snapshot, and settle paths while watching the effect. iOS medians
-#   swing up to +122% between single nights at n=5, so a step is judged against the median of up to
-#   seven earlier nights and must clear their spread, its own sampling error, 20%, and 50 ms.
+#   swing up to +122% between single nights, so a step is judged against the median of up to seven
+#   earlier nights and must clear their spread, its own sampling error, 20%, and 50 ms. A night
+#   runs 3 rounds, the minimum for a timing verdict, so one failed sample withholds that step's
+#   timing verdict.
 # - Cost: one macos-26 job of about 45 minutes a night; summaries are kept 90 days, raw logs 30.
 # - Delete or park when: no flagged change has been acted on for 60 nights.
 # Android stays report-only and runs only on request.

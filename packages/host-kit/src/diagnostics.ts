@@ -1,6 +1,7 @@
 export {
   countDiagnosticEventsByPhase,
   createRequestId,
+  DIAGNOSTIC_STDERR_PREFIX,
   type DiagnosticEventInput,
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
