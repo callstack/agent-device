@@ -189,31 +189,36 @@ extension RunnerTests {
     var inputs: [ResolvedTextEntryInput] = []
     for (position, element) in candidates.enumerated() {
       if shouldStop() { break }
-      guard element.exists else { continue }
+      // Each candidate re-runs the shared query, so an input that left the app since an earlier
+      // candidate's read moves a later input into a position already read, and the per-type count
+      // no longer names the input a position reads. Every position must still exist and every
+      // handle must read as its position's input, at the point or not, or the lookup can miss an
+      // input. A missing position's snapshot throws only after XCTest waits for a match, which only
+      // a lookup that falls back pays, so existence is read only when the snapshot fails.
       let snapshot = try? element.snapshot()
+      guard snapshot != nil || element.exists else {
+        return queryTextInputsByType(app: app, point: point, shouldStop: shouldStop)
+      }
       let elementType = snapshot?.elementType ?? element.elementType
       let typeIndex = indexByType[elementType, default: 0]
       indexByType[elementType] = typeIndex + 1
+      let handle = app.descendants(matching: elementType).element(boundBy: typeIndex)
+      let candidate: ResolvedTextEntryInput
+      if let snapshot {
+        guard let handleSnapshot = try? handle.snapshot(), Self.isSameTextInput(handleSnapshot, as: snapshot) else {
+          return queryTextInputsByType(app: app, point: point, shouldStop: shouldStop)
+        }
+        candidate = ResolvedTextEntryInput(element: handle, snapshot: handleSnapshot)
+      } else {
+        candidate = ResolvedTextEntryInput(element: handle, snapshot: nil)
+      }
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
       textInputCandidateReadForTesting?(position)
 #endif
-      let handle = app.descendants(matching: elementType).element(boundBy: typeIndex)
-      let candidate = ResolvedTextEntryInput(element: handle, snapshot: snapshot)
       let attributes = candidate.attributes
-      guard isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) else {
-        continue
-      }
-      guard let snapshot else {
+      if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) {
         inputs.append(candidate)
-        continue
       }
-      // Each candidate re-runs the shared query, so an input that left the app since an earlier
-      // candidate's read shifts the positions after it, and the per-type count no longer names the
-      // input this candidate read. The handle must read as that input, or no position can be trusted.
-      guard let handleSnapshot = try? handle.snapshot(), Self.isSameTextInput(handleSnapshot, as: snapshot) else {
-        return queryTextInputsByType(app: app, point: point, shouldStop: shouldStop)
-      }
-      inputs.append(ResolvedTextEntryInput(element: handle, snapshot: handleSnapshot))
     }
     return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
   }
