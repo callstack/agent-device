@@ -21,7 +21,9 @@ import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
  * anchored at its own top-left: the application root reads `(0,0,386,682)` and its `Add` button
  * `(335,14,37,36)` — the button's screen position `(559,221)` minus the window origin. Published as
  * reported, that tree mixes two spaces, clips its own content, and moves every tap by the window
- * origin (#3899). `windowContentTranslation` names the one vector that puts the subtree back.
+ * origin (#3899). That translation belongs to the capture that performs it — the runner's Swift
+ * `SnapshotContentTranslation` — not to this decoder, because the guest refuses a windowed tree
+ * before this file can read one; see the note at the foot of this file.
  *
  * A rule that reads a box reads what the box can say. The quarter turn is a statement about which
  * axis a box runs along, so it compares side lengths and nothing else. A content translation is a
@@ -31,12 +33,13 @@ import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
  * A full-screen window, an iPhone, and each foldable panel report origins at zero on both sides, so
  * the rule reads no translation there and every published rect stays as the platform reported it.
  *
- * The same rules are enforced in Swift for the capture that produces these trees, and one table
- * proves they are one rule: `contracts/fixtures/window-coordinate-space.json` is replayed here and
- * against `SnapshotGeometrySpace` and `SnapshotContentTranslation` in
- * `apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift`. The table also
- * pins the way back (`CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:)`, Swift-only
- * today); change any rule only through that table.
+ * RULE 1 is enforced in both languages, because both channels read it. RULE 3 (the content
+ * translation) and RULE 2 (the rotation back, `CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:)`)
+ * live with the runner's capture alone. One table proves the shared rules are one rule:
+ * `contracts/fixtures/window-coordinate-space.json` is replayed here and against
+ * `SnapshotGeometrySpace`, `SnapshotContentTranslation`, and `CoordinateSpaceRotation` in
+ * `apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift`;
+ * change any rule only through that table.
  *
  * Why this is a detector and not a repair: the bridge guest cannot read the app's interface
  * orientation. Measured in the #2659 spike (verdict on the issue, write-up in the diff of #2667):
@@ -71,44 +74,13 @@ export function isQuarterTurnedWindowFrame(windowFrame: Rect, appFrame: Rect): b
   );
 }
 
-/** The vector that carries a window-relative subtree into the screen space the viewport names. */
-export type WindowContentTranslation = {
-  offsetX: number;
-  offsetY: number;
-};
-
-/**
- * The vector from a carrier's own box to the screen space it is placed at, or null when the carrier's
- * box declares no translation. The carrier's subtree was reported in the carrier's content space, so
- * adding the vector to each reported rect publishes the subtree in the viewport's screen space (#3899).
- *
- * Null on anything that is not the app's own placed window: a box that is not a `(0,0)`-anchored copy
- * of the viewport's side lengths names no space, and a viewport that already starts at the screen
- * origin needs no move. Replayed against `windowContentCases` in
- * `contracts/fixtures/window-coordinate-space.json`, in the Swift twin and here.
+/*
+ * A window that does not fill the screen (#3899) is translated by the capture that owns it, and this
+ * file is not that capture. The bridge guest refuses a windowed tree (`app-window-not-full-screen`)
+ * before this decoder ever sees one, so no host tree arrives in the window's content space and there
+ * is nothing here to translate. The rule lives with the producer that converts —
+ * `SnapshotContentTranslation` beside the Swift capture — and `windowContentCases` in
+ * `contracts/fixtures/window-coordinate-space.json` is replayed there alone. The quarter-turn
+ * detection above stays in both languages because this decoder does read it: it is what refuses a
+ * turned tree the reader cannot resolve.
  */
-export function windowContentTranslation(
-  reportedBox: Rect,
-  viewportBox: Rect,
-): WindowContentTranslation | null {
-  if (!isPositiveFiniteRect(reportedBox) || !isPositiveFiniteRect(viewportBox)) return null;
-  if (
-    Math.abs(reportedBox.x) > WINDOW_QUARTER_TURN_TOLERANCE ||
-    Math.abs(reportedBox.y) > WINDOW_QUARTER_TURN_TOLERANCE
-  ) {
-    return null;
-  }
-  if (
-    Math.abs(viewportBox.x) <= WINDOW_QUARTER_TURN_TOLERANCE &&
-    Math.abs(viewportBox.y) <= WINDOW_QUARTER_TURN_TOLERANCE
-  ) {
-    return null;
-  }
-  if (
-    Math.abs(reportedBox.width - viewportBox.width) > WINDOW_QUARTER_TURN_TOLERANCE ||
-    Math.abs(reportedBox.height - viewportBox.height) > WINDOW_QUARTER_TURN_TOLERANCE
-  ) {
-    return null;
-  }
-  return { offsetX: viewportBox.x, offsetY: viewportBox.y };
-}

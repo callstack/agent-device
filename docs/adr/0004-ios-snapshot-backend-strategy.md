@@ -649,7 +649,7 @@ The carrier's box must be a `(0,0)`-anchored copy of the viewport box the platfo
 Then the subtree was reported in the carrier's content space, and the viewport's origin is the one vector that carries it to the screen.
 Any other carrier box names no space, so the rule leaves its numbers alone: the keyboard window and the SpringBoard overlay above report the screen's own box and are already in screen space.
 A full-screen window, an iPhone, and each foldable panel of ADR 0025 report origins at zero on both sides, so the rule reads no vector there and every rect is unchanged.
-`SnapshotContentTranslation.offset(reportedBox:viewportBox:)` is that rule, replayed from `contracts/fixtures/window-coordinate-space.json` in both languages.
+`SnapshotContentTranslation.offset(reportedBox:viewportBox:)` is that rule, replayed from `contracts/fixtures/window-coordinate-space.json` in the capture's language alone: the host bridge refuses a windowed tree (`app-window-not-full-screen`) before its decoder can read one, so the translation has one producer-side owner and the host's parity replay covers only the rules that decoder reads.
 
 Rotation and translation stay separate rules, and the split is the point.
 `CoordinateSpaceRotation` turns a box's axes and never moves its origin: the digitizer's origin is the display's own, which is where a placed window's screen-space points are already measured from.

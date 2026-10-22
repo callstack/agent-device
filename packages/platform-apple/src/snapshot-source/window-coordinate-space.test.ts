@@ -6,7 +6,6 @@ import type { Point, Rect } from '@agent-device/kernel/snapshot';
 import {
   isQuarterTurnedWindowFrame,
   WINDOW_QUARTER_TURN_TOLERANCE,
-  windowContentTranslation,
 } from './window-coordinate-space.ts';
 
 // ADR 0011 Layer 2 golden parity table (#2612): the SAME JSON is asserted against the Swift twin
@@ -107,21 +106,10 @@ test('the quarter-turn window rule agrees with every golden parity table case', 
   }
 });
 
-test('the window-content translation rule agrees with every golden parity table case', () => {
-  for (const fixture of loadTable().windowContentCases) {
-    const translation = windowContentTranslation(
-      toRect(fixture.reportedBox),
-      toRect(fixture.viewportBox),
-    );
-    assert.deepEqual(
-      translation,
-      fixture.offset === null
-        ? null
-        : { offsetX: fixture.offset.width, offsetY: fixture.offset.height },
-      fixture.name,
-    );
-  }
-});
+// `windowContentCases` is replayed in the Swift capture alone (CoordinateSpaceTests): this decoder
+// never receives a windowed tree — the bridge guest refuses it first (#3899) — so a second replay
+// here would pin arithmetic no production reader runs. The table still loads here, and its rows are
+// read for the name-uniqueness guard below.
 
 test('the quarter-turn tolerance belongs to the table, not this file', () => {
   assert.equal(loadTable().constants.quarterTurnTolerance, WINDOW_QUARTER_TURN_TOLERANCE);

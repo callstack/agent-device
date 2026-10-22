@@ -317,9 +317,11 @@ final class CoordinateSpaceTests: XCTestCase {
   }
 
   /// Golden parity table (#2612, #3899): every case in contracts/fixtures/window-coordinate-space.json
-  /// must agree with the vitest twin
-  /// (packages/platform-apple/src/snapshot-source/window-coordinate-space.test.ts). Add
-  /// cases there, never fork the rule. Detection is replayed under both landscape turns, because
+  /// must agree here, and the quarter-turn rows with the vitest twin
+  /// (packages/platform-apple/src/snapshot-source/window-coordinate-space.test.ts). The
+  /// window-content rows replay here alone: the host channel's guest refuses a windowed tree
+  /// before its decoder can read one, so this capture is the rule's only production owner. Add
+  /// cases to the table, never fork the rule. Detection is replayed under both landscape turns, because
   /// which window declares the native space cannot depend on which way the app is turned; the
   /// rotation rows carry their own orientation.
   func testWindowCoordinateSpaceMatchesGoldenParityTable() throws {
