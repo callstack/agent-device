@@ -11,10 +11,32 @@ import {
   restoreAndroidTestIme,
   withAndroidAdbProvider,
 } from '@agent-device/platform-android/mechanics';
-import { resourceAdmissionWorld } from './composite-resource-admission.fixtures.ts';
+import { resourceAdmissionWorld, assertRpcOk } from './composite-resource-admission.fixtures.ts';
 
 const originalIme = 'com.google.android.inputmethod.latin/.LatinIME';
 const helperIme = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
+
+test('caller bounded close preserves owned Android IME; direct close restores it', async () => {
+  const helper = androidHelperWorld();
+  const world = await resourceAdmissionWorld('capture', { ime: helper.ime });
+  try {
+    assertRpcOk(await world.call('open', ['com.android.settings'], { testIme: true }));
+    expect(helper.currentIme()).toBe(helperIme);
+    const response = await world.call('batch', [], { batchSteps: [{ command: 'close' }] });
+    expect(response.json.error?.data?.details).toMatchObject({
+      reason: 'bounded_composite_resource_unsupported',
+      shape: 'session-resource-disposal:android-test-ime',
+      standaloneCommandName: 'close',
+      dispatched: 'no',
+      executed: 0,
+    });
+    expect(helper.currentIme()).toBe(helperIme);
+    assertRpcOk(await world.call('close'));
+    expect(helper.currentIme()).toBe(originalIme);
+  } finally {
+    await world.daemon.close();
+  }
+});
 
 function androidHelperWorld() {
   let currentIme = originalIme;

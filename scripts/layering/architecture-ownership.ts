@@ -35,7 +35,11 @@ const DAEMON_SESSION_LIFECYCLE_FACADES = [
   },
   {
     root: 'packages/daemon/src/sessions/session-lifecycle/internal/session-open.ts',
-    exports: ['SessionOpenCommandInput', 'handleSessionOpenCommands'],
+    exports: [
+      'SessionOpenCommandInput',
+      'handleSessionOpenCommands',
+      'resolveForegroundOpenRequest',
+    ],
   },
 ] as const;
 

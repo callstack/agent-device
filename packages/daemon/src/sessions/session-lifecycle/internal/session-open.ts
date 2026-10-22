@@ -29,6 +29,7 @@ import {
   composeOpenWithInitialSnapshot,
   resolveForegroundOpenRequest,
 } from './session-open-foreground.ts';
+export { resolveForegroundOpenRequest };
 import { expireRefFrame } from '../../../core/ref-frame.ts';
 import type { DeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims';
 import type {

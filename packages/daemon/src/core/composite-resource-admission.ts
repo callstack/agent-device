@@ -1,5 +1,8 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveCommandCompositeResourceTrait } from '@agent-device/command-registry/registry';
+import {
+  resolveCommandCompositeResourceTrait,
+  resolveCommandDeviceClaimPolicy,
+} from '@agent-device/command-registry/registry';
 import {
   parsePerfRuntimeRequest,
   resolvePerfRuntimePlan,
@@ -16,31 +19,158 @@ import {
   isBoundedCompositeRequest,
   refuseBoundedCompositeResourceOperation,
 } from './lease-context.ts';
+import {
+  inspectDeviceClaimAcquisition,
+  type DeviceClaim,
+  type InspectedDeviceClaim,
+} from '@agent-device/daemon-contracts/device-claims';
+import {
+  inspectDeviceClaimRecovery,
+  type ClaimRecoveryInspection,
+} from '@agent-device/daemon-contracts/device-claim-recovery';
+import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
+
+function sessionResourceKinds(session: SessionState | undefined, platformOwned: readonly string[]) {
+  if (!session) return [];
+  return [
+    ...platformOwned,
+    ...(session.screenRecording ? ['screen-recording'] : []),
+    ...(session.appLog ? ['app-log'] : []),
+    ...(session.audioProbe ? ['audio-probe'] : []),
+    ...(session.perfCapture ? ['perf-capture'] : []),
+    ...(session.trace ? ['trace-log'] : []),
+  ];
+}
+
+function assertBoundedCompositeSessionDisposal(
+  req: DaemonRequest,
+  session: SessionState | undefined,
+  platformOwned: readonly string[],
+  closeWouldReleaseProviderLease: boolean,
+): void {
+  const resources = [
+    ...sessionResourceKinds(session, platformOwned),
+    ...(closeWouldReleaseProviderLease ? ['provider-lease'] : []),
+  ];
+  if (resources.length > 0) {
+    refuseBoundedCompositeResourceOperation(
+      req,
+      `session-resource-disposal:${resources.join(',')}`,
+    );
+  }
+}
 
 /** Runs under the existing session/device locks before lease cleanup, admission, or health writes. */
 export async function admitBoundedCompositeResourceRequest(params: {
   req: DaemonRequest;
   session: SessionState | undefined;
+  inspectSessionTeardownResources: (session: SessionState) => Promise<readonly string[]>;
+  closeWouldReleaseProviderLease: () => boolean;
+  claimRecovery: {
+    resolveDevice: () => Promise<DeviceInfo>;
+    session: string;
+    workspace: string;
+    stateDir: string;
+    env: EnvMap;
+    coveredClaimIsOwnedByRequest: (claim: DeviceClaim) => boolean;
+    observeDeviceBoot?: DeviceBootObservationService;
+    claimConflictError: (device: DeviceInfo, conflict: InspectedDeviceClaim) => AppError;
+  };
 }): Promise<void> {
   const { req, session } = params;
   if (!isBoundedCompositeRequest(req)) return;
   const trait = resolveCommandCompositeResourceTrait(req.command);
   switch (trait) {
     case 'none':
-      return;
-    case 'session-lifecycle':
-      return;
+      return await assertBoundedClaimRecovery(req, params.claimRecovery);
+    case 'session-lifecycle': {
+      // Maestro app-only close leaves the session and its durable resources owned.
+      if (req.command === 'close' && req.internal?.closeAppOnly === true) return;
+      const platformOwned =
+        req.command === 'close' && session
+          ? await params.inspectSessionTeardownResources(session)
+          : [];
+      if (req.command === 'open') {
+        if (sessionResourceKinds(session, platformOwned).length > 0) {
+          refuseBoundedCompositeResourceOperation(req, 'session-reopen-with-resources');
+        }
+      }
+      if (req.command === 'close') {
+        assertBoundedCompositeSessionDisposal(
+          req,
+          session,
+          platformOwned,
+          params.closeWouldReleaseProviderLease(),
+        );
+      }
+      return await assertBoundedClaimRecovery(req, params.claimRecovery);
+    }
     case 'nested-test':
       await admitBoundedTestRequest(req);
-      return;
+      return await assertBoundedClaimRecovery(req, params.claimRecovery);
     case 'operation':
       admitResourceOperation(req, session);
       return;
     default:
       refuseBoundedCompositeResourceOperation(req, `${req.command}:unclassified`);
   }
+}
+
+async function assertBoundedClaimRecovery(
+  req: DaemonRequest,
+  params: Parameters<typeof admitBoundedCompositeResourceRequest>[0]['claimRecovery'],
+): Promise<void> {
+  const policy = resolveCommandDeviceClaimPolicy(req.command);
+  if (policy !== 'acquire-session' && policy !== 'transient-exclusive') return;
+  const device = await params.resolveDevice();
+  if (isActiveProviderDevice(device)) return;
+  const settlements = await inspectDeviceClaimAcquisition({
+    device,
+    command: req.command,
+    session: params.session,
+    workspace: params.workspace,
+    stateDir: params.stateDir,
+    env: params.env,
+    coveredClaimIsOwnedByRequest: params.coveredClaimIsOwnedByRequest,
+    ...(policy === 'acquire-session' ? { observeDeviceBoot: params.observeDeviceBoot } : {}),
+  });
+  for (const settlement of settlements) {
+    if (settlement.status === 'conflict')
+      throw params.claimConflictError(device, settlement.conflict);
+    if (settlement.status !== 'reconcile') continue;
+    const inspection = inspectBoundedClaimBeforeGateway(req, settlement.claim);
+    if (inspection?.status === 'retained') {
+      throw params.claimConflictError(device, settlement.conflict);
+    }
+  }
+}
+
+function inspectBoundedClaimBeforeGateway(
+  req: DaemonRequest,
+  claim: DeviceClaim,
+): ClaimRecoveryInspection | undefined {
+  if (req.command === 'batch' || req.command === 'replay' || !isBoundedCompositeRequest(req)) {
+    return undefined;
+  }
+  const inspection = inspectDeviceClaimRecovery(claim);
+  if (inspection.status === 'inspectable' && inspection.ownedResources.length > 0) {
+    refuseBoundedCompositeResourceOperation(
+      req,
+      `session-resource-recovery:${inspection.ownedResources[0]!.resourceKind}`,
+    );
+  }
+  return inspection;
+}
+
+/** The same refusal guards both routed and transient reconciliation before gateway composition. */
+export function createBoundedClaimRecoveryBeforeGateway(
+  req: DaemonRequest,
+): (claim: DeviceClaim) => ClaimRecoveryInspection | undefined {
+  return (claim: DeviceClaim) => inspectBoundedClaimBeforeGateway(req, claim);
 }
 
 function admitResourceOperation(req: DaemonRequest, session: SessionState | undefined): void {

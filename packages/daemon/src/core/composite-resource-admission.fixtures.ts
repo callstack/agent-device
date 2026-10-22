@@ -29,6 +29,7 @@ export async function resourceAdmissionWorld(
   options: Readonly<{
     device?: DeviceInfo;
     providerOwned?: boolean;
+    withLifecycleProvider?: boolean;
     ime?: {
       activate(stateDir: string): Promise<void>;
       restore(stateDir: string): Promise<void>;
@@ -37,10 +38,11 @@ export async function resourceAdmissionWorld(
   }> = {},
 ) {
   const device = options.device ?? ANDROID_EMULATOR;
+  let now = 1_000;
   const leaseRegistry = new LeaseRegistry({
     defaultLeaseTtlMs: 10,
     minLeaseTtlMs: 1,
-    now: () => 1_000,
+    now: () => now,
   });
   const owner = localRuntimeOwner(device.platform);
   const sessionStore = new SessionStore(
@@ -67,6 +69,7 @@ export async function resourceAdmissionWorld(
   const native = vi.fn(async () => {
     throw new Error('resource native effect reached');
   });
+  const providerRelease = vi.fn(async () => ({}));
   const inspectTeardown = vi.fn(async (target: DeviceInfo) => options.ime?.inspect(target) ?? []);
   const base = createUnavailableRuntimeFactsForTest(device, owner);
   const available = { available: true as const };
@@ -187,6 +190,9 @@ export async function resourceAdmissionWorld(
       const base = await daemonRuntimeDepsFixture()(input);
       return {
         ...base,
+        ...((options.withLifecycleProvider ?? options.providerOwned)
+          ? { leaseLifecycleProvider: { release: providerRelease } }
+          : {}),
         providerDeviceAdmission: Object.freeze({ isActive: () => options.providerOwned === true }),
         deviceRuntimeGateway: {
           ...gateway,
@@ -244,12 +250,17 @@ export async function resourceAdmissionWorld(
     finish,
     forceCleanup,
     native,
+    providerRelease,
+    inspectTeardown,
     bind,
     inspectFacts,
     sample,
     home,
     setViewport,
     leaseRegistry,
+    expireLease: () => {
+      now = 1_011;
+    },
   };
 }
 
