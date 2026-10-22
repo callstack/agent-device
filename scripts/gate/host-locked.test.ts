@@ -11,7 +11,7 @@ import { executeGate, requiresHostLock } from './host-locked.ts';
 
 const skip = process.platform === 'win32';
 const cleanEnv = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
-  const env = { ...process.env, ...extra };
+  const env = { ...process.env };
   delete env[VALIDATION_PARENT_ENV];
   delete env.GITHUB_ACTIONS;
   return { ...env, ...extra };
@@ -209,6 +209,46 @@ test(
       assert.equal(fs.existsSync(marker), false);
       assert.ok(fs.existsSync(lockDirPath), 'cancelled waiter must not release the owner');
       await owner.release();
+    } finally {
+      cleanup();
+    }
+  },
+);
+
+test(
+  'a signal while the locked command runs stops it and still releases the lock',
+  { skip },
+  async () => {
+    const { lockDirPath, marker, cleanup } = fixture();
+    try {
+      const running = executeGate({
+        id: 'unit-ci',
+        command: [
+          process.execPath,
+          '-e',
+          `require('node:fs').writeFileSync(${JSON.stringify(marker)}, String(process.pid)); setInterval(() => {}, 1000)`,
+        ],
+        cwd: process.cwd(),
+        env: cleanEnv(),
+        lockDirPath,
+      });
+      await new Promise<void>((resolve) => {
+        const poll = setInterval(() => {
+          if (fs.existsSync(marker) && fs.readFileSync(marker, 'utf8')) {
+            clearInterval(poll);
+            resolve();
+          }
+        }, 20);
+      });
+      assert.ok(
+        fs.existsSync(`${lockDirPath}.active.json`),
+        'ownership is published while running',
+      );
+      process.emit('SIGTERM');
+      assert.equal(await running, 143);
+      assert.throws(() => process.kill(Number(fs.readFileSync(marker, 'utf8')), 0), /ESRCH/);
+      assert.equal(fs.existsSync(lockDirPath), false, 'gate must release the lock');
+      assert.equal(fs.existsSync(`${lockDirPath}.active.json`), false);
     } finally {
       cleanup();
     }

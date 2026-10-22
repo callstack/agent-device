@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdStreaming } from '@agent-device/host-kit/command';
-import { VALIDATION_PARENT_ENV, type ValidationLock } from './host-lock.ts';
+import { runLockedCommand, type ValidationLock } from './host-lock.ts';
 import type { CheckResult, ValidationRun } from './execution.ts';
 import type { TestReport } from './test-report.ts';
 
@@ -25,42 +24,23 @@ export async function executeValidationCommand(
     () => run.report(`[running] ${result.id} ${Math.round((Date.now() - started) / 1000)}s`),
     15_000,
   );
-  let commandPid: number | undefined;
   try {
-    lock.recordCommand(run.receiptPath, null);
-    const output = await runCmdStreaming(
-      process.execPath,
-      ['--experimental-strip-types', path.join(import.meta.dirname, 'command.ts'), ...command],
-      {
-        cwd,
-        allowFailure: true,
-        captureOutput: false,
-        detached: true,
-        kill: { signal: 'SIGTERM', graceMs: 5000 },
-        signal: run.controller.signal,
-        stdin: 'run\n',
-        onSpawn: (child) => {
-          commandPid = child.pid;
-          if (commandPid) lock.recordCommand(run.receiptPath, commandPid);
-        },
-        env: {
-          ...process.env,
-          [VALIDATION_PARENT_ENV]: run.receiptPath,
-          AGENT_DEVICE_VALIDATION_REPORT: reportPrefix,
-        },
-        onStdoutChunk: (chunk) => {
-          fs.writeSync(descriptor, chunk);
-        },
-        onStderrChunk: (chunk) => {
-          fs.writeSync(descriptor, chunk);
-        },
+    const exitCode = await runLockedCommand(lock, run.receiptPath, command, {
+      cwd,
+      env: { ...process.env, AGENT_DEVICE_VALIDATION_REPORT: reportPrefix },
+      signal: run.controller.signal,
+      onStdoutChunk: (chunk) => {
+        fs.writeSync(descriptor, chunk);
       },
-    );
-    result.exitCode = output.exitCode;
-    result.status = output.exitCode === 0 ? 'passed' : 'failed';
-    run.report(`[${result.status}] ${result.id}; exit=${output.exitCode}`);
-    if (output.exitCode !== 0) reportFailureTail(logPath, run.report);
-    return output.exitCode;
+      onStderrChunk: (chunk) => {
+        fs.writeSync(descriptor, chunk);
+      },
+    });
+    result.exitCode = exitCode;
+    result.status = exitCode === 0 ? 'passed' : 'failed';
+    run.report(`[${result.status}] ${result.id}; exit=${exitCode}`);
+    if (exitCode !== 0) reportFailureTail(logPath, run.report);
+    return exitCode;
   } catch (error) {
     result.status = run.controller.signal.aborted ? 'cancelled' : 'failed';
     result.reason = error instanceof Error ? error.message : String(error);
@@ -71,7 +51,6 @@ export async function executeValidationCommand(
     result.durationMs = Date.now() - started;
     collectTestReports(result, run.directory, reportPrefix);
     run.save();
-    await lock.finishCommand(commandPid);
   }
 }
 

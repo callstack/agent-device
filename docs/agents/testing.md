@@ -9,11 +9,10 @@
 
 Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
-Both broad commands acquire the same host lock.
-These `pnpm gate` ids acquire the same lock: `unit`, `unit-ci`, `provider-integration`, `fuzz-parsers`, `mutation`, `mutation-affected`, and `concurrency-torture`.
-A gate inside a locked validation reuses that lock. A GitHub runner takes no lock.
+Both broad commands and heavy `pnpm gate` ids acquire the same host lock.
 Wait for the owner to finish, or cancel your waiter with Ctrl-C.
-A wait ends after two hours. A nested `pnpm check` or `pnpm check:affected --run` fails immediately.
+Do not add lock wrappers. Do not delete lock files.
+A wait ends after two hours. Nested validation fails immediately.
 Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
 
 The runner prints progress and a receipt path. The receipt contains:
@@ -35,6 +34,7 @@ Execution stops at the first failure. Unexecuted checks remain `not-run`.
 
 Only a passed receipt with `exactCommit: true` proves validation at the named commit.
 A dirty-tree pass is local feedback. Detected checkout changes invalidate the run.
+Initial/final checks detect persistent changes. They do not sandbox the checkout.
 During validation, stop all edits.
 
 ## Interpret selection
@@ -45,6 +45,7 @@ A full selection for these changes is intentional.
 Read `failOpenReasons` in plan JSON or `plan.failOpenReasons` in a receipt.
 Do not reduce selection to get a pass.
 
+Read required-check status on the PR.
 The receipt lists skipped checks and owners in `results[].reason`.
 GitHub owns:
 
@@ -62,6 +63,7 @@ Do not add tests that assert prose.
 ## A gate failed
 
 Keep failure attribution separate from validation status.
+Never call a failing gate passed.
 
 | Evidence | Next action | Outcome |
 | --- | --- | --- |
