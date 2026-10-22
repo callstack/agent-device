@@ -335,7 +335,7 @@ extension RunnerTests {
 
   /// Shared ordering for point-hit candidates: smallest area wins, then top-to-bottom,
   /// left-to-right, then stable element-type order for ties.
-  func smallestElementFirst(_ left: XCUIElement, _ right: XCUIElement) -> Bool {
+  func smallestElementFirst(_ left: any XCUIElementAttributes, _ right: any XCUIElementAttributes) -> Bool {
     let leftArea = max(1, left.frame.width * left.frame.height)
     let rightArea = max(1, right.frame.width * right.frame.height)
     if leftArea != rightArea {
@@ -352,7 +352,7 @@ extension RunnerTests {
 
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
     let point = CGPoint(x: x, y: y)
-    let textInputCandidates = textInputCandidatesAt(app: app, point: point)
+    let textInputCandidates = textInputCandidatesAt(app: app, point: point).map(\.element)
     for element in textInputCandidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {
         return text
@@ -363,7 +363,7 @@ extension RunnerTests {
       .filter { element in
         element.exists && !element.frame.isEmpty && element.frame.contains(point)
       }
-      .sorted(by: smallestElementFirst)
+      .sorted { smallestElementFirst($0, $1) }
 
     for element in candidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {

@@ -15,6 +15,7 @@ import type { DeviceIdentity } from '@agent-device/kernel/device';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Readable } from 'node:stream';
 import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
@@ -31,8 +32,8 @@ const APP_LOG_PID_FILENAME = 'app-log.pid';
 type ManagedAppLogCommandChild = Readonly<{
   pid?: number;
   exitCode?: number | null;
-  stdout?: NodeJS.ReadableStream | null;
-  stderr?: NodeJS.ReadableStream | null;
+  stdout?: Readable | null;
+  stderr?: Readable | null;
   kill(signal?: NodeJS.Signals | number): boolean;
 }>;
 
@@ -248,9 +249,16 @@ function createManagedProcessTermination(
   let termination: Promise<void> | undefined;
   return async () =>
     await (termination ??= (async () => {
-      if (typeof child.exitCode === 'number') return;
-      child.kill('SIGINT');
-      if (!(await settlesWithin(wait, 2_000))) child.kill('SIGKILL');
+      if (typeof child.exitCode !== 'number') {
+        child.kill('SIGINT');
+        if (!(await settlesWithin(wait, 2_000))) child.kill('SIGKILL');
+      }
+      // A process outside the child's tree, such as one launched inside a simulator, can keep the
+      // output pipes open after the child exits. Releasing them lets the wait settle on that exit.
+      if (!(await settlesWithin(wait, 2_000))) {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+      }
       await wait.catch(() => undefined);
     })());
 }

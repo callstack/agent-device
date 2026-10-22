@@ -123,11 +123,10 @@ extension RunnerTests {
     )
   }
 
-  /// Samples the element's readable value with its identity in one accessibility query; nil when
-  /// the element is gone or its value is unreadable (secure fields).
-  func textEntryObservation(for element: XCUIElement?) -> TextEntryObservation? {
-    guard let element,
-          let snapshot = try? element.snapshot(),
+  /// The readable value and identity in the snapshot a resolution read; nil when no input resolved,
+  /// the resolution could not snapshot it, or its value is unreadable (secure fields).
+  func textEntryObservation(for input: ResolvedTextEntryInput?) -> TextEntryObservation? {
+    guard let snapshot = input?.snapshot,
           let value = editableTextValue(for: snapshot, treatingPlaceholderAsEmpty: true)
     else {
       return nil

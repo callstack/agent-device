@@ -24,10 +24,17 @@ export type CheckSpec = {
   // torture), and the instrumented coverage run stay authoritative on
   // GitHub CI.
   readonly localRunnable: boolean;
+  // Whether `pnpm gate` takes the host validation lock before it runs the check. Set it for a check that
+  // runs a whole-repo suite or spawns many workers.
+  readonly hostLocked: boolean;
 };
 
 function gate(id: CheckId, label: string, script: string, localRunnable = true): CheckSpec {
-  return { id, label, kind: { type: 'script', script }, localRunnable };
+  return { id, label, kind: { type: 'script', script }, localRunnable, hostLocked: false };
+}
+
+function heavyGate(id: CheckId, label: string, script: string, localRunnable = true): CheckSpec {
+  return { ...gate(id, label, script, localRunnable), hostLocked: true };
 }
 
 export const CHECK_CATALOG: readonly CheckSpec[] = [
@@ -62,12 +69,17 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     label: 'Tests related by Vitest module graph',
     kind: { type: 'vitest-related' },
     localRunnable: true,
+    hostLocked: false,
   },
-  gate('unit', 'Unit + smoke suite', 'check:unit'),
+  heavyGate('unit', 'Unit + smoke suite', 'check:unit'),
   // CI owns the default coverage run; the scripts remain available for explicit local diagnosis.
   gate('coverage', 'Changed-line coverage', 'check:coverage-changed', false),
   gate('coverage-crap', 'Coverage-based CRAP verdict', 'check:coverage-crap', false),
-  gate('provider-integration', 'Provider-backed integration suite', 'test:integration:provider'),
+  heavyGate(
+    'provider-integration',
+    'Provider-backed integration suite',
+    'test:integration:provider',
+  ),
   gate(
     'integration-progress',
     'Integration architecture-progress gate',
@@ -97,7 +109,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   //
   // `unit-ci` is the CI form of the unit suite under coverage. Local affected checks use Vitest's
   // related graph without instrumentation; CI owns the full coverage run and changed-line verdict.
-  gate('unit-ci', 'CI unit suite under coverage', 'test:coverage:ci', false),
+  heavyGate('unit-ci', 'CI unit suite under coverage', 'test:coverage:ci', false),
   gate('affected-selector', 'Affected-check selector model', 'check:affected:test'),
   gate('gate-manifest', 'Gate manifest — every gate owned and wired', 'check:gate-manifest'),
   gate('gate-manifest-model', 'Gate manifest model', 'check:gate-manifest:test'),
@@ -153,12 +165,12 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     'maestro:conformance:regenerate',
     false,
   ),
-  gate('fuzz-parsers', 'Parser fuzz invariants', 'fuzz:parsers', false),
-  gate('mutation', 'Mutation sweep', 'mutation:run', false),
-  gate('mutation-affected', 'Affected mutation shard selection', 'mutation:affected', false),
+  heavyGate('fuzz-parsers', 'Parser fuzz invariants', 'fuzz:parsers', false),
+  heavyGate('mutation', 'Mutation sweep', 'mutation:run', false),
+  heavyGate('mutation-affected', 'Affected mutation shard selection', 'mutation:affected', false),
   gate('mutation-check', 'Mutation score for an existing report', 'mutation:check', false),
   gate('mutation-model', 'Mutation harness self-test', 'mutation:test'),
-  gate(
+  heavyGate(
     'concurrency-torture',
     'Session/lease/lock torture sweep',
     'test:concurrency-torture',
