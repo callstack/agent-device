@@ -47,10 +47,12 @@ export {
   resolveRunnerBundleBuildSettings,
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
+  resolveRunnerScriptDefaultDerivedPath,
   resolveRunnerSigningBuildSettings,
 } from '../runner/runner-cache-metadata.ts';
 export {
   isRunnerXcuitestScriptPlatform,
+  resolveRunnerDerivedOverride,
   resolveRunnerScriptDevice,
 } from '../runner/apple-runner-platform.ts';
 export {

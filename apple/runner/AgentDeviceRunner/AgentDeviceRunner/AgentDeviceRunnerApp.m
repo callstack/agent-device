@@ -110,6 +110,7 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSTimeInterval textEntryBurstMinGap;
 @property(nonatomic, assign) NSTimeInterval textEntryAcknowledgeWindowSeconds;
 @property(nonatomic, strong) NSLayoutConstraint *textEntryFieldTop;
+@property(nonatomic, weak) UITextField *textEntryField;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @property(nonatomic, strong) NSTimer *alertBannerRepost;
@@ -127,6 +128,39 @@ int main(int argc, const char *argv[]) {
 @implementation AgentDeviceDigitCountTextField
 - (NSString *)accessibilityValue {
   return [NSString stringWithFormat:@"%lu of 6 digits", (unsigned long)self.text.length];
+}
+@end
+
+// XCTest reads every element's accessibility value each time it snapshots the app, which it does
+// for every element query and every attribute read from a live element. Counting this field's
+// value reads therefore counts the accessibility queries a command makes. The value is masked, so a
+// fill's read-back ends at its first read instead of polling through a stability window whose
+// poll count depends on how fast the host answers.
+static NSUInteger AgentDeviceTextEntryValueReads = 0;
+
+@interface AgentDeviceValueReadCountingTextField : AgentDeviceMaskedTextField
+@end
+
+@implementation AgentDeviceValueReadCountingTextField
+- (NSString *)accessibilityValue {
+  AgentDeviceTextEntryValueReads += 1;
+  return [super accessibilityValue];
+}
+@end
+
+// Reports the read count as its accessibility label and the counted field's text as its value, so
+// reading either changes no view state and the masked text stays checkable.
+@interface AgentDeviceValueReadCountLabel : UILabel
+@property(nonatomic, weak) UITextField *countedField;
+@end
+
+@implementation AgentDeviceValueReadCountLabel
+- (NSString *)accessibilityLabel {
+  return [NSString stringWithFormat:@"%lu", (unsigned long)AgentDeviceTextEntryValueReads];
+}
+
+- (NSString *)accessibilityValue {
+  return self.countedField.text;
 }
 @end
 
@@ -513,17 +547,30 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   }
   if ((codeComplete && [arguments containsObject:@"--agent-device-text-entry-auto-submit"]) ||
       (textField.text.length > 0 && [arguments containsObject:@"--agent-device-text-entry-replace-after-input"])) {
-    UITextField *nextScreenField = [[UITextField alloc] initWithFrame:textField.frame];
-    if (![arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
-      nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
-    }
-    nextScreenField.borderStyle = UITextBorderStyleRoundedRect;
-    [textField.superview addSubview:nextScreenField];
-    [textField removeFromSuperview];
-    [nextScreenField becomeFirstResponder];
+    [self replaceTextEntryFieldWithNextScreenInput:textField];
   } else if (codeComplete &&
              [arguments containsObject:@"--agent-device-text-entry-auto-submit-without-successor"]) {
     [textField removeFromSuperview];
+  }
+}
+
+- (void)replaceTextEntryFieldWithNextScreenInput:(UITextField *)textField {
+  UITextField *nextScreenField = [[UITextField alloc] initWithFrame:textField.frame];
+  if (![NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
+    nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
+  }
+  nextScreenField.borderStyle = UITextBorderStyleRoundedRect;
+  [textField.superview addSubview:nextScreenField];
+  [textField removeFromSuperview];
+  [nextScreenField becomeFirstResponder];
+}
+
+// The same navigation as `replace-after-input`, landing when a test presses the button instead of on
+// an edit, so the test decides which runner step it lands between.
+- (void)agentDeviceTextEntryReplaceDidPress:(UIButton *)sender {
+  (void)sender;
+  if (self.textEntryField.superview != nil) {
+    [self replaceTextEntryFieldWithNextScreenInput:self.textEntryField];
   }
 }
 
@@ -690,6 +737,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-submit-clears"];
     BOOL maskedValue =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-masked-value"];
+    BOOL countsValueReads =
+        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-counts-value-reads"];
     UITextField *textField;
     if (digitCountValue) {
       textField = [[AgentDeviceDigitCountTextField alloc] init];
@@ -702,6 +751,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       textField = [[AgentDeviceSubmitClearingTextField alloc] init];
     } else if (maskedValue) {
       textField = [[AgentDeviceMaskedTextField alloc] init];
+    } else if (countsValueReads) {
+      textField = [[AgentDeviceValueReadCountingTextField alloc] init];
     } else {
       textField = [[UITextField alloc] init];
     }
@@ -724,6 +775,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         forControlEvents:UIControlEventEditingChanged];
     textField.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:textField];
+    self.textEntryField = textField;
     self.textEntryFieldTop = [textField.topAnchor constraintEqualToAnchor:label.bottomAnchor
                                                                  constant:AgentDeviceTextEntryFieldTopInset];
     [NSLayoutConstraint activateConstraints:@[
@@ -732,6 +784,18 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [textField.widthAnchor constraintEqualToConstant:240],
       [textField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
+    if (countsValueReads) {
+      AgentDeviceValueReadCountLabel *valueReads = [[AgentDeviceValueReadCountLabel alloc] init];
+      valueReads.countedField = textField;
+      valueReads.accessibilityIdentifier = @"agent-device-text-entry-value-reads";
+      valueReads.text = @"value reads";
+      valueReads.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:valueReads];
+      [NSLayoutConstraint activateConstraints:@[
+        [valueReads.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [valueReads.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
+      ]];
+    }
     if (currencyValue || submitClears) {
       UILabel *entryStatus = [[UILabel alloc] init];
       entryStatus.accessibilityIdentifier = @"agent-device-text-entry-events";
@@ -773,6 +837,21 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [self.tapWitnessStatus.topAnchor constraintEqualToAnchor:witness.bottomAnchor constant:12],
       ]];
       [self updateTapWitnessStatus];
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-replace-on-request"]) {
+      // Above the title, so the software keyboard never covers it.
+      UIButton *replace = [UIButton buttonWithType:UIButtonTypeSystem];
+      replace.accessibilityIdentifier = @"agent-device-text-entry-replace";
+      [replace setTitle:@"Replace input" forState:UIControlStateNormal];
+      replace.translatesAutoresizingMaskIntoConstraints = NO;
+      [replace addTarget:self
+                  action:@selector(agentDeviceTextEntryReplaceDidPress:)
+        forControlEvents:UIControlEventTouchUpInside];
+      [self.view addSubview:replace];
+      [NSLayoutConstraint activateConstraints:@[
+        [replace.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [replace.bottomAnchor constraintEqualToAnchor:label.topAnchor constant:-24],
+      ]];
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unqueryable-on-focus"]) {
       self.textEntryFocusWitness = [[UILabel alloc] init];

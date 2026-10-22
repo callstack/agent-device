@@ -1,5 +1,7 @@
 import { ChildProcess, spawn } from 'node:child_process';
 import fs from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- vi.spyOn(os,'homedir'): os.homedir() ignores a stubbed HOME in worker threads
+import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -199,7 +201,7 @@ for (const fixedLogPath of [true, false]) {
     vi.useFakeTimers();
     const fixture = processFixture();
     const home = mkdtempForTestSync('exec-late-close-');
-    vi.stubEnv('HOME', home);
+    const homedir = vi.spyOn(os, 'homedir').mockReturnValue(home);
     const logPath = fixedLogPath ? path.join(home, 'request.ndjson') : undefined;
     try {
       await withCommandHost(
@@ -242,7 +244,7 @@ for (const fixedLogPath of [true, false]) {
           }),
       );
     } finally {
-      vi.unstubAllEnvs();
+      homedir.mockRestore();
     }
   });
 }

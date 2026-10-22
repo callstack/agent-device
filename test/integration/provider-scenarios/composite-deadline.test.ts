@@ -114,6 +114,7 @@ test('routed batch install reports its deadline and does not dispatch a later st
       app: 'com.android.settings',
       platform: 'android',
       serial: PROVIDER_SCENARIO_ANDROID.id,
+      testIme: false,
     });
     const apkPath = path.join(daemon.stateDir, 'deadline-install.apk');
     fs.writeFileSync(apkPath, 'fixture apk');
@@ -182,6 +183,7 @@ test.each(['batch', 'replay'])(
         app: 'com.android.settings',
         platform: 'android',
         serial: PROVIDER_SCENARIO_ANDROID.id,
+        testIme: false,
       });
       const script = path.join(daemon.stateDir, 'hold.ad');
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
@@ -302,6 +304,7 @@ test('annotated replay capture aborts within its deadline without post-failure f
       app: 'com.android.settings',
       platform: 'android',
       serial: PROVIDER_SCENARIO_ANDROID.id,
+      testIme: false,
     });
     stallReplayCapture = true;
     const script = path.join(daemon.stateDir, 'annotated.ad');

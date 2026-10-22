@@ -158,6 +158,9 @@ extension RunnerTests {
     /// this is set the point no longer names the field. It identifies the field for reads and
     /// clears, never for routing.
     let inputAtRefreshPoint: TextInputAtPoint?
+    /// `element` as the focus step read it after its last dispatch: a `TextEntryReader` hands it
+    /// out as its first read. A target moved to another read has none.
+    let postFocusRead: ResolvedTextEntryInput?
 
     init(
       element: XCUIElement?,
@@ -165,7 +168,8 @@ extension RunnerTests {
       prefersFocusedElement: Bool,
       fromTapWitness: Bool = false,
       boundIdentity: TextEntryInputIdentity? = nil,
-      inputAtRefreshPoint: TextInputAtPoint? = nil
+      inputAtRefreshPoint: TextInputAtPoint? = nil,
+      postFocusRead: ResolvedTextEntryInput? = nil
     ) {
       self.element = element
       self.refreshPoint = refreshPoint
@@ -173,28 +177,109 @@ extension RunnerTests {
       self.fromTapWitness = fromTapWitness
       self.boundIdentity = boundIdentity ?? inputAtRefreshPoint?.identity
       self.inputAtRefreshPoint = inputAtRefreshPoint
+      self.postFocusRead = postFocusRead
     }
 
-    func withElement(_ nextElement: XCUIElement?) -> TextEntryTarget {
-      guard let nextElement else {
+    /// The target moved to the input a resolution read: its element, a refresh point at its center,
+    /// and its identity while the target is unbound.
+    func withResolvedInput(_ input: ResolvedTextEntryInput?) -> TextEntryTarget {
+      guard let input else {
         return self
       }
-      // Reading `frame` from an input the app has removed records an XCTest failure; a snapshot
-      // only throws, after XCTest waits about two seconds for a match, so it is skipped when the
-      // input is already gone.
-      let snapshot = nextElement.exists ? try? nextElement.snapshot() : nil
-      let frame = snapshot?.frame ?? .zero
-      let point = frame.isEmpty ? refreshPoint : CGPoint(x: frame.midX, y: frame.midY)
+      let frame = input.snapshot?.frame ?? .zero
       return TextEntryTarget(
-        element: nextElement,
-        refreshPoint: point,
+        element: input.element,
+        refreshPoint: frame.isEmpty ? refreshPoint : CGPoint(x: frame.midX, y: frame.midY),
         prefersFocusedElement: prefersFocusedElement,
         fromTapWitness: fromTapWitness,
-        boundIdentity: boundIdentity ?? snapshot.map {
-          TextEntryInputIdentity(elementType: $0.elementType, identifier: $0.identifier)
-        },
+        boundIdentity: boundIdentity ?? input.identity,
         inputAtRefreshPoint: inputAtRefreshPoint
       )
+    }
+  }
+
+  /// A text input element read through one snapshot. Later reads take the input's attributes from
+  /// the snapshot: each attribute read from the live element runs its query again, and each query
+  /// snapshots the whole application, about 90 ms on Bluesky's React Native Search screen (iPhone 17
+  /// Pro, iOS 27.0). Where a live read of an element that stopped answering its query, such as a
+  /// removed input or a focused Flutter password field (#3060), records an XCTest failure that ends
+  /// the runner session, the snapshot only throws.
+  struct ResolvedTextEntryInput {
+    let element: XCUIElement
+    /// Nil when the element exists but could not be snapshotted.
+    let snapshot: XCUIElementSnapshot?
+
+    private init(element: XCUIElement, snapshot: XCUIElementSnapshot?) {
+      self.element = element
+      self.snapshot = snapshot
+    }
+
+    /// Reads a handle that may name an input the app has removed; nil when it names none or the read
+    /// raised. The snapshot of a missing element throws only after XCTest waits about two seconds for
+    /// a match, so existence is read first.
+    init?(reading element: XCUIElement) {
+      var exists = false
+      var snapshot: XCUIElementSnapshot?
+      if let exception = RunnerObjCExceptionCatcher.catchException({
+        exists = element.exists
+        snapshot = exists ? try? element.snapshot() : nil
+      }) {
+        NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_READ_IGNORED_EXCEPTION=%@", exception)
+        return nil
+      }
+      guard exists else { return nil }
+      self.init(element: element, snapshot: snapshot)
+    }
+
+    /// Reads a handle its query has just listed, inside the caller's exception containment, so the
+    /// snapshot is read first and existence only when the snapshot fails; nil when it names no element.
+    init?(readingListed element: XCUIElement) {
+      let snapshot = try? element.snapshot()
+      guard snapshot != nil || element.exists else { return nil }
+      self.init(element: element, snapshot: snapshot)
+    }
+
+    var identity: TextEntryInputIdentity? {
+      snapshot.map { TextEntryInputIdentity(elementType: $0.elementType, identifier: $0.identifier) }
+    }
+
+    var attributes: any XCUIElementAttributes {
+      if let snapshot {
+        return snapshot
+      }
+      return element
+    }
+  }
+
+  /// A text entry target and its input as last read. `input()` hands the last read out again until
+  /// `dispatch` runs, and resolves the target again after that, so a bound target refuses an input
+  /// that took its place. Each resolution moves the target to the input it read. Every post and every
+  /// pause between reads goes through `dispatch`; the pause a typing plan takes itself follows a post.
+  struct TextEntryReader {
+    private(set) var target: TextEntryTarget
+    private var lastRead: ResolvedTextEntryInput?
+    private let resolve: (TextEntryTarget) -> ResolvedTextEntryInput?
+
+    init(target: TextEntryTarget, resolve: @escaping (TextEntryTarget) -> ResolvedTextEntryInput?) {
+      self.target = target.withResolvedInput(target.postFocusRead)
+      lastRead = target.postFocusRead
+      self.resolve = resolve
+    }
+
+    mutating func input() -> ResolvedTextEntryInput? {
+      if let lastRead {
+        return lastRead
+      }
+      let read = resolve(target)
+      target = target.withResolvedInput(read)
+      lastRead = read
+      return read
+    }
+
+    /// Runs `dispatch`, which posts to the app or pauses, so the next `input()` resolves again.
+    mutating func dispatch<T>(_ dispatch: () -> T) -> T {
+      lastRead = nil
+      return dispatch()
     }
   }
 
@@ -241,7 +326,8 @@ extension RunnerTests {
     }
   }
 
-  func clearTextInput(app: XCUIApplication, _ element: XCUIElement) {
+  /// Clears `input`, which must have been read with nothing dispatched since.
+  func clearTextInput(app: XCUIApplication, _ input: ResolvedTextEntryInput) {
     // Skip the clear (delete burst + moveCaretToEnd edge-tap) ONLY when we can confirm the
     // field is empty. Why skip: the edge-tap computes a point from the element frame, which can
     // be stale after the field repositions on focus (e.g. the Settings search bar jumps
@@ -250,16 +336,17 @@ extension RunnerTests {
     // editableTextValue returns nil for secure (and unknown) fields, where we CANNOT confirm
     // emptiness — those must still be cleared, or replace would concatenate stale + new text.
     // So distinguish nil (clear) from "" (skip).
-    if let existing = editableTextValue(for: element, treatingPlaceholderAsEmpty: true),
+    if let existing = editableTextValue(for: input.attributes, treatingPlaceholderAsEmpty: true),
        existing.isEmpty {
       return
     }
+    // Read before the caret tap, which dispatches to the app.
+    let count = estimatedDeleteCount(for: input.attributes)
 #if !os(tvOS)
-    moveCaretToEnd(app: app, element: element)
+    moveCaretToEnd(app: app, input: input)
 #endif
-    let count = estimatedDeleteCount(for: element)
     let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: count)
-    element.typeText(deletes)
+    input.element.typeText(deletes)
   }
 
   func isTextEntryElement(_ element: XCUIElement) -> Bool {
@@ -282,36 +369,38 @@ extension RunnerTests {
     }
   }
 
-  /// Resolves the target's input. A bound target accepts only an element whose snapshot carries
-  /// its bound identity, so every post, read-back, verification poll, and repair refuses an input
-  /// that took the bound one's place.
-  func resolveTextEntryElement(app: XCUIApplication, target: TextEntryTarget) -> XCUIElement? {
+  /// Resolves the target's input, with the snapshot the resolution read it through. A bound target
+  /// accepts only an input whose snapshot carries its bound identity, so every post, read-back,
+  /// verification poll, and repair refuses an input that took the bound one's place.
+  func resolveTextEntryInput(app: XCUIApplication, target: TextEntryTarget) -> ResolvedTextEntryInput? {
     guard let boundIdentity = target.boundIdentity else {
-      return resolveUnboundTextEntryElement(app: app, target: target)
+      return resolveUnboundTextEntryInput(app: app, target: target)
     }
-    func isBoundInput(_ candidate: XCUIElement) -> Bool {
-      candidate.exists && probeTextEntryInput(candidate) == .input(boundIdentity)
+    func boundInput(_ candidate: XCUIElement) -> ResolvedTextEntryInput? {
+      guard let input = ResolvedTextEntryInput(reading: candidate), input.identity == boundIdentity else { return nil }
+      return input
     }
-    if target.prefersFocusedElement, let focused = focusedTextInput(app: app), isBoundInput(focused) {
-      return focused
+    if target.prefersFocusedElement, let focused = focusedTextInput(app: app), let input = boundInput(focused) {
+      return input
     }
-    if let element = target.element, isBoundInput(element) {
-      return element
+    if let element = target.element, let input = boundInput(element) {
+      return input
     }
-    if let input = target.inputAtRefreshPoint, textInputStillResolves(input) {
-      return input.element
+    if let input = target.inputAtRefreshPoint, let read = textInputIfStillResolves(input) {
+      return read
     }
     if target.inputAtRefreshPoint == nil,
        let refreshPoint = target.refreshPoint,
        case .matches(let candidates) = probeTextInputs(app: app, point: refreshPoint),
-       let match = candidates.first(where: isBoundInput) {
+       let match = candidates.first(where: { $0.identity == boundIdentity }) {
       return match
     }
-    if let focused = focusedTextInput(app: app), isBoundInput(focused) {
-      return focused
+    if let focused = focusedTextInput(app: app), let input = boundInput(focused) {
+      return input
     }
-    if let byIdentifier = boundTextEntryInputQuery(app: app, identity: boundIdentity), isBoundInput(byIdentifier) {
-      return byIdentifier
+    if let byIdentifier = boundTextEntryInputQuery(app: app, identity: boundIdentity),
+       let input = boundInput(byIdentifier) {
+      return input
     }
     return nil
   }
@@ -341,7 +430,7 @@ extension RunnerTests {
     case .absent:
       return true
     case .matches(let candidates):
-      return candidates.allSatisfy { probeTextEntryInput($0) != .input(boundIdentity) }
+      return candidates.allSatisfy { $0.identity != boundIdentity }
     case .unavailable:
       return false
     }
@@ -353,21 +442,6 @@ extension RunnerTests {
       return nil
     }
     return app.descendants(matching: identity.elementType).matching(identifier: identity.identifier).element
-  }
-
-  /// Reads the frame a post-focus point is computed from, through the channel that records nothing.
-  /// A tap holds a handle bound to the query that resolved its element, and asking that handle for
-  /// `element.frame` re-runs the query: an element that stopped answering it once it took focus — a
-  /// Flutter password field whose two accessibility channels disagree when focused (#3060) — makes
-  /// XCTest record "No matches found for …", which ends the runner session for work the dispatch had
-  /// already landed. `snapshot()` answers the same query through the throwing channel and records
-  /// nothing, which is already how `probeTextEntryInput` and `withElement` reach an element. Nil means
-  /// no trustworthy frame: callers must degrade to a route that needs no point rather than dispatch
-  /// one computed from where the element used to be.
-  func textEntrySnapshotFrame(_ element: XCUIElement) -> CGRect? {
-    // Skipped when the input is already gone, so a removed field does not pay the snapshot's
-    // ~2-second wait for a match before its point degrades (the same guard `withElement` makes).
-    safely("TEXT_ENTRY_SNAPSHOT_FRAME", { element.exists ? try? element.snapshot() : nil })?.frame
   }
 
   /// Snapshots one candidate: its identity, a proven no-match, or a failure that proves nothing.
@@ -385,30 +459,21 @@ extension RunnerTests {
   }
 
   /// Resolution for a target not bound to an input yet: the first element that exists.
-  private func resolveUnboundTextEntryElement(app: XCUIApplication, target: TextEntryTarget) -> XCUIElement? {
-    if target.prefersFocusedElement {
-      if let focused = focusedTextInput(app: app) {
-        return focused
-      }
-      if let element = target.element, element.exists {
-        return element
-      }
-    } else {
-      if let element = target.element, element.exists {
-        return element
-      }
+  private func resolveUnboundTextEntryInput(app: XCUIApplication, target: TextEntryTarget) -> ResolvedTextEntryInput? {
+    if target.prefersFocusedElement, let focused = focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(reading:)) {
+      return focused
+    }
+    if let element = target.element, let input = ResolvedTextEntryInput(reading: element) {
+      return input
     }
     if let refreshPoint = target.refreshPoint,
        let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y) {
       return refreshed
     }
-    if let focused = focusedTextInput(app: app) {
-      return focused
-    }
-    return nil
+    return focusedTextInput(app: app).flatMap(ResolvedTextEntryInput.init(reading:))
   }
 
-  private func moveCaretToEnd(app: XCUIApplication, element: XCUIElement) {
+  private func moveCaretToEnd(app: XCUIApplication, input: ResolvedTextEntryInput) {
 #if os(tvOS)
     return
 #else
@@ -416,14 +481,15 @@ extension RunnerTests {
     // focus tap, and an input that stopped answering its resolving query on focus (#3060) makes
     // every post-focus handle touch a recorder — `element.frame` records directly, and an
     // element-anchored `coordinate(...).tap()` re-runs that same query to resolve its anchor when
-    // the action executes. A fresh `snapshot()` proves the handle answered moments earlier, not
-    // that it still answers at tap-dispatch time. So the point comes from the snapshot frame and
+    // the action executes. The input's snapshot, read with nothing dispatched since, proves the handle
+    // answered moments earlier, not that it still answers at tap-dispatch time. So the point comes
+    // from the snapshot frame and
     // goes out app-relative through `tapAt`, which resolves no element at all — the shape
     // `waitForTextEntryReadinessAfterTap` settled on in #3237. With no trustworthy frame, or a
     // zero-size one (how a departed handle reads), there is no point to dispatch — an edge-tap
     // from a frame the field moved after records a failure or navigates away, the shape
     // `clearTextInput`'s comment refuses — so degrade to the caller's point-free delete burst.
-    guard let frame = textEntrySnapshotFrame(element), !frame.isEmpty else {
+    guard let frame = input.snapshot?.frame, !frame.isEmpty else {
       return
     }
     _ = tapAt(
@@ -434,7 +500,7 @@ extension RunnerTests {
 #endif
   }
 
-  private func estimatedDeleteCount(for element: XCUIElement) -> Int {
+  private func estimatedDeleteCount(for element: any XCUIElementAttributes) -> Int {
     let valueText = normalizedElementText(element.value)
     let base = valueText.isEmpty ? 24 : (valueText.count + 8)
     return max(24, min(120, base))

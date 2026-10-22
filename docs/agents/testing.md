@@ -9,7 +9,7 @@
 
 Serialized validation requires macOS or Linux.
 On Windows, use plan mode or focused checks.
-Both broad commands acquire the same host lock.
+Both broad commands and heavy `pnpm gate` ids acquire the same host lock.
 Wait for the owner to finish, or cancel your waiter with Ctrl-C.
 Do not add lock wrappers. Do not delete lock files.
 A wait ends after two hours. Nested validation fails immediately.

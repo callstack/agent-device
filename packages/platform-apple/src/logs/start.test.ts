@@ -1,3 +1,4 @@
+import type { AppLogOutputSink, AppLogRuntimeHost } from '@agent-device/contracts/app-log-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { expect, test, vi } from 'vitest';
 import { startAppleAppLogs } from './start.ts';
@@ -91,3 +92,122 @@ test('simulator log stream takes the set of the device it streams from', async (
     'stream',
   ]);
 });
+
+test('simulator start returns only after the in-simulator stream writes output', async () => {
+  const stream = launchingStream();
+  const fixture = hostFixture({ startProcess: stream.start, sleep: sleepUntilAborted });
+
+  const starting = startAppleAppLogs(
+    fixture.host,
+    appleDevice(),
+    startInput(),
+    localRuntimeOwner('apple'),
+  );
+  await vi.waitFor(() => expect(stream.output()).toBeDefined());
+  await expect(settlesSoon(starting)).resolves.toBe(false);
+
+  await stream.output()!.write('Filtering the log data\n');
+
+  await expect(starting).resolves.toMatchObject({ envelope: expect.anything() });
+});
+
+test('simulator start returns when the stream exits before writing output', async () => {
+  const stream = launchingStream({ exited: true });
+  const fixture = hostFixture({ startProcess: stream.start, sleep: sleepUntilAborted });
+
+  await expect(
+    startAppleAppLogs(fixture.host, appleDevice(), startInput(), localRuntimeOwner('apple')),
+  ).resolves.toMatchObject({ envelope: expect.anything() });
+});
+
+test('simulator start fails with a typed reason when the stream does not launch in time', async () => {
+  const stream = launchingStream();
+  const fixture = hostFixture({ startProcess: stream.start });
+
+  await expect(
+    startAppleAppLogs(fixture.host, appleDevice(), startInput(), localRuntimeOwner('apple')),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'simulator-log-stream-launch-timeout' },
+  });
+  expect(stream.disposed()).toBe(true);
+  expect(fixture.outputDisposed()).toBe(true);
+});
+
+test('host log stream start does not wait for output', async () => {
+  const stream = launchingStream();
+  const fixture = hostFixture({ startProcess: stream.start, sleep: sleepUntilAborted });
+
+  await expect(
+    startAppleAppLogs(
+      fixture.host,
+      appleDevice({ appleOs: 'macos', kind: 'device' }),
+      startInput(),
+      localRuntimeOwner('apple'),
+    ),
+  ).resolves.toMatchObject({ envelope: expect.anything() });
+});
+
+test('simulator start cancelled before the stream launches terminates the process', async () => {
+  const stream = launchingStream();
+  const fixture = hostFixture({ startProcess: stream.start, sleep: sleepUntilAborted });
+  const controller = new AbortController();
+  const reason = new Error('request cancelled');
+
+  const starting = startAppleAppLogs(
+    fixture.host,
+    appleDevice(),
+    startInput(),
+    localRuntimeOwner('apple'),
+    controller.signal,
+  );
+  await vi.waitFor(() => expect(stream.output()).toBeDefined());
+  controller.abort(reason);
+
+  await expect(starting).rejects.toBe(reason);
+  expect(stream.disposed()).toBe(true);
+  expect(fixture.outputDisposed()).toBe(true);
+});
+
+function startInput() {
+  return {
+    sessionId: 'session',
+    appBundleId: 'com.example.app',
+    outputPath: '/tmp/app.log',
+    fence: { token: 'fence', generation: 1 },
+  };
+}
+
+function launchingStream(options: { exited?: boolean } = {}) {
+  let output: AppLogOutputSink | undefined;
+  let disposed = false;
+  const start: AppLogRuntimeHost['processes']['start'] = async (request) => {
+    output = request.output;
+    return {
+      wait: options.exited
+        ? Promise.resolve({ stdout: '', stderr: '', exitCode: 1 })
+        : new Promise<never>(() => {}),
+      terminate: async () => {},
+      [Symbol.asyncDispose]: async () => {
+        disposed = true;
+      },
+    };
+  };
+  return { start, output: () => output, disposed: () => disposed };
+}
+
+async function sleepUntilAborted(_milliseconds: number, signal?: AbortSignal): Promise<void> {
+  await new Promise<void>((_resolve, reject) => {
+    signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+}
+
+async function settlesSoon(promise: Promise<unknown>): Promise<boolean> {
+  let settled = false;
+  void promise.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  for (let turn = 0; turn < 10; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  return settled;
+}

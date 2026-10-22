@@ -276,6 +276,42 @@ extension RunnerTests {
     XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
   }
 
+  // The navigation lands while the fill pauses after reading its first masked character back, which
+  // it does because a masked value cannot show whether the character arrived. The read before the
+  // pause named the code field, so the next post must resolve the field again and refuse the
+  // successor rather than type the rest of the code into it.
+  @MainActor
+  func testFillFailsWhenAppReplacesMaskedInputWhileWarmupPauses() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-masked-value",
+      "--agent-device-text-entry-replace-on-request"
+    )
+    let replace = app.buttons["agent-device-text-entry-replace"]
+    XCTAssertTrue(replace.exists)
+    var replacements = 0
+    textEntryWarmupPauseForTesting = {
+      guard replacements == 0 else { return }
+      replacements += 1
+      replace.tap()
+    }
+    defer { textEntryWarmupPauseForTesting = nil }
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-masked-replaced-in-pause", text: "123456", at: textField)
+    )
+
+    XCTAssertEqual(replacements, 1)
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(textField.exists)
+    let nextScreenField = app.textFields["agent-device-auto-submit-next-screen-input"]
+    XCTAssertTrue(nextScreenField.exists)
+    XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
+  }
+
   // Neither input has an identifier, so the successor carries the same identity as the code field.
   // The runner cannot tell them apart and must not clear and retype the successor: it reports the
   // mismatch it read instead of repairing.

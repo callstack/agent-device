@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { executeValidationCommand } from './command-execution.ts';
 import { acquireValidationLock } from './host-lock.ts';
+import { abortOnTerminationSignal } from './termination.ts';
 import { gitValue, readCheckoutState, type CheckoutState } from './checkout-state.ts';
 import type { TestReport } from './test-report.ts';
 import type { CheckId, CheckPlan } from './model.ts';
@@ -118,22 +119,7 @@ function openValidationRun(cwd: string, args: ValidationArgs) {
   const save = () => fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
   const report = (line: string) => process.stderr.write(`${line}\n`);
   const controller = new AbortController();
-  const cancellation = { code: 0 };
-  const interrupt = () => {
-    cancellation.code = 130;
-    controller.abort();
-  };
-  const terminate = () => {
-    cancellation.code = 143;
-    controller.abort();
-  };
-  const hangup = () => {
-    cancellation.code = 129;
-    controller.abort();
-  };
-  process.on('SIGHUP', hangup);
-  process.on('SIGINT', interrupt);
-  process.on('SIGTERM', terminate);
+  const { cancellation, dispose } = abortOnTerminationSignal(controller);
   return {
     receipt,
     directory,
@@ -142,11 +128,7 @@ function openValidationRun(cwd: string, args: ValidationArgs) {
     cancellation,
     save,
     report,
-    dispose: () => {
-      process.off('SIGHUP', hangup);
-      process.off('SIGINT', interrupt);
-      process.off('SIGTERM', terminate);
-    },
+    dispose,
   };
 }
 

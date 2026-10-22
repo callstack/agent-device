@@ -11,17 +11,17 @@ enum TextInputProbeFailure: String, Error {
 }
 
 enum TextInputProbeOutcome {
-  case matches([XCUIElement])
+  case matches([RunnerTests.ResolvedTextEntryInput])
   case absent
   case unavailable(TextInputProbeFailure)
 }
 
 extension RunnerTests {
-  func textInputAt(app: XCUIApplication, x: Double, y: Double) -> XCUIElement? {
+  func textInputAt(app: XCUIApplication, x: Double, y: Double) -> ResolvedTextEntryInput? {
     textInputCandidatesAt(app: app, point: CGPoint(x: x, y: y)).first
   }
 
-  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint) -> [XCUIElement] {
+  func textInputCandidatesAt(app: XCUIApplication, point: CGPoint) -> [ResolvedTextEntryInput] {
     safely("TEXT_INPUT_AT_POINT", []) {
       queryTextInputs(app: app, point: point, shouldStop: { false })
     }
@@ -29,8 +29,8 @@ extension RunnerTests {
 
   func coordinateTapTextInputAt(app: XCUIApplication, x: Double, y: Double) -> XCUIElement? {
     switch probeTextInputs(app: app, point: CGPoint(x: x, y: y)) {
-    case .matches(let elements):
-      return elements.first
+    case .matches(let inputs):
+      return inputs.first?.element
     case .absent:
       return nil
     case .unavailable:
@@ -57,18 +57,13 @@ extension RunnerTests {
   ) -> CoordinateTextInputResolution {
     let probed = containingTextInputProbeIssues(fallback: CoordinateTextInputResolution.unavailable) {
       shouldStop -> CoordinateTextInputResolution in
-      guard let element = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first
-      else {
+      guard let input = queryTextInputs(app: app, point: CGPoint(x: x, y: y), shouldStop: shouldStop).first else {
         return .absent
       }
-      switch probeTextEntryInput(element) {
-      case .input(let identity):
-        return .input(TextInputAtPoint(element: element, identity: identity))
-      case .noMatch:
-        return .absent
-      case .unavailable:
+      guard let identity = input.identity else {
         return .unavailable
       }
+      return .input(TextInputAtPoint(element: input.element, identity: identity))
     }
     switch probed {
     case .success(let resolution):
@@ -78,21 +73,21 @@ extension RunnerTests {
     }
   }
 
-  /// Whether `input`'s handle still resolves to the input it named when found, read inside the
-  /// same issue containment. A read that cannot answer counts as no.
-  func textInputStillResolves(_ input: TextInputAtPoint) -> Bool {
-    let probed = containingTextInputProbeIssues(fallback: false) { _ in
-      input.element.exists && probeTextEntryInput(input.element) == .input(input.identity)
+  /// `input`'s handle, read again, when it still resolves to the input it named when found, read
+  /// inside the same issue containment. A read that cannot answer counts as no.
+  func textInputIfStillResolves(_ input: TextInputAtPoint) -> ResolvedTextEntryInput? {
+    let probed = containingTextInputProbeIssues(fallback: nil as ResolvedTextEntryInput?) { _ in
+      ResolvedTextEntryInput(reading: input.element).flatMap { $0.identity == input.identity ? $0 : nil }
     }
-    guard case .success(let resolves) = probed else { return false }
-    return resolves
+    guard case .success(let read) = probed else { return nil }
+    return read
   }
 
   /// What `target`'s input reads between a replacement's clear passes, read inside the same issue
   /// containment, with a placeholder read as empty. A read that cannot answer is `.unavailable`.
   func clearedFieldRead(app: XCUIApplication, target: TextEntryTarget) -> TextValueRead {
     let probed = containingTextInputProbeIssues(fallback: TextValueRead.unavailable) { _ in
-      textValueRead(for: resolveTextEntryElement(app: app, target: target), treatingPlaceholderAsEmpty: true)
+      textValueRead(for: resolveTextEntryInput(app: app, target: target)?.attributes, treatingPlaceholderAsEmpty: true)
     }
     guard case .success(let read) = probed else { return .unavailable }
     return read
@@ -102,8 +97,8 @@ extension RunnerTests {
     switch containingTextInputProbeIssues(fallback: [], { shouldStop in
       queryTextInputs(app: app, point: point, shouldStop: shouldStop)
     }) {
-    case .success(let elements):
-      return elements.isEmpty ? .absent : .matches(elements)
+    case .success(let inputs):
+      return inputs.isEmpty ? .absent : .matches(inputs)
     case .failure(let failure):
       return .unavailable(failure)
     }
@@ -156,22 +151,29 @@ extension RunnerTests {
     app: XCUIApplication,
     point: CGPoint,
     shouldStop: () -> Bool
-  ) -> [XCUIElement] {
-    var candidates: [XCUIElement] = []
+  ) -> [ResolvedTextEntryInput] {
+    var inputs: [ResolvedTextEntryInput] = []
     for query in [app.textFields, app.secureTextFields, app.searchFields, app.textViews] {
       if shouldStop() { break }
-      candidates.append(contentsOf: query.allElementsBoundByIndex)
+      let candidates = query.allElementsBoundByIndex
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
       if let issue = textInputProbeIssueForTesting {
         textInputProbeIssueForTesting = nil
         record(issue)
       }
 #endif
+      // One snapshot per candidate answers enablement, frame, and the ordering below. A candidate that
+      // cannot be snapshotted is read live, so its failure still reaches the caller's issue handling.
+      for element in candidates {
+        if shouldStop() { break }
+        guard let candidate = ResolvedTextEntryInput(readingListed: element) else { continue }
+        let attributes = candidate.attributes
+        if isCoordinateTextInputCandidate(enabled: attributes.isEnabled, frame: attributes.frame, point: point) {
+          inputs.append(candidate)
+        }
+      }
     }
     guard !shouldStop() else { return [] }
-    return candidates.filter { element in
-      guard !shouldStop(), element.exists else { return false }
-      return isCoordinateTextInputCandidate(enabled: element.isEnabled, frame: element.frame, point: point)
-    }.sorted(by: smallestElementFirst)
+    return inputs.sorted { smallestElementFirst($0.attributes, $1.attributes) }
   }
 }
