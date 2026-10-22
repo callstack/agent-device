@@ -28,12 +28,12 @@ export type BridgeFailureDisposition =
  * A new capture-scoped refusal enters here, by an explicit decision; the route's warning switch is
  * exhaustive over the consequence, so a new one cannot reach the warning path undefined.
  */
-const CAPTURE_SCOPED_REFUSALS = {
-  'window-coordinate-space-unresolved': 'coordinate-space-unresolved',
-  'app-window-not-full-screen': 'window-not-full-screen',
-  'foreground-owner-unverified': 'foreground-ownership',
-  'foreground-owner-changed': 'foreground-ownership',
-} as const satisfies Readonly<Record<string, CaptureScopedConsequence>>;
+const CAPTURE_SCOPED_REFUSALS: ReadonlyMap<string, CaptureScopedConsequence> = new Map([
+  ['window-coordinate-space-unresolved', 'coordinate-space-unresolved'],
+  ['app-window-not-full-screen', 'window-not-full-screen'],
+  ['foreground-owner-unverified', 'foreground-ownership'],
+  ['foreground-owner-changed', 'foreground-ownership'],
+]);
 
 /**
  * Whether a bridge failure is evidence that this app generation cannot be served by the bridge.
@@ -46,7 +46,7 @@ export function bridgeFailureDisposition(failure: SnapshotSourceFailure): Bridge
   if (failure.kind === 'preparing') {
     return { scope: 'capture', code: failure.code, consequence: 'bridge-preparation' };
   }
-  const consequence = CAPTURE_SCOPED_REFUSALS[failure.code as keyof typeof CAPTURE_SCOPED_REFUSALS];
+  const consequence = CAPTURE_SCOPED_REFUSALS.get(failure.code);
   if (consequence) {
     return { scope: 'capture', code: failure.code, consequence };
   }

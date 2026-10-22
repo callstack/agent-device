@@ -55,12 +55,17 @@ describe('generation-wide failures', () => {
     ).toEqual({ scope: 'generation', code: 'presentation-invariant' });
   });
 
-  test('a code this policy does not know keeps the conservative generation default', () => {
-    // The guest's `code` is an open string. A refusal unknown here must not quietly keep a
-    // generation on a path that just refused it; a new capture-scoped refusal is classified
-    // explicitly, never by widening this default.
-    expect(
-      bridgeFailureDisposition({ kind: 'unsupported', code: 'future-runtime-refusal' }),
-    ).toEqual({ scope: 'generation', code: 'future-runtime-refusal' });
-  });
+  test.for(['future-runtime-refusal', 'toString', 'constructor'] as const)(
+    'a code this policy does not know (%s) keeps the conservative generation default',
+    (code) => {
+      // The guest's `code` is an open string. A refusal unknown here must not quietly keep a
+      // generation on a path that just refused it; a new capture-scoped refusal is classified
+      // explicitly, never by widening this default. An inherited property name is an unknown code
+      // too, so the table's lookup must not answer through a prototype chain.
+      expect(bridgeFailureDisposition({ kind: 'unsupported', code })).toEqual({
+        scope: 'generation',
+        code,
+      });
+    },
+  );
 });
