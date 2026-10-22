@@ -235,14 +235,7 @@ extension RunnerTests {
         synthesizedLongPressAt(app: activeApp, x: x, y: y, durationMs: durationMs, context: context)
       }) {
       case .performed(let timing):
-        let touchFrame = context.map {
-          TouchVisualizationFrame(
-            x: Double($0.referenceFrame.minX) + x,
-            y: Double($0.referenceFrame.minY) + y,
-            referenceWidth: Double($0.referenceFrame.width),
-            referenceHeight: Double($0.referenceFrame.height)
-          )
-        }
+        let touchFrame = context.map { touchVisualizationFrame(x: x, y: y, context: $0) }
         return gestureResponse(message: "long pressed", timing: timing, frame: .touch(touchFrame))
       case .xctestFallback(let message, let hint):
         fallback = GestureFallback(strategy: "xctest-coordinate-long-press", message: message, hint: hint)

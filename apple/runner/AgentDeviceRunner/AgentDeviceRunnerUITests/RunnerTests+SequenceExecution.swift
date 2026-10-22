@@ -35,13 +35,15 @@ extension RunnerTests {
       }
     }
 
-    // Touch frame resolves from the first step's coords so recording-gestures works unchanged.
+    let synthesizedContext = synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
+
+    // Touch frame resolves from the first step's coords so recording-gestures works unchanged. A
+    // synthesized context already names the frame, so the app tree is not read for it again.
     let firstStep = steps[0]
     let firstFrame = (firstStep.x != nil && firstStep.y != nil)
-      ? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
+      ? synthesizedContext.map { touchVisualizationFrame(x: firstStep.x!, y: firstStep.y!, context: $0) }
+        ?? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
       : nil
-
-    let synthesizedContext = synthesizedSequenceCoordinateContext(steps: steps, app: activeApp)
 
     let execution = assembleSequenceExecution(steps: steps) { _, step in
       performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)

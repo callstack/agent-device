@@ -296,6 +296,21 @@ extension RunnerTests {
     )
   }
 
+  /// The touch visualization frame of a synthesized gesture, read from its context instead of the
+  /// app tree.
+  func touchVisualizationFrame(
+    x: Double,
+    y: Double,
+    context: SynthesizedCoordinateContext
+  ) -> TouchVisualizationFrame {
+    TouchVisualizationFrame(
+      x: Double(context.referenceFrame.minX) + x,
+      y: Double(context.referenceFrame.minY) + y,
+      referenceWidth: Double(context.referenceFrame.width),
+      referenceHeight: Double(context.referenceFrame.height)
+    )
+  }
+
   func resolvedDragVisualizationFrame(
     app: XCUIApplication,
     x: Double,

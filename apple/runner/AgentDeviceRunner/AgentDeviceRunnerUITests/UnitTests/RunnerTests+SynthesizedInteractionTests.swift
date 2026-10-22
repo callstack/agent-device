@@ -8,8 +8,13 @@ import ObjectiveC.runtime
 /// depth 62 or more): the windows query finds no window and every element frame, the application's
 /// included, reads as null.
 private final class RunnerUnserializableTreeStub: NSObject {
+  /// Each element frame read costs XCTest's retries on such a tree, about 2 s each.
+  static var frameReads = 0
   @objc var allElementsBoundByIndex: [XCUIElement] { [] }
-  @objc var frame: CGRect { .null }
+  @objc var frame: CGRect {
+    Self.frameReads += 1
+    return .null
+  }
 }
 
 /// Counts XCTest coordinate presses without performing them.
@@ -32,13 +37,12 @@ extension RunnerTests {
       (class_getInstanceMethod(XCUICoordinate.self, #selector(XCUICoordinate.press(forDuration:))),
        class_getInstanceMethod(RunnerCoordinatePressCounter.self, #selector(RunnerCoordinatePressCounter.press(forDuration:)))),
     ]
-    var originals: [(Method, IMP)] = []
-    for (target, stub) in swaps {
-      let target = try XCTUnwrap(target)
-      let stub = try XCTUnwrap(stub)
-      originals.append((target, method_setImplementation(target, method_getImplementation(stub))))
+    let resolved = try swaps.map { (try XCTUnwrap($0.0), try XCTUnwrap($0.1)) }
+    let originals = resolved.map { target, stub in
+      (target, method_setImplementation(target, method_getImplementation(stub)))
     }
     RunnerCoordinatePressCounter.presses = 0
+    RunnerUnserializableTreeStub.frameReads = 0
     return {
       for (method, original) in originals.reversed() { method_setImplementation(method, original) }
     }
@@ -81,6 +85,14 @@ extension RunnerTests {
       XCTAssertNil(longPressResponse.data?.gestureFallback)
       XCTAssertEqual(pressSeriesResponse.data?.completedSteps, 2)
       XCTAssertEqual(RunnerCoordinatePressCounter.presses, 0)
+      XCTAssertEqual(RunnerUnserializableTreeStub.frameReads, 0)
+      let steps = pressSeriesResponse.data?.sequenceResults ?? []
+      XCTAssertEqual(steps.count, 2)
+      let holds = [(longPressResponse.data?.gestureStartUptimeMs, longPressResponse.data?.gestureEndUptimeMs)]
+        + steps.map { ($0.gestureStartUptimeMs, $0.gestureEndUptimeMs) }
+      for (start, end) in holds {
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(end) - XCTUnwrap(start), 600)
+      }
     } else {
       XCTAssertEqual(longPressCoordinatePresses, 1)
       XCTAssertEqual(longPressResponse.data?.gestureFallback, "xctest-coordinate-long-press")
