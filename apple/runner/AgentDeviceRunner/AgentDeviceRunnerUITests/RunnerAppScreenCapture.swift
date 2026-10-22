@@ -129,6 +129,26 @@ extension RunnerTests {
     else {
       return .failure(RunnerAppScreenCaptureFailure(resolution))
     }
+    return capturedScreen(captureScreen, displayID: displayID)
+  }
+
+  /// Samples the same sole-screen route that synthesized gestures use when the app tree refuses
+  /// its window. This route cannot name a screen on an iPad or a multi-screen iPhone.
+  func captureSoleAppScreen() -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
+    var screen: AnyObject?
+    var displayID: UInt = 0
+    guard RunnerResolveSoleScreen(&screen, &displayID) == nil,
+      let captureScreen = screen as? XCUIScreen
+    else {
+      return .failure(.unresolvedScreen)
+    }
+    return Self.capturedScreen(captureScreen, displayID: displayID)
+  }
+
+  private static func capturedScreen(
+    _ captureScreen: XCUIScreen,
+    displayID: UInt
+  ) -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure> {
     let image = captureScreen.screenshot().image
     guard let upright = runnerUprightCaptureImage(image) else {
       return .failure(.unrenderableImage)

@@ -18,6 +18,50 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testInAppBackVerifiesSoleScreenWhenXCTestCannotReadFramesOrEnumerate() throws {
+    app.launchArguments = ["--agent-device-back-regression"]
+    app.launch()
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    clearSnapshotXCTestChannelPenalty(reason: "navigation-test")
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let status = app.staticTexts["agent-device-back-status"]
+    XCTAssertTrue(status.waitForFixtureExistence(timeout: appExistenceTimeout))
+    var restorations: [() -> Void] = []
+    defer { restorations.reversed().forEach { $0() } }
+    let query = try XCTUnwrap(class_getInstanceMethod(XCUIElementQuery.self, NSSelectorFromString("allElementsBoundByIndex")))
+    let originalQuery = method_getImplementation(query)
+    let rejectedQuery = imp_implementationWithBlock({ (_: AnyObject) -> NSArray in
+      self.record(XCTIssue(type: .assertionFailure, compactDescription: "Failed to resolve query: kAXErrorIllegalArgument"))
+      return []
+    } as @convention(block) (AnyObject) -> NSArray)
+    method_setImplementation(query, rejectedQuery)
+    restorations.append {
+      method_setImplementation(query, originalQuery)
+      imp_removeBlock(rejectedQuery)
+    }
+    let frame = try XCTUnwrap(class_getInstanceMethod(XCUIElement.self, NSSelectorFromString("frame")))
+    let originalFrame = method_getImplementation(frame)
+    let unavailableFrame = imp_implementationWithBlock({ (_: AnyObject) -> CGRect in .zero } as @convention(block) (AnyObject) -> CGRect)
+    method_setImplementation(frame, unavailableFrame)
+    restorations.append {
+      method_setImplementation(frame, originalFrame)
+      imp_removeBlock(unavailableFrame)
+    }
+
+    let outcome = tapInAppBackControl(app: app)
+    restorations.reversed().forEach { $0() }
+    restorations.removeAll()
+    guard case .performed = outcome else {
+      return XCTFail("a window-less back must synthesize and verify against the sole display")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  @MainActor
   private func assertInAppBackDispatch(navigationBar: Bool) throws {
     app.launchArguments = ["--agent-device-back-regression"] + (navigationBar ? ["--navigation-bar"] : [])
     app.launch()
@@ -71,6 +115,15 @@ extension RunnerTests {
 
     XCTAssertEqual(point.x, 34.4, accuracy: 0.01)
     XCTAssertEqual(point.y, 132, accuracy: 0.01)
+  }
+
+  func testSoleScreenNavigationFallbackPointTargetsCompactHeader() throws {
+    let point = try XCTUnwrap(Self.topLeadingNavigationFallbackPoint(
+      in: CGRect(x: 0, y: 0, width: 402, height: 874),
+      windowResolved: false
+    ))
+    XCTAssertEqual(point.x, 32.16, accuracy: 0.01)
+    XCTAssertEqual(point.y, 87.4, accuracy: 0.01)
   }
 
   func testTopLeadingNavigationFallbackPointRejectsInvalidFrame() {

@@ -384,13 +384,14 @@ extension RunnerTests {
   @MainActor
   func synthesizedCoordinateContext(
     app: XCUIApplication,
-    policy: SynthesizedGesturePolicy
+    policy: SynthesizedGesturePolicy,
+    windowQueryRejected: Bool = false
   ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
     var health = mainOwned.accessibilityHealth
     let window: XCUIElement?
     let referenceFrame: CGRect
-    if let resolved = resolveRunnerWindowElement(app: app) {
+    if !windowQueryRejected, let resolved = resolveRunnerWindowElement(app: app) {
       window = resolved.window
       referenceFrame = resolved.frame
     } else if let soleScreenFrame = soleScreenReferenceFrame(app: app) {

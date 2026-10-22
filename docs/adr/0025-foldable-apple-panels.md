@@ -152,8 +152,11 @@ A visual check of the app's own transition requires different evidence.
 The `back` fallback compares before/after captures to determine whether this app changed after receiving a leading tap.
 Two SpringBoard home-screen captures are byte-identical regardless of the app's behavior.
 System-surface fallback would therefore report false "unchanged" evidence for the failure under test.
-The check observes only the app's own resolved window.
-If none resolves, typed refusal produces an unknown outcome instead of false no-change evidence from another process (#2728).
+The check observes the display of the app's resolved window.
+Exception: if XCTest cannot resolve a window on an iPhone with exactly one screen, the check uses the same sole screen as synthesized dispatch.
+An iPhone app occupies that screen, so this exception needs no app-tree query.
+iPad and multi-screen devices still require a resolved window.
+If neither route can name the display, typed refusal produces an unknown outcome instead of false no-change evidence from another process (#2728).
 
 Required and optional helper consumers differ in their frame requirements.
 `screenshot` and the `record start` bootstrap frame require a capture.
