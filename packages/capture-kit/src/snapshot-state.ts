@@ -1,13 +1,11 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   readSnapshotOcclusionContextEvidence,
+  readSnapshotTextInputGeometry,
+  attachSnapshotTextInputGeometry,
   snapshotCaptureAnnotationsFrom,
   publicSnapshotCaptureAnnotations,
 } from '@agent-device/contracts/capture';
-import {
-  attachSnapshotTextInputGeometry,
-  readSnapshotTextInputGeometry,
-} from '@agent-device/contracts/snapshot-private-evidence';
 import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-ownership';
 import {
   attachRefs,

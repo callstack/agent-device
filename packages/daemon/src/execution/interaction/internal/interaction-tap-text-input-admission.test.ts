@@ -1,4 +1,4 @@
-import { attachSnapshotTextInputGeometry } from '@agent-device/contracts/snapshot-private-evidence';
+import { attachSnapshotTextInputGeometry } from '@agent-device/contracts/capture';
 import { beforeEach, expect, test } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';

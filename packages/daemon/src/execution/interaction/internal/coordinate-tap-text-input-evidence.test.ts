@@ -5,7 +5,7 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { presentIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-runtime';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
-import { attachSnapshotTextInputGeometry } from '@agent-device/contracts/snapshot-private-evidence';
+import { attachSnapshotTextInputGeometry } from '@agent-device/contracts/capture';
 import { buildCoordinateTapTextInputEvidence } from './coordinate-tap-text-input-evidence.ts';
 
 type Fixture = {

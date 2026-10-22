@@ -1,6 +1,6 @@
 import type { CoordinateTapTextInputEvidence } from '@agent-device/contracts/interactor-types';
 import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
-import { readSnapshotTextInputGeometry } from '@agent-device/contracts/snapshot-private-evidence';
+import { readSnapshotTextInputGeometry } from '@agent-device/contracts/capture';
 import type { Point } from '@agent-device/kernel/snapshot';
 
 export function buildCoordinateTapTextInputEvidence(
