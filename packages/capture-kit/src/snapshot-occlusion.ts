@@ -26,6 +26,13 @@ const OVERLAY_KIND_FRAGMENTS = [
   'menu',
 ];
 const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
+/**
+ * How far below the viewport top a full-viewport chrome container may start, before the 0.5pt rect
+ * tolerance. On iOS 27 an app that draws a 2pt bar at the top gets a `_UIFloatingBarContainerView`
+ * at y=2 (#3883). A container that starts below the status bar is tens of points down and gets no
+ * exemption from this check.
+ */
+const VIEWPORT_CHROME_TOP_INSET_PT = 4;
 const TOOLBAR_HOST_KIND_FRAGMENTS = ['toolbar'];
 const SCROLL_INDICATOR_KIND_FRAGMENTS = ['scrollbar', 'scrollindicator'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
@@ -361,9 +368,43 @@ function isSiblingSizedChromeContainer(
   const rect = positiveRect(node.rect);
   if (!rect) return false;
   const siblings = neighbourhood.childrenByParent.get(node.parentIndex) ?? [];
-  return siblings.some(
-    (sibling) => sibling.index !== node.index && areRectsApproximatelyEqual(rect, sibling.rect),
-  );
+  if (
+    siblings.some(
+      (sibling) => sibling.index !== node.index && areRectsApproximatelyEqual(rect, sibling.rect),
+    )
+  ) {
+    return true;
+  }
+  const parent = neighbourhood.byIndex.get(node.parentIndex);
+  return Boolean(parent && isParentSizedBesideEnclosingBranch(node, rect, parent, siblings));
+}
+
+/**
+ * The same footprint after the runner has pruned the sibling that matched it. On iOS 27 a React
+ * Native tab screen's content branch extends under the header (`0,2,440,954`) while its
+ * `_UIFloatingBarContainerView` keeps the layout container's frame (`0,64,440,892`), and the
+ * container-sized wrapper the raw tree lists beside it is dropped as an empty `Other`. The container
+ * then matches its parent, and a sibling branch encloses it.
+ *
+ * Requiring the enclosing sibling keeps a bar that merely fills a same-size wrapper covering: a
+ * navigation or tool bar wrapped on its own has no sibling at least as large as itself.
+ *
+ * Accepted limit: a bar that fills a bar-sized wrapper, beside a sibling that overflows that wrapper
+ * (a backdrop larger than the bar), is exempt too, and stops covering content under it that the
+ * sibling does not hold. No capture shows that shape.
+ */
+function isParentSizedBesideEnclosingBranch(
+  node: RawSnapshotNode,
+  rect: Rect,
+  parent: RawSnapshotNode,
+  siblings: readonly RawSnapshotNode[],
+): boolean {
+  if (!areRectsApproximatelyEqual(rect, parent.rect)) return false;
+  return siblings.some((sibling) => {
+    if (sibling.index === node.index) return false;
+    const siblingRect = positiveRect(sibling.rect);
+    return Boolean(siblingRect && rectContains(siblingRect, rect));
+  });
 }
 
 /**
@@ -421,7 +462,7 @@ function isFullViewportChromeContainer(
   while (current && !visited.has(current.index)) {
     if (isViewportRootNode(current)) {
       const viewportRect = positiveRect(current.rect);
-      return Boolean(viewportRect && areRectsApproximatelyEqual(rect, viewportRect));
+      return Boolean(viewportRect && isViewportFootprint(rect, viewportRect));
     }
     visited.add(current.index);
     current =
@@ -530,4 +571,14 @@ function positiveRect(rect: RawSnapshotNode['rect']): Rect | null {
 
 function mergeCoveredHint(hints: string[] | undefined): string[] {
   return Array.from(new Set([...(hints ?? []), COVERED_PRESENTATION_HINT]));
+}
+
+/** The viewport's frame, or the viewport below a strip of at most `VIEWPORT_CHROME_TOP_INSET_PT`. */
+function isViewportFootprint(rect: Rect, viewport: Rect): boolean {
+  const topInset = Math.min(Math.max(rect.y - viewport.y, 0), VIEWPORT_CHROME_TOP_INSET_PT);
+  return areRectsApproximatelyEqual(rect, {
+    ...viewport,
+    y: viewport.y + topInset,
+    height: viewport.height - topInset,
+  });
 }

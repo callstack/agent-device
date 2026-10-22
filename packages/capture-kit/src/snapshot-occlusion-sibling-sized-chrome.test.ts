@@ -723,3 +723,67 @@ test('a control the exempt toolbar host really hosts still covers the row it ove
 
   assert.deepEqual(coveredLabels(nodes), ['Barless row 12']);
 });
+
+/**
+ * The iOS 27 runner shape from a React Native tab screen on an iPhone 18 Pro Max: the content branch
+ * starts under the header at y=2, the layout container and its `_UIFloatingBarContainerView` start
+ * at y=64, and the wrapper that matched the container in the raw tree has been pruned.
+ */
+function parentSizedTree(deltas: { branchRect?: Rect; chromeRect?: Rect } = {}): RawSnapshotNode[] {
+  const viewport: Rect = { x: 0, y: 0, width: 440, height: 956 };
+  const layout: Rect = { x: 0, y: 64, width: 440, height: 892 };
+  return [
+    node({ index: 0, depth: 0, type: 'Application', rect: viewport }),
+    node({ index: 1, parentIndex: 0, depth: 1, type: 'Window', rect: viewport, hittable: true }),
+    node({ index: 2, parentIndex: 1, depth: 2, type: 'Other', rect: layout, hittable: true }),
+    node({
+      index: 3,
+      parentIndex: 2,
+      depth: 3,
+      type: 'Other',
+      rect: deltas.branchRect ?? { x: 0, y: 2, width: 440, height: 954 },
+      hittable: true,
+    }),
+    node({
+      index: 4,
+      parentIndex: 3,
+      depth: 4,
+      type: 'Other',
+      label: 'Rooms',
+      rect: { x: 16, y: 313, width: 408, height: 46 },
+      hittable: true,
+    }),
+    node({
+      index: 5,
+      parentIndex: 2,
+      depth: 3,
+      type: 'Toolbar',
+      label: 'Toolbar',
+      rect: deltas.chromeRect ?? layout,
+      hittable: true,
+    }),
+  ];
+}
+
+test('a chrome container sized to its parent beside a branch that encloses it does not cover that branch', () => {
+  const target = targetVerdict(parentSizedTree());
+
+  assert.equal(target?.interactionBlocked, undefined);
+});
+
+test('a parent-sized chrome container still covers when no sibling encloses it', () => {
+  // A bar alone in a same-size wrapper, beside a branch shorter than the bar, keeps covering.
+  const target = targetVerdict(
+    parentSizedTree({ branchRect: { x: 0, y: 64, width: 440, height: 700 } }),
+  );
+
+  assert.equal(target?.interactionBlocked, 'covered');
+});
+
+test('a chrome container smaller than its parent still covers the branch beside it', () => {
+  const target = targetVerdict(
+    parentSizedTree({ chromeRect: { x: 0, y: 64, width: 440, height: 600 } }),
+  );
+
+  assert.equal(target?.interactionBlocked, 'covered');
+});
