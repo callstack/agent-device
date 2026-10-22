@@ -106,13 +106,6 @@ import {
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { deviceClaimConflictError } from '../resources/device/device-claim-conflict.ts';
 import {
-  pinSessionDeviceSelection,
-  refreshSessionDeviceIfNeeded,
-  resolveCommandDevice,
-  resolvePowerCommandDevice,
-  requireSessionOrExplicitSelector,
-} from '../resources/session-device-resolution.ts';
-import {
   requestDispatchLedger,
   type RequestDispatchLedger,
 } from '../core/request-dispatch-ledger.ts';
@@ -143,6 +136,8 @@ async function resolveBoundedClaimDevice(
   env: EnvMap,
   platformServices: DaemonPlatformServices,
 ): Promise<DeviceInfo> {
+  const { resolveCommandDevice, resolvePowerCommandDevice, requireSessionOrExplicitSelector } =
+    await import('../resources/session-device-resolution.ts');
   if (req.command !== 'open') {
     const guard = requireSessionOrExplicitSelector(req.command, session, req.flags);
     if (guard && !guard.ok) {
@@ -150,22 +145,13 @@ async function resolveBoundedClaimDevice(
       throw new AppError(code, message, details);
     }
   }
-  let selected: DeviceInfo;
-  if (req.command === 'open') {
-    selected = session
-      ? await refreshSessionDeviceIfNeeded(session.device, platformServices, env)
-      : await resolveFreshBoundedOpenDevice(req, env);
-  } else if (req.command === 'install_source' && session) {
-    selected = session.device;
-  } else {
-    const resolve =
-      req.command === 'boot' || req.command === 'shutdown'
-        ? resolvePowerCommandDevice
-        : resolveCommandDevice;
-    selected = await resolve({ session, flags: req.flags, env, platformServices });
-  }
-  if (session) pinSessionDeviceSelection(platformServices, session.device, selected);
-  return selected;
+  if (req.command === 'open') return await resolveFreshBoundedOpenDevice(req, env);
+  if (req.command === 'install_source' && session) return session.device;
+  const resolve =
+    req.command === 'boot' || req.command === 'shutdown'
+      ? resolvePowerCommandDevice
+      : resolveCommandDevice;
+  return await resolve({ session, flags: req.flags, env, platformServices });
 }
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps

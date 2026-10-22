@@ -318,8 +318,9 @@ test('bounded open preserves in-daemon session conflict guidance', async () => {
       details: { session: 'first' },
     },
   });
-  expect(bounded.error?.message).toContain(direct.error!.message);
-  expect(bounded.error?.details?.hint).toBe(direct.error?.details?.hint);
+  if (direct.ok || bounded.ok) throw new Error('Both opens must report the session conflict');
+  expect(bounded.error.message).toContain(direct.error.message);
+  expect(bounded.error.details?.hint).toBe(direct.error.details?.hint);
 });
 
 test('a completed owned manifest still refuses bounded recovery before cleanup', async () => {
@@ -425,7 +426,8 @@ test('active-session replay install reaches its handler without a child scope lo
     flags: { replayScriptSource: replayScriptSourceBundleFor(scriptPath) },
     meta: { cwd: scriptDir, requestId: 'replay-install-lock', sessionExplicit: true },
   });
-  expect(response.error?.message).not.toContain('A device execution lock can only be retained');
+  if (!response.ok)
+    expect(response.error.message).not.toContain('A device execution lock can only be retained');
   expect(runtime.inspectFacts).toHaveBeenCalled();
 });
 
@@ -600,7 +602,7 @@ test('a runner observation made during preview pins the selected simulator for t
   });
 });
 
-test('bounded reopen pins its runner-observed device through the handler', async () => {
+test('bounded reopen leaves runner-observed device selection to the handler', async () => {
   await withMockedPlatform('darwin', async () => {
     const original = { ...makeIosDevice('SIM-REOPEN-ORIGINAL'), appleOs: 'ios' as const };
     const replacement = {

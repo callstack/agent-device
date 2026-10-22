@@ -90,38 +90,40 @@ export async function admitBoundedCompositeResourceRequest(params: {
   switch (trait) {
     case 'none':
       return await assertBoundedClaimRecovery(req, params.claimRecovery);
-    case 'session-lifecycle': {
-      // Maestro app-only close leaves the session and its durable resources owned.
-      if (req.command === 'close' && req.internal?.closeAppOnly === true) return;
-      if (req.command === 'open' && session) await params.validateSessionReopen(session);
-      const platformOwned =
-        req.command === 'close' && session
-          ? await params.inspectSessionTeardownResources(session)
-          : [];
-      if (req.command === 'open') {
-        if (sessionResourceKinds(session, platformOwned).length > 0) {
-          refuseBoundedCompositeResourceOperation(req, 'session-reopen-with-resources');
-        }
-      }
-      if (req.command === 'close') {
-        assertBoundedCompositeSessionDisposal(
-          req,
-          session,
-          platformOwned,
-          params.closeWouldReleaseProviderLease(),
-        );
-      }
-      return await assertBoundedClaimRecovery(req, params.claimRecovery);
-    }
+    case 'session-lifecycle':
+      return await admitSessionLifecycleRequest(params);
     case 'nested-test':
       await admitBoundedTestRequest(req);
-      return await assertBoundedClaimRecovery(req, params.claimRecovery);
+      return;
     case 'operation':
       admitResourceOperation(req, session);
       return;
     default:
       refuseBoundedCompositeResourceOperation(req, `${req.command}:unclassified`);
   }
+}
+
+async function admitSessionLifecycleRequest(
+  params: Parameters<typeof admitBoundedCompositeResourceRequest>[0],
+): Promise<void> {
+  const { req, session } = params;
+  // Maestro app-only close leaves the session and its durable resources owned.
+  if (req.command === 'close' && req.internal?.closeAppOnly === true) return;
+  if (req.command === 'open' && session) await params.validateSessionReopen(session);
+  const platformOwned =
+    req.command === 'close' && session ? await params.inspectSessionTeardownResources(session) : [];
+  if (req.command === 'open' && sessionResourceKinds(session, platformOwned).length > 0) {
+    refuseBoundedCompositeResourceOperation(req, 'session-reopen-with-resources');
+  }
+  if (req.command === 'close') {
+    assertBoundedCompositeSessionDisposal(
+      req,
+      session,
+      platformOwned,
+      params.closeWouldReleaseProviderLease(),
+    );
+  }
+  await assertBoundedClaimRecovery(req, params.claimRecovery);
 }
 
 async function assertBoundedClaimRecovery(
