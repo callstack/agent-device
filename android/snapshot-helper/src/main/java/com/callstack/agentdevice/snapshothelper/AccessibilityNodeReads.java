@@ -30,10 +30,19 @@ final class AccessibilityNodeReads {
     return window.getRoot();
   }
 
+  /**
+   * The child, or null when it is gone. When the child's window closes during the read, the
+   * framework can throw a NullPointerException from its result integrity check instead of answering
+   * null (seen on API 35 while an alert dialog closed), so that throw means the same as null.
+   */
   static AccessibilityNodeInfo child(AccessibilityNodeInfo node, int index) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      return node.getChild(index, PREFETCH_STRATEGY);
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        return node.getChild(index, PREFETCH_STRATEGY);
+      }
+      return node.getChild(index);
+    } catch (NullPointerException vanished) {
+      return null;
     }
-    return node.getChild(index);
   }
 }

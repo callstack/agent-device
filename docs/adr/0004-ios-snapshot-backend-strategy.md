@@ -16,6 +16,8 @@ Structured snapshot quality verdicts and fallback warnings make degraded or reco
 ## Rules at a glance
 
 - Route eligible local iOS Simulator snapshots through the host AX bridge. Present them once through the shared TypeScript engine.
+  An iPad Simulator is a local iOS Simulator for this rule.
+- Refuse a bridge capture of an app window that does not fill the screen.
 - If bridge acquisition or presentation fails, use one typed XCTest fallback.
 - After fallback, disable the bridge for that app generation, except for `preparing` failures and capture-scoped failures.
   A new app generation enables it again.
@@ -58,6 +60,7 @@ A `preparing` failure describes a bridge preparation that is still running, not 
 It sends only that capture to XCTest.
 A new app generation enables it again.
 Physical devices, providers, custom-action captures, and interactions remain on their existing owners.
+The iPad amendment below defines which Simulators are local iOS Simulators.
 
 A WebKit page in Safari or in a `WKWebView` lives in a WebContent process.
 It reaches UIKit's tree as an `AXRemoteElement` under the web view.
@@ -677,3 +680,39 @@ That is a fact about their output, not a backend exception in the fold:
 
 A scope that names a modal-contained screen now publishes an empty projection.
 That is the same healthy empty answer that any other unmatched scope gives, because the screen is not what is presented.
+
+## Amendment: iPad Simulators (issue #3844)
+
+An iPad Simulator runs the iOS Simulator runtime that the bridge reader is built for.
+On XCTest, a deep UIKit tree on an iPad Simulator can keep a long session in private-AX fallback.
+
+Decision. The bridge serves iPhone and iPad Simulators.
+tvOS and visionOS Simulators, the macOS host, providers, and physical devices keep XCTest.
+
+Two iPad facts change what the bridge reports.
+
+The iPadOS floating tab bar draws each item as a collection-view cell that holds an item view.
+Neither node carries the button trait.
+Both nodes carry the private tab-button trait (bit 28).
+XCTest types an element with that trait as `Button`.
+The decoder does the same.
+Otherwise, a `role=button` tab selector that matches the runner tree does not match the bridge tree.
+
+The snapshot API reports the frames of a windowed app relative to its window, not to the screen.
+Windowed Apps and Stage Manager both put an app in such a window.
+A tap at a published point then misses the app.
+The guest compares the AXRuntime frame of the primary app with the frame of the system app.
+Both frames use the native space of the screen, also in landscape.
+If the frames differ, the guest refuses the capture (`app-window-not-full-screen`) before acquisition.
+This refusal provides evidence about the screen arrangement, not the app, so it has capture scope.
+If the runtime cannot report either frame, the guest keeps the capture.
+
+The XCTest fallback is not correct for a windowed app either.
+The runner clips window-relative element frames against the screen-relative app frame.
+That is a runner gap.
+It is not a reason to publish a bridge tree that is known to be wrong.
+
+Rejected alternatives:
+
+- Move the tree by the window origin. The bridge would then be the only correct producer for a windowed app. The keyboard window and alerts were not measured in that mode, so the refusal stays until they are.
+- Read the screen size on the host from the device type profile or from `simctl io`. That adds a host process and a format that Apple does not document. It also does not give the window origin.

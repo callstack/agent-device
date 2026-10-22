@@ -5,17 +5,21 @@
 #import <dlfcn.h>
 
 static id primaryApplication;
+static id systemApplicationElement;
 static id replacementApplication;
 static NSUInteger captureCount;
 static NSString *captureScenario;
 
 @interface AXElement : NSObject
 @property(nonatomic) pid_t pid;
+@property(nonatomic) CGRect frame;
 + (id)primaryApp;
++ (id)systemApplication;
 @end
 
 @implementation AXElement
 + (id)primaryApp { return primaryApplication; }
++ (id)systemApplication { return systemApplicationElement; }
 @end
 
 @interface XCAccessibilityElement : NSObject
@@ -206,6 +210,14 @@ int main(int argc, const char *argv[])
       expectedCode = @"application-server-unavailable";
     } else if ([scenario isEqualToString:@"stable"]) {
       expectedCaptures = 1;
+    } else if ([scenario isEqualToString:@"full-screen"] || [scenario isEqualToString:@"windowed"]) {
+      // Frames an iPad Air 11-inch simulator reports for a full-screen app and for a windowed one.
+      system.frame = CGRectMake(0, 0, 820, 1180);
+      systemApplicationElement = system;
+      BOOL windowed = [scenario isEqualToString:@"windowed"];
+      target.frame = windowed ? CGRectMake(223, 290, 375, 486) : system.frame;
+      expectedCode = windowed ? @"app-window-not-full-screen" : nil;
+      expectedCaptures = windowed ? 0 : 1;
     } else if ([scenario isEqualToString:@"changed"]) {
       replacementApplication = system;
       expectedCode = @"foreground-owner-changed";
