@@ -141,6 +141,14 @@ const SELECTED_TRAIT = 1n << 3n;
 const KEYBOARD_FOCUS_TRAIT = 1n << 21n;
 
 /**
+ * The private tab-button trait UIKit sets on a tab bar item. XCTest types an element that carries
+ * it as a button whatever its automation type, so the runner path answers `Button` for it. The
+ * iPadOS floating tab bar draws each item as a collection-view cell (`Cell`) that holds an item
+ * view (`Other`), so the bridge derives the type from this bit to match (#3844).
+ */
+const TAB_BUTTON_TRAIT = 1n << 28n;
+
+/**
  * Two hosts put another process's UI into this one's tree as an `AXRemoteElement`, with the
  * children in that other process:
  *
@@ -268,8 +276,8 @@ function nodeFacts(
   return {
     index,
     ...(parentIndex === undefined ? {} : { parentIndex }),
-    ...(elementTypeName(elementClass, automationType)
-      ? { type: elementTypeName(elementClass, automationType) }
+    ...(elementTypeName(elementClass, automationType, traits)
+      ? { type: elementTypeName(elementClass, automationType, traits) }
       : {}),
     ...(elementClass ? { role: elementClass } : {}),
     ...(baseClass && baseClass !== elementClass ? { subrole: baseClass } : {}),
@@ -295,10 +303,12 @@ function nodeFacts(
 function elementTypeName(
   elementClass: string | undefined,
   automationType: number | undefined,
+  traits: bigint | undefined,
 ): string | undefined {
   if (elementClass !== undefined && CLASS_PROMOTED_TYPES[elementClass]) {
     return CLASS_PROMOTED_TYPES[elementClass];
   }
+  if (traits !== undefined && (traits & TAB_BUTTON_TRAIT) !== 0n) return 'Button';
   if (elementClass !== undefined && ELEMENT_TYPE_NAMES.includes(elementClass)) {
     return elementClass;
   }

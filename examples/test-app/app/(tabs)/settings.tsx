@@ -19,6 +19,7 @@ export default function SettingsRoute() {
         onLoadDiagnostics={state.loadDiagnostics}
         onOpenAccessorySetup={() => router.push('/accessory-setup')}
         onOpenAutomationLab={() => router.push('/automation')}
+        onOpenHeavyFeed={() => router.push('/heavy-feed')}
         onOpenInertSurface={() => router.push('/inert')}
         onOpenSnapshotDepth={() => router.push('/snapshot-depth')}
         onOpenWebViewLab={() => router.push('/webview')}
