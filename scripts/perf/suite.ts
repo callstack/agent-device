@@ -352,8 +352,7 @@ export const SUITE: readonly SuiteScenario<SuiteStep>[] = [
         ],
       }),
       step('logs-start', C.logs, ['logs', 'start']),
-      // A stop issued 400 ms after start has hung its request in local runs; let the stream run.
-      step('logs-stop', C.logs, ['logs', 'stop'], { before: [['wait', '1000']] }),
+      step('logs-stop', C.logs, ['logs', 'stop']),
       step('network-dump', C.network, ['network', 'dump', '10']),
       step('back', C.back, ['back']),
       step('back-settle', C.back, ['back', '--settle'], {

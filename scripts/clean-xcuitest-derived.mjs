@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import {
+  resolveRunnerDerivedOverride,
+  resolveRunnerScriptDefaultDerivedPath,
+} from '@agent-device/platform-apple/runner/operations';
 
-const DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner', 'derived');
+const DERIVED_OVERRIDE = resolveRunnerDerivedOverride(process.env);
 const ROOT_TRANSIENT_ENTRY_NAMES = new Set([
   '.agent-device-runner-cache.json',
   'Build',
@@ -19,12 +22,13 @@ const ROOT_TRANSIENT_ENTRY_NAMES = new Set([
 const platforms = process.argv.slice(2);
 const requested = platforms.length > 0 ? platforms : ['ios', 'macos', 'tvos', 'visionos'];
 const supported = new Set(['ios', 'macos', 'tvos', 'visionos']);
-const DERIVED_PATHS = new Map([
-  ['ios', DERIVED_ROOT],
-  ['macos', path.join(DERIVED_ROOT, 'macos')],
-  ['tvos', path.join(DERIVED_ROOT, 'tvos')],
-  ['visionos', path.join(DERIVED_ROOT, 'visionos')],
-]);
+// An override pins one directory for every platform, as it does for the runner build.
+const DERIVED_PATHS = new Map(
+  [...supported].map((platform) => [
+    platform,
+    DERIVED_OVERRIDE ?? resolveRunnerScriptDefaultDerivedPath(platform),
+  ]),
+);
 const PLATFORM_LABELS = new Map([
   ['ios', 'iOS'],
   ['macos', 'macOS'],
@@ -55,7 +59,7 @@ function cleanDerivedPath(platform, targetPath) {
   if (!fs.existsSync(targetPath)) {
     return { status: 'skipped', reason: 'not-found' };
   }
-  if (platform !== 'ios') {
+  if (wholeDirectoryClean(platform)) {
     fs.rmSync(targetPath, { recursive: true, force: true });
     return { status: 'removed' };
   }
@@ -85,8 +89,15 @@ function cleanDerivedPath(platform, targetPath) {
 
 function formatCleanupResult(platform, targetPath, result) {
   const platformLabel = resolvePlatformLabel(platform);
-  if (platform !== 'ios') return formatWholeDerivedCleanupResult(platformLabel, targetPath, result);
+  if (wholeDirectoryClean(platform))
+    return formatWholeDerivedCleanupResult(platformLabel, targetPath, result);
   return formatIosCleanupResult(platformLabel, targetPath, result);
+}
+
+// Only a platform's own default subdirectory is removed whole; the shared base and an override
+// keep entries that are not build output.
+function wholeDirectoryClean(platform) {
+  return platform !== 'ios' && !DERIVED_OVERRIDE;
 }
 
 function formatWholeDerivedCleanupResult(platformLabel, targetPath, result) {

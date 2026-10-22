@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { acquireValidationLock, VALIDATION_PARENT_ENV } from './host-lock.ts';
+import { acquireValidationLock, runLockedCommand, VALIDATION_PARENT_ENV } from './host-lock.ts';
 
 test(
   'host lock excludes a waiter, supports cancellation, then admits it after release',
@@ -72,3 +72,49 @@ test('unsupported hosts reject validation before writing lock state', async () =
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test(
+  'a locked command publishes ownership while it runs and clears it when it finishes',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'validation-run-'));
+    const lock = path.join(directory, 'gate.lock');
+    const activePath = `${lock}.active.json`;
+    const env = { ...process.env };
+    delete env[VALIDATION_PARENT_ENV];
+    try {
+      const owner = await acquireValidationLock(new AbortController().signal, lock, () => {}, env);
+      const observed: string[] = [];
+      const exitCode = await runLockedCommand(
+        owner,
+        '/fixture/receipt.json',
+        [
+          process.execPath,
+          '-e',
+          `process.stdout.write(process.env.${VALIDATION_PARENT_ENV}); process.exit(3)`,
+        ],
+        {
+          cwd: directory,
+          env,
+          signal: new AbortController().signal,
+          onStdoutChunk: (chunk) => {
+            const active = JSON.parse(fs.readFileSync(activePath, 'utf8')) as {
+              receipt: string;
+              pid: number;
+              activation: string;
+            };
+            observed.push(chunk, active.receipt, active.activation);
+            assert.ok(active.pid > 0);
+          },
+          onStderrChunk: () => {},
+        },
+      );
+      assert.equal(exitCode, 3);
+      assert.deepEqual(observed, ['/fixture/receipt.json', '/fixture/receipt.json', 'stdin']);
+      assert.equal(fs.existsSync(activePath), false);
+      await owner.release();
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);

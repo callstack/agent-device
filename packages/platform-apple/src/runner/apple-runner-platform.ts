@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   isMacOs,
@@ -135,6 +136,16 @@ const RUNNER_PLATFORM_PROFILES: Record<RunnerApplePlatformName, RunnerPlatformPr
     },
   },
 };
+
+/**
+ * The derived-data directory an operator pinned with `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH`, or
+ * `undefined` when the managed cache layout applies. One path serves every Apple platform, so the
+ * runner, its cache retention, and the clean script all read the override here.
+ */
+export function resolveRunnerDerivedOverride(env: NodeJS.ProcessEnv): string | undefined {
+  const override = env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim();
+  return override ? path.resolve(override) : undefined;
+}
 
 const RUNNER_XCUITEST_SCRIPT_PLATFORMS = ['ios', 'macos', 'tvos', 'visionos'] as const;
 export type RunnerXcuitestScriptPlatform = (typeof RUNNER_XCUITEST_SCRIPT_PLATFORMS)[number];

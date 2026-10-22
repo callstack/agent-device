@@ -84,6 +84,59 @@ test('clean-xcuitest macos removes the entire platform directory when present', 
   }
 });
 
+for (const platform of ['ios', 'macos']) {
+  test(`clean-xcuitest ${platform} cleans the override directory and leaves the default untouched`, () => {
+    const homeDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), `agent-device-clean-xcuitest-override-${platform}-`),
+    );
+    try {
+      const defaultRoot = path.join(homeDir, '.agent-device', 'apple-runner', 'derived');
+      const defaultPlatformDir = path.join(defaultRoot, 'macos');
+      fs.mkdirSync(path.join(defaultRoot, 'Build'), { recursive: true });
+      fs.mkdirSync(defaultPlatformDir, { recursive: true });
+      const overrideRoot = path.join(homeDir, 'worktree', '.tmp', 'ios-runner-derived');
+      fs.mkdirSync(path.join(overrideRoot, 'Build'), { recursive: true });
+      fs.mkdirSync(path.join(overrideRoot, 'Logs'), { recursive: true });
+      fs.writeFileSync(path.join(overrideRoot, '.agent-device-runner-cache.json'), '{}', 'utf8');
+      fs.mkdirSync(path.join(overrideRoot, 'user-data'), { recursive: true });
+
+      const result = runCleanXcuitest(homeDir, platform, {
+        env: { AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ` ${overrideRoot}/ ` },
+      });
+      const label = platform === 'ios' ? 'iOS' : 'macOS';
+      assert.equal(result.exitCode, 0, result.stderr);
+      assert.equal(
+        result.stdout.trim(),
+        `Removed ${label} XCTest transient entries under ${overrideRoot}: .agent-device-runner-cache.json, Build, Logs; kept user-data`,
+      );
+      assert.deepEqual(fs.readdirSync(overrideRoot), ['user-data']);
+      assert.equal(fs.existsSync(path.join(defaultRoot, 'Build')), true);
+      assert.equal(fs.existsSync(defaultPlatformDir), true);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  });
+}
+
+test('clean-xcuitest ignores a blank override and keeps the default directory', () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-clean-xcuitest-blank-'));
+  try {
+    const derivedRoot = path.join(homeDir, '.agent-device', 'apple-runner', 'derived');
+    fs.mkdirSync(path.join(derivedRoot, 'Build'), { recursive: true });
+
+    const result = runCleanXcuitest(homeDir, 'ios', {
+      env: { AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: '  ' },
+    });
+    assert.equal(result.exitCode, 0, result.stderr);
+    assert.equal(
+      result.stdout.trim(),
+      `Removed iOS XCTest transient entries under ${derivedRoot}: Build`,
+    );
+  } finally {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  }
+});
+
 // Root bypasses directory permissions, so chmod cannot force the cleanup
 // failure this test provokes (common in containerized agent environments).
 const isRoot = process.getuid?.() === 0;
@@ -112,19 +165,33 @@ test(
   },
 );
 
-function runCleanXcuitest(homeDir: string, ...args: Array<string | { allowFailure?: boolean }>) {
+function runCleanXcuitest(
+  homeDir: string,
+  ...args: Array<string | { allowFailure?: boolean; env?: Record<string, string> }>
+) {
   const lastArg = args.at(-1);
   const options = typeof lastArg === 'object' ? lastArg : {};
   const platforms = (options === lastArg ? args.slice(0, -1) : args) as string[];
-  return runCmdSync(process.execPath, [scriptPath, ...platforms], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      HOME: homeDir,
+  return runCmdSync(
+    process.execPath,
+    [
+      '--experimental-strip-types',
+      '--disable-warning=ExperimentalWarning',
+      scriptPath,
+      ...platforms,
+    ],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: undefined,
+        HOME: homeDir,
+        ...options?.env,
+      },
+      allowFailure: options?.allowFailure,
+      timeoutMs: 30_000,
     },
-    allowFailure: options?.allowFailure,
-    timeoutMs: 30_000,
-  });
+  );
 }
 
 function escapeRegExp(value: string) {

@@ -8,8 +8,10 @@ import { hostEnvironment, isEnvTruthy, findProjectRoot, readVersion } from './ho
 import {
   resolveRunnerBuildDestinationFamily,
   resolveRunnerDerivedBaseName,
+  resolveRunnerDerivedOverride,
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
+  type RunnerXcuitestScriptPlatform,
 } from './apple-runner-platform.ts';
 import {
   requireRunnerToolchainFingerprint,
@@ -149,11 +151,21 @@ export function resolveRunnerDerivedPath(
   device: DeviceInfo,
   metadata: RunnerXctestrunCacheMetadata,
 ): string {
-  const override = hostEnvironment().env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim();
-  if (override) {
-    return path.resolve(override);
-  }
-  return resolveRunnerKeyedDerivedPath(device, metadata);
+  return (
+    resolveRunnerDerivedOverride(hostEnvironment().env) ??
+    resolveRunnerKeyedDerivedPath(device, metadata)
+  );
+}
+
+/**
+ * The derived-data directory `pnpm build:xcuitest:<platform>` builds into when no override is set.
+ * iOS builds into the shared base; the other platforms build into a subdirectory of it.
+ */
+export function resolveRunnerScriptDefaultDerivedPath(
+  platform: RunnerXcuitestScriptPlatform,
+): string {
+  const base = path.join(RUNNER_DERIVED_ROOT, 'derived');
+  return platform === 'ios' ? base : path.join(base, platform);
 }
 
 export function resolveRunnerKeyedDerivedPath(

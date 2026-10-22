@@ -25,6 +25,8 @@ export function appleDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
 export function hostFixture(
   options: {
     failProcessStart?: boolean;
+    startProcess?: AppLogRuntimeHost['processes']['start'];
+    sleep?: AppLogRuntimeHost['clock']['sleep'];
     commandRun?: AppLogRuntimeHost['commands']['run'];
     appleToolRun?: AppLogRuntimeHost['appleTools']['run'];
   } = {},
@@ -33,10 +35,12 @@ export function hostFixture(
   let outputDisposed = false;
   let outputOpens = 0;
   let markerReads = 0;
-  const startProcess: AppLogRuntimeHost['processes']['start'] = vi.fn(async ({ command }) => {
+  const startProcess: AppLogRuntimeHost['processes']['start'] = vi.fn(async (request, signal) => {
+    const { command } = request;
     if (command.kind !== 'host') throw new Error('Expected an Apple host command');
     backgroundCommands.push([command.request.executable, ...command.request.args]);
     if (options.failProcessStart) throw new Error('start failed');
+    if (options.startProcess) return await options.startProcess(request, signal);
     return {
       wait: new Promise<never>(() => {}),
       terminate: async () => {},
@@ -87,7 +91,7 @@ export function hostFixture(
       inspect: async () => 'missing',
       terminate: async () => 'already-missing',
     },
-    clock: { now: () => 10, sleep: async () => {} },
+    clock: { now: () => 10, sleep: options.sleep ?? (async () => {}) },
   };
   return {
     host,

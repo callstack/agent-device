@@ -138,7 +138,7 @@ extension RunnerTests {
     observe: () -> TextValueRead,
     waitForNextObservation: () -> Void
   ) {
-    let field = resolveTextEntryElement(app: app, target: target)
+    let field = resolveTextEntryInput(app: app, target: target)?.attributes
     let placeholder = field?.placeholderValue
     let waitStartedAt = Date()
     return (
@@ -146,7 +146,7 @@ extension RunnerTests {
       fieldIsUnreadable: textValueRead(for: field) == .unreadable,
       observe: {
         let observed = self.textValueRead(
-          for: self.resolveTextEntryElement(app: app, target: target),
+          for: self.resolveTextEntryInput(app: app, target: target)?.attributes,
           treatingPlaceholderAsEmpty: true
         )
         var observedText: String?
