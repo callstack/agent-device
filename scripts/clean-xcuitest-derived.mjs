@@ -2,7 +2,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { resolveRunnerDerivedOverride } from '@agent-device/platform-apple/runner/operations';
 
+const DERIVED_OVERRIDE = resolveRunnerDerivedOverride(process.env);
 const DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner', 'derived');
 const ROOT_TRANSIENT_ENTRY_NAMES = new Set([
   '.agent-device-runner-cache.json',
@@ -19,11 +21,12 @@ const ROOT_TRANSIENT_ENTRY_NAMES = new Set([
 const platforms = process.argv.slice(2);
 const requested = platforms.length > 0 ? platforms : ['ios', 'macos', 'tvos', 'visionos'];
 const supported = new Set(['ios', 'macos', 'tvos', 'visionos']);
+// An override pins one directory for every platform, as it does for the runner build.
 const DERIVED_PATHS = new Map([
-  ['ios', DERIVED_ROOT],
-  ['macos', path.join(DERIVED_ROOT, 'macos')],
-  ['tvos', path.join(DERIVED_ROOT, 'tvos')],
-  ['visionos', path.join(DERIVED_ROOT, 'visionos')],
+  ['ios', DERIVED_OVERRIDE ?? DERIVED_ROOT],
+  ['macos', DERIVED_OVERRIDE ?? path.join(DERIVED_ROOT, 'macos')],
+  ['tvos', DERIVED_OVERRIDE ?? path.join(DERIVED_ROOT, 'tvos')],
+  ['visionos', DERIVED_OVERRIDE ?? path.join(DERIVED_ROOT, 'visionos')],
 ]);
 const PLATFORM_LABELS = new Map([
   ['ios', 'iOS'],
@@ -55,7 +58,7 @@ function cleanDerivedPath(platform, targetPath) {
   if (!fs.existsSync(targetPath)) {
     return { status: 'skipped', reason: 'not-found' };
   }
-  if (platform !== 'ios') {
+  if (platform !== 'ios' && !DERIVED_OVERRIDE) {
     fs.rmSync(targetPath, { recursive: true, force: true });
     return { status: 'removed' };
   }
@@ -85,7 +88,8 @@ function cleanDerivedPath(platform, targetPath) {
 
 function formatCleanupResult(platform, targetPath, result) {
   const platformLabel = resolvePlatformLabel(platform);
-  if (platform !== 'ios') return formatWholeDerivedCleanupResult(platformLabel, targetPath, result);
+  if (platform !== 'ios' && !DERIVED_OVERRIDE)
+    return formatWholeDerivedCleanupResult(platformLabel, targetPath, result);
   return formatIosCleanupResult(platformLabel, targetPath, result);
 }
 

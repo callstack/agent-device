@@ -8,6 +8,7 @@ import { hostEnvironment, isEnvTruthy, findProjectRoot, readVersion } from './ho
 import {
   resolveRunnerBuildDestinationFamily,
   resolveRunnerDerivedBaseName,
+  resolveRunnerDerivedOverride,
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
 } from './apple-runner-platform.ts';
@@ -149,11 +150,10 @@ export function resolveRunnerDerivedPath(
   device: DeviceInfo,
   metadata: RunnerXctestrunCacheMetadata,
 ): string {
-  const override = hostEnvironment().env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim();
-  if (override) {
-    return path.resolve(override);
-  }
-  return resolveRunnerKeyedDerivedPath(device, metadata);
+  return (
+    resolveRunnerDerivedOverride(hostEnvironment().env) ??
+    resolveRunnerKeyedDerivedPath(device, metadata)
+  );
 }
 
 export function resolveRunnerKeyedDerivedPath(

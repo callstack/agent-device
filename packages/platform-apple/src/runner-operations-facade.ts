@@ -19,6 +19,7 @@ export {
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
   isRunnerXcuitestScriptPlatform,
+  resolveRunnerDerivedOverride,
   resolveRunnerScriptDevice,
   resolveRunnerSigningBuildSettings,
   requireCertifiedRunnerCacheArtifacts,

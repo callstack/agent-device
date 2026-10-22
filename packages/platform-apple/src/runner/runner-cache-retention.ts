@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveRunnerDerivedOverride } from './apple-runner-platform.ts';
 import { hostEnvironment, emitDiagnostic } from './host.ts';
 import {
   acquireRunnerXctestrunCacheLock,
@@ -39,7 +40,7 @@ export async function evictStaleRunnerCaches(
   nowMs: number = Date.now(),
 ): Promise<string[]> {
   const keep = resolveRunnerCacheKeepCount(env);
-  if (keep === 0 || env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim()) return [];
+  if (keep === 0 || resolveRunnerDerivedOverride(env)) return [];
   const base = path.dirname(currentDerived);
   const candidates = listCacheKeyDirectories(base)
     .filter((entry) => entry.derived !== currentDerived)
