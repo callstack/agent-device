@@ -662,6 +662,133 @@ extension RunnerTests {
     XCTAssertNotNil(keyQ, "`q` key must be presented under --depth \(options.depth ?? -1)")
   }
 
+  /// #3899: an iPad window that does not fill the screen publishes screen space. The measured shape is
+  /// iPad Pro 11-inch (M5, iOS 27.0) with Windowed Apps on and a Calendar window at (224,207,386x682):
+  /// the app's own window arrives as a (0,0)-anchored copy of that box and its subtree with it, so the
+  /// Add button reports (335,14,37,36) for a control drawn at (559,221). The one normalization pass
+  /// reads the declaration and publishes the subtree at its place on the screen, which is what lets the
+  /// fold keep every node instead of clipping each one to (w − x) × (h − y) and refusing the capture.
+  func testAWindowedSubtreeIsPublishedInScreenSpaceAndKeepsEveryNode() throws {
+    let windowOnScreen = CGRect(x: 224, y: 207, width: 386, height: 682)
+    func node(
+      _ index: Int, _ type: String, _ label: String, _ rect: CGRect, _ parent: Int?, _ depth: Int
+    ) -> RawAXNode {
+      RawAXNode(
+        index: index, type: type, label: label, identifier: nil, value: nil,
+        rect: SnapshotRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height),
+        enabled: true, focused: nil, selected: nil, hittable: false,
+        depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil
+      )
+    }
+    let reportedRoot = CGRect(x: 0, y: 0, width: 386, height: 682)
+    let acquired = [
+      node(0, "Application", "Calendar", reportedRoot, nil, 0),
+      node(1, "Window", "Window", reportedRoot, 0, 1),
+      node(2, "Other", "Toolbar", reportedRoot, 1, 2),
+      node(3, "Button", "Add", CGRect(x: 335, y: 14, width: 37, height: 36), 2, 3),
+      node(4, "Button", "Today", CGRect(x: 8, y: 583, width: 90, height: 38), 2, 3),
+      // A SpringBoard overlay under the app root reports the screen's own box: its subtree is already
+      // in screen space and must not move.
+      node(5, "Window", "Alert", CGRect(x: 0, y: 0, width: 834, height: 1210), 0, 1),
+      node(6, "Button", "Discard Changes", CGRect(x: 300, y: 500, width: 240, height: 44), 5, 2),
+    ]
+    let normalized = SnapshotGeometrySpace.normalized(
+      nodes: acquired,
+      viewport: .reported(
+        box: windowOnScreen,
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
+      )
+    )
+    let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
+    let capture = try XCTUnwrap(try SnapshotPresentation.present(
+      SnapshotAcquisition(
+        hint: SnapshotPresentation.captureHint(for: options),
+        nodes: normalized,
+        truncated: false,
+        effectiveDepth: nil,
+        viewport: .reported(box: windowOnScreen)
+      ),
+      options: options
+    ))
+
+    // One space: the root answers with the window's screen box, and the button with the position the
+    // screenshot draws.
+    XCTAssertEqual(capture.nodes.first?.rect, SnapshotRect(windowOnScreen))
+    let add = try XCTUnwrap(capture.nodes.first { $0.label == "Add" })
+    XCTAssertEqual(add.rect, SnapshotRect(x: 559, y: 221, width: 37, height: 36))
+    XCTAssertEqual(add.hittable, true)
+    // Nothing is dropped for being "outside the clip": the whole acquired tree is still there. The one
+    // clipped node is the system overlay that really is larger than the app's window, which is the
+    // fold's normal answer to oversized content — not the mixed-space clip that used to publish
+    // (w − x) × (h − y) boxes and refuse this capture outright.
+    XCTAssertEqual(Set(capture.nodes.map(\.label)), Set(acquired.map(\.label)))
+    let clipNote = capture.qualityNotes.first { $0.code == .regularGeometryClipped }
+    XCTAssertEqual(clipNote?.droppedNodeCount, 0, "no node is dropped for the window's origin")
+    XCTAssertEqual(clipNote?.clippedNodeCount, 1, "only the overlay larger than the window is clipped")
+    XCTAssertEqual(
+      capture.nodes.first { $0.label == "Alert" }?.rect,
+      SnapshotRect(x: 224, y: 207, width: 386, height: 682),
+      "the overlay is clipped to the window's visible box, not to (w − x) × (h − y) of it"
+    )
+    // The system window and its button stay where the platform reported them.
+    let discard = try XCTUnwrap(capture.nodes.first { $0.label == "Discard Changes" })
+    XCTAssertEqual(discard.rect, SnapshotRect(x: 300, y: 500, width: 240, height: 44))
+  }
+
+  /// #3899 keeps a full-screen capture byte-identical: the same tree reported from the screen origin is
+  /// published exactly as reported, with no translation read from its zero-origin viewport.
+  func testAFullScreenCapturePublishesWhatThePlatformReported() throws {
+    let screen = CGRect(x: 0, y: 0, width: 834, height: 1210)
+    func node(
+      _ index: Int, _ type: String, _ label: String, _ rect: CGRect, _ parent: Int?, _ depth: Int
+    ) -> RawAXNode {
+      RawAXNode(
+        index: index, type: type, label: label, identifier: nil, value: nil,
+        rect: SnapshotRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height),
+        enabled: true, focused: nil, selected: nil, hittable: false,
+        depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil
+      )
+    }
+    let acquired = [
+      node(0, "Application", "Calendar", screen, nil, 0),
+      node(1, "Window", "Window", screen, 0, 1),
+      node(2, "Button", "Add", CGRect(x: 335, y: 14, width: 37, height: 36), 1, 2),
+    ]
+    let normalized = SnapshotGeometrySpace.normalized(
+      nodes: acquired,
+      viewport: .reported(
+        box: screen,
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
+      )
+    )
+    XCTAssertEqual(normalized.map(\.rect), acquired.map(\.rect))
+    XCTAssertEqual(
+      SnapshotContentTranslation.offset(reportedBox: screen, viewportBox: screen),
+      nil,
+      "a viewport at the screen origin carries no translation"
+    )
+  }
+
+  /// #3899 keeps ADR 0025 foldable panel taps: a panel reports its own box from its own display's
+  /// origin, so no translation is read and the panel's geometry stays exactly as measured.
+  func testAFoldablePanelReportsNoContentTranslation() {
+    let panel = CGRect(x: 0, y: 0, width: 951, height: 669)
+    XCTAssertNil(
+      SnapshotContentTranslation.offset(reportedBox: panel, viewportBox: panel),
+      "a panel box anchored at its display's origin names no translation"
+    )
+    // A digitizer point on the panel is passed through, so the fold's display selection stays the only
+    // window-dependent choice the tap path makes.
+    XCTAssertEqual(
+      CoordinateSpaceRotation.native(
+        point: CGPoint(x: 476, y: 226),
+        in: panel,
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
+      ),
+      CGPoint(x: 476, y: 226)
+    )
+  }
+
   /// #2891: a capture whose viewport read failed publishes no `hittable` for a node whose answer is
   /// containment, while a root and a disabled node stay a declared `false`. Pinned on the
   /// encoded objects rather than on `capture.nodes`, because the promise is about the wire: a test

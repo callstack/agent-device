@@ -4,6 +4,10 @@ import CoreGraphics
 // Rotation between an app's interface space and the device's native (portrait-up) space, shared by
 // synthesized dispatch (forward) and capture (inverse). Rationale and measurements: ADR 0004
 // "the coordinate space of a captured subtree" and contracts/fixtures/window-coordinate-space.json.
+//
+// Rotation moves axes only. It never moves an origin: a placed window's offset from the screen
+// belongs to `SnapshotContentTranslation` (#3899), which is the one rule that turns a reported box
+// into its screen-space box. Keeping the two apart is what lets a capture publish one space.
 
 public enum RunnerInterfaceOrientation {
   public static let unknown = 0
@@ -14,18 +18,18 @@ public enum RunnerInterfaceOrientation {
 }
 
 public enum CoordinateSpaceRotation {
-  // Dispatch rotates a point about the reference frame's top-left. The origin is localized away
-  // and never added back: an XCUIApplication session observes only its own scene surface, so its
-  // windows report (0,0)-anchored frames (measured on iPhone landscape both ways and on every
-  // system window in window-coordinate-space.json), and displacement between panels or panes is
-  // carried by the record's displayID, not by an origin.
+  // Dispatch turns a point's axes and never moves its origin: the turn says which axis a box runs
+  // along, not where that box sits (#3899). The digitizer's origin is the display's own, which is
+  // where a windowed app's screen-space points are already measured from, so a placed window's
+  // offset from the screen belongs to `SnapshotContentTranslation` — the one rule that reads an
+  // offset — and not to this function. The `frame` argument names the side lengths the turn swaps.
   public static func native(
     point: CGPoint,
     in frame: CGRect,
     interfaceOrientation: Int
   ) -> CGPoint {
-    let localX = Double(point.x) - Double(frame.minX)
-    let localY = Double(point.y) - Double(frame.minY)
+    let localX = Double(point.x)
+    let localY = Double(point.y)
     let width = Double(frame.width)
     let height = Double(frame.height)
     switch interfaceOrientation {
@@ -60,23 +64,23 @@ public enum CoordinateSpaceRotation {
   ) -> CGPoint {
     let width = Double(frame.width)
     let height = Double(frame.height)
-    let localX: Double
-    let localY: Double
+    let x: Double
+    let y: Double
     switch interfaceOrientation {
     case RunnerInterfaceOrientation.landscapeRight:
-      localX = Double(point.y)
-      localY = height - Double(point.x)
+      x = Double(point.y)
+      y = height - Double(point.x)
     case RunnerInterfaceOrientation.landscapeLeft:
-      localX = width - Double(point.y)
-      localY = Double(point.x)
+      x = width - Double(point.y)
+      y = Double(point.x)
     case RunnerInterfaceOrientation.portraitUpsideDown:
-      localX = width - Double(point.x)
-      localY = height - Double(point.y)
+      x = width - Double(point.x)
+      y = height - Double(point.y)
     default:
-      localX = Double(point.x)
-      localY = Double(point.y)
+      x = Double(point.x)
+      y = Double(point.y)
     }
-    return CGPoint(x: localX + Double(frame.minX), y: localY + Double(frame.minY))
+    return CGPoint(x: x, y: y)
   }
 
   public static func oriented(
@@ -103,9 +107,57 @@ public enum CoordinateSpaceRotation {
   }
 }
 
+/// Whether a carrier's own box declares that its subtree reports in the carrier's content space
+/// rather than in the space the viewport names (#3899).
+///
+/// An iPad window that does not fill the screen (Windowed Apps, Stage Manager) reports its own frame
+/// at its place on the screen while its subtree arrives anchored at its own top-left: measured on
+/// iPad Pro 11-inch (M5, iOS 27.0) with a Calendar window whose `frame` is `(224,207,386,682)`, the
+/// application root reports `(0,0,386,682)` and its Add button `(335,14,37,36)` at screen
+/// `(559,221)`. A full-screen window, an iPhone, and each foldable panel report origins at zero on
+/// both sides, so the rule reads zero translation there and every published rect is unchanged.
+///
+/// The signature is the carrier's box as a `(0,0)`-anchored copy of the viewport box: the side
+/// lengths match within the tolerance and the viewport — the app's screen-anchored box — starts
+/// somewhere else on the screen. Any other carrier box names no space: it is not the app's own
+/// window, so its numbers say nothing about where the app's subtree starts.
+public enum SnapshotContentTranslation {
+  /// The vector from a carrier's reported box to the screen space it is placed at, or `nil` when the
+  /// carrier's box declares no translation. One box offset from one viewport box, decided from the
+  /// same tolerance the quarter-turn rule reads; replayed against
+  /// `contracts/fixtures/window-coordinate-space.json` in `windowContentCases`.
+  public static func offset(reportedBox: CGRect, viewportBox: CGRect) -> CGSize? {
+    guard SnapshotGeometry.isPositiveFinite(reportedBox),
+      SnapshotGeometry.isPositiveFinite(viewportBox)
+    else {
+      return nil
+    }
+    guard abs(reportedBox.minX) <= SnapshotGeometrySpace.quarterTurnTolerance,
+      abs(reportedBox.minY) <= SnapshotGeometrySpace.quarterTurnTolerance
+    else {
+      return nil
+    }
+    guard abs(viewportBox.minX) > SnapshotGeometrySpace.quarterTurnTolerance
+      || abs(viewportBox.minY) > SnapshotGeometrySpace.quarterTurnTolerance
+    else {
+      return nil
+    }
+    guard abs(reportedBox.width - viewportBox.width) <= SnapshotGeometrySpace.quarterTurnTolerance,
+      abs(reportedBox.height - viewportBox.height) <= SnapshotGeometrySpace.quarterTurnTolerance
+    else {
+      return nil
+    }
+    return CGSize(width: viewportBox.minX, height: viewportBox.minY)
+  }
+}
+
 public enum SnapshotGeometrySpace: Equatable {
   case appOrientation
   case deviceNative(appFrame: SnapshotViewport.Box, interfaceOrientation: Int)
+  /// The subtree was reported in a placed window's own content space and is published translated
+  /// into the viewport's screen space (`SnapshotContentTranslation`, #3899). The offset is the
+  /// vector from the window's reported box to the viewport box it sits at on screen.
+  case windowContent(offset: CGSize)
 
   public static let quarterTurnTolerance: Double = 1
 
@@ -119,10 +171,15 @@ public enum SnapshotGeometrySpace: Equatable {
         in: appFrame.rect,
         interfaceOrientation: interfaceOrientation
       )
+    case .windowContent(let offset):
+      return reportedFrame.offsetBy(dx: offset.width, dy: offset.height)
     }
   }
 
-  /// Only a `.reported` viewport carries an orientation, so only it can anchor a rotation.
+  /// A carrier declares its own subtree's space from its own box. A `.reported` viewport is the
+  /// screen-anchored fact both declarations read against: a quarter turn needs its orientation, and
+  /// a window-content offset needs its origin. A `.derived` viewport carries no screen anchor, so a
+  /// subtree under it publishes what the platform reported rather than a guessed space.
   public static func space(
     reportedBySurfaceHost isSurfaceHost: Bool,
     reportedFrame: CGRect,
@@ -130,13 +187,20 @@ public enum SnapshotGeometrySpace: Equatable {
     viewport: SnapshotViewport
   ) -> SnapshotGeometrySpace {
     guard isSurfaceHost else { return inherited }
-    guard case .reported(let appFrame, let interfaceOrientation) = viewport,
-      namesQuarterTurn(interfaceOrientation),
-      isQuarterTurned(reportedFrame, relativeTo: appFrame.rect)
-    else {
+    guard case .reported(let appFrame, let interfaceOrientation) = viewport else {
       return .appOrientation
     }
-    return .deviceNative(appFrame: appFrame, interfaceOrientation: interfaceOrientation)
+    if namesQuarterTurn(interfaceOrientation),
+      isQuarterTurned(reportedFrame, relativeTo: appFrame.rect) {
+      return .deviceNative(appFrame: appFrame, interfaceOrientation: interfaceOrientation)
+    }
+    if let offset = SnapshotContentTranslation.offset(
+      reportedBox: reportedFrame,
+      viewportBox: appFrame.rect
+    ) {
+      return .windowContent(offset: offset)
+    }
+    return .appOrientation
   }
 
   public static func namesQuarterTurn(_ interfaceOrientation: Int) -> Bool {

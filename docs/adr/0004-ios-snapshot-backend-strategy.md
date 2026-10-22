@@ -626,6 +626,43 @@ The rule detects un-normalized arrival, not a standing fact about iOS.
 The producers that the earlier sections of this ADR describe do normalize.
 A band taller than it is wide is what the output of a producer that did not normalize looks like.
 
+## Amendment: a window that does not fill the screen (issue #3899)
+
+An iPad window that does not fill the screen splits a capture in two.
+The measurement used iPad Pro 11-inch (M5, iOS 27.0) with Windowed Apps on and a Calendar window at screen `(224,207,386x682)`:
+
+- The app's root and its subtree report `(0,0)`-anchored frames. The window's `Add` button reads `(335,14,37,36)` and draws at screen `(559,221)`.
+- The runner's live `XCUIApplication.windows` read reports the window's screen box `(224,207,386,682)`.
+- A system window under the app root — the keyboard at `(0,925,834,282)`, a SpringBoard overlay at `(0,0,834,1210)` — reports the screen's own box.
+
+The viewport is built from the live read, so the capture published a screen-space viewport around window-relative rects.
+That mix produced three failures from one cause: the fold clipped each node to `(w - x) x (h - y)` and the regular capture died with `regular-node-outside-cumulative-clip`; a published rect named no position in the screenshot; and a coordinate tap landed at the point minus the window origin.
+The same drift appears in any app the user has placed, so Stage Manager behaves the same way.
+
+Decision. A window that does not fill the screen publishes screen space in points.
+One capture publishes one space, as the #2612 amendment decided, and the space a placed window names is the screen's — because that is the space its viewport, its screenshot, and its digitizer already use.
+The conversion runs where the platform's frame is still the platform's frame: inside the same `SnapshotGeometrySpace.normalized` pass that turns a quarter-turned subtree.
+No per-command patch reads a window origin.
+
+A window declares its subtree's space from its own box, and this is the one rule in the table that reads an origin.
+The carrier's box must be a `(0,0)`-anchored copy of the viewport box the platform reported, and the viewport must start somewhere else on the screen.
+Then the subtree was reported in the carrier's content space, and the viewport's origin is the one vector that carries it to the screen.
+Any other carrier box names no space, so the rule leaves its numbers alone: the keyboard window and the SpringBoard overlay above report the screen's own box and are already in screen space.
+A full-screen window, an iPhone, and each foldable panel of ADR 0025 report origins at zero on both sides, so the rule reads no vector there and every rect is unchanged.
+`SnapshotContentTranslation.offset(reportedBox:viewportBox:)` is that rule, replayed from `contracts/fixtures/window-coordinate-space.json` in both languages.
+
+Rotation and translation stay separate rules, and the split is the point.
+`CoordinateSpaceRotation` turns a box's axes and never moves its origin: the digitizer's origin is the display's own, which is where a placed window's screen-space points are already measured from.
+Before this amendment, that function localized a non-zero frame origin away and never added it back.
+Every configuration measured before this one has its app frame at the screen origin, so the localization was dead code there and the dispatch bug here.
+Translation is the one rule that reads an origin, so it is the only place the fix can live.
+
+Capture is half of the promise; dispatch is the other half.
+The measured dispatch spaces for a placed window are both screen-anchored: the synthesized path lands a point at its screen position, and XCTest's own `XCUICoordinate` on the app anchors at the screen's origin too.
+`interactionCoordinate` therefore passes the caller's screen point through, and `resolveRunnerWindow` keeps naming the window a foldable's tap resolves its display on (ADR 0025).
+The live `XCUIElement.frame` reads that the tap path already compares — the selector match, the input probe, the tree's sweep candidates — report screen space on a placed window, as the ref-tap path proved on the device.
+Only the snapshot channel arrives window-relative, and only that channel converts.
+
 ## Amendment: modal containment in the presentation cut
 
 The bridge reads one window and reports every container attached to it.

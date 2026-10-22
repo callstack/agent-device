@@ -28,9 +28,22 @@ final class CoordinateSpaceTests: XCTestCase {
       let oriented: Frame
     }
 
+    struct WindowContentCase: Decodable {
+      let name: String
+      let reportedBox: Frame
+      let viewportBox: Frame
+      let offset: Offset?
+    }
+
+    struct Offset: Decodable {
+      let width: Double
+      let height: Double
+    }
+
     let constants: Constants
     let quarterTurnCases: [QuarterTurnCase]
     let rotationCases: [RotationCase]
+    let windowContentCases: [WindowContentCase]
   }
 
   /// Identity in portrait/unknown, 90° per landscape, 180° upside-down.
@@ -63,9 +76,9 @@ final class CoordinateSpaceTests: XCTestCase {
         in: offsetLandscape,
         interfaceOrientation: RunnerInterfaceOrientation.landscapeLeft
       ),
-      CGPoint(x: 268, y: 1040),
-      "non-zero frame origin is localized before rotation"
-    )
+      CGPoint(x: 288, y: 1030),
+      "a frame offset from the screen never moves the turned point (#3899)"
+    );
   }
 
   func testNativeSynthesizedVectorRotatesByInterfaceOrientation() {
@@ -303,7 +316,7 @@ final class CoordinateSpaceTests: XCTestCase {
     )
   }
 
-  /// Golden parity table (#2612): every case in contracts/fixtures/window-coordinate-space.json
+  /// Golden parity table (#2612, #3899): every case in contracts/fixtures/window-coordinate-space.json
   /// must agree with the vitest twin
   /// (packages/platform-apple/src/snapshot-source/window-coordinate-space.test.ts). Add
   /// cases there, never fork the rule. Detection is replayed under both landscape turns, because
@@ -313,6 +326,22 @@ final class CoordinateSpaceTests: XCTestCase {
     let fixture = try loadWindowCoordinateSpaceFixture()
     XCTAssertFalse(fixture.quarterTurnCases.isEmpty, "parity table must not be empty")
     XCTAssertFalse(fixture.rotationCases.isEmpty, "parity table must not be empty")
+    XCTAssertFalse(fixture.windowContentCases.isEmpty, "parity table must not be empty")
+    XCTAssertEqual(
+      Set(fixture.quarterTurnCases.map(\.name)).count,
+      fixture.quarterTurnCases.count,
+      "parity table case names must be unique"
+    )
+    XCTAssertEqual(
+      Set(fixture.rotationCases.map(\.name)).count,
+      fixture.rotationCases.count,
+      "parity table case names must be unique"
+    )
+    XCTAssertEqual(
+      Set(fixture.windowContentCases.map(\.name)).count,
+      fixture.windowContentCases.count,
+      "parity table case names must be unique"
+    )
     XCTAssertEqual(
       fixture.constants.quarterTurnTolerance,
       SnapshotGeometrySpace.quarterTurnTolerance,
@@ -346,6 +375,17 @@ final class CoordinateSpaceTests: XCTestCase {
           interfaceOrientation: testCase.interfaceOrientation
         ),
         testCase.oriented.cgRect,
+        testCase.name
+      )
+    }
+    for testCase in fixture.windowContentCases {
+      let expected = testCase.offset.map { CGSize(width: $0.width, height: $0.height) }
+      XCTAssertEqual(
+        SnapshotContentTranslation.offset(
+          reportedBox: testCase.reportedBox.cgRect,
+          viewportBox: testCase.viewportBox.cgRect
+        ),
+        expected,
         testCase.name
       )
     }
@@ -483,6 +523,120 @@ final class CoordinateSpaceTests: XCTestCase {
         viewport: .missing(reason: .notProvided)
       )[1].hittable,
       false
+    )
+  }
+
+  /// The measured windowed iPad Calendar window (#3899) driven through the pass: the carrier reports
+  /// a `(0,0)`-anchored copy of the viewport box, declares its subtree window-relative, and every
+  /// rect under it comes back at its place on the screen — the root at the window's screen box, the
+  /// Add button at (559,221) where the screenshot draws it, and a full-screen-capture tree untouched.
+  func testNormalizedTranslatesAWindowedSubtreeIntoScreenSpace() {
+    let windowOnScreen = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let reportedRoot = CGRect(x: 0, y: 0, width: 386, height: 682)
+    let reportedAddButton = CGRect(x: 335, y: 14, width: 37, height: 36)
+    let acquired = [
+      coordinateNode(0, "Application", reportedRoot, nil, 0, label: "Calendar"),
+      coordinateNode(1, "Window", reportedRoot, 0, 1),
+      coordinateNode(2, "Other", reportedRoot, 1, 2),
+      coordinateNode(3, "Button", reportedAddButton, 2, 3, label: "Add"),
+    ]
+    let normalized = SnapshotGeometrySpace.normalized(
+      nodes: acquired,
+      viewport: .reported(box: windowOnScreen, interfaceOrientation: RunnerInterfaceOrientation.portrait)
+    )
+    XCTAssertEqual(normalized[0].rect.cgRect, windowOnScreen)
+    XCTAssertEqual(normalized[1].rect.cgRect, windowOnScreen)
+    XCTAssertEqual(normalized[2].rect.cgRect, windowOnScreen)
+    XCTAssertEqual(normalized[3].rect.cgRect, CGRect(x: 559, y: 221, width: 37, height: 36))
+    XCTAssertEqual(normalized[3].hittable, true)
+
+    // The same window moved: the subtree follows the new origin.
+    let moved = SnapshotGeometrySpace.normalized(
+      nodes: acquired,
+      viewport: .reported(
+        box: CGRect(x: 120, y: 90, width: 386, height: 682),
+        interfaceOrientation: RunnerInterfaceOrientation.portrait
+      )
+    )
+    XCTAssertEqual(moved[3].rect.cgRect, CGRect(x: 455, y: 104, width: 37, height: 36))
+  }
+
+  /// What must not move: a full-screen capture, and any subtree under a carrier that is not the app's
+  /// own placed window. Those trees keep exactly the rect the platform reported (#3899 keeps
+  /// full-screen and ADR 0025 panel behavior identical).
+  func testNormalizedTranslatesNothingForFullScreenAndForeignCarriers() {
+    // Full-screen iPad: reported boxes already start at the viewport.
+    let fullScreen = CGRect(x: 0, y: 0, width: 834, height: 1210)
+    let acquired = [
+      coordinateNode(0, "Application", fullScreen, nil, 0),
+      coordinateNode(1, "Window", fullScreen, 0, 1),
+      coordinateNode(2, "Button", CGRect(x: 335, y: 14, width: 37, height: 36), 1, 2),
+    ]
+    XCTAssertEqual(
+      SnapshotGeometrySpace.normalized(
+        nodes: acquired,
+        viewport: .reported(
+          box: fullScreen,
+          interfaceOrientation: RunnerInterfaceOrientation.portrait
+        )
+      ).map(\.rect),
+      acquired.map(\.rect)
+    );
+
+    // A windowed app, measured shape: the app's own window declares the translation and carries the
+    // subtree; the keyboard window and the SpringBoard overlay report the screen's own box, so their
+    // subtrees stay where the platform put them.
+    let windowOnScreen = CGRect(x: 224, y: 207, width: 386, height: 682)
+    let reportedRoot = CGRect(x: 0, y: 0, width: 386, height: 682)
+    let mixed = [
+      coordinateNode(0, "Application", reportedRoot, nil, 0),
+      coordinateNode(1, "Window", reportedRoot, 0, 1, label: "appWindow"),
+      coordinateNode(2, "Other", reportedRoot, 1, 2),
+      coordinateNode(3, "Button", CGRect(x: 335, y: 14, width: 37, height: 36), 2, 3, label: "Add"),
+      coordinateNode(4, "Window", CGRect(x: 0, y: 925, width: 834, height: 282), 0, 1, label: "keyboard"),
+      coordinateNode(5, "Key", CGRect(x: 300, y: 1100, width: 60, height: 60), 4, 2),
+      coordinateNode(6, "Window", CGRect(x: 0, y: 0, width: 834, height: 1210), 0, 1, label: "springboard"),
+      coordinateNode(7, "Alert", CGRect(x: 300, y: 500, width: 240, height: 160), 6, 2),
+    ]
+    let normalized = SnapshotGeometrySpace.normalized(
+      nodes: mixed,
+      viewport: .reported(box: windowOnScreen, interfaceOrientation: RunnerInterfaceOrientation.portrait)
+    )
+    XCTAssertEqual(normalized[1].rect.cgRect, windowOnScreen, "appWindow")
+    XCTAssertEqual(normalized[2].rect.cgRect, windowOnScreen)
+    XCTAssertEqual(normalized[3].rect.cgRect, CGRect(x: 559, y: 221, width: 37, height: 36))
+    XCTAssertEqual(normalized[4].rect, mixed[4].rect, "keyboard")
+    XCTAssertEqual(normalized[5].rect, mixed[5].rect)
+    XCTAssertEqual(normalized[6].rect, mixed[6].rect, "springboard")
+    XCTAssertEqual(normalized[7].rect, mixed[7].rect)
+  }
+
+  /// The dispatch direction for a windowed app: the caller's point is the point touched, so
+  /// `native(point:)` turns a screen-space point's axes without moving it toward the window origin
+  /// (#3899). Under portrait — the only orientation measured for a windowed app — it is the identity.
+  func testNativePointForAWindowedAppKeepsTheCallersScreenPoint() {
+    let windowOnScreen = CGRect(x: 224, y: 207, width: 386, height: 682)
+    for orientation in [
+      RunnerInterfaceOrientation.portrait, RunnerInterfaceOrientation.unknown
+    ] {
+      XCTAssertEqual(
+        CoordinateSpaceRotation.native(
+          point: CGPoint(x: 578, y: 239),
+          in: windowOnScreen,
+          interfaceOrientation: orientation
+        ),
+        CGPoint(x: 578, y: 239),
+        "interfaceOrientation \(orientation)"
+      )
+    }
+    // A turn moves axes only: the same point under a landscape window keeps its own origin story.
+    XCTAssertEqual(
+      CoordinateSpaceRotation.native(
+        point: CGPoint(x: 578, y: 239),
+        in: windowOnScreen,
+        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
+      ),
+      CGPoint(x: 682 - 239, y: 578)
     )
   }
 

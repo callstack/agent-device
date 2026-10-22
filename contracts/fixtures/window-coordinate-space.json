@@ -1,5 +1,5 @@
 {
-  "description": "Golden table for the coordinate space a captured window's own box declares (#2612), the twin of tap-keyboard-occlusion-policy.json on the geometry that guard reads. iOS hosts some system surfaces in the device's native (portrait-up) space even while the app is rotated, so their whole subtree arrives quarter-turned: measured on iPhone 17 Pro (iOS 26.2) with the system keyboard up over a landscape app frame (0,0,874,402), UIRemoteKeyboardWindow reports its own box as (0,0,402,874) — the app's box with the two side lengths swapped — while the app's own UIWindow, UITextEffectsWindow and a dev-menu overlay window all report (0,0,874,402); in portrait the same keyboard window reports (0,0,402,874) against a (0,0,402,874) app frame, i.e. nothing is turned. RULE 1 (detection) is enforced twice, in packages/contracts/src/window-coordinate-space.ts and in SnapshotGeometrySpace inside apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift, and decides from side lengths alone: a window is quarter-turned relative to an app frame when the app frame is not square (abs(app.width - app.height) > quarterTurnTolerance), both frames are finite, positive and non-empty, and the window's side lengths match the app's on the swapped axes (abs(window.width - app.height) <= quarterTurnTolerance && abs(window.height - app.width) <= quarterTurnTolerance). Origins are deliberately never compared: the turn is a statement about which axis a box runs along, and a window may legitimately be placed elsewhere. A square app frame cannot be told from its own quarter turn, so it is left alone rather than guessed at. The tolerance is 1 because measured captures match the swap to the point and this absorbs float representation only. RULE 2 (rotation) is the capture's way back for the runner's own UIInterfaceOrientation raw values — 1 portrait, 2 portraitUpsideDown, 3 landscapeRight, 4 landscapeLeft, and 0 unknown, where portrait and unknown publish what the platform reported rather than inventing a turn — implemented by CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:) in that same Swift file, whose rect helper turns opposite corners of the reported box and re-orders them so the result keeps a top-left origin. `rotationCases` are native -> oriented rows: the landscape ones measured on the device above, the 180 degree and identity ones derived from that table. Capture turns back with the exact inverse of what dispatch turns forward, so each row also has to come back to its own `native` box under the forward mapping; that is why one measured-looking landscape-left pairing whose native and oriented boxes are identical is absent — the table computes no such row. Infinity has no JSON spelling, so the unusable frame a platform hands back when it could not resolve a box is named {\"infinite\": true} and decodes to CGRect.infinite on the Swift side and to an infinite rect on the TypeScript side.",
+  "description": "Golden table for the coordinate space a captured window's own box declares (#2612), the twin of tap-keyboard-occlusion-policy.json on the geometry that guard reads. iOS hosts some system surfaces in the device's native (portrait-up) space even while the app is rotated, so their whole subtree arrives quarter-turned: measured on iPhone 17 Pro (iOS 26.2) with the system keyboard up over a landscape app frame (0,0,874,402), UIRemoteKeyboardWindow reports its own box as (0,0,402,874) — the app's box with the two side lengths swapped — while the app's own UIWindow, UITextEffectsWindow and a dev-menu overlay window all report (0,0,874,402); in portrait the same keyboard window reports (0,0,402,874) against a (0,0,402,874) app frame, i.e. nothing is turned. RULE 1 (detection) is enforced twice, in packages/contracts/src/window-coordinate-space.ts and in SnapshotGeometrySpace inside apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/SnapshotCoordinateSpace.swift, and decides from side lengths alone: a window is quarter-turned relative to an app frame when the app frame is not square (abs(app.width - app.height) > quarterTurnTolerance), both frames are finite, positive and non-empty, and the window's side lengths match the app's on the swapped axes (abs(window.width - app.height) <= quarterTurnTolerance && abs(window.height - app.width) <= quarterTurnTolerance). Origins are deliberately never compared: the turn is a statement about which axis a box runs along, and a window may legitimately be placed elsewhere. A square app frame cannot be told from its own quarter turn, so it is left alone rather than guessed at. The tolerance is 1 because measured captures match the swap to the point and this absorbs float representation only. RULE 2 (rotation) is the capture's way back for the runner's own UIInterfaceOrientation raw values — 1 portrait, 2 portraitUpsideDown, 3 landscapeRight, 4 landscapeLeft, and 0 unknown, where portrait and unknown publish what the platform reported rather than inventing a turn — implemented by CoordinateSpaceRotation.oriented(rect:in:interfaceOrientation:) in that same Swift file, whose rect helper turns opposite corners of the reported box and re-orders them so the result keeps a top-left origin. `rotationCases` are native -> oriented rows: the landscape ones measured on the device above, the 180 degree and identity ones derived from that table. Capture turns back with the exact inverse of what dispatch turns forward, so each row also has to come back to its own `native` box under the forward mapping; that is why one measured-looking landscape-left pairing whose native and oriented boxes are identical is absent — the table computes no such row. Infinity has no JSON spelling, so the unusable frame a platform hands back when it could not resolve a box is named {\"infinite\": true} and decodes to CGRect.infinite on the Swift side and to an infinite rect on the TypeScript side. RULE 3 (content translation) is the other space a captured subtree arrives in, and the one rule in this file that reads an origin. An iPad window that does not fill the screen (Windowed Apps, Stage Manager) reports its own screen box while the subtree under it arrives anchored at its own top-left: measured on iPad Pro 11-inch (M5, iOS 27.0) with a Calendar window at screen (224,207,386x682), the application root reports (0,0,386,682) and its Add button (335,14,37,36) for a control drawn at screen (559,221). Published as reported, that tree mixes two spaces, clips its own content, and moves every tap by the window origin (#3899). SnapshotContentTranslation.offset(reportedBox:viewportBox:) reads the carrier box against the viewport box the platform reported, and names the viewport origin as the offset only when the carrier is the app's own window: a (0,0)-anchored box whose side lengths match the viewport's within the same tolerance, while the viewport starts somewhere else on the screen. A carrier that is not the app's own window names no space, so its numbers are left alone: the keyboard window and a SpringBoard overlay under a windowed app report the screen's own box and are already in screen space. A full-screen window, an iPhone, and each foldable panel of ADR 0025 report origins at zero on both sides, so the rule reads no offset there and every published rect stays exactly as it was measured before. `windowContentCases` are reportedBox + viewportBox to offset rows, replayed against that Swift function and against windowContentTranslation in packages/platform-apple/src/snapshot-source/window-coordinate-space.ts; a null offset means the rule declares no translation. Because a translation is the one thing a rotation must not also do, `rotationCases` pin the turn as axes-only: `native` and `oriented` never move a box's origin, and a row whose app frame is offset from the screen comes back at the same place as its own zero-origin twin.",
   "constants": {
     "quarterTurnTolerance": 1
   },
@@ -126,11 +126,11 @@
       "oriented": { "x": 75, "y": 198, "width": 0, "height": 0 }
     },
     {
-      "name": "landscape right localizes a non-zero app frame origin before the turn and restores it after",
+      "name": "a non-zero app frame origin does not travel through the turn: the same native box comes back at the same place (#3899)",
       "interfaceOrientation": 3,
       "app": { "x": 12, "y": 24, "width": 874, "height": 402 },
       "native": { "x": 2, "y": 75, "width": 202, "height": 724 },
-      "oriented": { "x": 87, "y": 222, "width": 724, "height": 202 }
+      "oriented": { "x": 75, "y": 198, "width": 724, "height": 202 }
     },
     {
       "name": "landscape left turns the same plane the other way, which is where its own native column is",
@@ -166,6 +166,92 @@
       "app": { "x": 0, "y": 0, "width": 951, "height": 669 },
       "native": { "x": 226, "y": 475, "width": 0, "height": 0 },
       "oriented": { "x": 476, "y": 226, "width": 0, "height": 0 }
+    }
+  ],
+  "windowContentCases": [
+    {
+      "name": "RULE 3 (content translation): a Calendar window placed at (224,207) reports its own screen box and its subtree from its own top-left",
+      "reportedBox": { "x": 0, "y": 0, "width": 386, "height": 682 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": { "width": 224, "height": 207 }
+    },
+    {
+      "name": "the same window moved elsewhere on the screen carries its subtree by the new origin",
+      "reportedBox": { "x": 0, "y": 0, "width": 386, "height": 682 },
+      "viewportBox": { "x": 120, "y": 90, "width": 386, "height": 682 },
+      "offset": { "width": 120, "height": 90 }
+    },
+    {
+      "name": "the app's own window box reports the screen box it is placed at and translates nothing",
+      "reportedBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": null
+    },
+    {
+      "name": "a full-screen iPad window fills the screen from (0,0), so its subtree starts where the viewport starts",
+      "reportedBox": { "x": 0, "y": 0, "width": 834, "height": 1210 },
+      "viewportBox": { "x": 0, "y": 0, "width": 834, "height": 1210 },
+      "offset": null
+    },
+    {
+      "name": "a full-screen iPhone window is the same no-op on the smaller screen",
+      "reportedBox": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "viewportBox": { "x": 0, "y": 0, "width": 402, "height": 874 },
+      "offset": null
+    },
+    {
+      "name": "a Duo panel reports its own box from the origin of its own display, so no translation is read (ADR 0025)",
+      "reportedBox": { "x": 0, "y": 0, "width": 951, "height": 669 },
+      "viewportBox": { "x": 0, "y": 0, "width": 951, "height": 669 },
+      "offset": null
+    },
+    {
+      "name": "the keyboard window under a windowed app reports the screen's box and stays in screen space",
+      "reportedBox": { "x": 0, "y": 925, "width": 834, "height": 282 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": null
+    },
+    {
+      "name": "a SpringBoard overlay under a windowed app reports the whole screen and translates nothing",
+      "reportedBox": { "x": 0, "y": 0, "width": 834, "height": 1210 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": null
+    },
+    {
+      "name": "a half-tolerance origin miss is float representation, not a different placement",
+      "reportedBox": { "x": 0, "y": 0, "width": 385.5, "height": 682 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": { "width": 224, "height": 207 }
+    },
+    {
+      "name": "a carrier two points narrower than the viewport is some other box and declares no space",
+      "reportedBox": { "x": 0, "y": 0, "width": 384, "height": 682 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": null
+    },
+    {
+      "name": "a carrier anchored inside the screen names some content box, not the app's window",
+      "reportedBox": { "x": 40, "y": 12, "width": 386, "height": 682 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": null
+    },
+    {
+      "name": "a viewport the capture derived from its own root carries no screen anchor to translate toward",
+      "reportedBox": { "x": 0, "y": 0, "width": 386, "height": 682 },
+      "viewportBox": { "x": 0, "y": 0, "width": 386, "height": 682 },
+      "offset": null
+    },
+    {
+      "name": "a zero-width carrier carries no geometry to read a space from",
+      "reportedBox": { "x": 0, "y": 0, "width": 0, "height": 682 },
+      "viewportBox": { "x": 224, "y": 207, "width": 386, "height": 682 },
+      "offset": null
+    },
+    {
+      "name": "a non-finite viewport declares nothing",
+      "reportedBox": { "x": 0, "y": 0, "width": 386, "height": 682 },
+      "viewportBox": { "infinite": true },
+      "offset": null
     }
   ]
 }
