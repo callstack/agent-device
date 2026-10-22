@@ -121,6 +121,7 @@
   "@agent-device/contracts/settings-catalog",
   "@agent-device/contracts/settings-runtime",
   "@agent-device/contracts/snapshot",
+  "@agent-device/contracts/snapshot-private-evidence",
   "@agent-device/contracts/snapshot-runtime",
   "@agent-device/contracts/snapshot-scope",
   "@agent-device/contracts/startup-recovery-fence",
